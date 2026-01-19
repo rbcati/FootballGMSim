@@ -972,7 +972,7 @@ function startNewSeason() {
 /**
  * Simulates all games for the current week in the league.
  */
-function simulateWeek() {
+function simulateWeek(options = {}) {
   try {
     // Validate all dependencies first
     if (!validateDependencies()) {
@@ -1082,6 +1082,12 @@ function simulateWeek() {
 
     const results = [];
     let gamesSimulated = 0;
+    const overrideResults = Array.isArray(options.overrideResults) ? options.overrideResults : [];
+    const overrideLookup = new Map(
+      overrideResults
+        .filter(result => result && Number.isInteger(result.home) && Number.isInteger(result.away))
+        .map(result => [`${result.home}-${result.away}`, result])
+    );
 
     // Simulate each game
     pairings.forEach((pair, index) => {
@@ -1110,68 +1116,81 @@ function simulateWeek() {
           return;
         }
 
-        // Simulate the game
-        const gameScores = simGameStats(home, away);
-        
-        if (!gameScores) {
-          console.error(`Failed to simulate game ${index + 1}`);
-          return;
-        }
-        
-        const sH = gameScores.homeScore;
-        const sA = gameScores.awayScore;
+        const overrideResult = overrideLookup.get(`${pair.home}-${pair.away}`);
+        let sH;
+        let sA;
+        let homePlayerStats = {};
+        let awayPlayerStats = {};
 
-        // Capture player stats BEFORE accumulating (snapshot for box score)
-        const capturePlayerStats = (roster) => {
-          const playerStats = {};
-          roster.forEach(player => {
-            if (player && player.stats && player.stats.game) {
-              playerStats[player.id] = {
-                name: player.name,
-                pos: player.pos,
-                stats: JSON.parse(JSON.stringify(player.stats.game)) // Deep copy
-              };
-            }
-          });
-          return playerStats;
-        };
-        
-        const homePlayerStats = capturePlayerStats(home.roster);
-        const awayPlayerStats = capturePlayerStats(away.roster);
-
-        // Update player season stats from game stats (AFTER capturing for box score)
-        const updatePlayerStats = (roster) => {
-          if (!Array.isArray(roster)) return;
+        if (overrideResult) {
+          sH = overrideResult.scoreHome;
+          sA = overrideResult.scoreAway;
+          homePlayerStats = overrideResult.boxScore?.home || {};
+          awayPlayerStats = overrideResult.boxScore?.away || {};
+        } else {
+          // Simulate the game
+          const gameScores = simGameStats(home, away);
           
-          roster.forEach(p => {
-            if (p && p.stats && p.stats.game) {
-              initializePlayerStats(p);
-              
-              // Accumulate game stats into season stats
-              Object.keys(p.stats.game).forEach(key => {
-                const value = p.stats.game[key];
-                if (typeof value === 'number') {
-                  // For averages/percentages, we'll recalculate at season end
-                  // For totals, just add them up
-                  if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') || 
-                      key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                      key === 'avgKickYards' || key === 'completionPct') {
-                    // These are calculated fields, don't accumulate
-                    return;
+          if (!gameScores) {
+            console.error(`Failed to simulate game ${index + 1}`);
+            return;
+          }
+          
+          sH = gameScores.homeScore;
+          sA = gameScores.awayScore;
+
+          // Capture player stats BEFORE accumulating (snapshot for box score)
+          const capturePlayerStats = (roster) => {
+            const playerStats = {};
+            roster.forEach(player => {
+              if (player && player.stats && player.stats.game) {
+                playerStats[player.id] = {
+                  name: player.name,
+                  pos: player.pos,
+                  stats: JSON.parse(JSON.stringify(player.stats.game)) // Deep copy
+                };
+              }
+            });
+            return playerStats;
+          };
+          
+          homePlayerStats = capturePlayerStats(home.roster);
+          awayPlayerStats = capturePlayerStats(away.roster);
+
+          // Update player season stats from game stats (AFTER capturing for box score)
+          const updatePlayerStats = (roster) => {
+            if (!Array.isArray(roster)) return;
+            
+            roster.forEach(p => {
+              if (p && p.stats && p.stats.game) {
+                initializePlayerStats(p);
+                
+                // Accumulate game stats into season stats
+                Object.keys(p.stats.game).forEach(key => {
+                  const value = p.stats.game[key];
+                  if (typeof value === 'number') {
+                    // For averages/percentages, we'll recalculate at season end
+                    // For totals, just add them up
+                    if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') || 
+                        key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
+                        key === 'avgKickYards' || key === 'completionPct') {
+                      // These are calculated fields, don't accumulate
+                      return;
+                    }
+                    p.stats.season[key] = (p.stats.season[key] || 0) + value;
                   }
-                  p.stats.season[key] = (p.stats.season[key] || 0) + value;
-                }
-              });
-              
-              // Track games played
-              if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-              p.stats.season.gamesPlayed++;
-            }
-          });
-        };
-        
-        updatePlayerStats(home.roster);
-        updatePlayerStats(away.roster);
+                });
+                
+                // Track games played
+                if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
+                p.stats.season.gamesPlayed++;
+              }
+            });
+          };
+          
+          updatePlayerStats(home.roster);
+          updatePlayerStats(away.roster);
+        }
         
         // Store game result with complete box score
         results.push({
