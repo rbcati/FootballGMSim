@@ -17,6 +17,7 @@ class LiveGameViewer {
     this.onPlayCallback = null;
     this.onGameEndCallback = null;
     this.modal = null;
+    this.hasAppliedResult = false;
   }
 
   /**
@@ -38,6 +39,7 @@ class LiveGameViewer {
     this.isPlaying = false;
     this.isPaused = false;
     this.playCallQueue = null;
+    this.hasAppliedResult = false;
 
     this.createModal();
     this.renderGame();
@@ -102,53 +104,10 @@ class LiveGameViewer {
     const targetHomeScore = Math.max(0, 20 + Math.round(strengthDiff / 3) + U.rand(-7, 7));
     const targetAwayScore = Math.max(0, 20 - Math.round(strengthDiff / 3) + U.rand(-7, 7));
 
-    // Simulate plays until game ends
-    let playCount = 0;
-    const maxPlays = 120; // ~60 plays per team
-
-    while (!state.gameComplete && playCount < maxPlays) {
-      const offense = state.ballPossession === 'home' ? state.home : state.away;
-      const defense = state.ballPossession === 'home' ? state.away : state.home;
-      const isUserTeam = offense.team.id === this.userTeamId;
-
-      // Generate a play
-      const play = this.generatePlay(
-        offense,
-        defense,
-        state,
-        isUserTeam,
-        targetHomeScore,
-        targetAwayScore
-      );
-
-      this.playByPlay.push(play);
-      this.updateGameState(play, state);
-
-      // Check for quarter/game end
-      if (state.time <= 0) {
-        if (state.quarter < 4) {
-          state.quarter++;
-          state.time = 900;
-          this.playByPlay.push({
-            type: 'quarter_end',
-            quarter: state.quarter - 1,
-            message: `End of Q${state.quarter - 1}`
-          });
-        } else {
-          state.gameComplete = true;
-          this.playByPlay.push({
-            type: 'game_end',
-            message: 'Game Over',
-            finalScore: {
-              home: state.home.score,
-              away: state.away.score
-            }
-          });
-        }
-      }
-
-      playCount++;
-    }
+    this.simulationMeta = {
+      targetHomeScore,
+      targetAwayScore
+    };
 
     // Start displaying plays
     this.startPlayback();
@@ -346,6 +305,39 @@ class LiveGameViewer {
   }
 
   /**
+   * Handle quarter and game transitions after the clock runs out
+   */
+  handleEndOfQuarter(gameState) {
+    if (gameState.time > 0) {
+      return;
+    }
+
+    if (gameState.quarter < 4) {
+      gameState.quarter++;
+      gameState.time = 900;
+      const quarterPlay = {
+        type: 'quarter_end',
+        quarter: gameState.quarter - 1,
+        message: `End of Q${gameState.quarter - 1}`
+      };
+      this.playByPlay.push(quarterPlay);
+      this.renderPlay(quarterPlay);
+    } else {
+      gameState.gameComplete = true;
+      const finalPlay = {
+        type: 'game_end',
+        message: 'Game Over',
+        finalScore: {
+          home: gameState.home.score,
+          away: gameState.away.score
+        }
+      };
+      this.playByPlay.push(finalPlay);
+      this.renderPlay(finalPlay);
+    }
+  }
+
+  /**
    * Calculate team offensive strength
    */
   calculateOffenseStrength(team) {
@@ -387,32 +379,50 @@ class LiveGameViewer {
    * Display next play
    */
   displayNextPlay() {
-    if (this.currentPlayIndex >= this.playByPlay.length) {
+    if (this.gameState?.gameComplete) {
       this.endGame();
       return;
     }
-
-    const play = this.playByPlay[this.currentPlayIndex];
-    this.renderPlay(play);
-    this.currentPlayIndex++;
 
     // Check if user needs to call a play
     const state = this.gameState;
     const offense = state.ballPossession === 'home' ? state.home : state.away;
     const isUserTeam = offense.team.id === this.userTeamId;
 
-    if (isUserTeam && !this.playCallQueue && play.type === 'play') {
+    if (isUserTeam && !this.playCallQueue) {
       // Show play calling interface
       this.showPlayCalling();
-    } else {
-      // Auto-advance
-      const delay = this.getPlayDelay();
-      this.intervalId = setTimeout(() => {
-        if (!this.isPaused) {
-          this.displayNextPlay();
-        }
-      }, delay);
+      return;
     }
+
+    const defense = state.ballPossession === 'home' ? state.away : state.home;
+    const play = this.generatePlay(
+      offense,
+      defense,
+      state,
+      isUserTeam,
+      this.simulationMeta?.targetHomeScore,
+      this.simulationMeta?.targetAwayScore
+    );
+
+    this.playByPlay.push(play);
+    this.currentPlayIndex = this.playByPlay.length;
+    this.renderPlay(play);
+    this.updateGameState(play, state);
+    this.handleEndOfQuarter(state);
+
+    if (this.gameState.gameComplete) {
+      this.endGame();
+      return;
+    }
+
+    // Auto-advance
+    const delay = this.getPlayDelay();
+    this.intervalId = setTimeout(() => {
+      if (!this.isPaused) {
+        this.displayNextPlay();
+      }
+    }, delay);
   }
 
   /**
@@ -596,6 +606,46 @@ class LiveGameViewer {
 
     if (this.onGameEndCallback) {
       this.onGameEndCallback(this.gameState);
+    }
+
+    this.applyLiveResultToLeague();
+  }
+
+  /**
+   * Apply live game result to league simulation
+   */
+  applyLiveResultToLeague() {
+    if (this.hasAppliedResult) return;
+
+    const L = window.state?.league;
+    if (!L || !L.schedule) return;
+
+    const scheduleWeeks = L.schedule.weeks || L.schedule;
+    if (!Array.isArray(scheduleWeeks)) return;
+
+    const weekIndex = (L.week || 1) - 1;
+    const weekData = scheduleWeeks[weekIndex];
+    if (!weekData?.games) return;
+
+    if (L.resultsByWeek?.[weekIndex]?.length) return;
+
+    const homeId = this.gameState?.home?.team?.id;
+    const awayId = this.gameState?.away?.team?.id;
+    if (homeId === undefined || awayId === undefined) return;
+
+    const matchingGame = weekData.games.find(game => game && !game.bye && game.home === homeId && game.away === awayId);
+    if (!matchingGame) return;
+
+    if (typeof window.simulateWeek === 'function') {
+      this.hasAppliedResult = true;
+      window.simulateWeek({
+        overrideResults: [{
+          home: homeId,
+          away: awayId,
+          scoreHome: this.gameState.home.score,
+          scoreAway: this.gameState.away.score
+        }]
+      });
     }
   }
 
