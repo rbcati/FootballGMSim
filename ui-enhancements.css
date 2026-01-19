@@ -53,6 +53,11 @@ button, .btn {
   --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", 
                   "Segoe UI", system-ui, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+
+  /* Accent glow for more playful, polished feedback */
+  --accent-glow: rgba(10, 132, 255, 0.35);
+  --accent-glow-strong: rgba(10, 132, 255, 0.55);
+  --surface-glow: rgba(255, 255, 255, 0.08);
   
   /* Enhanced line heights for readability */
   --line-height-tight: 1.2;
@@ -71,6 +76,10 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -109,16 +118,31 @@ h6 { font-size: var(--text-base); }
   
   /* Smooth transitions */
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow;
   
   /* Better spacing */
   padding: var(--space-6);
   margin-bottom: var(--space-6);
 }
 
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    120% 120% at 10% 0%,
+    rgba(10, 132, 255, 0.15),
+    transparent 55%
+  );
+  opacity: 0;
+  transition: opacity 0.4s var(--ease);
+  pointer-events: none;
+}
+
 .card:hover {
-  transform: translateY(-4px) scale(1.01);
+  transform: translateY(-6px) scale(1.01);
   box-shadow: 
-    0 12px 48px rgba(0, 0, 0, 0.4),
+    0 16px 56px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.25);
 }
@@ -126,6 +150,10 @@ h6 { font-size: var(--text-base); }
 .card:active {
   transform: translateY(-2px) scale(1.005);
   transition-duration: 0.1s;
+}
+
+.card:hover::after {
+  opacity: 1;
 }
 
 /* Card header with gradient accent */
@@ -163,6 +191,7 @@ h6 { font-size: var(--text-base); }
   
   /* Smooth transitions */
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform, box-shadow;
   
   /* Touch feedback */
   -webkit-tap-highlight-color: transparent;
@@ -197,6 +226,7 @@ h6 { font-size: var(--text-base); }
   color: white;
   box-shadow: 
     0 4px 16px rgba(10, 132, 255, 0.3),
+    0 0 18px var(--accent-glow),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
@@ -204,14 +234,15 @@ h6 { font-size: var(--text-base); }
 .btn-primary:hover {
   background: linear-gradient(135deg, var(--accent-hover), var(--accent));
   box-shadow: 
-    0 6px 24px rgba(10, 132, 255, 0.4),
+    0 10px 28px rgba(10, 132, 255, 0.4),
+    0 0 24px var(--accent-glow-strong),
     inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transform: translateY(-2px);
 }
 
 .btn.primary:active,
 .btn-primary:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
   box-shadow: 
     0 2px 8px rgba(10, 132, 255, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -278,6 +309,46 @@ h6 { font-size: var(--text-base); }
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   -webkit-tap-highlight-color: transparent;
   min-height: 44px;
+}
+
+.nav-item {
+  position: relative;
+  border-radius: var(--radius-lg);
+  padding-left: calc(var(--space-5) + 6px);
+  transition: all 0.2s var(--ease);
+}
+
+.nav-item::before {
+  content: '';
+  position: absolute;
+  left: var(--space-2);
+  top: 50%;
+  width: 4px;
+  height: 60%;
+  background: linear-gradient(180deg, var(--accent), var(--accent-hover));
+  border-radius: var(--radius-pill);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0.5);
+  transition: all 0.2s var(--ease);
+}
+
+.nav-item:hover {
+  background: var(--surface-strong);
+  color: var(--text);
+  transform: translateX(2px);
+}
+
+.nav-item.active,
+.nav-item[aria-current="page"] {
+  background: linear-gradient(135deg, rgba(10, 132, 255, 0.18), rgba(10, 132, 255, 0.05));
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.3);
+}
+
+.nav-item.active::before,
+.nav-item[aria-current="page"]::before {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1);
 }
 
 .nav-pill::before {
@@ -348,6 +419,10 @@ h6 { font-size: var(--text-base); }
 .table tbody tr {
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .table tbody tr:hover {
