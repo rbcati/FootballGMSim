@@ -61,11 +61,27 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  min-width: 0;
 }
 
 .save-slot.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
+}
+
+.save-slot-details {
+  min-width: 0;
+  word-break: break-word;
+}
+
+.save-slot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.save-slot-actions .btn {
+  flex: 1 1 150px;
 }
 
 .result-card, .rookie-card, .hof-card {

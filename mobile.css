@@ -140,6 +140,14 @@
     min-height: 44px;
     min-width: 44px;
   }
+
+  .save-slot-actions {
+    flex-direction: column;
+  }
+
+  .save-slot-actions .btn {
+    width: 100%;
+  }
   
   /* Forms */
   .section {
