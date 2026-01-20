@@ -543,7 +543,74 @@ export function loadState() {
  * @param {Object} stateToSave - State to save (optional, uses window.state by default)
  * @returns {boolean} Success status
  */
-export function saveState(stateToSave = null) {
+function optimizeResultsByWeek(resultsByWeek, keepBoxScoreWeeks = 1) {
+  if (!resultsByWeek) return resultsByWeek;
+
+  const keepCount = Math.max(0, Number(keepBoxScoreWeeks) || 0);
+
+  if (Array.isArray(resultsByWeek)) {
+    const lastIndex = resultsByWeek.length - 1;
+    const keepFrom = lastIndex - keepCount + 1;
+
+    return resultsByWeek.map((weekResults, index) => {
+      if (!Array.isArray(weekResults)) return weekResults;
+      const keepBoxScore = keepCount > 0 && index >= keepFrom;
+      if (keepBoxScore) return weekResults;
+
+      return weekResults.map(result => {
+        if (!result || typeof result !== 'object' || !result.boxScore) return result;
+        const { boxScore, ...rest } = result;
+        return rest;
+      });
+    });
+  }
+
+  const entries = Object.entries(resultsByWeek);
+  const numericKeys = entries
+    .map(([key]) => Number(key))
+    .filter(value => !Number.isNaN(value));
+  const lastIndex = numericKeys.length ? Math.max(...numericKeys) : 0;
+  const keepFrom = lastIndex - keepCount + 1;
+
+  const optimizedEntries = entries.map(([key, weekResults]) => {
+    if (!Array.isArray(weekResults)) return [key, weekResults];
+    const weekIndex = Number(key);
+    const keepBoxScore = keepCount > 0 && !Number.isNaN(weekIndex) && weekIndex >= keepFrom;
+    if (keepBoxScore) return [key, weekResults];
+
+    const trimmed = weekResults.map(result => {
+      if (!result || typeof result !== 'object' || !result.boxScore) return result;
+      const { boxScore, ...rest } = result;
+      return rest;
+    });
+
+    return [key, trimmed];
+  });
+
+  return Object.fromEntries(optimizedEntries);
+}
+
+function prepareStateForSave(stateObj, { keepBoxScoreWeeks = 1 } = {}) {
+  const league = stateObj?.league;
+  if (!league?.resultsByWeek) {
+    return stateObj;
+  }
+
+  const optimizedResults = optimizeResultsByWeek(league.resultsByWeek, keepBoxScoreWeeks);
+  if (optimizedResults === league.resultsByWeek) {
+    return stateObj;
+  }
+
+  return {
+    ...stateObj,
+    league: {
+      ...league,
+      resultsByWeek: optimizedResults
+    }
+  };
+}
+
+export function saveState(stateToSave = null, options = {}) {
   try {
     const stateObj = stateToSave || window.state;
     
@@ -558,7 +625,10 @@ export function saveState(stateToSave = null) {
     // Ensure current version is recorded
     if (!stateObj.version) stateObj.version = State.init().version;
 
-    const serialized = JSON.stringify(stateObj);
+    const stateForSave = prepareStateForSave(stateObj, {
+      keepBoxScoreWeeks: options.keepBoxScoreWeeks ?? 1
+    });
+    const serialized = JSON.stringify(stateForSave);
     const activeSlot = stateObj.saveSlot || getActiveSaveSlot();
     const saveKey = saveKeyFor(activeSlot);
     window.localStorage.setItem(saveKey, serialized);
@@ -575,8 +645,21 @@ export function saveState(stateToSave = null) {
   } catch (error) {
     if (error?.name === 'QuotaExceededError') {
       console.warn('Save failed: storage quota exceeded');
-      if (typeof window.setStatus === 'function') {
-        window.setStatus('Save failed: storage is full. Please clear a slot and try again.', 'error');
+      try {
+        const fallbackState = prepareStateForSave(stateToSave || window.state, { keepBoxScoreWeeks: 0 });
+        const fallbackSerialized = JSON.stringify(fallbackState);
+        const activeSlot = (stateToSave || window.state)?.saveSlot || getActiveSaveSlot();
+        const saveKey = saveKeyFor(activeSlot);
+        window.localStorage.setItem(saveKey, fallbackSerialized);
+        if (typeof window.setStatus === 'function') {
+          window.setStatus('Save optimized: older box scores trimmed to free space.', 'success');
+        }
+        return true;
+      } catch (fallbackError) {
+        if (typeof window.setStatus === 'function') {
+          window.setStatus('Save failed: storage is full. Clear a slot in Settings → Save Data, then try again.', 'error');
+        }
+        console.error('Save failed after optimization:', fallbackError);
       }
     } else {
       console.error('Error saving state:', error);
@@ -588,14 +671,17 @@ export function saveState(stateToSave = null) {
 /**
  * Clear saved game data from localStorage.
  */
-export function clearSavedState() {
+export function clearSavedState(slot = null) {
   try {
-    const slot = getActiveSaveSlot();
-    const saveKey = saveKeyFor(slot);
+    const activeSlot = getActiveSaveSlot();
+    const normalizedSlot = slot ? normalizeSlot(slot) : activeSlot;
+    const saveKey = saveKeyFor(normalizedSlot);
     window.localStorage.removeItem(saveKey);
-    console.log('Saved state cleared');
+    console.log('Saved state cleared for slot', normalizedSlot);
     // Optional: Reset in-memory state after clearing save
-    State.reset(); 
+    if (normalizedSlot === activeSlot) {
+      State.reset();
+    }
   } catch (err) {
     console.error('Error clearing save:', err);
   }

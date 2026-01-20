@@ -1412,29 +1412,67 @@ window.renderSaveDataManager = function() {
 
     const rows = slots.map((slotMeta, idx) => {
         const slotNumber = idx + 1;
+        const isActive = slotNumber === activeSlot;
+        const slotHeader = `<div class="save-slot-details"><strong>Slot ${slotNumber}</strong>`;
+
         if (!slotMeta) {
-            return `<div class="save-slot ${slotNumber === activeSlot ? 'active' : ''}">` +
-                `<div><strong>Slot ${slotNumber}</strong> — Empty</div>` +
-                `<button class="btn" data-slot="${slotNumber}">Switch to Slot</button>` +
+            return `<div class="save-slot ${isActive ? 'active' : ''}">` +
+                `${slotHeader} — Empty</div>` +
+                `<div class="save-slot-actions">` +
+                    `<button class="btn" data-action="switch" data-slot="${slotNumber}">Switch to Slot</button>` +
+                `</div>` +
             `</div>`;
         }
 
         const lastSaved = slotMeta.lastSaved ? new Date(slotMeta.lastSaved).toLocaleString() : 'Unknown';
         const teamLabel = slotMeta.team || 'Unknown team';
-        return `<div class="save-slot ${slotNumber === activeSlot ? 'active' : ''}">` +
-            `<div><strong>Slot ${slotNumber}</strong> — ${teamLabel} (Season ${slotMeta.season})</div>` +
+        const optimizeDisabled = isActive ? '' : ' disabled';
+        const optimizeTitle = isActive ? '' : ' title="Switch to this slot to optimize its save data."';
+        return `<div class="save-slot ${isActive ? 'active' : ''}">` +
+            `${slotHeader} — ${teamLabel} (Season ${slotMeta.season})</div>` +
             `<div class="muted small">Saved: ${lastSaved}</div>` +
-            `<button class="btn" data-slot="${slotNumber}">Switch to Slot</button>` +
+            `<div class="save-slot-actions">` +
+                `<button class="btn" data-action="switch" data-slot="${slotNumber}">Switch to Slot</button>` +
+                `<button class="btn" data-action="optimize" data-slot="${slotNumber}" ${optimizeDisabled}${optimizeTitle}>Optimize Save</button>` +
+                `<button class="btn danger" data-action="clear" data-slot="${slotNumber}">Clear Slot</button>` +
+            `</div>` +
         `</div>`;
     }).join('');
 
     manager.innerHTML = `<div class="save-slot-list">${rows}</div>`;
 
-    manager.querySelectorAll('button[data-slot]').forEach(btn => {
+    manager.querySelectorAll('button[data-action]').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            const slot = parseInt(e.target.getAttribute('data-slot'), 10);
-            if (window.switchSaveSlot) {
+            const action = e.currentTarget.getAttribute('data-action');
+            const slot = parseInt(e.currentTarget.getAttribute('data-slot'), 10);
+
+            if (action === 'switch' && window.switchSaveSlot) {
                 window.switchSaveSlot(slot);
+                return;
+            }
+
+            if (action === 'optimize') {
+                if (slot !== activeSlot) return;
+                if (window.saveState) {
+                    const saved = window.saveState(null, { keepBoxScoreWeeks: 0 });
+                    if (saved && typeof window.setStatus === 'function') {
+                        window.setStatus('Save optimized: older box scores trimmed.', 'success');
+                    }
+                }
+                return;
+            }
+
+            if (action === 'clear') {
+                if (!window.clearSavedState) return;
+                const confirmed = window.confirm(`Clear save slot ${slot}? This cannot be undone.`);
+                if (!confirmed) return;
+                window.clearSavedState(slot);
+                if (window.renderSaveDataManager) {
+                    window.renderSaveDataManager();
+                }
+                if (window.renderSaveSlotInfo) {
+                    window.renderSaveSlotInfo();
+                }
             }
         });
     });
