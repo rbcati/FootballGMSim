@@ -6,15 +6,6 @@ import { calculateWinPercentage } from './coaching.js';
 // --- Utility Functions (Defined Locally) ---
 
 /**
- * Calculate win percentage (W + 0.5 * T) / (W + L + T)
- */
-function calculateWinPercentage(wins, losses, ties = 0) {
-  const totalGames = wins + losses + ties;
-  if (totalGames === 0) return 0;
-  return (wins + (ties * 0.5)) / totalGames;
-}
-
-/**
  * Get division name (AFC/NFC East, North, South, West)
  */
 function getDivisionName(conf, div) {
