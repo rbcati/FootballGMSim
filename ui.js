@@ -1,4 +1,6 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
+import { startNewSeason } from './simulation.js';
+
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
 #onboardTeam {
@@ -798,8 +800,8 @@ window.renderHub = function() {
                 const btnStartNewSeason = document.getElementById('btnStartNewSeason');
                 if (btnStartNewSeason) {
                     btnStartNewSeason.onclick = function() {
-                        if (window.startNewSeason) {
-                            window.startNewSeason();
+                        if (startNewSeason) {
+                            startNewSeason();
                         } else {
                             window.setStatus('Error: startNewSeason function not available', 'error');
                         }

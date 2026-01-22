@@ -1,4 +1,7 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
+import { simulateWeek, startNewSeason } from './simulation.js';
+import { setupEventListeners as setupGlobalEventListeners } from './events.js';
+import { renderPlayoffs } from './playoffs.js';
 
 /**
  * Enhanced Main Game Controller with improved performance and error handling
@@ -328,8 +331,8 @@ class GameController {
             const btnSimWeekHero = hubContainer.querySelector('#btnSimWeekHero');
             if (btnSimWeekHero) {
                 btnSimWeekHero.addEventListener('click', () => {
-                    if (window.simulateWeek) {
-                        window.simulateWeek();
+                    if (simulateWeek) {
+                        simulateWeek();
                     } else {
                         this.handleSimulateWeek();
                     }
@@ -355,8 +358,8 @@ class GameController {
             }
             if (btnStartNewSeason) {
                 btnStartNewSeason.addEventListener('click', () => {
-                    if (typeof window.startNewSeason === 'function') {
-                        window.startNewSeason();
+                    if (typeof startNewSeason === 'function') {
+                        startNewSeason();
                     } else {
                         this.setStatus('Error: startNewSeason function not available', 'error');
                     }
@@ -378,8 +381,8 @@ class GameController {
         try {
             console.log('Simulating week...');
             this.setStatus('Simulating week...', 'info');
-            if (window.simulateWeek) {
-                window.simulateWeek();
+            if (simulateWeek) {
+                simulateWeek();
                 this.setStatus('Week simulated successfully', 'success');
                 setTimeout(() => this.renderHub(), 1000);
             } else if (window.state?.league) {
@@ -899,8 +902,8 @@ class GameController {
                 await this.openOnboard();
             }
             this.setupEventListeners();
-            if (typeof window.setupEventListeners === 'function') {
-                window.setupEventListeners();
+            if (typeof setupGlobalEventListeners === 'function') {
+                setupGlobalEventListeners();
             } else {
                 console.warn('Global UI event listeners not available');
             }
@@ -1151,8 +1154,8 @@ class GameController {
                 }
                 break;
             case 'playoffs':
-                if (window.renderPlayoffs) {
-                    window.renderPlayoffs();
+                if (renderPlayoffs) {
+                    renderPlayoffs();
                 }
                 break;
             default:

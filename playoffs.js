@@ -1,3 +1,6 @@
+// playoffs.js - Playoff Management System
+import { simGameStats } from './simulation.js';
+
 'use strict';
 
 /**
@@ -48,7 +51,8 @@ function simPlayoffWeek() {
     const P = window.state?.playoffs;
     if (!P || P.winner) return;
 
-    const simGame = window.simGameStats;
+    // Use imported simGameStats
+    const simGame = simGameStats;
     const roundResults = { round: P.currentRound, games: [] };
 
     const simRound = (games) => {
@@ -312,3 +316,5 @@ window.generatePlayoffs = generatePlayoffs;
 window.simPlayoffWeek = simPlayoffWeek;
 window.renderPlayoffs = renderPlayoffs;
 window.startPlayoffs = startPlayoffs;
+
+export { generatePlayoffs, simPlayoffWeek, renderPlayoffs, startPlayoffs };

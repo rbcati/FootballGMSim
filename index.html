@@ -306,44 +306,6 @@
         </a>
     </nav>
 
-    <div id="onboardModal" class="modal" hidden>
-      <div class="modal-card">
-        <h3>Start New League</h3>
-        <div class="section">
-          <label>Team Names</label>
-          <div class="row">
-            <label><input type="radio" name="namesMode" value="fictional" checked> Fictional</label>
-            <label><input type="radio" name="namesMode" value="real"> Real NFL</label>
-          </div>
-        </div>
-        <div class="section">
-          <label>Game Mode</label>
-          <div class="row">
-            <label><input type="radio" name="gameMode" value="gm" checked> GM Mode</label>
-            <label><input type="radio" name="gameMode" value="career"> Career Mode</label>
-          </div>
-        </div>
-        <div id="careerOptions" class="section" hidden>
-          <label for="careerRole">Your Role</label>
-          <select id="careerRole">
-            <option value="GM">General Manager</option>
-            <option value="OC">Offensive Coordinator</option>
-            <option value="DC">Defensive Coordinator</option>
-          </select>
-        </div>
-        <div class="section">
-          <label for="onboardTeam">Choose your team</label>
-          <div class="row">
-            <select id="onboardTeam"></select>
-            <button id="onboardRandom" class="btn">Random</button>
-          </div>
-        </div>
-        <div class="section">
-          <button id="onboardStart" class="btn primary">Start Season</button>
-        </div>
-      </div>
-    </div>
-
 <script type="module" src="fixes.js"></script>
 <!-- Note: fixes.js now includes error-overlay.js, missing-functions.js, league-creation-fix.js, team-selection-fix.js, navbar-fix.js, dom-helpers-fix.js, and critical-fixes.js -->
 <script src="constants.js"></script>
@@ -379,11 +341,11 @@
 
 <!-- Simulation system - ES Module -->
 <script type="module" src="simulation.js"></script>
-<script src="events.js"></script>
+<script type="module" src="events.js"></script>
 <script src="story-events.js"></script>
 <script src="cap.js"></script>
 <script src="offseason.js"></script>
-<script src="playoffs.js"></script>
+<script type="module" src="playoffs.js"></script>
 
 <!-- Contracts & finances -->
 <script src="picks.js"></script>
@@ -407,7 +369,7 @@
 <script src="game-results-viewer.js"></script>
 <script src="schedule-viewer.js"></script>
 <script src="box-score-viewer.js"></script>
-<script src="live-game-viewer.js"></script>
+<script type="module" src="live-game-viewer.js"></script>
 <script type="module" src="standings-page.js"></script>
 
 <!-- Player Database & History -->
@@ -433,4 +395,3 @@
 
 </body>
 </html>
-        

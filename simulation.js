@@ -15,6 +15,8 @@
  */
 
 // Import dependencies
+import { startPlayoffs } from './playoffs.js';
+
 // TODO: Convert Utils and Constants to ES modules and import properly
 const getUtils = () => window.Utils;
 const getConstants = () => window.Constants;
@@ -1028,12 +1030,12 @@ function simulateWeek(options = {}) {
       // Set flag immediately to prevent multiple calls
       window.state.offseason = true;
       
-      if (typeof window.startOffseason === 'function') {
-        window.startOffseason();
+      if (typeof startOffseason === 'function') {
+        startOffseason();
       } else {
         // Fallback: start new season if offseason function doesn't exist
-        if (typeof window.startNewSeason === 'function') {
-          window.startNewSeason();
+        if (typeof startNewSeason === 'function') {
+          startNewSeason();
         }
       }
       return;
@@ -1044,8 +1046,8 @@ function simulateWeek(options = {}) {
       console.log('Regular season complete, starting playoffs');
       window.setStatus('Regular season complete!');
 
-      if (typeof window.startPlayoffs === 'function') {
-        window.startPlayoffs();
+      if (typeof startPlayoffs === 'function') {
+        startPlayoffs();
       } else {
         // Fallback if playoffs not implemented
         window.setStatus('Season complete! Check standings.');
@@ -1319,18 +1321,3 @@ export {
   initializePlayerStats,
   accumulateCareerStats
 };
-
-// ============================================================================
-// BACKWARD COMPATIBILITY SHIMS
-// ============================================================================
-// TODO: Remove these once all code is migrated to ES modules
-
-if (typeof window !== 'undefined') {
-  window.simulateWeek = simulateWeek;
-  window.simGameStats = simGameStats;
-  window.applyResult = applyResult;
-  window.startOffseason = startOffseason;
-  window.startNewSeason = startNewSeason;
-  window.initializePlayerStats = initializePlayerStats;
-  window.accumulateCareerStats = accumulateCareerStats;
-}

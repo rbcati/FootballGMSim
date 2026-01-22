@@ -1,3 +1,6 @@
+// events.js - Core Event Handlers
+import { simulateWeek } from './simulation.js';
+
 'use strict';
 
 /**
@@ -304,9 +307,10 @@ async function handleSimulateWeek(button) {
             button.textContent = 'Simulating...';
         }
         await new Promise(resolve => setTimeout(resolve, 50));
-        if (window.simulateWeek) {
-            window.simulateWeek();
-        }
+
+        // Use imported simulateWeek
+        simulateWeek();
+
     } catch (error) {
         console.error('Error in handleSimulateWeek:', error);
         window.setStatus(`Error: ${error.message}`, 'error');
@@ -385,10 +389,8 @@ function handleSimulatePlayoff(e) {
     }
 }
 
-window.setupEventListeners = setupEventListeners;
-
 // Add missing openOnboard function
-window.openOnboard = async function() {
+async function openOnboard() {
     console.log('🎯 Opening onboarding modal...');
     const { modal } = getOnboardingElements();
     if (modal) {
@@ -406,4 +408,9 @@ window.openOnboard = async function() {
     } else {
         console.error('❌ Onboarding modal not found');
     }
-};
+}
+
+window.setupEventListeners = setupEventListeners;
+window.openOnboard = openOnboard;
+
+export { setupEventListeners, openOnboard };

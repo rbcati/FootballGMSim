@@ -1,4 +1,6 @@
 // live-game-viewer.js - Live game simulation with play-by-play and play calling
+import { simulateWeek } from './simulation.js';
+
 'use strict';
 
 /**
@@ -636,17 +638,16 @@ class LiveGameViewer {
     const matchingGame = weekData.games.find(game => game && !game.bye && game.home === homeId && game.away === awayId);
     if (!matchingGame) return;
 
-    if (typeof window.simulateWeek === 'function') {
-      this.hasAppliedResult = true;
-      window.simulateWeek({
-        overrideResults: [{
-          home: homeId,
-          away: awayId,
-          scoreHome: this.gameState.home.score,
-          scoreAway: this.gameState.away.score
-        }]
-      });
-    }
+    // Use imported simulateWeek directly
+    this.hasAppliedResult = true;
+    simulateWeek({
+      overrideResults: [{
+        home: homeId,
+        away: awayId,
+        scoreHome: this.gameState.home.score,
+        scoreAway: this.gameState.away.score
+      }]
+    });
   }
 
   /**
@@ -780,8 +781,7 @@ if (!window.liveGameViewer) {
  * @param {number} homeTeamId - Home team ID
  * @param {number} awayTeamId - Away team ID
  */
-
-window.watchLiveGame = function(homeTeamId, awayTeamId) {
+function watchLiveGame(homeTeamId, awayTeamId) {
   try {
     const L = window.state?.league;
     if (!L || !L.teams) {
@@ -828,4 +828,9 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
   }
 };
 
+// Make globally available for inline handlers
+window.watchLiveGame = watchLiveGame;
+
 console.log('✅ Live Game Viewer loaded');
+
+export { LiveGameViewer, watchLiveGame };
