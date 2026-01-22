@@ -13,8 +13,8 @@
   gap: var(--space-6); 
   padding: var(--space-6);
   padding-left: calc(200px + var(--space-6)); /* Account for nav sidebar */
-  min-height: calc(100vh - 48px); /* Account for topbar */
-  margin-top: 48px; /* Account for topbar */
+  min-height: 100vh;
+  margin-top: 0;
   transition: padding-left var(--dur-slow) var(--ease);
 }
 
@@ -62,8 +62,15 @@
    NAVIGATION
    ============================================================================ */
 
+.nav-toggle-container {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 1002;
+}
+
 .nav-toggle {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 40px;
@@ -90,7 +97,7 @@
 .nav-sidebar {
   position: fixed;
   left: 0;
-  top: calc(48px + env(safe-area-inset-top, 0px));
+  top: env(safe-area-inset-top, 0px);
   bottom: 0;
   width: 200px;
   background: var(--bg-secondary);
@@ -102,6 +109,7 @@
   -webkit-overflow-scrolling: touch;
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-top: 60px; /* Space for toggle button */
   transform: translateX(0);
   pointer-events: auto;
 }
