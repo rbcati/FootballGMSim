@@ -871,7 +871,7 @@
                 <span>Value: ${playerVal.toFixed(0)}</span>
               </div>
             </div>
-            <button class="btn btn-sm" onclick="window.removeFromTradeBlock(${userTeamId}, ${player.id}); window.renderTradeBlock();" 
+            <button class="btn btn-sm" onclick="window.removeFromTradeBlock(${userTeamId}, '${player.id}'); window.renderTradeBlock();"
                     style="padding: 6px 12px; background: var(--error-text, #dc3545); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">
               Remove
             </button>
@@ -909,7 +909,7 @@
             font-size: 13px;
           ">
             <span><strong>${player.name}</strong> (${player.pos}) - OVR ${player.ovr}</span>
-            <button class="btn btn-sm" onclick="window.addToTradeBlock(${userTeamId}, ${player.id}); window.renderTradeBlock();" 
+            <button class="btn btn-sm" onclick="window.addToTradeBlock(${userTeamId}, '${player.id}'); window.renderTradeBlock();"
                     style="padding: 4px 10px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px;">
               Add
             </button>
