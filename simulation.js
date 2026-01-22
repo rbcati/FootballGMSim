@@ -15,9 +15,8 @@
  */
 
 // Import dependencies
-// TODO: Convert Utils and Constants to ES modules and import properly
-const getUtils = () => window.Utils;
-const getConstants = () => window.Constants;
+import { Utils } from './utils.js';
+import { Constants } from './constants.js';
 
 /**
  * Validates that required global dependencies are available
@@ -26,8 +25,8 @@ const getConstants = () => window.Constants;
 function validateDependencies() {
   const missing = [];
   
-  if (!window.Constants?.SIMULATION) missing.push('window.Constants.SIMULATION');
-  if (!window.Utils) missing.push('window.Utils');
+  if (!Constants?.SIMULATION) missing.push('Constants.SIMULATION');
+  if (!Utils) missing.push('Utils');
   if (!window.state?.league) missing.push('window.state.league');
   if (!window.setStatus) missing.push('window.setStatus');
   
@@ -476,13 +475,13 @@ function generatePunterStats(punter, teamScore, U) {
 function simGameStats(home, away) {
   try {
     // Validate dependencies
-    if (!window.Constants?.SIMULATION || !window.Utils) {
+    if (!Constants?.SIMULATION || !Utils) {
       console.error('Missing simulation dependencies');
       return null;
     }
     
-    const C = window.Constants.SIMULATION;
-    const U = window.Utils;
+    const C = Constants.SIMULATION;
+    const U = Utils;
 
     // Validate team inputs
     if (!home?.roster || !away?.roster || !Array.isArray(home.roster) || !Array.isArray(away.roster)) {
