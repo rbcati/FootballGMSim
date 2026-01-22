@@ -2154,11 +2154,105 @@ let C = getConstants();
   }
 
   // ============================================================================
+  // PLAYER CLASS (New Implementation)
+  // ============================================================================
+
+  /**
+   * Player Class: Manages individual stats, growth logic, and aging.
+   * Designed for a serialized GM simulation.
+   */
+  class Player {
+    constructor(data) {
+      this.id = data.id;
+      this.name = data.name;
+      this.age = data.age || 21;
+      this.potential = data.potential; // Ceiling for growth
+      this.longevity = data.longevity; // 0-100: Higher stays in prime longer
+
+      // Split ratings into Physical and Mental for realistic aging
+      this.ratings = {
+        physical: data.physicalRating || 70, // Speed, Strength, Agility
+        mental: data.mentalRating || 70,     // Vision, Intelligence, Consistency
+        overall: 0
+      };
+
+      this.updateOverall();
+    }
+
+    updateOverall() {
+      this.ratings.overall = Math.round((this.ratings.physical + this.ratings.mental) / 2);
+    }
+
+    /**
+     * Primary logic for the off-season progression step.
+     * Rankings for impact: Age > Potential > Longevity.
+     */
+    advanceSeason() {
+      this.age++;
+
+      const physicalChange = this.calculatePhysicalChange();
+      const mentalChange = this.calculateMentalChange();
+
+      this.ratings.physical = this.clamp(this.ratings.physical + physicalChange, 40, 99);
+      this.ratings.mental = this.clamp(this.ratings.mental + mentalChange, 40, 99);
+
+      this.updateOverall();
+
+      return {
+        name: this.name,
+        age: this.age,
+        change: { physical: physicalChange, mental: mentalChange },
+        newOverall: this.ratings.overall
+      };
+    }
+
+    calculatePhysicalChange() {
+      // Phase 1: Development (Under 25)
+      if (this.age < 25) {
+        let gap = this.potential - this.ratings.physical;
+        return Math.floor(Math.random() * (gap * 0.25)) + 1;
+      }
+      // Phase 2: The Plateau (25-28)
+      else if (this.age <= 28) {
+        return Math.floor(Math.random() * 3) - 1; // Slight fluctuation
+      }
+      // Phase 3: The Decline (29+)
+      else {
+        // Longevity acts as a buffer against physical decay
+        const decayBase = (this.age - 28) * 1.8;
+        const buffer = this.longevity / 25;
+        return -Math.max(1, Math.floor(Math.random() * decayBase - buffer));
+      }
+    }
+
+    calculateMentalChange() {
+      // Mental stats grow slower but stay high longer than physicals
+      if (this.age < 30) {
+        let gap = this.potential - this.ratings.mental;
+        return Math.floor(Math.random() * (gap * 0.15)) + 1;
+      }
+      // Mental prime lasts much longer
+      else if (this.age <= 34) {
+        return Math.floor(Math.random() * 2); // Can still improve slightly in mid-30s
+      }
+      // Late career decline
+      else {
+        return Math.floor(Math.random() * 3) - 2;
+      }
+    }
+
+    clamp(val, min, max) {
+      return Math.min(Math.max(val, min), max);
+    }
+  }
+
+  // ============================================================================
   // ES MODULE EXPORTS
   // ============================================================================
 
   // Export constants
   export { SKILL_TREES, DRAFT_CONFIG };
+  export default Player;
 
   // Export progression system
   export { initProgressionStats, calculateGameXP, addXP, applySkillTreeUpgrade };
@@ -2245,6 +2339,7 @@ let C = getConstants();
   C = getConstants();
 
   // Progression system
+  window.Player = Player;
   window.SKILL_TREES = SKILL_TREES;
   window.initProgressionStats = initProgressionStats;
   window.calculateGameXP = calculateGameXP;
