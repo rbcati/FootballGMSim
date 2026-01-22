@@ -1,17 +1,17 @@
 // constants.js - Cleaned, organized, and properly exported properties
+// ES Module version
 
-(function (global) {
   'use strict';
 
   // --- I. GAME CONFIGURATION ---
-  const GAME_CONFIG = {
+  export const GAME_CONFIG = {
     YEAR_START: 2025,
     SAVE_KEY: 'nflGM4.league',
     ROUTES: ['hub','roster','contracts','cap','schedule','standings','trade','freeagency','draft','playoffs','settings', 'hallOfFame', 'scouting']
   };
 
   // --- II. SALARY & CONTRACTS ---
-  const SALARY_CAP = {
+  export const SALARY_CAP = {
     BASE: 220, // Base Salary Cap in Millions
     MAX_ROLLOVER: 10,
     ROOKIE_DISCOUNT: 0.9,
@@ -21,11 +21,11 @@
   };
 
   // --- III. PLAYER & ROSTER DEFINITION ---
-  const POSITIONS = ["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];
-  const OFFENSIVE_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'];
-  const DEFENSIVE_POSITIONS = ['DL', 'LB', 'CB', 'S', 'P'];
+  export const POSITIONS = ["QB","RB","WR","TE","OL","DL","LB","CB","S","K","P"];
+  export const OFFENSIVE_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'];
+  export const DEFENSIVE_POSITIONS = ['DL', 'LB', 'CB', 'S', 'P'];
   
-  const PLAYER_CONFIG = {
+  export const PLAYER_CONFIG = {
     MIN_AGE: 21,
     MAX_AGE: 34,
     ROOKIE_MIN_AGE: 21,
@@ -41,13 +41,13 @@
     PLAYER_RETIREMENT_AGE_MAX: 40
   };
   
-  const DEPTH_NEEDS = {
+  export const DEPTH_NEEDS = {
     QB: 2, RB: 3, WR: 4, TE: 2, OL: 6,
     DL: 5, LB: 4, CB: 4, S: 3, K: 1, P: 1
   };
 
   // --- IV. RATING & ATTRIBUTE LOGIC ---
-  const OVR_WEIGHTS = {
+  export const OVR_WEIGHTS = {
     QB: { throwPower: 0.2, throwAccuracy: 0.3, awareness: 0.3, speed: 0.1, intelligence: 0.1 },
     RB: { speed: 0.2, acceleration: 0.2, trucking: 0.15, juking: 0.15, catching: 0.1, awareness: 0.2 },
     WR: { speed: 0.3, acceleration: 0.2, catching: 0.3, catchInTraffic: 0.2 },
@@ -61,7 +61,7 @@
     P:  { kickPower: 0.6, kickAccuracy: 0.4 }
   };
   
-  const POS_RATING_RANGES = {
+  export const POS_RATING_RANGES = {
     QB: { throwPower: [60, 99], throwAccuracy: [55, 99], awareness: [50, 99], speed: [40, 85], intelligence: [60, 99] },
     RB: { speed: [70, 99], acceleration: [70, 99], trucking: [50, 99], juking: [50, 99], catching: [40, 90], awareness: [50, 90] },
     WR: { speed: [70, 99], acceleration: [70, 99], catching: [65, 99], catchInTraffic: [55, 99], awareness: [50, 90] },
@@ -76,29 +76,29 @@
   };
 
   // --- V. GAME SYSTEMS (Draft, FA, Training, HoF, Sim) ---
-  const TRAINING = {
+  export const TRAINING = {
     SUCCESS_BASE_RATE: 0.55, SUCCESS_MIN_RATE: 0.15, SUCCESS_MAX_RATE: 0.85,
     COACH_SKILL_MODIFIER: 0.15, AGE_PENALTY_PER_YEAR: 0.015,
     HIGH_RATING_PENALTY: 0.01, FATIGUE_GAIN_SUCCESS: 2,
     FATIGUE_GAIN_FAIL: 1, MAX_RATING_IMPROVEMENT: 4
   };
   
-  const DRAFT_CONFIG = {
+  export const DRAFT_CONFIG = {
     TOTAL_PROSPECTS: 250, SCOUTABLE_PROSPECTS: 150, ROUNDS: 7, TEAMS: 32
   };
   
-  const FREE_AGENCY = {
+  export const FREE_AGENCY = {
     POOL_SIZE: 120, CONTRACT_DISCOUNT: 0.9, DEFAULT_YEARS: 2, GUARANTEED_PCT: 0.5
   };
   
-  const SIMULATION = {
+  export const SIMULATION = {
     HOME_ADVANTAGE: 2.5, BASE_SCORE_MIN: 14, BASE_SCORE_MAX: 31, SCORE_VARIANCE: 17,
     MIN_PASS_ATTEMPTS: 25, MAX_PASS_ATTEMPTS: 45, MIN_COMPLETION_PCT: 55, MAX_COMPLETION_PCT: 80,
     MIN_RUSH_ATTEMPTS: 15, MAX_RUSH_ATTEMPTS: 30,
     YARDS_PER_COMPLETION: { MIN: 8, MAX: 15 }, YARDS_PER_CARRY: { MIN: 3, MAX: 6 }
   };
   
-  const HALL_OF_FAME = {
+  export const HALL_OF_FAME = {
     MIN_YEARS: 5, LEGACY_THRESHOLD: 30, RETIREMENT_AGE_START: 33,
     RETIREMENT_CHANCE_PER_YEAR: 0.20, FORCED_RETIREMENT_AGE: 38,
     STATS_THRESHOLDS: {
@@ -107,22 +107,26 @@
   };
 
   // --- VI. NAMES, COLLEGES, ABILITIES (Relies on expanded-names.js being loaded first) ---
-  const FIRST_NAMES = global.EXPANDED_FIRST_NAMES || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
-  const LAST_NAMES = global.EXPANDED_LAST_NAMES || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+  // Using window explicitly
+  const defaultFirstNames = ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
+  const defaultLastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
   
-  const NAMES = { first: FIRST_NAMES, last: LAST_NAMES };
+  export const FIRST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || defaultFirstNames;
+  export const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || defaultLastNames;
   
-  const NAMES_BY_POS = {
+  export const NAMES = { first: FIRST_NAMES, last: LAST_NAMES };
+
+  export const NAMES_BY_POS = {
     QB: NAMES, RB: NAMES, WR: NAMES, TE: NAMES, OL: NAMES,
     DL: NAMES, LB: NAMES, CB: NAMES, S: NAMES, K: NAMES, P: NAMES
   };
   
-  const COLLEGES = [
+  export const COLLEGES = [
     'Alabama', 'Ohio State', 'Georgia', 'Clemson', 'Oklahoma', 'LSU', 'Florida',
     'Michigan', 'Penn State', 'Texas', 'Notre Dame', 'USC', 'Oregon', 'Wisconsin'
   ];
   
-  const ABILITIES_BY_POS = {
+  export const ABILITIES_BY_POS = {
     QB: ['Cannon Arm', 'Deadeye', 'Escape Artist', 'Field General', 'Clutch'],
     RB: ['Bruiser', 'Ankle Breaker', 'Breakaway Speed', 'Pass Catcher', 'Workhorse'],
     WR: ['Deep Threat', 'Possession', 'Route Runner', 'Sure Hands', 'YAC Monster'],
@@ -137,11 +141,11 @@
   };
 
   // --- VII. LEAGUE STRUCTURE & TRADES ---
-  const YEARS_OF_PICKS = 3;
-  const CONF_NAMES = ["AFC","NFC"];
-  const DIV_NAMES = ["East","North","South","West"];
+  export const YEARS_OF_PICKS = 3;
+  export const CONF_NAMES = ["AFC","NFC"];
+  export const DIV_NAMES = ["East","North","South","West"];
   
-  const TRADE_VALUES = {
+  export const TRADE_VALUES = {
     PICKS: {
       1: { 1: 3000, 2: 2600, 3: 2200, 4: 1800, 5: 1600, 6: 1400, 7: 1200 },
       2: { 1: 1800, 2: 1600, 3: 1400, 4: 1200, 5: 1000, 6: 800, 7: 600 },
@@ -154,12 +158,12 @@
     FUTURE_DISCOUNT: 0.8
   };
   
-  const POSITION_VALUES = {
+  export const POSITION_VALUES = {
     QB: 1.6, WR: 1.25, CB: 1.2, DL: 1.15, OL: 1.1,
     RB: 1.0, LB: 1.0, S: 1.0, TE: 0.9, K: 0.5, P: 0.5
   };
   
-  const OFFENSIVE_SCHEMES = {
+  export const OFFENSIVE_SCHEMES = {
     'Pass Heavy': { keyStats: ['throwAccuracy', 'throwPower', 'catching', 'passBlock'], description: 'Air it out with a pass-first approach.' },
     'Run Heavy': { keyStats: ['trucking', 'runBlock', 'acceleration', 'strength'], description: 'Ground and pound to control the clock.' },
     'Balanced': { keyStats: ['throwAccuracy', 'trucking', 'catching', 'runBlock'], description: 'Mix of run and pass plays.' },
@@ -167,7 +171,7 @@
     'Vertical': { keyStats: ['throwPower', 'speed', 'passBlock', 'catching'], description: 'Deep shots and explosive plays.' }
   };
   
-  const DEFENSIVE_SCHEMES = {
+  export const DEFENSIVE_SCHEMES = {
     '4-3': { keyStats: ['runStop', 'tackling', 'awareness', 'coverage'], description: 'Traditional 4-3 defense with strong run support.' },
     '3-4': { keyStats: ['passRushPower', 'speed', 'coverage', 'awareness'], description: '3-4 defense with versatile linebackers.' },
     'Nickel': { keyStats: ['coverage', 'speed', 'awareness', 'intelligence'], description: 'Extra defensive back for pass coverage.' },
@@ -176,7 +180,7 @@
   };
   
   // --- VIII. EXPORT EVERYTHING ---
-  global.Constants = {
+  export const Constants = {
     GAME_CONFIG,
     SALARY_CAP,
     PLAYER_CONFIG,
@@ -207,11 +211,16 @@
     PLAYER_RETIREMENT_AGE_MAX: PLAYER_CONFIG.PLAYER_RETIREMENT_AGE_MAX
   };
   
-  // Make individual arrays globally available (for compatibility with state.js and expanded-names)
-  global.FIRST_NAMES = FIRST_NAMES;
-  global.LAST_NAMES = LAST_NAMES;
-  
-})(window);
+  if (typeof window !== 'undefined') {
+      // Merge with existing window.Constants to preserve data from scripts running earlier (e.g. teams.js)
+      window.Constants = Object.assign(window.Constants || {}, Constants);
 
-// Make constants available in legacy format too
-window.constants = window.Constants;
+      // Make individual arrays globally available (for compatibility with state.js and expanded-names)
+      window.FIRST_NAMES = FIRST_NAMES;
+      window.LAST_NAMES = LAST_NAMES;
+
+      // Make constants available in legacy format too
+      window.constants = window.Constants;
+  }
+
+  export default Constants;

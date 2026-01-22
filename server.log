@@ -1,55 +1,75 @@
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /index.html HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /base.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /style.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /layout.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /components.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /features.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /standings-savemanager.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /coaching-styles.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /ui-enhancements.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /mobile.css HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /fixes.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /utils.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /schedule-factory.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /player.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /constants.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /expanded-names.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /staff.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /league.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /coaching.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /schedule.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /state.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /teams.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /simulation.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /events.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /story-events.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /cap.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /offseason.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /trade.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /freeagency.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /picks.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /playoffs.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /contract-management.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /draft.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /owner-mode.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /team-ratings.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /scheme-management.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /team-statistics.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /player-stats-viewer.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /game-results-viewer.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /schedule-viewer.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /box-score-viewer.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /live-game-viewer.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /standings-page.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /player-database.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /history.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /awards.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /records.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /player-comparison.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /injury-system.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /retirement-system.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /data-visualization.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /ui-components.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /ui.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /ui-interactions.js HTTP/1.1" 200 -
-127.0.0.1 - - [22/Jan/2026 21:48:12] "GET /main.js HTTP/1.1" 200 -
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/http/server.py", line 1314, in <module>
+    test(
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/http/server.py", line 1261, in test
+    with ServerClass(addr, HandlerClass) as httpd:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/socketserver.py", line 457, in __init__
+    self.server_bind()
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/http/server.py", line 1308, in server_bind
+    return super().server_bind()
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/http/server.py", line 136, in server_bind
+    socketserver.TCPServer.server_bind(self)
+  File "/home/jules/.pyenv/versions/3.12.12/lib/python3.12/socketserver.py", line 478, in server_bind
+    self.socket.bind(self.server_address)
+OSError: [Errno 98] Address already in use
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /base.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /components.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /coaching-styles.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /mobile.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /layout.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /standings-savemanager.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /features.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /verification/verify_modules.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /expanded-names.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /utils.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /ui-enhancements.css HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /constants.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /fixes.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /player.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /staff.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /schedule.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /schedule-factory.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /league.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /coaching.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /state.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /teams.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /events.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /story-events.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /simulation.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /cap.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /offseason.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /contract-management.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /freeagency.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /tradeproposals.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /playoffs.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /trade.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /picks.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /draft.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /owner-mode.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /team-ratings.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /scheme-management.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /team-statistics.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /player-stats-viewer.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /game-results-viewer.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /schedule-viewer.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /box-score-viewer.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /live-game-viewer.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /standings-page.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /player-database.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /history.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /awards.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /records.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /injury-system.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /player-comparison.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /retirement-system.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /ui-components.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /data-visualization.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /ui.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /ui-interactions.js HTTP/1.1" 200 -
+127.0.0.1 - - [22/Jan/2026 22:10:56] "GET /main.js HTTP/1.1" 200 -

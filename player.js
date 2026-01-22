@@ -4,14 +4,11 @@
 // ES Module version - migrated from IIFE pattern
 
 // Import dependencies
-// TODO: Convert Utils and Constants to ES modules and import properly
-// For now, we access them from window for backward compatibility
-const getUtils = () => window.Utils;
-const getConstants = () => window.Constants;
+import Utils from './utils.js';
+import Constants from './constants.js';
 
-// Get Utils and Constants (will be updated when those are converted to ES modules)
-let U = getUtils();
-let C = getConstants();
+const U = Utils;
+const C = Constants;
 
   // ============================================================================
   // PLAYER PROGRESSION & SKILL TREES (from player-progression.js)
@@ -148,9 +145,6 @@ let C = getConstants();
    * @returns {number} Amount of XP earned
    */
   function calculateGameXP(gameStats, ovr) {
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
     let baseXP = 50; // Base XP for playing a game
     
     // Performance Bonus (simplified, real logic uses position-specific stats)
@@ -291,10 +285,6 @@ let C = getConstants();
    * Create a fallback player if main creation fails
    */
   function createFallbackPlayer(pos, age, ovr) {
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
-    
     if (!U || !C) {
       return {
         id: 'fallback_' + Date.now(),
@@ -782,8 +772,6 @@ let C = getConstants();
       });
     }
     
-    // Update Constants reference
-    C = getConstants();
     const positions = C.POSITIONS || ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P'];
     
     let html = '<div class="depth-chart-container">';
@@ -1102,10 +1090,6 @@ let C = getConstants();
    */
   function progressPlayer(player) {
     if (!player) return player;
-
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
 
     try {
       // Age progression
@@ -2333,10 +2317,6 @@ let C = getConstants();
   // BACKWARD COMPATIBILITY SHIMS
   // ============================================================================
   // TODO: Remove these once all code is migrated to ES modules
-
-  // Update Utils and Constants references (they may not be loaded yet)
-  U = getUtils();
-  C = getConstants();
 
   // Progression system
   window.Player = Player;
