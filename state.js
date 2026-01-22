@@ -2,12 +2,10 @@
 // ES Module version - migrated from IIFE pattern
 
 // Import dependencies
-// TODO: Convert Constants to ES module and import properly
-// For now, we access it from window for backward compatibility
-const getConstants = () => window.Constants || {};
+import { Constants } from './constants.js';
 
 // --- Configuration Variables ---
-const C = getConstants();
+const C = Constants;
 const SAVE_KEY_BASE = (C.GAME_CONFIG && C.GAME_CONFIG.SAVE_KEY) || 'nflGM4.state';
 const YEAR_START = (C.GAME_CONFIG && C.GAME_CONFIG.YEAR_START) || 2025;
 
