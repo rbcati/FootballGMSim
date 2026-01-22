@@ -1146,7 +1146,7 @@ function simulateWeek(options = {}) {
                 playerStats[player.id] = {
                   name: player.name,
                   pos: player.pos,
-                  stats: JSON.parse(JSON.stringify(player.stats.game)) // Deep copy
+                  stats: { ...player.stats.game } // Shallow copy (sufficient as stats are flat)
                 };
               }
             });
