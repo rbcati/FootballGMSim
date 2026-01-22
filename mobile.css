@@ -113,7 +113,7 @@
     position: relative;
     top: 0;
     margin-bottom: var(--space-3);
-    order: 2;
+    order: 2 !important;
   }
   
   /* Grid layouts */
@@ -771,4 +771,66 @@
   input, select, textarea {
     font-size: 16px;
   }
+}
+
+/* ============================================================================
+   BOTTOM NAVIGATION
+   ============================================================================ */
+
+.bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface-strong);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid var(--hairline);
+    padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+    z-index: 1000;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+}
+
+.nav-item-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    width: 64px;
+}
+
+.nav-item-bottom svg {
+    width: 24px;
+    height: 24px;
+    stroke-width: 2px;
+}
+
+.nav-item-bottom.active {
+    color: var(--accent);
+    background: rgba(10, 132, 255, 0.1);
+}
+
+.nav-item-bottom.active svg {
+    stroke: var(--accent);
+}
+
+/* Adjust layout to not be covered by bottom nav on mobile */
+@media (max-width: 768px) {
+    .bottom-nav {
+        display: flex;
+    }
+
+    .layout {
+        margin-bottom: 80px; /* Space for bottom nav */
+    }
 }
