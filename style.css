@@ -120,8 +120,8 @@ html, body {
   gap: var(--space-6); 
   padding: var(--space-6);
   padding-left: calc(200px + var(--space-6)); /* Account for nav sidebar */
-  min-height: calc(100vh - 48px); /* Account for topbar */
-  margin-top: 48px; /* Account for topbar */
+  min-height: 100vh;
+  margin-top: 0;
   transition: padding-left var(--dur-slow) var(--ease);
 }
 
@@ -270,7 +270,7 @@ html, body {
 .nav-sidebar {
   position: fixed;
   left: 0;
-  top: calc(48px + env(safe-area-inset-top, 0px)); /* Below topbar */
+  top: env(safe-area-inset-top, 0px);
   bottom: 0;
   width: 200px;
   background: var(--bg-secondary);
