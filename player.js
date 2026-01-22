@@ -4,14 +4,11 @@
 // ES Module version - migrated from IIFE pattern
 
 // Import dependencies
-// TODO: Convert Utils and Constants to ES modules and import properly
-// For now, we access them from window for backward compatibility
-const getUtils = () => window.Utils;
-const getConstants = () => window.Constants;
+import { Utils } from './utils.js';
+import { Constants } from './constants.js';
 
-// Get Utils and Constants (will be updated when those are converted to ES modules)
-let U = getUtils();
-let C = getConstants();
+const U = Utils;
+const C = Constants;
 
   // ============================================================================
   // PLAYER PROGRESSION & SKILL TREES (from player-progression.js)
@@ -149,8 +146,6 @@ let C = getConstants();
    */
   function calculateGameXP(gameStats, ovr) {
     // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
     let baseXP = 50; // Base XP for playing a game
     
     // Performance Bonus (simplified, real logic uses position-specific stats)
@@ -276,7 +271,6 @@ let C = getConstants();
    * Generate college name
    */
   function generateCollege() {
-    const U = window.Utils;
     const colleges = [
       'Alabama', 'Ohio State', 'Georgia', 'Clemson', 'Oklahoma', 'LSU', 'Florida',
       'Michigan', 'Penn State', 'Texas', 'Notre Dame', 'USC', 'Oregon', 'Wisconsin',
@@ -292,8 +286,6 @@ let C = getConstants();
    */
   function createFallbackPlayer(pos, age, ovr) {
     // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
     
     if (!U || !C) {
       return {
@@ -350,7 +342,6 @@ let C = getConstants();
    * Generate basic ratings for position if detailed function not available
    */
   function generateBasicRatings(pos, baseOvr) {
-    const U = window.Utils;
     const variance = 8; // +/- variance from base
     
     const ratings = {};
@@ -783,7 +774,6 @@ let C = getConstants();
     }
     
     // Update Constants reference
-    C = getConstants();
     const positions = C.POSITIONS || ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P'];
     
     let html = '<div class="depth-chart-container">';
@@ -1104,8 +1094,6 @@ let C = getConstants();
     if (!player) return player;
 
     // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
 
     try {
       // Age progression
@@ -1929,7 +1917,6 @@ let C = getConstants();
    * @returns {string} - Selected position
    */
   function getWeightedPosition(positionWeights = DRAFT_CONFIG.POSITIONS) {
-      const U = window.Utils;
       const positions = Object.keys(positionWeights);
       const weights = Object.values(positionWeights);
       
@@ -1955,7 +1942,6 @@ let C = getConstants();
    * @returns {Object} - Object with floor, ceiling, and range string
    */
   function calculatePotentialRange(actualOverall, config = DRAFT_CONFIG) {
-      const U = window.Utils;
       const variance = U ? U.rand(config.POTENTIAL_VARIANCE.MIN, config.POTENTIAL_VARIANCE.MAX) : 10;
       
       const floor = U ? U.clamp(
@@ -1985,7 +1971,6 @@ let C = getConstants();
    * @returns {Object} - Rookie player object
    */
   function createRookiePlayer(position, year) {
-      const U = window.Utils;
       
       // Check if makePlayer function exists
       if (typeof makePlayer !== 'function') {
@@ -2026,9 +2011,6 @@ let C = getConstants();
           validateDraftParams(year, options);
           
           // Check dependencies
-          if (!window.Utils) {
-              throw new Error('Utils library is not available. Please ensure it is loaded.');
-          }
           
           // Merge options with defaults
           const config = {
@@ -2335,8 +2317,6 @@ let C = getConstants();
   // TODO: Remove these once all code is migrated to ES modules
 
   // Update Utils and Constants references (they may not be loaded yet)
-  U = getUtils();
-  C = getConstants();
 
   // Progression system
   window.Player = Player;
