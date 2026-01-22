@@ -17,6 +17,7 @@
 // Import dependencies
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
+import { calculateGamePerformance } from './coach-system.js';
 
 /**
  * Validates that required global dependencies are available
@@ -467,6 +468,22 @@ function generatePunterStats(punter, teamScore, U) {
 }
 
 /**
+ * Calculate how many weeks a player has been with the team
+ * (Local copy to avoid dependency issues with player.js)
+ * @param {Object} player - Player object
+ * @param {Object} team - Team object
+ * @returns {number} Weeks with team
+ */
+function calculateWeeksWithTeam(player, team) {
+  // Simplified: check player history or use a default
+  if (player.history && player.history.length > 0) {
+    const teamHistory = player.history.filter(h => h.team === team.abbr);
+    return teamHistory.length * 17; // Approximate: 1 season = 17 weeks
+  }
+  return 17; // Default: assume 1 season
+}
+
+/**
  * Simulates game statistics for a single game between two teams.
  * @param {object} home - The home team object.
  * @param {object} away - The away team object.
@@ -494,13 +511,21 @@ function simGameStats(home, away) {
     }
 
     // Calculate team strengths
-    const calculateStrength = (roster) => {
-      if (!roster.length) return 50;
-      return roster.reduce((acc, p) => acc + (p.ovr || 50), 0) / roster.length;
+    const calculateStrength = (team) => {
+      const roster = team.roster;
+      if (!roster || !roster.length) return 50;
+
+      return roster.reduce((acc, p) => {
+        // Calculate tenure in years (approx 17 weeks per season)
+        const tenureYears = calculateWeeksWithTeam(p, team) / 17;
+        // Use the new performance calculation which adjusts based on tenure
+        const effectiveOvr = calculateGamePerformance(p, tenureYears);
+        return acc + effectiveOvr;
+      }, 0) / roster.length;
     };
 
-    const homeStrength = calculateStrength(home.roster);
-    const awayStrength = calculateStrength(away.roster);
+    const homeStrength = calculateStrength(home);
+    const awayStrength = calculateStrength(away);
 
     // Calculate defensive strengths (for stat generation)
     const calculateDefenseStrength = (roster) => {
