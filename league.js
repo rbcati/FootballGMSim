@@ -1,5 +1,6 @@
 // league.js - Core League Generation Logic
 'use strict';
+import { initializeCoachingStats } from './coaching.js';
 
 window.makeLeague = function(
     teams,
@@ -207,9 +208,9 @@ window.makeLeague = function(
     }
 
     // 3. Initialize Derived Stats (Coaching & Team Ratings)
-    if (window.initializeCoachingStats) {
+    if (initializeCoachingStats) {
         L.teams.forEach(t => {
-            if (t.staff?.headCoach) window.initializeCoachingStats(t.staff.headCoach);
+            if (t.staff?.headCoach) initializeCoachingStats(t.staff.headCoach);
         });
     }
 

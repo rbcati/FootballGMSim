@@ -1,4 +1,4 @@
-  'use strict';
+import { renderCoachingStats, renderCoaching } from './coaching.js';
 
 /**
  * Enhanced Main Game Controller with improved performance and error handling
@@ -1127,10 +1127,10 @@ class GameController {
                 }
                 break;
             case 'coaching':
-                if (window.renderCoachingStats) {
-                    window.renderCoachingStats();
-                } else if (window.renderCoaching) {
-                    window.renderCoaching();
+                if (renderCoachingStats) {
+                    renderCoachingStats();
+                } else if (renderCoaching) {
+                    renderCoaching();
                 }
                 break;
             case 'draft':

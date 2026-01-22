@@ -1,6 +1,8 @@
 // fixes.js - Combined Fix Files
 // This file combines: error-overlay.js, missing-functions.js, league-creation-fix.js, 
 // team-selection-fix.js, navbar-fix.js, and dom-helpers-fix.js
+import { renderCoachingStats } from './coaching.js';
+import { renderTradeProposals } from './tradeproposals.js';
 
 'use strict';
 
@@ -1087,8 +1089,8 @@ console.log('[LeagueCreationFix] Loaded');
             } else {
               window.show('trade');
             }
-            if (window.renderTradeProposals) {
-              setTimeout(() => window.renderTradeProposals(), 100);
+            if (renderTradeProposals) {
+              setTimeout(() => renderTradeProposals(), 100);
               console.log('✅ Trade proposals rendered');
             }
             break;
@@ -1102,8 +1104,8 @@ console.log('[LeagueCreationFix] Loaded');
               window.setupCoachingTabs();
             }
             // Render coaching stats
-            if (window.renderCoachingStats) {
-              window.renderCoachingStats();
+            if (renderCoachingStats) {
+              renderCoachingStats();
               console.log('✅ Coaching rendered');
             } else {
               console.warn('⚠️ renderCoachingStats function not found');
