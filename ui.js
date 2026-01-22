@@ -147,6 +147,18 @@ window.show = function(viewId) {
       const isActive = href === `#/${viewId}`;
       pill.setAttribute('aria-current', isActive ? 'page' : null);
     });
+
+    // Update bottom nav
+    document.querySelectorAll('.nav-item-bottom').forEach(item => {
+        const href = item.getAttribute('href');
+        const isActive = href === `#/${viewId}`;
+        if (isActive) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+
     console.log('✅ View shown successfully:', viewId);
   } else {
     console.error('❌ View not found:', viewId);

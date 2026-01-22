@@ -216,27 +216,90 @@ class GameController {
                 `;
             }
             
+            // Find next game for user team
+            let nextGameHTML = '';
+            if (!isOffseason) {
+                const currentWeek = L.week || 1;
+                let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
+                // Handle different schedule formats (array of objects or array of arrays)
+                if (Array.isArray(scheduleWeeks) && scheduleWeeks.length > 0) {
+                    if (scheduleWeeks[0] && typeof scheduleWeeks[0] === 'object' && scheduleWeeks[0].weekNumber !== undefined) {
+                        scheduleWeeks = scheduleWeeks;
+                    } else if (Array.isArray(scheduleWeeks[0]) || (scheduleWeeks[0] && scheduleWeeks[0].games)) {
+                        scheduleWeeks = scheduleWeeks;
+                    }
+                }
+                // Find current week data
+                const weekData = Array.isArray(scheduleWeeks) ?
+                    (scheduleWeeks.find(w => w && (w.weekNumber === currentWeek || w.week === currentWeek)) || scheduleWeeks[currentWeek - 1]) : null;
+
+                if (weekData && weekData.games) {
+                    const nextGame = weekData.games.find(g => g.home === userTeamId || g.away === userTeamId);
+                    if (nextGame) {
+                        const isHome = nextGame.home === userTeamId;
+                        const oppId = isHome ? nextGame.away : nextGame.home;
+                        const opponent = L.teams[oppId];
+                        if (opponent) {
+                            const oppRecord = opponent.record ? `(${opponent.record.w}-${opponent.record.l})` : '';
+                            nextGameHTML = `
+                                <div class="card next-game-card" style="background: linear-gradient(135deg, rgba(30, 40, 60, 0.8), rgba(20, 25, 35, 0.9)); border: 1px solid var(--accent);">
+                                    <h3 style="color: var(--accent); margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Next Opponent - Week ${currentWeek}</h3>
+                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
+                                        <div style="font-size: 1.5rem; font-weight: 700;">${isHome ? 'vs' : '@'} ${opponent.name} <span style="font-size: 1rem; color: var(--text-muted); font-weight: 400;">${oppRecord}</span></div>
+                                        <div style="font-size: 2rem;">🏈</div>
+                                    </div>
+                                    ${!isOffseason ? '<button class="btn primary" id="btnSimWeekHero" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">Play Week ' + currentWeek + '</button>' : ''}
+                                </div>
+                            `;
+                        }
+                    } else {
+                         nextGameHTML = `
+                            <div class="card next-game-card">
+                                <h3>Week ${currentWeek}</h3>
+                                <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 1.2rem;">BYE WEEK</div>
+                                ${!isOffseason ? '<button class="btn primary" id="btnSimWeekHero" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">Simulate Bye Week</button>' : ''}
+                            </div>
+                        `;
+                    }
+                }
+            }
+
             hubContainer.innerHTML = `
+                ${nextGameHTML}
                 <div class="card">
                     <h2>Team Hub</h2>
                     <div class="grid two">
                         <div>
                             <h3>Quick Actions</h3>
-                            <div class="actions">
-                                <button class="btn primary" onclick="location.hash='#/roster'">View Roster</button>
-                                <button class="btn" onclick="location.hash='#/schedule'">View Schedule</button>
-                                <button class="btn" onclick="location.hash='#/trade'">Trade Center</button>
-                                <button class="btn" onclick="location.hash='#/freeagency'">Free Agency</button>
-                                <button class="btn" onclick="location.hash='#/draft'">Draft</button>
+                            <div class="actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;">
+                                <button class="btn" onclick="location.hash='#/roster'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">👥</span>
+                                    Roster
+                                </button>
+                                <button class="btn" onclick="location.hash='#/trade'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">⇄</span>
+                                    Trade
+                                </button>
+                                <button class="btn" onclick="location.hash='#/freeagency'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">✍️</span>
+                                    Sign
+                                </button>
+                                <button class="btn" onclick="location.hash='#/draft'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">🎓</span>
+                                    Draft
+                                </button>
+                                <button class="btn" onclick="location.hash='#/schedule'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">📅</span>
+                                    Sched
+                                </button>
                             </div>
                         </div>
                         <div>
                             <h3>League Actions</h3>
-                            <div class="actions">
-                                ${!isOffseason ? '<button class="btn primary" id="btnSimWeek">Simulate Week</button>' : ''}
-                                ${!isOffseason ? '<button class="btn" id="btnSimSeason" onclick="handleSimulateSeason()">Simulate Season</button>' : ''}
-                                <button class="btn" onclick="location.hash='#/standings'">View Standings</button>
-                                ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
+                            <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
+                                ${!isOffseason ? '<button class="btn" id="btnSimSeason" onclick="handleSimulateSeason()" style="justify-content: center;">Simulate Season</button>' : ''}
+                                <button class="btn" onclick="location.hash='#/standings'" style="justify-content: center;">View Standings</button>
+                                ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -260,6 +323,19 @@ class GameController {
             // Add event listeners for simulate buttons
             const btnSimSeason = hubContainer.querySelector('#btnSimSeason');
             const btnStartNewSeason = hubContainer.querySelector('#btnStartNewSeason');
+
+            // Handle Hero Sim Button
+            const btnSimWeekHero = hubContainer.querySelector('#btnSimWeekHero');
+            if (btnSimWeekHero) {
+                btnSimWeekHero.addEventListener('click', () => {
+                    if (window.simulateWeek) {
+                        window.simulateWeek();
+                    } else {
+                        this.handleSimulateWeek();
+                    }
+                });
+            }
+
             // btnSimWeek handled in events.js to avoid duplicates
             // Render additional interfaces
             setTimeout(() => {
