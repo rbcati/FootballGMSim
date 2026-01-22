@@ -4,14 +4,8 @@
 // ES Module version - migrated from IIFE pattern
 
 // Import dependencies
-// TODO: Convert Utils and Constants to ES modules and import properly
-// For now, we access them from window for backward compatibility
-const getUtils = () => window.Utils;
-const getConstants = () => window.Constants;
-
-// Get Utils and Constants (will be updated when those are converted to ES modules)
-let U = getUtils();
-let C = getConstants();
+import { Utils as U } from './utils.js';
+import { Constants as C } from './constants.js';
 
   // ============================================================================
   // PLAYER PROGRESSION & SKILL TREES (from player-progression.js)
@@ -148,9 +142,6 @@ let C = getConstants();
    * @returns {number} Amount of XP earned
    */
   function calculateGameXP(gameStats, ovr) {
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
     let baseXP = 50; // Base XP for playing a game
     
     // Performance Bonus (simplified, real logic uses position-specific stats)
@@ -276,7 +267,6 @@ let C = getConstants();
    * Generate college name
    */
   function generateCollege() {
-    const U = window.Utils;
     const colleges = [
       'Alabama', 'Ohio State', 'Georgia', 'Clemson', 'Oklahoma', 'LSU', 'Florida',
       'Michigan', 'Penn State', 'Texas', 'Notre Dame', 'USC', 'Oregon', 'Wisconsin',
@@ -291,10 +281,6 @@ let C = getConstants();
    * Create a fallback player if main creation fails
    */
   function createFallbackPlayer(pos, age, ovr) {
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
-    
     if (!U || !C) {
       return {
         id: 'fallback_' + Date.now(),
@@ -350,7 +336,6 @@ let C = getConstants();
    * Generate basic ratings for position if detailed function not available
    */
   function generateBasicRatings(pos, baseOvr) {
-    const U = window.Utils;
     const variance = 8; // +/- variance from base
     
     const ratings = {};
@@ -697,7 +682,6 @@ let C = getConstants();
     if (!team || !team.roster) return {};
     
     const depthChart = {};
-    const C = window.Constants;
     
     // Group players by position
     const byPosition = {};
@@ -782,8 +766,6 @@ let C = getConstants();
       });
     }
     
-    // Update Constants reference
-    C = getConstants();
     const positions = C.POSITIONS || ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K', 'P'];
     
     let html = '<div class="depth-chart-container">';
@@ -1102,10 +1084,6 @@ let C = getConstants();
    */
   function progressPlayer(player) {
     if (!player) return player;
-
-    // Update Utils and Constants references
-    U = getUtils();
-    C = getConstants();
 
     try {
       // Age progression
@@ -1929,7 +1907,6 @@ let C = getConstants();
    * @returns {string} - Selected position
    */
   function getWeightedPosition(positionWeights = DRAFT_CONFIG.POSITIONS) {
-      const U = window.Utils;
       const positions = Object.keys(positionWeights);
       const weights = Object.values(positionWeights);
       
@@ -1955,7 +1932,6 @@ let C = getConstants();
    * @returns {Object} - Object with floor, ceiling, and range string
    */
   function calculatePotentialRange(actualOverall, config = DRAFT_CONFIG) {
-      const U = window.Utils;
       const variance = U ? U.rand(config.POTENTIAL_VARIANCE.MIN, config.POTENTIAL_VARIANCE.MAX) : 10;
       
       const floor = U ? U.clamp(
@@ -1985,8 +1961,6 @@ let C = getConstants();
    * @returns {Object} - Rookie player object
    */
   function createRookiePlayer(position, year) {
-      const U = window.Utils;
-      
       // Check if makePlayer function exists
       if (typeof makePlayer !== 'function') {
           throw new Error('makePlayer function is not available. Please ensure it is loaded.');
@@ -2026,7 +2000,7 @@ let C = getConstants();
           validateDraftParams(year, options);
           
           // Check dependencies
-          if (!window.Utils) {
+          if (!U) {
               throw new Error('Utils library is not available. Please ensure it is loaded.');
           }
           
@@ -2333,10 +2307,6 @@ let C = getConstants();
   // BACKWARD COMPATIBILITY SHIMS
   // ============================================================================
   // TODO: Remove these once all code is migrated to ES modules
-
-  // Update Utils and Constants references (they may not be loaded yet)
-  U = getUtils();
-  C = getConstants();
 
   // Progression system
   window.Player = Player;
