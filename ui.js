@@ -1,3 +1,4 @@
+import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
 #onboardTeam {
@@ -826,7 +827,7 @@ window.renderHub = function() {
         // Render standings on hub
         renderHubStandings(L);
         
-        // Render trade proposals on hub
+// Render trade proposals on hub
         renderHubTradeProposals();
         
         // Update cap sidebar
@@ -931,7 +932,7 @@ function renderHubStandings(L) {
  * Renders trade proposals on the hub
  */
 function renderHubTradeProposals() {
-    if (!window.renderTradeProposals) return;
+    if (!renderTradeProposals) return;
     
     // Check if trade proposals container exists, create if not
     let proposalsContainer = document.getElementById('hubTradeProposals');
@@ -964,8 +965,8 @@ function renderHubTradeProposals() {
     if (!listEl) return;
     
     // Generate proposals if they don't exist
-    if (!window.state.tradeProposals && window.generateAITradeProposals) {
-        window.generateAITradeProposals();
+    if (!window.state.tradeProposals && generateAITradeProposals) {
+        generateAITradeProposals();
     }
     
     const proposals = window.state.tradeProposals || [];
@@ -974,8 +975,8 @@ function renderHubTradeProposals() {
     const refreshBtn = document.getElementById('btnRefreshHubProposals');
     if (refreshBtn && !refreshBtn._hubBound) {
         refreshBtn.addEventListener('click', () => {
-            if (window.generateAITradeProposals) {
-                window.generateAITradeProposals();
+            if (generateAITradeProposals) {
+                generateAITradeProposals();
             }
             renderHubTradeProposals();
         });

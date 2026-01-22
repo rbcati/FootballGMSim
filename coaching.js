@@ -6,7 +6,7 @@
  * @param {Object} coach - Coach object
  * @returns {Object} Coach with initialized stats
  */
-function initializeCoachingStats(coach) {
+export function initializeCoachingStats(coach) {
   if (!coach) return null;
   
   if (!coach.stats) {
@@ -75,7 +75,7 @@ function initializeCoachingStats(coach) {
  * @param {Object} gameResult - Game result object
  * @param {Object} team - Team object
  */
-function updateCoachingGameStats(coach, gameResult, team) {
+export function updateCoachingGameStats(coach, gameResult, team) {
   if (!coach || !gameResult || !coach.stats) return;
   
   try {
@@ -131,7 +131,7 @@ function updateCoachingGameStats(coach, gameResult, team) {
  * @param {Object} team - Team object
  * @param {number} year - Season year
  */
-function updateCoachingSeasonStats(coach, seasonStats, team, year) {
+export function updateCoachingSeasonStats(coach, seasonStats, team, year) {
   if (!coach || !seasonStats || !team || !coach.stats) return;
   
   try {
@@ -286,7 +286,7 @@ function updateCoachingSeasonStats(coach, seasonStats, team, year) {
  * @param {Object} playoffResult - Playoff result
  * @param {number} year - Season year
  */
-function updateCoachingPlayoffStats(coach, playoffResult, year) {
+export function updateCoachingPlayoffStats(coach, playoffResult, year) {
   if (!coach || !playoffResult || !coach.stats) return;
   
   try {
@@ -358,7 +358,7 @@ function updateCoachingPlayoffStats(coach, playoffResult, year) {
  * @param {Object} newTeam - Team hiring the coordinator
  * @param {number} year - Year of promotion
  */
-function promoteCoordinatorToHeadCoach(coordinator, newTeam, year) {
+export function promoteCoordinatorToHeadCoach(coordinator, newTeam, year) {
   if (!coordinator || !newTeam) return null;
   
   try {
@@ -412,7 +412,7 @@ function promoteCoordinatorToHeadCoach(coordinator, newTeam, year) {
  * @param {number} ties - Number of ties
  * @returns {number} Win percentage as decimal
  */
-function calculateWinPercentage(wins, losses, ties = 0) {
+export function calculateWinPercentage(wins, losses, ties = 0) {
   const totalGames = wins + losses + ties;
   if (totalGames === 0) return 0;
   return (wins + (ties * 0.5)) / totalGames;
@@ -452,7 +452,7 @@ function calculateDefensiveRanking(team, papg) {
  * @param {Array} allCoaches - Array of all coaches
  * @returns {Array} Hall of Fame worthy coaches
  */
-function getCoachingHallOfFame(allCoaches) {
+export function getCoachingHallOfFame(allCoaches) {
   if (!allCoaches || allCoaches.length === 0) return [];
   
   return allCoaches.filter(coach => {
@@ -497,7 +497,7 @@ function getCoachingHallOfFame(allCoaches) {
 /**
  * Render coaching statistics page
  */
-function renderCoachingStats() {
+export function renderCoachingStats() {
   console.log('Rendering coaching statistics...');
   console.log('State:', state);
   console.log('League:', state.league);
@@ -906,21 +906,11 @@ function calculateBestRanking(rankings) {
   return Math.min(...rankings.map(r => r.ranking));
 }
 
-// Make functions globally available
-window.initializeCoachingStats = initializeCoachingStats;
-window.updateCoachingGameStats = updateCoachingGameStats;
-window.updateCoachingSeasonStats = updateCoachingSeasonStats;
-window.updateCoachingPlayoffStats = updateCoachingPlayoffStats;
-window.promoteCoordinatorToHeadCoach = promoteCoordinatorToHeadCoach;
-window.calculateWinPercentage = calculateWinPercentage;
-window.getCoachingHallOfFame = getCoachingHallOfFame;
-window.renderCoachingStats = renderCoachingStats;
-
 /**
  * Main coaching system entry point
  * This function renders the main coaching interface
  */
-function renderCoaching() {
+export function renderCoaching() {
     // Check if we have a content area to render into
     const content = document.getElementById('content');
     if (!content) {
@@ -932,15 +922,12 @@ function renderCoaching() {
     renderCoachingStats();
 }
 
-// Expose the main coaching function globally
-window.renderCoaching = renderCoaching;
-
 // ============================================================================
 // COACHING ADVANCED FEATURES (from coaching-advanced.js)
 // ============================================================================
 
 // COACHING CONTRACTS SYSTEM
-class CoachingContract {
+export class CoachingContract {
   constructor(coach, team, details) {
     this.coach = coach;
     this.team = team;
@@ -980,7 +967,7 @@ class CoachingContract {
 }
 
 // Coaching tree tracking system
-class CoachingTree {
+export class CoachingTree {
   constructor() {
     this.relationships = new Map(); // mentorId -> [apprenticeIds]
     this.mentorships = new Map(); // apprenticeId -> mentorId
@@ -1031,7 +1018,7 @@ class CoachingTree {
 }
 
 // Coach development and progression system
-class CoachDevelopment {
+export class CoachDevelopment {
   static developCoach(coach, team, season) {
     if (!coach.development) {
       coach.development = {
@@ -1117,7 +1104,7 @@ class CoachDevelopment {
 }
 
 // Coach AI personality system
-class CoachPersonality {
+export class CoachPersonality {
   static generatePersonality(coach) {
     const U = window.Utils;
     
@@ -1176,7 +1163,7 @@ class CoachPersonality {
 }
 
 // Advanced coaching analytics
-class CoachingAnalytics {
+export class CoachingAnalytics {
   static calculateCoachingEfficiency(coach, team, season) {
     const expectedWins = CoachingAnalytics.calculateExpectedWins(team);
     const actualWins = team.record.w;
@@ -1216,7 +1203,7 @@ class CoachingAnalytics {
 }
 
 // Coach hiring and firing system
-class CoachingMarket {
+export class CoachingMarket {
   static getAvailableCoaches(position = 'HC') {
     const availableCoaches = [];
     
@@ -1296,7 +1283,7 @@ class CoachingMarket {
 }
 
 // Enhanced coaching view with advanced features
-function renderAdvancedCoachingStats() {
+export function renderAdvancedCoachingStats() {
   const L = state.league;
   if (!L) return;
   
@@ -1521,12 +1508,3 @@ function renderCoachingTrees(coaches) {
     </div>
   `;
 }
-
-// Make advanced coaching functions globally available
-window.CoachingContract = CoachingContract;
-window.CoachingTree = CoachingTree;
-window.CoachDevelopment = CoachDevelopment;
-window.CoachPersonality = CoachPersonality;
-window.CoachingAnalytics = CoachingAnalytics;
-window.CoachingMarket = CoachingMarket;
-window.renderAdvancedCoachingStats = renderAdvancedCoachingStats;

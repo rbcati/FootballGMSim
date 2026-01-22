@@ -1,4 +1,5 @@
 // standings-page-fixed.js - Comprehensive Standings System (Enhanced & Fixed)
+import { calculateWinPercentage } from './coaching.js';
 
 'use strict';
 
@@ -692,7 +693,6 @@ function makeTeamsClickable() {
 // --- Global Exports ---
 
 // Make utility functions available globally for other scripts that might need them
-window.calculateWinPercentage = calculateWinPercentage;
 window.getDivisionName = getDivisionName;
 window.getConferenceName = getConferenceName;
 window.groupByDivision = groupByDivision;

@@ -326,7 +326,7 @@
       </div>
     </div>
 
-<script src="fixes.js"></script>
+<script type="module" src="fixes.js"></script>
 <!-- Note: fixes.js now includes error-overlay.js, missing-functions.js, league-creation-fix.js, team-selection-fix.js, navbar-fix.js, dom-helpers-fix.js, and critical-fixes.js -->
 <script src="constants.js"></script>
 <script src="utils.js"></script>
@@ -342,11 +342,11 @@
 
 <!-- Staff & coaching -->
 <script src="staff.js"></script>
-<script src="coaching.js"></script>
+<script type="module" src="coaching.js"></script>
 <!-- Note: coaching.js now includes coaching-advanced.js, coaching-integration.js, coaching-roles.js, and training.js -->
 
 <!-- League core AFTER dependencies -->
-<script src="league.js"></script>
+<script type="module" src="league.js"></script>
 <script src="schedule.js"></script>
 
 <!-- ✅ Your unified state manager (ES Module) -->
@@ -373,6 +373,7 @@
 <!-- Personnel management -->
 <script src="freeagency.js"></script>
 <script src="trade.js"></script>
+<script type="module" src="tradeproposals.js"></script>
 <script src="draft.js"></script>
 <!-- Note: rookies.js is now combined in player.js -->
 
@@ -388,7 +389,7 @@
 <script src="schedule-viewer.js"></script>
 <script src="box-score-viewer.js"></script>
 <script src="live-game-viewer.js"></script>
-<script src="standings-page.js"></script>
+<script type="module" src="standings-page.js"></script>
 
 <!-- Player Database & History -->
 <script src="player-database.js"></script>
@@ -404,11 +405,11 @@
 
 <!-- UI -->
 <script src="ui-components.js"></script>
-<script src="ui.js"></script>
+<script type="module" src="ui.js"></script>
 <script src="ui-interactions.js"></script>
 
 <!-- Main Game Controller -->
-<script src="main.js"></script>
+<script type="module" src="main.js"></script>
 <!-- Note: Fix files are now combined in fixes.js -->
 
 </body>
