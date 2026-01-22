@@ -675,9 +675,17 @@ window.filterProspects = function() {
   
   const prospects = document.querySelectorAll('.prospect-card');
   
+  // Create map for faster lookups
+  const prospectMap = new Map();
+  if (window.state.draftClass) {
+    for (const p of window.state.draftClass) {
+      prospectMap.set(p.id, p);
+    }
+  }
+
   prospects.forEach(card => {
     const prospectId = card.dataset.prospectId;
-    const prospect = window.state.draftClass?.find(p => p.id === prospectId);
+    const prospect = prospectMap.get(prospectId);
     const report = window.state.scouting.scoutingReports[prospectId];
     const isScouted = prospect?.scouted || report;
     
