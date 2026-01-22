@@ -392,15 +392,16 @@ window.renderRoster = function() {
         }
         
         // Sort roster by position and effective rating (from depth chart)
-        const sortedRoster = [...team.roster].sort((a, b) => {
-            if (a.pos !== b.pos) return a.pos.localeCompare(b.pos);
-            // Use effective rating if available, otherwise use OVR
-            const aEff = window.calculateEffectiveRating ? window.calculateEffectiveRating(a, team, a.pos) : (a.ovr || 0);
-            const bEff = window.calculateEffectiveRating ? window.calculateEffectiveRating(b, team, b.pos) : (b.ovr || 0);
-            return bEff - aEff;
+        // Optimization: Calculate effective ratings once per player
+        const sortedRosterWithRatings = team.roster.map(player => ({
+            player,
+            effectiveRating: window.calculateEffectiveRating ? window.calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0)
+        })).sort((a, b) => {
+            if (a.player.pos !== b.player.pos) return a.player.pos.localeCompare(b.player.pos);
+            return b.effectiveRating - a.effectiveRating;
         });
         
-        sortedRoster.forEach(player => {
+        sortedRosterWithRatings.forEach(({player, effectiveRating}) => {
             const tr = tbody.insertRow();
             tr.dataset.playerId = player.id;
             tr.style.cursor = 'pointer';
@@ -412,7 +413,7 @@ window.renderRoster = function() {
             
             // Get depth chart data
             const dc = player.depthChart || {};
-            const effectiveRating = window.calculateEffectiveRating ? window.calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0);
+            // effectiveRating is already calculated
             const depthPosition = dc.depthPosition || 'N/A';
             const playbookKnowledge = dc.playbookKnowledge || 50;
             const chemistry = dc.chemistry || 50;
