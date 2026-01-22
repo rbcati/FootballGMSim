@@ -1,7 +1,5 @@
 // constants.js - Cleaned, organized, and properly exported properties
-
-(function (global) {
-  'use strict';
+'use strict';
 
   // --- I. GAME CONFIGURATION ---
   const GAME_CONFIG = {
@@ -107,8 +105,9 @@
   };
 
   // --- VI. NAMES, COLLEGES, ABILITIES (Relies on expanded-names.js being loaded first) ---
-  const FIRST_NAMES = global.EXPANDED_FIRST_NAMES || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
-  const LAST_NAMES = global.EXPANDED_LAST_NAMES || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+  // Ensure we check window for names if they were loaded by expanded-names.js
+  const FIRST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
+  const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
   
   const NAMES = { first: FIRST_NAMES, last: LAST_NAMES };
   
@@ -176,7 +175,7 @@
   };
   
   // --- VIII. EXPORT EVERYTHING ---
-  global.Constants = {
+  const Constants = {
     GAME_CONFIG,
     SALARY_CAP,
     PLAYER_CONFIG,
@@ -206,12 +205,14 @@
     PLAYER_POTENTIAL_MAX: PLAYER_CONFIG.PLAYER_POTENTIAL_MAX,
     PLAYER_RETIREMENT_AGE_MAX: PLAYER_CONFIG.PLAYER_RETIREMENT_AGE_MAX
   };
+
+  export { Constants };
   
   // Make individual arrays globally available (for compatibility with state.js and expanded-names)
-  global.FIRST_NAMES = FIRST_NAMES;
-  global.LAST_NAMES = LAST_NAMES;
-  
-})(window);
-
-// Make constants available in legacy format too
-window.constants = window.Constants;
+  if (typeof window !== 'undefined') {
+      window.Constants = Object.assign(window.Constants || {}, Constants);
+      window.FIRST_NAMES = FIRST_NAMES;
+      window.LAST_NAMES = LAST_NAMES;
+      // Make constants available in legacy format too
+      window.constants = window.Constants;
+  }
