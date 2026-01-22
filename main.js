@@ -381,7 +381,6 @@ class GameController {
             if (window.simulateWeek) {
                 window.simulateWeek();
                 this.setStatus('Week simulated successfully', 'success');
-                setTimeout(() => this.renderHub(), 1000);
             } else if (window.state?.league) {
                 const L = window.state.league;
                 if (L.week < 18) {
