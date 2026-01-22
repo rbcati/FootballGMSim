@@ -1,3 +1,5 @@
+import { saveState } from './state.js';
+
 'use strict';
 
 /**
@@ -126,8 +128,8 @@ function startPlayoffs() {
     window.state.playoffs = playoffBracket;
     
     // Save state
-    if (window.saveState) {
-        window.saveState();
+    if (saveState) {
+        saveState();
     }
     
     // Navigate to playoffs view

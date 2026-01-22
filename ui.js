@@ -1,4 +1,6 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
+import { saveState, clearSavedState, getActiveSaveSlot, listSaveSlots, getSaveMetadata, switchSaveSlot } from './state.js';
+
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
 #onboardTeam {
@@ -1389,7 +1391,7 @@ window.renderSettings = function() {
                 if (!window.state) return;
                 window.state.theme = e.target.value;
                 if (window.applyTheme) window.applyTheme(window.state.theme);
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1397,7 +1399,7 @@ window.renderSettings = function() {
             salaryCapToggle.addEventListener('change', (e) => {
                 if (!window.state?.settings) return;
                 window.state.settings.salaryCapEnabled = e.target.checked;
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1405,7 +1407,7 @@ window.renderSettings = function() {
             coachFiringToggle.addEventListener('change', (e) => {
                 if (!window.state?.settings) return;
                 window.state.settings.allowCoachFiring = e.target.checked;
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1420,8 +1422,8 @@ window.renderSaveDataManager = function() {
     const manager = document.getElementById('saveDataManager');
     if (!manager) return;
 
-    const slots = (typeof window.listSaveSlots === 'function') ? window.listSaveSlots() : Array.from({ length: 5 }, () => null);
-    const activeSlot = window.state?.saveSlot || (window.getActiveSaveSlot ? window.getActiveSaveSlot() : 1);
+    const slots = (typeof listSaveSlots === 'function') ? listSaveSlots() : Array.from({ length: 5 }, () => null);
+    const activeSlot = window.state?.saveSlot || (getActiveSaveSlot ? getActiveSaveSlot() : 1);
 
     const rows = slots.map((slotMeta, idx) => {
         const slotNumber = idx + 1;
@@ -1466,8 +1468,8 @@ window.renderSaveDataManager = function() {
 
             if (action === 'optimize') {
                 if (slot !== activeSlot) return;
-                if (window.saveState) {
-                    const saved = window.saveState(null, { keepBoxScoreWeeks: 0 });
+                if (saveState) {
+                    const saved = saveState(null, { keepBoxScoreWeeks: 0 });
                     if (saved && typeof window.setStatus === 'function') {
                         window.setStatus('Save optimized: older box scores trimmed.', 'success');
                     }
@@ -1476,10 +1478,10 @@ window.renderSaveDataManager = function() {
             }
 
             if (action === 'clear') {
-                if (!window.clearSavedState) return;
+                if (!clearSavedState) return;
                 const confirmed = window.confirm(`Clear save slot ${slot}? This cannot be undone.`);
                 if (!confirmed) return;
-                window.clearSavedState(slot);
+                clearSavedState(slot);
                 if (window.renderSaveDataManager) {
                     window.renderSaveDataManager();
                 }
@@ -1494,7 +1496,7 @@ window.renderSaveDataManager = function() {
 window.renderSaveSlotInfo = function() {
     const select = document.getElementById('saveSlotSelect');
     const info = document.getElementById('saveSlotInfo');
-    const activeSlot = window.state?.saveSlot || (window.getActiveSaveSlot ? window.getActiveSaveSlot() : 1);
+    const activeSlot = window.state?.saveSlot || (getActiveSaveSlot ? getActiveSaveSlot() : 1);
 
     if (select) {
         select.value = String(activeSlot);
@@ -1502,7 +1504,7 @@ window.renderSaveSlotInfo = function() {
 
     if (!info) return;
 
-    const meta = (typeof window.getSaveMetadata === 'function') ? window.getSaveMetadata(activeSlot) : null;
+    const meta = (typeof getSaveMetadata === 'function') ? getSaveMetadata(activeSlot) : null;
     if (!meta) {
         info.textContent = `Slot ${activeSlot}: Empty`;
         return;

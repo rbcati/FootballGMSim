@@ -1,4 +1,6 @@
 // scheme-management.js - Team Scheme Management and Scheme Fit Calculations
+import { saveState } from './state.js';
+
 'use strict';
 
 /**
@@ -286,7 +288,7 @@ function renderSchemeManagement() {
   if (offSelect) {
     offSelect.addEventListener('change', (e) => {
       team.strategies.offense = e.target.value;
-      if (window.saveState) window.saveState();
+      if (saveState) saveState();
       renderSchemeManagement(); // Re-render to update ratings
       if (window.updateTeamRatings) {
         window.updateTeamRatings(team);
@@ -298,7 +300,7 @@ function renderSchemeManagement() {
   if (defSelect) {
     defSelect.addEventListener('change', (e) => {
       team.strategies.defense = e.target.value;
-      if (window.saveState) window.saveState();
+      if (saveState) saveState();
       renderSchemeManagement(); // Re-render to update ratings
       if (window.updateTeamRatings) {
         window.updateTeamRatings(team);

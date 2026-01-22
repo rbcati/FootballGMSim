@@ -15,6 +15,8 @@
  */
 
 // Import dependencies
+import { saveState } from './state.js';
+
 // TODO: Convert Utils and Constants to ES modules and import properly
 const getUtils = () => window.Utils;
 const getConstants = () => window.Constants;
@@ -839,8 +841,8 @@ function startOffseason() {
     }
     
     // Save state
-    if (typeof window.saveState === 'function') {
-      window.saveState();
+    if (saveState) {
+      saveState();
     }
     
     // Show offseason message and navigate to hub
@@ -949,7 +951,7 @@ function startNewSeason() {
     }
 
     // Persist the updated state
-    if (typeof window.saveState === 'function') window.saveState();
+    if (saveState) saveState();
 
     // Refresh the UI for the new season
     if (typeof window.renderHub === 'function') window.renderHub();

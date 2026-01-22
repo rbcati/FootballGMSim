@@ -1,3 +1,5 @@
+import { saveState, loadState, State, clearSavedState, setActiveSaveSlot } from './state.js';
+
 'use strict';
 
 /**
@@ -338,14 +340,14 @@ function handleNewLeague() {
         }
 
         // Fallback for environments where the controller is not available
-        if (window.clearSavedState) {
-            window.clearSavedState();
+        if (clearSavedState) {
+            clearSavedState();
         }
-        if (window.State?.init) {
-            window.state = window.State.init();
+        if (State?.init) {
+            window.state = State.init();
         }
-        if (window.setActiveSaveSlot && window.state?.saveSlot) {
-            window.setActiveSaveSlot(window.state.saveSlot);
+        if (setActiveSaveSlot && window.state?.saveSlot) {
+            setActiveSaveSlot(window.state.saveSlot);
         }
         if (window.renderSaveSlotInfo) {
             window.renderSaveSlotInfo();
@@ -386,6 +388,7 @@ function handleSimulatePlayoff(e) {
 }
 
 window.setupEventListeners = setupEventListeners;
+window.handleLoadGame = handleLoadGame; // Export this as it is used in fixes.js
 
 // Add missing openOnboard function
 window.openOnboard = async function() {

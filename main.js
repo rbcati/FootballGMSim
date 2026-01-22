@@ -1,4 +1,5 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
+import { State, loadState, saveState, clearSavedState, setActiveSaveSlot } from './state.js';
 
 /**
  * Enhanced Main Game Controller with improved performance and error handling
@@ -89,7 +90,7 @@ class GameController {
     }
 
     async switchSaveSlot(slot) {
-        const normalized = (typeof window.setActiveSaveSlot === 'function') ? window.setActiveSaveSlot(slot) : slot;
+        const normalized = setActiveSaveSlot ? setActiveSaveSlot(slot) : slot;
         this.setStatus(`Switching to slot ${normalized}...`, 'info');
         const loadResult = await this.loadGameState();
         if (loadResult.success && loadResult.gameData) {
@@ -102,8 +103,8 @@ class GameController {
             this.router();
             this.setStatus(`Loaded save slot ${normalized}`, 'success');
         } else {
-            if (window.State?.init) {
-                window.state = window.State.init();
+            if (State?.init) {
+                window.state = State.init();
                 window.state.saveSlot = normalized;
             }
             if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
@@ -725,10 +726,10 @@ class GameController {
             if (!chosenMode || teamIdx === undefined) {
                 throw new Error('Missing required game options');
             }
-            if (!window.State?.init) {
+            if (!State?.init) {
                 throw new Error('State system not available');
             }
-            window.state = window.State.init();
+            window.state = State.init();
             window.state.onboarded = true;
             window.state.namesMode = chosenMode;
             window.state.userTeamId = parseInt(teamIdx, 10);
@@ -879,8 +880,8 @@ class GameController {
             // Accept saved state if it contains a league, even if onboarded flag is missing
             if (loadResult.success && loadResult.gameData && (loadResult.gameData.onboarded || loadResult.gameData.league)) {
                 // Migrate to current version if necessary
-                if (window.State?.migrate && (!loadResult.gameData.version || loadResult.gameData.version !== '4.0.0')) {
-                    window.state = window.State.migrate(loadResult.gameData);
+                if (State?.migrate && (!loadResult.gameData.version || loadResult.gameData.version !== '4.0.0')) {
+                    window.state = State.migrate(loadResult.gameData);
                 } else {
                     window.state = loadResult.gameData;
                 }
@@ -890,10 +891,10 @@ class GameController {
                 if (typeof window.updateCapSidebar === 'function') window.updateCapSidebar();
                 this.setStatus('Game loaded successfully', 'success', 2000);
             } else {
-                if (!window.State?.init) {
+                if (!State?.init) {
                     throw new Error('State system not loaded');
                 }
-                window.state = window.State.init();
+                window.state = State.init();
                 this.applyTheme(window.state.theme || 'dark');
                 if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
                 await this.openOnboard();
@@ -930,18 +931,18 @@ class GameController {
                 this.autoSaveInterval = null;
             }
 
-            if (!window.State?.init) {
+            if (!State?.init) {
                 throw new Error('State system not available');
             }
 
-            if (typeof window.clearSavedState === 'function') {
-                window.clearSavedState();
+            if (typeof clearSavedState === 'function') {
+                clearSavedState();
             }
 
-            window.state = window.State.init();
+            window.state = State.init();
 
-            if (typeof window.setActiveSaveSlot === 'function' && window.state?.saveSlot) {
-                window.setActiveSaveSlot(window.state.saveSlot);
+            if (typeof setActiveSaveSlot === 'function' && window.state?.saveSlot) {
+                setActiveSaveSlot(window.state.saveSlot);
             }
 
             this.applyTheme(window.state.theme || 'dark');
@@ -1037,8 +1038,8 @@ class GameController {
     // --- ENHANCED SAVE/LOAD ---
     async saveGameState(stateToSave = null) {
         try {
-            if (window.saveState && typeof window.saveState === 'function') {
-                const ok = window.saveState(stateToSave);
+            if (saveState && typeof saveState === 'function') {
+                const ok = saveState(stateToSave);
                 if (ok) {
                     if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
                     if (typeof window.renderSaveDataManager === 'function') window.renderSaveDataManager();
@@ -1055,8 +1056,8 @@ class GameController {
 
     async loadGameState() {
         try {
-            if (window.loadState && typeof window.loadState === 'function') {
-                const gameData = window.loadState();
+            if (loadState && typeof loadState === 'function') {
+                const gameData = loadState();
                 if (gameData) {
                     return { success: true, gameData };
                 } else {

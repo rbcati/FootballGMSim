@@ -791,11 +791,6 @@ function initializeGlobalState() {
 initializeGlobalState();
 
 // Expose functions globally for backward compatibility
-// TODO: Remove these once all code is migrated to ES modules
-window.State = State;
-window.loadState = loadState;
-window.saveState = saveState;
-window.clearSavedState = clearSavedState;
 window.hookAutoSave = hookAutoSave;
 window.getActiveSaveSlot = getActiveSaveSlot;
 window.setActiveSaveSlot = setActiveSaveSlot;
@@ -808,8 +803,8 @@ window.getTeamsByConference = getTeamsByConference;
 window.getTeamsByDivision = getTeamsByDivision;
 
 // Legacy aliases
-window.saveLeague = saveState; // New games should use saveState
-window.loadLeague = loadState; // New games should use loadState
+// window.saveLeague = saveState; // Removed
+// window.loadLeague = loadState; // Removed
 
 // Install autosave hook
 hookAutoSave();

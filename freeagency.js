@@ -1,4 +1,6 @@
 // freeAgency.js
+import { saveState } from './state.js';
+
 'use strict';
 
 function ensureFA() {
@@ -603,8 +605,8 @@ function signFreeAgent(playerIndex) {
       window.updateCapSidebar();
     }
 
-    if (window.saveState) {
-      window.saveState();
+    if (saveState) {
+      saveState();
     }
 
     window.setStatus(`Signed ${player.name} (${player.pos}) for $${capHit.toFixed(1)}M`);
@@ -983,8 +985,8 @@ function signFreeAgentWithContract(playerIndex, years, baseSalary, signingBonus)
       window.updateCapSidebar();
     }
 
-    if (window.saveState) {
-      window.saveState();
+    if (saveState) {
+      saveState();
     }
 
     window.setStatus(`Signed ${player.name} (${player.pos}) for $${capHit.toFixed(1)}M cap hit`);
