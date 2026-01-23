@@ -15,7 +15,7 @@
     width: 260px;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5);
     background: transparent;
-    z-index: 1100;
+    z-index: 2000;
     transform: translateX(-100%);
     overflow: hidden;
   }
@@ -293,8 +293,26 @@
   
   /* Navigation sidebar position */
   .nav-sidebar {
-  top: env(safe-area-inset-top, 0px);
-  height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    top: env(safe-area-inset-top, 0px);
+    height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  }
+
+  .nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1500;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .nav-overlay.show {
+    display: block;
+    opacity: 1;
   }
   
   /* Topbar */

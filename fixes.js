@@ -945,7 +945,7 @@ console.log('[LeagueCreationFix] Loaded');
     
     // Map legacy/sub-views to actual DOM view IDs
     let targetViewId = viewName;
-    if (['standings', 'stats', 'records', 'awards', 'streaks'].includes(viewName)) {
+    if (['stats', 'records', 'awards', 'streaks'].includes(viewName)) {
         targetViewId = 'leagueStats';
     }
 
@@ -1833,7 +1833,7 @@ window.on = on;
           const chosenMode = document.querySelector('input[name="namesMode"]:checked')?.value || 'fictional';
           const teamIdx = teamSelect?.value ?? '0';
           
-          if (teamSelect && teamSelect.value && teamSelect.value !== '0' && teamSelect.value !== '') {
+          if (teamSelect && teamSelect.value !== '') {
             window.initNewGame({ chosenMode, teamIdx }).catch(err => {
               console.error('Failed to initialize game:', err);
               window.setStatus?.('Failed to start game. Please try again.', 'error');

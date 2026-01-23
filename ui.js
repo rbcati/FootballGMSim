@@ -1964,6 +1964,27 @@ window.renderTradeCenter = function () {
   }
   const state = tradeContainer._tradeState;
 
+  // --- Handle Pending Proposals (Negotiate) ---
+  if (window.pendingTradeProposal) {
+    const p = window.pendingTradeProposal;
+    state.fromAssets = p.toAssets.map(a => ({ kind: a.kind, playerId: a.playerId, year: a.year, round: a.round })); // What user gives (proposal's toAssets)
+    state.toAssets = p.fromAssets.map(a => ({ kind: a.kind, playerId: a.playerId, year: a.year, round: a.round }));   // What user gets (proposal's fromAssets)
+
+    // Set opponent team
+    if (selectB) {
+        // Find option with correct value and select it
+        // The proposal.fromTeamId is the opponent
+        setTimeout(() => {
+            selectB.value = String(p.fromTeamId);
+            // Trigger change event to refresh lists
+            selectB.dispatchEvent(new Event('change'));
+        }, 50);
+    }
+
+    // Clear pending proposal
+    window.pendingTradeProposal = null;
+  }
+
   // --- 1) Setup YOUR TEAM select (tradeA) ---
 
   selectA.innerHTML = '';

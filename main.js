@@ -455,6 +455,10 @@ class GameController {
                             <h3>League Actions</h3>
                             <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
                                 ${!isOffseason ? '<button class="btn" id="btnSimSeason" onclick="handleSimulateSeason()" style="justify-content: center;">Simulate Season</button>' : ''}
+                                ${(!isOffseason && L.week > 18 && (!window.state?.playoffs || !window.state.playoffs.winner))
+                                    ? `<button class="btn primary" onclick="if(window.startPlayoffs) window.startPlayoffs();" style="justify-content: center;">Start Playoffs</button>`
+                                    : ''
+                                }
                                 <button class="btn" onclick="location.hash='#/standings'" style="justify-content: center;">View Standings</button>
                                 ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
                             </div>

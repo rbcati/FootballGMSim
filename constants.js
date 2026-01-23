@@ -10,7 +10,7 @@
 
   // --- II. SALARY & CONTRACTS (REFACTORED) ---
   const SALARY_CAP = {
-    BASE: 220,
+    BASE: 255, // Updated to 2025 projection
     MAX_ROLLOVER: 10,
     MIN_CONTRACT: 0.75, // $750k - Standard league minimum
     MAX_CONTRACT: 55.0, // $55M - Current star QB ceiling
@@ -18,8 +18,8 @@
     // NEW: Positional Salary Weights
     // (Ensures QBs cost more than Punters naturally)
     POS_SALARY_WEIGHTS: {
-      QB: 1.25,  // Premiums
-      WR: 1.10,
+      QB: 1.15,  // Reduced from 1.25 to help cap
+      WR: 1.05,  // Reduced from 1.10
       OL: 1.05,
       CB: 1.05,
       DL: 1.05,
