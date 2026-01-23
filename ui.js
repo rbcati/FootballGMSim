@@ -1,5 +1,5 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
-import { saveState } from './state.js';
+import { saveState, clearSavedState } from './state.js';
 
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
@@ -1593,10 +1593,10 @@ window.renderSaveDataManager = function() {
             }
 
             if (action === 'clear') {
-                if (!window.clearSavedState) return;
+                if (!clearSavedState) return;
                 const confirmed = window.confirm(`Clear save slot ${slot}? This cannot be undone.`);
                 if (!confirmed) return;
-                window.clearSavedState(slot);
+                clearSavedState(slot);
                 if (window.renderSaveDataManager) {
                     window.renderSaveDataManager();
                 }

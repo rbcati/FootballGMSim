@@ -8,6 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance } from './coach-system.js';
+import { saveState } from './state.js';
 
 /**
  * Validates that required global dependencies are available
@@ -910,8 +911,8 @@ function startOffseason() {
     }
     
     // Save state
-    if (typeof window.saveState === 'function') {
-      window.saveState();
+    if (saveState) {
+      saveState();
     }
     
     // Show offseason message and navigate to hub
@@ -1023,7 +1024,7 @@ function startNewSeason() {
     }
 
     // Persist the updated state
-    if (typeof window.saveState === 'function') window.saveState();
+    if (saveState) saveState();
 
     // Refresh the UI for the new season
     if (typeof window.renderHub === 'function') window.renderHub();

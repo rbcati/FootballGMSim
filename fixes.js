@@ -3,6 +3,7 @@
 // team-selection-fix.js, navbar-fix.js, and dom-helpers-fix.js
 import { renderCoachingStats } from './coaching.js';
 import { renderTradeProposals } from './tradeproposals.js';
+import { loadState, saveState } from './state.js';
 
 'use strict';
 
@@ -1891,8 +1892,8 @@ window.on = on;
       if (targetId === 'btnSave') {
         e.preventDefault();
         e.stopPropagation();
-        if (window.saveState) {
-          window.saveState();
+        if (saveState) {
+          saveState();
           window.setStatus?.('Game saved!', 'success');
         }
         return false;
@@ -1903,9 +1904,9 @@ window.on = on;
         e.stopPropagation();
         if (window.handleLoadGame) {
           window.handleLoadGame(e);
-        } else if (window.loadState) {
+        } else if (loadState) {
           try {
-            const loaded = window.loadState();
+            const loaded = loadState();
             if (loaded) {
               window.state = loaded;
               location.reload();

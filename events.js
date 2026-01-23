@@ -1,6 +1,6 @@
 'use strict';
 
-import { saveState, loadState } from './state.js';
+import { saveState, loadState, State, clearSavedState, setActiveSaveSlot } from './state.js';
 
 /**
  * Handles core game events (onboarding, saving, loading, simulating).
@@ -340,14 +340,14 @@ function handleNewLeague() {
         }
 
         // Fallback for environments where the controller is not available
-        if (window.clearSavedState) {
-            window.clearSavedState();
+        if (clearSavedState) {
+            clearSavedState();
         }
-        if (window.State?.init) {
-            window.state = window.State.init();
+        if (State?.init) {
+            window.state = State.init();
         }
-        if (window.setActiveSaveSlot && window.state?.saveSlot) {
-            window.setActiveSaveSlot(window.state.saveSlot);
+        if (setActiveSaveSlot && window.state?.saveSlot) {
+            setActiveSaveSlot(window.state.saveSlot);
         }
         if (window.renderSaveSlotInfo) {
             window.renderSaveSlotInfo();
