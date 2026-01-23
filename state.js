@@ -811,3 +811,4 @@ window.FIRST_NAMES = [...currentFirstNames];
 window.LAST_NAMES = [...currentLastNames];
 
 console.log('✅ State-Save Manager loaded. Full state persistence is active.');
+// Global state exports have been removed.
