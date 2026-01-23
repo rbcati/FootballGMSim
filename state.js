@@ -799,7 +799,15 @@ hookAutoSave();
 export const init = State.init;
 
 // Expose name arrays for generation (if they were not globally defined already)
-window.FIRST_NAMES = window.FIRST_NAMES || FIRST_NAMES;
-window.LAST_NAMES = window.LAST_NAMES || LAST_NAMES;
+// Copy-then-Modify pattern: Ensure we have mutable copies on the window object
+// We must handle the case where these are getters (from Constants) by deleting them first
+const currentFirstNames = window.FIRST_NAMES || FIRST_NAMES;
+const currentLastNames = window.LAST_NAMES || LAST_NAMES;
+
+try { delete window.FIRST_NAMES; } catch (e) {}
+try { delete window.LAST_NAMES; } catch (e) {}
+
+window.FIRST_NAMES = [...currentFirstNames];
+window.LAST_NAMES = [...currentLastNames];
 
 console.log('✅ State-Save Manager loaded. Full state persistence is active.');
