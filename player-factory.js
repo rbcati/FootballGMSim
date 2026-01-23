@@ -49,7 +49,7 @@
             ovr: playerOvr,
             years: utils.rand(1, 4),
             yearsTotal: undefined,
-            baseAnnual: utils.rand(2, 15),
+            baseAnnual: utils.rand(2, 15) * (constants.SALARY_CAP?.POS_SALARY_WEIGHTS?.[position] || 1.0),
             ratings: generatePlayerRatings(position, playerOvr),
             abilities: constants?.ABILITIES_BY_POS?.[position]
                 ? [utils.choice(constants.ABILITIES_BY_POS[position])]

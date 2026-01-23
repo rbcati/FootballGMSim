@@ -318,10 +318,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       years: U.rand(1, 4),
       yearsTotal: U.rand(1, 4),
       // FIXED: Realistic salary based on OVR (for createRookiePlayer function)
-      baseAnnual: playerOvr >= 90 ? U.rand(20, 35) : 
+      baseAnnual: (playerOvr >= 90 ? U.rand(20, 35) :
                  playerOvr >= 80 ? U.rand(8, 20) : 
                  playerOvr >= 70 ? U.rand(3, 8) : 
-                 playerOvr >= 60 ? U.rand(1, 3) : U.rand(0.5, 1),
+                 playerOvr >= 60 ? U.rand(1, 3) : U.rand(0.5, 1)) * (C.SALARY_CAP?.POS_SALARY_WEIGHTS?.[pos] || 1.0),
       signingBonus: 0,
       guaranteedPct: 0.5,
       ratings: generateBasicRatings(pos, playerOvr),
@@ -1010,10 +1010,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         years: U.rand(1, 4),
         // FIXED: Reduced salary ranges to fit within $220M cap
         // With ~35 players, average should be ~$6M, but most are depth players
-        baseAnnual: playerOvr >= 90 ? U.rand(12, 22) : 
+        baseAnnual: (playerOvr >= 90 ? U.rand(12, 22) :
                    playerOvr >= 80 ? U.rand(4, 12) : 
                    playerOvr >= 70 ? U.rand(1.5, 5) : 
-                   playerOvr >= 60 ? U.rand(0.6, 2) : U.rand(0.4, 0.8),
+                   playerOvr >= 60 ? U.rand(0.6, 2) : U.rand(0.4, 0.8)) * (C.SALARY_CAP?.POS_SALARY_WEIGHTS?.[pos] || 1.0),
         signingBonus: 0,
         guaranteedPct: 0.5
       };
@@ -2153,10 +2153,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
             years: utils.rand(1, 4),
             yearsTotal: undefined,
             // FIXED: Reduced salary ranges to fit within $220M cap
-            baseAnnual: playerOvr >= 90 ? utils.rand(12, 22) : 
+            baseAnnual: (playerOvr >= 90 ? utils.rand(12, 22) :
                        playerOvr >= 80 ? utils.rand(4, 12) : 
                        playerOvr >= 70 ? utils.rand(1.5, 5) : 
-                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8),
+                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8)) * (constants.SALARY_CAP?.POS_SALARY_WEIGHTS?.[position] || 1.0),
             ratings: generatePlayerRatingsFactory(position, playerOvr),
             abilities: constants?.ABILITIES_BY_POS?.[position]
                 ? [utils.choice(constants.ABILITIES_BY_POS[position])]
