@@ -1,15 +1,5 @@
 /*
- * Updated Simulation Module with Season Progression Fix
- *
- * This file is based on the original simulation.js from the NFLGM4 project.
- * A key enhancement has been added: after the playoffs conclude and a Super Bowl
- * champion is crowned, the game will now correctly advance to a new season
- * instead of re-running the same year's playoffs when the user clicks
- * “Simulate Week.” The new season logic increments the league year and
- * season counters, resets team records and weekly results, generates a new
- * schedule, processes salary cap rollover (if available), and clears
- * playoff data. A helper function `startNewSeason` is exposed globally
- * for reuse.
+ * Updated Simulation Module with Season Progression Fix and optimizations
  *
  * ES Module version - migrated from global exports
  */
@@ -43,6 +33,26 @@ function validateDependencies() {
 }
 
 /**
+ * Helper to group players by position and sort by OVR descending.
+ * @param {Array} roster - Team roster array
+ * @returns {Object} Map of position -> sorted array of players
+ */
+function groupPlayersByPosition(roster) {
+  const groups = {};
+  if (!roster) return groups;
+  for (const player of roster) {
+    const pos = player.pos || 'UNK';
+    if (!groups[pos]) groups[pos] = [];
+    groups[pos].push(player);
+  }
+  // Sort by OVR descending
+  for (const pos in groups) {
+    groups[pos].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+  }
+  return groups;
+}
+
+/**
  * Applies the result of a simulated game to the teams' records.
  * @param {object} game - An object containing the home and away team objects.
  * @param {object} game.home - The home team object.
@@ -51,27 +61,12 @@ function validateDependencies() {
  * @param {number} awayScore - The final score for the away team.
  */
 function applyResult(game, homeScore, awayScore) {
-  // Validate inputs
-  if (!game || typeof game !== 'object') {
-    console.error("Invalid game object provided to applyResult");
-    return;
-  }
-  
-  if (typeof homeScore !== 'number' || typeof awayScore !== 'number') {
-    console.error("Invalid scores provided to applyResult", { homeScore, awayScore });
-    return;
-  }
+  if (!game || typeof game !== 'object') return;
   
   const home = game.home;
   const away = game.away;
+  if (!home || !away) return;
 
-  // This check is important to prevent errors if teams are not found
-  if (!home || !away) {
-    console.error("Invalid team data provided to applyResult", game);
-    return;
-  }
-
-  // Initialize records if they don't exist - more robust initialization
   const initializeTeamStats = (team) => {
     if (!team) return;
     team.wins = team.wins ?? 0;
@@ -84,14 +79,12 @@ function applyResult(game, homeScore, awayScore) {
   initializeTeamStats(home);
   initializeTeamStats(away);
 
-  // Update game scores if a game object is passed with schedule info
   if (game.hasOwnProperty('played')) {
     game.homeScore = homeScore;
     game.awayScore = awayScore;
     game.played = true;
   }
 
-  // Update team records
   if (homeScore > awayScore) {
     home.wins++;
     away.losses++;
@@ -103,7 +96,6 @@ function applyResult(game, homeScore, awayScore) {
     away.ties++;
   }
 
-  // Update points for and against
   home.ptsFor += homeScore;
   home.ptsAgainst += awayScore;
   away.ptsFor += awayScore;
@@ -125,11 +117,6 @@ function initializePlayerStats(player) {
 
 /**
  * Generate quarterback statistics
- * @param {Object} qb - Quarterback player object
- * @param {number} teamScore - Team's score in the game
- * @param {Object} defenseStrength - Opposing defense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for QB
  */
 function generateQBStats(qb, teamScore, defenseStrength, U) {
   const ratings = qb.ratings || {};
@@ -137,33 +124,26 @@ function generateQBStats(qb, teamScore, defenseStrength, U) {
   const throwAccuracy = ratings.throwAccuracy || 70;
   const awareness = ratings.awareness || 70;
   
-  // Base attempts based on score and game flow
   const baseAttempts = Math.max(20, Math.min(50, teamScore * 2 + U.rand(15, 35)));
   const attempts = Math.round(baseAttempts);
   
-  // Completion percentage based on accuracy and defense
   const baseCompPct = (throwAccuracy + awareness) / 2;
   const defenseFactor = 100 - (defenseStrength || 70);
   const compPct = Math.max(45, Math.min(85, baseCompPct + (defenseFactor - 50) * 0.3));
   const completions = Math.round(attempts * (compPct / 100));
   
-  // Yards based on completions, throw power, and score
   const avgYardsPerAttempt = 5 + (throwPower / 20) + (teamScore / 5);
   const yards = Math.round(completions * avgYardsPerAttempt + U.rand(-50, 100));
   
-  // Touchdowns based on score and red zone efficiency
   const redZoneEfficiency = (awareness + throwAccuracy) / 200;
   const touchdowns = Math.max(0, Math.min(6, Math.round(teamScore / 7 + redZoneEfficiency * 2 + U.rand(-1, 2))));
   
-  // Interceptions based on accuracy and defense
   const intRate = Math.max(0, (100 - throwAccuracy) / 100 + (defenseStrength / 200));
   const interceptions = Math.max(0, Math.min(5, Math.round(attempts * intRate * 0.03 + U.rand(-0.5, 1.5))));
   
-  // Sacks based on offensive line and awareness
   const sacks = Math.max(0, Math.min(8, Math.round((100 - awareness) / 25 + U.rand(-1, 2))));
   
-  // Longest completion
-  const longestPass = Math.max(10, Math.round(yards / completions * U.rand(1.2, 2.5)));
+  const longestPass = Math.max(10, Math.round(yards / Math.max(1, completions) * U.rand(1.2, 2.5)));
   
   return {
     passAtt: attempts,
@@ -179,11 +159,6 @@ function generateQBStats(qb, teamScore, defenseStrength, U) {
 
 /**
  * Generate running back statistics
- * @param {Object} rb - Running back player object
- * @param {number} teamScore - Team's score
- * @param {Object} defenseStrength - Opposing defense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for RB
  */
 function generateRBStats(rb, teamScore, defenseStrength, U) {
   const ratings = rb.ratings || {};
@@ -192,25 +167,19 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
   const juking = ratings.juking || 70;
   const catching = ratings.catching || 50;
   
-  // Carries based on score and game flow
   const carries = Math.max(5, Math.min(30, Math.round(teamScore * 1.5 + U.rand(8, 18))));
   
-  // Yards per carry based on ratings and defense
   const baseYPC = 3.5 + (speed + trucking + juking) / 100;
   const defenseFactor = (100 - (defenseStrength || 70)) / 50;
   const yardsPerCarry = Math.max(2.0, Math.min(8.0, baseYPC + defenseFactor + U.rand(-0.5, 0.5)));
   const rushYd = Math.round(carries * yardsPerCarry + U.rand(-10, 20));
   
-  // Touchdowns
   const touchdowns = Math.max(0, Math.min(4, Math.round(teamScore / 7 * 0.6 + U.rand(-0.5, 1.5))));
   
-  // Fumbles
   const fumbles = Math.max(0, Math.min(2, Math.round((100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5))));
   
-  // Longest run
-  const longestRun = Math.max(5, Math.round(rushYd / carries * U.rand(1.5, 3.5)));
+  const longestRun = Math.max(5, Math.round(rushYd / Math.max(1, carries) * U.rand(1.5, 3.5)));
   
-  // Receiving stats
   const targets = Math.max(0, Math.min(8, Math.round((catching / 20) + U.rand(0, 3))));
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (catching / 100) + U.rand(-1, 1))));
   const recYd = Math.max(0, Math.round(receptions * (5 + speed / 20) + U.rand(-5, 15)));
@@ -237,11 +206,6 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
 
 /**
  * Generate wide receiver/tight end statistics
- * @param {Object} receiver - WR/TE player object
- * @param {number} teamScore - Team's score
- * @param {Object} defenseStrength - Opposing defense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for WR/TE
  */
 function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
   const ratings = receiver.ratings || {};
@@ -249,31 +213,24 @@ function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
   const catchInTraffic = ratings.catchInTraffic || 70;
   const speed = ratings.speed || 70;
   
-  // Targets based on position importance and score
   const baseTargets = receiver.pos === 'WR' ? 8 : 5;
   const targets = Math.max(0, Math.min(15, Math.round(baseTargets + (teamScore / 5) + U.rand(-2, 4))));
   
-  // Receptions based on catching ability and defense
   const catchRate = (catching + catchInTraffic) / 2;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
   const receptionPct = Math.max(40, Math.min(90, catchRate + defenseFactor * 20));
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (receptionPct / 100) + U.rand(-1, 1))));
   
-  // Yards based on receptions and speed
   const avgYardsPerCatch = 8 + (speed / 15);
   const recYd = Math.round(receptions * avgYardsPerCatch + U.rand(-20, 50));
   
-  // Touchdowns
   const recTD = Math.max(0, Math.min(3, Math.round((receptions / 5) * (teamScore / 14) + U.rand(-0.5, 1.5))));
   
-  // Drops
   const dropRate = Math.max(0, (100 - catching) / 200);
   const drops = Math.max(0, Math.min(targets - receptions, Math.round(targets * dropRate + U.rand(-0.5, 1.5))));
   
-  // Yards after catch
   const yardsAfterCatch = Math.max(0, Math.round(recYd * (0.3 + speed / 200) + U.rand(-10, 20)));
   
-  // Longest catch
   const longestCatch = receptions > 0 ? Math.max(10, Math.round(recYd / receptions * U.rand(1.5, 3.5))) : 0;
   
   return {
@@ -289,10 +246,6 @@ function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
 
 /**
  * Generate defensive back statistics (CB, S)
- * @param {Object} db - Defensive back player object
- * @param {Object} offenseStrength - Opposing offense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for DB
  */
 function generateDBStats(db, offenseStrength, U) {
   const ratings = db.ratings || {};
@@ -300,18 +253,14 @@ function generateDBStats(db, offenseStrength, U) {
   const speed = ratings.speed || 70;
   const awareness = ratings.awareness || 70;
   
-  // Coverage rating (0-100)
   const coverageRating = Math.round((coverage + speed + awareness) / 3 + U.rand(-5, 5));
   
-  // Tackles based on position and game flow
   const baseTackles = db.pos === 'S' ? 6 : 4;
   const tackles = Math.max(0, Math.min(15, Math.round(baseTackles + (100 - coverage) / 30 + U.rand(-1, 3))));
   
-  // Interceptions based on coverage and awareness
   const intChance = (coverage + awareness) / 200;
   const interceptions = Math.max(0, Math.min(3, Math.round(intChance * 2 + U.rand(-0.5, 1.5))));
   
-  // Passes defended
   const passesDefended = Math.max(0, Math.min(5, Math.round((coverage / 30) + U.rand(-0.5, 1.5))));
   
   return {
@@ -324,10 +273,6 @@ function generateDBStats(db, offenseStrength, U) {
 
 /**
  * Generate defensive lineman/linebacker statistics (DL, LB, DE)
- * @param {Object} defender - Defensive player object
- * @param {Object} offenseStrength - Opposing offense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for DL/LB
  */
 function generateDLStats(defender, offenseStrength, U) {
   const ratings = defender.ratings || {};
@@ -336,21 +281,16 @@ function generateDLStats(defender, offenseStrength, U) {
   const runStop = ratings.runStop || 70;
   const awareness = ratings.awareness || 70;
   
-  // Pressure rating
   const pressureRating = Math.round((passRushPower + passRushSpeed + awareness) / 3 + U.rand(-5, 5));
   
-  // Sacks based on pass rush ability
   const sackChance = (passRushPower + passRushSpeed) / 200;
   const sacks = Math.max(0, Math.min(4, Math.round(sackChance * 3 + U.rand(-0.5, 1.5))));
   
-  // Tackles based on position and run stop
   const baseTackles = defender.pos === 'LB' ? 8 : 5;
   const tackles = Math.max(0, Math.min(15, Math.round(baseTackles + (runStop / 20) + U.rand(-1, 3))));
   
-  // Tackles for loss
   const tacklesForLoss = Math.max(0, Math.min(3, Math.round((runStop / 50) + U.rand(-0.5, 1.5))));
   
-  // Forced fumbles
   const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
   
   return {
@@ -364,10 +304,6 @@ function generateDLStats(defender, offenseStrength, U) {
 
 /**
  * Generate offensive lineman statistics
- * @param {Object} ol - Offensive lineman player object
- * @param {Object} defenseStrength - Opposing defense strength
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for OL
  */
 function generateOLStats(ol, defenseStrength, U) {
   const ratings = ol.ratings || {};
@@ -375,14 +311,11 @@ function generateOLStats(ol, defenseStrength, U) {
   const runBlock = ratings.runBlock || 70;
   const awareness = ratings.awareness || 70;
   
-  // Sacks allowed (inverse of pass block)
   const sackChance = (100 - passBlock) / 200 + (defenseStrength / 300);
   const sacksAllowed = Math.max(0, Math.min(3, Math.round(sackChance * 2 + U.rand(-0.5, 1.5))));
   
-  // Tackles for loss allowed
   const tflAllowed = Math.max(0, Math.min(2, Math.round((100 - runBlock) / 100 + U.rand(-0.3, 0.5))));
   
-  // Protection grade (0-100)
   const protectionGrade = Math.round((passBlock + runBlock + awareness) / 3 + U.rand(-5, 5));
   
   return {
@@ -394,34 +327,24 @@ function generateOLStats(ol, defenseStrength, U) {
 
 /**
  * Generate kicker statistics
- * @param {Object} kicker - Kicker player object
- * @param {number} teamScore - Team's score
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for K
  */
 function generateKickerStats(kicker, teamScore, U) {
   const ratings = kicker.ratings || {};
   const kickPower = ratings.kickPower || 70;
   const kickAccuracy = ratings.kickAccuracy || 70;
   
-  // Field goal attempts
   const fgAttempts = Math.max(0, Math.min(5, Math.round(teamScore / 7 + U.rand(-1, 2))));
   
-  // Field goals made based on accuracy
   const makeRate = kickAccuracy / 100;
   const fgMade = Math.max(0, Math.min(fgAttempts, Math.round(fgAttempts * makeRate + U.rand(-0.5, 0.5))));
   
-  // Longest field goal
   const longestFG = Math.max(20, Math.min(65, Math.round(30 + (kickPower / 2) + U.rand(-5, 10))));
   
-  // Extra points (assume 1 per TD, roughly)
   const xpAttempts = Math.max(0, Math.round(teamScore / 7));
   const xpMade = Math.max(0, Math.min(xpAttempts, Math.round(xpAttempts * (kickAccuracy / 100) + U.rand(-0.3, 0.3))));
   
-  // Success percentage
   const successPct = fgAttempts > 0 ? Math.round((fgMade / fgAttempts) * 1000) / 10 : 0;
   
-  // Average kick distance (for kickoffs)
   const avgKickYards = Math.round(60 + (kickPower / 3) + U.rand(-5, 5));
   
   return {
@@ -439,24 +362,16 @@ function generateKickerStats(kicker, teamScore, U) {
 
 /**
  * Generate punter statistics
- * @param {Object} punter - Punter player object
- * @param {number} teamScore - Team's score (lower = more punts)
- * @param {Object} U - Utils object
- * @returns {Object} Game stats for P
  */
 function generatePunterStats(punter, teamScore, U) {
   const ratings = punter.ratings || {};
   const kickPower = ratings.kickPower || 70;
-  const kickAccuracy = ratings.kickAccuracy || 70;
   
-  // Punts (more if team scored less)
   const punts = Math.max(0, Math.min(8, Math.round((28 - teamScore) / 4 + U.rand(-1, 2))));
   
-  // Punt distance based on power
   const avgPuntYards = Math.round(40 + (kickPower / 3) + U.rand(-5, 5));
   const totalPuntYards = punts * avgPuntYards;
   
-  // Longest punt
   const longestPunt = Math.max(30, Math.min(70, Math.round(avgPuntYards * U.rand(1.2, 1.8))));
   
   return {
@@ -469,18 +384,13 @@ function generatePunterStats(punter, teamScore, U) {
 
 /**
  * Calculate how many weeks a player has been with the team
- * (Local copy to avoid dependency issues with player.js)
- * @param {Object} player - Player object
- * @param {Object} team - Team object
- * @returns {number} Weeks with team
  */
 function calculateWeeksWithTeam(player, team) {
-  // Simplified: check player history or use a default
   if (player.history && player.history.length > 0) {
     const teamHistory = player.history.filter(h => h.team === team.abbr);
-    return teamHistory.length * 17; // Approximate: 1 season = 17 weeks
+    return teamHistory.length * 17;
   }
-  return 17; // Default: assume 1 season
+  return 17;
 }
 
 /**
@@ -491,7 +401,6 @@ function calculateWeeksWithTeam(player, team) {
  */
 function simGameStats(home, away) {
   try {
-    // Validate dependencies
     if (!Constants?.SIMULATION || !Utils) {
       console.error('Missing simulation dependencies');
       return null;
@@ -500,42 +409,74 @@ function simGameStats(home, away) {
     const C = Constants.SIMULATION;
     const U = Utils;
 
-    // Validate team inputs
     if (!home?.roster || !away?.roster || !Array.isArray(home.roster) || !Array.isArray(away.roster)) {
-      console.error('Invalid team roster data:', { home: !!home?.roster, away: !!away?.roster });
+      console.error('Invalid team roster data');
       return null;
     }
 
-    if (home.roster.length === 0 || away.roster.length === 0) {
-      console.warn('Empty roster detected:', { homeRoster: home.roster.length, awayRoster: away.roster.length });
-    }
+    // --- OPTIMIZATION & INJURY INTEGRATION ---
+    // Helper to get active roster (healthy players)
+    const getActiveRoster = (team) => {
+      if (!team.roster) return [];
+      if (typeof window.canPlayerPlay === 'function') {
+        return team.roster.filter(p => window.canPlayerPlay(p));
+      }
+      return team.roster;
+    };
 
-    // Calculate team strengths
-    const calculateStrength = (team) => {
-      const roster = team.roster;
-      if (!roster || !roster.length) return 50;
+    const homeActive = getActiveRoster(home);
+    const awayActive = getActiveRoster(away);
 
-      return roster.reduce((acc, p) => {
-        // Calculate tenure in years (approx 17 weeks per season)
+    // Group active players by position for faster access
+    const homeGroups = groupPlayersByPosition(homeActive);
+    const awayGroups = groupPlayersByPosition(awayActive);
+
+    // Calculate team strengths using active roster and effective ratings
+    const calculateStrength = (activeRoster, team) => {
+      if (!activeRoster || !activeRoster.length) return 50;
+
+      return activeRoster.reduce((acc, p) => {
         const tenureYears = calculateWeeksWithTeam(p, team) / 17;
-        // Use the new performance calculation which adjusts based on tenure
-        const effectiveOvr = calculateGamePerformance(p, tenureYears);
-        return acc + effectiveOvr;
-      }, 0) / roster.length;
+
+        // Use effective rating (includes injury impact) if available
+        let rating = p.ovr || 50;
+        if (typeof window.getEffectiveRating === 'function') {
+          rating = window.getEffectiveRating(p);
+        }
+
+        // Use coach system adjustment
+        const proxyPlayer = { ...p, ovr: rating, ratings: { overall: rating } };
+        const effectivePerf = calculateGamePerformance(proxyPlayer, tenureYears);
+
+        return acc + effectivePerf;
+      }, 0) / activeRoster.length;
     };
 
-    const homeStrength = calculateStrength(home);
-    const awayStrength = calculateStrength(away);
+    const homeStrength = calculateStrength(homeActive, home);
+    const awayStrength = calculateStrength(awayActive, away);
 
-    // Calculate defensive strengths (for stat generation)
-    const calculateDefenseStrength = (roster) => {
-      const defenders = roster.filter(p => ['DL', 'LB', 'CB', 'S'].includes(p.pos));
-      if (defenders.length === 0) return 70;
-      return defenders.reduce((acc, p) => acc + (p.ovr || 50), 0) / defenders.length;
+    // Calculate defensive strengths (for stat generation) - use active defenders only
+    const calculateDefenseStrength = (groups) => {
+      const defensivePositions = ['DL', 'LB', 'CB', 'S'];
+      let totalRating = 0;
+      let count = 0;
+
+      defensivePositions.forEach(pos => {
+        const players = groups[pos] || [];
+        players.forEach(p => {
+            // Use effective rating
+            const r = typeof window.getEffectiveRating === 'function' ? window.getEffectiveRating(p) : (p.ovr || 50);
+            totalRating += r;
+            count++;
+        });
+      });
+
+      if (count === 0) return 70;
+      return totalRating / count;
     };
 
-    const homeDefenseStrength = calculateDefenseStrength(away.roster); // Opposing defense
-    const awayDefenseStrength = calculateDefenseStrength(home.roster);
+    const homeDefenseStrength = calculateDefenseStrength(awayGroups); // Opposing defense
+    const awayDefenseStrength = calculateDefenseStrength(homeGroups);
 
     // Add home advantage
     const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
@@ -549,48 +490,38 @@ function simGameStats(home, away) {
     let homeScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) + Math.round(strengthDiff / 5);
     let awayScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) - Math.round(strengthDiff / 5);
 
-    // Add randomness
     homeScore += U.rand(0, SCORE_VARIANCE);
     awayScore += U.rand(0, SCORE_VARIANCE);
 
-    // Ensure scores are non-negative
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
-    // Generate comprehensive stats for all players
-    [home, away].forEach((team, teamIndex) => {
-      const score = teamIndex === 0 ? homeScore : awayScore;
-      const oppScore = teamIndex === 0 ? awayScore : homeScore;
-      const oppDefenseStrength = teamIndex === 0 ? homeDefenseStrength : awayDefenseStrength;
-      const oppOffenseStrength = teamIndex === 0 ? awayStrength : homeStrength;
-      
-      // Initialize stats for all players
-      team.roster.forEach(player => {
+    // Generate comprehensive stats for all players (ACTIVE PLAYERS ONLY)
+
+    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups) => {
+       // Initialize stats for ALL players (even inactive ones, to clear old game stats)
+       team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
       });
-      
-      // Quarterback stats
-      const qb = team.roster.find(p => p.pos === 'QB');
+
+      // QB
+      const qbs = groups['QB'] || [];
+      const qb = qbs.length > 0 ? qbs[0] : null; // Starter
       if (qb) {
         const qbStats = generateQBStats(qb, score, oppDefenseStrength, U);
-        // Track QB Wins/Losses
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
-        // else tie, not tracked as win or loss
-
         Object.assign(qb.stats.game, qbStats);
       }
       
-      // Running back stats
-      const rbs = team.roster.filter(p => p.pos === 'RB').slice(0, 2); // Top 2 RBs
+      // RB
+      const rbs = (groups['RB'] || []).slice(0, 2);
       rbs.forEach((rb, index) => {
-        // Distribute carries between RBs
         const share = index === 0 ? 0.7 : 0.3;
         const rbStats = generateRBStats(rb, score * share, oppDefenseStrength, U);
-        // Scale down stats for backup RB
         if (index > 0) {
-          Object.keys(rbStats).forEach(key => {
+           Object.keys(rbStats).forEach(key => {
             if (typeof rbStats[key] === 'number') {
               rbStats[key] = Math.round(rbStats[key] * share);
             }
@@ -598,9 +529,9 @@ function simGameStats(home, away) {
         }
         Object.assign(rb.stats.game, rbStats);
       });
-      
-      // Wide receiver stats
-      const wrs = team.roster.filter(p => p.pos === 'WR').slice(0, 4); // Top 4 WRs
+
+      // WR
+      const wrs = (groups['WR'] || []).slice(0, 4);
       wrs.forEach((wr, index) => {
         const share = index === 0 ? 0.35 : index === 1 ? 0.25 : index === 2 ? 0.2 : 0.2;
         const wrStats = generateReceiverStats(wr, score * share, oppDefenseStrength, U);
@@ -613,13 +544,13 @@ function simGameStats(home, away) {
         }
         Object.assign(wr.stats.game, wrStats);
       });
-      
-      // Tight end stats
-      const tes = team.roster.filter(p => p.pos === 'TE').slice(0, 2);
+
+      // TE
+      const tes = (groups['TE'] || []).slice(0, 2);
       tes.forEach((te, index) => {
         const share = index === 0 ? 0.7 : 0.3;
         const teStats = generateReceiverStats(te, score * share, oppDefenseStrength, U);
-        if (index > 0) {
+         if (index > 0) {
           Object.keys(teStats).forEach(key => {
             if (typeof teStats[key] === 'number') {
               teStats[key] = Math.round(teStats[key] * share);
@@ -628,37 +559,41 @@ function simGameStats(home, away) {
         }
         Object.assign(te.stats.game, teStats);
       });
-      
-      // Offensive lineman stats
-      const ols = team.roster.filter(p => p.pos === 'OL').slice(0, 5);
+
+      // OL
+      const ols = (groups['OL'] || []).slice(0, 5);
       ols.forEach(ol => {
         Object.assign(ol.stats.game, generateOLStats(ol, oppDefenseStrength, U));
       });
-      
-      // Defensive back stats
-      const dbs = team.roster.filter(p => ['CB', 'S'].includes(p.pos));
+
+      // DB (CB, S)
+      const dbs = [...(groups['CB'] || []), ...(groups['S'] || [])];
       dbs.forEach(db => {
-        Object.assign(db.stats.game, generateDBStats(db, oppOffenseStrength, U));
+         Object.assign(db.stats.game, generateDBStats(db, oppOffenseStrength, U));
       });
-      
-      // Defensive lineman/linebacker stats
-      const defenders = team.roster.filter(p => ['DL', 'LB'].includes(p.pos));
-      defenders.forEach(defender => {
-        Object.assign(defender.stats.game, generateDLStats(defender, oppOffenseStrength, U));
+
+      // Front 7 (DL, LB)
+      const defenders = [...(groups['DL'] || []), ...(groups['LB'] || [])];
+      defenders.forEach(def => {
+         Object.assign(def.stats.game, generateDLStats(def, oppOffenseStrength, U));
       });
-      
-      // Kicker stats
-      const kicker = team.roster.find(p => p.pos === 'K');
-      if (kicker) {
-        Object.assign(kicker.stats.game, generateKickerStats(kicker, score, U));
+
+      // K
+      const kickers = groups['K'] || [];
+      if (kickers.length > 0) {
+        Object.assign(kickers[0].stats.game, generateKickerStats(kickers[0], score, U));
       }
-      
-      // Punter stats
-      const punter = team.roster.find(p => p.pos === 'P');
-      if (punter) {
-        Object.assign(punter.stats.game, generatePunterStats(punter, score, U));
+
+      // P
+      const punters = groups['P'] || [];
+      if (punters.length > 0) {
+        Object.assign(punters[0].stats.game, generatePunterStats(punters[0], score, U));
       }
-    });
+    };
+
+    // Generate stats for both teams
+    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups);
+    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups);
 
     return { homeScore, awayScore };
     
