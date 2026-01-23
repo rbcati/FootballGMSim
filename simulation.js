@@ -100,6 +100,23 @@ function applyResult(game, homeScore, awayScore) {
   home.ptsAgainst += awayScore;
   away.ptsFor += awayScore;
   away.ptsAgainst += homeScore;
+
+  // Sync legacy record object if it exists (for UI compatibility)
+  if (home.record) {
+    home.record.w = home.wins;
+    home.record.l = home.losses;
+    home.record.t = home.ties;
+    home.record.pf = home.ptsFor;
+    home.record.pa = home.ptsAgainst;
+  }
+
+  if (away.record) {
+    away.record.w = away.wins;
+    away.record.l = away.losses;
+    away.record.t = away.ties;
+    away.record.pf = away.ptsFor;
+    away.record.pa = away.ptsAgainst;
+  }
 }
 
 /**
@@ -1031,7 +1048,21 @@ function simulateWeek(options = {}) {
 
     // Check if season is over
     if (L.week > scheduleWeeks.length) {
-      console.log('Regular season complete, starting playoffs');
+      console.log('Regular season complete, checking playoffs...');
+
+      // FIXED: If playoffs are already active, don't restart them
+      if (window.state.playoffs && !window.state.playoffs.winner) {
+          console.log('Playoffs active, navigating to bracket');
+          if (window.location && window.location.hash !== '#/playoffs') {
+              window.location.hash = '#/playoffs';
+          }
+          if (typeof window.renderPlayoffs === 'function') {
+              window.renderPlayoffs();
+          }
+          return;
+      }
+
+      console.log('Starting playoffs');
       window.setStatus('Regular season complete!');
 
       if (typeof window.startPlayoffs === 'function') {

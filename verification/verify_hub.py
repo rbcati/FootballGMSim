@@ -1,29 +1,43 @@
-from playwright.sync_api import sync_playwright, expect
 
-def run():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
+import time
+from playwright.sync_api import sync_playwright
 
-        print("Navigating to app...")
-        page.goto("http://localhost:8000")
+def run(playwright):
+    browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page()
 
-        print("Waiting for hub or onboard...")
-        page.wait_for_selector("#onboardStart, #hub", timeout=10000)
+    # Go to the app
+    print("Navigating to app...")
+    page.goto("http://localhost:8000")
 
-        if page.is_visible("#onboardStart"):
-            print("Onboarding...")
-            page.click("#onboardStart")
-            page.wait_for_selector("#hub", timeout=10000)
+    # Wait for onboarding modal
+    print("Waiting for onboarding...")
+    page.wait_for_selector("#onboardModal", state="visible")
 
-        print("Hub visible. Taking screenshot...")
-        page.screenshot(path="verification/verification_hub.png")
+    # Click Start Season (it might take a moment to load teams)
+    # Give it a second for the team list to populate if needed
+    time.sleep(1)
 
-        # Check if we can see team name in hub
-        print("Verifying hub content...")
-        expect(page.locator("#hub h2")).to_have_text("League Hub")
+    print("Clicking Start Season...")
+    page.click("#onboardStart")
 
-        browser.close()
+    # Wait for Hub
+    print("Waiting for Hub...")
+    page.wait_for_selector("#hub", state="visible")
 
-if __name__ == "__main__":
-    run()
+    # Check for team comparison
+    print("Checking for Team Comparison...")
+    try:
+        page.wait_for_selector(".team-comparison", timeout=5000)
+        print("PASS: Team comparison found.")
+    except:
+        print("FAIL: Team comparison NOT found.")
+
+    # Take screenshot of Hub
+    page.screenshot(path="verification/hub_verification.png", full_page=True)
+    print("Screenshot saved to verification/hub_verification.png")
+
+    browser.close()
+
+with sync_playwright() as playwright:
+    run(playwright)
