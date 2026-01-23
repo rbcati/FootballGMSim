@@ -1,5 +1,7 @@
 'use strict';
 
+import { SKILL_TREES } from './player.js';
+
 /**
  * Player statistics viewer system
  * Now includes Progression (XP/Skill Tree), Legacy data, and Weekly Training Potential.
@@ -261,7 +263,7 @@ class PlayerStatsViewer {
     generateProgressionUI(player) {
         const prog = player.progression;
         // Check for SKILL_TREES global object
-        const skillTree = window.SKILL_TREES?.[player.pos] || []; 
+        const skillTree = SKILL_TREES?.[player.pos] || [];
         let html = '<div class="progression-panel">';
 
         html += `
