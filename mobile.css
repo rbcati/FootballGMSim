@@ -19,12 +19,7 @@
     transform: translateX(-100%);
   }
 
-  .nav-sidebar.collapsed {
-    transform: translateX(-100%);
-    pointer-events: none;
-  }
-  
-  .nav-sidebar:not(.collapsed) {
+  .nav-sidebar.nav-open {
     transform: translateX(0);
     pointer-events: auto;
   }
