@@ -2407,8 +2407,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   // Progression system
 
   // Main player functions
-  // window.makePlayer = makePlayer;
-  // window.progressPlayer = progressPlayer;
+  window.makePlayer = makePlayer;
+  window.progressPlayer = progressPlayer;
 
   // Legacy system
   window.initializePlayerLegacy = initializePlayerLegacy;
