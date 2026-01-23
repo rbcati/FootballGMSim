@@ -34,7 +34,7 @@ class PlayerStatsViewer {
 
     init() {
         this.createModal();
-        this.setupEventListeners();
+        // this.setupEventListeners(); // Disabled in favor of routing
         
         // Auto-make players clickable after a short delay
         setTimeout(() => {
@@ -173,6 +173,86 @@ class PlayerStatsViewer {
         // Generate and display the Skill Tree UI
         const progressionUI = document.getElementById('playerProgressionUI');
         progressionUI.innerHTML = this.generateProgressionUI(player);
+    }
+
+    /**
+     * Renders player profile to a full-page view
+     */
+    renderToView(containerId, playerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const L = window.state?.league;
+        if (!L) return;
+
+        let foundPlayer = null;
+        let foundTeam = null;
+
+        // Search in all teams
+        if (L.teams) {
+            for (const team of L.teams) {
+                if (team.roster) {
+                    const player = team.roster.find(p => p.id === playerId || String(p.id) === String(playerId));
+                    if (player) {
+                        foundPlayer = player;
+                        foundTeam = team;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!foundPlayer && L.freeAgents) {
+            foundPlayer = L.freeAgents.find(p => p.id === playerId || String(p.id) === String(playerId));
+            if (foundPlayer) foundTeam = { name: 'Free Agent' };
+        }
+
+        if (!foundPlayer && window.state.draftClass) {
+            foundPlayer = window.state.draftClass.find(p => p.id === playerId || String(p.id) === String(playerId));
+            if (foundPlayer) foundTeam = { name: 'Draft Prospect' };
+        }
+
+        if (!foundPlayer) {
+            container.innerHTML = '<div class="card"><h2>Player Not Found</h2><button class="btn" onclick="history.back()">Back</button></div>';
+            return;
+        }
+
+        this.currentPlayer = foundPlayer;
+
+        // Create full page layout
+        let html = `
+            <div class="card">
+                <div class="row" style="align-items: center; margin-bottom: 1rem;">
+                    <button class="btn" onclick="history.back()">← Back</button>
+                    <div style="flex-grow: 1; text-align: center;">
+                        <h2 style="margin: 0;">${foundPlayer.name}</h2>
+                        <div class="text-muted">${foundPlayer.pos} • ${foundTeam ? foundTeam.name : 'N/A'}</div>
+                    </div>
+                    <div style="width: 60px;"></div> <!-- Spacer for balance -->
+                </div>
+            </div>
+        `;
+
+        // Stats Section
+        html += `<div class="card mt">${this.generateStatsHTML(foundPlayer, foundTeam)}</div>`;
+
+        // Progression Section
+        html += `<div class="card mt">${this.generateProgressionUI(foundPlayer)}</div>`;
+
+        container.innerHTML = html;
+
+        // Bind progression buttons
+        setTimeout(() => {
+            container.querySelectorAll('.skill-buy-btn').forEach(btn => {
+                btn.onclick = (e) => {
+                    const skillName = e.target.dataset.skill;
+                    console.log(`Attempting to purchase: ${skillName}`);
+                    if (window.setStatus) {
+                        window.setStatus(`Placeholder: You bought ${skillName}!`);
+                    }
+                };
+            });
+        }, 100);
     }
     
     // ----------------------------------------------------
