@@ -399,18 +399,43 @@ class GameController {
         }
     }
 
-    handleSimulateSeason() {
+    async handleSimulateSeason() {
         try {
             console.log('Simulating season...');
             this.setStatus('Simulating season...', 'info');
-            if (window.state?.league) {
-                const L = window.state.league;
-                L.week = 18;
-                this.setStatus('Season completed!', 'success');
-                setTimeout(() => this.renderHub(), 1000);
-            } else {
+
+            if (!window.state?.league) {
                 this.setStatus('No league data available', 'error');
+                return;
             }
+
+            const L = window.state.league;
+            const scheduleWeeks = L.schedule?.weeks || L.schedule || [];
+            const maxWeeks = scheduleWeeks.length || 18;
+
+            // Loop until end of regular season
+            while (L.week <= maxWeeks) {
+                // Stop if offseason or playoffs started
+                if (window.state.offseason) break;
+
+                // Simulate week without rendering full UI
+                if (window.simulateWeek) {
+                    window.simulateWeek({ render: false });
+                } else {
+                    // Fallback logic if simulateWeek not available
+                    L.week++;
+                }
+
+                // Update status
+                this.setStatus(`Simulating week ${L.week}...`, 'info');
+
+                // Allow UI to update status
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            this.setStatus('Season completed!', 'success');
+            setTimeout(() => this.renderHub(), 500);
+
         } catch (error) {
             console.error('Error simulating season:', error);
             this.setStatus('Failed to simulate season', 'error');
@@ -1157,6 +1182,11 @@ class GameController {
             case 'playoffs':
                 if (window.renderPlayoffs) {
                     window.renderPlayoffs();
+                }
+                break;
+            case 'stats':
+                if (window.renderStatsPage) {
+                    window.renderStatsPage();
                 }
                 break;
             default:

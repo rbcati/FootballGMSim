@@ -682,6 +682,16 @@ function accumulateCareerStats(league) {
       }
       if (!player.stats || !player.stats.season) return;
       
+      // Snapshot season stats to history
+      if (Object.keys(player.stats.season).length > 0) {
+          if (!player.statsHistory) player.statsHistory = [];
+          player.statsHistory.push({
+              season: year,
+              team: team.abbr || team.name,
+              ...player.stats.season
+          });
+      }
+
       initializePlayerStats(player);
       
       const season = player.stats.season;
@@ -934,13 +944,15 @@ function startNewSeason() {
     L.week = 1;
     L.resultsByWeek = [];
 
-    // Reset team records and clear per-game player stats
+    // Reset team records, clear per-game stats, and reset season stats
     L.teams.forEach(team => {
       team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
       if (team.roster) {
         team.roster.forEach(p => {
-          if (p && p.stats && p.stats.game) {
-            delete p.stats.game;
+          if (p && p.stats) {
+            if (p.stats.game) delete p.stats.game;
+            // Reset season stats for the new season
+            p.stats.season = {};
           }
           // Record starting OVR for season tracking
           if (p && p.ovr !== undefined) {
@@ -1302,21 +1314,23 @@ function simulateWeek(options = {}) {
       }
     }
 
-    // Update UI to show results
+    // Update UI to show results (if render option is true, default to true)
     try {
-      if (typeof window.renderHub === 'function') {
-        window.renderHub();
-      }
-      if (typeof window.updateCapSidebar === 'function') {
-        window.updateCapSidebar();
-      }
+      if (options.render !== false) {
+        if (typeof window.renderHub === 'function') {
+          window.renderHub();
+        }
+        if (typeof window.updateCapSidebar === 'function') {
+          window.updateCapSidebar();
+        }
 
-      // Show success message
-      window.setStatus(`Week ${previousWeek} simulated - ${gamesSimulated} games completed`);
+        // Show success message
+        window.setStatus(`Week ${previousWeek} simulated - ${gamesSimulated} games completed`);
 
-      // Auto-show results on hub
-      if (window.location && window.location.hash !== '#/hub') {
-        window.location.hash = '#/hub';
+        // Auto-show results on hub
+        if (window.location && window.location.hash !== '#/hub') {
+          window.location.hash = '#/hub';
+        }
       }
 
     } catch (uiError) {

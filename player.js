@@ -298,6 +298,7 @@ import { Constants as C } from './constants.js';
         fatigue: 0,
         abilities: [],
         stats: { game: {}, season: {}, career: {} },
+        statsHistory: [],
         history: [],
         awards: []
       };
@@ -327,6 +328,7 @@ import { Constants as C } from './constants.js';
       college: generateCollege(),
       fatigue: 0,
       stats: { game: {}, season: {}, career: {} },
+      statsHistory: [],
       history: [],
       awards: []
     };
@@ -1049,6 +1051,7 @@ import { Constants as C } from './constants.js';
           season: {},
           career: {}
         },
+        statsHistory: [],
 
         // History
         history: [],
@@ -2115,7 +2118,8 @@ import { Constants as C } from './constants.js';
                 : [],
             college: generateCollege(),
             fatigue: 0,
-            stats: {}
+            stats: {},
+            statsHistory: []
         };
 
         if (!player.yearsTotal) player.yearsTotal = player.years;
