@@ -50,6 +50,8 @@ class PlayerStatsViewer {
         this.modal = document.createElement('div');
         this.modal.id = 'playerStatsModal';
         this.modal.className = 'modal';
+        this.modal.style.display = 'none'; // Hidden by default
+        this.modal.hidden = true;
         this.modal.innerHTML = `
             <div class="modal-content">
                 <div class="modal-header">
@@ -97,7 +99,60 @@ class PlayerStatsViewer {
         });
     }
 
-    // Existing cleanupStalePlayerIds, showPlayerStats, displayPlayerStats are UNCHANGED
+    cleanupStaleData() {
+        // No-op for now
+    }
+
+    /**
+     * Show stats for a player
+     * @param {string} playerId - ID of the player
+     */
+    showPlayerStats(playerId) {
+        if (!playerId) return;
+
+        const L = window.state?.league;
+        if (!L) return;
+
+        let foundPlayer = null;
+        let foundTeam = null;
+
+        // Search in all teams
+        if (L.teams) {
+            for (const team of L.teams) {
+                if (team.roster) {
+                    const player = team.roster.find(p => p.id === playerId || String(p.id) === String(playerId));
+                    if (player) {
+                        foundPlayer = player;
+                        foundTeam = team;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Search in free agents if not found
+        if (!foundPlayer && L.freeAgents) {
+            foundPlayer = L.freeAgents.find(p => p.id === playerId || String(p.id) === String(playerId));
+            if (foundPlayer) {
+                foundTeam = { name: 'Free Agent' };
+            }
+        }
+
+        // Search in draft class
+        if (!foundPlayer && window.state.draftClass) {
+            foundPlayer = window.state.draftClass.find(p => p.id === playerId || String(p.id) === String(playerId));
+            if (foundPlayer) {
+                foundTeam = { name: 'Draft Prospect' };
+            }
+        }
+
+        if (foundPlayer) {
+            this.displayPlayerStats(foundPlayer, foundTeam);
+            this.showModal();
+        } else {
+            console.warn('Player not found:', playerId);
+        }
+    }
 
     /**
      * Finds and displays player information and dynamically generated stats.
@@ -623,7 +678,58 @@ class PlayerStatsViewer {
         return summaries.length > 0 ? summaries.join(', ') : 'DNP';
     }
     
-    // Existing showModal, hideModal, makePlayersClickable, cleanupStaleData, refreshClickablePlayers, setupDOMObserver, disconnect are UNCHANGED
+    showModal() {
+        if (this.modal) {
+            this.modal.style.display = 'flex';
+            this.modal.hidden = false;
+        }
+    }
+
+    hideModal() {
+        if (this.modal) {
+            this.modal.style.display = 'none';
+            this.modal.hidden = true;
+        }
+    }
+
+    makePlayersClickable() {
+        // Add pointer cursor to all rows with player-id
+        const rows = document.querySelectorAll('tr[data-player-id], .player-row');
+        rows.forEach(row => {
+            row.style.cursor = 'pointer';
+            row.classList.add('clickable-player');
+        });
+    }
+
+    refreshClickablePlayers() {
+        this.makePlayersClickable();
+    }
+
+    setupDOMObserver() {
+        if (this.observer) this.disconnect();
+
+        this.observer = new MutationObserver((mutations) => {
+            let shouldRefresh = false;
+            mutations.forEach(mutation => {
+                if (mutation.addedNodes.length > 0) {
+                    shouldRefresh = true;
+                }
+            });
+
+            if (shouldRefresh) {
+                this.makePlayersClickable();
+            }
+        });
+
+        this.observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    disconnect() {
+        if (this.observer) {
+            this.observer.disconnect();
+            this.observer = null;
+        }
+    }
 
 }
 
@@ -649,5 +755,10 @@ function initializePlayerStatsViewer() {
     }
 }
 
-// ... (Rest of initialization/watchForGameState logic is UNCHANGED) ...
+// Auto-initialize
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializePlayerStatsViewer);
+} else {
+    initializePlayerStatsViewer();
+}
 

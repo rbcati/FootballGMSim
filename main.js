@@ -1139,6 +1139,11 @@ class GameController {
                     window.renderDraft();
                 }
                 break;
+            case 'awards':
+                if (window.renderAwardRaces) {
+                    window.renderAwardRaces();
+                }
+                break;
             case 'injuries':
                 if (window.renderInjuriesPage) {
                     window.renderInjuriesPage();
