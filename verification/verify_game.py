@@ -21,14 +21,9 @@ def verify_game_load():
                 for err in errors:
                     print(err)
 
-            # Check if Onboarding modal is visible (id="onboardModal")
-            # or if Hub is visible (id="hub") if state was loaded
-
-            # Since we didn't clear local storage in the browser instance, it might load a state or show onboarding.
-            # Let's check for title
             print(f"Page title: {page.title()}")
 
-            page.screenshot(path="verification/game_load.png")
+            page.screenshot(path="verification/game_load_rebased.png")
             print("Screenshot taken.")
 
         except Exception as e:
