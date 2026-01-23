@@ -1272,6 +1272,15 @@ console.log('[LeagueCreationFix] Loaded');
     
     // Set up navigation toggle
     setupNavigationToggle();
+
+    // Set up bottom menu toggle
+    const bottomMenu = document.getElementById('navMenuBottom');
+    if (bottomMenu) {
+      bottomMenu.addEventListener('click', (e) => {
+        e.preventDefault();
+        window.toggleNavigation();
+      });
+    }
     
     console.log('✅ Enhanced navigation set up');
   }

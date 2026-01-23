@@ -222,10 +222,12 @@
                 </div>
                 <div class="row mt">
                   <button id="tradeValidate" class="btn">Validate</button>
+                  <button id="btnTradeFinder" class="btn secondary" onclick="window.renderTradeProposals()">Trade Finder</button>
                   <div id="tradeInfo" class="spacer"></div>
                   <button id="tradeExecute" class="btn primary" disabled>Execute</button>
                 </div>
               </div>
+              <div id="tradeProposalsContainer"></div>
             </section>
             
             <section id="freeagency" class="view" hidden>
@@ -318,6 +320,10 @@
         <a href="#/trade" class="nav-item-bottom" data-view="trade">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
             <span>Trade</span>
+        </a>
+        <a href="#" class="nav-item-bottom" id="navMenuBottom">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <span>Menu</span>
         </a>
     </nav>
 

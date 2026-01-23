@@ -60,18 +60,7 @@
   }
   
   .nav-toggle {
-    width: 44px;
-    height: 44px;
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    z-index: 1002 !important;
-    position: relative;
-    background: var(--surface) !important;
-    border: 1px solid var(--hairline) !important;
-    border-radius: var(--radius-md) !important;
-    flex-shrink: 0;
+    display: none !important;
   }
 
   /* Cards */

@@ -503,7 +503,11 @@ window.renderRoster = function() {
             tr.addEventListener('click', (e) => {
                 // Ensure clicking the checkbox doesn't trigger details
                 if (!e.target.matches('input[type="checkbox"]')) {
-                    showPlayerDetails(player);
+                    if (window.showPlayerDetails) {
+                        window.showPlayerDetails(player);
+                    } else {
+                        showPlayerDetails(player);
+                    }
                 }
             });
         });
@@ -2135,5 +2139,8 @@ window.enhanceNavigation = enhanceNavigation;
 window.setupRosterEvents = setupRosterEvents;
 window.initializeUIFixes = initializeUI;
 window.renderPowerRankings = renderPowerRankings;
+window.renderTradeProposals = renderTradeProposals;
+window.generateAITradeProposals = generateAITradeProposals;
+window.showPlayerDetails = showPlayerDetails;
 
 console.log('🎉 UI master file loaded successfully!');
