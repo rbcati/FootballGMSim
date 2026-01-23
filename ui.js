@@ -827,7 +827,7 @@ window.renderHub = function() {
         }
         
         // Render power rankings
-        renderHubPowerRankings();
+        renderPowerRankings();
         
         // Render team ratings overview (assuming renderLeagueTeamRatings exists)
         if (window.renderLeagueTeamRatings) {
@@ -1034,7 +1034,7 @@ function renderHubTradeProposals() {
     }).join('') + (proposals.length > 3 ? `<div class="mt"><a href="#/trade-proposals" class="btn btn-sm">View All Proposals (${proposals.length})</a></div>` : '');
 }
 
-function renderHubPowerRankings() {
+function renderPowerRankings() {
     const L = window.state?.league;
     if (!L || !L.teams) return;
     
@@ -2138,7 +2138,7 @@ window.renderTradeCenter = function () {
 window.enhanceNavigation = enhanceNavigation;
 window.setupRosterEvents = setupRosterEvents;
 window.initializeUIFixes = initializeUI;
-window.renderHubPowerRankings = renderHubPowerRankings;
+window.renderPowerRankings = renderPowerRankings;
 window.renderTradeProposals = renderTradeProposals;
 window.generateAITradeProposals = generateAITradeProposals;
 window.showPlayerDetails = showPlayerDetails;

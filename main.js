@@ -1134,8 +1134,8 @@ class GameController {
                 }
                 break;
             case 'powerRankings':
-                if (window.renderPowerRankings) {
-                    window.renderPowerRankings();
+                if (window.renderPowerRankingsPage) {
+                    window.renderPowerRankingsPage();
                 }
                 break;
             case 'trade':

@@ -70,11 +70,11 @@ function calculatePowerRankingsData(league) {
 /**
  * Renders the Power Rankings view
  */
-function renderPowerRankings() {
+function renderPowerRankingsPage() {
     try {
         const container = document.getElementById('powerRankings');
         if (!container) {
-            console.error("renderPowerRankings: Container #powerRankings not found");
+            console.error("renderPowerRankingsPage: Container #powerRankings not found");
             return;
         }
 
@@ -83,7 +83,7 @@ function renderPowerRankings() {
         const league = window.state?.league || window.league;
 
         if (!league) {
-            console.error("renderPowerRankings: League not found in window.state");
+            console.error("renderPowerRankingsPage: League not found in window.state");
             container.innerHTML = `
                 <div class="card">
                     <h2>Power Rankings</h2>
@@ -100,7 +100,7 @@ function renderPowerRankings() {
         const data = calculatePowerRankingsData(league);
 
         if (!data || data.length === 0) {
-             console.error("renderPowerRankings: No data calculated");
+             console.error("renderPowerRankingsPage: No data calculated");
              container.innerHTML = '<div class="card"><h3>No Data Available</h3></div>';
              return;
         }
@@ -142,7 +142,7 @@ function renderPowerRankings() {
         container.innerHTML = html;
 
     } catch (err) {
-        console.error("Error rendering Power Rankings:", err);
+        console.error("Error rendering Power Rankings Page:", err);
         const container = document.getElementById('powerRankings');
         if (container) {
              container.innerHTML = `<div class="card"><h3>Error</h3><pre>${err.message}</pre></div>`;
@@ -224,5 +224,5 @@ function sortPowerRankings(key) {
 
 // Expose globally
 window.calculatePowerRankingsData = calculatePowerRankingsData;
-window.renderPowerRankings = renderPowerRankings;
+window.renderPowerRankingsPage = renderPowerRankingsPage;
 window.sortPowerRankings = sortPowerRankings;
