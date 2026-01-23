@@ -1,8 +1,23 @@
 // utils.js
 // ES Module version
 
-export function rand(n, m){ return Math.floor(Math.random()*(m-n+1))+n; }
-export function choice(a){ return a[Math.floor(Math.random()*a.length)]; }
+export function rand(n, m){
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        crypto.getRandomValues(array);
+        // Use 4294967296 (2^32) for normalization
+        return Math.floor((array[0] / 4294967296) * (m - n + 1)) + n;
+    }
+    return Math.floor(Math.random()*(m-n+1))+n;
+}
+export function choice(a){
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        crypto.getRandomValues(array);
+        return a[Math.floor((array[0] / 4294967296) * a.length)];
+    }
+    return a[Math.floor(Math.random()*a.length)];
+}
 export function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
 export function id(){
     if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
