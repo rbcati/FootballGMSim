@@ -801,8 +801,8 @@ import { Constants as C } from './constants.js';
         html += `</div>`;
         html += `<div class="depth-actions">`;
         // Use number directly in onclick to avoid string conversion issues
-        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth(${entry.playerId}, '${pos}', ${entry.depthPosition - 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition === 1 ? 'disabled' : ''}>↑</button>`;
-        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth(${entry.playerId}, '${pos}', ${entry.depthPosition + 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition >= depth.length ? 'disabled' : ''}>↓</button>`;
+        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth('${entry.playerId}', '${pos}', ${entry.depthPosition - 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition === 1 ? 'disabled' : ''}>↑</button>`;
+        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth('${entry.playerId}', '${pos}', ${entry.depthPosition + 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition >= depth.length ? 'disabled' : ''}>↓</button>`;
         html += `</div>`;
         html += `</div>`;
       });

@@ -1141,6 +1141,12 @@ console.log('[LeagueCreationFix] Loaded');
               console.log('✅ Records rendered');
             }
             break;
+          case 'awards':
+            if (window.renderAwardRaces) {
+              window.renderAwardRaces();
+              console.log('✅ Award Races rendered');
+            }
+            break;
           case 'injuries':
             if (window.renderInjuriesPage) {
               window.renderInjuriesPage();
