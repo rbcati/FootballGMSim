@@ -4,6 +4,8 @@
 // Import dependencies
 import { Constants } from './constants.js';
 
+export let state = null;
+
 // --- Configuration Variables ---
 const C = Constants;
 const SAVE_KEY_BASE = (C.GAME_CONFIG && C.GAME_CONFIG.SAVE_KEY) || 'nflGM4.state';
@@ -459,6 +461,7 @@ export const State = {
     });
     // Assign new properties
     Object.assign(window.state, newState);
+    state = window.state;
     return window.state;
   }
 };
@@ -521,6 +524,7 @@ export function loadState() {
     // Overwrite/initialize global state with loaded data
     window.state = window.state || State.init();
     Object.assign(window.state, loadedState, { saveSlot: activeSlot });
+    state = window.state;
 
     if (legacyKeyUsed) {
       // Re-save into the active slot to migrate forward
@@ -783,34 +787,16 @@ function initializeGlobalState() {
   } else {
     console.log('Global state already exists, skipping initialization.');
   }
+  state = window.state;
 }
 
 // Initialize state immediately (attempts load first)
 initializeGlobalState();
 
-// Expose functions globally for backward compatibility
-// TODO: Remove these once all code is migrated to ES modules
-window.State = State;
-window.loadState = loadState;
-window.saveState = saveState;
-window.clearSavedState = clearSavedState;
-window.hookAutoSave = hookAutoSave;
-window.getActiveSaveSlot = getActiveSaveSlot;
-window.setActiveSaveSlot = setActiveSaveSlot;
-window.saveKeyFor = saveKeyFor;
-window.getSaveMetadata = getSaveMetadata;
-window.listSaveSlots = listSaveSlots;
-
-window.currentTeam = currentTeam;
-window.getTeamsByConference = getTeamsByConference;
-window.getTeamsByDivision = getTeamsByDivision;
-
-// Legacy aliases
-window.saveLeague = saveState; // New games should use saveState
-window.loadLeague = loadState; // New games should use loadState
-
 // Install autosave hook
 hookAutoSave();
+
+export const init = State.init;
 
 // Expose name arrays for generation (if they were not globally defined already)
 window.FIRST_NAMES = window.FIRST_NAMES || FIRST_NAMES;

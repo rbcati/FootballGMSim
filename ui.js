@@ -1,4 +1,6 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
+import { saveState } from './state.js';
+
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
 #onboardTeam {
@@ -1504,7 +1506,7 @@ window.renderSettings = function() {
                 if (!window.state) return;
                 window.state.theme = e.target.value;
                 if (window.applyTheme) window.applyTheme(window.state.theme);
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1512,7 +1514,7 @@ window.renderSettings = function() {
             salaryCapToggle.addEventListener('change', (e) => {
                 if (!window.state?.settings) return;
                 window.state.settings.salaryCapEnabled = e.target.checked;
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1520,7 +1522,7 @@ window.renderSettings = function() {
             coachFiringToggle.addEventListener('change', (e) => {
                 if (!window.state?.settings) return;
                 window.state.settings.allowCoachFiring = e.target.checked;
-                if (window.saveState) window.saveState();
+                if (saveState) saveState();
             });
         }
 
@@ -1581,8 +1583,8 @@ window.renderSaveDataManager = function() {
 
             if (action === 'optimize') {
                 if (slot !== activeSlot) return;
-                if (window.saveState) {
-                    const saved = window.saveState(null, { keepBoxScoreWeeks: 0 });
+                if (saveState) {
+                    const saved = saveState(null, { keepBoxScoreWeeks: 0 });
                     if (saved && typeof window.setStatus === 'function') {
                         window.setStatus('Save optimized: older box scores trimmed.', 'success');
                     }
