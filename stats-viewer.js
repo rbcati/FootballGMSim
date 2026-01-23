@@ -64,13 +64,17 @@
 
         let html = `
         <div class="table-wrapper">
-            <table class="table">
+            <table class="table" id="teamStatsTable">
                 <thead>
                     <tr>
-                        <th class="sortable" onclick="window.sortTable('name')">Team</th>
-                        <th>3rd Down</th>
+                        <th>Team</th>
+                        <th>W-L-T</th>
+                        <th>PF</th>
+                        <th>PA</th>
+                        <th>Diff</th>
+                        <th>Off Yds/G</th>
+                        <th>Def Yds/G</th>
                         <th>3rd %</th>
-                        <th>Red Zone</th>
                         <th>RZ TD %</th>
                     </tr>
                 </thead>
@@ -79,6 +83,9 @@
 
         L.teams.forEach(t => {
             const s = t.stats?.season || {};
+            const r = t.record || { w:0, l:0, t:0, pf:0, pa:0 };
+            const games = Math.max(1, (r.w + r.l + r.t));
+
             const thirdAtt = s.thirdDownAttempts || 0;
             const thirdConv = s.thirdDownConversions || 0;
             const thirdPct = thirdAtt > 0 ? ((thirdConv/thirdAtt)*100).toFixed(1) + '%' : '0.0%';
@@ -87,12 +94,29 @@
             const rzTDs = s.redZoneTDs || 0;
             const rzPct = rzTrips > 0 ? ((rzTDs/rzTrips)*100).toFixed(1) + '%' : '0.0%';
 
+            // Calculate yards per game from player stats accumulation
+            // This is an approximation as we don't store team total yards directly in season object usually
+            // We rely on the accumulation logic in simulation.js
+            const passYds = s.passYd || 0;
+            const rushYds = s.rushYd || 0;
+            const totalYds = passYds + rushYds;
+            const ypg = (totalYds / games).toFixed(1);
+
+            // Defense approximation (using PA as proxy or calculate if available)
+            // For now, let's use PA/G as a key metric, and maybe yards allowed if we tracked it
+            // We tracked 'yardsAllowed' on defenders, but aggregating for team is complex.
+            // Let's stick to PA/G and Differential for now.
+
             html += `
                 <tr>
                     <td><strong>${t.name}</strong></td>
-                    <td>${thirdConv}/${thirdAtt}</td>
+                    <td>${r.w}-${r.l}-${r.t}</td>
+                    <td>${r.pf}</td>
+                    <td>${r.pa}</td>
+                    <td style="color: ${r.pf - r.pa >= 0 ? 'var(--accent)' : 'var(--error)'}">${r.pf - r.pa}</td>
+                    <td>${ypg}</td>
+                    <td>${(r.pa / games).toFixed(1)} (Pts)</td>
                     <td>${thirdPct}</td>
-                    <td>${rzTDs}/${rzTrips}</td>
                     <td>${rzPct}</td>
                 </tr>
             `;

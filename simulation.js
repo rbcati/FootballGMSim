@@ -8,7 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance } from './coach-system.js';
-import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted } from './player.js';
+import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
 
 /**
  * Validates that required global dependencies are available
@@ -1273,6 +1273,11 @@ function simulateWeek(options = {}) {
                 // Track games played
                 if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
                 p.stats.season.gamesPlayed++;
+
+                // Update Advanced Stats (WAR, etc.) - Weekly Update
+                if (updateAdvancedStats) {
+                    updateAdvancedStats(p, p.stats.season);
+                }
               }
             });
           };
