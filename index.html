@@ -35,6 +35,71 @@
     <link rel="stylesheet" href="standings-savemanager.css" />
     <link rel="stylesheet" href="coaching-styles.css" />
     <link rel="stylesheet" href="ui-enhancements.css" />
+
+<script type="importmap">
+{
+  "imports": {
+    "./awards-viewer.js": "./awards-viewer.js?v=1.0.1",
+    "./awards.js": "./awards.js?v=1.0.1",
+    "./box-score-viewer.js": "./box-score-viewer.js?v=1.0.1",
+    "./cap.js": "./cap.js?v=1.0.1",
+    "./coach-system.js": "./coach-system.js?v=1.0.1",
+    "./coaching.js": "./coaching.js?v=1.0.1",
+    "./constants.js": "./constants.js?v=1.0.1",
+    "./contract-management.js": "./contract-management.js?v=1.0.1",
+    "./data-visualization.js": "./data-visualization.js?v=1.0.1",
+    "./debug-helper.js": "./debug-helper.js?v=1.0.1",
+    "./draft.js": "./draft.js?v=1.0.1",
+    "./events.js": "./events.js?v=1.0.1",
+    "./expanded-names.js": "./expanded-names.js?v=1.0.1",
+    "./fixes.js": "./fixes.js?v=1.0.1",
+    "./football-db.js": "./football-db.js?v=1.0.1",
+    "./freeagency.js": "./freeagency.js?v=1.0.1",
+    "./game-results-viewer.js": "./game-results-viewer.js?v=1.0.1",
+    "./history.js": "./history.js?v=1.0.1",
+    "./injury-system.js": "./injury-system.js?v=1.0.1",
+    "./league-stats.js": "./league-stats.js?v=1.0.1",
+    "./league.js": "./league.js?v=1.0.1",
+    "./live-game-viewer.js": "./live-game-viewer.js?v=1.0.1",
+    "./main.js": "./main.js?v=1.0.1",
+    "./offseason.js": "./offseason.js?v=1.0.1",
+    "./owner-mode.js": "./owner-mode.js?v=1.0.1",
+    "./picks.js": "./picks.js?v=1.0.1",
+    "./player-comparison.js": "./player-comparison.js?v=1.0.1",
+    "./player-database.js": "./player-database.js?v=1.0.1",
+    "./player-factory.js": "./player-factory.js?v=1.0.1",
+    "./player-stats-viewer.js": "./player-stats-viewer.js?v=1.0.1",
+    "./player.js": "./player.js?v=1.0.1",
+    "./playoffs.js": "./playoffs.js?v=1.0.1",
+    "./power-rankings.js": "./power-rankings.js?v=1.0.1",
+    "./records.js": "./records.js?v=1.0.1",
+    "./retirement-system.js": "./retirement-system.js?v=1.0.1",
+    "./schedule-factory.js": "./schedule-factory.js?v=1.0.1",
+    "./schedule-viewer.js": "./schedule-viewer.js?v=1.0.1",
+    "./schedule.js": "./schedule.js?v=1.0.1",
+    "./scheme-management.js": "./scheme-management.js?v=1.0.1",
+    "./scouting-system.js": "./scouting-system.js?v=1.0.1",
+    "./simulation.js": "./simulation.js?v=1.0.1",
+    "./staff.js": "./staff.js?v=1.0.1",
+    "./standings-page.js": "./standings-page.js?v=1.0.1",
+    "./state.js": "./state.js?v=1.0.1",
+    "./stats-viewer.js": "./stats-viewer.js?v=1.0.1",
+    "./story-events.js": "./story-events.js?v=1.0.1",
+    "./team-ratings.js": "./team-ratings.js?v=1.0.1",
+    "./team-statistics.js": "./team-statistics.js?v=1.0.1",
+    "./teams.js": "./teams.js?v=1.0.1",
+    "./test.js": "./test.js?v=1.0.1",
+    "./trade.js": "./trade.js?v=1.0.1",
+    "./tradeproposals.js": "./tradeproposals.js?v=1.0.1",
+    "./ui-components.js": "./ui-components.js?v=1.0.1",
+    "./ui-interactions.js": "./ui-interactions.js?v=1.0.1",
+    "./ui.js": "./ui.js?v=1.0.1",
+    "./utils.js": "./utils.js?v=1.0.1",
+    "./war-calculator.js": "./war-calculator.js?v=1.0.1"
+  }
+}
+</script>
+
 </head>
 <body>
     <!-- Topbar removed as per request -->
@@ -254,6 +319,10 @@
                 </div>
             </section>
 
+            <section id="standings" class="view" hidden>
+                <div id="standingsWrap"></div>
+            </section>
+
             <section id="coaching" class="view" hidden>
                 <div class="card">
                     <h2>Coaching & Scheme Management</h2>
@@ -364,33 +433,33 @@
       </div>
     </div>
 
-<script type="module" src="fixes.js"></script>
+<script type="module" src="fixes.js?v=1.0.1"></script>
 <!-- Note: fixes.js now includes error-overlay.js, missing-functions.js, league-creation-fix.js, team-selection-fix.js, navbar-fix.js, dom-helpers-fix.js, and critical-fixes.js -->
-<script type="module" src="constants.js"></script>
-<script type="module" src="utils.js"></script>
-<script src="expanded-names.js"></script>
+<script type="module" src="constants.js?v=1.0.1"></script>
+<script type="module" src="utils.js?v=1.0.1"></script>
+<script src="expanded-names.js?v=1.0.1"></script>
 
 <!-- Player systems (now combined in player.js) - ES Module -->
-<script type="module" src="player.js"></script>
+<script type="module" src="player.js?v=1.0.1"></script>
 <!-- Note: player.js now includes player-progression.js, player.legacy.js, player-factory.js, and rookies.js -->
 <!-- Note: player.js also includes the new Depth Chart System with playbook knowledge and chemistry -->
 
 <!-- Lightweight fallbacks to guarantee core factories -->
-<script src="schedule-factory.js"></script>
+<script src="schedule-factory.js?v=1.0.1"></script>
 
 <!-- Staff & coaching -->
-<script src="staff.js"></script>
-<script type="module" src="coaching.js"></script>
+<script src="staff.js?v=1.0.1"></script>
+<script type="module" src="coaching.js?v=1.0.1"></script>
 <!-- Note: coaching.js now includes coaching-advanced.js, coaching-integration.js, coaching-roles.js, and training.js -->
 
 <!-- League core AFTER dependencies -->
-<script type="module" src="league.js"></script>
-<script src="schedule.js"></script>
+<script type="module" src="league.js?v=1.0.1"></script>
+<script src="schedule.js?v=1.0.1"></script>
 
 <!-- ✅ Your unified state manager (ES Module) -->
-<script type="module" src="state.js"></script>
+<script type="module" src="state.js?v=1.0.1"></script>
 
-<script src="teams.js"></script>
+<script src="teams.js?v=1.0.1"></script>
 
 
 
@@ -398,63 +467,63 @@
 <!-- League core -->
 
 <!-- Simulation system - ES Module -->
-<script type="module" src="coach-system.js"></script>
-<script type="module" src="simulation.js"></script>
-<script type="module" src="events.js"></script>
-<script src="story-events.js"></script>
-<script src="cap.js"></script>
-<script src="offseason.js"></script>
-<script src="playoffs.js"></script>
+<script type="module" src="coach-system.js?v=1.0.1"></script>
+<script type="module" src="simulation.js?v=1.0.1"></script>
+<script type="module" src="events.js?v=1.0.1"></script>
+<script src="story-events.js?v=1.0.1"></script>
+<script src="cap.js?v=1.0.1"></script>
+<script src="offseason.js?v=1.0.1"></script>
+<script src="playoffs.js?v=1.0.1"></script>
 
 <!-- Contracts & finances -->
-<script src="picks.js"></script>
-<script src="contract-management.js"></script>
+<script src="picks.js?v=1.0.1"></script>
+<script src="contract-management.js?v=1.0.1"></script>
 
 <!-- Personnel management -->
-<script type="module" src="freeagency.js"></script>
-<script type="module" src="trade.js"></script>
-<script type="module" src="tradeproposals.js"></script>
-<script type="module" src="draft.js"></script>
+<script type="module" src="freeagency.js?v=1.0.1"></script>
+<script type="module" src="trade.js?v=1.0.1"></script>
+<script type="module" src="tradeproposals.js?v=1.0.1"></script>
+<script type="module" src="draft.js?v=1.0.1"></script>
 <!-- Note: rookies.js is now combined in player.js -->
 
 <!-- Coaching extensions (now combined in coaching.js) -->
-<script src="owner-mode.js"></script>
+<script src="owner-mode.js?v=1.0.1"></script>
 
 <!-- Team & stats -->
-<script src="team-ratings.js"></script>
-<script type="module" src="scheme-management.js"></script>
-<script src="team-statistics.js"></script>
-<script type="module" src="player-stats-viewer.js"></script>
-<script src="game-results-viewer.js"></script>
-<script src="schedule-viewer.js"></script>
-<script src="box-score-viewer.js"></script>
-<script src="live-game-viewer.js"></script>
-<script type="module" src="standings-page.js"></script>
-<script src="power-rankings.js"></script>
+<script src="team-ratings.js?v=1.0.1"></script>
+<script type="module" src="scheme-management.js?v=1.0.1"></script>
+<script src="team-statistics.js?v=1.0.1"></script>
+<script type="module" src="player-stats-viewer.js?v=1.0.1"></script>
+<script src="game-results-viewer.js?v=1.0.1"></script>
+<script src="schedule-viewer.js?v=1.0.1"></script>
+<script src="box-score-viewer.js?v=1.0.1"></script>
+<script src="live-game-viewer.js?v=1.0.1"></script>
+<script type="module" src="standings-page.js?v=1.0.1"></script>
+<script src="power-rankings.js?v=1.0.1"></script>
 
 <!-- Player Database & History -->
-<script src="player-database.js"></script>
-<script type="module" src="football-db.js"></script>
-<script src="history.js"></script>
-<script src="awards.js"></script>
-<script src="awards-viewer.js"></script>
-<script src="records.js"></script>
-<script src="stats-viewer.js"></script>
-<script src="league-stats.js"></script>
+<script src="player-database.js?v=1.0.1"></script>
+<script type="module" src="football-db.js?v=1.0.1"></script>
+<script src="history.js?v=1.0.1"></script>
+<script src="awards.js?v=1.0.1"></script>
+<script src="awards-viewer.js?v=1.0.1"></script>
+<script src="records.js?v=1.0.1"></script>
+<script src="stats-viewer.js?v=1.0.1"></script>
+<script src="league-stats.js?v=1.0.1"></script>
 
 <!-- New Features -->
-<script src="injury-system.js"></script>
-<script src="player-comparison.js"></script>
-<script src="retirement-system.js"></script>
-<script src="data-visualization.js"></script>
+<script src="injury-system.js?v=1.0.1"></script>
+<script src="player-comparison.js?v=1.0.1"></script>
+<script src="retirement-system.js?v=1.0.1"></script>
+<script src="data-visualization.js?v=1.0.1"></script>
 
 <!-- UI -->
-<script src="ui-components.js"></script>
-<script type="module" src="ui.js"></script>
-<script src="ui-interactions.js"></script>
+<script src="ui-components.js?v=1.0.1"></script>
+<script type="module" src="ui.js?v=1.0.1"></script>
+<script src="ui-interactions.js?v=1.0.1"></script>
 
 <!-- Main Game Controller -->
-<script type="module" src="main.js"></script>
+<script type="module" src="main.js?v=1.0.1"></script>
 <!-- Note: Fix files are now combined in fixes.js -->
 
 </body>

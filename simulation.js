@@ -8,6 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance } from './coach-system.js';
+import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
 
 /**
  * Validates that required global dependencies are available
@@ -169,6 +170,7 @@ function generateQBStats(qb, teamScore, defenseStrength, U) {
     passTD: touchdowns,
     interceptions: interceptions,
     sacks: sacks,
+    dropbacks: attempts + sacks, // NEW: Dropbacks = attempts + sacks
     longestPass: longestPass,
     completionPct: Math.round((completions / Math.max(1, attempts)) * 1000) / 10
   };
@@ -204,6 +206,11 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
   const drops = Math.max(0, targets - receptions);
   const yardsAfterCatch = Math.max(0, Math.round(recYd * 0.4 + U.rand(-5, 10)));
   
+  // NEW: Routes and separation
+  const routesRun = Math.round(targets * 3 + U.rand(5, 15)); // Approx 3x targets
+  const separationChance = (ratings.agility || 70) / 150;
+  const targetsWithSeparation = Math.round(targets * separationChance);
+
   return {
     rushAtt: carries,
     rushYd: Math.max(0, rushYd),
@@ -217,21 +224,46 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
     recTD: recTD,
     drops: drops,
     yardsAfterCatch: yardsAfterCatch,
-    longestCatch: receptions > 0 ? Math.max(5, Math.round(recYd / receptions * U.rand(1.2, 2.5))) : 0
+    longestCatch: receptions > 0 ? Math.max(5, Math.round(recYd / receptions * U.rand(1.2, 2.5))) : 0,
+    routesRun: routesRun,
+    targetsWithSeparation: targetsWithSeparation
   };
+}
+
+/**
+ * REFACTORED: Helper to distribute targets based on skill rather than index
+ */
+function distributePassingTargets(receivers, totalTargets, U) {
+  if (!receivers || receivers.length === 0) return [];
+
+  // 1. Calculate "Gravity" for each receiver
+  const weights = receivers.map(r => {
+      const ratings = r.ratings || {};
+      // High OVR and Awareness "attract" more targets
+      // Speed bonus for deep threats
+      return (r.ovr * 0.5) + ((ratings.awareness || 50) * 0.3) + ((ratings.speed || 50) * 0.2);
+  });
+
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+
+  // 2. Return objects with assigned targets
+  return receivers.map((r, i) => {
+      const playerShare = weights[i] / totalWeight;
+      const playerTargets = Math.round(totalTargets * playerShare);
+      return { player: r, targets: playerTargets };
+  });
 }
 
 /**
  * Generate wide receiver/tight end statistics
  */
-function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
+function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength, U) {
   const ratings = receiver.ratings || {};
   const catching = ratings.catching || 70;
   const catchInTraffic = ratings.catchInTraffic || 70;
   const speed = ratings.speed || 70;
   
-  const baseTargets = receiver.pos === 'WR' ? 8 : 5;
-  const targets = Math.max(0, Math.min(15, Math.round(baseTargets + (teamScore / 5) + U.rand(-2, 4))));
+  const targets = targetCount;
   
   const catchRate = (catching + catchInTraffic) / 2;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
@@ -250,6 +282,11 @@ function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
   
   const longestCatch = receptions > 0 ? Math.max(10, Math.round(recYd / receptions * U.rand(1.5, 3.5))) : 0;
   
+  // NEW: Routes and separation
+  const routesRun = Math.round(targets * 4 + U.rand(10, 20)); // WRs run more routes per target
+  const separationChance = ((ratings.agility || 70) + (ratings.speed || 70)) / 250;
+  const targetsWithSeparation = Math.round(targets * separationChance);
+
   return {
     targets: targets,
     receptions: receptions,
@@ -257,7 +294,9 @@ function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
     recTD: recTD,
     drops: drops,
     yardsAfterCatch: yardsAfterCatch,
-    longestCatch: longestCatch
+    longestCatch: longestCatch,
+    routesRun: routesRun,
+    targetsWithSeparation: targetsWithSeparation
   };
 }
 
@@ -280,11 +319,22 @@ function generateDBStats(db, offenseStrength, U) {
   
   const passesDefended = Math.max(0, Math.min(5, Math.round((coverage / 30) + U.rand(-0.5, 1.5))));
   
+  // NEW: Coverage stats
+  const targetsAllowed = Math.round(5 + (100 - coverage) / 10 + U.rand(-1, 2));
+  const completionPctAllowed = Math.max(0.4, (100 - coverage) / 100);
+  const completionsAllowed = Math.round(targetsAllowed * completionPctAllowed);
+  const yardsAllowed = Math.round(completionsAllowed * (10 + (100 - speed)/10));
+  const tdsAllowed = U.rand(0, 100) < (100 - coverage) ? 1 : 0;
+
   return {
     coverageRating: Math.max(0, Math.min(100, coverageRating)),
     tackles: tackles,
     interceptions: interceptions,
-    passesDefended: passesDefended
+    passesDefended: passesDefended,
+    targetsAllowed: targetsAllowed,
+    completionsAllowed: completionsAllowed,
+    yardsAllowed: yardsAllowed,
+    tdsAllowed: tdsAllowed
   };
 }
 
@@ -310,12 +360,19 @@ function generateDLStats(defender, offenseStrength, U) {
   
   const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
   
+  // NEW: Pass rush stats
+  const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed)/5);
+  const pressureChance = (passRushPower + passRushSpeed) / 300;
+  const pressures = Math.round(passRushSnaps * pressureChance);
+
   return {
     pressureRating: Math.max(0, Math.min(100, pressureRating)),
     sacks: sacks,
     tackles: tackles,
     tacklesForLoss: tacklesForLoss,
-    forcedFumbles: forcedFumbles
+    forcedFumbles: forcedFumbles,
+    passRushSnaps: passRushSnaps,
+    pressures: pressures
   };
 }
 
@@ -525,11 +582,14 @@ function simGameStats(home, away) {
       // QB
       const qbs = groups['QB'] || [];
       const qb = qbs.length > 0 ? qbs[0] : null; // Starter
+      let totalPassAttempts = 30; // Fallback
+
       if (qb) {
         const qbStats = generateQBStats(qb, score, oppDefenseStrength, U);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
         Object.assign(qb.stats.game, qbStats);
+        totalPassAttempts = qbStats.passAtt || 30;
       }
       
       // RB
@@ -547,34 +607,20 @@ function simGameStats(home, away) {
         Object.assign(rb.stats.game, rbStats);
       });
 
-      // WR
-      const wrs = (groups['WR'] || []).slice(0, 4);
-      wrs.forEach((wr, index) => {
-        const share = index === 0 ? 0.35 : index === 1 ? 0.25 : index === 2 ? 0.2 : 0.2;
-        const wrStats = generateReceiverStats(wr, score * share, oppDefenseStrength, U);
-        if (index > 0) {
-          Object.keys(wrStats).forEach(key => {
-            if (typeof wrStats[key] === 'number') {
-              wrStats[key] = Math.round(wrStats[key] * share);
-            }
-          });
-        }
-        Object.assign(wr.stats.game, wrStats);
-      });
-
-      // TE
+      // WR & TE - Dynamic Target Distribution
+      const wrs = (groups['WR'] || []).slice(0, 5);
       const tes = (groups['TE'] || []).slice(0, 2);
-      tes.forEach((te, index) => {
-        const share = index === 0 ? 0.7 : 0.3;
-        const teStats = generateReceiverStats(te, score * share, oppDefenseStrength, U);
-         if (index > 0) {
-          Object.keys(teStats).forEach(key => {
-            if (typeof teStats[key] === 'number') {
-              teStats[key] = Math.round(teStats[key] * share);
-            }
-          });
-        }
-        Object.assign(te.stats.game, teStats);
+
+      // Reserve ~15% of targets for RBs (handled inside generateRBStats, but we conceptually account for it)
+      // We'll distribute 85% of pass attempts to WRs/TEs
+      const receiverTargetsPool = Math.round(totalPassAttempts * 0.85);
+
+      const allReceivers = [...wrs, ...tes];
+      const distributedTargets = distributePassingTargets(allReceivers, receiverTargetsPool, U);
+
+      distributedTargets.forEach(item => {
+        const wrStats = generateReceiverStats(item.player, item.targets, score, oppDefenseStrength, U);
+        Object.assign(item.player.stats.game, wrStats);
       });
 
       // OL
@@ -612,6 +658,27 @@ function simGameStats(home, away) {
     generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups);
     generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups);
 
+    // NEW: Team Situational Stats
+    const generateTeamStats = (team, score, strength, oppStrength) => {
+        if (!team.stats) team.stats = { game: {}, season: {} };
+        if (!team.stats.game) team.stats.game = {};
+
+        const baseAttempts = 12 + U.rand(-2, 4);
+        const conversionRate = 0.35 + (strength - oppStrength) / 200;
+        const conversions = Math.round(baseAttempts * Math.max(0.1, Math.min(0.8, conversionRate)));
+
+        const trips = Math.round(score / 6 + U.rand(0, 2));
+        const redZoneTDs = Math.min(trips, Math.round(trips * (0.5 + (strength - oppStrength) / 200)));
+
+        team.stats.game.thirdDownAttempts = baseAttempts;
+        team.stats.game.thirdDownConversions = conversions;
+        team.stats.game.redZoneTrips = trips;
+        team.stats.game.redZoneTDs = redZoneTDs;
+    };
+
+    generateTeamStats(home, homeScore, homeStrength, awayStrength);
+    generateTeamStats(away, awayScore, awayStrength, homeStrength);
+
     return { homeScore, awayScore };
     
   } catch (error) {
@@ -643,14 +710,14 @@ function accumulateCareerStats(league) {
       
       // Calculate advanced stats (WAR, Ratings, etc.) BEFORE snapshotting
       // This ensures they are saved in history and available for awards
-      if (typeof window.calculateWAR === 'function') {
-          player.stats.season.war = window.calculateWAR(player, player.stats.season);
+      if (calculateWAR) {
+          player.stats.season.war = calculateWAR(player, player.stats.season);
       }
-      if (typeof window.calculateQBRating === 'function' && player.pos === 'QB') {
-          player.stats.season.passerRating = window.calculateQBRating(player.stats.season);
+      if (calculateQBRating && player.pos === 'QB') {
+          player.stats.season.passerRating = calculateQBRating(player.stats.season);
       }
-      if (typeof window.calculatePasserRatingWhenTargeted === 'function' && ['WR', 'TE', 'RB'].includes(player.pos)) {
-          player.stats.season.ratingWhenTargeted = window.calculatePasserRatingWhenTargeted(player.stats.season);
+      if (calculatePasserRatingWhenTargeted && ['WR', 'TE', 'RB'].includes(player.pos)) {
+          player.stats.season.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player.stats.season);
       }
 
       // Snapshot season stats to history
@@ -918,6 +985,7 @@ function startNewSeason() {
     // Reset team records, clear per-game stats, and reset season stats
     L.teams.forEach(team => {
       team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+      if (team.stats) team.stats.season = {};
       if (team.roster) {
         team.roster.forEach(p => {
           if (p && p.stats) {
@@ -1205,12 +1273,33 @@ function simulateWeek(options = {}) {
                 // Track games played
                 if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
                 p.stats.season.gamesPlayed++;
+
+                // Update Advanced Stats (WAR, etc.) - Weekly Update
+                if (updateAdvancedStats) {
+                    updateAdvancedStats(p, p.stats.season);
+                }
               }
             });
           };
           
           updatePlayerStats(home.roster);
           updatePlayerStats(away.roster);
+
+          // NEW: Update team season stats from game stats
+          const updateTeamSeasonStats = (team) => {
+              if (!team || !team.stats || !team.stats.game) return;
+              if (!team.stats.season) team.stats.season = {};
+
+              Object.keys(team.stats.game).forEach(key => {
+                  const val = team.stats.game[key];
+                  if (typeof val === 'number') {
+                      team.stats.season[key] = (team.stats.season[key] || 0) + val;
+                  }
+              });
+          };
+
+          updateTeamSeasonStats(home);
+          updateTeamSeasonStats(away);
         }
         
         // Store game result with complete box score

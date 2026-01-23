@@ -1,129 +1,175 @@
 // league.js - Core League Generation Logic
 'use strict';
 import { initializeCoachingStats } from './coaching.js';
+import { makePlayer as makePlayerImport } from './player.js';
 
-window.makeLeague = function(
-    teams,
-    {
-        Constants = window.Constants,
-        Utils = window.Utils,
-        makePlayer = window.makePlayer,
-        makeSchedule = window.makeSchedule
-    } = {}
-) {
+/**
+ * Generates draft picks for a team for the next few years.
+ * @param {string|number} teamId - The team's ID.
+ * @param {number} startYear - The current league year.
+ * @param {number} years - Number of years to generate picks for.
+ * @param {Object} Utils - Utils dependency.
+ * @returns {Array} Array of draft pick objects.
+ */
+const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
+    const picks = [];
+    // Fallback ID generator if Utils is missing or doesn't have id()
+    const genId = Utils?.id || (() => Math.random().toString(36).slice(2, 10));
+
+    for (let y = 0; y < years; y++) {
+        for (let r = 1; r <= 7; r++) {
+            picks.push({
+                id: genId(),
+                round: r,
+                year: startYear + y,
+                originalOwner: teamId,
+                isCompensatory: false
+            });
+        }
+    }
+    return picks;
+};
+
+/**
+ * Initializes the roster for a team based on depth needs.
+ * @param {Object} team - The team object.
+ * @param {Object} Constants - Constants dependency.
+ * @param {Object} Utils - Utils dependency.
+ * @param {Function} makePlayer - Factory function to create a player.
+ * @returns {Array} Array of player objects.
+ */
+const initializeRoster = (team, Constants, Utils, makePlayer) => {
+    if (!Constants?.DEPTH_NEEDS) return [];
+
+    const roster = [];
+    const positions = Object.keys(Constants.DEPTH_NEEDS);
+
+    // Track estimated cap usage to avoid going over
+    // We can't perfectly predict proration here without cap.js logic,
+    // but we can track base salaries.
+    let estimatedCapUsed = 0;
+    const capLimit = team.capTotal || 220; // Default buffer
+    const safeCapLimit = capLimit * 0.95; // Leave 5% buffer
+
+    // Calculate total players needed to reserve budget for depth
+    const totalPlayersNeeded = positions.reduce((sum, pos) => sum + Constants.DEPTH_NEEDS[pos], 0);
+    let playersCreated = 0;
+
+    positions.forEach(pos => {
+        const count = Constants.DEPTH_NEEDS[pos];
+        for (let j = 0; j < count; j++) {
+            // Logic for rating ranges
+            let ovrRange = Constants.POS_RATING_RANGES?.[pos] || [60, 85];
+
+            // First player at position should be better (starter material)
+            if (j === 0) {
+                ovrRange = [
+                    Math.max(70, ovrRange[0]),
+                    Math.min(99, ovrRange[1] + 5)
+                ];
+            }
+
+            const ovr = Utils.rand(ovrRange[0], ovrRange[1]);
+            const age = Utils.rand(21, 35);
+
+            const player = makePlayer(pos, age, ovr);
+            if (player) {
+                player.teamId = team.id;
+
+                // --- Cap Safety Check ---
+                const playersRemaining = totalPlayersNeeded - playersCreated - 1;
+                // Reserve ~0.8M per remaining player
+                const reservedBudget = playersRemaining * 0.8;
+                const availableBudget = safeCapLimit - estimatedCapUsed - reservedBudget;
+
+                // If player salary exceeds available budget, clamp it
+                if (player.baseAnnual > availableBudget) {
+                    // But don't go below minimum (0.75M) unless absolutely necessary
+                    // Allow at least 0.8M or availableBudget, whichever is higher (but handled by min() logic)
+                    // Actually, if availableBudget is negative, we are in trouble.
+                    // Just force to min salary (0.75-1.0)
+
+                    const newSalary = Math.max(0.75, Math.min(player.baseAnnual, availableBudget));
+
+                    // If the reduction is significant (>20%), treat it as a restructure/force
+                    if (newSalary < player.baseAnnual * 0.8) {
+                        player.baseAnnual = newSalary;
+                        player.signingBonus = 0; // Remove bonus to save cap
+                    }
+                }
+
+                estimatedCapUsed += (player.baseAnnual || 0);
+                roster.push(player);
+                playersCreated++;
+            }
+        }
+    });
+    return roster;
+};
+
+/**
+ * Main function to generate the league.
+ * @param {Array} teams - Array of team objects.
+ * @param {Object} dependencies - Optional dependencies (Constants, Utils, etc.).
+ * @returns {Object} The generated league object.
+ */
+function makeLeague(teams, dependencies = {}) {
+    // Destructure dependencies with fallbacks to window
+    const {
+        Constants = (typeof window !== 'undefined' ? window.Constants : null),
+        Utils = (typeof window !== 'undefined' ? window.Utils : null),
+        makePlayer = makePlayerImport || (typeof window !== 'undefined' ? window.makePlayer : null),
+        makeSchedule = (typeof window !== 'undefined' ? window.makeSchedule : null),
+        recalcCap = (typeof window !== 'undefined' ? window.recalcCap : null),
+        generateInitialStaff = (typeof window !== 'undefined' ? window.generateInitialStaff : null)
+    } = dependencies;
+
     const missingDependencies = [];
     if (!Constants) missingDependencies.push('Constants');
     if (!Utils) missingDependencies.push('Utils');
     if (!makePlayer) missingDependencies.push('makePlayer');
-    if (!makeSchedule) missingDependencies.push('makeSchedule');
+    // makeSchedule, recalcCap, generateInitialStaff are optional/handled gracefully
 
     if (missingDependencies.length > 0) {
         console.error('Critical dependencies missing for league creation:', missingDependencies);
         return null;
     }
 
-    const currentYear =
-        typeof window.state === 'object' && window.state?.year ? window.state.year : 2025;
-    const C = Constants;
-    const U = Utils;
+    const leagueYear = (typeof window !== 'undefined' && window.state?.year) || 2025;
 
-    const L = {
+    const league = {
         teams: [],
-        year: currentYear,
+        year: leagueYear,
         season: 1,
         week: 1,
         schedule: null,
         resultsByWeek: [],
-        transactions: [] // Track trades/signings
+        transactions: []
     };
 
-    // 1. Initialize Teams, Roster, Picks, and Staff
-    L.teams = teams.map((t, i) => {
-        const team = { ...t };
-        team.id = i;
+    // Main Orchestration Loop
+    league.teams = teams.map((teamData, index) => {
+        const team = {
+            ...teamData,
+            id: index,
+            record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
+            history: [],
+            capTotal: Constants.SALARY_CAP?.BASE || 220,
+            deadCap: 0,
+            capRollover: 0,
+            capUsed: 0,
+            capRoom: Constants.SALARY_CAP?.BASE || 220
+        };
 
-        // Basic Stats
-        team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
-        team.history = [];
+        // Delegate tasks to specialized functions
+        team.roster = initializeRoster(team, Constants, Utils, makePlayer);
+        team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils);
 
-        // --- A. Generate Roster ---
-        team.roster = [];
-
-        if (C.DEPTH_NEEDS) {
-            Object.keys(C.DEPTH_NEEDS).forEach(pos => {
-                const count = C.DEPTH_NEEDS[pos];
-                for (let j = 0; j < count; j++) {
-                    let ovrRange = C.POS_RATING_RANGES?.[pos] || [60, 85];
-
-                    if (j === 0) {
-                        ovrRange = [
-                            Math.max(70, ovrRange[0]),
-                            Math.min(99, ovrRange[1] + 5)
-                        ];
-                    }
-
-                    const ovr = U.rand(ovrRange[0], ovrRange[1]);
-                    const age = U.rand(21, 35);
-
-                    if (makePlayer) {
-                        const player = makePlayer(pos, age, ovr);
-                        if (player) {
-                            player.teamId = team.id;
-                            team.roster.push(player);
-                        }
-                    }
-                }
-            });
-        }
-
-        // --- B. Calculate Salary Cap ---
-        team.capTotal = C.SALARY_CAP?.BASE || 220; // Use constant from SALARY_CAP.BASE
-        team.deadCap = 0;
-        team.deadCapBook = {}; // Initialize dead cap book
-        team.capRollover = 0; // Initialize rollover
-
-        // FIXED: Use proper cap calculation function
-        // This must be called AFTER all players are created
-        // We'll recalculate after roster is complete
-        if (window.recalcCap) {
-          // Use the proper recalcCap function which handles prorated bonuses correctly
-          window.recalcCap(L, team);
-          
-          // If team is way over cap, log warning and adjust
-          if (team.capUsed > team.capTotal * 1.2) {
-            console.warn(`⚠️ Team ${team.name || team.abbr} is over cap: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
-            console.warn(`   Roster size: ${team.roster.length} players`);
-            console.warn(`   Average cap hit: $${(team.capUsed / team.roster.length).toFixed(2)}M per player`);
-          }
+        if (generateInitialStaff) {
+            team.staff = generateInitialStaff();
         } else {
-          // Fallback calculation
-          team.capUsed = team.roster.reduce((total, p) => {
-            const hit = window.capHitFor ? window.capHitFor(p, 0) : (p.baseAnnual || 0);
-            return total + hit;
-          }, 0);
-          team.capRoom = team.capTotal - team.capUsed;
-        }
-
-        // --- C. Generate Draft Picks (Next 3 Years) ---
-        team.picks = [];
-        const yearsToGen = 3;
-        for (let y = 0; y < yearsToGen; y++) {
-            for (let r = 1; r <= 7; r++) {
-                team.picks.push({
-                    id: U.id(),
-                    round: r,
-                    year: currentYear + y,
-                    originalOwner: team.id,
-                    isCompensatory: false
-                });
-            }
-        }
-
-        // --- D. Generate Coaching Staff ---
-        if (window.generateInitialStaff) {
-            team.staff = window.generateInitialStaff();
-        } else {
-            team.staff = {
+             // Fallback staff generation
+             team.staff = {
                 headCoach: { name: 'Interim HC', ovr: 70 },
                 offCoordinator: { name: 'Interim OC', ovr: 70 },
                 defCoordinator: { name: 'Interim DC', ovr: 70 },
@@ -131,116 +177,72 @@ window.makeLeague = function(
             };
         }
 
-        // --- E. Set Team Strategies (Playbooks) ---
-        team.strategies = team.strategies || {
-            offense: U.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
-            defense: U.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative'])
+        // Initialize Coaching Stats
+        if (initializeCoachingStats) {
+             if (team.staff?.headCoach) initializeCoachingStats(team.staff.headCoach);
+        }
+
+        // Set Strategies
+        team.strategies = {
+            offense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
+            defense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative'])
         };
+
+        // Initial Cap Check
+        if (recalcCap) {
+            recalcCap(league, team);
+
+            // Log warning if still over cap (sanity check)
+            if (team.capUsed > team.capTotal) {
+                console.warn(`⚠️ Team ${team.name || team.abbr} created over cap: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
+            }
+        } else {
+             // Fallback simple calc
+             team.capUsed = team.roster.reduce((sum, p) => sum + (p.baseAnnual || 0), 0);
+             team.capRoom = team.capTotal - team.capUsed;
+        }
 
         return team;
     });
 
-    console.log('✅ Teams created. Generating schedule...');
-    
-    // Recalculate cap for all teams after rosters are complete
-    // This ensures prorated bonuses are calculated correctly
-    if (window.recalcAllTeamCaps) {
-        window.recalcAllTeamCaps(L);
-    } else if (window.recalcCap) {
-        L.teams.forEach(team => {
-            try {
-                window.recalcCap(L, team);
-            } catch (error) {
-                console.error(`Error recalculating cap for ${team.name || team.abbr}:`, error);
-            }
-        });
+    // Final Setup
+    if (makeSchedule) {
+        league.schedule = makeSchedule(league.teams);
+    } else {
+        console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
     }
-    
-    // Normalize salaries if teams are way over cap
-    // This is a safety net to ensure teams start within reasonable cap space
-    L.teams.forEach(team => {
-        if (team.capUsed && team.capTotal && team.capUsed > team.capTotal * 1.1) {
-            const targetCap = team.capTotal * 0.95; // Target 95% of cap (leave some room)
-            const reductionFactor = targetCap / team.capUsed;
 
-            console.warn(`⚠️ Normalizing salaries for ${team.name || team.abbr}: was $${team.capUsed.toFixed(1)}M, reducing by ${((1 - reductionFactor) * 100).toFixed(1)}% to target $${targetCap.toFixed(1)}M`);
+    // Update state only once at the end
+    if (typeof window !== 'undefined') {
+        if (!window.state) window.state = {};
+        window.state.league = league;
+        window.state.year = league.year;
+        window.state.season = league.season;
+        window.state.week = league.week;
 
-            // Reduce all player salaries proportionally
-            team.roster.forEach(player => {
-                if (player && player.baseAnnual) {
-                    const oldBase = player.baseAnnual;
-                    player.baseAnnual = Math.max(0.4, Math.round(player.baseAnnual * reductionFactor * 10) / 10);
-
-                    // Also reduce signing bonus proportionally, but ensure yearsTotal is set
-                    if (player.signingBonus && player.yearsTotal) {
-                        player.signingBonus = Math.round(player.signingBonus * reductionFactor * 10) / 10;
-                    } else if (player.signingBonus) {
-                        // If yearsTotal is missing, set it to years
-                        if (!player.yearsTotal && player.years) {
-                            player.yearsTotal = player.years;
-                        }
-                        player.signingBonus = Math.round(player.signingBonus * reductionFactor * 10) / 10;
-                    }
+        // Update ratings if function exists
+        if (window.updateAllTeamRatings) {
+            window.updateAllTeamRatings(league);
+        } else {
+            // Simple rating calculation fallback
+            league.teams.forEach(t => {
+                if (t.roster.length) {
+                    const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
+                    t.ovr = Math.round(totalOvr / t.roster.length);
+                } else {
+                    t.ovr = 75;
                 }
             });
-
-            // Recalculate cap after normalization
-            if (window.recalcCap) {
-                window.recalcCap(L, team);
-                console.log(`   ✅ After normalization: $${team.capUsed?.toFixed(1) || '0.0'}M / $${team.capTotal?.toFixed(1) || '0.0'}M`);
-            }
         }
-    });
-    
-    // Log cap summary for debugging
-    L.teams.forEach((team, idx) => {
-        if (idx < 3) { // Log first 3 teams as sample
-            const avgCapHit = team.roster?.length > 0 ? (team.capUsed / team.roster.length) : 0;
-            console.log(`📊 ${team.name || team.abbr}: $${team.capUsed?.toFixed(1) || '0.0'}M / $${team.capTotal?.toFixed(1) || '0.0'}M (${team.roster?.length || 0} players, avg $${avgCapHit.toFixed(2)}M/player)`);
-        }
-    });
-
-    // 2. Generate Schedule
-    if (makeSchedule) {
-        L.schedule = makeSchedule(L.teams);
-    } else {
-        console.warn('⚠️ makeSchedule not found. Schedule is empty.');
     }
 
-    // 3. Initialize Derived Stats (Coaching & Team Ratings)
-    if (initializeCoachingStats) {
-        L.teams.forEach(t => {
-            if (t.staff?.headCoach) initializeCoachingStats(t.staff.headCoach);
-        });
-    }
+    console.log('✨ League creation complete and modularized!');
+    return league;
+}
 
-    if (typeof window.state === 'object' && window.state !== null) {
-        window.state.league = L;
-        window.state.year = L.year;
-        window.state.season = L.season;
-        window.state.week = L.week;
-    } else {
-        window.state = {
-            league: L,
-            year: L.year,
-            season: L.season,
-            week: L.week
-        };
-    }
+// Make available globally and export
+if (typeof window !== 'undefined') {
+    window.makeLeague = makeLeague;
+}
 
-    if (window.updateAllTeamRatings) {
-        window.updateAllTeamRatings(L);
-    } else {
-        L.teams.forEach(t => {
-            if (t.roster.length) {
-                const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
-                t.ovr = Math.round(totalOvr / t.roster.length);
-            } else {
-                t.ovr = 75;
-            }
-        });
-    }
-
-    console.log('✨ League creation complete!');
-    return L;
-};
+export { makeLeague };

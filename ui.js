@@ -1964,6 +1964,27 @@ window.renderTradeCenter = function () {
   }
   const state = tradeContainer._tradeState;
 
+  // --- Handle Pending Proposals (Negotiate) ---
+  if (window.pendingTradeProposal) {
+    const p = window.pendingTradeProposal;
+    state.fromAssets = p.toAssets.map(a => ({ kind: a.kind, playerId: a.playerId, year: a.year, round: a.round })); // What user gives (proposal's toAssets)
+    state.toAssets = p.fromAssets.map(a => ({ kind: a.kind, playerId: a.playerId, year: a.year, round: a.round }));   // What user gets (proposal's fromAssets)
+
+    // Set opponent team
+    if (selectB) {
+        // Find option with correct value and select it
+        // The proposal.fromTeamId is the opponent
+        setTimeout(() => {
+            selectB.value = String(p.fromTeamId);
+            // Trigger change event to refresh lists
+            selectB.dispatchEvent(new Event('change'));
+        }, 50);
+    }
+
+    // Clear pending proposal
+    window.pendingTradeProposal = null;
+  }
+
   // --- 1) Setup YOUR TEAM select (tradeA) ---
 
   selectA.innerHTML = '';
@@ -2065,6 +2086,8 @@ window.renderTradeCenter = function () {
       roster.forEach(player => {
         const item = document.createElement('div');
         item.className = 'asset-item';
+        item.dataset.kind = 'player';
+        item.dataset.id = player.id;
         // Use grid layout
         item.style.display = 'grid';
         item.style.gridTemplateColumns = '2fr 0.8fr 0.8fr 0.8fr 1.2fr';
@@ -2100,6 +2123,9 @@ window.renderTradeCenter = function () {
       (team.picks || []).forEach(pk => { 
         const item = document.createElement('div');
         item.className = 'asset-item';
+        item.dataset.kind = 'pick';
+        item.dataset.year = pk.year;
+        item.dataset.round = pk.round;
         item.textContent = `${pk.year} Round ${pk.round}`;
 
         const asset = { kind: 'pick', year: pk.year, round: pk.round };
@@ -2124,7 +2150,52 @@ window.renderTradeCenter = function () {
 
   // Initial render
   clearSelections();
-  renderTeamLists();
+
+  // Check for pending trade proposal (from Trade Finder)
+  if (window.pendingTradeProposal) {
+    const p = window.pendingTradeProposal;
+    // Set opponent
+    selectB.value = String(p.fromTeamId);
+
+    renderTeamLists(); // Re-render lists for the correct team
+
+    // Map assets
+    // Proposal: toAssets = User assets (User gives)
+    // Proposal: fromAssets = CPU assets (CPU gives)
+    state.fromAssets = p.toAssets.map(a => ({...a}));
+    state.toAssets = p.fromAssets.map(a => ({...a}));
+
+    // Update UI selection
+    const markSelected = (assets, container) => {
+        assets.forEach(asset => {
+            let selector = '';
+            if (asset.kind === 'player') {
+                selector = `.asset-item[data-kind="player"][data-id="${asset.playerId}"]`;
+            } else {
+                selector = `.asset-item[data-kind="pick"][data-year="${asset.year}"][data-round="${asset.round}"]`;
+            }
+            const el = container.querySelector(selector);
+            if (el) el.classList.add('selected');
+        });
+    };
+
+    markSelected(state.fromAssets, listA); // User assets in listA
+    markSelected(state.fromAssets, pickListA);
+    markSelected(state.toAssets, listB); // CPU assets in listB
+    markSelected(state.toAssets, pickListB);
+
+    // Validate immediately
+    setTimeout(() => {
+        if (btnValidate && !btnValidate.disabled) {
+            btnValidate.click();
+        }
+    }, 100);
+
+    // Clear pending
+    window.pendingTradeProposal = null;
+  } else {
+    renderTeamLists();
+  }
   
   // Render Trade Block UI
   if (window.renderTradeBlock) {

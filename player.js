@@ -318,10 +318,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       years: U.rand(1, 4),
       yearsTotal: U.rand(1, 4),
       // FIXED: Realistic salary based on OVR (for createRookiePlayer function)
-      baseAnnual: playerOvr >= 90 ? U.rand(20, 35) :
+      baseAnnual: (playerOvr >= 90 ? U.rand(20, 35) :
                  playerOvr >= 80 ? U.rand(8, 20) :
                  playerOvr >= 70 ? U.rand(3, 8) :
-                 playerOvr >= 60 ? U.rand(1, 3) : U.rand(0.5, 1),
+                 playerOvr >= 60 ? U.rand(1, 3) : U.rand(0.5, 1)) * (C.SALARY_CAP?.POS_SALARY_WEIGHTS?.[pos] || 1.0),
       signingBonus: 0,
       guaranteedPct: 0.5,
       ratings: generateBasicRatings(pos, playerOvr),
@@ -1010,10 +1010,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         years: U.rand(1, 4),
         // FIXED: Reduced salary ranges to fit within $220M cap
         // With ~35 players, average should be ~$6M, but most are depth players
-        baseAnnual: playerOvr >= 90 ? U.rand(12, 22) :
+        baseAnnual: (playerOvr >= 90 ? U.rand(12, 22) :
                    playerOvr >= 80 ? U.rand(4, 12) :
                    playerOvr >= 70 ? U.rand(1.5, 5) :
-                   playerOvr >= 60 ? U.rand(0.6, 2) : U.rand(0.4, 0.8),
+                   playerOvr >= 60 ? U.rand(0.6, 2) : U.rand(0.4, 0.8)) * (C.SALARY_CAP?.POS_SALARY_WEIGHTS?.[pos] || 1.0),
         signingBonus: 0,
         guaranteedPct: 0.5
       };
@@ -1688,6 +1688,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       advanced.interceptionPct = (seasonStats.interceptions || 0) / attempts;
       advanced.qbRating = calculateQBRating(seasonStats);
       seasonStats.passerRating = advanced.qbRating;
+
+      // NEW: Sack Percentage
+      const dropbacks = seasonStats.dropbacks || (seasonStats.passAtt + (seasonStats.sacks || 0));
+      seasonStats.sackPct = dropbacks > 0 ? ((seasonStats.sacks || 0) / dropbacks * 100).toFixed(1) + '%' : '0.0%';
     }
     
     if (player.pos === 'RB') {
@@ -1697,36 +1701,77 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       seasonStats.yardsPerCarry = advanced.yardsPerCarry;
     }
     
-    if (player.pos === 'WR' || player.pos === 'TE') {
+    if (['WR', 'TE', 'RB'].includes(player.pos)) {
       const targets = seasonStats.targets || Math.max(1, seasonStats.receptions || 1);
       advanced.catchPct = (seasonStats.receptions || 0) / targets;
       advanced.yardsPerReception = (seasonStats.recYd || 0) / Math.max(1, seasonStats.receptions || 1);
       advanced.receptionsPerGame = (seasonStats.receptions || 0) / Math.max(1, seasonStats.gamesPlayed || 1);
 
       seasonStats.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player, seasonStats);
+
+      // NEW: Drop Rate and Separation Rate
+      const drops = seasonStats.drops || 0;
+      const sep = seasonStats.targetsWithSeparation || 0;
+      const validTargets = seasonStats.targets || 0;
+
+      seasonStats.dropRate = validTargets > 0 ? ((drops / validTargets) * 100).toFixed(1) + '%' : '0.0%';
+      seasonStats.separationRate = validTargets > 0 ? ((sep / validTargets) * 100).toFixed(1) + '%' : '0.0%';
+    }
+
+    // NEW: Defender Stats
+    if (['DL', 'LB', 'CB', 'S'].includes(player.pos)) {
+        const snaps = seasonStats.passRushSnaps || 0;
+        const pressures = seasonStats.pressures || 0;
+        seasonStats.pressureRate = snaps > 0 ? ((pressures / snaps) * 100).toFixed(1) + '%' : '0.0%';
+
+        if (seasonStats.targetsAllowed > 0) {
+             seasonStats.coverageRating = calculateCoverageRating(seasonStats);
+        }
     }
   }
 
   /**
-   * Calculate QB rating (simplified)
+   * Calculate QB rating (Standard NFL Formula)
    * @param {Object} seasonStats - Season statistics
    * @returns {number} QB rating
    */
   function calculateQBRating(seasonStats) {
-    const attempts = seasonStats.passAtt || 1;
+    const attempts = seasonStats.passAtt || 0;
+    if (attempts === 0) return 0;
+
     const completions = seasonStats.passComp || 0;
     const yards = seasonStats.passYd || 0;
     const touchdowns = seasonStats.passTD || 0;
     const interceptions = seasonStats.interceptions || 0;
     
-    // Simplified QB rating calculation
-    const compPct = (completions / attempts - 0.3) * 5;
-    const yardsPer = (yards / attempts - 3) * 0.25;
-    const touchdownPer = touchdowns / attempts * 20;
-    const intPer = 2.375 - (interceptions / attempts * 25);
+    const a = Math.max(0, Math.min(2.375, ((completions / attempts) - 0.3) * 5));
+    const b = Math.max(0, Math.min(2.375, ((yards / attempts) - 3) * 0.25));
+    const c = Math.max(0, Math.min(2.375, (touchdowns / attempts) * 20));
+    const d = Math.max(0, Math.min(2.375, 2.375 - ((interceptions / attempts) * 25)));
     
-    const rating = ((compPct + yardsPer + touchdownPer + intPer) / 6) * 100;
-    return Math.max(0, Math.min(158.3, rating));
+    return ((a + b + c + d) / 6) * 100;
+  }
+
+  /**
+   * Calculate Coverage Rating (Passer Rating Against)
+   * @param {Object} seasonStats - Defender statistics
+   * @returns {number} Coverage Rating
+   */
+  function calculateCoverageRating(seasonStats) {
+    const targets = seasonStats.targetsAllowed || 0;
+    if (targets === 0) return 0;
+
+    const completions = seasonStats.completionsAllowed || 0;
+    const yards = seasonStats.yardsAllowed || 0;
+    const tds = seasonStats.tdsAllowed || 0;
+    const ints = seasonStats.interceptions || 0; // Using ints made as ints against QB
+
+    const a = Math.max(0, Math.min(2.375, ((completions / targets) - 0.3) * 5));
+    const b = Math.max(0, Math.min(2.375, ((yards / targets) - 3) * 0.25));
+    const c = Math.max(0, Math.min(2.375, (tds / targets) * 20));
+    const d = Math.max(0, Math.min(2.375, 2.375 - ((ints / targets) * 25)));
+
+    return ((a + b + c + d) / 6) * 100;
   }
 
   /**
@@ -2153,10 +2198,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
             years: utils.rand(1, 4),
             yearsTotal: undefined,
             // FIXED: Reduced salary ranges to fit within $220M cap
-            baseAnnual: playerOvr >= 90 ? utils.rand(12, 22) :
+            baseAnnual: (playerOvr >= 90 ? utils.rand(12, 22) :
                        playerOvr >= 80 ? utils.rand(4, 12) :
                        playerOvr >= 70 ? utils.rand(1.5, 5) :
-                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8),
+                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8)) * (constants.SALARY_CAP?.POS_SALARY_WEIGHTS?.[position] || 1.0),
             ratings: generatePlayerRatingsFactory(position, playerOvr),
             abilities: constants?.ABILITIES_BY_POS?.[position]
                 ? [utils.choice(constants.ABILITIES_BY_POS[position])]
@@ -2295,6 +2340,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
     updateAdvancedStats,
     calculateWAR,
     calculatePasserRatingWhenTargeted,
+    calculateQBRating,
+    calculateCoverageRating,
     calculateImpactMetrics,
     calculateLegacyScore,
     checkHallOfFameEligibility,
@@ -2353,55 +2400,5 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       }));
     }
   };
-
-  // ============================================================================
-  // BACKWARD COMPATIBILITY SHIMS
-  // ============================================================================
-  // TODO: Remove these once all code is migrated to ES modules
-
-  // Progression system
-
-  // Main player functions
-  window.makePlayer = makePlayer;
-  window.progressPlayer = progressPlayer;
-
-  // Legacy system
-  window.initializePlayerLegacy = initializePlayerLegacy;
-  window.updatePlayerGameLegacy = updatePlayerGameLegacy;
-  window.updatePlayerSeasonLegacy = updatePlayerSeasonLegacy;
-  window.checkForNotablePerformance = checkForNotablePerformance;
-  window.updatePlayoffStats = updatePlayoffStats;
-  window.checkCareerMilestones = checkCareerMilestones;
-  window.checkSeasonAwards = checkSeasonAwards;
-  window.updateAdvancedStats = updateAdvancedStats;
-  window.calculateWAR = calculateWAR;
-  window.calculatePasserRatingWhenTargeted = calculatePasserRatingWhenTargeted;
-  window.calculateImpactMetrics = calculateImpactMetrics;
-  window.calculateLegacyScore = calculateLegacyScore;
-  window.checkHallOfFameEligibility = checkHallOfFameEligibility;
-  window.getHOFThreshold = getHOFThreshold;
-
-  // Rookie generation
-  window.generateDraftClass = generateDraftClass;
-  window.DRAFT_CONFIG = DRAFT_CONFIG;
-  window.createRookiePlayer = createRookiePlayer;
-  window.calculatePotentialRange = calculatePotentialRange;
-  window.getWeightedPosition = getWeightedPosition;
-
-  // Depth Chart System
-  window.initializeDepthChartStats = initializeDepthChartStats;
-  window.calculateEffectiveRating = calculateEffectiveRating;
-  window.setDepthChartPosition = setDepthChartPosition;
-  window.generateDepthChart = generateDepthChart;
-  window.renderDepthChart = renderDepthChart;
-  window.updatePlaybookKnowledge = updatePlaybookKnowledge;
-  window.updateChemistry = updateChemistry;
-  window.addPracticeReps = addPracticeReps;
-  window.processWeeklyDepthChartUpdates = processWeeklyDepthChartUpdates;
-  window.getPositionGroup = getPositionGroup;
-  window.calculateWeeksWithTeam = calculateWeeksWithTeam;
-
-  // Draft utilities
-  window.draftUtils = draftUtils;
 
   console.log('✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system');

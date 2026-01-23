@@ -247,6 +247,70 @@ const LAST_NAMES_GETTER = {
   get: () => window.EXPANDED_LAST_NAMES || window.LAST_NAMES || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones']
 };
 
+const OFFENSIVE_POSITIONS = ['QB', 'RB', 'WR', 'TE', 'OL'];
+const DEFENSIVE_POSITIONS = ['DL', 'LB', 'CB', 'S'];
+
+const ABILITIES_BY_POS = {
+    QB: ['Cannon Arm', 'Deadeye', 'Escape Artist', 'Field General', 'Clutch'],
+    RB: ['Bruiser', 'Ankle Breaker', 'Breakaway Speed', 'Pass Catcher', 'Workhorse'],
+    WR: ['Deep Threat', 'Possession', 'Route Runner', 'Sure Hands', 'YAC Monster'],
+    TE: ['Mismatch', 'Red Zone Target', 'Blocking TE', 'Seam Threat'],
+    OL: ['Pancake Block', 'Pass Pro', 'Road Grader', 'Anchor'],
+    DL: ['Pass Rush', 'Run Stopper', 'Bull Rush', 'Finesse'],
+    LB: ['Coverage LB', 'Run Defender', 'Pass Rusher', 'Sideline to Sideline'],
+    CB: ['Shutdown Corner', 'Ball Hawk', 'Press Coverage', 'Slot Defender'],
+    S: ['Ball Hawk', 'Enforcer', 'Coverage Safety', 'Box Safety'],
+    K: ['Clutch Kicker', 'Big Leg', 'Accurate'],
+    P: ['Coffin Corner', 'Hang Time', 'Directional']
+};
+
+const OFFENSIVE_SCHEMES = {
+    'Pass Heavy': { keyStats: ['throwAccuracy', 'throwPower', 'catching', 'passBlock'], description: 'Air it out with a pass-first approach.' },
+    'Run Heavy': { keyStats: ['trucking', 'runBlock', 'acceleration', 'strength'], description: 'Ground and pound to control the clock.' },
+    'Balanced': { keyStats: ['throwAccuracy', 'trucking', 'catching', 'runBlock'], description: 'Mix of run and pass plays.' },
+    'West Coast': { keyStats: ['throwAccuracy', 'catching', 'passBlock', 'awareness'], description: 'High-percentage, short passes.' },
+    'Vertical': { keyStats: ['throwPower', 'speed', 'passBlock', 'catching'], description: 'Deep shots and explosive plays.' }
+};
+
+const DEFENSIVE_SCHEMES = {
+    '4-3': { keyStats: ['runStop', 'tackling', 'awareness', 'coverage'], description: 'Traditional 4-3 defense with strong run support.' },
+    '3-4': { keyStats: ['passRushPower', 'speed', 'coverage', 'awareness'], description: '3-4 defense with versatile linebackers.' },
+    'Nickel': { keyStats: ['coverage', 'speed', 'awareness', 'intelligence'], description: 'Extra defensive back for pass coverage.' },
+    'Aggressive': { keyStats: ['passRushPower', 'passRushSpeed', 'tackling', 'speed'], description: 'Attack the quarterback and force turnovers.' },
+    'Conservative': { keyStats: ['coverage', 'awareness', 'tackling', 'intelligence'], description: 'Bend but don\'t break, prevent big plays.' }
+};
+
+const POS_RATING_RANGES = {
+    QB: { throwPower: [75, 99], throwAccuracy: [70, 95], awareness: [60, 99] },
+    RB: { speed: [85, 99], agility: [80, 99], carrying: [75, 99] },
+    WR: { speed: [88, 99], catching: [80, 99], routeRunning: [75, 99] },
+    TE: { catching: [75, 95], runBlock: [60, 90], speed: [75, 90] },
+    OL: { runBlock: [75, 99], passBlock: [75, 99], strength: [80, 99] },
+    DL: { strength: [80, 99], blockShedding: [75, 99], tackling: [70, 99] },
+    LB: { tackling: [80, 99], awareness: [75, 99], speed: [75, 90] },
+    CB: { manCoverage: [75, 99], zoneCoverage: [75, 99], speed: [88, 99] },
+    S: { zoneCoverage: [80, 99], tackling: [70, 95], speed: [85, 95] },
+    K: { kickPower: [80, 99], kickAccuracy: [75, 99] },
+    P: { kickPower: [80, 99], kickAccuracy: [75, 99] }
+};
+
+const GAME_CONFIG = {
+    TEAM_COUNT: 32,
+    WEEKS_PER_SEASON: 18,
+    PLAYOFF_TEAMS: 14
+};
+
+const FREE_AGENCY = {
+    BASE_INTEREST: 50,
+    CHAMPIONSHIP_BONUS: 20,
+    CAP_SPACE_WEIGHT: 1.5
+};
+
+const HALL_OF_FAME = {
+    MIN_YEARS: 10,
+    MIN_AV: 100
+};
+
 // ============================================================================
 // EXPORTS
 // ============================================================================
@@ -265,7 +329,16 @@ const Constants = {
   SIMULATION,
   TRAINING,
   DEPTH_NEEDS,
-  COLLEGES
+  COLLEGES,
+  OFFENSIVE_POSITIONS,
+  DEFENSIVE_POSITIONS,
+  ABILITIES_BY_POS,
+  OFFENSIVE_SCHEMES,
+  DEFENSIVE_SCHEMES,
+  POS_RATING_RANGES,
+  GAME_CONFIG,
+  FREE_AGENCY,
+  HALL_OF_FAME
 };
 
 // Define properties for names to ensure they are read at runtime

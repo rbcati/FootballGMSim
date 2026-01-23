@@ -158,6 +158,29 @@ function calcPlayerTradeValue(player, leagueYear) {
 function calcPickTradeValue(pick, leagueYear, teamRecord = 0.5) {
   if (!pick) return 0;
 
+  // New TRADE_CONFIG Logic
+  if (C.TRADE_CONFIG && C.TRADE_CONFIG.PICK_ONE_VALUE) {
+      // Estimate pick number based on team record
+      // Worst record (0.0) -> Pick 1 (Global 1 + (Round-1)*32)
+      // Best record (1.0) -> Pick 32 (Global 32 + (Round-1)*32)
+      // Average record (0.5) -> Pick 16
+
+      const picksPerRound = 32;
+      // Record 0.0 -> Pick 1. Record 1.0 -> Pick 32.
+      // Pick = 1 + (Record * 31)
+      const estimatedPickInRound = 1 + (teamRecord * (picksPerRound - 1));
+      const globalPick = ((pick.round - 1) * picksPerRound) + estimatedPickInRound;
+
+      let val = C.TRADE_CONFIG.PICK_ONE_VALUE * Math.pow(C.TRADE_CONFIG.PICK_DECAY, globalPick - 1);
+
+      const yearsOut = Math.max(0, (pick.year || leagueYear) - leagueYear);
+      // Use fallback for future discount if not in config
+      const futureDiscount = 0.85;
+      const disc = Math.pow(futureDiscount, yearsOut);
+
+      return Math.max(1, Math.round(val * disc));
+  }
+
   if (C.TRADE_VALUES && C.TRADE_VALUES.PICKS) {
     const roundMap = C.TRADE_VALUES.PICKS[pick.round];
     if (roundMap && typeof roundMap.avg === 'number') {

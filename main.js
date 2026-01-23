@@ -1,6 +1,31 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 
+// Update Checker System
+async function checkForUpdates() {
+    const CURRENT_VERSION = "1.0.1"; // Hardcode this per patch
+    try {
+        const response = await fetch('version.json', { cache: "no-store" });
+        const data = await response.json();
+
+        if (data.version !== CURRENT_VERSION) {
+            console.log("New patch detected! Reloading...");
+            // Force a hard reload from the server
+            window.location.reload(true);
+        }
+    } catch (e) {
+        console.log("Offline or version check failed");
+    }
+}
+
+// Check for updates whenever the app is resumed or opened
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdates();
+});
+
+// Check on initial load
+checkForUpdates();
+
 /**
  * Enhanced Main Game Controller with improved performance and error handling
  *
@@ -138,6 +163,97 @@ class GameController {
             const userTeamId = window.state?.userTeamId || 0;
             const userTeam = L?.teams?.[userTeamId];
             const isOffseason = window.state?.offseason === true;
+
+            // Update team ratings to ensure header is fresh
+            if (userTeam && window.updateTeamRatings) {
+                window.updateTeamRatings(userTeam);
+            }
+
+            // --- HEADER DASHBOARD GENERATION ---
+            let headerDashboardHTML = '';
+            if (userTeam && L) {
+                // 1. Record & Standing
+                const wins = userTeam.wins ?? userTeam.record?.w ?? 0;
+                const losses = userTeam.losses ?? userTeam.record?.l ?? 0;
+                const ties = userTeam.ties ?? userTeam.record?.t ?? 0;
+
+                // Division Rank
+                const divTeams = L.teams.filter(t => t.conf === userTeam.conf && t.div === userTeam.div);
+                divTeams.sort((a, b) => {
+                    const wa = a.wins ?? a.record?.w ?? 0;
+                    const wb = b.wins ?? b.record?.w ?? 0;
+                    if (wa !== wb) return wb - wa;
+                    return 0; // Simplified tie-breaker
+                });
+                const divRank = divTeams.findIndex(t => t.id === userTeam.id) + 1;
+                const divSuffix = divRank === 1 ? 'st' : divRank === 2 ? 'nd' : divRank === 3 ? 'rd' : 'th';
+
+                // Conf Rank
+                const confTeams = L.teams.filter(t => t.conf === userTeam.conf);
+                confTeams.sort((a, b) => {
+                    const wa = a.wins ?? a.record?.w ?? 0;
+                    const wb = b.wins ?? b.record?.w ?? 0;
+                    if (wa !== wb) return wb - wa;
+                    return 0;
+                });
+                const confRank = confTeams.findIndex(t => t.id === userTeam.id) + 1;
+                const confSuffix = confRank === 1 ? 'st' : confRank === 2 ? 'nd' : confRank === 3 ? 'rd' : 'th';
+
+                // 2. Overalls
+                const ovr = userTeam.ratings?.overall ?? userTeam.overallRating ?? 0;
+                const offOvr = userTeam.ratings?.offense?.overall ?? userTeam.offensiveRating ?? 0;
+                const defOvr = userTeam.ratings?.defense?.overall ?? userTeam.defensiveRating ?? 0;
+
+                // 3. League Ranks (Off/Def)
+                // Sort all teams by Points For (Offense Proxy) and Points Against (Defense Proxy)
+                const sortedByPF = [...L.teams].sort((a, b) => (b.ptsFor ?? b.record?.pf ?? 0) - (a.ptsFor ?? a.record?.pf ?? 0));
+                const offRank = sortedByPF.findIndex(t => t.id === userTeam.id) + 1;
+
+                // For Defense, lower points against is better
+                const sortedByPA = [...L.teams].sort((a, b) => (a.ptsAgainst ?? a.record?.pa ?? 0) - (b.ptsAgainst ?? b.record?.pa ?? 0));
+                const defRank = sortedByPA.findIndex(t => t.id === userTeam.id) + 1;
+
+                headerDashboardHTML = `
+                    <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+
+                            <!-- Record & Standing -->
+                            <div style="flex: 1; min-width: 140px;">
+                                <div style="font-size: 2rem; font-weight: 800; line-height: 1;">${wins}-${losses}-${ties}</div>
+                                <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 5px;">
+                                    ${divRank}${divSuffix} in Div • ${confRank}${confSuffix} in Conf
+                                </div>
+                            </div>
+
+                            <!-- Ratings -->
+                            <div style="flex: 1; min-width: 120px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;">
+                                <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Team OVR</div>
+                                <div style="display: flex; justify-content: space-around; align-items: center;">
+                                    <div title="Overall"><span style="font-weight: 700; font-size: 1.2rem;">${ovr}</span></div>
+                                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1);"></div>
+                                    <div title="Offense"><span style="font-size: 0.8rem; opacity: 0.7;">OFF</span> <span style="font-weight: 700;">${offOvr}</span></div>
+                                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1);"></div>
+                                    <div title="Defense"><span style="font-size: 0.8rem; opacity: 0.7;">DEF</span> <span style="font-weight: 700;">${defOvr}</span></div>
+                                </div>
+                            </div>
+
+                            <!-- Rankings -->
+                            <div style="flex: 1; min-width: 140px; text-align: right;">
+                                <div style="margin-bottom: 4px;">
+                                    <span style="opacity: 0.7; font-size: 0.85rem;">Offense Rank:</span>
+                                    <span style="font-weight: 700; color: ${offRank <= 5 ? '#48bb78' : 'white'};">#${offRank}</span>
+                                </div>
+                                <div>
+                                    <span style="opacity: 0.7; font-size: 0.85rem;">Defense Rank:</span>
+                                    <span style="font-weight: 700; color: ${defRank <= 5 ? '#48bb78' : 'white'};">#${defRank}</span>
+                                </div>
+                                <div style="font-size: 0.75rem; opacity: 0.5; margin-top: 4px;">(Based on Pts)</div>
+                            </div>
+
+                        </div>
+                    </div>
+                `;
+            }
             
             let divisionStandingsHTML = '';
             if (userTeam && L) {
@@ -305,6 +421,7 @@ class GameController {
             }
 
             hubContainer.innerHTML = `
+                ${headerDashboardHTML}
                 ${nextGameHTML}
                 <div class="card">
                     <h2>Team Hub</h2>
@@ -338,6 +455,10 @@ class GameController {
                             <h3>League Actions</h3>
                             <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
                                 ${!isOffseason ? '<button class="btn" id="btnSimSeason" onclick="handleSimulateSeason()" style="justify-content: center;">Simulate Season</button>' : ''}
+                                ${(!isOffseason && L.week > 18 && (!window.state?.playoffs || !window.state.playoffs.winner))
+                                    ? `<button class="btn primary" onclick="if(window.startPlayoffs) window.startPlayoffs();" style="justify-content: center;">Start Playoffs</button>`
+                                    : ''
+                                }
                                 <button class="btn" onclick="location.hash='#/standings'" style="justify-content: center;">View Standings</button>
                                 ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
                             </div>
@@ -458,12 +579,20 @@ class GameController {
                 // Stop if offseason or playoffs started
                 if (window.state.offseason) break;
 
+                const startWeek = L.week;
+
                 // Simulate week without rendering full UI
                 if (window.simulateWeek) {
                     window.simulateWeek({ render: false });
                 } else {
                     // Fallback logic if simulateWeek not available
                     L.week++;
+                }
+
+                // CHECK FOR FREEZE: If week didn't advance, we are stuck or done
+                if (L.week === startWeek && !window.state.offseason) {
+                    console.warn("Simulation loop detected no week advancement. Stopping.");
+                    break;
                 }
 
                 // Update status
@@ -473,7 +602,7 @@ class GameController {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
 
-            this.setStatus('Season completed!', 'success');
+            this.setStatus('Season simulation complete.', 'success');
             setTimeout(() => this.renderHub(), 500);
 
         } catch (error) {
@@ -1031,6 +1160,17 @@ class GameController {
                 this.clearDOMCache();
             }
         });
+
+        // FIX: Handle Bottom Nav Menu Click
+        const navMenuBottom = document.getElementById('navMenuBottom');
+        if (navMenuBottom) {
+            this.addEventListener(navMenuBottom, 'click', (e) => {
+                e.preventDefault();
+                // Toggle sidebar by clicking the main toggle
+                const toggle = document.querySelector('.nav-toggle');
+                if (toggle) toggle.click();
+            });
+        }
     }
 
     addEventListener(element, event, handler) {
@@ -1228,8 +1368,31 @@ class GameController {
                     window.renderLeagueStats();
                 }
                 break;
+            case 'player':
+                // Handle player profile route: player/123
+                const parts = viewName.split('/');
+                if (parts.length > 1) {
+                    const playerId = parts[1];
+                    // Ensure playerProfile view is shown
+                    window.show('playerProfile');
+                    if (window.playerStatsViewer) {
+                        window.playerStatsViewer.renderToView('playerProfile', playerId);
+                    } else if (window.showPlayerDetails) {
+                         // Fallback if viewer not found (though less ideal for full page)
+                         console.warn('PlayerStatsViewer not found, using modal fallback');
+                         window.showPlayerDetails({ id: playerId });
+                    }
+                }
+                break;
             default:
-                console.log('No renderer for view:', viewName);
+                // Handle other nested routes (e.g., player/123 might fall here if not caught above)
+                if (viewName.startsWith('player/')) {
+                     const pId = viewName.split('/')[1];
+                     window.show('playerProfile');
+                     if (window.playerStatsViewer) window.playerStatsViewer.renderToView('playerProfile', pId);
+                } else {
+                    console.log('No renderer for view:', viewName);
+                }
         }
     }
 
