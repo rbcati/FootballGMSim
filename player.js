@@ -6,6 +6,7 @@
 // Import dependencies
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
+import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 
   // ============================================================================
   // PLAYER PROGRESSION & SKILL TREES (from player-progression.js)
@@ -1631,75 +1632,13 @@ import { Constants as C } from './constants.js';
 
   /**
    * Calculate Wins Above Replacement (WAR)
+   * Delegates to the enhanced calculation logic in war-calculator.js
    * @param {Object} player - Player object
    * @param {Object} seasonStats - Season statistics
    * @returns {number} WAR value
    */
   function calculateWAR(player, seasonStats) {
-    if (!player || !seasonStats) return 0;
-
-    // Simplified WAR calculation based on position
-    let war = 0;
-    const games = seasonStats.gamesPlayed || 1;
-
-    if (player.pos === 'QB') {
-      const passYd = seasonStats.passYd || 0;
-      const passTD = seasonStats.passTD || 0;
-      const ints = seasonStats.interceptions || 0;
-      const rushYd = seasonStats.rushYd || 0;
-      const rushTD = seasonStats.rushTD || 0;
-      const fumbles = seasonStats.fumbles || 0;
-      const sacks = seasonStats.sacks || 0;
-
-      // Approximate value formula
-      const val = (passYd / 25) + (passTD * 4) + (rushYd / 10) + (rushTD * 6) - (ints * 2) - (fumbles * 2) - (sacks * 1);
-      war = (val / 400) * (games / 17); // Normalize
-    } else if (player.pos === 'RB') {
-      const rushYd = seasonStats.rushYd || 0;
-      const rushTD = seasonStats.rushTD || 0;
-      const recYd = seasonStats.recYd || 0;
-      const recTD = seasonStats.recTD || 0;
-      const fumbles = seasonStats.fumbles || 0;
-
-      const val = (rushYd / 10) + (rushTD * 6) + (recYd / 10) + (recTD * 6) - (fumbles * 2);
-      war = (val / 350) * (games / 17);
-    } else if (player.pos === 'WR' || player.pos === 'TE') {
-      const recYd = seasonStats.recYd || 0;
-      const recTD = seasonStats.recTD || 0;
-      const receptions = seasonStats.receptions || 0;
-      const drops = seasonStats.drops || 0;
-
-      const val = (recYd / 10) + (recTD * 6) + (receptions * 0.5) - (drops * 2);
-      war = (val / 350) * (games / 17);
-    } else if (player.pos === 'OL') {
-      const sacksAllowed = seasonStats.sacksAllowed || 0;
-      const pancakes = seasonStats.pancakes || 0;
-
-      const val = (pancakes * 2) - (sacksAllowed * 5) + (player.ratings.runBlock + player.ratings.passBlock) * 0.5;
-      war = (val / 200) * (games / 17);
-    } else if (['DL', 'LB'].includes(player.pos)) {
-      const tackles = seasonStats.tackles || 0;
-      const sacks = seasonStats.sacks || 0;
-      const tfl = seasonStats.tacklesForLoss || 0;
-      const ints = seasonStats.interceptions || 0;
-      const ff = seasonStats.forcedFumbles || 0;
-
-      const val = (tackles * 1) + (sacks * 4) + (tfl * 2) + (ints * 5) + (ff * 3);
-      war = (val / 250) * (games / 17);
-    } else if (['CB', 'S'].includes(player.pos)) {
-      const tackles = seasonStats.tackles || 0;
-      const ints = seasonStats.interceptions || 0;
-      const pd = seasonStats.passesDefended || 0;
-      const defTD = seasonStats.defTD || 0;
-
-      const val = (tackles * 1) + (ints * 6) + (pd * 3) + (defTD * 6);
-      war = (val / 200) * (games / 17);
-    } else if (['K', 'P'].includes(player.pos)) {
-        war = (player.ovr - 70) / 20 * (games / 17); // Very simplified for special teams
-    }
-
-    // Scale to realistic NFL WAR values (0-10ish for superstars, 2-3 for starters)
-    return Math.max(-2, Math.min(15, parseFloat(war.toFixed(1))));
+    return calculateWARImpl(player, seasonStats);
   }
 
   /**
