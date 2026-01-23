@@ -404,7 +404,7 @@ function generateContract(ovr, pos, age = 25) {
   // REDUCED signing bonus percentage to keep cap hits reasonable
   // Lower bonus = lower prorated cap hit
   const bonusPercent = (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15) + 
-                      Math.random() * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
+                      (U ? U.getSecureRandom() : Math.random()) * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
   
   // Cap signing bonus to prevent excessive prorated amounts
   const maxBonus = baseAnnual * years * 0.4; // Max 40% of total contract
@@ -1839,7 +1839,8 @@ window.on = on;
           // Fallback: direct random selection
           const teamSelect = document.getElementById('onboardTeam');
           if (teamSelect && teamSelect.options.length > 0) {
-            const randomIndex = Math.floor(Math.random() * teamSelect.options.length);
+            const U = window.Utils;
+            const randomIndex = Math.floor((U ? U.getSecureRandom() : Math.random()) * teamSelect.options.length);
             teamSelect.selectedIndex = randomIndex;
           }
         }
