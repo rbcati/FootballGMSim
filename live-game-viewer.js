@@ -118,17 +118,45 @@ class LiveGameViewer {
    */
   generatePlay(offense, defense, gameState, isUserTeam, targetHomeScore, targetAwayScore) {
     const U = window.Utils;
-    const playType = isUserTeam && this.playCallQueue ? 
-      this.playCallQueue : 
-      this.choosePlayType(offense, gameState);
 
-    // Clear user play call after using it
-    if (isUserTeam && this.playCallQueue) {
-      this.playCallQueue = null;
+    // Determine play type (Offense)
+    let playType = this.choosePlayType(offense, gameState);
+    // Determine defense call (Defense)
+    let defenseCall = 'defense_man';
+    const isUserDefense = defense.team.id === this.userTeamId;
+
+    // Apply user call if available
+    if (this.playCallQueue) {
+        if (this.playCallQueue.startsWith('defense_')) {
+            if (isUserDefense) defenseCall = this.playCallQueue;
+        } else {
+            if (isUserTeam) playType = this.playCallQueue;
+        }
+        this.playCallQueue = null;
     }
 
     const offenseStrength = this.calculateOffenseStrength(offense.team);
     const defenseStrength = this.calculateDefenseStrength(defense.team);
+
+    // Defense Modifiers
+    let defModSack = 0;
+    let defModRun = 0;
+    let defModPass = 0;
+    let defModBigPlay = 0;
+    let defModInt = 0;
+
+    if (defenseCall === 'defense_blitz') {
+        defModSack = 0.10;
+        defModRun = 2; // Vulnerable to run
+        defModPass = -2; // Pressure
+        defModBigPlay = 0.10; // High risk
+    } else if (defenseCall === 'defense_zone') {
+        defModPass = -3; // Coverage
+        defModRun = -1; // Light box
+        defModBigPlay = -0.05; // Safety
+        defModInt = 0.02;
+    }
+
     const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100));
 
     const play = {
@@ -150,30 +178,67 @@ class LiveGameViewer {
     const success = Math.random() < successChance;
     let yards = 0;
 
-    if (playType === 'run') {
+    // Normalize subtypes
+    let baseType = playType;
+    if (playType.startsWith('run_')) baseType = 'run';
+    if (playType.startsWith('pass_')) baseType = 'pass';
+
+    if (baseType === 'run') {
+      let runBonus = 0;
+      let variance = 1;
+
+      if (playType === 'run_inside') {
+          runBonus = 1; variance = 0.5;
+      } else if (playType === 'run_outside') {
+          runBonus = -1; variance = 1.5;
+      }
+
       if (success) {
-        yards = U.rand(2, 8);
-        if (Math.random() < 0.1) yards = U.rand(10, 25); // Big play
+        yards = Math.round(U.rand(2, 8) + runBonus + defModRun);
+        if (Math.random() < (0.1 * variance + defModBigPlay)) yards = U.rand(10, 25); // Big play
       } else {
         yards = U.rand(-2, 3);
+        // Blitz TFL chance
+        if (Math.random() < defModSack * 0.5) yards -= 2;
       }
-    } else if (playType === 'pass') {
-      if (success) {
-        yards = U.rand(5, 15);
-        if (Math.random() < 0.15) yards = U.rand(20, 40); // Big play
-        if (Math.random() < 0.05) {
-          // Interception
+    } else if (baseType === 'pass') {
+      let completeBonus = 0;
+      let yardBonus = 0;
+      let intChance = 0.03;
+      let bigPlayChance = 0.15;
+
+      if (playType === 'pass_short') {
+          completeBonus = 0.15; yardBonus = -2; intChance = 0.01; bigPlayChance = 0.05;
+      } else if (playType === 'pass_medium') {
+          completeBonus = 0; yardBonus = 0;
+      } else if (playType === 'pass_long') {
+          completeBonus = -0.15; yardBonus = 10; intChance = 0.07; bigPlayChance = 0.25;
+      }
+
+      // Check for Sack
+      if (Math.random() < (0.05 + defModSack)) {
+          yards = -U.rand(5, 10);
+          play.result = 'sack';
+          play.message = 'SACKED!';
+      } else if (Math.random() < (successChance + completeBonus)) {
+        // Completion
+        yards = Math.max(1, Math.round(U.rand(5, 15) + yardBonus + defModPass));
+
+        // Big play
+        if (Math.random() < (bigPlayChance + defModBigPlay)) {
+            yards = U.rand(20, 50);
+        }
+
+        // Interception
+        if (Math.random() < (intChance + defModInt)) {
           play.result = 'interception';
           yards = 0;
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
         }
       } else {
-        yards = U.rand(-1, 4);
-        if (Math.random() < 0.1) {
-          play.result = 'incomplete';
-          yards = 0;
-          play.message = 'Incomplete pass';
-        }
+        yards = 0;
+        play.result = 'incomplete';
+        play.message = 'Incomplete pass';
       }
     } else if (playType === 'field_goal') {
       const kicker = offense.team.roster?.find(p => p.pos === 'K');
@@ -278,11 +343,22 @@ class LiveGameViewer {
     }
 
     // Normal play selection
+    let type = 'run';
     if (down === 1 || down === 2) {
-      return Math.random() < 0.6 ? 'pass' : 'run';
+      type = Math.random() < 0.6 ? 'pass' : 'run';
     } else {
       // 3rd down - more likely to pass
-      return Math.random() < 0.7 ? 'pass' : 'run';
+      type = Math.random() < 0.7 ? 'pass' : 'run';
+    }
+
+    // Add subtypes
+    if (type === 'run') {
+        return Math.random() < 0.6 ? 'run_inside' : 'run_outside';
+    } else {
+        const r = Math.random();
+        if (r < 0.3) return 'pass_short';
+        if (r < 0.7) return 'pass_medium';
+        return 'pass_long';
     }
   }
 
@@ -387,20 +463,22 @@ class LiveGameViewer {
     // Check if user needs to call a play
     const state = this.gameState;
     const offense = state.ballPossession === 'home' ? state.home : state.away;
-    const isUserTeam = offense.team.id === this.userTeamId;
+    const defense = state.ballPossession === 'home' ? state.away : state.home;
 
-    if (isUserTeam && !this.playCallQueue) {
+    const isUserOffense = offense.team.id === this.userTeamId;
+    const isUserDefense = defense.team.id === this.userTeamId;
+
+    if ((isUserOffense || isUserDefense) && !this.playCallQueue) {
       // Show play calling interface
       this.showPlayCalling();
       return;
     }
 
-    const defense = state.ballPossession === 'home' ? state.away : state.home;
     const play = this.generatePlay(
       offense,
       defense,
       state,
-      isUserTeam,
+      isUserOffense,
       this.simulationMeta?.targetHomeScore,
       this.simulationMeta?.targetAwayScore
     );
@@ -528,6 +606,24 @@ class LiveGameViewer {
 
     playCalling.style.display = 'flex';
     this.isPaused = true;
+
+    // Toggle buttons based on possession
+    const state = this.gameState;
+    const offense = state.ballPossession === 'home' ? state.home : state.away;
+    const isUserOffense = offense.team.id === this.userTeamId;
+
+    const offRows = playCalling.querySelectorAll('.play-row:not(.defense-row)');
+    const defRow = playCalling.querySelector('.defense-row');
+
+    if (isUserOffense) {
+        offRows.forEach(r => r.style.display = 'flex');
+        if (defRow) defRow.style.display = 'none';
+        playCalling.querySelector('.play-call-prompt').textContent = 'Call Offense:';
+    } else {
+        offRows.forEach(r => r.style.display = 'none');
+        if (defRow) defRow.style.display = 'flex';
+        playCalling.querySelector('.play-call-prompt').textContent = 'Call Defense:';
+    }
 
     // Clear any existing timeout
     if (this.intervalId) {
@@ -682,11 +778,29 @@ class LiveGameViewer {
 
         <div class="play-calling" style="display: none;">
           <div class="play-call-prompt">Call Your Play:</div>
-          <div class="play-call-buttons">
-            <button class="play-call-btn" data-play="run">🏃 Run</button>
-            <button class="play-call-btn" data-play="pass">🏈 Pass</button>
-            <button class="play-call-btn" data-play="field_goal">🥅 Field Goal</button>
-            <button class="play-call-btn" data-play="punt">⚡ Punt</button>
+          <div class="play-call-buttons" style="flex-direction: column; gap: 8px;">
+            <div class="play-row">
+                <span style="font-size: 10px; color: #888;">RUN</span>
+                <button class="play-call-btn" data-play="run_inside">Inside</button>
+                <button class="play-call-btn" data-play="run_outside">Outside</button>
+            </div>
+            <div class="play-row">
+                <span style="font-size: 10px; color: #888;">PASS</span>
+                <button class="play-call-btn" data-play="pass_short">Short</button>
+                <button class="play-call-btn" data-play="pass_medium">Med</button>
+                <button class="play-call-btn" data-play="pass_long">Long</button>
+            </div>
+            <div class="play-row">
+                <span style="font-size: 10px; color: #888;">ST</span>
+                <button class="play-call-btn" data-play="field_goal">FG</button>
+                <button class="play-call-btn" data-play="punt">Punt</button>
+            </div>
+            <div class="play-row defense-row" style="border-top: 1px solid #333; padding-top: 8px;">
+                <span style="font-size: 10px; color: #888;">DEF</span>
+                <button class="play-call-btn" data-play="defense_blitz">Blitz</button>
+                <button class="play-call-btn" data-play="defense_man">Man</button>
+                <button class="play-call-btn" data-play="defense_zone">Zone</button>
+            </div>
           </div>
         </div>
 

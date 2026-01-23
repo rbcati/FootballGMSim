@@ -64,7 +64,7 @@
 
 .nav-toggle-container {
   position: fixed;
-  top: 10px;
+  top: calc(10px + env(safe-area-inset-top));
   left: 10px;
   z-index: 1002;
 }
