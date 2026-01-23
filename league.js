@@ -1,6 +1,7 @@
 // league.js - Core League Generation Logic
 'use strict';
 import { initializeCoachingStats } from './coaching.js';
+import { makePlayer as defaultMakePlayer } from './player.js';
 
 /**
  * Generates draft picks for a team for the next few years.
@@ -117,7 +118,7 @@ function makeLeague(teams, dependencies = {}) {
     const {
         Constants = (typeof window !== 'undefined' ? window.Constants : null),
         Utils = (typeof window !== 'undefined' ? window.Utils : null),
-        makePlayer = (typeof window !== 'undefined' ? window.makePlayer : null),
+        makePlayer = defaultMakePlayer,
         makeSchedule = (typeof window !== 'undefined' ? window.makeSchedule : null),
         recalcCap = (typeof window !== 'undefined' ? window.recalcCap : null),
         generateInitialStaff = (typeof window !== 'undefined' ? window.generateInitialStaff : null)

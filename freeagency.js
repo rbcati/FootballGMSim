@@ -2,6 +2,7 @@
 'use strict';
 
 import { saveState } from './state.js';
+import { makePlayer } from './player.js';
 
 function ensureFA() {
   if (window.state?.freeAgents && window.state.freeAgents.length > 0) {
@@ -37,8 +38,8 @@ function ensureFA() {
   const createRealisticPlayer = (pos, index) => {
     let player;
     
-    if (window.makePlayer) {
-      player = window.makePlayer(pos);
+    if (makePlayer) {
+      player = makePlayer(pos);
     } else {
       // Fallback player creation with realistic distribution
       player = {
