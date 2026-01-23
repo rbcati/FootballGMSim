@@ -315,13 +315,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       pos: pos,
       age: playerAge,
       ovr: playerOvr,
-      years: U.rand(1, 4),
-      yearsTotal: U.rand(1, 4),
-      // FIXED: Realistic salary based on OVR (for createRookiePlayer function)
-      baseAnnual: playerOvr >= 90 ? U.rand(20, 35) : 
-                 playerOvr >= 80 ? U.rand(8, 20) : 
-                 playerOvr >= 70 ? U.rand(3, 8) : 
-                 playerOvr >= 60 ? U.rand(1, 3) : U.rand(0.5, 1),
+      years: playerAge < 25 ? 4 : U.rand(1, 3),
+      yearsTotal: playerAge < 25 ? 4 : U.rand(1, 3),
+      // Use refined salary logic
+      baseAnnual: calculateSalary ? calculateSalary(pos, playerOvr, playerAge) : 1.0,
       signingBonus: 0,
       guaranteedPct: 0.5,
       ratings: generateBasicRatings(pos, playerOvr),
@@ -987,6 +984,32 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   // ============================================================================
 
   /**
+   * Calculates a realistic salary based on OVR and Position.
+   * High OVR players gain salary exponentially.
+   */
+  function calculateSalary(pos, ovr, age) {
+    if (!C) return 0.7; // fallback
+
+    // 1. Get position weight (QBs cost more than Punters)
+    const posWeight = C.POS_SALARY_WEIGHTS?.[pos] || 1.0;
+
+    // 2. Exponential growth: (ovr / 100)^8
+    // This ensures a 90+ OVR player gets the "Max" contracts
+    const skillFactor = Math.pow(ovr / 100, 8);
+    const maxContract = C.SALARY_CAP?.MAX_CONTRACT || 50; // $50M/year
+    const minContract = C.SALARY_CAP?.MIN_CONTRACT || 0.7; // $700k/year
+
+    let salary = (maxContract * skillFactor * posWeight);
+
+    // 3. Age Discount/Premium
+    // Veterans (30+) might take less, Primes (26-29) cost most
+    if (age > 32) salary *= 0.8;
+    if (age < 23) salary *= 0.5; // Rookie scale simulation
+
+    return Math.max(minContract, Math.round(salary * 10) / 10);
+  }
+
+  /**
    * Creates a new player object with all ratings and attributes
    * @param {string} pos - Player position (QB, RB, etc.)
    * @param {number} age - Optional age override
@@ -1004,19 +1027,19 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       // Use functions from fixes.js if available, otherwise use local fallbacks
       const ratings = window.generatePlayerRatings ? window.generatePlayerRatings(pos) : generateBasicRatings(pos, ovr || 70);
       const playerOvr = ovr || (window.calculateOvr ? window.calculateOvr(pos, ratings) : (ovr || 70));
-      // Use fixed contract generation that creates realistic salaries
-      // Always use window.generateContract if available (from fixes.js with corrected salaries)
-      const contractDetails = window.generateContract ? window.generateContract(playerOvr, pos) : {
-        years: U.rand(1, 4),
-        // FIXED: Reduced salary ranges to fit within $220M cap
-        // With ~35 players, average should be ~$6M, but most are depth players
-        baseAnnual: playerOvr >= 90 ? U.rand(12, 22) : 
-                   playerOvr >= 80 ? U.rand(4, 12) : 
-                   playerOvr >= 70 ? U.rand(1.5, 5) : 
-                   playerOvr >= 60 ? U.rand(0.6, 2) : U.rand(0.4, 0.8),
+
+      // Use refined salary curve logic
+      const salary = calculateSalary(pos, playerOvr, playerAge);
+      const years = playerAge < 25 ? 4 : U.rand(1, 3);
+
+      const contractDetails = {
+        years: years,
+        yearsTotal: years,
+        baseAnnual: salary,
         signingBonus: 0,
         guaranteedPct: 0.5
       };
+
       const playerName = window.generatePlayerName ? window.generatePlayerName() : 
         (U.choice(window.EXPANDED_FIRST_NAMES || ['John']) + ' ' + U.choice(window.EXPANDED_LAST_NAMES || ['Smith']));
 
@@ -2150,13 +2173,9 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
             pos: position,
             age: playerAge,
             ovr: playerOvr,
-            years: utils.rand(1, 4),
+            years: playerAge < 25 ? 4 : utils.rand(1, 3),
             yearsTotal: undefined,
-            // FIXED: Reduced salary ranges to fit within $220M cap
-            baseAnnual: playerOvr >= 90 ? utils.rand(12, 22) : 
-                       playerOvr >= 80 ? utils.rand(4, 12) : 
-                       playerOvr >= 70 ? utils.rand(1.5, 5) : 
-                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8),
+            baseAnnual: calculateSalary(position, playerOvr, playerAge),
             ratings: generatePlayerRatingsFactory(position, playerOvr),
             abilities: constants?.ABILITIES_BY_POS?.[position]
                 ? [utils.choice(constants.ABILITIES_BY_POS[position])]

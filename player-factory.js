@@ -41,15 +41,26 @@
         const playerOvr = typeof ovr === 'number' ? ovr : utils.rand(60, 85);
         const playerAge = typeof age === 'number' ? age : utils.rand(21, 35);
 
+        // Logic for contract length based on age
+        const contractYears = playerAge < 25 ? 4 : utils.rand(1, 3);
+
         const player = {
             id: utils.id(),
             name: generatePlayerName(position),
             pos: position,
             age: playerAge,
             ovr: playerOvr,
-            years: utils.rand(1, 4),
-            yearsTotal: undefined,
-            baseAnnual: utils.rand(2, 15),
+            years: contractYears,
+            yearsTotal: contractYears,
+            baseAnnual: (function() {
+                const max = constants?.SALARY_CAP?.MAX_CONTRACT || 50;
+                const min = constants?.SALARY_CAP?.MIN_CONTRACT || 0.7;
+                const w = constants?.POS_SALARY_WEIGHTS?.[position] || 1.0;
+                let s = max * Math.pow(playerOvr / 100, 8) * w;
+                if (playerAge > 32) s *= 0.8;
+                if (playerAge < 23) s *= 0.5;
+                return Math.max(min, Math.round(s * 10) / 10);
+            })(),
             ratings: generatePlayerRatings(position, playerOvr),
             abilities: constants?.ABILITIES_BY_POS?.[position]
                 ? [utils.choice(constants.ABILITIES_BY_POS[position])]

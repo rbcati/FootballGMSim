@@ -156,41 +156,6 @@ window.makeLeague = function(
         });
     }
     
-    // Normalize salaries if teams are way over cap
-    // This is a safety net to ensure teams start within reasonable cap space
-    L.teams.forEach(team => {
-        if (team.capUsed && team.capTotal && team.capUsed > team.capTotal * 1.1) {
-            const targetCap = team.capTotal * 0.95; // Target 95% of cap (leave some room)
-            const reductionFactor = targetCap / team.capUsed;
-            
-            console.warn(`⚠️ Normalizing salaries for ${team.name || team.abbr}: was $${team.capUsed.toFixed(1)}M, reducing by ${((1 - reductionFactor) * 100).toFixed(1)}% to target $${targetCap.toFixed(1)}M`);
-            
-            // Reduce all player salaries proportionally
-            team.roster.forEach(player => {
-                if (player && player.baseAnnual) {
-                    const oldBase = player.baseAnnual;
-                    player.baseAnnual = Math.max(0.4, Math.round(player.baseAnnual * reductionFactor * 10) / 10);
-                    
-                    // Also reduce signing bonus proportionally, but ensure yearsTotal is set
-                    if (player.signingBonus && player.yearsTotal) {
-                        player.signingBonus = Math.round(player.signingBonus * reductionFactor * 10) / 10;
-                    } else if (player.signingBonus) {
-                        // If yearsTotal is missing, set it to years
-                        if (!player.yearsTotal && player.years) {
-                            player.yearsTotal = player.years;
-                        }
-                        player.signingBonus = Math.round(player.signingBonus * reductionFactor * 10) / 10;
-                    }
-                }
-            });
-            
-            // Recalculate cap after normalization
-            if (window.recalcCap) {
-                window.recalcCap(L, team);
-                console.log(`   ✅ After normalization: $${team.capUsed?.toFixed(1) || '0.0'}M / $${team.capTotal?.toFixed(1) || '0.0'}M`);
-            }
-        }
-    });
     
     // Log cap summary for debugging
     L.teams.forEach((team, idx) => {
