@@ -151,12 +151,7 @@
               </div>
             </section>
             
-            <section id="standings" class="view" hidden>
-                <div class="card">
-                    <h2>Standings</h2>
-                    <div id="standingsWrap"></div>
-                </div>
-            </section>
+            <section id="leagueStats" class="view" hidden></section>
             
             <section id="scouting" class="view" hidden>
                 <div class="card">
@@ -173,18 +168,6 @@
 
             <section id="history" class="view" hidden>
                 <div id="history"></div>
-            </section>
-
-            <section id="records" class="view" hidden>
-                <div id="records"></div>
-            </section>
-
-            <section id="stats" class="view" hidden>
-                <div id="stats"></div>
-            </section>
-
-            <section id="awards" class="view" hidden>
-                <div id="awards"></div>
             </section>
 
             <section id="injuries" class="view" hidden>
@@ -321,6 +304,10 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
             <span>Trade</span>
         </a>
+        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span>Stats</span>
+        </a>
         <a href="#" class="nav-item-bottom" id="navMenuBottom">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             <span>Menu</span>
@@ -439,6 +426,7 @@
 <script src="awards-viewer.js"></script>
 <script src="records.js"></script>
 <script src="stats-viewer.js"></script>
+<script src="league-stats.js"></script>
 
 <!-- New Features -->
 <script src="injury-system.js"></script>
