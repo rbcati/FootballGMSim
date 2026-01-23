@@ -300,7 +300,7 @@ class ScheduleViewer {
             <div class="modal-content">
                 <div class="modal-header">
                     <h2>Week ${week} - Game Statistics</h2>
-                    <span class="close">&times;</span>
+                    <button type="button" class="close" aria-label="Close modal">&times;</button>
                 </div>
                 <div class="modal-body">
                     ${this.generateDetailedGameStatsHTML(gameResult, week)}

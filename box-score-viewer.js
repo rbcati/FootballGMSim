@@ -620,7 +620,7 @@
       <div class="modal-content modal-large">
         <div class="modal-header">
           <h2>Box Score</h2>
-          <span class="close">&times;</span>
+          <button type="button" class="close" aria-label="Close modal">&times;</button>
         </div>
         <div class="modal-body">
           ${renderBoxScore(gameResult)}
