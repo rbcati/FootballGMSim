@@ -1,6 +1,31 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 
+// Update Checker System
+async function checkForUpdates() {
+    const CURRENT_VERSION = "1.0.1"; // Hardcode this per patch
+    try {
+        const response = await fetch('version.json', { cache: "no-store" });
+        const data = await response.json();
+
+        if (data.version !== CURRENT_VERSION) {
+            console.log("New patch detected! Reloading...");
+            // Force a hard reload from the server
+            window.location.reload(true);
+        }
+    } catch (e) {
+        console.log("Offline or version check failed");
+    }
+}
+
+// Check for updates whenever the app is resumed or opened
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdates();
+});
+
+// Check on initial load
+checkForUpdates();
+
 /**
  * Enhanced Main Game Controller with improved performance and error handling
  *
