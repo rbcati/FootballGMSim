@@ -219,13 +219,16 @@ export function renderTradeProposals() {
         existingContainer = document.createElement('div');
         existingContainer.id = 'tradeProposalsContainer';
         existingContainer.className = 'card mt';
-        existingContainer.innerHTML = `
-          <h3>AI Trade Proposals</h3>
-          <button id="btnRefreshProposals" class="btn btn-sm">Refresh</button>
-          <div id="tradeProposalsList"></div>
-        `;
         tradeView.appendChild(existingContainer);
       }
+      existingContainer.innerHTML = `
+        <div class="row">
+          <h3>Trade Finder</h3>
+          <div class="spacer"></div>
+          <button id="btnRefreshProposals" class="btn btn-sm">Refresh</button>
+        </div>
+        <div id="tradeProposalsList"></div>
+      `;
       listEl = document.getElementById('tradeProposalsList');
       refreshBtn = document.getElementById('btnRefreshProposals');
     }

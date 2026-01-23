@@ -931,7 +931,7 @@ function renderTopProspects() {
       const scoutingInfo = getScoutingInfo(prospect);
       
       return `
-        <div class="prospect-card">
+        <div class="prospect-card" onclick="window.showPlayerDetails && window.showPlayerDetails(window.state.draftClass.find(p => p.id === '${prospect.id}'))" style="cursor: pointer;">
           <div class="prospect-header">
             <h4>${prospect.name}</h4>
             <div class="prospect-info">
@@ -955,7 +955,7 @@ function renderTopProspects() {
             </div>
           </div>
           <div class="prospect-actions">
-            <button class="btn btn-scout" data-prospect-id="${prospect.id}">
+            <button class="btn btn-scout" data-prospect-id="${prospect.id}" onclick="event.stopPropagation()">
               ${prospect.scouted ? 'Scouted' : 'Scout Player'}
             </button>
           </div>

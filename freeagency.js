@@ -441,10 +441,16 @@ window.filterFreeAgents = function() {
       </td>
     `;
     
-    // Make row clickable for selection
+    // Make row clickable for player details
     tr.addEventListener('click', function(e) {
       if (e.target.tagName === 'BUTTON') return;
       
+      // Show player details
+      if (window.showPlayerDetails) {
+        window.showPlayerDetails(p);
+      }
+
+      // Handle selection for legacy support
       document.querySelectorAll('#faTableBody tr').forEach(row => {
         row.classList.remove('selected');
         row.style.background = '';
