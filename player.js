@@ -1630,6 +1630,105 @@ import { Constants as C } from './constants.js';
   }
 
   /**
+   * Calculate Wins Above Replacement (WAR)
+   * @param {Object} player - Player object
+   * @param {Object} seasonStats - Season statistics
+   * @returns {number} WAR value
+   */
+  function calculateWAR(player, seasonStats) {
+    if (!player || !seasonStats) return 0;
+
+    // Simplified WAR calculation based on position
+    let war = 0;
+    const games = seasonStats.gamesPlayed || 1;
+
+    if (player.pos === 'QB') {
+      const passYd = seasonStats.passYd || 0;
+      const passTD = seasonStats.passTD || 0;
+      const ints = seasonStats.interceptions || 0;
+      const rushYd = seasonStats.rushYd || 0;
+      const rushTD = seasonStats.rushTD || 0;
+      const fumbles = seasonStats.fumbles || 0;
+      const sacks = seasonStats.sacks || 0;
+
+      // Approximate value formula
+      const val = (passYd / 25) + (passTD * 4) + (rushYd / 10) + (rushTD * 6) - (ints * 2) - (fumbles * 2) - (sacks * 1);
+      war = (val / 400) * (games / 17); // Normalize
+    } else if (player.pos === 'RB') {
+      const rushYd = seasonStats.rushYd || 0;
+      const rushTD = seasonStats.rushTD || 0;
+      const recYd = seasonStats.recYd || 0;
+      const recTD = seasonStats.recTD || 0;
+      const fumbles = seasonStats.fumbles || 0;
+
+      const val = (rushYd / 10) + (rushTD * 6) + (recYd / 10) + (recTD * 6) - (fumbles * 2);
+      war = (val / 350) * (games / 17);
+    } else if (player.pos === 'WR' || player.pos === 'TE') {
+      const recYd = seasonStats.recYd || 0;
+      const recTD = seasonStats.recTD || 0;
+      const receptions = seasonStats.receptions || 0;
+      const drops = seasonStats.drops || 0;
+
+      const val = (recYd / 10) + (recTD * 6) + (receptions * 0.5) - (drops * 2);
+      war = (val / 350) * (games / 17);
+    } else if (player.pos === 'OL') {
+      const sacksAllowed = seasonStats.sacksAllowed || 0;
+      const pancakes = seasonStats.pancakes || 0;
+
+      const val = (pancakes * 2) - (sacksAllowed * 5) + (player.ratings.runBlock + player.ratings.passBlock) * 0.5;
+      war = (val / 200) * (games / 17);
+    } else if (['DL', 'LB'].includes(player.pos)) {
+      const tackles = seasonStats.tackles || 0;
+      const sacks = seasonStats.sacks || 0;
+      const tfl = seasonStats.tacklesForLoss || 0;
+      const ints = seasonStats.interceptions || 0;
+      const ff = seasonStats.forcedFumbles || 0;
+
+      const val = (tackles * 1) + (sacks * 4) + (tfl * 2) + (ints * 5) + (ff * 3);
+      war = (val / 250) * (games / 17);
+    } else if (['CB', 'S'].includes(player.pos)) {
+      const tackles = seasonStats.tackles || 0;
+      const ints = seasonStats.interceptions || 0;
+      const pd = seasonStats.passesDefended || 0;
+      const defTD = seasonStats.defTD || 0;
+
+      const val = (tackles * 1) + (ints * 6) + (pd * 3) + (defTD * 6);
+      war = (val / 200) * (games / 17);
+    } else if (['K', 'P'].includes(player.pos)) {
+        war = (player.ovr - 70) / 20 * (games / 17); // Very simplified for special teams
+    }
+
+    // Scale to realistic NFL WAR values (0-10ish for superstars, 2-3 for starters)
+    return Math.max(-2, Math.min(15, parseFloat(war.toFixed(1))));
+  }
+
+  /**
+   * Calculate Passer Rating when Targeted
+   * @param {Object} player - Player object
+   * @param {Object} seasonStats - Season stats
+   * @returns {number} Rating
+   */
+  function calculatePasserRatingWhenTargeted(player, seasonStats) {
+    if (!seasonStats) return 0;
+
+    const targets = seasonStats.targets || 0;
+    if (targets === 0) return 0;
+
+    const receptions = seasonStats.receptions || 0;
+    const yards = seasonStats.recYd || 0;
+    const tds = seasonStats.recTD || 0;
+    const ints = seasonStats.intWhenTargeted || 0; // Assuming this is tracked or 0
+
+    // Standard Passer Rating Formula
+    const a = Math.min(2.375, Math.max(0, ((receptions/targets) - 0.3) * 5));
+    const b = Math.min(2.375, Math.max(0, ((yards/targets) - 3) * 0.25));
+    const c = Math.min(2.375, Math.max(0, (tds/targets) * 20));
+    const d = Math.min(2.375, Math.max(0, 2.375 - ((ints/targets) * 25)));
+
+    return ((a + b + c + d) / 6) * 100;
+  }
+
+  /**
    * Update advanced statistics
    * @param {Object} player - Player object
    * @param {Object} seasonStats - Season statistics
@@ -1637,6 +1736,9 @@ import { Constants as C } from './constants.js';
   function updateAdvancedStats(player, seasonStats) {
     const advanced = player.stats.career.advanced;
     
+    // Calculate WAR
+    seasonStats.war = calculateWAR(player, seasonStats);
+
     if (player.pos === 'QB') {
       const attempts = seasonStats.passAtt || 1;
       const completions = seasonStats.passComp || 0;
@@ -1646,12 +1748,14 @@ import { Constants as C } from './constants.js';
       advanced.touchdownPct = (seasonStats.passTD || 0) / attempts;
       advanced.interceptionPct = (seasonStats.interceptions || 0) / attempts;
       advanced.qbRating = calculateQBRating(seasonStats);
+      seasonStats.passerRating = advanced.qbRating;
     }
     
     if (player.pos === 'RB') {
       const rushAttempts = seasonStats.rushAtt || 1;
       advanced.yardsPerCarry = (seasonStats.rushYd || 0) / rushAttempts;
       advanced.fumbles = (advanced.fumbles || 0) + (seasonStats.fumbles || 0);
+      seasonStats.yardsPerCarry = advanced.yardsPerCarry;
     }
     
     if (player.pos === 'WR' || player.pos === 'TE') {
@@ -1659,6 +1763,8 @@ import { Constants as C } from './constants.js';
       advanced.catchPct = (seasonStats.receptions || 0) / targets;
       advanced.yardsPerReception = (seasonStats.recYd || 0) / Math.max(1, seasonStats.receptions || 1);
       advanced.receptionsPerGame = (seasonStats.receptions || 0) / Math.max(1, seasonStats.gamesPlayed || 1);
+
+      seasonStats.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player, seasonStats);
     }
   }
 
@@ -2248,6 +2354,8 @@ import { Constants as C } from './constants.js';
     checkCareerMilestones,
     checkSeasonAwards,
     updateAdvancedStats,
+    calculateWAR,
+    calculatePasserRatingWhenTargeted,
     calculateImpactMetrics,
     calculateLegacyScore,
     checkHallOfFameEligibility,
@@ -2333,6 +2441,8 @@ import { Constants as C } from './constants.js';
   window.checkCareerMilestones = checkCareerMilestones;
   window.checkSeasonAwards = checkSeasonAwards;
   window.updateAdvancedStats = updateAdvancedStats;
+  window.calculateWAR = calculateWAR;
+  window.calculatePasserRatingWhenTargeted = calculatePasserRatingWhenTargeted;
   window.calculateImpactMetrics = calculateImpactMetrics;
   window.calculateLegacyScore = calculateLegacyScore;
   window.checkHallOfFameEligibility = checkHallOfFameEligibility;

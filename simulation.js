@@ -560,6 +560,7 @@ function simGameStats(home, away) {
     // Generate comprehensive stats for all players
     [home, away].forEach((team, teamIndex) => {
       const score = teamIndex === 0 ? homeScore : awayScore;
+      const oppScore = teamIndex === 0 ? awayScore : homeScore;
       const oppDefenseStrength = teamIndex === 0 ? homeDefenseStrength : awayDefenseStrength;
       const oppOffenseStrength = teamIndex === 0 ? awayStrength : homeStrength;
       
@@ -572,7 +573,13 @@ function simGameStats(home, away) {
       // Quarterback stats
       const qb = team.roster.find(p => p.pos === 'QB');
       if (qb) {
-        Object.assign(qb.stats.game, generateQBStats(qb, score, oppDefenseStrength, U));
+        const qbStats = generateQBStats(qb, score, oppDefenseStrength, U);
+        // Track QB Wins/Losses
+        if (score > oppScore) qbStats.wins = 1;
+        else if (score < oppScore) qbStats.losses = 1;
+        // else tie, not tracked as win or loss
+
+        Object.assign(qb.stats.game, qbStats);
       }
       
       // Running back stats
@@ -682,6 +689,18 @@ function accumulateCareerStats(league) {
       }
       if (!player.stats || !player.stats.season) return;
       
+      // Calculate advanced stats (WAR, Ratings, etc.) BEFORE snapshotting
+      // This ensures they are saved in history and available for awards
+      if (typeof window.calculateWAR === 'function') {
+          player.stats.season.war = window.calculateWAR(player, player.stats.season);
+      }
+      if (typeof window.calculateQBRating === 'function' && player.pos === 'QB') {
+          player.stats.season.passerRating = window.calculateQBRating(player.stats.season);
+      }
+      if (typeof window.calculatePasserRatingWhenTargeted === 'function' && ['WR', 'TE', 'RB'].includes(player.pos)) {
+          player.stats.season.ratingWhenTargeted = window.calculatePasserRatingWhenTargeted(player.stats.season);
+      }
+
       // Snapshot season stats to history
       if (Object.keys(player.stats.season).length > 0) {
           if (!player.statsHistory) player.statsHistory = [];

@@ -158,8 +158,12 @@
                                 <th class="sortable" data-sort="ptsFor">PF</th>
                                 <th class="sortable" data-sort="ptsAgainst">PA</th>
                                 <th class="sortable" data-sort="passYds">Pass Yds</th>
+                                <th class="sortable" data-sort="passTD">Pass TD</th>
                                 <th class="sortable" data-sort="rushYds">Rush Yds</th>
+                                <th class="sortable" data-sort="rushTD">Rush TD</th>
                                 <th class="sortable" data-sort="defYds">Def Yds Allowed</th>
+                                <th class="sortable" data-sort="sacksAllowed">Sacks All</th>
+                                <th class="sortable" data-sort="defSacks">Def Sacks</th>
                                 <th class="sortable" data-sort="turnoverDiff">TO Diff</th>
                                 <th class="sortable" data-sort="intsThrown">INT Thrown</th>
                                 <th class="sortable" data-sort="fumblesLost">Fum Lost</th>
@@ -178,8 +182,12 @@
                                     <td>${t.ptsFor}</td>
                                     <td>${t.ptsAgainst}</td>
                                     <td>${t.passYds.toLocaleString()}</td>
+                                    <td>${t.passTD}</td>
                                     <td>${t.rushYds.toLocaleString()}</td>
+                                    <td>${t.rushTD}</td>
                                     <td>${t.defYds.toLocaleString()}</td>
+                                    <td>${t.sacksAllowed}</td>
+                                    <td>${t.defSacks}</td>
                                     <td class="${t.turnoverDiff > 0 ? 'text-success' : t.turnoverDiff < 0 ? 'text-danger' : ''}">
                                         ${t.turnoverDiff > 0 ? '+' : ''}${t.turnoverDiff}
                                     </td>
@@ -239,10 +247,14 @@
 
         // Offense Stats (Aggregated from players)
         let passYds = 0;
+        let passTD = 0;
         let rushYds = 0;
+        let rushTD = 0;
         let intsThrown = 0;
         let fumblesLost = 0;
         let intsTaken = 0;
+        let sacksAllowed = 0;
+        let defSacks = 0;
 
         team.roster.forEach(p => {
             if (p.stats && p.stats.season) {
@@ -250,16 +262,20 @@
 
                 // Offense
                 passYds += (s.passYd || 0);
+                passTD += (s.passTD || 0);
                 rushYds += (s.rushYd || 0);
+                rushTD += (s.rushTD || 0);
                 fumblesLost += (s.fumbles || 0); // Assuming 'fumbles' tracks fumbles lost/total
 
                 if (p.pos === 'QB') {
                     intsThrown += (s.interceptions || 0);
+                    sacksAllowed += (s.sacks || 0); // QB sacks taken = Team sacks allowed
                 }
 
                 // Defense
                 if (['CB', 'S', 'LB', 'DL'].includes(p.pos)) {
                     intsTaken += (s.interceptions || 0);
+                    defSacks += (s.sacks || 0);
                 }
             }
         });
@@ -295,10 +311,14 @@
 
         return {
             passYds,
+            passTD,
             rushYds,
+            rushTD,
             intsThrown,
             fumblesLost,
             intsTaken,
+            sacksAllowed,
+            defSacks,
             defYds,
             turnoverDiff: (intsTaken) - (intsThrown + fumblesLost) // Simplified TO Diff
         };
