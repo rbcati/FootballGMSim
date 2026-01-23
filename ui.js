@@ -646,7 +646,7 @@ function showPlayerDetails(player) {
         <div class="modal-content">
             <div class="modal-header">
                 <h2>${player.name || 'Unknown Player'} <span class="muted-tag">${player.pos || 'N/A'} (OVR ${player.ovr || 'N/A'})</span></h2>
-                <span class="close">&times;</span>
+                <button type="button" class="close" aria-label="Close modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="player-info grid two">
@@ -1833,7 +1833,7 @@ function showSimplePlayerStats(playerId) {
     <div class="modal-content">
       <div class="modal-header">
         <h2>${player.name} - Statistics</h2>
-        <span class="close">&times;</span>
+        <button type="button" class="close" aria-label="Close modal">&times;</button>
       </div>
       <div class="modal-body">
         <div class="stats-section">

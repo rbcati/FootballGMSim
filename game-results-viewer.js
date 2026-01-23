@@ -28,7 +28,7 @@ class GameResultsViewer {
             <div class="modal-content game-results-modal">
                 <div class="modal-header">
                     <h2 id="gameModalTitle">Game Results</h2>
-                    <button class="close" aria-label="Close">&times;</button>
+                    <button type="button" class="close" aria-label="Close modal">&times;</button>
                 </div>
                 <div class="modal-body" id="gameModalBody">
                     <div class="game-info">

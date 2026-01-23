@@ -764,7 +764,7 @@ class LiveGameViewer {
       <div class="modal-content live-game-content">
         <div class="modal-header">
           <h2>Live Game</h2>
-          <button class="close" aria-label="Close">&times;</button>
+          <button type="button" class="close" aria-label="Close modal">&times;</button>
         </div>
         
         <div class="scoreboard"></div>
