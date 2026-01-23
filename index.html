@@ -52,6 +52,7 @@
                 <a href="#/contracts" class="nav-item" data-view="contracts">Contracts</a>
                 <a href="#/trade" class="nav-item" data-view="trade">Trades</a>
                 <a href="#/standings" class="nav-item" data-view="standings">Standings</a>
+                <a href="#/powerRankings" class="nav-item" data-view="powerRankings">Power Rankings</a>
                 <a href="#/freeagency" class="nav-item" data-view="freeagency">Free Agency</a>
                 <a href="#/draft" class="nav-item" data-view="draft">Draft</a>
                 <a href="#/scouting" class="nav-item" data-view="scouting">Scouting</a>
@@ -152,6 +153,12 @@
             </section>
             
             <section id="leagueStats" class="view" hidden></section>
+
+            <section id="powerRankings" class="view" hidden>
+                <div class="card">
+                    <p>Loading Power Rankings...</p>
+                </div>
+            </section>
             
             <section id="scouting" class="view" hidden>
                 <div class="card">
@@ -418,6 +425,7 @@
 <script src="box-score-viewer.js"></script>
 <script src="live-game-viewer.js"></script>
 <script type="module" src="standings-page.js"></script>
+<script src="power-rankings.js"></script>
 
 <!-- Player Database & History -->
 <script src="player-database.js"></script>

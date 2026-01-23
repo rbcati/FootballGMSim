@@ -1133,6 +1133,11 @@ class GameController {
                     window.renderStandings();
                 }
                 break;
+            case 'powerRankings':
+                if (window.renderPowerRankings) {
+                    window.renderPowerRankings();
+                }
+                break;
             case 'trade':
                 if (window.renderTradeCenter) {
                     window.renderTradeCenter();

@@ -1059,6 +1059,14 @@ console.log('[LeagueCreationFix] Loaded');
               window.renderStandingsPage();
             }
             break;
+          case 'powerRankings':
+            if (window.renderPowerRankings) {
+                window.renderPowerRankings();
+                console.log('✅ Power Rankings rendered');
+            } else {
+                console.warn('⚠️ renderPowerRankings function not found');
+            }
+            break;
           case 'leagueStats':
             if (window.renderLeagueStats) {
               window.renderLeagueStats('detailed');
