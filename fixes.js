@@ -218,17 +218,14 @@ function makePlayer(pos, overrides = {}) {
   // Calculate overall rating
   const ovr = calculateOvr(pos, ratings);
   
-  // Determine age
-  const age = overrides.age || U.rand(C.PLAYER_CONFIG.MIN_AGE, C.PLAYER_CONFIG.MAX_AGE);
-
   // Generate contract details
-  const contractDetails = generateContract(ovr, pos, age);
+  const contractDetails = generateContract(ovr, pos);
   
   const player = {
     id: U.id(),
     name: generatePlayerName(),
     pos: pos,
-    age: age,
+    age: overrides.age || U.rand(C.PLAYER_CONFIG.MIN_AGE, C.PLAYER_CONFIG.MAX_AGE),
     ratings: ratings,
     ovr: ovr,
     years: contractDetails.years,
@@ -377,34 +374,58 @@ function calculateOvr(pos, ratings) {
  * Generates contract details based on player overall rating and position
  * @param {number} ovr - Player overall rating
  * @param {string} pos - Player position  
- * @param {number} age - Player age
  * @returns {Object} Contract details
  */
-function generateContract(ovr, pos, age = 25) {
+function generateContract(ovr, pos) {
   const U = window.Utils;
   const C = window.Constants;
   
-  // Use refined exponential salary curve
-  const posWeight = C.POS_SALARY_WEIGHTS?.[pos] || 1.0;
+  // FIXED: Realistic salary calculation that fits within $220M cap
+  // Teams have ~35 players (DEPTH_NEEDS total), so average salary should be ~$6.3M
+  // But we need a realistic distribution where most players are depth/role players
+  // Target: ~$180-200M total cap usage to leave room for free agency
+  const positionMultiplier = C.POSITION_VALUES?.[pos] || 1.0;
+
+  // SIGNIFICANTLY REDUCED salary ranges to fit within cap
+  // Distribution: 1-2 elite, 3-5 good, 10-15 average, 15-20 depth
+  let baseAnnual;
+
+  if (ovr >= 90) {
+    // Elite players: $12-22M (reduced from $20-35M)
+    // Only QBs and rare elite players get top tier
+    if (pos === 'QB') {
+      baseAnnual = U.rand(15, 25) * positionMultiplier;
+    } else {
+      baseAnnual = U.rand(12, 20) * positionMultiplier * 0.85;
+    }
+  } else if (ovr >= 80) {
+    // Good players: $4-12M (reduced from $8-20M)
+    baseAnnual = U.rand(4, 12) * positionMultiplier * 0.9;
+  } else if (ovr >= 70) {
+    // Average players: $1.5-5M (reduced from $3-8M)
+    baseAnnual = U.rand(1.5, 5) * positionMultiplier;
+  } else if (ovr >= 60) {
+    // Below average: $0.6-2M (reduced from $1-3M)
+    baseAnnual = U.rand(0.6, 2) * positionMultiplier;
+  } else {
+    // Low OVR: $0.4-0.8M (reduced from $0.5-1M)
+    baseAnnual = U.rand(0.4, 0.8) * positionMultiplier;
+  }
   
-  // Exponential growth: (ovr / 100)^8
-  const skillFactor = Math.pow(ovr / 100, 8);
-  const maxContract = C.SALARY_CAP?.MAX_CONTRACT || 50;
-  const minContract = C.SALARY_CAP?.MIN_CONTRACT || 0.7;
+  // Cap maximum at $30M (for elite QBs only)
+  if (baseAnnual > 30) baseAnnual = 30;
 
-  let salary = (maxContract * skillFactor * posWeight);
+  // Ensure minimum
+  if (baseAnnual < 0.4) baseAnnual = 0.4;
 
-  // Age Discount/Premium
-  if (age > 32) salary *= 0.8;
-  if (age < 23) salary *= 0.5; // Rookie scale
+  baseAnnual = Math.round(baseAnnual * 10) / 10;
 
-  const baseAnnual = Math.max(minContract, Math.round(salary * 10) / 10);
-  const years = age < 25 ? 4 : U.rand(1, 3);
+  const years = U.rand(1, 4);
   
   // REDUCED signing bonus percentage to keep cap hits reasonable
   // Lower bonus = lower prorated cap hit
   const bonusPercent = (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15) + 
-                      (U ? U.getSecureRandom() : Math.random()) * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
+                      Math.random() * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
   
   // Cap signing bonus to prevent excessive prorated amounts
   const maxBonus = baseAnnual * years * 0.4; // Max 40% of total contract
@@ -1839,8 +1860,7 @@ window.on = on;
           // Fallback: direct random selection
           const teamSelect = document.getElementById('onboardTeam');
           if (teamSelect && teamSelect.options.length > 0) {
-            const U = window.Utils;
-            const randomIndex = Math.floor((U ? U.getSecureRandom() : Math.random()) * teamSelect.options.length);
+            const randomIndex = Math.floor(Math.random() * teamSelect.options.length);
             teamSelect.selectedIndex = randomIndex;
           }
         }
