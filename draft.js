@@ -1,6 +1,8 @@
 // draft-fixed.js - Fixed Draft System with proper syntax
 'use strict';
 
+import { saveState } from './state.js';
+
 /**
  * Generate draft prospects for upcoming draft
  * @param {number} year - Draft year
@@ -588,7 +590,7 @@ function completeDraft() {
     console.log(`${draftState.availableProspects.length} players went undrafted`);
   }
   window.setStatus(`🎉 ${draftState.year} Draft Complete!`, 'success', 5000);
-  if (window.saveState) window.saveState();
+  if (saveState) saveState();
 }
 
 /**

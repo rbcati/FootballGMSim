@@ -1,5 +1,7 @@
 'use strict';
 
+import { saveState, loadState } from './state.js';
+
 /**
  * Handles core game events (onboarding, saving, loading, simulating).
  */

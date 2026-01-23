@@ -1,5 +1,7 @@
 'use strict';
 
+import { saveState } from './state.js';
+
 /**
  * Playoff Management System
  * Based on the user's original file, with a fix for the final round simulation.
@@ -105,7 +107,7 @@ function simPlayoffWeek() {
         P.currentRound++;
     }
 
-    saveState();
+    if (saveState) saveState();
     if (window.renderPlayoffs) renderPlayoffs();
 }
 
@@ -138,8 +140,8 @@ function startPlayoffs() {
     window.state.playoffs = playoffBracket;
     
     // Save state
-    if (window.saveState) {
-        window.saveState();
+    if (saveState) {
+        saveState();
     }
     
     // Navigate to playoffs view

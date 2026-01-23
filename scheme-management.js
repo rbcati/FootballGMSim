@@ -1,6 +1,8 @@
 // scheme-management.js - Team Scheme Management and Scheme Fit Calculations
 'use strict';
 
+import { saveState } from './state.js';
+
 /**
  * Calculates how well a player fits a given offensive scheme
  * @param {Object} player - Player object
@@ -286,7 +288,7 @@ function renderSchemeManagement() {
   if (offSelect) {
     offSelect.addEventListener('change', (e) => {
       team.strategies.offense = e.target.value;
-      if (window.saveState) window.saveState();
+      if (saveState) saveState();
       renderSchemeManagement(); // Re-render to update ratings
       if (window.updateTeamRatings) {
         window.updateTeamRatings(team);
@@ -298,7 +300,7 @@ function renderSchemeManagement() {
   if (defSelect) {
     defSelect.addEventListener('change', (e) => {
       team.strategies.defense = e.target.value;
-      if (window.saveState) window.saveState();
+      if (saveState) saveState();
       renderSchemeManagement(); // Re-render to update ratings
       if (window.updateTeamRatings) {
         window.updateTeamRatings(team);
