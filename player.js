@@ -2421,12 +2421,6 @@ import { Constants as C } from './constants.js';
   // TODO: Remove these once all code is migrated to ES modules
 
   // Progression system
-  window.Player = Player;
-  window.SKILL_TREES = SKILL_TREES;
-  window.initProgressionStats = initProgressionStats;
-  window.calculateGameXP = calculateGameXP;
-  window.addXP = addXP;
-  window.applySkillTreeUpgrade = applySkillTreeUpgrade;
 
   // Main player functions
   window.makePlayer = makePlayer;
