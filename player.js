@@ -1688,6 +1688,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       advanced.interceptionPct = (seasonStats.interceptions || 0) / attempts;
       advanced.qbRating = calculateQBRating(seasonStats);
       seasonStats.passerRating = advanced.qbRating;
+
+      // NEW: Sack Percentage
+      const dropbacks = seasonStats.dropbacks || (seasonStats.passAtt + (seasonStats.sacks || 0));
+      seasonStats.sackPct = dropbacks > 0 ? ((seasonStats.sacks || 0) / dropbacks * 100).toFixed(1) + '%' : '0.0%';
     }
     
     if (player.pos === 'RB') {
@@ -1697,36 +1701,77 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       seasonStats.yardsPerCarry = advanced.yardsPerCarry;
     }
     
-    if (player.pos === 'WR' || player.pos === 'TE') {
+    if (['WR', 'TE', 'RB'].includes(player.pos)) {
       const targets = seasonStats.targets || Math.max(1, seasonStats.receptions || 1);
       advanced.catchPct = (seasonStats.receptions || 0) / targets;
       advanced.yardsPerReception = (seasonStats.recYd || 0) / Math.max(1, seasonStats.receptions || 1);
       advanced.receptionsPerGame = (seasonStats.receptions || 0) / Math.max(1, seasonStats.gamesPlayed || 1);
 
       seasonStats.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player, seasonStats);
+
+      // NEW: Drop Rate and Separation Rate
+      const drops = seasonStats.drops || 0;
+      const sep = seasonStats.targetsWithSeparation || 0;
+      const validTargets = seasonStats.targets || 0;
+
+      seasonStats.dropRate = validTargets > 0 ? ((drops / validTargets) * 100).toFixed(1) + '%' : '0.0%';
+      seasonStats.separationRate = validTargets > 0 ? ((sep / validTargets) * 100).toFixed(1) + '%' : '0.0%';
+    }
+
+    // NEW: Defender Stats
+    if (['DL', 'LB', 'CB', 'S'].includes(player.pos)) {
+        const snaps = seasonStats.passRushSnaps || 0;
+        const pressures = seasonStats.pressures || 0;
+        seasonStats.pressureRate = snaps > 0 ? ((pressures / snaps) * 100).toFixed(1) + '%' : '0.0%';
+
+        if (seasonStats.targetsAllowed > 0) {
+             seasonStats.coverageRating = calculateCoverageRating(seasonStats);
+        }
     }
   }
 
   /**
-   * Calculate QB rating (simplified)
+   * Calculate QB rating (Standard NFL Formula)
    * @param {Object} seasonStats - Season statistics
    * @returns {number} QB rating
    */
   function calculateQBRating(seasonStats) {
-    const attempts = seasonStats.passAtt || 1;
+    const attempts = seasonStats.passAtt || 0;
+    if (attempts === 0) return 0;
+
     const completions = seasonStats.passComp || 0;
     const yards = seasonStats.passYd || 0;
     const touchdowns = seasonStats.passTD || 0;
     const interceptions = seasonStats.interceptions || 0;
     
-    // Simplified QB rating calculation
-    const compPct = (completions / attempts - 0.3) * 5;
-    const yardsPer = (yards / attempts - 3) * 0.25;
-    const touchdownPer = touchdowns / attempts * 20;
-    const intPer = 2.375 - (interceptions / attempts * 25);
+    const a = Math.max(0, Math.min(2.375, ((completions / attempts) - 0.3) * 5));
+    const b = Math.max(0, Math.min(2.375, ((yards / attempts) - 3) * 0.25));
+    const c = Math.max(0, Math.min(2.375, (touchdowns / attempts) * 20));
+    const d = Math.max(0, Math.min(2.375, 2.375 - ((interceptions / attempts) * 25)));
     
-    const rating = ((compPct + yardsPer + touchdownPer + intPer) / 6) * 100;
-    return Math.max(0, Math.min(158.3, rating));
+    return ((a + b + c + d) / 6) * 100;
+  }
+
+  /**
+   * Calculate Coverage Rating (Passer Rating Against)
+   * @param {Object} seasonStats - Defender statistics
+   * @returns {number} Coverage Rating
+   */
+  function calculateCoverageRating(seasonStats) {
+    const targets = seasonStats.targetsAllowed || 0;
+    if (targets === 0) return 0;
+
+    const completions = seasonStats.completionsAllowed || 0;
+    const yards = seasonStats.yardsAllowed || 0;
+    const tds = seasonStats.tdsAllowed || 0;
+    const ints = seasonStats.interceptions || 0; // Using ints made as ints against QB
+
+    const a = Math.max(0, Math.min(2.375, ((completions / targets) - 0.3) * 5));
+    const b = Math.max(0, Math.min(2.375, ((yards / targets) - 3) * 0.25));
+    const c = Math.max(0, Math.min(2.375, (tds / targets) * 20));
+    const d = Math.max(0, Math.min(2.375, 2.375 - ((ints / targets) * 25)));
+
+    return ((a + b + c + d) / 6) * 100;
   }
 
   /**
