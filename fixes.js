@@ -1069,7 +1069,9 @@ console.log('[LeagueCreationFix] Loaded');
             }
             break;
           case 'leagueStats':
-            if (window.renderLeagueStats) {
+            if (window.renderStatsPage) {
+              window.renderStatsPage();
+            } else if (window.renderLeagueStats) {
               window.renderLeagueStats('detailed');
               console.log('✅ League Stats Hub rendered');
             }

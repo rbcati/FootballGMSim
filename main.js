@@ -1216,12 +1216,10 @@ class GameController {
                 }
                 break;
             case 'stats':
+            case 'leagueStats':
                 if (window.renderStatsPage) {
                     window.renderStatsPage();
-                }
-                break;
-            case 'leagueStats':
-                if (window.renderLeagueStats) {
+                } else if (window.renderLeagueStats) {
                     window.renderLeagueStats();
                 }
                 break;

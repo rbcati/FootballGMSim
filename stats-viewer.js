@@ -4,50 +4,111 @@
 (function() {
     'use strict';
 
+    let currentStatsView = 'players';
     let currentSort = 'ovr';
     let sortDesc = true;
     let currentPosFilter = 'All';
-    let currentLimit = 50;
+    let currentLimit = 20;
+
+    // Helper to switch views
+    window.setStatsView = function(view) {
+        currentStatsView = view;
+        if (view === 'players') {
+            currentLimit = 20;
+        }
+        window.renderStatsPage();
+    };
 
     window.renderStatsPage = function() {
-        const statsContainer = document.getElementById('stats');
-        if (!statsContainer) return;
+        // Target the leagueStats view directly if 'stats' container is not found
+        let statsContainer = document.getElementById('stats');
+        if (!statsContainer) {
+            statsContainer = document.getElementById('leagueStats');
+        }
 
+        if (!statsContainer) {
+            console.error("No stats container found!");
+            return;
+        }
+
+        // Render Structure
         statsContainer.innerHTML = `
             <div class="card">
-                <div class="row">
-                    <h2>League Stats & Leaders</h2>
-                    <div class="spacer"></div>
-                    <select id="statsPosFilter">
-                        <option value="All">All Positions</option>
-                        <option value="QB">QB</option>
-                        <option value="RB">RB</option>
-                        <option value="WR">WR</option>
-                        <option value="TE">TE</option>
-                        <option value="OL">OL</option>
-                        <option value="DL">DL</option>
-                        <option value="LB">LB</option>
-                        <option value="CB">CB</option>
-                        <option value="S">S</option>
-                        <option value="K">K</option>
-                        <option value="P">P</option>
-                    </select>
+                <div class="row" style="margin-bottom: 20px;">
+                    <div class="stats-controls" style="display: flex; gap: 10px;">
+                        <button class="btn ${currentStatsView === 'team' ? 'primary' : ''}" onclick="window.setStatsView('team')">Standings</button>
+                        <button class="btn ${currentStatsView === 'players' ? 'primary' : ''}" onclick="window.setStatsView('players')">Player Leaders</button>
+                    </div>
                 </div>
+                <div id="stats-content"></div>
+            </div>
+        `;
 
-                <div class="table-wrapper mt">
-                    <table class="table" id="statsTable">
-                        <thead id="statsTableHeader">
-                            <!-- Dynamic Headers -->
-                        </thead>
-                        <tbody id="statsTableBody">
-                            <tr><td colspan="15">Loading stats...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
+        const content = document.getElementById('stats-content');
+        if (currentStatsView === 'team') {
+            renderStandingsView(content);
+        } else {
+            renderPlayerLeadersView(content);
+        }
+    };
 
-                <div class="row mt center">
-                    <button id="btnStatsLoadMore" class="btn">Load More</button>
-                </div>
+    function renderStandingsView(container) {
+        if (!window.calculateAllStandings || !window.state?.league) {
+            container.innerHTML = '<p class="muted">Standings data unavailable.</p>';
+            return;
+        }
+
+        const L = window.state.league;
+        const standingsData = window.calculateAllStandings(L);
+
+        // Prefer Division Standings for detail
+        if (window.renderDivisionStandings) {
+            container.innerHTML = window.renderDivisionStandings(standingsData);
+        } else if (window.renderOverallStandings) {
+            container.innerHTML = window.renderOverallStandings(standingsData);
+        } else {
+            container.innerHTML = '<p class="muted">Standings renderer unavailable.</p>';
+        }
+
+        if (window.makeTeamsClickable) {
+            setTimeout(window.makeTeamsClickable, 100);
+        }
+    }
+
+    function renderPlayerLeadersView(container) {
+        container.innerHTML = `
+            <div class="row">
+                <h3>Player Leaders</h3>
+                <div class="spacer"></div>
+                <select id="statsPosFilter">
+                    <option value="All">All Positions</option>
+                    <option value="QB">QB</option>
+                    <option value="RB">RB</option>
+                    <option value="WR">WR</option>
+                    <option value="TE">TE</option>
+                    <option value="OL">OL</option>
+                    <option value="DL">DL</option>
+                    <option value="LB">LB</option>
+                    <option value="CB">CB</option>
+                    <option value="S">S</option>
+                    <option value="K">K</option>
+                    <option value="P">P</option>
+                </select>
+            </div>
+
+            <div class="table-wrapper mt">
+                <table class="table" id="statsTable">
+                    <thead id="statsTableHeader">
+                        <!-- Dynamic Headers -->
+                    </thead>
+                    <tbody id="statsTableBody">
+                        <tr><td colspan="15">Loading stats...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="row mt center">
+                <button id="btnStatsLoadMore" class="btn">Load More</button>
             </div>
         `;
 
@@ -57,7 +118,7 @@
             posSelect.value = currentPosFilter;
             posSelect.addEventListener('change', (e) => {
                 currentPosFilter = e.target.value;
-                currentLimit = 50; // Reset limit on filter change
+                currentLimit = 20; // Reset limit on filter change
                 updateTableHeaders();
                 renderStatsTable();
             });
@@ -66,7 +127,7 @@
         const loadMoreBtn = document.getElementById('btnStatsLoadMore');
         if (loadMoreBtn) {
             loadMoreBtn.addEventListener('click', () => {
-                currentLimit += 50;
+                currentLimit += 20;
                 renderStatsTable();
             });
         }
@@ -74,7 +135,7 @@
         // Initial setup
         updateTableHeaders();
         renderStatsTable();
-    };
+    }
 
     function updateTableHeaders() {
         const thead = document.getElementById('statsTableHeader');
@@ -412,5 +473,7 @@
         .stat-ovr { font-weight: bold; color: var(--accent); }
     `;
     document.head.appendChild(style);
+
+    console.log("Stats Viewer Loaded Successfully");
 
 })();
