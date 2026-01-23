@@ -943,6 +943,12 @@ console.log('[LeagueCreationFix] Loaded');
     
     console.log('🧭 Routing to:', viewName, 'from path:', path);
     
+    // Map legacy/sub-views to actual DOM view IDs
+    let targetViewId = viewName;
+    if (['standings', 'stats', 'records', 'awards', 'streaks'].includes(viewName)) {
+        targetViewId = 'leagueStats';
+    }
+
     // Hide all views first
     document.querySelectorAll('.view').forEach(view => {
       view.hidden = true;
@@ -950,13 +956,13 @@ console.log('[LeagueCreationFix] Loaded');
     });
     
     // Show target view
-    const targetView = document.getElementById(viewName);
+    const targetView = document.getElementById(targetViewId);
     if (targetView) {
       targetView.hidden = false;
       targetView.style.display = 'block';
-      console.log('✅ Showing view:', viewName);
+      console.log('✅ Showing view:', targetViewId);
     } else {
-      console.warn('⚠️ View not found:', viewName, 'falling back to hub');
+      console.warn('⚠️ View not found:', targetViewId, 'falling back to hub');
       // Fallback to hub if view not found
       const hubView = document.getElementById('hub');
       if (hubView) {
@@ -1046,16 +1052,43 @@ console.log('[LeagueCreationFix] Loaded');
             }
             break;
           case 'standings':
-            if (window.renderStandingsPage) {
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('standings');
+              console.log('✅ Standings rendered via Hub');
+            } else if (window.renderStandingsPage) {
               window.renderStandingsPage();
-              console.log('✅ Standings rendered');
-            } else if (window.renderStandings) {
-              window.renderStandings();
-              console.log('✅ Standings (legacy) rendered');
             }
-            // Update cap sidebar when viewing standings
-            if (window.updateCapSidebar) {
-              setTimeout(() => window.updateCapSidebar(), 100);
+            break;
+          case 'leagueStats':
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('detailed');
+              console.log('✅ League Stats Hub rendered');
+            }
+            break;
+          case 'streaks':
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('streaks');
+            }
+            break;
+          case 'stats':
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('leaders');
+            } else if (window.renderStatsPage) {
+              window.renderStatsPage();
+            }
+            break;
+          case 'records':
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('records');
+            } else if (window.renderRecords) {
+              window.renderRecords();
+            }
+            break;
+          case 'awards':
+            if (window.renderLeagueStats) {
+              window.renderLeagueStats('awards');
+            } else if (window.renderAwardRaces) {
+              window.renderAwardRaces();
             }
             break;
           case 'freeagency':
