@@ -949,6 +949,15 @@ console.log('[LeagueCreationFix] Loaded');
         targetViewId = 'leagueStats';
     }
 
+    // Handle Player Profile Route
+    if (viewName.startsWith('player/')) {
+        const playerId = viewName.split('/')[1];
+        if (playerId && window.playerStatsViewer && window.playerStatsViewer.renderToView) {
+            window.playerStatsViewer.renderToView('playerProfile', playerId);
+            targetViewId = 'playerProfile';
+        }
+    }
+
     // Hide all views first
     document.querySelectorAll('.view').forEach(view => {
       view.hidden = true;
@@ -1928,6 +1937,8 @@ window.on = on;
     if (isCollapsed) {
       // Expand navigation
       navSidebar.classList.remove('collapsed');
+      navSidebar.classList.add('nav-open'); // Mobile compat
+      document.body.classList.add('nav-open'); // Mobile compat
       if (layout) layout.classList.remove('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'true');
       localStorage.setItem('navSidebarCollapsed', 'false');
@@ -1935,11 +1946,14 @@ window.on = on;
       // Show overlay on mobile
       if (isMobile && navOverlay) {
         navOverlay.style.display = 'block';
+        navOverlay.classList.add('show');
       }
       console.log('✅ Navigation expanded');
     } else {
       // Collapse navigation
       navSidebar.classList.add('collapsed');
+      navSidebar.classList.remove('nav-open'); // Mobile compat
+      document.body.classList.remove('nav-open'); // Mobile compat
       if (layout) layout.classList.add('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'false');
       localStorage.setItem('navSidebarCollapsed', 'true');
@@ -1947,6 +1961,7 @@ window.on = on;
       // Hide overlay
       if (navOverlay) {
         navOverlay.style.display = 'none';
+        navOverlay.classList.remove('show');
       }
       console.log('✅ Navigation collapsed');
     }

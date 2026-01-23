@@ -60,7 +60,12 @@
   }
   
   .nav-toggle {
-    display: none !important;
+    display: flex !important;
+    z-index: 9999 !important;
+  }
+
+  .nav-toggle-container {
+    z-index: 9999 !important;
   }
 
   /* Cards */

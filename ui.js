@@ -503,11 +503,7 @@ window.renderRoster = function() {
             tr.addEventListener('click', (e) => {
                 // Ensure clicking the checkbox doesn't trigger details
                 if (!e.target.matches('input[type="checkbox"]')) {
-                    if (window.showPlayerDetails) {
-                        window.showPlayerDetails(player);
-                    } else {
-                        showPlayerDetails(player);
-                    }
+                    location.hash = `#/player/${player.id}`;
                 }
             });
         });
