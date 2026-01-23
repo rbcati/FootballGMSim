@@ -2340,6 +2340,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
     updateAdvancedStats,
     calculateWAR,
     calculatePasserRatingWhenTargeted,
+    calculateQBRating,
+    calculateCoverageRating,
     calculateImpactMetrics,
     calculateLegacyScore,
     checkHallOfFameEligibility,
@@ -2398,55 +2400,5 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       }));
     }
   };
-
-  // ============================================================================
-  // BACKWARD COMPATIBILITY SHIMS
-  // ============================================================================
-  // TODO: Remove these once all code is migrated to ES modules
-
-  // Progression system
-
-  // Main player functions
-  window.makePlayer = makePlayer;
-  window.progressPlayer = progressPlayer;
-
-  // Legacy system
-  window.initializePlayerLegacy = initializePlayerLegacy;
-  window.updatePlayerGameLegacy = updatePlayerGameLegacy;
-  window.updatePlayerSeasonLegacy = updatePlayerSeasonLegacy;
-  window.checkForNotablePerformance = checkForNotablePerformance;
-  window.updatePlayoffStats = updatePlayoffStats;
-  window.checkCareerMilestones = checkCareerMilestones;
-  window.checkSeasonAwards = checkSeasonAwards;
-  window.updateAdvancedStats = updateAdvancedStats;
-  window.calculateWAR = calculateWAR;
-  window.calculatePasserRatingWhenTargeted = calculatePasserRatingWhenTargeted;
-  window.calculateImpactMetrics = calculateImpactMetrics;
-  window.calculateLegacyScore = calculateLegacyScore;
-  window.checkHallOfFameEligibility = checkHallOfFameEligibility;
-  window.getHOFThreshold = getHOFThreshold;
-
-  // Rookie generation
-  window.generateDraftClass = generateDraftClass;
-  window.DRAFT_CONFIG = DRAFT_CONFIG;
-  window.createRookiePlayer = createRookiePlayer;
-  window.calculatePotentialRange = calculatePotentialRange;
-  window.getWeightedPosition = getWeightedPosition;
-
-  // Depth Chart System
-  window.initializeDepthChartStats = initializeDepthChartStats;
-  window.calculateEffectiveRating = calculateEffectiveRating;
-  window.setDepthChartPosition = setDepthChartPosition;
-  window.generateDepthChart = generateDepthChart;
-  window.renderDepthChart = renderDepthChart;
-  window.updatePlaybookKnowledge = updatePlaybookKnowledge;
-  window.updateChemistry = updateChemistry;
-  window.addPracticeReps = addPracticeReps;
-  window.processWeeklyDepthChartUpdates = processWeeklyDepthChartUpdates;
-  window.getPositionGroup = getPositionGroup;
-  window.calculateWeeksWithTeam = calculateWeeksWithTeam;
-
-  // Draft utilities
-  window.draftUtils = draftUtils;
 
   console.log('✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system');
