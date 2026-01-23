@@ -31,7 +31,8 @@
       { key: 'opoy', title: 'Offensive Player of Year' },
       { key: 'dpoy', title: 'Defensive Player of Year' },
       { key: 'oroty', title: 'Offensive Rookie of Year' },
-      { key: 'droty', title: 'Defensive Rookie of Year' }
+      { key: 'droty', title: 'Defensive Rookie of Year' },
+      { key: 'comeback', title: 'Comeback Player of Year' }
     ];
 
     raceTypes.forEach(type => {
@@ -84,7 +85,8 @@
       opoy: [],
       dpoy: [],
       oroty: [],
-      droty: []
+      droty: [],
+      comeback: []
     };
 
     league.teams.forEach(team => {
@@ -150,6 +152,38 @@
             } else if (['DL', 'LB', 'CB', 'S'].includes(player.pos)) {
                 if (dpoyScore > 0) races.droty.push({ player, team, score: dpoyScore }); // Use DPOY score logic
             }
+        }
+
+        // Comeback Player Score
+        // Needs previous season stats in legacy history
+        if (player.legacy && player.legacy.teamHistory && player.legacy.teamHistory.length >= 2) {
+            const history = player.legacy.teamHistory;
+            const prevStats = history[history.length - 2]?.stats || {}; // Last completed season
+
+            let impScore = 0;
+            if (player.pos === 'QB') {
+                const ydDiff = (stats.passYd||0) - (prevStats.passYd||0);
+                const tdDiff = (stats.passTD||0) - (prevStats.passTD||0);
+                if (ydDiff > 500 || tdDiff > 5) impScore = (ydDiff/100) + (tdDiff*20);
+            } else if (['RB', 'WR', 'TE'].includes(player.pos)) {
+                const ydDiff = ((stats.rushYd||0) + (stats.recYd||0)) - ((prevStats.rushYd||0) + (prevStats.recYd||0));
+                const tdDiff = ((stats.rushTD||0) + (stats.recTD||0)) - ((prevStats.rushTD||0) + (prevStats.recTD||0));
+                if (ydDiff > 300 || tdDiff > 3) impScore = (ydDiff/80) + (tdDiff*15);
+            } else if (['DL', 'LB', 'CB', 'S'].includes(player.pos)) {
+                // Defensive improvement
+                // Approximation using DPOY score diff
+                // We don't have stored DPOY score, so re-calc simplified
+                const currDefScore = dpoyScore; // Reuse current score
+                const pT = prevStats.tackles||0, pS = prevStats.sacks||0, pI = prevStats.interceptions||0;
+                let prevDefScore = 0;
+                if (player.pos === 'DL') prevDefScore = (pS*20) + (pT*1.5);
+                else if (player.pos === 'LB') prevDefScore = (pT*2) + (pS*15) + (pI*15);
+                else prevDefScore = (pI*25) + (pT*1.5);
+
+                if (currDefScore > prevDefScore + 50) impScore = (currDefScore - prevDefScore);
+            }
+
+            if (impScore > 0) races.comeback.push({ player, team, score: impScore });
         }
       });
     });

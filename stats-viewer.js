@@ -36,25 +36,11 @@
 
                 <div class="table-wrapper mt">
                     <table class="table" id="statsTable">
-                        <thead>
-                            <tr>
-                                <th data-sort="name" class="sortable">Name</th>
-                                <th data-sort="team" class="sortable">Team</th>
-                                <th data-sort="pos" class="sortable">Pos</th>
-                                <th data-sort="ovr" class="sortable">OVR</th>
-                                <th data-sort="passYd" class="sortable">Pass Yds</th>
-                                <th data-sort="passTD" class="sortable">Pass TD</th>
-                                <th data-sort="rushYd" class="sortable">Rush Yds</th>
-                                <th data-sort="rushTD" class="sortable">Rush TD</th>
-                                <th data-sort="recYd" class="sortable">Rec Yds</th>
-                                <th data-sort="recTD" class="sortable">Rec TD</th>
-                                <th data-sort="tackles" class="sortable">Tackles</th>
-                                <th data-sort="sacks" class="sortable">Sacks</th>
-                                <th data-sort="interceptions" class="sortable">INT</th>
-                            </tr>
+                        <thead id="statsTableHeader">
+                            <!-- Dynamic Headers -->
                         </thead>
                         <tbody id="statsTableBody">
-                            <tr><td colspan="13">Loading stats...</td></tr>
+                            <tr><td colspan="15">Loading stats...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -72,6 +58,7 @@
             posSelect.addEventListener('change', (e) => {
                 currentPosFilter = e.target.value;
                 currentLimit = 50; // Reset limit on filter change
+                updateTableHeaders();
                 renderStatsTable();
             });
         }
@@ -84,25 +71,126 @@
             });
         }
 
-        document.querySelectorAll('#statsTable th.sortable').forEach(th => {
-            th.addEventListener('click', () => {
-                const sortKey = th.dataset.sort;
-                if (currentSort === sortKey) {
-                    sortDesc = !sortDesc;
-                } else {
-                    currentSort = sortKey;
-                    sortDesc = true; // Default to desc for most stats
-                    if (sortKey === 'name' || sortKey === 'team' || sortKey === 'pos') sortDesc = false;
-                }
-                renderStatsTable();
-                updateSortIcons();
-            });
-        });
-
-        // Initial render
-        updateSortIcons();
+        // Initial setup
+        updateTableHeaders();
         renderStatsTable();
     };
+
+    function updateTableHeaders() {
+        const thead = document.getElementById('statsTableHeader');
+        if (!thead) return;
+
+        let headers = [
+            { key: 'name', label: 'Name' },
+            { key: 'team', label: 'Team' },
+            { key: 'pos', label: 'Pos' },
+            { key: 'ovr', label: 'OVR' },
+            { key: 'war', label: 'WAR' },
+            { key: 'awards', label: 'Awards', noSort: true }
+        ];
+
+        // Add specific stats based on filter
+        if (currentPosFilter === 'All') {
+            headers.push(
+                { key: 'passYd', label: 'Pass Yds' },
+                { key: 'passTD', label: 'Pass TD' },
+                { key: 'rushYd', label: 'Rush Yds' },
+                { key: 'rushTD', label: 'Rush TD' },
+                { key: 'recYd', label: 'Rec Yds' },
+                { key: 'tackles', label: 'Tkl' },
+                { key: 'sacks', label: 'Sk' },
+                { key: 'interceptions', label: 'INT' }
+            );
+        } else if (currentPosFilter === 'QB') {
+            headers.push(
+                { key: 'passYd', label: 'Yds' },
+                { key: 'passTD', label: 'TD' },
+                { key: 'interceptions', label: 'INT' },
+                { key: 'completionPct', label: 'Cmp%' },
+                { key: 'passerRating', label: 'Rate' },
+                { key: 'sacks', label: 'Sk' },
+                { key: 'sackPct', label: 'Sk%' },
+                { key: 'qbWins', label: 'W-L' },
+                { key: 'passAtt', label: 'Att' },
+                { key: 'passComp', label: 'Cmp' }
+            );
+        } else if (currentPosFilter === 'RB') {
+            headers.push(
+                { key: 'rushYd', label: 'Yds' },
+                { key: 'rushTD', label: 'TD' },
+                { key: 'yardsPerCarry', label: 'YPC' },
+                { key: 'rushYardsPerGame', label: 'Y/G' },
+                { key: 'recYd', label: 'Rec Yds' },
+                { key: 'recTD', label: 'Rec TD' }
+            );
+        } else if (['WR', 'TE'].includes(currentPosFilter)) {
+            headers.push(
+                { key: 'receptions', label: 'Rec' },
+                { key: 'recYd', label: 'Yds' },
+                { key: 'recTD', label: 'TD' },
+                { key: 'targets', label: 'Tgt' },
+                { key: 'drops', label: 'Drop' },
+                { key: 'ratingWhenTargeted', label: 'Rt' }
+            );
+        } else if (currentPosFilter === 'OL') {
+            headers.push(
+                { key: 'sacksAllowed', label: 'Sk All' },
+                { key: 'protectionGrade', label: 'Prot' },
+                { key: 'runBlock', label: 'RBk' },
+                { key: 'passBlock', label: 'PBk' }
+            );
+        } else if (['DL', 'LB'].includes(currentPosFilter)) {
+            headers.push(
+                { key: 'tackles', label: 'Tkl' },
+                { key: 'sacks', label: 'Sk' },
+                { key: 'tacklesForLoss', label: 'TFL' },
+                { key: 'forcedFumbles', label: 'FF' },
+                { key: 'interceptions', label: 'INT' },
+                { key: 'passesDefended', label: 'PD' }
+            );
+        } else if (['CB', 'S'].includes(currentPosFilter)) {
+            headers.push(
+                { key: 'interceptions', label: 'INT' },
+                { key: 'passesDefended', label: 'PD' },
+                { key: 'tackles', label: 'Tkl' },
+                { key: 'forcedFumbles', label: 'FF' },
+                { key: 'coverageRating', label: 'Cov' }
+            );
+        } else if (['K', 'P'].includes(currentPosFilter)) {
+            headers.push(
+                { key: 'fgMade', label: 'FG' },
+                { key: 'successPct', label: '%' },
+                { key: 'longestFG', label: 'Lng' },
+                { key: 'avgPuntYards', label: 'P Avg' }
+            );
+        }
+
+        const tr = document.createElement('tr');
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h.label;
+            if (!h.noSort) {
+                th.classList.add('sortable');
+                th.dataset.sort = h.key;
+                th.addEventListener('click', () => {
+                    const sortKey = h.key;
+                    if (currentSort === sortKey) {
+                        sortDesc = !sortDesc;
+                    } else {
+                        currentSort = sortKey;
+                        sortDesc = true;
+                        if (sortKey === 'name' || sortKey === 'team' || sortKey === 'pos') sortDesc = false;
+                    }
+                    renderStatsTable();
+                    updateSortIcons();
+                });
+            }
+            tr.appendChild(th);
+        });
+        thead.innerHTML = '';
+        thead.appendChild(tr);
+        updateSortIcons();
+    }
 
     function updateSortIcons() {
         document.querySelectorAll('#statsTable th.sortable').forEach(th => {
@@ -119,28 +207,68 @@
 
         const L = window.state?.league;
         if (!L || !L.teams) {
-            tbody.innerHTML = '<tr><td colspan="13">No league data available.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="15">No league data available.</td></tr>';
             return;
         }
 
         // Collect all players
         let allPlayers = [];
+        const currentYear = L.year || 2025;
+
         L.teams.forEach(team => {
             if (team.roster) {
                 team.roster.forEach(p => {
+                    const s = p.stats?.season || {};
+                    // Get current year awards
+                    const awards = (p.awards || []).filter(a => a.year === currentYear).map(a => a.award).join(', ');
+                    const awardIcon = awards ? '🏆' : '';
+
                     allPlayers.push({
                         ...p,
                         teamAbbr: team.abbr || team.name.substring(0, 3).toUpperCase(),
                         // Flatten stats for easier sorting
-                        passYd: p.stats?.season?.passYd || 0,
-                        passTD: p.stats?.season?.passTD || 0,
-                        rushYd: p.stats?.season?.rushYd || 0,
-                        rushTD: p.stats?.season?.rushTD || 0,
-                        recYd: p.stats?.season?.recYd || 0,
-                        recTD: p.stats?.season?.recTD || 0,
-                        tackles: p.stats?.season?.tackles || 0,
-                        sacks: p.stats?.season?.sacks || 0,
-                        interceptions: p.stats?.season?.interceptions || 0
+                        passYd: s.passYd || 0,
+                        passTD: s.passTD || 0,
+                        rushYd: s.rushYd || 0,
+                        rushTD: s.rushTD || 0,
+                        recYd: s.recYd || 0,
+                        recTD: s.recTD || 0,
+                        tackles: s.tackles || 0,
+                        sacks: s.sacks || 0,
+                        interceptions: s.interceptions || 0,
+
+                        // New Stats
+                        war: s.war || 0,
+                        awardsDisplay: awardIcon,
+                        awardsTitle: awards,
+
+                        passerRating: s.passerRating || 0,
+                        completionPct: s.completionPct || 0,
+                        sacksAllowed: s.sacksAllowed || 0,
+                        sacks: s.sacks || 0, // Times sacked for QB
+                        sackPct: (s.sacks && (s.passAtt || 0) + s.sacks > 0) ? ((s.sacks / ((s.passAtt || 0) + s.sacks)) * 100).toFixed(1) + '%' : '0.0%',
+                        qbWins: (s.wins || 0) + '-' + (s.losses || 0),
+                        passAtt: s.passAtt || 0,
+                        passComp: s.passComp || 0,
+
+                        yardsPerCarry: s.yardsPerCarry || 0,
+                        rushYardsPerGame: s.rushYardsPerGame || 0,
+
+                        targets: s.targets || 0,
+                        receptions: s.receptions || 0,
+                        drops: s.drops || 0,
+                        ratingWhenTargeted: s.ratingWhenTargeted || 0,
+
+                        tacklesForLoss: s.tacklesForLoss || 0,
+                        forcedFumbles: s.forcedFumbles || 0,
+                        passesDefended: s.passesDefended || 0,
+                        coverageRating: s.coverageRating || 0,
+                        protectionGrade: s.protectionGrade || 0,
+
+                        fgMade: s.fgMade || 0,
+                        successPct: s.successPct || 0,
+                        longestFG: s.longestFG || 0,
+                        avgPuntYards: s.avgPuntYards || 0
                     });
                 });
             }
@@ -169,27 +297,101 @@
 
         // Render
         if (displayPlayers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="13">No players found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="15">No players found.</td></tr>';
             return;
         }
 
-        tbody.innerHTML = displayPlayers.map(p => `
-            <tr class="player-row" data-player-id="${p.id}" onclick="window.viewPlayerStats('${p.id}')">
+        tbody.innerHTML = displayPlayers.map(p => {
+            let cells = `
                 <td><strong>${p.name}</strong></td>
                 <td>${p.teamAbbr}</td>
                 <td>${p.pos}</td>
                 <td class="stat-ovr">${p.ovr}</td>
-                <td class="${p.passYd > 0 ? 'highlight-stat' : ''}">${p.passYd}</td>
-                <td class="${p.passTD > 0 ? 'highlight-stat' : ''}">${p.passTD}</td>
-                <td class="${p.rushYd > 0 ? 'highlight-stat' : ''}">${p.rushYd}</td>
-                <td class="${p.rushTD > 0 ? 'highlight-stat' : ''}">${p.rushTD}</td>
-                <td class="${p.recYd > 0 ? 'highlight-stat' : ''}">${p.recYd}</td>
-                <td class="${p.recTD > 0 ? 'highlight-stat' : ''}">${p.recTD}</td>
-                <td class="${p.tackles > 0 ? 'highlight-stat' : ''}">${p.tackles}</td>
-                <td class="${p.sacks > 0 ? 'highlight-stat' : ''}">${p.sacks}</td>
-                <td class="${p.interceptions > 0 ? 'highlight-stat' : ''}">${p.interceptions}</td>
+                <td class="stat-war" style="font-weight: bold; color: #2ecc71;">${p.war}</td>
+                <td title="${p.awardsTitle}">${p.awardsDisplay}</td>
+            `;
+
+            if (currentPosFilter === 'All') {
+                cells += `
+                    <td class="${p.passYd > 0 ? 'highlight-stat' : ''}">${p.passYd}</td>
+                    <td class="${p.passTD > 0 ? 'highlight-stat' : ''}">${p.passTD}</td>
+                    <td class="${p.rushYd > 0 ? 'highlight-stat' : ''}">${p.rushYd}</td>
+                    <td class="${p.rushTD > 0 ? 'highlight-stat' : ''}">${p.rushTD}</td>
+                    <td class="${p.recYd > 0 ? 'highlight-stat' : ''}">${p.recYd}</td>
+                    <td class="${p.tackles > 0 ? 'highlight-stat' : ''}">${p.tackles}</td>
+                    <td class="${p.sacks > 0 ? 'highlight-stat' : ''}">${p.sacks}</td>
+                    <td class="${p.interceptions > 0 ? 'highlight-stat' : ''}">${p.interceptions}</td>
+                `;
+            } else if (currentPosFilter === 'QB') {
+                cells += `
+                    <td>${p.passYd}</td>
+                    <td>${p.passTD}</td>
+                    <td>${p.interceptions}</td>
+                    <td>${(p.completionPct * 100).toFixed(1)}%</td>
+                    <td style="font-weight: bold;">${p.passerRating.toFixed(1)}</td>
+                    <td>${p.sacks}</td>
+                    <td>${p.sackPct}</td>
+                    <td>${p.qbWins}</td>
+                    <td>${p.passAtt}</td>
+                    <td>${p.passComp}</td>
+                `;
+            } else if (currentPosFilter === 'RB') {
+                cells += `
+                    <td>${p.rushYd}</td>
+                    <td>${p.rushTD}</td>
+                    <td>${p.yardsPerCarry.toFixed(1)}</td>
+                    <td>${p.rushYardsPerGame.toFixed(1)}</td>
+                    <td>${p.recYd}</td>
+                    <td>${p.recTD}</td>
+                `;
+            } else if (['WR', 'TE'].includes(currentPosFilter)) {
+                cells += `
+                    <td>${p.receptions}</td>
+                    <td>${p.recYd}</td>
+                    <td>${p.recTD}</td>
+                    <td>${p.targets}</td>
+                    <td>${p.drops}</td>
+                    <td>${p.ratingWhenTargeted.toFixed(1)}</td>
+                `;
+            } else if (currentPosFilter === 'OL') {
+                cells += `
+                    <td>${p.sacksAllowed}</td>
+                    <td>${p.protectionGrade}</td>
+                    <td>${p.ratings.runBlock}</td>
+                    <td>${p.ratings.passBlock}</td>
+                `;
+            } else if (['DL', 'LB'].includes(currentPosFilter)) {
+                cells += `
+                    <td>${p.tackles}</td>
+                    <td>${p.sacks}</td>
+                    <td>${p.tacklesForLoss}</td>
+                    <td>${p.forcedFumbles}</td>
+                    <td>${p.interceptions}</td>
+                    <td>${p.passesDefended}</td>
+                `;
+            } else if (['CB', 'S'].includes(currentPosFilter)) {
+                cells += `
+                    <td>${p.interceptions}</td>
+                    <td>${p.passesDefended}</td>
+                    <td>${p.tackles}</td>
+                    <td>${p.forcedFumbles}</td>
+                    <td>${p.coverageRating}</td>
+                `;
+            } else if (['K', 'P'].includes(currentPosFilter)) {
+                cells += `
+                    <td>${p.fgMade}</td>
+                    <td>${(p.successPct * 100).toFixed(1)}%</td>
+                    <td>${p.longestFG}</td>
+                    <td>${p.avgPuntYards}</td>
+                `;
+            }
+
+            return `
+            <tr class="player-row" data-player-id="${p.id}" onclick="window.viewPlayerStats('${p.id}')">
+                ${cells}
             </tr>
-        `).join('');
+            `;
+        }).join('');
 
         // Hide load more if no more
         const loadMoreBtn = document.getElementById('btnStatsLoadMore');

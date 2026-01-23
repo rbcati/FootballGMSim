@@ -1189,6 +1189,11 @@ class GameController {
                     window.renderStatsPage();
                 }
                 break;
+            case 'leagueStats':
+                if (window.renderLeagueStats) {
+                    window.renderLeagueStats();
+                }
+                break;
             default:
                 console.log('No renderer for view:', viewName);
         }

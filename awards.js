@@ -522,17 +522,19 @@
       }
     };
 
-    // All-Pro team sizes per position
+    // All-Pro team sizes per position (Per Conference)
+    // User requested totals: 4 QBs, 8 RBs, 10 WRs, 5 TEs, 10 OL, 10 DL, 10 LB, 10 CB, 10 S, 2 K, 2 P
+    // We split these by 2 for AFC/NFC.
     const allProSizes = {
-      QB: 1,
-      RB: 2,
-      WR: 3,
-      TE: 1,
+      QB: 2,
+      RB: 4,
+      WR: 5,
+      TE: 3, // 5 total requested, so we do 3 per conf (6 total) to cover it
       OL: 5,
-      DL: 4,
-      LB: 3,
-      CB: 2,
-      S: 2,
+      DL: 5,
+      LB: 5,
+      CB: 5,
+      S: 5,
       K: 1,
       P: 1
     };
