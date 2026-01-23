@@ -113,6 +113,18 @@ function simPlayoffWeek() {
 function startPlayoffs() {
     console.log('Starting playoffs...');
     
+    // Check if playoffs already exist for this year to prevent overwrite
+    if (window.state?.playoffs && window.state.playoffs.year === window.state.league?.year) {
+        console.warn('Playoffs already active for this year. Redirecting...');
+        if (window.location) {
+            window.location.hash = '#/playoffs';
+        }
+        if (window.renderPlayoffs) {
+            window.renderPlayoffs();
+        }
+        return;
+    }
+
     if (!window.state?.league?.teams) {
         console.error('No teams available for playoffs');
         window.setStatus('Error: No teams available for playoffs');

@@ -241,6 +241,43 @@ class GameController {
                         const opponent = L.teams[oppId];
                         if (opponent) {
                             const oppRecord = opponent.record ? `(${opponent.record.w}-${opponent.record.l})` : '';
+
+                            // Calculate Team Comparison Ratings
+                            let comparisonHTML = '';
+                            if (window.calculateTeamRating) {
+                                const userRatings = window.calculateTeamRating(userTeam);
+                                const oppRatings = window.calculateTeamRating(opponent);
+
+                                const getRatingColor = (val) => {
+                                    if (val >= 85) return '#34C759'; // elite/good
+                                    if (val >= 75) return '#34C759';
+                                    if (val >= 70) return '#FF9F0A'; // avg
+                                    return '#FF453A'; // poor
+                                };
+
+                                comparisonHTML = `
+                                    <div class="team-comparison" style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: var(--text-muted);">
+                                            <div>YOU</div>
+                                            <div>STAT</div>
+                                            <div>OPP</div>
+                                        </div>
+                                        ${[
+                                            { label: 'OVR', u: userRatings.overall, o: oppRatings.overall },
+                                            { label: 'OFF', u: userRatings.offense.overall, o: oppRatings.offense.overall },
+                                            { label: 'DEF', u: userRatings.defense.overall, o: oppRatings.defense.overall },
+                                            { label: 'ST', u: userRatings.specialTeams, o: oppRatings.specialTeams }
+                                        ].map(stat => `
+                                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+                                                <div style="color: ${getRatingColor(stat.u)}; font-weight: 700;">${stat.u}</div>
+                                                <div style="color: var(--text-muted); font-size: 0.8rem;">${stat.label}</div>
+                                                <div style="color: ${getRatingColor(stat.o)}; font-weight: 700;">${stat.o}</div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                `;
+                            }
+
                             nextGameHTML = `
                                 <div class="card next-game-card" style="background: linear-gradient(135deg, rgba(30, 40, 60, 0.8), rgba(20, 25, 35, 0.9)); border: 1px solid var(--accent);">
                                     <h3 style="color: var(--accent); margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Next Opponent - Week ${currentWeek}</h3>
@@ -248,6 +285,7 @@ class GameController {
                                         <div style="font-size: 1.5rem; font-weight: 700;">${isHome ? 'vs' : '@'} ${opponent.name} <span style="font-size: 1rem; color: var(--text-muted); font-weight: 400;">${oppRecord}</span></div>
                                         <div style="font-size: 2rem;">🏈</div>
                                     </div>
+                                    ${comparisonHTML}
                                     ${!isOffseason ? '<button class="btn primary" id="btnSimWeekHero" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">Play Week ' + currentWeek + '</button>' : ''}
                                 </div>
                             `;
