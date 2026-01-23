@@ -2,19 +2,46 @@
 'use strict';
 
 /**
+ * Helper to group players by position and sort by OVR descending.
+ * This optimizes performance by doing a single pass over the roster.
+ * @param {Array} roster - Team roster array
+ * @returns {Object} Map of position -> sorted array of players
+ */
+function groupPlayersByPosition(roster) {
+    const groups = {};
+    if (!roster) return groups;
+    for (const player of roster) {
+        const pos = player.pos || 'UNK';
+        if (!groups[pos]) groups[pos] = [];
+        groups[pos].push(player);
+    }
+    // Pre-sort by overall rating descending for faster access
+    for (const pos in groups) {
+        groups[pos].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    }
+    return groups;
+}
+
+/**
  * Calculates team offensive rating based on offensive players
  * @param {Object} team - Team object
+ * @param {Object} positionGroups - Optional pre-grouped players
  * @returns {Object} Offensive rating data
  */
-function calculateOffensiveRating(team) {
+function calculateOffensiveRating(team, positionGroups = null) {
     if (!team || !team.roster) {
         return { overall: 0, breakdown: {}, positions: {} };
     }
 
+    const groups = positionGroups || groupPlayersByPosition(team.roster);
     const offensivePositions = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'];
-    const offensivePlayers = team.roster.filter(p => offensivePositions.includes(p.pos));
     
-    if (offensivePlayers.length === 0) {
+    let totalOffensivePlayers = 0;
+    offensivePositions.forEach(pos => {
+        if (groups[pos]) totalOffensivePlayers += groups[pos].length;
+    });
+
+    if (totalOffensivePlayers === 0) {
         return { overall: 0, breakdown: {}, positions: {} };
     }
 
@@ -24,16 +51,15 @@ function calculateOffensiveRating(team) {
 
     // Calculate position-specific ratings with weights
     offensivePositions.forEach(pos => {
-        const players = offensivePlayers.filter(p => p.pos === pos);
+        const players = groups[pos] || [];
         if (players.length > 0) {
-            // Sort by overall rating and get top players
-            const sortedPlayers = players.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+            // Already sorted by groupPlayersByPosition
             
             // Calculate weighted average based on depth
             let positionRating = 0;
             let weight = 0;
             
-            sortedPlayers.forEach((player, index) => {
+            players.forEach((player, index) => {
                 const playerWeight = Math.max(0.1, 1 - (index * 0.3)); // Diminishing returns
                 positionRating += (player.ovr || 50) * playerWeight;
                 weight += playerWeight;
@@ -69,24 +95,30 @@ function calculateOffensiveRating(team) {
         overall,
         breakdown: positionRatings,
         positions: offensivePositions,
-        playerCount: offensivePlayers.length
+        playerCount: totalOffensivePlayers
     };
 }
 
 /**
  * Calculates team defensive rating based on defensive players
  * @param {Object} team - Team object
+ * @param {Object} positionGroups - Optional pre-grouped players
  * @returns {Object} Defensive rating data
  */
-function calculateDefensiveRating(team) {
+function calculateDefensiveRating(team, positionGroups = null) {
     if (!team || !team.roster) {
         return { overall: 0, breakdown: {}, positions: {} };
     }
 
+    const groups = positionGroups || groupPlayersByPosition(team.roster);
     const defensivePositions = ['DL', 'LB', 'CB', 'S', 'P'];
-    const defensivePlayers = team.roster.filter(p => defensivePositions.includes(p.pos));
     
-    if (defensivePlayers.length === 0) {
+    let totalDefensivePlayers = 0;
+    defensivePositions.forEach(pos => {
+        if (groups[pos]) totalDefensivePlayers += groups[pos].length;
+    });
+
+    if (totalDefensivePlayers === 0) {
         return { overall: 0, breakdown: {}, positions: {} };
     }
 
@@ -96,16 +128,15 @@ function calculateDefensiveRating(team) {
 
     // Calculate position-specific ratings with weights
     defensivePositions.forEach(pos => {
-        const players = defensivePlayers.filter(p => p.pos === pos);
+        const players = groups[pos] || [];
         if (players.length > 0) {
-            // Sort by overall rating and get top players
-            const sortedPlayers = players.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+            // Already sorted
             
             // Calculate weighted average based on depth
             let positionRating = 0;
             let weight = 0;
             
-            sortedPlayers.forEach((player, index) => {
+            players.forEach((player, index) => {
                 const playerWeight = Math.max(0.1, 1 - (index * 0.3)); // Diminishing returns
                 positionRating += (player.ovr || 50) * playerWeight;
                 weight += playerWeight;
@@ -140,7 +171,7 @@ function calculateDefensiveRating(team) {
         overall,
         breakdown: positionRatings,
         positions: defensivePositions,
-        playerCount: defensivePlayers.length
+        playerCount: totalDefensivePlayers
     };
 }
 
@@ -161,19 +192,27 @@ function calculateTeamRating(team) {
         };
     }
 
-    const offensiveRating = calculateOffensiveRating(team);
-    const defensiveRating = calculateDefensiveRating(team);
+    // Single pass to group all players
+    const groups = groupPlayersByPosition(team.roster);
+
+    const offensiveRating = calculateOffensiveRating(team, groups);
+    const defensiveRating = calculateDefensiveRating(team, groups);
+
+    // Calculate special teams rating (K + P)
+    let specialTeamsRating = 0;
+    const kickers = groups['K'] || [];
+    const punters = groups['P'] || [];
+    const specialTeamsPlayers = [...kickers, ...punters];
     
-    // Calculate special teams rating (K + P + return specialists)
-    const specialTeamsPlayers = team.roster.filter(p => ['K', 'P'].includes(p.pos));
-    const specialTeamsRating = specialTeamsPlayers.length > 0 
-        ? Math.round(specialTeamsPlayers.reduce((sum, p) => sum + (p.ovr || 50), 0) / specialTeamsPlayers.length)
-        : 0;
+    if (specialTeamsPlayers.length > 0) {
+        specialTeamsRating = Math.round(specialTeamsPlayers.reduce((sum, p) => sum + (p.ovr || 50), 0) / specialTeamsPlayers.length);
+    }
 
     // Calculate depth rating (how many quality players beyond starters)
-    const depthRating = calculateDepthRating(team);
+    const depthRating = calculateDepthRating(team, groups);
     
     // Calculate star power (players with 85+ overall)
+    // Optimized: iterate over roster directly as grouping doesn't help much here unless we iterate groups
     const starPlayers = team.roster.filter(p => (p.ovr || 0) >= 85);
     const starPower = starPlayers.length;
 
@@ -198,20 +237,21 @@ function calculateTeamRating(team) {
 /**
  * Calculates team depth rating
  * @param {Object} team - Team object
+ * @param {Object} positionGroups - Optional pre-grouped players
  * @returns {number} Depth rating (0-100)
  */
-function calculateDepthRating(team) {
+function calculateDepthRating(team, positionGroups = null) {
     if (!team || !team.roster) return 0;
 
+    const groups = positionGroups || groupPlayersByPosition(team.roster);
     const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
     let totalDepthScore = 0;
     let positionCount = 0;
 
     positions.forEach(pos => {
-        const players = team.roster.filter(p => p.pos === pos);
-        if (players.length > 0) {
-            // Sort by overall rating
-            const sortedPlayers = players.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+        const sortedPlayers = groups[pos] || [];
+        if (sortedPlayers.length > 0) {
+            // Already sorted
             
             // Calculate depth score based on quality of backups
             let depthScore = 0;
