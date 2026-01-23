@@ -1922,8 +1922,19 @@ window.renderTradeCenter = function () {
       return;
     }
 
-    listA.innerHTML = '<h4>Your Players</h4>';
-    listB.innerHTML = '<h4>Their Players</h4>';
+    // Add headers with grid layout matching items
+    const headerHTML = `
+      <div style="display: grid; grid-template-columns: 2fr 0.8fr 0.8fr 0.8fr 1.2fr; padding: 4px 6px; font-weight: bold; font-size: 0.75rem; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; color: var(--text-muted);">
+        <span>Name</span>
+        <span>Pos</span>
+        <span>OVR</span>
+        <span>Age</span>
+        <span>Salary</span>
+      </div>
+    `;
+
+    listA.innerHTML = '<h4>Your Players</h4>' + headerHTML;
+    listB.innerHTML = '<h4>Their Players</h4>' + headerHTML;
     pickListA.innerHTML = '<h4>Your Picks</h4>';
     pickListB.innerHTML = '<h4>Their Picks</h4>';
     
@@ -1931,10 +1942,27 @@ window.renderTradeCenter = function () {
     clearSelections();
 
     function renderRosterList(team, container, isUserSide) {
-      (team.roster || []).forEach(player => {
+      // Sort by OVR descending
+      const roster = (team.roster || []).slice().sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+
+      roster.forEach(player => {
         const item = document.createElement('div');
         item.className = 'asset-item';
-        item.textContent = `${player.name} (${player.pos || 'POS'} • OVR ${player.ovr ?? 'N/A'})`;
+        // Use grid layout
+        item.style.display = 'grid';
+        item.style.gridTemplateColumns = '2fr 0.8fr 0.8fr 0.8fr 1.2fr';
+        item.style.alignItems = 'center';
+        item.style.fontSize = '0.8rem';
+
+        const salary = '$' + (player.baseAnnual || 0).toFixed(1) + 'M';
+
+        item.innerHTML = `
+          <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500;">${player.name}</span>
+          <span style="color: var(--text-muted);">${player.pos || 'POS'}</span>
+          <span style="font-weight: 600; color: var(--accent);">${player.ovr ?? 'N/A'}</span>
+          <span>${player.age || '-'}</span>
+          <span style="color: var(--text-muted); font-size: 0.75rem;">${salary}</span>
+        `;
 
         const asset = { kind: 'player', playerId: player.id };
 

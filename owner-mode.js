@@ -179,16 +179,29 @@ function updateFanSatisfaction() {
   }
   
   // Pricing factor (30% of satisfaction)
-  const avgTicketPrice = ownerMode.businessSettings.ticketPrice;
   const marketMultiplier = getMarketMultiplier(team);
-  const expectedPrice = 75 * marketMultiplier;
-  const priceRatio = avgTicketPrice / expectedPrice;
   
-  if (priceRatio < 0.8) {
-    satisfaction += 15; // Good value
-  } else if (priceRatio > 1.2) {
-    satisfaction -= 15; // Overpriced
-  }
+  // Calculate value scores for each category (lower price relative to market = higher score)
+  const getScore = (price, base) => {
+      const expected = base * marketMultiplier;
+      const ratio = price / expected;
+      if (ratio < 0.8) return 1.0; // Great value
+      if (ratio > 1.4) return -1.0; // Ripoff
+      // Linear interpolation between -1 and 1
+      return 1.0 - ((ratio - 0.8) / 0.6) * 2;
+  };
+
+  const s = ownerMode.businessSettings;
+  const ticketScore = getScore(s.ticketPrice, 75);
+  const foodScore = getScore(s.concessionPrice, 15);
+  const parkScore = getScore(s.parkingPrice, 25);
+  const merchScore = getScore(s.merchandisePrice, 50);
+
+  // Weighted average of scores (tickets most important)
+  const totalPricingScore = (ticketScore * 0.5) + (foodScore * 0.2) + (parkScore * 0.15) + (merchScore * 0.15);
+
+  // Convert score (-1 to 1) to satisfaction modifier (-15 to +15)
+  satisfaction += totalPricingScore * 15;
   
   // Recent success factor (30% of satisfaction)
   if (team.record.w >= 10) {
@@ -217,13 +230,31 @@ function calculateRevenue() {
   const attendanceMultiplier = fanSatisfaction / 100;
   const actualAttendance = Math.round(baseAttendance * attendanceMultiplier);
   
-  // Calculate revenue streams
+  // Calculate revenue streams with demand curves
   const homeGames = 8; // Regular season home games
+  const marketMultiplier = getMarketMultiplier(team);
+
+  // Demand function: Higher price = Lower buy rate
+  const getBuyRate = (price, basePrice, baseRate) => {
+      const expected = basePrice * marketMultiplier;
+      // Elasticity: if price is double, buy rate drops significantly
+      const ratio = price / expected;
+      // Simple demand curve: 1.0 at ratio 1.0. Drops to 0 at ratio 3.0. Max 1.5x at ratio 0.5.
+      let demand = 1.0 - (ratio - 1.0) * 0.8;
+      demand = Math.max(0.05, Math.min(1.5, demand)); // Clamp demand
+      return baseRate * demand;
+  };
+
+  const ticketRevenue = actualAttendance * homeGames * settings.ticketPrice; // Attendance already factored satisfaction
   
-  const ticketRevenue = actualAttendance * homeGames * settings.ticketPrice;
-  const concessionRevenue = actualAttendance * homeGames * settings.concessionPrice * 0.7; // 70% buy concessions
-  const parkingRevenue = actualAttendance * homeGames * settings.parkingPrice * 0.8; // 80% drive
-  const merchandiseRevenue = actualAttendance * homeGames * settings.merchandisePrice * 0.3; // 30% buy merch
+  const foodBuyRate = getBuyRate(settings.concessionPrice, 15, 0.7);
+  const concessionRevenue = actualAttendance * homeGames * settings.concessionPrice * foodBuyRate;
+
+  const parkBuyRate = getBuyRate(settings.parkingPrice, 25, 0.8);
+  const parkingRevenue = actualAttendance * homeGames * settings.parkingPrice * parkBuyRate;
+
+  const merchBuyRate = getBuyRate(settings.merchandisePrice, 50, 0.3);
+  const merchandiseRevenue = actualAttendance * homeGames * settings.merchandisePrice * merchBuyRate;
   
   ownerMode.revenue = {
     total: ticketRevenue + concessionRevenue + parkingRevenue + merchandiseRevenue,
