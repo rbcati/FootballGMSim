@@ -254,6 +254,87 @@ window.calculateOverallRating = function(player) {
 };
 
 // --- VIEW RENDERERS ---
+window.renderPlayerCard = function(player) {
+    if (!player) return '';
+
+    // Calculate aggregate ratings for bars
+    let physical = 0, mental = 0;
+    if (player.ratings) {
+        if (player.ratings.physical) physical = player.ratings.physical;
+        else {
+            // Estimate from available ratings
+            const r = player.ratings;
+            physical = Math.round(((r.speed || 50) + (r.acceleration || 50) + (r.strength || 50) + (r.agility || 50)) / 4);
+        }
+
+        if (player.ratings.mental) mental = player.ratings.mental;
+        else {
+            const r = player.ratings;
+            mental = Math.round(((r.awareness || 50) + (r.intelligence || 50) + (r.vision || 50) + (r.consistency || 50)) / 4);
+        }
+    }
+
+    // Determine Grade
+    const ovr = player.ovr || 50;
+    let grade = 'C';
+    let gradeClass = 'C';
+    if (ovr >= 95) { grade = 'S'; gradeClass = 'A'; } // Elite
+    else if (ovr >= 90) { grade = 'A+'; gradeClass = 'A'; }
+    else if (ovr >= 85) { grade = 'A'; gradeClass = 'A'; }
+    else if (ovr >= 80) { grade = 'B+'; gradeClass = 'B'; }
+    else if (ovr >= 75) { grade = 'B'; gradeClass = 'B'; }
+    else if (ovr >= 70) { grade = 'C+'; gradeClass = 'C'; }
+    else if (ovr < 60) { grade = 'D'; gradeClass = 'C'; }
+
+    // OVR Badge Class
+    let ovrClass = 'avg';
+    if (ovr >= 90) ovrClass = 'elite';
+    else if (ovr >= 80) ovrClass = 'good';
+
+    // Status
+    const isInjured = player.injuryWeeks > 0;
+
+    // Portrait Initial
+    const initial = player.name ? player.name.charAt(0) : '?';
+
+    return `
+    <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.showPlayerDetails) window.showPlayerDetails(window.state.league.teams.find(t => t.roster.find(p => p.id === '${player.id}'))?.roster.find(p => p.id === '${player.id}'))">
+        <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
+        <div class="card-content">
+            <div class="portrait-container">
+                <div class="player-portrait">${initial}</div>
+            </div>
+            <div class="player-details">
+                <div class="player-name" title="${player.name}">${player.name}</div>
+                <div class="stats-row">
+                    <div class="ovr-badge ${ovrClass}">${ovr}</div>
+                    <div class="tags-container">
+                        <span class="tag">${player.pos}</span>
+                        <span class="tag">${player.age} yo</span>
+                        ${isInjured ? '<span class="tag" style="color:#FF3B30">INJ</span>' : ''}
+                    </div>
+                    <div class="grade-badge ${gradeClass}">${grade}</div>
+                </div>
+                <div class="bars-container">
+                    <div class="bar-row">
+                        <span class="bar-label">PHY</span>
+                        <div class="progress-track">
+                            <div class="progress-fill physical" style="width: ${physical}%"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <span class="bar-label">MEN</span>
+                        <div class="progress-track">
+                            <div class="progress-fill mental" style="width: ${mental}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    `;
+};
+
 window.renderRoster = function() {
     console.log('Rendering roster...');
     try {
@@ -329,7 +410,17 @@ window.renderRoster = function() {
         console.log(`📋 Rendering roster for team ${teamId}: ${team.name}`);
         
         const titleEl = document.getElementById('rosterTitle');
-        if (titleEl) titleEl.textContent = `${team.name} Roster`;
+        if (titleEl) {
+             titleEl.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+                    <span>${team.name} Roster</span>
+                    <div class="view-toggle">
+                        <button class="view-toggle-btn ${window.state.rosterViewMode !== 'cards' ? 'active' : ''}" onclick="window.state.rosterViewMode='table'; window.renderRoster();">Table</button>
+                        <button class="view-toggle-btn ${window.state.rosterViewMode === 'cards' ? 'active' : ''}" onclick="window.state.rosterViewMode='cards'; window.renderRoster();">Cards</button>
+                    </div>
+                </div>
+             `;
+        }
         
         // Generate and render depth chart
         if (window.generateDepthChart && window.renderDepthChart) {
@@ -346,6 +437,30 @@ window.renderRoster = function() {
         
         const rosterTable = document.getElementById('rosterTable');
         if (!rosterTable) return;
+
+        // --- Card View Implementation ---
+        if (!window.state.rosterViewMode) window.state.rosterViewMode = 'table';
+
+        let gridContainer = document.getElementById('rosterGrid');
+        if (!gridContainer) {
+             gridContainer = document.createElement('div');
+             gridContainer.id = 'rosterGrid';
+             gridContainer.className = 'roster-grid-view';
+             if (rosterTable.parentNode) rosterTable.parentNode.insertBefore(gridContainer, rosterTable);
+        }
+
+        if (window.state.rosterViewMode === 'cards') {
+            rosterTable.style.display = 'none';
+            gridContainer.style.display = 'grid';
+
+            // Sort by OVR for cards
+            const cardSortedRoster = [...team.roster].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+            gridContainer.innerHTML = cardSortedRoster.map(p => window.renderPlayerCard(p)).join('');
+            return; // Exit here for card view
+        } else {
+            rosterTable.style.display = 'table';
+            gridContainer.style.display = 'none';
+        }
         
         // Clear and setup table
         rosterTable.innerHTML = `
