@@ -27,10 +27,25 @@ async function runTests() {
 
   // Test 3: Verify that the main game controller can still call the refactored functions
   try {
-    // This is a bit of a hack, but we can check if the router has the correct functions
-    if (window.router && typeof window.router === 'function') {
-        console.log('Test 3 Passed: Main game controller is still functional.');
+    // Verify GameController initialization
+    if (!window.gameController) {
+      throw new Error('GameController instance not found on window object');
     }
+
+    const gc = window.gameController;
+    const requiredMethods = ['router', 'init', 'saveGameState', 'loadGameState', 'renderHub'];
+    const missingMethods = requiredMethods.filter(method => typeof gc[method] !== 'function');
+
+    if (missingMethods.length > 0) {
+      throw new Error(`GameController is missing required methods: ${missingMethods.join(', ')}`);
+    }
+
+    // Check if window.router is bound correctly
+    if (typeof window.router !== 'function') {
+      throw new Error('window.router is not a function');
+    }
+
+    console.log('Test 3 Passed: Main game controller is properly initialized and exposes required methods.');
   } catch (error) {
     console.error('Test 3 Failed: Main game controller is not functional.', error);
   }
