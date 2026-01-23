@@ -14,9 +14,26 @@
   .nav-sidebar {
     width: 260px;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.5);
-    background: rgba(14, 18, 25, 0.98);
+    background: transparent;
     z-index: 1100;
     transform: translateX(-100%);
+    overflow: hidden;
+  }
+
+  .glass-bg {
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(15px);
+    -webkit-backdrop-filter: blur(15px);
+    background: rgba(10, 10, 15, 0.8);
+    z-index: 1;
+  }
+
+  .menu-items {
+    position: relative;
+    z-index: 2;
+    height: 100%;
+    overflow-y: auto;
   }
 
   .nav-sidebar.nav-open {
