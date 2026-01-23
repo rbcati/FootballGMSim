@@ -8,6 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance } from './coach-system.js';
+import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted } from './player.js';
 
 /**
  * Validates that required global dependencies are available
@@ -709,14 +710,14 @@ function accumulateCareerStats(league) {
       
       // Calculate advanced stats (WAR, Ratings, etc.) BEFORE snapshotting
       // This ensures they are saved in history and available for awards
-      if (typeof window.calculateWAR === 'function') {
-          player.stats.season.war = window.calculateWAR(player, player.stats.season);
+      if (calculateWAR) {
+          player.stats.season.war = calculateWAR(player, player.stats.season);
       }
-      if (typeof window.calculateQBRating === 'function' && player.pos === 'QB') {
-          player.stats.season.passerRating = window.calculateQBRating(player.stats.season);
+      if (calculateQBRating && player.pos === 'QB') {
+          player.stats.season.passerRating = calculateQBRating(player.stats.season);
       }
-      if (typeof window.calculatePasserRatingWhenTargeted === 'function' && ['WR', 'TE', 'RB'].includes(player.pos)) {
-          player.stats.season.ratingWhenTargeted = window.calculatePasserRatingWhenTargeted(player.stats.season);
+      if (calculatePasserRatingWhenTargeted && ['WR', 'TE', 'RB'].includes(player.pos)) {
+          player.stats.season.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player.stats.season);
       }
 
       // Snapshot season stats to history
