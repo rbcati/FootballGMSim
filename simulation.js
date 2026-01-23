@@ -222,16 +222,39 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
 }
 
 /**
+ * REFACTORED: Helper to distribute targets based on skill rather than index
+ */
+function distributePassingTargets(receivers, totalTargets, U) {
+  if (!receivers || receivers.length === 0) return [];
+
+  // 1. Calculate "Gravity" for each receiver
+  const weights = receivers.map(r => {
+      const ratings = r.ratings || {};
+      // High OVR and Awareness "attract" more targets
+      // Speed bonus for deep threats
+      return (r.ovr * 0.5) + ((ratings.awareness || 50) * 0.3) + ((ratings.speed || 50) * 0.2);
+  });
+
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+
+  // 2. Return objects with assigned targets
+  return receivers.map((r, i) => {
+      const playerShare = weights[i] / totalWeight;
+      const playerTargets = Math.round(totalTargets * playerShare);
+      return { player: r, targets: playerTargets };
+  });
+}
+
+/**
  * Generate wide receiver/tight end statistics
  */
-function generateReceiverStats(receiver, teamScore, defenseStrength, U) {
+function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength, U) {
   const ratings = receiver.ratings || {};
   const catching = ratings.catching || 70;
   const catchInTraffic = ratings.catchInTraffic || 70;
   const speed = ratings.speed || 70;
   
-  const baseTargets = receiver.pos === 'WR' ? 8 : 5;
-  const targets = Math.max(0, Math.min(15, Math.round(baseTargets + (teamScore / 5) + U.rand(-2, 4))));
+  const targets = targetCount;
   
   const catchRate = (catching + catchInTraffic) / 2;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
@@ -525,11 +548,14 @@ function simGameStats(home, away) {
       // QB
       const qbs = groups['QB'] || [];
       const qb = qbs.length > 0 ? qbs[0] : null; // Starter
+      let totalPassAttempts = 30; // Fallback
+
       if (qb) {
         const qbStats = generateQBStats(qb, score, oppDefenseStrength, U);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
         Object.assign(qb.stats.game, qbStats);
+        totalPassAttempts = qbStats.passAtt || 30;
       }
       
       // RB
@@ -547,34 +573,20 @@ function simGameStats(home, away) {
         Object.assign(rb.stats.game, rbStats);
       });
 
-      // WR
-      const wrs = (groups['WR'] || []).slice(0, 4);
-      wrs.forEach((wr, index) => {
-        const share = index === 0 ? 0.35 : index === 1 ? 0.25 : index === 2 ? 0.2 : 0.2;
-        const wrStats = generateReceiverStats(wr, score * share, oppDefenseStrength, U);
-        if (index > 0) {
-          Object.keys(wrStats).forEach(key => {
-            if (typeof wrStats[key] === 'number') {
-              wrStats[key] = Math.round(wrStats[key] * share);
-            }
-          });
-        }
-        Object.assign(wr.stats.game, wrStats);
-      });
-
-      // TE
+      // WR & TE - Dynamic Target Distribution
+      const wrs = (groups['WR'] || []).slice(0, 5);
       const tes = (groups['TE'] || []).slice(0, 2);
-      tes.forEach((te, index) => {
-        const share = index === 0 ? 0.7 : 0.3;
-        const teStats = generateReceiverStats(te, score * share, oppDefenseStrength, U);
-         if (index > 0) {
-          Object.keys(teStats).forEach(key => {
-            if (typeof teStats[key] === 'number') {
-              teStats[key] = Math.round(teStats[key] * share);
-            }
-          });
-        }
-        Object.assign(te.stats.game, teStats);
+
+      // Reserve ~15% of targets for RBs (handled inside generateRBStats, but we conceptually account for it)
+      // We'll distribute 85% of pass attempts to WRs/TEs
+      const receiverTargetsPool = Math.round(totalPassAttempts * 0.85);
+
+      const allReceivers = [...wrs, ...tes];
+      const distributedTargets = distributePassingTargets(allReceivers, receiverTargetsPool, U);
+
+      distributedTargets.forEach(item => {
+        const wrStats = generateReceiverStats(item.player, item.targets, score, oppDefenseStrength, U);
+        Object.assign(item.player.stats.game, wrStats);
       });
 
       // OL

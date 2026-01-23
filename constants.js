@@ -8,12 +8,32 @@
     ROUTES: ['hub','roster','contracts','cap','schedule','standings','trade','freeagency','draft','playoffs','settings', 'hallOfFame', 'scouting']
   };
 
-  // --- II. SALARY & CONTRACTS ---
+  // --- II. SALARY & CONTRACTS (REFACTORED) ---
   const SALARY_CAP = {
-    BASE: 220, // Base Salary Cap in Millions
+    BASE: 220,
     MAX_ROLLOVER: 10,
+    MIN_CONTRACT: 0.75, // $750k - Standard league minimum
+    MAX_CONTRACT: 55.0, // $55M - Current star QB ceiling
+
+    // NEW: Positional Salary Weights
+    // (Ensures QBs cost more than Punters naturally)
+    POS_SALARY_WEIGHTS: {
+      QB: 1.25,  // Premiums
+      WR: 1.10,
+      OL: 1.05,
+      CB: 1.05,
+      DL: 1.05,
+      RB: 0.90,  // Devalued positions
+      LB: 0.90,
+      S:  0.85,
+      TE: 0.85,
+      K:  0.40,  // Specialists
+      P:  0.40
+    },
+
     ROOKIE_DISCOUNT: 0.9,
     GUARANTEED_PCT_DEFAULT: 0.5,
+    // Keeping existing bonus config
     SIGNING_BONUS_MIN: 0.25,
     SIGNING_BONUS_MAX: 0.6
   };
@@ -104,17 +124,12 @@
     }
   };
 
-  // --- VI. NAMES, COLLEGES, ABILITIES (Relies on expanded-names.js being loaded first) ---
-  // Ensure we check window for names if they were loaded by expanded-names.js
-  const FIRST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher'];
-  const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez'];
+  // --- VI. NAMES, COLLEGES, ABILITIES (REFACTORED FOR SAFETY) ---
+  // We use a function to ensure we get the names EVEN IF the other script loads late
+  const getFirstNames = () => ((typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher']);
+  const getLastNames = () => ((typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']);
   
-  const NAMES = { first: FIRST_NAMES, last: LAST_NAMES };
-  
-  const NAMES_BY_POS = {
-    QB: NAMES, RB: NAMES, WR: NAMES, TE: NAMES, OL: NAMES,
-    DL: NAMES, LB: NAMES, CB: NAMES, S: NAMES, K: NAMES, P: NAMES
-  };
+  // NAMES object also needs to be dynamic or a getter, but for simplicity in this structure we use the getters in Constants
   
   const COLLEGES = [
     'Alabama', 'Ohio State', 'Georgia', 'Clemson', 'Oklahoma', 'LSU', 'Florida',
@@ -135,22 +150,21 @@
     P: ['Coffin Corner', 'Hang Time', 'Directional']
   };
 
-  // --- VII. LEAGUE STRUCTURE & TRADES ---
+  // --- VII. LEAGUE STRUCTURE & TRADES (REFACTORED) ---
   const YEARS_OF_PICKS = 3;
   const CONF_NAMES = ["AFC","NFC"];
   const DIV_NAMES = ["East","North","South","West"];
   
-  const TRADE_VALUES = {
-    PICKS: {
-      1: { 1: 3000, 2: 2600, 3: 2200, 4: 1800, 5: 1600, 6: 1400, 7: 1200 },
-      2: { 1: 1800, 2: 1600, 3: 1400, 4: 1200, 5: 1000, 6: 800, 7: 600 },
-      3: { 1: 800, 2: 600, 3: 400, 4: 300, 5: 200, 6: 150, 7: 100 },
-      4: { 1: 300, 2: 200, 3: 150, 4: 100, 5: 75, 6: 50, 7: 25 },
-      5: { 1: 150, 2: 100, 3: 75, 4: 50, 5: 25, 6: 15, 7: 10 },
-      6: { 1: 75, 2: 50, 3: 25, 4: 15, 5: 10, 6: 8, 7: 5 },
-      7: { 1: 25, 15: 15, 3: 10, 4: 8, 5: 5, 6: 3, 7: 1 }
-    },
-    FUTURE_DISCOUNT: 0.8
+  const TRADE_CONFIG = {
+    // Instead of a giant table, we use a base value and a decay factor
+    PICK_ONE_VALUE: 3000,
+    PICK_DECAY: 0.96, // Each subsequent pick is worth 4% less than the one before it
+    POSITION_MULTIPLIERS: {
+        QB: 1.5,
+        WR: 1.2,
+        CB: 1.2,
+        // ... etc
+    }
   };
   
   const POSITION_VALUES = {
@@ -190,11 +204,19 @@
     OVR_WEIGHTS, POS_RATING_RANGES,
     OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 
-    // Names/Generation
-    FIRST_NAMES, LAST_NAMES, NAMES, NAMES_BY_POS, COLLEGES, ABILITIES_BY_POS,
+    // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
+    get FIRST_NAMES() { return getFirstNames(); },
+    get LAST_NAMES() { return getLastNames(); },
+
+    // Helper to get NAMES object dynamically
+    get NAMES() { return { first: getFirstNames(), last: getLastNames() }; },
+
+    COLLEGES, ABILITIES_BY_POS,
     
     // League/Trade
-    CONF_NAMES, DIV_NAMES, TRADE_VALUES, POSITION_VALUES,
+    CONF_NAMES, DIV_NAMES,
+    TRADE_CONFIG, // Replaces TRADE_VALUES
+    POSITION_VALUES,
     
     // Legacy/Compatibility:
     CAP_BASE: SALARY_CAP.BASE, 
@@ -211,8 +233,19 @@
   // Make individual arrays globally available (for compatibility with state.js and expanded-names)
   if (typeof window !== 'undefined') {
       window.Constants = Object.assign(window.Constants || {}, Constants);
-      window.FIRST_NAMES = FIRST_NAMES;
-      window.LAST_NAMES = LAST_NAMES;
+
+      // We can't assign window.FIRST_NAMES = getFirstNames() directly as an array here if it's not loaded
+      // But we can define a getter on window if we want true "ghost" behavior,
+      // OR we just rely on Constants.FIRST_NAMES
+      Object.defineProperty(window, 'FIRST_NAMES', {
+        get: getFirstNames,
+        configurable: true
+      });
+      Object.defineProperty(window, 'LAST_NAMES', {
+        get: getLastNames,
+        configurable: true
+      });
+
       // Make constants available in legacy format too
       window.constants = window.Constants;
   }

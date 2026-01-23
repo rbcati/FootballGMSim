@@ -42,21 +42,27 @@ function pickValue(pick) {
   if (!pick || !state.league) return 1;
   
   const C = window.Constants;
-  const tradeValues = C?.TRADE_VALUES?.PICKS || {};
   
-  // Get base value from trade chart
-  const roundValues = tradeValues[pick.round] || {};
-  let baseValue = roundValues[1] || 1; // Default to first pick of round if specific pick not found
+  let baseValue;
   
-  // Simple base values if trade chart not available
-  if (!baseValue) {
-    const baseValues = { 1: 25, 2: 15, 3: 8, 4: 5, 5: 3, 6: 2, 7: 1 };
-    baseValue = baseValues[pick.round] || 1;
+  // Check for new TRADE_CONFIG
+  if (C?.TRADE_CONFIG?.PICK_ONE_VALUE) {
+    const globalPick = ((pick.round - 1) * 32) + 1; // Assume start of round
+    baseValue = Math.round(C.TRADE_CONFIG.PICK_ONE_VALUE * Math.pow(C.TRADE_CONFIG.PICK_DECAY, globalPick - 1));
+  } else {
+    const tradeValues = C?.TRADE_VALUES?.PICKS || {};
+    const roundValues = tradeValues[pick.round] || {};
+    baseValue = roundValues[1] || 1;
+
+    if (!baseValue) {
+        const baseValues = { 1: 25, 2: 15, 3: 8, 4: 5, 5: 3, 6: 2, 7: 1 };
+        baseValue = baseValues[pick.round] || 1;
+    }
   }
-  
+
   // Apply discount for future years
   const yearsOut = pick.year - state.league.season;
-  const futureDiscount = C?.TRADE_VALUES?.FUTURE_DISCOUNT || 0.8;
+  const futureDiscount = C?.TRADE_VALUES?.FUTURE_DISCOUNT || 0.85;
   const discount = Math.pow(futureDiscount, Math.max(0, yearsOut));
   
   return Math.max(1, Math.round(baseValue * discount * 10) / 10);
@@ -70,6 +76,13 @@ function pickValue(pick) {
  */
 function getPickValue(round, pickNumber) {
   const C = window.Constants;
+
+  // New TRADE_CONFIG logic
+  if (C?.TRADE_CONFIG?.PICK_ONE_VALUE) {
+     const globalPick = ((round - 1) * 32) + (pickNumber || 16);
+     return Math.max(1, Math.round(C.TRADE_CONFIG.PICK_ONE_VALUE * Math.pow(C.TRADE_CONFIG.PICK_DECAY, globalPick - 1)));
+  }
+
   const tradeValues = C?.TRADE_VALUES?.PICKS || {};
   
   if (tradeValues[round] && tradeValues[round][pickNumber]) {
