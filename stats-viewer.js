@@ -37,6 +37,7 @@
                 <div class="row" style="margin-bottom: 20px;">
                     <div class="stats-controls" style="display: flex; gap: 10px;">
                         <button class="btn ${currentStatsView === 'team' ? 'primary' : ''}" onclick="window.setStatsView('team')">Standings</button>
+                        <button class="btn ${currentStatsView === 'team_stats' ? 'primary' : ''}" onclick="window.setStatsView('team_stats')">Team Stats</button>
                         <button class="btn ${currentStatsView === 'players' ? 'primary' : ''}" onclick="window.setStatsView('players')">Player Leaders</button>
                     </div>
                 </div>
@@ -47,10 +48,59 @@
         const content = document.getElementById('stats-content');
         if (currentStatsView === 'team') {
             renderStandingsView(content);
+        } else if (currentStatsView === 'team_stats') {
+            renderTeamStatsView(content);
         } else {
             renderPlayerLeadersView(content);
         }
     };
+
+    function renderTeamStatsView(container) {
+        const L = window.state?.league;
+        if (!L || !L.teams) {
+            container.innerHTML = '<p class="muted">No league data available.</p>';
+            return;
+        }
+
+        let html = `
+        <div class="table-wrapper">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="sortable" onclick="window.sortTable('name')">Team</th>
+                        <th>3rd Down</th>
+                        <th>3rd %</th>
+                        <th>Red Zone</th>
+                        <th>RZ TD %</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        L.teams.forEach(t => {
+            const s = t.stats?.season || {};
+            const thirdAtt = s.thirdDownAttempts || 0;
+            const thirdConv = s.thirdDownConversions || 0;
+            const thirdPct = thirdAtt > 0 ? ((thirdConv/thirdAtt)*100).toFixed(1) + '%' : '0.0%';
+
+            const rzTrips = s.redZoneTrips || 0;
+            const rzTDs = s.redZoneTDs || 0;
+            const rzPct = rzTrips > 0 ? ((rzTDs/rzTrips)*100).toFixed(1) + '%' : '0.0%';
+
+            html += `
+                <tr>
+                    <td><strong>${t.name}</strong></td>
+                    <td>${thirdConv}/${thirdAtt}</td>
+                    <td>${thirdPct}</td>
+                    <td>${rzTDs}/${rzTrips}</td>
+                    <td>${rzPct}</td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table></div>`;
+        container.innerHTML = html;
+    }
 
     function renderStandingsView(container) {
         if (!window.calculateAllStandings || !window.state?.league) {
@@ -171,6 +221,7 @@
                 { key: 'passerRating', label: 'Rate' },
                 { key: 'sacks', label: 'Sk' },
                 { key: 'sackPct', label: 'Sk%' },
+                { key: 'dropbacks', label: 'DrpBk' },
                 { key: 'qbWins', label: 'W-L' },
                 { key: 'passAtt', label: 'Att' },
                 { key: 'passComp', label: 'Cmp' }
@@ -182,7 +233,9 @@
                 { key: 'yardsPerCarry', label: 'YPC' },
                 { key: 'rushYardsPerGame', label: 'Y/G' },
                 { key: 'recYd', label: 'Rec Yds' },
-                { key: 'recTD', label: 'Rec TD' }
+                { key: 'recTD', label: 'Rec TD' },
+                { key: 'routesRun', label: 'Rts' },
+                { key: 'dropRate', label: 'Drp%' }
             );
         } else if (['WR', 'TE'].includes(currentPosFilter)) {
             headers.push(
@@ -191,6 +244,8 @@
                 { key: 'recTD', label: 'TD' },
                 { key: 'targets', label: 'Tgt' },
                 { key: 'drops', label: 'Drop' },
+                { key: 'dropRate', label: 'Drp%' },
+                { key: 'separationRate', label: 'Sep%' },
                 { key: 'ratingWhenTargeted', label: 'Rt' }
             );
         } else if (currentPosFilter === 'OL') {
@@ -205,6 +260,8 @@
                 { key: 'tackles', label: 'Tkl' },
                 { key: 'sacks', label: 'Sk' },
                 { key: 'tacklesForLoss', label: 'TFL' },
+                { key: 'pressures', label: 'Pres' },
+                { key: 'pressureRate', label: 'Pres%' },
                 { key: 'forcedFumbles', label: 'FF' },
                 { key: 'interceptions', label: 'INT' },
                 { key: 'passesDefended', label: 'PD' }
@@ -214,7 +271,9 @@
                 { key: 'interceptions', label: 'INT' },
                 { key: 'passesDefended', label: 'PD' },
                 { key: 'tackles', label: 'Tkl' },
-                { key: 'forcedFumbles', label: 'FF' },
+                { key: 'targetsAllowed', label: 'Tgt A' },
+                { key: 'completionsAllowed', label: 'Cmp A' },
+                { key: 'tdsAllowed', label: 'TD A' },
                 { key: 'coverageRating', label: 'Cov' }
             );
         } else if (['K', 'P'].includes(currentPosFilter)) {
@@ -311,6 +370,7 @@
                         qbWins: (s.wins || 0) + '-' + (s.losses || 0),
                         passAtt: s.passAtt || 0,
                         passComp: s.passComp || 0,
+                        dropbacks: s.dropbacks || (s.passAtt || 0) + (s.sacks || 0),
 
                         yardsPerCarry: s.yardsPerCarry || 0,
                         rushYardsPerGame: s.rushYardsPerGame || 0,
@@ -319,12 +379,22 @@
                         receptions: s.receptions || 0,
                         drops: s.drops || 0,
                         ratingWhenTargeted: s.ratingWhenTargeted || 0,
+                        dropRate: s.dropRate || '0.0%',
+                        separationRate: s.separationRate || '0.0%',
+                        routesRun: s.routesRun || 0,
 
                         tacklesForLoss: s.tacklesForLoss || 0,
                         forcedFumbles: s.forcedFumbles || 0,
                         passesDefended: s.passesDefended || 0,
                         coverageRating: s.coverageRating || 0,
                         protectionGrade: s.protectionGrade || 0,
+
+                        pressures: s.pressures || 0,
+                        pressureRate: s.pressureRate || '0.0%',
+                        targetsAllowed: s.targetsAllowed || 0,
+                        completionsAllowed: s.completionsAllowed || 0,
+                        yardsAllowed: s.yardsAllowed || 0,
+                        tdsAllowed: s.tdsAllowed || 0,
 
                         fgMade: s.fgMade || 0,
                         successPct: s.successPct || 0,
@@ -392,6 +462,7 @@
                     <td style="font-weight: bold;">${p.passerRating.toFixed(1)}</td>
                     <td>${p.sacks}</td>
                     <td>${p.sackPct}</td>
+                    <td>${p.dropbacks}</td>
                     <td>${p.qbWins}</td>
                     <td>${p.passAtt}</td>
                     <td>${p.passComp}</td>
@@ -404,6 +475,8 @@
                     <td>${p.rushYardsPerGame.toFixed(1)}</td>
                     <td>${p.recYd}</td>
                     <td>${p.recTD}</td>
+                    <td>${p.routesRun}</td>
+                    <td>${p.dropRate}</td>
                 `;
             } else if (['WR', 'TE'].includes(currentPosFilter)) {
                 cells += `
@@ -412,6 +485,8 @@
                     <td>${p.recTD}</td>
                     <td>${p.targets}</td>
                     <td>${p.drops}</td>
+                    <td>${p.dropRate}</td>
+                    <td>${p.separationRate}</td>
                     <td>${p.ratingWhenTargeted.toFixed(1)}</td>
                 `;
             } else if (currentPosFilter === 'OL') {
@@ -426,6 +501,8 @@
                     <td>${p.tackles}</td>
                     <td>${p.sacks}</td>
                     <td>${p.tacklesForLoss}</td>
+                    <td>${p.pressures}</td>
+                    <td>${p.pressureRate}</td>
                     <td>${p.forcedFumbles}</td>
                     <td>${p.interceptions}</td>
                     <td>${p.passesDefended}</td>
@@ -435,8 +512,10 @@
                     <td>${p.interceptions}</td>
                     <td>${p.passesDefended}</td>
                     <td>${p.tackles}</td>
-                    <td>${p.forcedFumbles}</td>
-                    <td>${p.coverageRating}</td>
+                    <td>${p.targetsAllowed}</td>
+                    <td>${p.completionsAllowed}</td>
+                    <td>${p.tdsAllowed}</td>
+                    <td>${p.coverageRating.toFixed(1)}</td>
                 `;
             } else if (['K', 'P'].includes(currentPosFilter)) {
                 cells += `

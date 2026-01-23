@@ -169,6 +169,7 @@ function generateQBStats(qb, teamScore, defenseStrength, U) {
     passTD: touchdowns,
     interceptions: interceptions,
     sacks: sacks,
+    dropbacks: attempts + sacks, // NEW: Dropbacks = attempts + sacks
     longestPass: longestPass,
     completionPct: Math.round((completions / Math.max(1, attempts)) * 1000) / 10
   };
@@ -204,6 +205,11 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
   const drops = Math.max(0, targets - receptions);
   const yardsAfterCatch = Math.max(0, Math.round(recYd * 0.4 + U.rand(-5, 10)));
   
+  // NEW: Routes and separation
+  const routesRun = Math.round(targets * 3 + U.rand(5, 15)); // Approx 3x targets
+  const separationChance = (ratings.agility || 70) / 150;
+  const targetsWithSeparation = Math.round(targets * separationChance);
+
   return {
     rushAtt: carries,
     rushYd: Math.max(0, rushYd),
@@ -217,7 +223,9 @@ function generateRBStats(rb, teamScore, defenseStrength, U) {
     recTD: recTD,
     drops: drops,
     yardsAfterCatch: yardsAfterCatch,
-    longestCatch: receptions > 0 ? Math.max(5, Math.round(recYd / receptions * U.rand(1.2, 2.5))) : 0
+    longestCatch: receptions > 0 ? Math.max(5, Math.round(recYd / receptions * U.rand(1.2, 2.5))) : 0,
+    routesRun: routesRun,
+    targetsWithSeparation: targetsWithSeparation
   };
 }
 
@@ -273,6 +281,11 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   
   const longestCatch = receptions > 0 ? Math.max(10, Math.round(recYd / receptions * U.rand(1.5, 3.5))) : 0;
   
+  // NEW: Routes and separation
+  const routesRun = Math.round(targets * 4 + U.rand(10, 20)); // WRs run more routes per target
+  const separationChance = ((ratings.agility || 70) + (ratings.speed || 70)) / 250;
+  const targetsWithSeparation = Math.round(targets * separationChance);
+
   return {
     targets: targets,
     receptions: receptions,
@@ -280,7 +293,9 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
     recTD: recTD,
     drops: drops,
     yardsAfterCatch: yardsAfterCatch,
-    longestCatch: longestCatch
+    longestCatch: longestCatch,
+    routesRun: routesRun,
+    targetsWithSeparation: targetsWithSeparation
   };
 }
 
@@ -303,11 +318,22 @@ function generateDBStats(db, offenseStrength, U) {
   
   const passesDefended = Math.max(0, Math.min(5, Math.round((coverage / 30) + U.rand(-0.5, 1.5))));
   
+  // NEW: Coverage stats
+  const targetsAllowed = Math.round(5 + (100 - coverage) / 10 + U.rand(-1, 2));
+  const completionPctAllowed = Math.max(0.4, (100 - coverage) / 100);
+  const completionsAllowed = Math.round(targetsAllowed * completionPctAllowed);
+  const yardsAllowed = Math.round(completionsAllowed * (10 + (100 - speed)/10));
+  const tdsAllowed = U.rand(0, 100) < (100 - coverage) ? 1 : 0;
+
   return {
     coverageRating: Math.max(0, Math.min(100, coverageRating)),
     tackles: tackles,
     interceptions: interceptions,
-    passesDefended: passesDefended
+    passesDefended: passesDefended,
+    targetsAllowed: targetsAllowed,
+    completionsAllowed: completionsAllowed,
+    yardsAllowed: yardsAllowed,
+    tdsAllowed: tdsAllowed
   };
 }
 
@@ -333,12 +359,19 @@ function generateDLStats(defender, offenseStrength, U) {
   
   const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
   
+  // NEW: Pass rush stats
+  const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed)/5);
+  const pressureChance = (passRushPower + passRushSpeed) / 300;
+  const pressures = Math.round(passRushSnaps * pressureChance);
+
   return {
     pressureRating: Math.max(0, Math.min(100, pressureRating)),
     sacks: sacks,
     tackles: tackles,
     tacklesForLoss: tacklesForLoss,
-    forcedFumbles: forcedFumbles
+    forcedFumbles: forcedFumbles,
+    passRushSnaps: passRushSnaps,
+    pressures: pressures
   };
 }
 
@@ -623,6 +656,27 @@ function simGameStats(home, away) {
     // Generate stats for both teams
     generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups);
     generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups);
+
+    // NEW: Team Situational Stats
+    const generateTeamStats = (team, score, strength, oppStrength) => {
+        if (!team.stats) team.stats = { game: {}, season: {} };
+        if (!team.stats.game) team.stats.game = {};
+
+        const baseAttempts = 12 + U.rand(-2, 4);
+        const conversionRate = 0.35 + (strength - oppStrength) / 200;
+        const conversions = Math.round(baseAttempts * Math.max(0.1, Math.min(0.8, conversionRate)));
+
+        const trips = Math.round(score / 6 + U.rand(0, 2));
+        const redZoneTDs = Math.min(trips, Math.round(trips * (0.5 + (strength - oppStrength) / 200)));
+
+        team.stats.game.thirdDownAttempts = baseAttempts;
+        team.stats.game.thirdDownConversions = conversions;
+        team.stats.game.redZoneTrips = trips;
+        team.stats.game.redZoneTDs = redZoneTDs;
+    };
+
+    generateTeamStats(home, homeScore, homeStrength, awayStrength);
+    generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
     return { homeScore, awayScore };
     
@@ -930,6 +984,7 @@ function startNewSeason() {
     // Reset team records, clear per-game stats, and reset season stats
     L.teams.forEach(team => {
       team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+      if (team.stats) team.stats.season = {};
       if (team.roster) {
         team.roster.forEach(p => {
           if (p && p.stats) {
@@ -1223,6 +1278,22 @@ function simulateWeek(options = {}) {
           
           updatePlayerStats(home.roster);
           updatePlayerStats(away.roster);
+
+          // NEW: Update team season stats from game stats
+          const updateTeamSeasonStats = (team) => {
+              if (!team || !team.stats || !team.stats.game) return;
+              if (!team.stats.season) team.stats.season = {};
+
+              Object.keys(team.stats.game).forEach(key => {
+                  const val = team.stats.game[key];
+                  if (typeof val === 'number') {
+                      team.stats.season[key] = (team.stats.season[key] || 0) + val;
+                  }
+              });
+          };
+
+          updateTeamSeasonStats(home);
+          updateTeamSeasonStats(away);
         }
         
         // Store game result with complete box score
