@@ -1,6 +1,13 @@
 // staff.js
 'use strict';
 
+const STAFF_PERKS = {
+    HC: ['Motivator', 'Strategist', 'Disciplinarian'],
+    OC: ['Air Raid', 'Ground & Pound', 'Balanced'],
+    DC: ['Blitz Happy', 'Zone Specialist', 'No Fly Zone'],
+    Scout: ['Talent Spotter', 'Draft Guru', 'Analytics Expert']
+};
+
 // Creates a single staff member with ratings
 function makeStaff(position) {
     const U = window.Utils;
@@ -9,6 +16,10 @@ function makeStaff(position) {
     const firstNames = window.Constants?.FIRST_NAMES || window.FIRST_NAMES || ['John', 'Mike', 'Steve', 'Dave', 'Tom'];
     const lastNames = window.Constants?.LAST_NAMES || window.LAST_NAMES || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones'];
     
+    // Select a random perk for the position
+    const possiblePerks = STAFF_PERKS[position] || [];
+    const perk = possiblePerks.length > 0 ? U.choice(possiblePerks) : null;
+
     const staffMember = {
         id: U.id(),
         name: U.choice(firstNames) + ' ' + U.choice(lastNames),
@@ -18,12 +29,18 @@ function makeStaff(position) {
         playerDevelopment: U.rand(50, 99),
         playcalling: U.rand(50, 99),
         scouting: U.rand(50, 99),
+
+        // RPG Elements
+        xp: 0,
+        level: 1,
+        perk: perk,
+
         // Initialize coaching stats
         stats: null, // Will be initialized by coaching system
         careerHistory: []
     };
     
-    console.log(`Generated ${position}: ${staffMember.name}`);
+    console.log(`Generated ${position}: ${staffMember.name} (${perk})`);
     return staffMember;
 }
 
@@ -44,3 +61,5 @@ function generateInitialStaff() {
 
 // Make the function available to other scripts
 window.generateInitialStaff = generateInitialStaff;
+window.makeStaff = makeStaff; // Also expose makeStaff
+window.STAFF_PERKS = STAFF_PERKS;
