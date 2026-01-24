@@ -1182,11 +1182,22 @@ class GameController {
         const sidebar = document.getElementById('nav-sidebar');
         const overlay = document.getElementById('menu-overlay');
 
+        // Initial setup for mobile
+        if (window.innerWidth <= 768) {
+            if (sidebar && !sidebar.classList.contains('collapsed')) {
+                sidebar.classList.add('collapsed');
+            }
+        }
+
         function toggleMenu() {
-            if (sidebar) sidebar.classList.toggle('active');
+            // Toggle collapsed class (collapsed = hidden)
+            if (sidebar) sidebar.classList.toggle('collapsed');
+
+            // Toggle active on overlay (active = visible)
             if (overlay) overlay.classList.toggle('active');
-            // Also toggle .nav-open for compatibility if needed
-            if (sidebar) sidebar.classList.toggle('nav-open');
+
+            // Toggle body class for styling if needed
+            document.body.classList.toggle('nav-open');
         }
 
         if (menuBtn) {
@@ -1298,6 +1309,19 @@ class GameController {
 
     async loadGameState() {
         try {
+            // Priority: Check League Dashboard system first
+            if (window.getLastPlayedLeague && window.loadLeague) {
+                const lastLeague = window.getLastPlayedLeague();
+                if (lastLeague) {
+                    console.log("Loading last played league:", lastLeague);
+                    const loadedState = window.loadLeague(lastLeague);
+                    if (loadedState) {
+                        return { success: true, gameData: loadedState };
+                    }
+                }
+            }
+
+            // Fallback: Legacy State System
             if (loadState) {
                 const gameData = loadState();
                 if (gameData) {

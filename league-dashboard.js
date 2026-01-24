@@ -1,4 +1,16 @@
 const DB_KEY_PREFIX = 'football_gm_league_';
+const LAST_PLAYED_KEY = 'football_gm_last_played';
+
+// Helper to manage last played league
+export function getLastPlayedLeague() {
+    return localStorage.getItem(LAST_PLAYED_KEY);
+}
+
+export function setLastPlayedLeague(name) {
+    if (name) {
+        localStorage.setItem(LAST_PLAYED_KEY, name);
+    }
+}
 
 // 1. Function to Save Current Game
 export function saveGame(stateToSave) {
@@ -31,6 +43,7 @@ export function saveGame(stateToSave) {
 
     try {
         localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+        setLastPlayedLeague(leagueName); // Update last played
         if (window.setStatus) window.setStatus("League saved: " + leagueName, "success");
         console.log("Game saved successfully to " + leagueName);
         renderDashboard();
@@ -94,12 +107,15 @@ export function renderDashboard() {
 // 3. Load Specific League
 export function loadLeague(leagueName) {
     const raw = localStorage.getItem(DB_KEY_PREFIX + leagueName);
-    if (!raw) return;
+    if (!raw) return null;
 
     try {
         const saveObj = JSON.parse(raw);
         window.state = saveObj.data;
         window.state.leagueName = leagueName; // Ensure name is preserved
+
+        // Update last played on load
+        setLastPlayedLeague(leagueName);
 
         // Hide dashboard, show game
         const dashboard = document.getElementById('leagueDashboard');
@@ -113,13 +129,18 @@ export function loadLeague(leagueName) {
             window.gameController.router('hub');
         } else {
             location.hash = '#/hub';
-            window.location.reload();
+            // Only reload if not already initialized to avoid loops
+            if (!window.gameController || !window.gameController.initialized) {
+                 // window.location.reload(); // Removed to prevent reload loops
+            }
         }
 
         if (window.setStatus) window.setStatus("Loaded " + leagueName, "success");
+        return window.state;
     } catch (e) {
         console.error("Error loading league:", e);
         if (window.setStatus) window.setStatus("Failed to load league.", "error");
+        return null;
     }
 }
 
@@ -127,6 +148,9 @@ export function loadLeague(leagueName) {
 export function deleteLeague(leagueName) {
     if (confirm(`Delete league "${leagueName}"? This cannot be undone.`)) {
         localStorage.removeItem(DB_KEY_PREFIX + leagueName);
+        if (getLastPlayedLeague() === leagueName) {
+            localStorage.removeItem(LAST_PLAYED_KEY);
+        }
         renderDashboard();
     }
 }
@@ -145,6 +169,9 @@ export function createNewLeague(name) {
 
     // Store name temporarily
     sessionStorage.setItem('temp_league_name', name);
+
+    // Set as last played immediately
+    setLastPlayedLeague(name);
 
     // Hide dashboard
     const dashboard = document.getElementById('leagueDashboard');
@@ -167,6 +194,7 @@ window.renderDashboard = renderDashboard;
 window.loadLeague = loadLeague;
 window.deleteLeague = deleteLeague;
 window.createNewLeague = createNewLeague;
+window.getLastPlayedLeague = getLastPlayedLeague;
 
 // Bind UI events when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
