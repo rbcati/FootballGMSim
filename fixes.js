@@ -2125,6 +2125,48 @@ window.on = on;
     
     console.log('✅ iOS optimizations added');
   }
+
+  // ============================================================================
+  // FIX 5: Modal Accessibility
+  // ============================================================================
+
+  function fixModalAccessibility() {
+    console.log('🔧 Fixing modal accessibility...');
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      let closed = false;
+
+      // 1. Dynamic modals
+      document.querySelectorAll('.modal').forEach(modal => {
+        if (closed || modal.id === 'onboardModal') return;
+        if (modal.style.display !== 'none' && !modal.hidden && modal.offsetWidth > 0) {
+          const closeBtn = modal.querySelector('.close');
+          if (closeBtn) closeBtn.click();
+          else if (modal.parentElement === document.body) modal.remove();
+          else { modal.hidden = true; modal.style.display = 'none'; }
+          console.log('✅ Closed dynamic modal');
+          closed = true;
+        }
+      });
+      if (closed) return;
+
+      // 2. Static modals
+      ['gameResultsModal', 'errorOverlay'].forEach(id => {
+        if (closed) return;
+        const m = document.getElementById(id);
+        if (m && !m.hidden && m.style.display !== 'none') {
+             if (id === 'errorOverlay') m.querySelector('#errorClose')?.click();
+             else {
+                 m.hidden = true; m.style.display = 'none';
+                 if (id === 'gameResultsModal') window.gameResultsViewer?.hideModal();
+             }
+             console.log(`✅ Closed ${id}`);
+             closed = true;
+        }
+      });
+    });
+    console.log('✅ Modal accessibility fixed');
+  }
   
   // ============================================================================
   // FIX 4: Ensure event listeners are initialized
@@ -2157,6 +2199,9 @@ window.on = on;
     
     // Add iOS optimizations
     addIOSOptimizations();
+
+    // Fix modal accessibility
+    fixModalAccessibility();
     
     // Ensure setupEventListeners is called if available
     if (window.setupEventListeners && typeof window.setupEventListeners === 'function') {
