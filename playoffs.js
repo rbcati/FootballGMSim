@@ -22,7 +22,17 @@ function generatePlayoffs(teams) {
 
     const getConferenceTeams = (confId) => {
         return teams.filter(t => t.conf === confId)
-            .sort((a, b) => (b.record.w - a.record.w) || ((b.record.pf - b.record.pa) - (a.record.pf - a.record.pa)));
+            .sort((a, b) => {
+                // Primary: Wins
+                const winsA = a.wins ?? a.record?.w ?? 0;
+                const winsB = b.wins ?? b.record?.w ?? 0;
+                if (winsB !== winsA) return winsB - winsA;
+
+                // Secondary: Point Diff
+                const diffA = (a.ptsFor ?? a.record?.pf ?? 0) - (a.ptsAgainst ?? a.record?.pa ?? 0);
+                const diffB = (b.ptsFor ?? b.record?.pf ?? 0) - (b.ptsAgainst ?? b.record?.pa ?? 0);
+                return diffB - diffA;
+            });
     };
 
     const afcTeams = getConferenceTeams(0);
@@ -51,14 +61,25 @@ function simPlayoffWeek() {
     if (!P || P.winner) return;
 
     const simGame = window.simGameStats;
+    if (!simGame) {
+        console.error("simGameStats not available");
+        return;
+    }
+
     const roundResults = { round: P.currentRound, games: [] };
 
     const simRound = (games) => {
         const winners = [];
         games.forEach(game => {
             const result = simGame(game.home, game.away);
-            roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
-            winners.push(result.homeScore > result.awayScore ? game.home : game.away);
+            if (result) {
+                roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
+                winners.push(result.homeScore > result.awayScore ? game.home : game.away);
+            } else {
+                console.error("Simulation failed for game", game);
+                // Fallback random winner to prevent crash
+                winners.push(game.home);
+            }
         });
         return winners;
     };
@@ -95,19 +116,23 @@ function simPlayoffWeek() {
             window.recordSuperBowl(window.state.league, year, winner, runnerUp);
         }
         
-        setStatus(`🏆 ${P.winner.name} have won the Super Bowl!`);
+        if (window.setStatus) window.setStatus(`🏆 ${P.winner.name} have won the Super Bowl!`);
         console.log("Super Bowl Winner:", P.winner);
     }
     
     P.results.push(roundResults);
-    // ** THE FIX IS HERE **
-    // The original code was likely incrementing the round before the Super Bowl check,
-    // causing it to skip the final round. This structure ensures all rounds are played.
+
     if (!P.winner) {
         P.currentRound++;
     }
 
-    if (saveState) saveState();
+    // Use unified save
+    if (window.saveGame) {
+        window.saveGame();
+    } else if (saveState) {
+        saveState();
+    }
+
     if (window.renderPlayoffs) renderPlayoffs();
 }
 
@@ -115,68 +140,75 @@ function simPlayoffWeek() {
 function startPlayoffs() {
     console.log('Starting playoffs...');
     
-    // Check if playoffs already exist for this year to prevent overwrite
-    if (window.state?.playoffs && window.state.playoffs.year === window.state.league?.year) {
-        console.warn('Playoffs already active for this year. Redirecting...');
+    try {
+        // Check if playoffs already exist for this year to prevent overwrite
+        if (window.state?.playoffs && window.state.playoffs.year === window.state.league?.year) {
+            console.warn('Playoffs already active for this year. Redirecting...');
+            if (window.location) {
+                window.location.hash = '#/playoffs';
+            }
+            if (window.renderPlayoffs) {
+                window.renderPlayoffs();
+            }
+            return;
+        }
+
+        if (!window.state?.league?.teams) {
+            throw new Error('No teams available for playoffs');
+        }
+
+        // Generate playoff bracket
+        const playoffBracket = generatePlayoffs(window.state.league.teams);
+
+        // Store in state
+        window.state.playoffs = playoffBracket;
+
+        // Save state using robust method
+        if (window.saveGame) {
+            window.saveGame();
+        } else if (saveState) {
+            saveState();
+        }
+
+        // Navigate to playoffs view
         if (window.location) {
             window.location.hash = '#/playoffs';
         }
+
+        // Render playoffs
         if (window.renderPlayoffs) {
             window.renderPlayoffs();
         }
-        return;
-    }
 
-    if (!window.state?.league?.teams) {
-        console.error('No teams available for playoffs');
-        window.setStatus('Error: No teams available for playoffs');
-        return;
+        if (window.setStatus) window.setStatus('Playoffs have begun!', 'success');
+        console.log('Playoffs started successfully');
+
+    } catch (error) {
+        console.error("Error starting playoffs:", error);
+        if (window.setStatus) window.setStatus("Failed to start playoffs: " + error.message, 'error');
     }
-    
-    // Generate playoff bracket
-    const playoffBracket = generatePlayoffs(window.state.league.teams);
-    
-    // Store in state
-    window.state.playoffs = playoffBracket;
-    
-    // Save state
-    if (saveState) {
-        saveState();
-    }
-    
-    // Navigate to playoffs view
-    if (window.location) {
-        window.location.hash = '#/playoffs';
-    }
-    
-    // Render playoffs
-    if (window.renderPlayoffs) {
-        window.renderPlayoffs();
-    }
-    
-    window.setStatus('Playoffs have begun!');
-    console.log('Playoffs started successfully');
 }
 
 // --- PLAYOFF UI RENDERING ---
 function renderPlayoffs() {
-    const container = document.getElementById('playoffs') || document.getElementById('playoff-bracket');
+    let container = document.getElementById('playoffs') || document.getElementById('playoff-bracket');
     if (!container) {
-        console.warn('Playoff container not found, creating one.');
+        // Create the view if it doesn't exist
         const content = document.querySelector('.content');
-        if (!content) return;
-        // Create a new section if it doesn't exist.
-        let playoffSection = document.getElementById('playoffs');
-        if (!playoffSection) {
-            playoffSection = document.createElement('section');
+        if (content) {
+            const playoffSection = document.createElement('section');
             playoffSection.id = 'playoffs';
             playoffSection.className = 'view';
+            playoffSection.hidden = false; // Show it
             content.appendChild(playoffSection);
+            container = playoffSection;
+        } else {
+            console.warn('Playoff container not found and could not be created');
+            return;
         }
-        container = playoffSection;
     }
 
-    const P = window.state?.playoffs || window.state?.playoffs;
+    const P = window.state?.playoffs;
     if (!P) {
         container.innerHTML = '<div class="card"><p>No playoff data available.</p></div>';
         return;
@@ -209,6 +241,7 @@ function renderPlayoffs() {
 }
 
 function renderConference(name, confRounds, userTeamId = 0) {
+    if (!confRounds) return '';
     return `
         <div class="conference-bracket ${name.toLowerCase()}">
             <h3 class="conference-title">${name} Conference</h3>
@@ -237,6 +270,23 @@ function renderRound(games, roundNum, userTeamId = 0) {
     
     let html = '';
     games.forEach(game => {
+        if (!game) return;
+
+        // Handle bye week logic stored in array
+        if (game.bye) {
+             const isUserTeam = game.bye.id === userTeamId;
+             html += `
+                <div class="matchup bye ${isUserTeam ? 'user-team-matchup' : ''}">
+                    <div class="team winner ${isUserTeam ? 'user-team' : ''}">
+                        <span class="seed">${game.bye.seed || 1}</span>
+                        <span class="team-name">${game.bye.name || 'TBD'}</span>
+                        <span class="bye-label">BYE</span>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
         if (!game.home || !game.away) return;
         
         const result = findResult(game.home, game.away, roundNum);
@@ -260,8 +310,8 @@ function renderRound(games, roundNum, userTeamId = 0) {
         `;
     });
     
-    // Handle bye week for #1 seed
-    if (games.bye) {
+    // Handle bye week stored as property on array (legacy check)
+    if (games.bye && !Array.isArray(games)) {
         const isUserTeam = games.bye.id === userTeamId;
         html += `
             <div class="matchup bye ${isUserTeam ? 'user-team-matchup' : ''}">
@@ -308,7 +358,7 @@ function renderSuperBowl(game, userTeamId = 0) {
 }
 
 function findResult(homeTeam, awayTeam, roundNum) {
-    const P = window.state?.playoffs || window.state?.playoffs;
+    const P = window.state?.playoffs;
     if (!P || !P.results || !P.results[roundNum]) return null;
     return P.results[roundNum].games.find(g => 
         g.home && g.away && homeTeam && awayTeam &&
