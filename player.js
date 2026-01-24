@@ -804,8 +804,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         html += `</div>`;
         html += `<div class="depth-actions">`;
         // Use number directly in onclick to avoid string conversion issues
-        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth('${entry.playerId}', '${pos}', ${entry.depthPosition - 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition === 1 ? 'disabled' : ''}>↑</button>`;
-        html += `<button class="btn btn-sm" onclick="if(window.movePlayerDepth) { window.movePlayerDepth('${entry.playerId}', '${pos}', ${entry.depthPosition + 1}); } else { console.error('movePlayerDepth not available'); }" ${entry.depthPosition >= depth.length ? 'disabled' : ''}>↓</button>`;
+        html += `<button class="btn btn-sm depth-move-btn" data-action="move-depth" data-player-id="${entry.playerId}" data-position="${pos}" data-new-depth="${entry.depthPosition - 1}" ${entry.depthPosition === 1 ? 'disabled' : ''}>↑</button>`;
+        html += `<button class="btn btn-sm depth-move-btn" data-action="move-depth" data-player-id="${entry.playerId}" data-position="${pos}" data-new-depth="${entry.depthPosition + 1}" ${entry.depthPosition >= depth.length ? 'disabled' : ''}>↓</button>`;
         html += `</div>`;
         html += `</div>`;
       });
@@ -826,7 +826,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
    * @param {string} position - Position
    * @param {number} newDepth - New depth position
    */
-  window.movePlayerDepth = function(playerId, position, newDepth) {
+  function movePlayerDepth(playerId, position, newDepth) {
     try {
       const team = window.currentTeam ? window.currentTeam() : (window.state?.league?.teams?.[window.state?.userTeamId]);
       if (!team || !team.roster) {
@@ -2149,77 +2149,6 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       }
   }
 
-  // ============================================================================
-  // PLAYER FACTORY FALLBACK (from player-factory.js)
-  // ============================================================================
-
-  // Only use if makePlayer doesn't exist (backward compatibility check)
-  if (!window.makePlayer) {
-    function generatePlayerName(position) {
-        const constants = C;
-        const utils = U;
-        const first = utils?.choice(constants?.FIRST_NAMES || ['James', 'Michael']);
-        const last = utils?.choice(constants?.LAST_NAMES || ['Smith', 'Johnson']);
-        return `${first} ${last}`;
-    }
-
-    function generatePlayerRatingsFactory(position, ovr) {
-        const constants = C;
-        const utils = U;
-        const baseRatings = constants?.POS_RATING_RANGES?.[position] || {};
-        const ratings = {};
-
-        Object.keys(baseRatings).forEach(attr => {
-            const [min, max] = baseRatings[attr];
-            ratings[attr] = utils?.clamp ? utils.clamp(ovr + utils.rand(-5, 5), min, max) : ovr;
-        });
-
-        return ratings;
-    }
-
-    window.makePlayer = function makePlayerFactory(position, age, ovr) {
-        const constants = C;
-        const utils = U;
-
-        if (!constants || !utils) {
-            console.error('makePlayer fallback missing dependencies');
-            return null;
-        }
-
-        const playerOvr = typeof ovr === 'number' ? ovr : utils.rand(60, 85);
-        const playerAge = typeof age === 'number' ? age : utils.rand(21, 35);
-
-        const player = {
-            id: utils.id(),
-            name: generatePlayerName(position),
-            pos: position,
-            age: playerAge,
-            ovr: playerOvr,
-            years: utils.rand(1, 4),
-            yearsTotal: undefined,
-            // FIXED: Reduced salary ranges to fit within $220M cap
-            baseAnnual: (playerOvr >= 90 ? utils.rand(12, 22) :
-                       playerOvr >= 80 ? utils.rand(4, 12) : 
-                       playerOvr >= 70 ? utils.rand(1.5, 5) : 
-                       playerOvr >= 60 ? utils.rand(0.6, 2) : utils.rand(0.4, 0.8)) * (constants.SALARY_CAP?.POS_SALARY_WEIGHTS?.[position] || 1.0),
-            ratings: generatePlayerRatingsFactory(position, playerOvr),
-            abilities: constants?.ABILITIES_BY_POS?.[position]
-                ? [utils.choice(constants.ABILITIES_BY_POS[position])]
-                : [],
-            college: generateCollege(),
-            fatigue: 0,
-            stats: {},
-            statsHistory: []
-        };
-
-        if (!player.yearsTotal) player.yearsTotal = player.years;
-        
-        // Initialize depth chart
-        initializeDepthChartStats(player);
-        
-        return player;
-    };
-  }
 
   // ============================================================================
   // PLAYER CLASS (New Implementation)
@@ -2358,6 +2287,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
     setDepthChartPosition,
     generateDepthChart,
     renderDepthChart,
+    movePlayerDepth,
     updatePlaybookKnowledge,
     updateChemistry,
     addPracticeReps,
