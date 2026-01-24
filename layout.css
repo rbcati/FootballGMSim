@@ -223,3 +223,39 @@ body.nav-open .nav-overlay,
 .nav-overlay.show {
   display: block;
 }
+
+/* --- League Dashboard --- */
+#leagueDashboard {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+#leagueDashboard h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-4);
+    color: var(--text-highlight);
+    text-align: center;
+}
+
+.dashboard-section {
+    margin-bottom: var(--space-4);
+}
+
+.dashboard-section h3 {
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: var(--space-2);
+}
+
+/* Ensure table looks good */
+#leagues-table {
+    width: 100%;
+}
+
+#leagues-table th, #leagues-table td {
+    vertical-align: middle;
+}
+
+.btn-load {
+    min-width: 60px;
+}

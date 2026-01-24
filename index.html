@@ -140,31 +140,52 @@
                 <select id="userTeam"></select>
             </div>
             <div class="section">
-                <label for="saveSlotSelect">Save Slot</label>
-                <select id="saveSlotSelect">
-                    <option value="1">Slot 1</option>
-                    <option value="2">Slot 2</option>
-                    <option value="3">Slot 3</option>
-                    <option value="4">Slot 4</option>
-                    <option value="5">Slot 5</option>
-                </select>
-                <div id="saveSlotInfo" class="muted small"></div>
-            </div>
-            <div class="section">
               <div>Season <span id="seasonNow"></span></div>
               <div>Cap Used: <span id="capUsed"></span> / <span id="capTotal"></span></div>
               <div class="muted small">Dead Cap: <span id="deadCap"></span></div>
               <div class="muted small">Room: <span id="capRoom"></span></div>
             </div>
             <div class="section">
-                <button id="btnSave" class="btn">Save</button>
-                <button id="btnLoad" class="btn">Load</button>
-                <button id="btnNewLeague" class="btn danger">New League</button>
+                <button id="btnDashboard" class="btn primary" style="width:100%">League Dashboard</button>
             </div>
             <div id="statusMsg" class="section muted"></div>
         </aside>
 
         <section class="content">
+            <section id="leagueDashboard" class="view" hidden>
+                <div class="card">
+                    <h1>Football GM Dashboard</h1>
+
+                    <div class="dashboard-section">
+                        <h3>Current Leagues</h3>
+                        <div class="table-wrapper">
+                            <table class="table" id="leagues-table">
+                                <thead>
+                                    <tr>
+                                        <th>League Name</th>
+                                        <th>Team</th>
+                                        <th>Year</th>
+                                        <th>Last Played</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leagues-list">
+                                    </tbody>
+                            </table>
+                        </div>
+                        <div id="no-leagues-msg" style="display:none; padding: 10px;" class="muted">No saved leagues found.</div>
+                    </div>
+
+                    <div class="dashboard-section mt-4">
+                        <h3>Create New League</h3>
+                        <div class="row">
+                            <input type="text" id="new-league-name" placeholder="Enter League Name" style="max-width:300px">
+                            <button id="create-league-btn" class="btn primary">Create League</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             <section id="hub" class="view">
               <div class="card">
                 <div class="row"><h2>League Hub</h2><div class="spacer"></div><div class="muted">Season <span id="hubSeason"></span></div></div>
@@ -524,8 +545,10 @@
 
 <!-- Main Game Controller -->
 <script type="module" src="main.js?v=1.0.1"></script>
+<script type="module" src="league-dashboard.js?v=1.0.1"></script>
 <!-- Note: Fix files are now combined in fixes.js -->
 
+<div id="menu-overlay"></div>
 </body>
 </html>
         
