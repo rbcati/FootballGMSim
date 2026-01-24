@@ -1,6 +1,7 @@
 'use strict';
 
 import { saveState } from './state.js';
+import { launchConfetti } from './confetti.js';
 
 /**
  * Playoff Management System
@@ -118,6 +119,9 @@ function simPlayoffWeek() {
         
         if (window.setStatus) window.setStatus(`🏆 ${P.winner.name} have won the Super Bowl!`);
         console.log("Super Bowl Winner:", P.winner);
+
+        // Trigger confetti for the championship win
+        if (launchConfetti) launchConfetti();
     }
     
     P.results.push(roundResults);
