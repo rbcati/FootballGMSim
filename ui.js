@@ -1,5 +1,6 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
 import { saveState } from './state.js';
+import { generateDepthChart, renderDepthChart, movePlayerDepth, initializeDepthChartStats, calculateEffectiveRating, generateDraftClass } from './player.js';
 
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
@@ -425,12 +426,30 @@ window.renderRoster = function() {
         }
         
         // Generate and render depth chart
-        if (window.generateDepthChart && window.renderDepthChart) {
+        if (generateDepthChart && renderDepthChart) {
             try {
-                window.generateDepthChart(team);
+                generateDepthChart(team);
                 const depthChartContainer = document.getElementById('depthChartContainer');
                 if (depthChartContainer) {
-                    depthChartContainer.innerHTML = window.renderDepthChart(team);
+                    depthChartContainer.innerHTML = renderDepthChart(team);
+
+                    // Attach event listeners for depth chart moves (use onclick to prevent accumulation)
+                    depthChartContainer.onclick = (e) => {
+                        const btn = e.target.closest('.depth-move-btn');
+                        if (!btn) return;
+
+                        const playerId = btn.dataset.playerId;
+                        const position = btn.dataset.position;
+                        const newDepth = parseInt(btn.dataset.newDepth, 10);
+
+                        if (playerId && position && !isNaN(newDepth)) {
+                            if (movePlayerDepth) {
+                                movePlayerDepth(playerId, position, newDepth);
+                                // Re-render the depth chart
+                                depthChartContainer.innerHTML = renderDepthChart(team);
+                            }
+                        }
+                    };
                 }
             } catch (error) {
                 console.error('Error rendering depth chart:', error);
@@ -497,23 +516,23 @@ window.renderRoster = function() {
         }
         
         // Initialize depth chart stats for all players
-        if (window.initializeDepthChartStats) {
+        if (initializeDepthChartStats) {
             team.roster.forEach(player => {
-                window.initializeDepthChartStats(player, team);
+                initializeDepthChartStats(player, team);
             });
         }
         
         // Generate depth chart to get effective ratings
-        if (window.generateDepthChart) {
-            window.generateDepthChart(team);
+        if (generateDepthChart) {
+            generateDepthChart(team);
         }
         
         // Sort roster by position and effective rating (from depth chart)
         const sortedRoster = [...team.roster].sort((a, b) => {
             if (a.pos !== b.pos) return a.pos.localeCompare(b.pos);
             // Use effective rating if available, otherwise use OVR
-            const aEff = window.calculateEffectiveRating ? window.calculateEffectiveRating(a, team, a.pos) : (a.ovr || 0);
-            const bEff = window.calculateEffectiveRating ? window.calculateEffectiveRating(b, team, b.pos) : (b.ovr || 0);
+            const aEff = calculateEffectiveRating ? calculateEffectiveRating(a, team, a.pos) : (a.ovr || 0);
+            const bEff = calculateEffectiveRating ? calculateEffectiveRating(b, team, b.pos) : (b.ovr || 0);
             return bEff - aEff;
         });
         
@@ -523,13 +542,13 @@ window.renderRoster = function() {
             tr.style.cursor = 'pointer';
             
             // Initialize depth chart stats if not already done
-            if (window.initializeDepthChartStats) {
-                window.initializeDepthChartStats(player, team);
+            if (initializeDepthChartStats) {
+                initializeDepthChartStats(player, team);
             }
             
             // Get depth chart data
             const dc = player.depthChart || {};
-            const effectiveRating = window.calculateEffectiveRating ? window.calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0);
+            const effectiveRating = calculateEffectiveRating ? calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0);
             const depthPosition = dc.depthPosition || 'N/A';
             const playbookKnowledge = dc.playbookKnowledge || 50;
             const chemistry = dc.chemistry || 50;
