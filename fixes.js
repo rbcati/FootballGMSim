@@ -1394,6 +1394,7 @@ console.log('[LeagueCreationFix] Loaded');
     
     function openNav() {
       navSidebar.classList.remove('collapsed');
+      navSidebar.classList.add('active'); // CSS ID specificity fix
       layout.classList.remove('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'true');
       if (isMobile && navOverlay) {
@@ -1404,6 +1405,7 @@ console.log('[LeagueCreationFix] Loaded');
     
     function closeNav() {
       navSidebar.classList.add('collapsed');
+      navSidebar.classList.remove('active'); // CSS ID specificity fix
       layout.classList.add('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'false');
       if (navOverlay) {
@@ -1948,6 +1950,7 @@ window.on = on;
       // Expand navigation
       navSidebar.classList.remove('collapsed');
       navSidebar.classList.add('nav-open'); // Mobile compat
+      navSidebar.classList.add('active'); // CSS ID specificity fix
       document.body.classList.add('nav-open'); // Mobile compat
       if (layout) layout.classList.remove('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'true');
@@ -1963,6 +1966,7 @@ window.on = on;
       // Collapse navigation
       navSidebar.classList.add('collapsed');
       navSidebar.classList.remove('nav-open'); // Mobile compat
+      navSidebar.classList.remove('active'); // CSS ID specificity fix
       document.body.classList.remove('nav-open'); // Mobile compat
       if (layout) layout.classList.add('nav-collapsed');
       navToggle.setAttribute('aria-expanded', 'false');
@@ -2136,6 +2140,12 @@ window.on = on;
   }
   
   function initializeAll() {
+    if (window.__criticalFixesInitialized) {
+        console.log('✅ Critical fixes already initialized');
+        return;
+    }
+    window.__criticalFixesInitialized = true;
+
     console.log('🚀 Initializing all critical fixes...');
     
     // Fix click handlers
