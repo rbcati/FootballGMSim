@@ -541,6 +541,7 @@ class GameController {
             this.setStatus('Simulating week...', 'info');
             if (window.simulateWeek) {
                 window.simulateWeek();
+                this.saveGameState(); // Auto-save after week
                 this.setStatus('Week simulated successfully', 'success');
             } else if (window.state?.league) {
                 const L = window.state.league;
@@ -603,6 +604,7 @@ class GameController {
             }
 
             this.setStatus('Season simulation complete.', 'success');
+            this.saveGameState(); // Auto-save after season
             setTimeout(() => this.renderHub(), 500);
 
         } catch (error) {
@@ -1083,8 +1085,11 @@ class GameController {
             } else {
                 window.state = initState();
                 this.applyTheme(window.state.theme || 'dark');
-                if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
-                await this.openOnboard();
+
+                // Show Dashboard instead of immediate onboarding
+                if (window.show) window.show('leagueDashboard');
+                if (window.renderDashboard) window.renderDashboard();
+                this.setStatus('Welcome to NFL GM. Please select or create a league.', 'info');
             }
             this.setupEventListeners();
             if (typeof window.setupEventListeners === 'function') {
@@ -1171,6 +1176,42 @@ class GameController {
                 if (toggle) toggle.click();
             });
         }
+
+        // FIX: Menu Toggle (ZenGM Style)
+        const menuBtn = document.getElementById('navToggle');
+        const sidebar = document.getElementById('nav-sidebar');
+        const overlay = document.getElementById('menu-overlay');
+
+        function toggleMenu() {
+            if (sidebar) sidebar.classList.toggle('active');
+            if (overlay) overlay.classList.toggle('active');
+            // Also toggle .nav-open for compatibility if needed
+            if (sidebar) sidebar.classList.toggle('nav-open');
+        }
+
+        if (menuBtn) {
+            this.addEventListener(menuBtn, 'click', (e) => {
+                e.preventDefault();
+                toggleMenu();
+            });
+        }
+
+        if (overlay) {
+             this.addEventListener(overlay, 'click', toggleMenu);
+        }
+
+        // FIX: Dashboard Button
+        const btnDashboard = document.getElementById('btnDashboard');
+        if (btnDashboard) {
+            this.addEventListener(btnDashboard, 'click', () => {
+                if (window.show) window.show('leagueDashboard');
+                if (window.renderDashboard) window.renderDashboard();
+                // Close menu if open
+                if (typeof toggleMenu === 'function' && sidebar && sidebar.classList.contains('active')) {
+                    toggleMenu();
+                }
+            });
+        }
     }
 
     addEventListener(element, event, handler) {
@@ -1232,6 +1273,13 @@ class GameController {
     // --- ENHANCED SAVE/LOAD ---
     async saveGameState(stateToSave = null) {
         try {
+            // Use new Dashboard Save System if available
+            if (window.saveGame) {
+                window.saveGame(stateToSave);
+                return { success: true };
+            }
+
+            // Fallback to legacy
             if (saveState) {
                 const ok = saveState(stateToSave);
                 if (ok) {
@@ -1281,6 +1329,9 @@ class GameController {
         switch(viewName) {
             case 'hub':
                 if (this.renderHub) this.renderHub();
+                break;
+            case 'leagueDashboard':
+                if (window.renderDashboard) window.renderDashboard();
                 break;
             case 'roster':
                 if (this.renderRoster) this.renderRoster();

@@ -858,3 +858,37 @@
         margin-bottom: 80px; /* Space for bottom nav */
     }
 }
+
+/* --- Menu Button Fix --- */
+/* Sidebar hidden by default on mobile */
+#nav-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    z-index: 2000; /* Ensure it is above overlay */
+    background: var(--surface-strong, #1a1a1a); /* Use variable if available or fallback */
+    width: 250px;
+}
+
+/* Class to show sidebar */
+#nav-sidebar.active {
+    transform: translateX(0);
+}
+
+/* Overlay to close menu when clicking outside */
+#menu-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+    z-index: 1500; /* Just below sidebar but above content */
+}
+#menu-overlay.active {
+    display: block;
+}
