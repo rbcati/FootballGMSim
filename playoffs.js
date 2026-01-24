@@ -2,6 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
+import { simGameStats } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -61,7 +62,8 @@ function simPlayoffWeek() {
     const P = window.state?.playoffs;
     if (!P || P.winner) return;
 
-    const simGame = window.simGameStats;
+    // Use imported simGameStats instead of global
+    const simGame = simGameStats;
     if (!simGame) {
         console.error("simGameStats not available");
         return;
