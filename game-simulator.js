@@ -72,6 +72,11 @@ export function applyResult(game, homeScore, awayScore) {
     team.ties = team.ties ?? 0;
     team.ptsFor = team.ptsFor ?? 0;
     team.ptsAgainst = team.ptsAgainst ?? 0;
+
+    // Ensure record object exists for UI compatibility
+    if (!team.record) {
+        team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+    }
   };
 
   initializeTeamStats(home);
@@ -431,13 +436,20 @@ function generatePunterStats(punter, teamScore, U) {
  */
 export function simGameStats(home, away) {
   try {
-    if (!Constants?.SIMULATION || !Utils) {
-      console.error('Missing simulation dependencies');
+    // Enhanced dependency resolution with fallbacks
+    const C_OBJ = Constants || (typeof window !== 'undefined' ? window.Constants : null);
+    const U = Utils || (typeof window !== 'undefined' ? window.Utils : null);
+
+    if (!C_OBJ?.SIMULATION || !U) {
+      console.error('Missing simulation dependencies:', {
+          ConstantsLoaded: !!C_OBJ,
+          SimulationConfig: !!C_OBJ?.SIMULATION,
+          Utils: !!U
+      });
       return null;
     }
 
-    const C = Constants.SIMULATION;
-    const U = Utils;
+    const C = C_OBJ.SIMULATION;
 
     if (!home?.roster || !away?.roster || !Array.isArray(home.roster) || !Array.isArray(away.roster)) {
       console.error('Invalid team roster data');

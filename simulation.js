@@ -571,11 +571,16 @@ function simulateWeek(options = {}) {
           awayPlayerStats = overrideResult.boxScore?.away || {};
         } else {
           // Simulate the game (USING GameSimulator Logic)
-          const gameScores = simGameStats(home, away);
+          let gameScores = simGameStats(home, away);
           
           if (!gameScores) {
-            console.error(`Failed to simulate game ${index + 1}`);
-            return;
+            console.warn(`SimGameStats failed for ${away.abbr || 'Away'} @ ${home.abbr || 'Home'}, using fallback score.`);
+            // Fallback: Generate random score to prevent season stall
+            // Use basic random generation if Utils unavailable
+            const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+            const fallbackHome = r(10, 42);
+            const fallbackAway = r(7, 35);
+            gameScores = { homeScore: fallbackHome, awayScore: fallbackAway };
           }
           
           sH = gameScores.homeScore;
