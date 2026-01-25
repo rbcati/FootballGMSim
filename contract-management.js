@@ -387,21 +387,42 @@ function updateContract(league, team, player, updates = {}) {
  * @param {number} userTeamId - User's team ID
  */
 function renderContractManagement(league, userTeamId) {
-  if (!league || typeof userTeamId !== 'number') {
-    console.error('Invalid parameters for renderContractManagement');
-    return;
-  }
-
   const container = document.getElementById('contractManagement');
   if (!container) {
     console.error('Contract management container not found');
     return;
   }
 
-  const team = league.teams?.[userTeamId];
-  if (!team) {
-    container.innerHTML = '<p class="muted">Team not found.</p>';
+  if (!league || !league.teams) {
+    container.innerHTML = '<div class="card"><p class="muted">League data not available.</p></div>';
+    console.error('Invalid parameters for renderContractManagement: League data missing');
     return;
+  }
+
+  if (typeof userTeamId !== 'number') {
+    userTeamId = window.state?.userTeamId || 0;
+  }
+
+  const team = league.teams[userTeamId];
+  if (!team) {
+    container.innerHTML = '<div class="card"><p class="muted">Team not found. Please create a league.</p></div>';
+    return;
+  }
+
+  // Ensure players have contracts
+  if (team.roster) {
+      team.roster.forEach(p => {
+          if (!p.years || !p.baseAnnual) {
+              if (window.generateContract) {
+                  const c = window.generateContract(p.ovr || 50, p.pos);
+                  p.years = c.years;
+                  p.yearsTotal = c.yearsTotal;
+                  p.baseAnnual = c.baseAnnual;
+                  p.signingBonus = c.signingBonus;
+                  p.guaranteedPct = c.guaranteedPct;
+              }
+          }
+      });
   }
 
   const expiring = getExpiringContracts(league, userTeamId);

@@ -73,6 +73,8 @@ export function renderDashboard() {
 
                 const row = document.createElement('tr');
                 row.style.cursor = 'pointer';
+                // Explicit onclick handler for robustness as requested
+                row.setAttribute('onclick', `if(!event.target.closest('.btn')) window.loadLeague('${league.name.replace(/'/g, "\\'")}')`);
                 row.innerHTML = `
                     <td><strong>${league.name}</strong></td>
                     <td>${league.team}</td>
@@ -91,7 +93,7 @@ export function renderDashboard() {
                 const loadBtn = row.querySelector('.btn-load');
                 const delBtn = row.querySelector('.btn-danger');
 
-                // Make entire row clickable for loading
+                // Make entire row clickable for loading (Listener + Attribute for safety)
                 row.addEventListener('click', (e) => {
                     // Prevent firing if clicking buttons specifically
                     if (e.target.closest('.btn')) return;
