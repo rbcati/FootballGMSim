@@ -20,10 +20,10 @@ Currently, `story-events.js` acts as a static repository of potential events. Th
 *   leverages existing `events.js` structure but adds persistence.
 *   Low risk, high immersion value.
 
-## 2. RPG Coaching Skill Trees (Vision-Stage)
+## 2. RPG Coaching Skill Trees (Implemented - Phase 1)
 
 **Concept:**
-`staff.js` currently generates staff with three static ratings (`playerDevelopment`, `playcalling`, `scouting`). This proposal transforms staff management into an RPG-lite progression system where coaches earn XP and unlock specific "Perks" in a skill tree.
+`staff.js` currently generates staff with three static ratings (`playerDevelopment`, `playcalling`, `scouting`). This feature has been implemented to transform staff management into an RPG-lite progression system where coaches earn XP and unlock specific "Perks" in a skill tree.
 
 **Key Features:**
 *   **Skill Trees:**

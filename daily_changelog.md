@@ -60,3 +60,24 @@ Focused on resolving major technical debt in the simulation engine and implement
 ## Technical Risks & Notes
 - **Playoff Testing:** While verify scripts passed, full end-to-end testing of the playoff bracket progression using the new module should be confirmed in a live session.
 - **Balancing:** Perk modifiers (e.g., 1.15x volume) may need tuning based on long-term statistical analysis.
+
+---
+
+# Day 3 Optimization & Expansion
+
+## Summary of Changes
+Fully implemented the "RPG Coaching Skill Trees" feature proposed in the backlog, transforming staff from static stat-blocks into evolving characters.
+
+### 1. Feature Pressure-Testing (RPG Coaching)
+- **Implemented Skill Trees:** Defined `COACH_SKILL_TREES` in `coach-system.js` with tiered progression (Levels 1-5) for archetypes like "Air Raid", "Ground & Pound", and "Blitz Happy".
+- **Dynamic Progression:** Added `processStaffXp` to `simulation.js`. Staff now earn XP based on wins, playoff success, and championships, leveling up to unlock more potent game modifiers.
+- **Game Engine Integration:** Refactored `game-simulator.js` to replace static perk checks with a dynamic `getCoachingMods` lookup that scales with staff level.
+
+### 2. Code Refactoring
+- **Modularization:** Moved hardcoded staff modifier logic out of `game-simulator.js` and into `coach-system.js`, strictly adhering to separation of concerns.
+
+## Impact Ranking
+| Feature | Impact | Description |
+| :--- | :--- | :--- |
+| **RPG Coaching** | **High** | Major gameplay depth addition. Long-term saves now have a "coaching carousel" meta-game where developing staff matters. |
+| **Sim Refactor** | **Low** | Cleanup of simulation logic improves maintainability. |

@@ -34,6 +34,7 @@ function makeStaff(position) {
         xp: 0,
         level: 1,
         perk: perk,
+        archetype: perk, // Explicitly set archetype for RPG system
 
         // Initialize coaching stats
         stats: null, // Will be initialized by coaching system
