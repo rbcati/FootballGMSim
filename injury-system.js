@@ -371,13 +371,19 @@
    * Renders the league-wide injuries page
    */
   function renderInjuriesPage() {
+    const container = document.getElementById('injuriesContent');
+    if (!container) {
+      console.error('Injuries container not found');
+      return;
+    }
+
     const L = window.state?.league;
     if (!L || !L.teams) {
+      container.innerHTML = '<div class="injury-summary"><p class="muted">No league data available for injuries.</p></div>';
       console.error('No league data available for injuries page');
       return;
     }
     
-    const container = document.getElementById('injuriesContent');
     if (!container) {
       console.error('Injuries container not found');
       return;

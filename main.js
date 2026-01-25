@@ -709,6 +709,13 @@ class GameController {
                 return;
             }
 
+            // Ensure schedule exists
+            if (!L.schedule || (Array.isArray(L.schedule) && L.schedule.length === 0)) {
+                if (window.makeSchedule) {
+                    L.schedule = window.makeSchedule(L.teams);
+                }
+            }
+
             const currentWeek = L.week || 1;
             const userTeamId = window.state?.userTeamId;
             
@@ -1569,3 +1576,60 @@ window.handleSimulateSeason = function() {
     }
 };
 console.log('✅ GameController functions exported globally (patched version)');
+
+// --- HEADER & DASHBOARD FIXES ---
+
+window.updateHeader = function() {
+    const L = window.state?.league;
+    const seasonNow = document.getElementById('seasonNow');
+    const capUsed = document.getElementById('capUsed');
+    const capTotal = document.getElementById('capTotal');
+    const deadCap = document.getElementById('deadCap');
+    const capRoom = document.getElementById('capRoom');
+    const hubWeek = document.getElementById('hubWeek');
+
+    if (L) {
+        if (seasonNow) seasonNow.textContent = L.year || new Date().getFullYear();
+        if (hubWeek) hubWeek.textContent = L.week || 1;
+
+        // Update Cap Info if user team is selected
+        const userTeamId = window.state.userTeamId;
+        if (userTeamId !== undefined && L.teams && L.teams[userTeamId]) {
+            const team = L.teams[userTeamId];
+            if (capUsed) capUsed.textContent = '$' + (team.capUsed || 0).toFixed(2) + 'M';
+            if (capTotal) capTotal.textContent = '$' + (team.capTotal || 220).toFixed(2) + 'M';
+            if (deadCap) deadCap.textContent = '$' + (team.deadCap || 0).toFixed(2) + 'M';
+            if (capRoom) {
+                const room = team.capRoom || 0;
+                capRoom.textContent = '$' + room.toFixed(2) + 'M';
+                capRoom.style.color = room >= 0 ? 'var(--success-text)' : 'var(--error-text)';
+            }
+        }
+    }
+};
+
+// Ensure Dashboard loads on start
+window.initDashboard = function() {
+    if (window.renderDashboard) {
+        window.renderDashboard();
+    }
+};
+
+window.addEventListener('load', () => {
+    window.initDashboard();
+    // Hook into game controller init to update header
+    if (window.gameController) {
+        const originalInit = window.gameController.init;
+        window.gameController.init = async function() {
+            await originalInit.call(this);
+            window.updateHeader();
+        };
+
+        // Also hook renderHub to update header
+        const originalRenderHub = window.gameController.renderHub;
+        window.gameController.renderHub = function() {
+            originalRenderHub.call(this);
+            window.updateHeader();
+        };
+    }
+});

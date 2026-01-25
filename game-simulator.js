@@ -91,18 +91,39 @@ export function applyResult(game, homeScore, awayScore) {
     game.played = true;
   }
 
+  // Ensure we are updating the global state object if possible
+  let realHome = home;
+  let realAway = away;
+
+  if (typeof window !== 'undefined' && window.state?.league?.teams) {
+      if (home.id !== undefined) realHome = window.state.league.teams.find(t => t.id === home.id) || home;
+      if (away.id !== undefined) realAway = window.state.league.teams.find(t => t.id === away.id) || away;
+  }
+
   if (homeScore > awayScore) {
-    home.wins++;
-    away.losses++;
+    realHome.wins++;
+    realAway.losses++;
   } else if (awayScore > homeScore) {
-    away.wins++;
-    home.losses++;
+    realAway.wins++;
+    realHome.losses++;
   } else {
-    home.ties++;
-    away.ties++;
+    realHome.ties++;
+    realAway.ties++;
     // Ensure draws property is updated if used elsewhere
-    home.draws = (home.draws || 0) + 1;
-    away.draws = (away.draws || 0) + 1;
+    realHome.draws = (realHome.draws || 0) + 1;
+    realAway.draws = (realAway.draws || 0) + 1;
+  }
+
+  // Sync back to passed objects if they were different (e.g. copies)
+  if (realHome !== home) {
+      home.wins = realHome.wins;
+      home.losses = realHome.losses;
+      home.ties = realHome.ties;
+  }
+  if (realAway !== away) {
+      away.wins = realAway.wins;
+      away.losses = realAway.losses;
+      away.ties = realAway.ties;
   }
 
   home.ptsFor += homeScore;

@@ -572,6 +572,9 @@
     `;
     document.head.appendChild(style);
 
+    // Alias renderStats for compatibility
+    window.renderStats = window.renderStatsPage;
+
     console.log("Stats Viewer Loaded Successfully");
 
 })();

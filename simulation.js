@@ -376,6 +376,15 @@ function startNewSeason() {
       }
     }
 
+    // Generate new draft class for the next season
+    if (typeof window.generateDraftClass === 'function') {
+        // Pass year + 1 because the class is for the NEXT draft
+        window.generateDraftClass(window.state.year + 1);
+    } else if (typeof window.generateProspects === 'function') {
+        // Fallback
+        window.state.draftClass = window.generateProspects(window.state.year + 1);
+    }
+
     // Persist the updated state
     if (typeof window.saveState === 'function') window.saveState();
 
