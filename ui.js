@@ -948,7 +948,8 @@ window.renderHub = function() {
             if (hubWeeks) hubWeeks.textContent = '18';
             
             // Calculate games this week
-            const currentWeekGames = L.schedule?.weeks?.find(week => week.weekNumber === L.week)?.games || [];
+            const scheduleWeeks = Array.isArray(L.schedule?.weeks) ? L.schedule.weeks : [];
+            const currentWeekGames = scheduleWeeks.find(week => week.weekNumber === L.week)?.games || [];
             if (hubGames) hubGames.textContent = currentWeekGames.length;
             
             // Remove offseason banner if it exists
@@ -1330,17 +1331,18 @@ function renderUpcomingGames() {
     if (!gamesList) return;
     
     const currentWeek = L.week || 1;
-    let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
+    let scheduleWeeks = L.schedule?.weeks || (Array.isArray(L.schedule) ? L.schedule : []);
+    if (!Array.isArray(scheduleWeeks)) scheduleWeeks = [];
     
     // Handle different schedule formats
-    if (Array.isArray(scheduleWeeks) && scheduleWeeks.length > 0) {
+    if (scheduleWeeks.length > 0) {
         // Check if it's an array of week objects or array of arrays
         if (scheduleWeeks[0] && typeof scheduleWeeks[0] === 'object' && scheduleWeeks[0].weekNumber !== undefined) {
             // Array of week objects with weekNumber property
-            scheduleWeeks = scheduleWeeks;
+            // scheduleWeeks = scheduleWeeks;
         } else if (Array.isArray(scheduleWeeks[0]) || (scheduleWeeks[0] && scheduleWeeks[0].games)) {
             // Already in correct format
-            scheduleWeeks = scheduleWeeks;
+            // scheduleWeeks = scheduleWeeks;
         }
     }
     
