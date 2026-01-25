@@ -94,7 +94,7 @@
       const onClickAttr = onClick ? `onclick="${onClick}"` : '';
       
       return `
-        <button ${btnId} class="${className} ${variant}" ${onClickAttr} ${disabledAttr}>
+        <button type="button" ${btnId} class="${className} ${variant}" ${onClickAttr} ${disabledAttr}>
           ${text}
         </button>
       `;
@@ -155,7 +155,7 @@
           <div class="modal-content ${sizeClass}">
             <div class="modal-header">
               <h2>${title}</h2>
-              <button class="modal-close" onclick="this.closest('.modal').remove()">&times;</button>
+              <button type="button" class="modal-close close" aria-label="Close modal" onclick="this.closest('.modal').remove()">&times;</button>
             </div>
             <div class="modal-body">
               ${content}
