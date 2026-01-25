@@ -9,6 +9,7 @@ import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
+import { processStaffXp } from './coach-system.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -249,6 +250,55 @@ function startOffseason() {
       } catch (error) {
         console.error('Error in runOffseason:', error);
       }
+    }
+
+    // Process Staff Progression (RPG System)
+    // Use window.state.league just to be safe about variable scope, though L should be available
+    const leagueRef = window.state?.league || L;
+
+    if (processStaffXp && leagueRef && leagueRef.teams) {
+        console.log('Processing staff XP progression...');
+        const playoffs = window.state.playoffs;
+        const championId = playoffs && playoffs.winner ? playoffs.winner.id : -1;
+
+        leagueRef.teams.forEach(team => {
+            if (!team.staff) return;
+
+            const isChampion = team.id === championId;
+            const wins = team.wins || (team.record ? team.record.w : 0);
+
+            // Calculate playoff wins
+            let playoffWins = 0;
+            if (playoffs && playoffs.results && Array.isArray(playoffs.results)) {
+                playoffs.results.forEach(round => {
+                    if (round && round.games && Array.isArray(round.games)) {
+                        round.games.forEach(g => {
+                            if (g.home && g.home.id === team.id && g.scoreHome > g.scoreAway) playoffWins++;
+                            if (g.away && g.away.id === team.id && g.scoreAway > g.scoreHome) playoffWins++;
+                        });
+                    }
+                });
+            }
+
+            const performance = {
+                wins: wins,
+                playoffWins: playoffWins,
+                isChampion: isChampion
+            };
+
+            const staffList = [team.staff.headCoach, team.staff.offCoordinator, team.staff.defCoordinator, team.staff.scout];
+            staffList.forEach(s => {
+                if (s) {
+                   const leveledUp = processStaffXp(s, performance);
+                   if (leveledUp) {
+                       console.log(`${s.name} (${s.position}) leveled up to ${s.level}!`);
+                       if (window.state.userTeamId === team.id && window.setStatus) {
+                           window.setStatus(`Staff Level Up: ${s.name} is now level ${s.level}!`, 'success');
+                       }
+                   }
+                }
+            });
+        });
     }
     
     // Update owner mode at season end

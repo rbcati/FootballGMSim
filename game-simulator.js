@@ -5,7 +5,7 @@
 
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
-import { calculateGamePerformance } from './coach-system.js';
+import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats } from './player.js';
 
 /**
@@ -575,31 +575,9 @@ export function simGameStats(home, away) {
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
-    // --- STAFF PERKS INTEGRATION ---
-    const getTeamModifiers = (team) => {
-        const mods = {};
-        if (team.staff) {
-            // Check OC Perks
-            if (team.staff.offCoordinator && team.staff.offCoordinator.perk) {
-                switch(team.staff.offCoordinator.perk) {
-                    case 'Air Raid': mods.passVolume = 1.15; mods.runVolume = 0.85; break;
-                    case 'Ground & Pound': mods.runVolume = 1.15; mods.passVolume = 0.85; break;
-                    case 'Balanced': mods.passAccuracy = 1.05; break;
-                }
-            }
-            // Check DC Perks
-            if (team.staff.defCoordinator && team.staff.defCoordinator.perk) {
-                switch(team.staff.defCoordinator.perk) {
-                    case 'Blitz Happy': mods.sackChance = 1.2; break;
-                    case 'No Fly Zone': mods.intChance = 1.2; break;
-                }
-            }
-        }
-        return mods;
-    };
-
-    const homeMods = getTeamModifiers(home);
-    const awayMods = getTeamModifiers(away);
+    // --- STAFF PERKS INTEGRATION (RPG System) ---
+    const homeMods = getCoachingMods(home.staff);
+    const awayMods = getCoachingMods(away.staff);
 
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
