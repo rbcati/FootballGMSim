@@ -97,12 +97,21 @@ export function applyResult(game, homeScore, awayScore) {
   } else {
     home.ties++;
     away.ties++;
+    // Ensure draws property is updated if used elsewhere
+    home.draws = (home.draws || 0) + 1;
+    away.draws = (away.draws || 0) + 1;
   }
 
   home.ptsFor += homeScore;
   home.ptsAgainst += awayScore;
   away.ptsFor += awayScore;
   away.ptsAgainst += homeScore;
+
+  // Update aliases for ranking logic compatibility
+  home.pointsFor = home.ptsFor;
+  home.pointsAgainst = home.ptsAgainst;
+  away.pointsFor = away.ptsFor;
+  away.pointsAgainst = away.ptsAgainst;
 
   // Sync legacy record object if it exists (for UI compatibility)
   if (home.record) {

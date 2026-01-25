@@ -72,6 +72,7 @@ export function renderDashboard() {
                 const league = JSON.parse(raw);
 
                 const row = document.createElement('tr');
+                row.style.cursor = 'pointer';
                 row.innerHTML = `
                     <td><strong>${league.name}</strong></td>
                     <td>${league.team}</td>
@@ -90,8 +91,21 @@ export function renderDashboard() {
                 const loadBtn = row.querySelector('.btn-load');
                 const delBtn = row.querySelector('.btn-danger');
 
-                if (loadBtn) loadBtn.onclick = () => loadLeague(league.name);
-                if (delBtn) delBtn.onclick = () => deleteLeague(league.name);
+                // Make entire row clickable for loading
+                row.addEventListener('click', (e) => {
+                    // Prevent firing if clicking buttons specifically
+                    if (e.target.closest('.btn')) return;
+                    loadLeague(league.name);
+                });
+
+                if (loadBtn) loadBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    loadLeague(league.name);
+                };
+                if (delBtn) delBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    deleteLeague(league.name);
+                };
 
             } catch (e) {
                 console.error("Error parsing league", key, e);
@@ -124,14 +138,38 @@ export function loadLeague(leagueName) {
             dashboard.style.display = 'none';
         }
 
-        // Use game controller to navigate
+        // Ensure data consistency (fix 0-0-0 record issue)
+        if (window.state.league && window.state.league.teams) {
+            window.state.league.teams.forEach(team => {
+                if (!team.record) {
+                    team.record = {
+                        w: team.wins || 0,
+                        l: team.losses || 0,
+                        t: team.ties || 0,
+                        pf: team.ptsFor || 0,
+                        pa: team.ptsAgainst || 0
+                    };
+                } else {
+                    // Sync if record exists but might be stale
+                    if (team.wins !== undefined) team.record.w = team.wins;
+                    if (team.losses !== undefined) team.record.l = team.losses;
+                    if (team.ties !== undefined) team.record.t = team.ties;
+                    if (team.ptsFor !== undefined) team.record.pf = team.ptsFor;
+                    if (team.ptsAgainst !== undefined) team.record.pa = team.ptsAgainst;
+                }
+            });
+        }
+
+        // Use game controller to navigate and refresh
         if (window.gameController) {
             window.gameController.router('hub');
+            if (typeof window.gameController.renderHub === 'function') {
+                window.gameController.renderHub();
+            }
         } else {
             location.hash = '#/hub';
-            // Only reload if not already initialized to avoid loops
-            if (!window.gameController || !window.gameController.initialized) {
-                 // window.location.reload(); // Removed to prevent reload loops
+            if (typeof window.renderHub === 'function') {
+                window.renderHub();
             }
         }
 

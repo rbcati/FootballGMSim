@@ -1077,11 +1077,11 @@ console.log('[LeagueCreationFix] Loaded');
             }
             break;
           case 'leagueStats':
-            if (window.renderStatsPage) {
-              window.renderStatsPage();
-            } else if (window.renderLeagueStats) {
+            if (window.renderLeagueStats) {
               window.renderLeagueStats('detailed');
               console.log('✅ League Stats Hub rendered');
+            } else if (window.renderStatsPage) {
+              window.renderStatsPage();
             }
             break;
           case 'streaks':

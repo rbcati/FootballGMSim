@@ -133,7 +133,7 @@ html, body {
   position: sticky; 
   top: var(--space-6); 
   height: fit-content;
-  z-index: 10;
+  z-index: 1000;
 }
 
 /* Premium Glass Card System */
@@ -228,7 +228,7 @@ html, body {
   border-bottom: 1px solid var(--hairline);
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: 1001;
 }
 
 .brand { 
@@ -557,12 +557,17 @@ select:disabled {
 }
 
 /* Enhanced Table System */
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
   background: var(--glass-bg);
   border-radius: var(--radius-lg);
-  overflow: hidden;
   border: 1px solid var(--hairline);
   backdrop-filter: var(--glass-blur);
 }
