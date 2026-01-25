@@ -238,39 +238,38 @@
             );
         } else if (currentPosFilter === 'QB') {
             headers.push(
-                { key: 'passYd', label: 'Yds' },
+                { key: 'passYd', label: 'Pass Yds' },
                 { key: 'passTD', label: 'TD' },
                 { key: 'interceptions', label: 'INT' },
+                { key: 'passerRating', label: 'Rating' },
                 { key: 'completionPct', label: 'Cmp%' },
-                { key: 'passerRating', label: 'Rate' },
-                { key: 'sacks', label: 'Sk' },
-                { key: 'sackPct', label: 'Sk%' },
-                { key: 'dropbacks', label: 'DrpBk' },
-                { key: 'qbWins', label: 'W-L' },
                 { key: 'passAtt', label: 'Att' },
-                { key: 'passComp', label: 'Cmp' }
+                { key: 'passComp', label: 'Cmp' },
+                { key: 'sacks', label: 'Sacks' },
+                { key: 'rushYd', label: 'Rush Yds' },
+                { key: 'rushTD', label: 'Rush TD' }
             );
         } else if (currentPosFilter === 'RB') {
             headers.push(
-                { key: 'rushYd', label: 'Yds' },
-                { key: 'rushTD', label: 'TD' },
-                { key: 'yardsPerCarry', label: 'YPC' },
-                { key: 'rushYardsPerGame', label: 'Y/G' },
+                { key: 'rushYd', label: 'Rush Yds' },
+                { key: 'rushTD', label: 'Rush TD' },
+                { key: 'passAtt', label: 'Carries' }, // Using passAtt as placeholder for rushAtt if not available, will fix in render
                 { key: 'recYd', label: 'Rec Yds' },
                 { key: 'recTD', label: 'Rec TD' },
-                { key: 'routesRun', label: 'Rts' },
-                { key: 'dropRate', label: 'Drp%' }
+                { key: 'targets', label: 'Targets' },
+                { key: 'receptions', label: 'Rec' },
+                { key: 'yardsPerCarry', label: 'YPC' }
             );
         } else if (['WR', 'TE'].includes(currentPosFilter)) {
             headers.push(
+                { key: 'recYd', label: 'Rec Yds' },
+                { key: 'recTD', label: 'Rec TD' },
+                { key: 'targets', label: 'Targets' },
                 { key: 'receptions', label: 'Rec' },
-                { key: 'recYd', label: 'Yds' },
-                { key: 'recTD', label: 'TD' },
-                { key: 'targets', label: 'Tgt' },
-                { key: 'drops', label: 'Drop' },
-                { key: 'dropRate', label: 'Drp%' },
-                { key: 'separationRate', label: 'Sep%' },
-                { key: 'ratingWhenTargeted', label: 'Rt' }
+                { key: 'rushYd', label: 'Rush Yds' },
+                { key: 'rushTD', label: 'Rush TD' },
+                { key: 'passAtt', label: 'Carries' }, // Placeholder
+                { key: 'dropRate', label: 'Drp%' }
             );
         } else if (currentPosFilter === 'OL') {
             headers.push(
@@ -281,23 +280,21 @@
             );
         } else if (['DL', 'LB'].includes(currentPosFilter)) {
             headers.push(
-                { key: 'tackles', label: 'Tkl' },
-                { key: 'sacks', label: 'Sk' },
+                { key: 'tackles', label: 'Tackles' },
+                { key: 'sacks', label: 'Sacks' },
+                { key: 'interceptions', label: 'INTs' },
                 { key: 'tacklesForLoss', label: 'TFL' },
                 { key: 'pressures', label: 'Pres' },
-                { key: 'pressureRate', label: 'Pres%' },
                 { key: 'forcedFumbles', label: 'FF' },
-                { key: 'interceptions', label: 'INT' },
                 { key: 'passesDefended', label: 'PD' }
             );
         } else if (['CB', 'S'].includes(currentPosFilter)) {
             headers.push(
-                { key: 'interceptions', label: 'INT' },
+                { key: 'tackles', label: 'Tackles' },
+                { key: 'sacks', label: 'Sacks' },
+                { key: 'interceptions', label: 'INTs' },
                 { key: 'passesDefended', label: 'PD' },
-                { key: 'tackles', label: 'Tkl' },
                 { key: 'targetsAllowed', label: 'Tgt A' },
-                { key: 'completionsAllowed', label: 'Cmp A' },
-                { key: 'tdsAllowed', label: 'TD A' },
                 { key: 'coverageRating', label: 'Cov' }
             );
         } else if (['K', 'P'].includes(currentPosFilter)) {
@@ -392,7 +389,8 @@
                         sacks: s.sacks || 0, // Times sacked for QB
                         sackPct: (s.sacks && (s.passAtt || 0) + s.sacks > 0) ? ((s.sacks / ((s.passAtt || 0) + s.sacks)) * 100).toFixed(1) + '%' : '0.0%',
                         qbWins: (s.wins || 0) + '-' + (s.losses || 0),
-                        passAtt: s.passAtt || 0,
+                        passAtt: s.passAtt || 0, // Using passAtt for Rush Att if needed, see below
+                        rushAtt: s.rushAtt || 0, // Explicit rush attempts
                         passComp: s.passComp || 0,
                         dropbacks: s.dropbacks || (s.passAtt || 0) + (s.sacks || 0),
 
@@ -482,36 +480,35 @@
                     <td>${p.passYd}</td>
                     <td>${p.passTD}</td>
                     <td>${p.interceptions}</td>
-                    <td>${(p.completionPct * 100).toFixed(1)}%</td>
                     <td style="font-weight: bold;">${p.passerRating.toFixed(1)}</td>
-                    <td>${p.sacks}</td>
-                    <td>${p.sackPct}</td>
-                    <td>${p.dropbacks}</td>
-                    <td>${p.qbWins}</td>
+                    <td>${(p.completionPct * 100).toFixed(1)}%</td>
                     <td>${p.passAtt}</td>
                     <td>${p.passComp}</td>
+                    <td>${p.sacks}</td>
+                    <td>${p.rushYd}</td>
+                    <td>${p.rushTD}</td>
                 `;
             } else if (currentPosFilter === 'RB') {
                 cells += `
                     <td>${p.rushYd}</td>
                     <td>${p.rushTD}</td>
-                    <td>${p.yardsPerCarry.toFixed(1)}</td>
-                    <td>${p.rushYardsPerGame.toFixed(1)}</td>
-                    <td>${p.recYd}</td>
-                    <td>${p.recTD}</td>
-                    <td>${p.routesRun}</td>
-                    <td>${p.dropRate}</td>
-                `;
-            } else if (['WR', 'TE'].includes(currentPosFilter)) {
-                cells += `
-                    <td>${p.receptions}</td>
+                    <td>${p.rushAtt}</td>
                     <td>${p.recYd}</td>
                     <td>${p.recTD}</td>
                     <td>${p.targets}</td>
-                    <td>${p.drops}</td>
+                    <td>${p.receptions}</td>
+                    <td>${p.yardsPerCarry.toFixed(1)}</td>
+                `;
+            } else if (['WR', 'TE'].includes(currentPosFilter)) {
+                cells += `
+                    <td>${p.recYd}</td>
+                    <td>${p.recTD}</td>
+                    <td>${p.targets}</td>
+                    <td>${p.receptions}</td>
+                    <td>${p.rushYd}</td>
+                    <td>${p.rushTD}</td>
+                    <td>${p.rushAtt}</td>
                     <td>${p.dropRate}</td>
-                    <td>${p.separationRate}</td>
-                    <td>${p.ratingWhenTargeted.toFixed(1)}</td>
                 `;
             } else if (currentPosFilter === 'OL') {
                 cells += `
@@ -524,21 +521,19 @@
                 cells += `
                     <td>${p.tackles}</td>
                     <td>${p.sacks}</td>
+                    <td>${p.interceptions}</td>
                     <td>${p.tacklesForLoss}</td>
                     <td>${p.pressures}</td>
-                    <td>${p.pressureRate}</td>
                     <td>${p.forcedFumbles}</td>
-                    <td>${p.interceptions}</td>
                     <td>${p.passesDefended}</td>
                 `;
             } else if (['CB', 'S'].includes(currentPosFilter)) {
                 cells += `
+                    <td>${p.tackles}</td>
+                    <td>${p.sacks}</td>
                     <td>${p.interceptions}</td>
                     <td>${p.passesDefended}</td>
-                    <td>${p.tackles}</td>
                     <td>${p.targetsAllowed}</td>
-                    <td>${p.completionsAllowed}</td>
-                    <td>${p.tdsAllowed}</td>
                     <td>${p.coverageRating.toFixed(1)}</td>
                 `;
             } else if (['K', 'P'].includes(currentPosFilter)) {

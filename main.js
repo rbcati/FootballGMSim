@@ -1437,10 +1437,10 @@ class GameController {
                 break;
             case 'stats':
             case 'leagueStats':
-                if (window.renderStatsPage) {
-                    window.renderStatsPage();
-                } else if (window.renderLeagueStats) {
+                if (window.renderLeagueStats) {
                     window.renderLeagueStats();
+                } else if (window.renderStatsPage) {
+                    window.renderStatsPage();
                 }
                 break;
             case 'player':

@@ -133,11 +133,26 @@
         // Calculate stats
         const teamStats = L.teams.map(team => {
             const stats = calculateTeamStats(team, L);
+            // Calculate derived stats
+            const games = Math.max(1, (team.wins || 0) + (team.losses || 0) + (team.ties || 0));
+            const ppg = ((team.ptsFor || 0) / games).toFixed(1);
+            const totalOff = (stats.passYds || 0) + (stats.rushYds || 0);
+            const ypg = (totalOff / games).toFixed(1);
+
             return {
                 ...team,
-                ...stats
+                ...stats,
+                ppg: parseFloat(ppg),
+                ypg: parseFloat(ypg),
+                gamesPlayed: games
             };
         });
+
+        // Calculate League Averages
+        const totalTeams = teamStats.length;
+        const avgPPG = (teamStats.reduce((sum, t) => sum + t.ppg, 0) / totalTeams).toFixed(1);
+        const avgYPG = (teamStats.reduce((sum, t) => sum + t.ypg, 0) / totalTeams).toFixed(1);
+        const avgTO = (teamStats.reduce((sum, t) => sum + t.turnoverDiff, 0) / totalTeams).toFixed(1);
 
         // Sort by Wins, then Point Diff
         teamStats.sort((a, b) => {
@@ -148,6 +163,22 @@
         let html = `
             <div class="card">
                 <h3>Detailed Team Statistics</h3>
+
+                <div class="stats-summary-box" style="display: flex; gap: 20px; margin-bottom: 20px; padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                    <div style="flex: 1; text-align: center;">
+                        <div class="muted small">League Avg PPG</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${avgPPG}</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div class="muted small">League Avg YPG</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${avgYPG}</div>
+                    </div>
+                    <div style="flex: 1; text-align: center;">
+                        <div class="muted small">Avg TO Diff</div>
+                        <div style="font-size: 1.5rem; font-weight: bold;">${avgTO}</div>
+                    </div>
+                </div>
+
                 <div class="table-wrapper">
                     <table class="table" id="detailedStatsTable">
                         <thead>
@@ -155,45 +186,39 @@
                                 <th class="sortable" data-sort="rank">Rank</th>
                                 <th class="sortable" data-sort="name">Team</th>
                                 <th class="sortable" data-sort="wins">W-L</th>
+                                <th class="sortable" data-sort="ppg" style="color: var(--accent);">PPG</th>
+                                <th class="sortable" data-sort="ypg" style="color: var(--accent);">YPG</th>
+                                <th class="sortable" data-sort="turnoverDiff" style="color: var(--accent);">TO Diff</th>
                                 <th class="sortable" data-sort="ptsFor">PF</th>
                                 <th class="sortable" data-sort="ptsAgainst">PA</th>
                                 <th class="sortable" data-sort="passYds">Pass Yds</th>
-                                <th class="sortable" data-sort="passTD">Pass TD</th>
                                 <th class="sortable" data-sort="rushYds">Rush Yds</th>
-                                <th class="sortable" data-sort="rushTD">Rush TD</th>
-                                <th class="sortable" data-sort="defYds">Def Yds Allowed</th>
-                                <th class="sortable" data-sort="sacksAllowed">Sacks All</th>
-                                <th class="sortable" data-sort="defSacks">Def Sacks</th>
-                                <th class="sortable" data-sort="turnoverDiff">TO Diff</th>
-                                <th class="sortable" data-sort="intsThrown">INT Thrown</th>
-                                <th class="sortable" data-sort="fumblesLost">Fum Lost</th>
-                                <th class="sortable" data-sort="intsTaken">INT Taken</th>
+                                <th class="sortable" data-sort="defYds">Def Yds</th>
+                                <th class="sortable" data-sort="sacksAllowed">Sk All</th>
+                                <th class="sortable" data-sort="defSacks">Def Sk</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${teamStats.map((t, i) => `
-                                <tr>
+                                <tr class="${t.id === window.state.userTeamId ? 'user-team' : ''}">
                                     <td>${i + 1}</td>
                                     <td>
                                         <strong>${t.name}</strong>
                                         <span class="muted small">${t.abbr}</span>
                                     </td>
                                     <td>${t.wins}-${t.losses}</td>
+                                    <td style="font-weight: 700;">${t.ppg}</td>
+                                    <td style="font-weight: 700;">${t.ypg}</td>
+                                    <td class="${t.turnoverDiff > 0 ? 'text-success' : t.turnoverDiff < 0 ? 'text-danger' : ''}" style="font-weight: 700;">
+                                        ${t.turnoverDiff > 0 ? '+' : ''}${t.turnoverDiff}
+                                    </td>
                                     <td>${t.ptsFor}</td>
                                     <td>${t.ptsAgainst}</td>
                                     <td>${t.passYds.toLocaleString()}</td>
-                                    <td>${t.passTD}</td>
                                     <td>${t.rushYds.toLocaleString()}</td>
-                                    <td>${t.rushTD}</td>
                                     <td>${t.defYds.toLocaleString()}</td>
                                     <td>${t.sacksAllowed}</td>
                                     <td>${t.defSacks}</td>
-                                    <td class="${t.turnoverDiff > 0 ? 'text-success' : t.turnoverDiff < 0 ? 'text-danger' : ''}">
-                                        ${t.turnoverDiff > 0 ? '+' : ''}${t.turnoverDiff}
-                                    </td>
-                                    <td>${t.intsThrown}</td>
-                                    <td>${t.fumblesLost}</td>
-                                    <td>${t.intsTaken}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
