@@ -7,6 +7,7 @@
 // Import dependencies
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
+import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
 
 // Import GameSimulator
@@ -692,6 +693,53 @@ function simulateWeek(options = {}) {
         // Create a game object with the actual teams to pass to applyResult
         const game = { home: home, away: away };
         applyResult(game, sH, sA);
+
+        // FORCE-FIX: Direct Injection Logic to ensure records persist
+        // We re-fetch the teams from the global state to be absolutely sure we have the reference
+        if (window.state && window.state.league && window.state.league.teams) {
+            const globalHome = window.state.league.teams[pair.home];
+            const globalAway = window.state.league.teams[pair.away];
+
+            if (globalHome && globalAway) {
+                 // Update Wins/Losses directly on the gameState object
+                if (sH > sA) {
+                    globalHome.wins = (globalHome.wins || 0) + 1;
+                    globalAway.losses = (globalAway.losses || 0) + 1;
+                } else if (sA > sH) {
+                    globalAway.wins = (globalAway.wins || 0) + 1;
+                    globalHome.losses = (globalHome.losses || 0) + 1;
+                } else {
+                    globalHome.draws = (globalHome.draws || 0) + 1;
+                    globalAway.draws = (globalAway.draws || 0) + 1;
+                    // Also update ties for legacy support
+                    globalHome.ties = (globalHome.ties || 0) + 1;
+                    globalAway.ties = (globalAway.ties || 0) + 1;
+                }
+
+                // Update Point Differentials
+                globalHome.pointsFor = (globalHome.pointsFor || 0) + sH;
+                globalHome.pointsAgainst = (globalHome.pointsAgainst || 0) + sA;
+                globalAway.pointsFor = (globalAway.pointsFor || 0) + sA;
+                globalAway.pointsAgainst = (globalAway.pointsAgainst || 0) + sH;
+
+                // Sync legacy record object
+                if (globalHome.record) {
+                    globalHome.record.w = globalHome.wins;
+                    globalHome.record.l = globalHome.losses;
+                    globalHome.record.t = globalHome.ties || globalHome.draws || 0;
+                    globalHome.record.pf = globalHome.pointsFor;
+                    globalHome.record.pa = globalHome.pointsAgainst;
+                }
+                 if (globalAway.record) {
+                    globalAway.record.w = globalAway.wins;
+                    globalAway.record.l = globalAway.losses;
+                    globalAway.record.t = globalAway.ties || globalAway.draws || 0;
+                    globalAway.record.pf = globalAway.pointsFor;
+                    globalAway.record.pa = globalAway.pointsAgainst;
+                }
+            }
+        }
+
         gamesSimulated++;
 
         console.log(`${away.name || `Team ${pair.away}`} ${sA} @ ${home.name || `Team ${pair.home}`} ${sH}`);
@@ -758,6 +806,13 @@ function simulateWeek(options = {}) {
     // Update UI to show results (if render option is true, default to true)
     try {
       if (options.render !== false) {
+        // FORCE-FIX: Save state immediately
+        if (saveState) saveState();
+        else if (window.saveState) window.saveState();
+
+        // FORCE-FIX: Refresh UI
+        if (typeof window.renderStandings === 'function') window.renderStandings();
+
         if (typeof window.renderHub === 'function') {
           window.renderHub();
         }
