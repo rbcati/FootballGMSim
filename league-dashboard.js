@@ -236,6 +236,8 @@ window.getLastPlayedLeague = getLastPlayedLeague;
 
 // Bind UI events when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    if (window.renderDashboard) window.renderDashboard();
+
     const createBtn = document.getElementById('create-league-btn');
     if (createBtn) {
         createBtn.addEventListener('click', () => {

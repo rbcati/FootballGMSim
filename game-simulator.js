@@ -70,12 +70,15 @@ export function applyResult(game, homeScore, awayScore) {
     team.wins = team.wins ?? 0;
     team.losses = team.losses ?? 0;
     team.ties = team.ties ?? 0;
+    team.draws = team.draws ?? team.ties ?? 0;
     team.ptsFor = team.ptsFor ?? 0;
+    team.pointsFor = team.pointsFor ?? team.ptsFor ?? 0;
     team.ptsAgainst = team.ptsAgainst ?? 0;
+    team.pointsAgainst = team.pointsAgainst ?? team.ptsAgainst ?? 0;
 
     // Ensure record object exists for UI compatibility
     if (!team.record) {
-        team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+        team.record = { w: team.wins, l: team.losses, t: team.ties, pf: team.ptsFor, pa: team.ptsAgainst };
     }
   };
 
