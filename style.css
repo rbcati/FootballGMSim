@@ -7038,4 +7038,12 @@ input:focus, select:focus, textarea:focus {
 /* Ensure body clears the topbar if needed, mainly for PWA */
 body {
     padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: calc(60px + env(safe-area-inset-bottom)); /* Clear bottom nav */
+}
+
+.header {
+    top: 0;
+    padding-top: env(safe-area-inset-top);
+    height: auto;
+    min-height: 60px;
 }

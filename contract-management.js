@@ -104,7 +104,7 @@ function calculateFranchiseTagSalary(position, league) {
   if (!league?.teams) return 0;
   
   const allPlayerSalaries = league.teams.flatMap(team => 
-    team.roster
+    (team.roster || [])
       .filter(player => player?.pos === position && player.baseAnnual > 0)
       .map(player => capHitFor(player, 0)) // Use full current year cap hit
   );
@@ -411,7 +411,7 @@ function renderContractManagement(league, userTeamId) {
 
   // Ensure players have contracts
   if (team.roster) {
-      team.roster.forEach(p => {
+      (team.roster || []).forEach(p => {
           if (!p.years || !p.baseAnnual) {
               if (window.generateContract) {
                   const c = window.generateContract(p.ovr || 50, p.pos);
@@ -584,7 +584,7 @@ function calculateNextYearCapSpace(league, team) {
   let projectedUsed = 0;
   let projectedDead = team.deadCapBook?.[(league.season || league.year || 2025) + 1] || 0;
   
-  team.roster.forEach(player => {
+  (team.roster || []).forEach(player => {
     if (!expiringIds.has(player.id) && player.years > 1) {
       // Player will still be on roster next year
       const nextYearCapHit = capHitFor(player, 1); // Cap hit for next season

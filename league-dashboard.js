@@ -140,6 +140,10 @@ export function loadLeague(leagueName) {
             dashboard.style.display = 'none';
         }
 
+        // Force UI updates
+        if (window.updateHeader) window.updateHeader();
+        if (window.renderHub) window.renderHub();
+
         // Ensure data consistency (fix 0-0-0 record issue)
         if (window.state.league && window.state.league.teams) {
             window.state.league.teams.forEach(team => {

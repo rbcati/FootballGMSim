@@ -116,13 +116,16 @@ class ScheduleViewer {
         // actually user requested "start at team schedule and have a selectable option to see league schedule"
         // But the week selector design is better for performance.
 
-        const weekData = L.schedule.weeks ? L.schedule.weeks.find(w => w.weekNumber === this.currentWeek) : null;
+        const scheduleWeeks = L.schedule.weeks || (Array.isArray(L.schedule) ? [] : []);
+        const weekData = Array.isArray(L.schedule.weeks)
+            ? L.schedule.weeks.find(w => w.weekNumber === this.currentWeek)
+            : null;
 
         if (weekData) {
             html += this.renderWeekSchedule(weekData, this.currentWeek);
         } else {
             // Legacy schedule format support
-             if (L.schedule[this.currentWeek]) {
+             if (L.schedule && L.schedule[this.currentWeek]) {
                  html += this.renderWeekSchedule({ games: L.schedule[this.currentWeek] }, this.currentWeek);
              }
         }
@@ -146,12 +149,13 @@ class ScheduleViewer {
             weekData.games.forEach((game, gameIndex) => {
                 if (game.bye) {
                     // Bye week
-                    if (this.filterMyTeam && !game.bye.includes(userTeamId)) return;
+                    const byeTeams = Array.isArray(game.bye) ? game.bye : [game.bye];
+                    if (this.filterMyTeam && !byeTeams.includes(userTeamId)) return;
 
                     html += `
                         <div class="game-item bye-week">
                             <div class="bye-teams">
-                                ${game.bye.map(teamId => {
+                                ${byeTeams.map(teamId => {
                                     const team = this.getTeamById(teamId);
                                     return team ? team.name : 'Unknown Team';
                                 }).join(', ')} - BYE

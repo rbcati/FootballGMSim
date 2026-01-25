@@ -100,6 +100,10 @@ export function applyResult(game, homeScore, awayScore) {
       if (away.id !== undefined) realAway = window.state.league.teams.find(t => t.id === away.id) || away;
   }
 
+  // Ensure real objects are initialized
+  initializeTeamStats(realHome);
+  initializeTeamStats(realAway);
+
   if (homeScore > awayScore) {
     realHome.wins++;
     realAway.losses++;
@@ -114,28 +118,37 @@ export function applyResult(game, homeScore, awayScore) {
     realAway.draws = (realAway.draws || 0) + 1;
   }
 
+  // Update points for real objects (persistent state)
+  realHome.ptsFor = (realHome.ptsFor || 0) + homeScore;
+  realHome.ptsAgainst = (realHome.ptsAgainst || 0) + awayScore;
+  realAway.ptsFor = (realAway.ptsFor || 0) + awayScore;
+  realAway.ptsAgainst = (realAway.ptsAgainst || 0) + homeScore;
+
+  // Update aliases for ranking logic compatibility
+  realHome.pointsFor = realHome.ptsFor;
+  realHome.pointsAgainst = realHome.ptsAgainst;
+  realAway.pointsFor = realAway.ptsFor;
+  realAway.pointsAgainst = realAway.ptsAgainst;
+
   // Sync back to passed objects if they were different (e.g. copies)
   if (realHome !== home) {
       home.wins = realHome.wins;
       home.losses = realHome.losses;
       home.ties = realHome.ties;
+      home.ptsFor = realHome.ptsFor;
+      home.ptsAgainst = realHome.ptsAgainst;
+      home.pointsFor = realHome.pointsFor;
+      home.pointsAgainst = realHome.pointsAgainst;
   }
   if (realAway !== away) {
       away.wins = realAway.wins;
       away.losses = realAway.losses;
       away.ties = realAway.ties;
+      away.ptsFor = realAway.ptsFor;
+      away.ptsAgainst = realAway.ptsAgainst;
+      away.pointsFor = realAway.pointsFor;
+      away.pointsAgainst = realAway.pointsAgainst;
   }
-
-  home.ptsFor += homeScore;
-  home.ptsAgainst += awayScore;
-  away.ptsFor += awayScore;
-  away.ptsAgainst += homeScore;
-
-  // Update aliases for ranking logic compatibility
-  home.pointsFor = home.ptsFor;
-  home.pointsAgainst = home.ptsAgainst;
-  away.pointsFor = away.ptsFor;
-  away.pointsAgainst = away.ptsAgainst;
 
   // Sync legacy record object if it exists (for UI compatibility)
   if (home.record) {

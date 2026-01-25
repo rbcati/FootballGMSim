@@ -607,7 +607,7 @@ function renderDraftBoard() {
 
   const currentPick = getCurrentPick();
   const upcomingPicks = getUpcomingPicks(10);
-  const recentPicks = draftState.completedPicks.slice(-10).reverse();
+  const recentPicks = (draftState.completedPicks || []).slice(-10).reverse();
 
   let html = `
     <div class="draft-board-container">
@@ -655,7 +655,7 @@ function renderDraftBoard() {
         <div class="draft-section upcoming-picks-section">
           <h3>Upcoming Picks</h3>
           <div class="upcoming-picks-list">
-            ${upcomingPicks.map((pick, index) => `
+            ${(upcomingPicks || []).map((pick, index) => `
               <div class="upcoming-pick-item ${pick.teamId === window.state.userTeamId ? 'user-pick' : ''}">
                 <span class="pick-num">#${pick.pick}</span>
                 <span class="pick-team">${pick.team.abbr}</span>
@@ -742,7 +742,7 @@ function renderAvailableProspects() {
       </div>
 
       <div class="prospects-grid">
-        ${prospects.map(prospect => `
+        ${(prospects || []).map(prospect => `
           <div class="prospect-card-draft ${isUserTurn ? 'selectable' : ''}" 
                data-prospect-id="${prospect.id}"
                ${isUserTurn ? `onclick="window.selectDraftProspect('${prospect.id}')"` : ''}>
@@ -896,7 +896,7 @@ function renderTeamPicks(team, league) {
       <div class="card">
         <h3>${team.name} - ${draftYear} Draft Picks</h3>
         <div class="draft-picks-grid">
-          ${teamPicks.map(pick => {
+          ${(teamPicks || []).map(pick => {
             const value = window.pickValue ? window.pickValue(pick) : calculateBasicPickValue(pick);
             return `
               <div class="draft-pick-card">
@@ -927,7 +927,7 @@ function renderTopProspects() {
   if (!draftContainer || !window.state.draftClass) return;
   
   try {
-    const topProspects = window.state.draftClass.slice(0, 50); // Show top 50
+    const topProspects = (window.state.draftClass || []).slice(0, 50); // Show top 50
     
     draftContainer.innerHTML = topProspects.map(prospect => {
       const scoutingInfo = getScoutingInfo(prospect);
