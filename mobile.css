@@ -44,7 +44,7 @@
   .layout {
     padding-left: var(--space-2) !important;
     padding-right: var(--space-2) !important;
-    padding-top: var(--space-2) !important;
+    padding-top: 60px !important;
     grid-template-columns: 1fr !important;
     gap: var(--space-2) !important;
     margin-top: 0 !important;
@@ -116,10 +116,7 @@
   
   /* Sidebar */
   .sidebar {
-    position: relative;
-    top: 0;
-    margin-bottom: var(--space-3);
-    order: 2 !important;
+    display: none;
   }
   
   /* Grid layouts */
@@ -295,6 +292,7 @@
   .nav-sidebar {
     top: env(safe-area-inset-top, 0px);
     height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    z-index: 2000 !important;
   }
 
   .nav-overlay {

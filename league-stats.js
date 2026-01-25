@@ -136,6 +136,7 @@
             // Calculate derived stats
             const games = Math.max(1, (team.wins || 0) + (team.losses || 0) + (team.ties || 0));
             const ppg = ((team.ptsFor || 0) / games).toFixed(1);
+            const oppPpg = ((team.ptsAgainst || 0) / games).toFixed(1);
             const totalOff = (stats.passYds || 0) + (stats.rushYds || 0);
             const ypg = (totalOff / games).toFixed(1);
 
@@ -143,6 +144,7 @@
                 ...team,
                 ...stats,
                 ppg: parseFloat(ppg),
+                oppPpg: parseFloat(oppPpg),
                 ypg: parseFloat(ypg),
                 gamesPlayed: games
             };
@@ -187,13 +189,14 @@
                                 <th class="sortable" data-sort="name">Team</th>
                                 <th class="sortable" data-sort="wins">W-L</th>
                                 <th class="sortable" data-sort="ppg" style="color: var(--accent);">PPG</th>
-                                <th class="sortable" data-sort="ypg" style="color: var(--accent);">YPG</th>
-                                <th class="sortable" data-sort="turnoverDiff" style="color: var(--accent);">TO Diff</th>
+                                <th class="sortable" data-sort="oppPpg" style="color: var(--accent);">Opp PPG</th>
+                                <th class="sortable" data-sort="ypg" style="color: var(--accent);">Off Yds/G</th>
+                                <th class="sortable" data-sort="defYds" style="color: var(--accent);">Def Yds</th>
+                                <th class="sortable" data-sort="turnoverDiff">TO Diff</th>
                                 <th class="sortable" data-sort="ptsFor">PF</th>
                                 <th class="sortable" data-sort="ptsAgainst">PA</th>
                                 <th class="sortable" data-sort="passYds">Pass Yds</th>
                                 <th class="sortable" data-sort="rushYds">Rush Yds</th>
-                                <th class="sortable" data-sort="defYds">Def Yds</th>
                                 <th class="sortable" data-sort="sacksAllowed">Sk All</th>
                                 <th class="sortable" data-sort="defSacks">Def Sk</th>
                             </tr>
@@ -208,7 +211,9 @@
                                     </td>
                                     <td>${t.wins}-${t.losses}</td>
                                     <td style="font-weight: 700;">${t.ppg}</td>
+                                    <td style="font-weight: 700;">${t.oppPpg}</td>
                                     <td style="font-weight: 700;">${t.ypg}</td>
+                                    <td style="font-weight: 700;">${t.defYds.toLocaleString()}</td>
                                     <td class="${t.turnoverDiff > 0 ? 'text-success' : t.turnoverDiff < 0 ? 'text-danger' : ''}" style="font-weight: 700;">
                                         ${t.turnoverDiff > 0 ? '+' : ''}${t.turnoverDiff}
                                     </td>
@@ -216,7 +221,6 @@
                                     <td>${t.ptsAgainst}</td>
                                     <td>${t.passYds.toLocaleString()}</td>
                                     <td>${t.rushYds.toLocaleString()}</td>
-                                    <td>${t.defYds.toLocaleString()}</td>
                                     <td>${t.sacksAllowed}</td>
                                     <td>${t.defSacks}</td>
                                 </tr>

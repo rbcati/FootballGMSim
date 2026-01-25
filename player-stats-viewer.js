@@ -343,6 +343,127 @@ class PlayerStatsViewer {
     // ----------------------------------------------------
     // 🏆 Enhanced Stats Grid Generation
     // ----------------------------------------------------
+
+    /**
+     * Generates a positional stats table based on player position.
+     * @param {Object} player - The player object.
+     */
+    generatePositionalStatsTable(player) {
+        const pos = player.pos;
+        const seasonStats = player.stats?.season || {};
+        const careerStats = player.stats?.career || {};
+
+        let columns = [];
+        let seasonRow = [];
+        let careerRow = [];
+
+        // Helper to format values
+        const fmt = (val) => (val !== undefined && val !== null) ? val.toLocaleString() : '0';
+        const fmtPct = (val) => (val !== undefined && val !== null) ? val.toFixed(1) + '%' : '0.0%';
+        const fmtAvg = (val) => (val !== undefined && val !== null) ? val.toFixed(1) : '0.0';
+
+        if (pos === 'QB') {
+            columns = ['Pass Yds', 'TD', 'INT', 'Comp %', 'Rating', 'Rush Yds', 'Rush TD'];
+
+            const getQBData = (s) => [
+                fmt(s.passYd),
+                fmt(s.passTD),
+                fmt(s.interceptions || s.passInt),
+                fmtPct(s.completionPct),
+                fmtAvg(s.passerRating),
+                fmt(s.rushYd),
+                fmt(s.rushTD)
+            ];
+
+            seasonRow = getQBData(seasonStats);
+            careerRow = getQBData(careerStats);
+
+        } else if (['RB', 'WR', 'TE'].includes(pos)) {
+            columns = ['Rush Yds', 'Rush TD', 'Avg/Carry', 'Rec Yds', 'Rec TD', 'Avg/Rec', 'Targets'];
+
+            const getSkillData = (s) => [
+                fmt(s.rushYd),
+                fmt(s.rushTD),
+                fmtAvg(s.yardsPerCarry),
+                fmt(s.recYd),
+                fmt(s.recTD),
+                fmtAvg(s.yardsPerReception),
+                fmt(s.targets)
+            ];
+
+            seasonRow = getSkillData(seasonStats);
+            careerRow = getSkillData(careerStats);
+
+        } else if (['DL', 'LB', 'CB', 'S', 'DE', 'DT', 'OLB', 'MLB'].includes(pos)) {
+            columns = ['Tackles', 'Sacks', 'INT', 'FF', 'PD', 'TFL'];
+
+            const getDefData = (s) => [
+                fmt(s.tackles),
+                fmt(s.sacks),
+                fmt(s.interceptions),
+                fmt(s.forcedFumbles),
+                fmt(s.passesDefended),
+                fmt(s.tacklesForLoss)
+            ];
+
+            seasonRow = getDefData(seasonStats);
+            careerRow = getDefData(careerStats);
+
+        } else if (['K', 'P'].includes(pos)) {
+            columns = ['FGM', 'FGA', 'FG%', 'XPM', 'XPA', 'Long'];
+            if (pos === 'P') columns = ['Punts', 'Yards', 'Avg', 'Long', 'Inside 20'];
+
+            if (pos === 'K') {
+                const getKData = (s) => [
+                    fmt(s.fgMade), fmt(s.fgAttempts), fmtPct(s.successPct),
+                    fmt(s.xpMade), fmt(s.xpAttempts), fmt(s.longestFG)
+                ];
+                seasonRow = getKData(seasonStats);
+                careerRow = getKData(careerStats);
+            } else {
+                const getPData = (s) => [
+                    fmt(s.punts), fmt(s.puntYards), fmtAvg(s.avgPuntYards),
+                    fmt(s.longestPunt), fmt(s.puntsInside20)
+                ];
+                seasonRow = getPData(seasonStats);
+                careerRow = getPData(careerStats);
+            }
+        } else {
+            // OL or Default
+            columns = ['Games', 'Sacks All.', 'Pancakes'];
+            const getOLData = (s) => [
+                fmt(s.gamesPlayed), fmt(s.sacksAllowed), fmt(s.pancakes)
+            ];
+            seasonRow = getOLData(seasonStats);
+            careerRow = getOLData(careerStats);
+        }
+
+        // Build Table HTML
+        let html = `
+            <div class="table-wrapper">
+                <table class="table table-sm" style="width:100%; text-align: center;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left;">Period</th>
+                            ${columns.map(c => `<th>${c}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: left; font-weight:bold;">Season</td>
+                            ${seasonRow.map(v => `<td>${v}</td>`).join('')}
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight:bold;">Career</td>
+                            ${careerRow.map(v => `<td>${v}</td>`).join('')}
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+        return html;
+    }
+
     /**
      * Generates the main stats grid content.
      * @param {Object} player - The player object.
@@ -439,42 +560,12 @@ class PlayerStatsViewer {
             </div>
         `;
 
-        // Section 5: Statistics (Season/Career)
+        // Section 5: Statistics (Season/Career) - Positional Table
         if (player.stats && (Object.keys(player.stats.season || {}).length > 0 || Object.keys(player.stats.career || {}).length > 0)) {
             statsHTML += `
                 <div class="stats-section full-width">
-                    <h3>Detailed Stats</h3>
-                    <div class="stats-table">
-                        <div class="stats-header">
-                            <span>Statistic</span>
-                            <span>Season</span>
-                            <span>Career</span>
-                        </div>
-            `;
-            
-            // Compile all unique stats
-            const allStats = new Set([
-                ...Object.keys(player.stats.season || {}), 
-                ...Object.keys(player.stats.career || {})
-            ]);
-            
-            allStats.forEach(stat => {
-                const seasonValue = player.stats.season[stat] || 0;
-                const careerValue = player.stats.career[stat] || 0;
-                
-                if (seasonValue > 0 || careerValue > 0) {
-                    statsHTML += `
-                        <div class="stats-row">
-                            <span class="stat-label">${this.formatStatName(stat)}:</span>
-                            <span class="stat-value">${this.formatStatValue(stat, seasonValue)}</span>
-                            <span class="stat-value">${this.formatStatValue(stat, careerValue)}</span>
-                        </div>
-                    `;
-                }
-            });
-            
-            statsHTML += `
-                    </div>
+                    <h3>Performance Stats (${player.pos})</h3>
+                    ${this.generatePositionalStatsTable(player)}
                 </div>
             `;
         }
