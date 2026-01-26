@@ -11,14 +11,8 @@ import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
 import { processStaffXp } from './coach-system.js';
 
-// Import GameSimulator
-import GameSimulator from './game-simulator.js';
-const {
-  simGameStats,
-  applyResult,
-  initializePlayerStats,
-  accumulateStats
-} = GameSimulator;
+import { simGameStats, applyResult, initializePlayerStats, accumulateStats } from './game-simulator.js';
+
 
 /**
  * Validates that required global dependencies are available
