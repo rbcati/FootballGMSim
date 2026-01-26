@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats } from './game-simulator.js';
+import { simGameStats, initializePlayerStats } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -78,6 +78,39 @@ function simPlayoffWeek() {
             if (result) {
                 roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
                 winners.push(result.homeScore > result.awayScore ? game.home : game.away);
+
+                // Accumulate Playoff Stats
+                const accumulatePlayoffStats = (team) => {
+                    if (team && team.roster) {
+                        team.roster.forEach(p => {
+                             if (p && p.stats && p.stats.game) {
+                                initializePlayerStats(p);
+                                if (!p.stats.playoffs) p.stats.playoffs = {};
+
+                                // Accumulate game stats into playoff stats
+                                Object.keys(p.stats.game).forEach(key => {
+                                    const value = p.stats.game[key];
+                                    if (typeof value === 'number') {
+                                        if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
+                                            key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
+                                            key === 'avgKickYards' || key === 'completionPct') {
+                                            return;
+                                        }
+                                        p.stats.playoffs[key] = (p.stats.playoffs[key] || 0) + value;
+                                    }
+                                });
+
+                                // Track games played
+                                if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
+                                p.stats.playoffs.gamesPlayed++;
+                            }
+                        });
+                    }
+                };
+
+                accumulatePlayoffStats(game.home);
+                accumulatePlayoffStats(game.away);
+
             } else {
                 console.error("Simulation failed for game", game);
                 // Fallback random winner to prevent crash
