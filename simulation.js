@@ -498,7 +498,7 @@ function simulateWeek(options = {}) {
       console.log('Initialized league week to 1');
     }
 
-    console.log(`Simulating week ${L.week}...`);
+    console.log(`[SIM-DEBUG] Simulating week ${L.week}...`);
     window.setStatus(`Simulating week ${L.week}...`);
 
     // NEW SEASON PROGRESSION CHECK
@@ -571,7 +571,7 @@ function simulateWeek(options = {}) {
     }
 
     const pairings = weekData.games || [];
-    console.log(`Found ${pairings.length} games for week ${L.week}`);
+    console.log(`[SIM-DEBUG] Found ${pairings.length} games for week ${L.week}`);
 
     if (pairings.length === 0) {
       console.warn(`No games scheduled for week ${L.week}`);
@@ -596,6 +596,7 @@ function simulateWeek(options = {}) {
     // Simulate each game
     pairings.forEach((pair, index) => {
       try {
+        console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${pairings.length}: Home=${pair.home}, Away=${pair.away}`);
         // Handle bye weeks
         if (pair.bye !== undefined) {
           results.push({
@@ -727,17 +728,17 @@ function simulateWeek(options = {}) {
         // Create a game object with the actual teams to pass to applyResult
         const game = { home: home, away: away };
 
-        console.log(`[DEBUG] Pre-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
+        console.log(`[SIM-DEBUG] Pre-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
         applyResult(game, sH, sA);
-        console.log(`[DEBUG] Post-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
+        console.log(`[SIM-DEBUG] Post-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
 
 
         gamesSimulated++;
 
-        console.log(`${away.name || `Team ${pair.away}`} ${sA} @ ${home.name || `Team ${pair.home}`} ${sH}`);
+        console.log(`[SIM-DEBUG] Game Complete: ${away.name || `Team ${pair.away}`} ${sA} @ ${home.name || `Team ${pair.home}`} ${sH}`);
         
       } catch (gameError) {
-        console.error(`Error simulating game ${index + 1}:`, gameError);
+        console.error(`[SIM-DEBUG] Error simulating game ${index + 1}:`, gameError);
         window.setStatus(`Error in game ${index + 1}: ${gameError.message}`);
       }
     });
@@ -783,7 +784,7 @@ function simulateWeek(options = {}) {
       }
     }
 
-    console.log(`Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
+    console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
 
     // Update owner mode revenue and fan satisfaction after games
     if (window.state?.ownerMode?.enabled && typeof window.calculateRevenue === 'function' && typeof window.updateFanSatisfaction === 'function') {
