@@ -264,7 +264,7 @@ function makePlayer(pos, overrides = {}) {
     fatigue: 0,
     abilities: [],
     stats: { 
-      game: {}, 
+      game: getZeroStats(),
       season: getZeroStats(),
       career: getZeroStats()
     },
