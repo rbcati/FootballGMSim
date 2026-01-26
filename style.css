@@ -7015,35 +7015,3 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-/* === CRITICAL MOBILE & NAVIGATION FIXES === */
-.nav-sidebar {
-    z-index: 2000 !important;
-    top: env(safe-area-inset-top, 0px);
-}
-
-.topbar {
-    z-index: 1000 !important;
-    padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
-}
-
-.layout .content {
-    z-index: 1;
-    position: relative;
-}
-
-.bottom-nav {
-    padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
-}
-
-/* Ensure body clears the topbar if needed, mainly for PWA */
-body {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: calc(60px + env(safe-area-inset-bottom)); /* Clear bottom nav */
-}
-
-.header {
-    top: 0;
-    padding-top: env(safe-area-inset-top);
-    height: auto;
-    min-height: 60px;
-}
