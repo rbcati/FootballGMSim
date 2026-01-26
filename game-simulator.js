@@ -6,7 +6,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
-import { updateAdvancedStats } from './player.js';
+import { updateAdvancedStats, getZeroStats } from './player.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -34,11 +34,23 @@ export function groupPlayersByPosition(roster) {
  */
 export function initializePlayerStats(player) {
   if (!player.stats) {
-    player.stats = { game: {}, season: {}, career: {} };
+    player.stats = {
+      game: {},
+      season: getZeroStats ? getZeroStats() : {},
+      career: getZeroStats ? getZeroStats() : {}
+    };
   }
   if (!player.stats.game) player.stats.game = {};
-  if (!player.stats.season) player.stats.season = {};
-  if (!player.stats.career) player.stats.career = {};
+
+  // Initialize season stats if missing or empty
+  if (!player.stats.season || Object.keys(player.stats.season).length === 0) {
+    player.stats.season = getZeroStats ? getZeroStats() : {};
+  }
+
+  // Initialize career stats if missing
+  if (!player.stats.career) {
+    player.stats.career = getZeroStats ? getZeroStats() : {};
+  }
 }
 
 /**

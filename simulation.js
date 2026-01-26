@@ -8,7 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { saveState } from './state.js';
-import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
+import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats, getZeroStats } from './player.js';
 import { processStaffXp } from './coach-system.js';
 import newsEngine from './news-engine.js';
 
@@ -396,7 +396,7 @@ function startNewSeason() {
           if (p && p.stats) {
             if (p.stats.game) delete p.stats.game;
             // Reset season stats for the new season
-            p.stats.season = {};
+            p.stats.season = getZeroStats ? getZeroStats() : {};
           }
           // Record starting OVR for season tracking
           if (p && p.ovr !== undefined) {

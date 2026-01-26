@@ -279,6 +279,32 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   }
 
   /**
+   * Returns an object with common stats initialized to 0.
+   * @returns {Object} Zeroed stats object
+   */
+  function getZeroStats() {
+    return {
+      // General
+      gamesPlayed: 0,
+
+      // Passing
+      passYd: 0, passTD: 0, interceptions: 0, passAtt: 0, passComp: 0, sacks: 0,
+
+      // Rushing
+      rushYd: 0, rushTD: 0, rushAtt: 0, fumbles: 0,
+
+      // Receiving
+      recYd: 0, recTD: 0, receptions: 0, targets: 0, drops: 0,
+
+      // Defense
+      tackles: 0, forcedFumbles: 0, passesDefended: 0, tacklesForLoss: 0,
+
+      // Kicking/Punting
+      fgMade: 0, fgAttempts: 0, xpMade: 0, xpAttempts: 0, punts: 0, puntYards: 0
+    };
+  }
+
+  /**
    * Create a fallback player if main creation fails
    */
   function createFallbackPlayer(pos, age, ovr) {
@@ -298,7 +324,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         injuryWeeks: 0,
         fatigue: 0,
         abilities: [],
-        stats: { game: {}, season: {}, career: {} },
+        stats: { game: {}, season: getZeroStats(), career: getZeroStats() },
         statsHistory: [],
         history: [],
         awards: []
@@ -328,7 +354,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       abilities: [],
       college: generateCollege(),
       fatigue: 0,
-      stats: { game: {}, season: {}, career: {} },
+      stats: { game: {}, season: getZeroStats(), career: getZeroStats() },
       statsHistory: [],
       history: [],
       awards: []
@@ -1049,8 +1075,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         // Statistics tracking
         stats: {
           game: {},
-          season: {},
-          career: {}
+          season: getZeroStats(),
+          career: getZeroStats()
         },
         statsHistory: [],
 
@@ -2255,7 +2281,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   export { initProgressionStats, calculateGameXP, addXP, applySkillTreeUpgrade };
 
   // Export main player functions
-  export { makePlayer, progressPlayer };
+  export { makePlayer, progressPlayer, getZeroStats };
 
   // Export legacy system
   export {
