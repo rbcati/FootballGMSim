@@ -359,7 +359,12 @@ class PlayerStatsViewer {
 
         // Helper to format values
         const fmt = (val) => (val !== undefined && val !== null) ? val.toLocaleString() : '0';
-        const fmtPct = (val) => (val !== undefined && val !== null) ? val.toFixed(1) + '%' : '0.0%';
+        const fmtPct = (val) => {
+            if (val === undefined || val === null) return '0.0%';
+            if (typeof val === 'string' && val.includes('%')) return val;
+            if (val <= 1 && val > 0) return (val * 100).toFixed(1) + '%';
+            return val.toFixed(1) + '%';
+        };
         const fmtAvg = (val) => (val !== undefined && val !== null) ? val.toFixed(1) : '0.0';
 
         if (pos === 'QB') {
@@ -379,7 +384,7 @@ class PlayerStatsViewer {
             careerRow = getQBData(careerStats);
 
         } else if (['RB', 'WR', 'TE'].includes(pos)) {
-            columns = ['Rush Yds', 'Rush TD', 'Avg/Carry', 'Rec Yds', 'Rec TD', 'Avg/Rec', 'Targets'];
+            columns = ['Rush Yds', 'Rush TD', 'Avg/Carry', 'Rec Yds', 'Rec TD', 'Avg/Rec', 'Targets', 'Catch %', 'Drop %', 'Rating'];
 
             const getSkillData = (s) => [
                 fmt(s.rushYd),
@@ -388,14 +393,17 @@ class PlayerStatsViewer {
                 fmt(s.recYd),
                 fmt(s.recTD),
                 fmtAvg(s.yardsPerReception),
-                fmt(s.targets)
+                fmt(s.targets),
+                fmtPct(s.catchPct || (s.targets > 0 ? s.receptions / s.targets : 0)),
+                fmtPct(s.dropRate),
+                fmtAvg(s.ratingWhenTargeted)
             ];
 
             seasonRow = getSkillData(seasonStats);
             careerRow = getSkillData(careerStats);
 
         } else if (['DL', 'LB', 'CB', 'S', 'DE', 'DT', 'OLB', 'MLB'].includes(pos)) {
-            columns = ['Tackles', 'Sacks', 'INT', 'FF', 'PD', 'TFL'];
+            columns = ['Tackles', 'Sacks', 'INT', 'FF', 'PD', 'TFL', 'Pres %', 'Cmp % All', 'Cov Rtg'];
 
             const getDefData = (s) => [
                 fmt(s.tackles),
@@ -403,7 +411,10 @@ class PlayerStatsViewer {
                 fmt(s.interceptions),
                 fmt(s.forcedFumbles),
                 fmt(s.passesDefended),
-                fmt(s.tacklesForLoss)
+                fmt(s.tacklesForLoss),
+                fmtPct(s.pressureRate),
+                s.targetsAllowed > 0 ? fmtPct(s.completionsAllowed / s.targetsAllowed) : '0.0%',
+                fmtAvg(s.coverageRating)
             ];
 
             seasonRow = getDefData(seasonStats);
