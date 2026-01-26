@@ -16,7 +16,8 @@ import GameSimulator from './game-simulator.js';
 const {
   simGameStats,
   applyResult,
-  initializePlayerStats
+  initializePlayerStats,
+  accumulateStats
 } = GameSimulator;
 
 /**
@@ -664,60 +665,9 @@ function simulateWeek(options = {}) {
           homePlayerStats = capturePlayerStats(home.roster);
           awayPlayerStats = capturePlayerStats(away.roster);
 
-          // Update player season stats from game stats (AFTER capturing for box score)
-          const updatePlayerStats = (roster) => {
-            if (!Array.isArray(roster)) return;
-            
-            roster.forEach(p => {
-              if (p && p.stats && p.stats.game) {
-                initializePlayerStats(p);
-                
-                // Accumulate game stats into season stats
-                Object.keys(p.stats.game).forEach(key => {
-                  const value = p.stats.game[key];
-                  if (typeof value === 'number') {
-                    // For averages/percentages, we'll recalculate at season end
-                    // For totals, just add them up
-                    if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') || 
-                        key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                        key === 'avgKickYards' || key === 'completionPct') {
-                      // These are calculated fields, don't accumulate
-                      return;
-                    }
-                    p.stats.season[key] = (p.stats.season[key] || 0) + value;
-                  }
-                });
-                
-                // Track games played
-                if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                p.stats.season.gamesPlayed++;
-
-                // Update Advanced Stats (WAR, etc.) - Weekly Update
-                if (updateAdvancedStats) {
-                    updateAdvancedStats(p, p.stats.season);
-                }
-              }
-            });
-          };
-          
-          updatePlayerStats(home.roster);
-          updatePlayerStats(away.roster);
-
-          // NEW: Update team season stats from game stats
-          const updateTeamSeasonStats = (team) => {
-              if (!team || !team.stats || !team.stats.game) return;
-              if (!team.stats.season) team.stats.season = {};
-
-              Object.keys(team.stats.game).forEach(key => {
-                  const val = team.stats.game[key];
-                  if (typeof val === 'number') {
-                      team.stats.season[key] = (team.stats.season[key] || 0) + val;
-                  }
-              });
-          };
-
-          updateTeamSeasonStats(home);
-          updateTeamSeasonStats(away);
+          // Accumulate stats for season (using shared helper)
+          accumulateStats(home, 'season');
+          accumulateStats(away, 'season');
         }
         
         // Store game result with complete box score
@@ -803,6 +753,11 @@ function simulateWeek(options = {}) {
     // Store results for the week
     if (!L.resultsByWeek) L.resultsByWeek = {};
     L.resultsByWeek[L.week - 1] = results;
+
+    // Generate News Stories
+    if (window.newsEngine && typeof window.newsEngine.generateWeeklyStories === 'function') {
+        window.newsEngine.generateWeeklyStories(L);
+    }
 
     // Update single game records
     if (typeof window.updateSingleGameRecords === 'function') {

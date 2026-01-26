@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats } from './game-simulator.js';
+import { simGameStats, accumulateStats } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -78,6 +78,12 @@ function simPlayoffWeek() {
             if (result) {
                 roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
                 winners.push(result.homeScore > result.awayScore ? game.home : game.away);
+
+                // Track playoff stats
+                if (accumulateStats) {
+                    accumulateStats(game.home, 'playoffs');
+                    accumulateStats(game.away, 'playoffs');
+                }
             } else {
                 console.error("Simulation failed for game", game);
                 // Fallback random winner to prevent crash
@@ -121,6 +127,16 @@ function simPlayoffWeek() {
         
         if (window.setStatus) window.setStatus(`🏆 ${P.winner.name} have won the Super Bowl!`);
         console.log("Super Bowl Winner:", P.winner);
+
+        // Add News Story
+        if (window.newsEngine) {
+            window.newsEngine.addStory({
+                headline: `CHAMPIONS: ${P.winner.name} win the Super Bowl!`,
+                body: `The ${P.winner.name} have been crowned world champions!`,
+                category: 'Playoffs',
+                teamId: P.winner.id
+            });
+        }
 
         // Trigger confetti for the championship win
         if (launchConfetti) launchConfetti();

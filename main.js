@@ -1,5 +1,7 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
+import { NewsEngine } from './news-engine.js';
+import { renderNews } from './news-viewer.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -1099,6 +1101,12 @@ class GameController {
                 this.setStatus('Welcome to NFL GM. Please select or create a league.', 'info');
             }
             this.setupEventListeners();
+
+            // Initialize News Engine
+            if (!window.newsEngine) {
+                window.newsEngine = new NewsEngine();
+            }
+
             if (typeof window.setupEventListeners === 'function') {
                 window.setupEventListeners();
             } else {
@@ -1430,6 +1438,11 @@ class GameController {
             case 'injuries':
                 if (window.renderInjuriesPage) {
                     window.renderInjuriesPage();
+                }
+                break;
+            case 'news':
+                if (renderNews) {
+                    renderNews();
                 }
                 break;
             case 'settings':

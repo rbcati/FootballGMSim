@@ -53,6 +53,58 @@ function calculateWeeksWithTeam(player, team) {
 }
 
 /**
+ * Accumulates game stats into season or playoff stats.
+ * @param {Object} team - Team object with roster and stats.game
+ * @param {string} type - 'season' or 'playoffs'
+ */
+export function accumulateStats(team, type = 'season') {
+  if (!team || !team.roster) return;
+
+  // Ensure target stats object exists
+  if (!team.stats) team.stats = {};
+  if (!team.stats[type]) team.stats[type] = {};
+
+  // Accumulate Team Stats
+  if (team.stats.game) {
+    Object.keys(team.stats.game).forEach(key => {
+        const val = team.stats.game[key];
+        if (typeof val === 'number') {
+            team.stats[type][key] = (team.stats[type][key] || 0) + val;
+        }
+    });
+  }
+
+  // Accumulate Player Stats
+  team.roster.forEach(p => {
+    if (p && p.stats && p.stats.game) {
+        if (!p.stats[type]) p.stats[type] = {};
+
+        // Track games played
+        if (!p.stats[type].gamesPlayed) p.stats[type].gamesPlayed = 0;
+        p.stats[type].gamesPlayed++;
+
+        Object.keys(p.stats.game).forEach(key => {
+            const value = p.stats.game[key];
+            if (typeof value === 'number') {
+                // Filter out calculated fields (averages, percentages)
+                if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
+                    key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
+                    key === 'avgKickYards' || key === 'completionPct') {
+                    return;
+                }
+                p.stats[type][key] = (p.stats[type][key] || 0) + value;
+            }
+        });
+
+        // Update Advanced Stats (WAR, etc.)
+        if (type === 'season' && updateAdvancedStats) {
+            updateAdvancedStats(p, p.stats.season);
+        }
+    }
+  });
+}
+
+/**
  * Applies the result of a simulated game to the teams' records.
  * @param {object} game - An object containing the home and away team objects.
  * @param {number} homeScore - The final score for the home team.
@@ -687,5 +739,6 @@ export default {
     simGameStats,
     applyResult,
     initializePlayerStats,
-    groupPlayersByPosition
+    groupPlayersByPosition,
+    accumulateStats
 };
