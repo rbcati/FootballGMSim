@@ -209,18 +209,23 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
 
 // --- STAT GENERATION HELPERS ---
 
-function generateQBStats(qb, teamScore, defenseStrength, U, modifiers = {}) {
+function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}) {
   const ratings = qb.ratings || {};
   const throwPower = ratings.throwPower || 70;
   const throwAccuracy = ratings.throwAccuracy || 70;
   const awareness = ratings.awareness || 70;
 
-  let baseAttempts = Math.max(20, Math.min(50, teamScore * 2 + U.rand(15, 35)));
+  // Realistic Game Script Logic
+  // Baseline attempts ~34. Increase if trailing, decrease if leading.
+  const scoreDiff = oppScore - teamScore; // Positive if trailing
+  const scriptMod = Math.max(-15, Math.min(15, scoreDiff * 0.6));
+
+  let baseAttempts = 34 + scriptMod + U.rand(-5, 5);
 
   // Apply modifier
   if (modifiers.passVolume) baseAttempts *= modifiers.passVolume;
 
-  const attempts = Math.round(baseAttempts);
+  const attempts = Math.max(15, Math.min(65, Math.round(baseAttempts)));
 
   let baseCompPct = (throwAccuracy + awareness) / 2;
 
@@ -257,16 +262,25 @@ function generateQBStats(qb, teamScore, defenseStrength, U, modifiers = {}) {
   };
 }
 
-function generateRBStats(rb, teamScore, defenseStrength, U, modifiers = {}) {
+function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers = {}, share = 1.0) {
   const ratings = rb.ratings || {};
   const speed = ratings.speed || 70;
   const trucking = ratings.trucking || 70;
   const juking = ratings.juking || 70;
   const catching = ratings.catching || 50;
 
-  let carries = Math.max(5, Math.min(30, Math.round(teamScore * 1.5 + U.rand(8, 18))));
+  // Realistic Game Script Logic
+  // Baseline ~26 team carries. Increase if leading, decrease if trailing.
+  const scoreDiff = teamScore - oppScore; // Positive if leading
+  const scriptMod = Math.max(-10, Math.min(12, scoreDiff * 0.4));
 
-  if (modifiers.runVolume) carries = Math.round(carries * modifiers.runVolume);
+  let baseTeamCarries = 26 + scriptMod + U.rand(-5, 8);
+
+  if (modifiers.runVolume) baseTeamCarries *= modifiers.runVolume;
+
+  // Apply share and bounds
+  let carries = Math.round(baseTeamCarries * share);
+  carries = Math.max(2, Math.min(35, carries));
 
   const baseYPC = 3.5 + (speed + trucking + juking) / 100;
   const defenseFactor = (100 - (defenseStrength || 70)) / 50;
@@ -639,7 +653,7 @@ export function simGameStats(home, away, options = {}) {
 
       if (qb) {
         // console.log(`[SIM-DEBUG] Generating stats for QB ${qb.name}`);
-        const qbStats = generateQBStats(qb, score, oppDefenseStrength, U, mods);
+        const qbStats = generateQBStats(qb, score, oppScore, oppDefenseStrength, U, mods);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
         Object.assign(qb.stats.game, qbStats);
@@ -649,14 +663,8 @@ export function simGameStats(home, away, options = {}) {
       const rbs = (groups['RB'] || []).slice(0, 2);
       rbs.forEach((rb, index) => {
         const share = index === 0 ? 0.7 : 0.3;
-        const rbStats = generateRBStats(rb, score * share, oppDefenseStrength, U, mods);
-        if (index > 0) {
-           Object.keys(rbStats).forEach(key => {
-            if (typeof rbStats[key] === 'number') {
-              rbStats[key] = Math.round(rbStats[key] * share);
-            }
-          });
-        }
+        // Pass full scores for context, and explicit share parameter
+        const rbStats = generateRBStats(rb, score, oppScore, oppDefenseStrength, U, mods, share);
         Object.assign(rb.stats.game, rbStats);
       });
 
