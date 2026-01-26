@@ -4,7 +4,7 @@
 const STAFF_PERKS = {
     HC: ['Motivator', 'Strategist', 'Disciplinarian'],
     OC: ['Air Raid', 'Ground & Pound', 'Balanced'],
-    DC: ['Blitz Happy', 'Zone Specialist', 'No Fly Zone'],
+    DC: ['Blitz Happy', 'Bend Dont Break', 'No Fly Zone'],
     Scout: ['Talent Spotter', 'Draft Guru', 'Analytics Expert']
 };
 

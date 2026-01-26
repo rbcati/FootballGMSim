@@ -699,6 +699,7 @@ function simulateWeek(options = {}) {
               if (!team.stats.season) team.stats.season = {};
 
               accumulateStats(team.stats.game, team.stats.season);
+              team.stats.season.gamesPlayed = (team.stats.season.gamesPlayed || 0) + 1;
           };
 
           updateTeamSeasonStats(home);

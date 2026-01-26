@@ -21,12 +21,14 @@ function normalizeSlot(slot) {
 }
 
 function getActiveSaveSlot() {
+  if (typeof window === 'undefined') return 1;
   const stored = window.localStorage.getItem('nflGM4.activeSlot');
   return normalizeSlot(stored || 1);
 }
 
 function setActiveSaveSlot(slot) {
   const normalized = normalizeSlot(slot);
+  if (typeof window === 'undefined') return normalized;
   try {
     window.localStorage.setItem('nflGM4.activeSlot', normalized);
     if (window.state) {
@@ -50,11 +52,11 @@ const routes = [
 ];
 
 // --- Name Data (Fallbacks for Player Generation) ---
-const FIRST_NAMES = window.EXPANDED_FIRST_NAMES || [
+const FIRST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || [
   'James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 
   'Thomas', 'Christopher', 'Matthew', 'Anthony', 'Mark', 'Steven', 'Andrew', 'Joshua'
 ];
-const LAST_NAMES = window.EXPANDED_LAST_NAMES || [
+const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || [
   'Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 
   'Rodriguez', 'Martinez', 'Hernandez', 'Lopez', 'Gonzalez', 'Wilson', 'Anderson'
 ];
@@ -791,23 +793,27 @@ function initializeGlobalState() {
 }
 
 // Initialize state immediately (attempts load first)
-initializeGlobalState();
+if (typeof window !== 'undefined') {
+  initializeGlobalState();
 
-// Install autosave hook
-hookAutoSave();
+  // Install autosave hook
+  hookAutoSave();
+}
 
 export const init = State.init;
 
 // Expose name arrays for generation (if they were not globally defined already)
 // Copy-then-Modify pattern: Ensure we have mutable copies on the window object
 // We must handle the case where these are getters (from Constants) by deleting them first
-const currentFirstNames = window.FIRST_NAMES || FIRST_NAMES;
-const currentLastNames = window.LAST_NAMES || LAST_NAMES;
+if (typeof window !== 'undefined') {
+  const currentFirstNames = window.FIRST_NAMES || FIRST_NAMES;
+  const currentLastNames = window.LAST_NAMES || LAST_NAMES;
 
-try { delete window.FIRST_NAMES; } catch (e) {}
-try { delete window.LAST_NAMES; } catch (e) {}
+  try { delete window.FIRST_NAMES; } catch (e) {}
+  try { delete window.LAST_NAMES; } catch (e) {}
 
-window.FIRST_NAMES = [...currentFirstNames];
-window.LAST_NAMES = [...currentLastNames];
+  window.FIRST_NAMES = [...currentFirstNames];
+  window.LAST_NAMES = [...currentLastNames];
 
-console.log('✅ State-Save Manager loaded. Full state persistence is active.');
+  console.log('✅ State-Save Manager loaded. Full state persistence is active.');
+}
