@@ -711,10 +711,34 @@ export function simGameStats(home, away) {
   }
 }
 
+/**
+ * Accumulate game stats into a target stats object (season or career).
+ * Ignores calculated fields like averages and percentages.
+ * @param {Object} source - Source stats (e.g., game stats).
+ * @param {Object} target - Target stats (e.g., season stats).
+ */
+export function accumulateStats(source, target) {
+    if (!source || !target) return;
+
+    Object.keys(source).forEach(key => {
+        const value = source[key];
+        if (typeof value === 'number') {
+            // Ignore calculated fields
+            if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
+                key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
+                key === 'avgKickYards' || key === 'completionPct') {
+                return;
+            }
+            target[key] = (target[key] || 0) + value;
+        }
+    });
+}
+
 // Default export if needed, or just named exports
 export default {
     simGameStats,
     applyResult,
     initializePlayerStats,
-    groupPlayersByPosition
+    groupPlayersByPosition,
+    accumulateStats
 };

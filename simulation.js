@@ -17,7 +17,8 @@ import GameSimulator from './game-simulator.js';
 const {
   simGameStats,
   applyResult,
-  initializePlayerStats
+  initializePlayerStats,
+  accumulateStats
 } = GameSimulator;
 
 /**
@@ -674,20 +675,7 @@ function simulateWeek(options = {}) {
                 initializePlayerStats(p);
                 
                 // Accumulate game stats into season stats
-                Object.keys(p.stats.game).forEach(key => {
-                  const value = p.stats.game[key];
-                  if (typeof value === 'number') {
-                    // For averages/percentages, we'll recalculate at season end
-                    // For totals, just add them up
-                    if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') || 
-                        key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                        key === 'avgKickYards' || key === 'completionPct') {
-                      // These are calculated fields, don't accumulate
-                      return;
-                    }
-                    p.stats.season[key] = (p.stats.season[key] || 0) + value;
-                  }
-                });
+                accumulateStats(p.stats.game, p.stats.season);
                 
                 // Track games played
                 if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
@@ -709,12 +697,7 @@ function simulateWeek(options = {}) {
               if (!team || !team.stats || !team.stats.game) return;
               if (!team.stats.season) team.stats.season = {};
 
-              Object.keys(team.stats.game).forEach(key => {
-                  const val = team.stats.game[key];
-                  if (typeof val === 'number') {
-                      team.stats.season[key] = (team.stats.season[key] || 0) + val;
-                  }
-              });
+              accumulateStats(team.stats.game, team.stats.season);
           };
 
           updateTeamSeasonStats(home);

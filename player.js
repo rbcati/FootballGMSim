@@ -1699,6 +1699,13 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
    * @param {Object} seasonStats - Season statistics
    */
   function updateAdvancedStats(player, seasonStats) {
+    if (!player.stats.career) player.stats.career = getZeroStats();
+
+    if (!player.stats.career.advanced) {
+      // Lazy initialization if missing
+      initializePlayerLegacy(player);
+    }
+
     const advanced = player.stats.career.advanced;
     
     // Calculate WAR
