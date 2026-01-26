@@ -152,7 +152,15 @@ function makeLeague(teams, dependencies = {}) {
         const team = {
             ...teamData,
             id: index,
+            // Explicitly initialize standings properties
+            wins: 0,
+            losses: 0,
+            ties: 0,
+            ptsFor: 0,
+            ptsAgainst: 0,
+            // Legacy record object for compatibility
             record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
+            stats: { season: {}, game: {} },
             history: [],
             capTotal: Constants.SALARY_CAP?.BASE || 220,
             deadCap: 0,

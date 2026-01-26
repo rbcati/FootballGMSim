@@ -199,6 +199,32 @@ function restructureContract(league, team, player, amount = null) {
 // === PLAYER GENERATION FUNCTIONS ===
 
 /**
+ * Returns an object with common stats initialized to 0.
+ * @returns {Object} Zeroed stats object
+ */
+function getZeroStats() {
+  return {
+    // General
+    gamesPlayed: 0,
+
+    // Passing
+    passYd: 0, passTD: 0, interceptions: 0, passAtt: 0, passComp: 0, sacks: 0,
+
+    // Rushing
+    rushYd: 0, rushTD: 0, rushAtt: 0, fumbles: 0,
+
+    // Receiving
+    recYd: 0, recTD: 0, receptions: 0, targets: 0, drops: 0,
+
+    // Defense
+    tackles: 0, forcedFumbles: 0, passesDefended: 0, tacklesForLoss: 0,
+
+    // Kicking/Punting
+    fgMade: 0, fgAttempts: 0, xpMade: 0, xpAttempts: 0, punts: 0, puntYards: 0
+  };
+}
+
+/**
  * Generates a complete player with all ratings and attributes
  * @param {string} pos - Position (QB, RB, etc.)
  * @param {Object} overrides - Optional overrides for specific attributes
@@ -238,8 +264,8 @@ function makePlayer(pos, overrides = {}) {
     abilities: [],
     stats: { 
       game: {}, 
-      season: {}, 
-      career: {} 
+      season: getZeroStats(),
+      career: getZeroStats()
     },
     history: [],
     awards: [],
