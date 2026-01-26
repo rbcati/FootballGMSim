@@ -1,6 +1,8 @@
 // coaching.js - Comprehensive Coaching Statistics System
 'use strict';
 
+import { COACH_SKILL_TREES } from './coach-system.js';
+
 /**
  * Initialize coaching stats for a coach
  * @param {Object} coach - Coach object
@@ -495,6 +497,132 @@ export function getCoachingHallOfFame(allCoaches) {
 }
 
 /**
+ * Render Skill Trees for the user's staff
+ * @returns {string} HTML string
+ */
+function renderSkillTrees() {
+    const L = window.state?.league;
+    const userTeamId = window.state?.userTeamId || 0;
+    const userTeam = L && L.teams ? L.teams[userTeamId] : null;
+
+    if (!userTeam || !userTeam.staff) {
+        return '<div class="coaching-empty"><h3>No Staff Data</h3><p>Could not load staff for your team.</p></div>';
+    }
+
+    const staffMembers = [
+        { role: 'OC', data: userTeam.staff.offCoordinator },
+        { role: 'DC', data: userTeam.staff.defCoordinator }
+    ].filter(s => s.data);
+
+    if (staffMembers.length === 0) {
+         return '<div class="coaching-empty"><h3>No Coordinators</h3><p>Your team does not have any coordinators with skill trees.</p></div>';
+    }
+
+    return `
+        <div class="coaching-section">
+            <h3 class="coaching-section-title">Staff Skill Trees (RPG Progression)</h3>
+            <p class="muted mb-3">Staff earn XP from wins and championships to level up their archetype trees.</p>
+            <div class="skill-trees-grid">
+                ${staffMembers.map(s => renderSingleSkillTree(s.role, s.data)).join('')}
+            </div>
+        </div>
+    `;
+}
+
+function renderSingleSkillTree(role, staff) {
+    // Get archetype or fallback
+    const archetype = staff.archetype || staff.perk;
+    const level = staff.level || 1;
+    const xp = staff.xp || 0;
+    const nextLevelXp = 1000; // Hardcoded for now based on coach-system.js
+
+    // Get Tree Definition
+    const category = role; // 'OC' or 'DC'
+    const treeDef = COACH_SKILL_TREES[category] ? COACH_SKILL_TREES[category][archetype] : null;
+
+    if (!treeDef) {
+        return `
+            <div class="skill-tree-card">
+                <div class="skill-header">
+                    <div>
+                        <h4>${staff.name}</h4>
+                        <span class="badge-position">${role}</span>
+                    </div>
+                </div>
+                <div class="skill-body">
+                    <p class="muted">No skill tree available for archetype: ${archetype || 'None'}</p>
+                </div>
+            </div>
+        `;
+    }
+
+    // Render 5 levels
+    let nodesHtml = '';
+    for (let i = 1; i <= 5; i++) {
+        const tier = treeDef.levels[i-1];
+        const isUnlocked = i <= level;
+        const isActive = i === level;
+
+        // Format mods
+        const modDesc = tier ? Object.entries(tier.mods).map(([k, v]) => {
+            const val = Math.round((v - 1) * 100);
+            const sign = val > 0 ? '+' : '';
+            // Make friendly name
+            const friendly = k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            return `${friendly}: ${sign}${val}%`;
+        }).join(', ') : 'No Bonus';
+
+        nodesHtml += `
+            <div class="skill-node-wrapper ${isUnlocked ? 'unlocked' : ''} ${isActive ? 'active' : ''}">
+                <div class="skill-node">
+                    <span class="level-num">${i}</span>
+                </div>
+                <div class="skill-info">
+                    <div class="skill-name">Level ${i}</div>
+                    <div class="skill-desc">${modDesc}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    const progressPct = Math.min(100, Math.round((xp / nextLevelXp) * 100));
+
+    return `
+        <div class="skill-tree-card">
+            <div class="skill-header">
+                <div class="skill-title-row">
+                    <div>
+                        <h4>${staff.name}</h4>
+                        <div class="role-archetype">
+                            <span class="badge-position">${role}</span>
+                            <span class="archetype-name">${archetype}</span>
+                        </div>
+                    </div>
+                    <div class="level-badge">Lvl ${level}</div>
+                </div>
+                <p class="tree-desc">${treeDef.description}</p>
+
+                ${level < 5 ? `
+                <div class="xp-bar-container">
+                    <div class="xp-label">
+                        <span>XP Progress</span>
+                        <span>${xp} / ${nextLevelXp}</span>
+                    </div>
+                    <div class="xp-track">
+                        <div class="xp-fill" style="width: ${progressPct}%"></div>
+                    </div>
+                </div>
+                ` : '<div class="xp-bar-container"><div class="xp-label"><span>Max Level Reached</span></div></div>'}
+            </div>
+
+            <div class="skill-path">
+                ${nodesHtml}
+            </div>
+        </div>
+    `;
+}
+
+/**
  * Render coaching statistics page
  */
 export function renderCoachingStats() {
@@ -594,6 +722,7 @@ export function renderCoachingStats() {
     coachingContent.innerHTML = `
       <div class="coaching-tabs">
         <button class="tab-btn active" data-tab="active">Active Coaches</button>
+        <button class="tab-btn" data-tab="skills">Skill Trees</button>
         <button class="tab-btn" data-tab="hof">Hall of Fame</button>
         <button class="tab-btn" data-tab="records">Records</button>
       </div>
@@ -615,6 +744,8 @@ export function renderCoachingStats() {
         
         if (tab === 'active') {
           tabContent.innerHTML = renderActiveCoaches(allCoaches);
+        } else if (tab === 'skills') {
+          tabContent.innerHTML = renderSkillTrees();
         } else if (tab === 'hof') {
           tabContent.innerHTML = renderCoachingHallOfFame(allCoaches);
         } else if (tab === 'records') {
