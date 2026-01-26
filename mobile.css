@@ -82,11 +82,11 @@
   
   .nav-toggle {
     display: flex !important;
-    z-index: 9999 !important;
+    z-index: 1002 !important;
   }
 
   .nav-toggle-container {
-    z-index: 9999 !important;
+    z-index: 1002 !important;
   }
 
   /* Cards */
