@@ -254,6 +254,29 @@ class GameController {
                     </div>
                 `;
             }
+
+            // --- NEWS SECTION ---
+            let newsHTML = '';
+            if (L.news && L.news.length > 0) {
+                const recentNews = L.news.slice(0, 3);
+                newsHTML = `
+                    <div class="card mb-4" id="hubNews">
+                        <h3>Latest News</h3>
+                        <div class="news-list">
+                            ${recentNews.map(item => `
+                                <div class="news-item" style="border-bottom: 1px solid rgba(255,255,255,0.1); padding: 10px 0;">
+                                    <div style="font-size: 0.8rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+                                        <span class="news-type tag">${item.type.toUpperCase()}</span>
+                                        <span>Week ${item.week}, ${item.year}</span>
+                                    </div>
+                                    <div style="font-weight: 600; font-size: 1.1rem; margin: 4px 0;">${item.headline}</div>
+                                    <div style="font-size: 0.9rem; opacity: 0.8;">${item.story}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
             
             let divisionStandingsHTML = '';
             if (userTeam && L) {
@@ -422,6 +445,7 @@ class GameController {
 
             hubContainer.innerHTML = `
                 ${headerDashboardHTML}
+                ${newsHTML}
                 ${nextGameHTML}
                 <div class="card">
                     <h2>Team Hub</h2>

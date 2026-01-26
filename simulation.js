@@ -10,6 +10,7 @@ import { Constants } from './constants.js';
 import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats } from './player.js';
 import { processStaffXp } from './coach-system.js';
+import newsEngine from './news-engine.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -851,6 +852,15 @@ function simulateWeek(options = {}) {
       } catch (ownerError) {
         console.error('Error updating owner mode:', ownerError);
       }
+    }
+
+    // Generate Weekly News
+    try {
+        if (newsEngine && newsEngine.generateWeeklyNews) {
+            newsEngine.generateWeeklyNews(L);
+        }
+    } catch (newsError) {
+        console.error('Error generating news:', newsError);
     }
 
     // Update UI to show results (if render option is true, default to true)
