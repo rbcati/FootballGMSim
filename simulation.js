@@ -61,97 +61,74 @@ function accumulateCareerStats(league) {
     if (!team.roster || !Array.isArray(team.roster)) return;
     
     team.roster.forEach(player => {
-      // Record season OVR change
-      if (window.recordSeasonOVR) {
-        const ovrStart = player.seasonOVRStart || player.ovr || 0;
-        const ovrEnd = player.ovr || 0;
-        window.recordSeasonOVR(player, year, ovrStart, ovrEnd);
-      }
+      // 1. Snapshot Season Stats
       if (!player.stats || !player.stats.season) return;
       
-      // Calculate advanced stats (WAR, Ratings, etc.) BEFORE snapshotting
-      // This ensures they are saved in history and available for awards
-      if (calculateWAR) {
+      // Calculate advanced stats explicitly before snapshot
+      if (typeof calculateWAR === 'function') {
           player.stats.season.war = calculateWAR(player, player.stats.season);
       }
-      if (calculateQBRating && player.pos === 'QB') {
-          player.stats.season.passerRating = calculateQBRating(player.stats.season);
-      }
-      if (calculatePasserRatingWhenTargeted && ['WR', 'TE', 'RB'].includes(player.pos)) {
-          player.stats.season.ratingWhenTargeted = calculatePasserRatingWhenTargeted(player.stats.season);
-      }
 
-      // Snapshot season stats to history
-      if (Object.keys(player.stats.season).length > 0) {
+      // Create a deep copy of season stats to preserve data before reset
+      const seasonSnapshot = { ...player.stats.season };
+
+      // Add to history
+      if (Object.keys(seasonSnapshot).length > 0) {
           if (!player.statsHistory) player.statsHistory = [];
           player.statsHistory.push({
               season: year,
               team: team.abbr || team.name,
-              ...player.stats.season
+              ...seasonSnapshot
           });
       }
 
+      // 2. Reset Season Stats (Now safe to do)
       initializePlayerStats(player);
       
-      const season = player.stats.season;
       const career = player.stats.career;
-      
-      // Accumulate all numeric season stats into career
-      Object.keys(season).forEach(key => {
-        const value = season[key];
+
+      // 3. Accumulate Counting Stats ONLY
+      // List of fields that are averages/ratings and should NOT be summed
+      const derivedFields = [
+          'completionPct', 'yardsPerCarry', 'yardsPerReception',
+          'avgPuntYards', 'successPct', 'passerRating', 'ratingWhenTargeted'
+      ];
+
+      Object.keys(seasonSnapshot).forEach(key => {
+        const value = seasonSnapshot[key];
         if (typeof value === 'number') {
-          // For calculated fields, recalculate from totals
-          if (key === 'completionPct') {
-            const attempts = career.passAtt || 0;
-            const completions = career.passComp || 0;
-            if (attempts > 0) {
-              career.completionPct = Math.round((completions / attempts) * 1000) / 10;
+            // Skip derived fields and ratings during summation
+            if (derivedFields.includes(key) || key.includes('Rating') || key.includes('Grade')) {
+                return;
             }
-          } else if (key === 'yardsPerCarry') {
-            const carries = career.rushAtt || 0;
-            const yards = career.rushYd || 0;
-            if (carries > 0) {
-              career.yardsPerCarry = Math.round((yards / carries) * 10) / 10;
-            }
-          } else if (key === 'yardsPerReception') {
-            const receptions = career.receptions || 0;
-            const yards = career.recYd || 0;
-            if (receptions > 0) {
-              career.yardsPerReception = Math.round((yards / receptions) * 10) / 10;
-            }
-          } else if (key === 'avgPuntYards') {
-            const punts = career.punts || 0;
-            const yards = career.puntYards || 0;
-            if (punts > 0) {
-              career.avgPuntYards = Math.round((yards / punts) * 10) / 10;
-            }
-          } else if (key === 'successPct') {
-            const attempts = career.fgAttempts || 0;
-            const made = career.fgMade || 0;
-            if (attempts > 0) {
-              career.successPct = Math.round((made / attempts) * 1000) / 10;
-            }
-          } else if (key.includes('Rating') || key.includes('Grade')) {
-            // For ratings/grades, track average
-            if (!career[key + 'Total']) career[key + 'Total'] = 0;
-            if (!career[key + 'Games']) career[key + 'Games'] = 0;
-            career[key + 'Total'] += value;
-            career[key + 'Games'] += (season.gamesPlayed || 1);
-            career[key] = Math.round((career[key + 'Total'] / Math.max(1, career[key + 'Games'])) * 10) / 10;
-          } else {
-            // Regular accumulation for totals
             career[key] = (career[key] || 0) + value;
-          }
         }
       });
-      
-      // Update longest records (keep maximum)
+
+      // 4. Update Longest Records
       const longestFields = ['longestPass', 'longestRun', 'longestCatch', 'longestFG', 'longestPunt'];
       longestFields.forEach(field => {
-        if (season[field] && season[field] > (career[field] || 0)) {
-          career[field] = season[field];
+        if (typeof seasonSnapshot[field] === 'number' && seasonSnapshot[field] > (career[field] || 0)) {
+          career[field] = seasonSnapshot[field];
         }
       });
+
+      // 5. Recalculate Career Derived Stats from new Totals
+      if (career.passAtt > 0) {
+          career.completionPct = Math.round((career.passComp / career.passAtt) * 1000) / 10;
+      }
+      if (career.rushAtt > 0) {
+          career.yardsPerCarry = Math.round((career.rushYd / career.rushAtt) * 10) / 10;
+      }
+      if (career.receptions > 0) {
+          career.yardsPerReception = Math.round((career.recYd / career.receptions) * 10) / 10;
+      }
+      if (career.punts > 0) {
+          career.avgPuntYards = Math.round((career.puntYards / career.punts) * 10) / 10;
+      }
+      if (career.fgAttempts > 0) {
+          career.successPct = Math.round((career.fgMade / career.fgAttempts) * 1000) / 10;
+      }
     });
   });
 }
@@ -373,98 +350,58 @@ function startOffseason() {
 function startNewSeason() {
   try {
     const L = window.state?.league;
-    if (!L) {
-      console.error('No league loaded to start new season');
-      return;
-    }
+    if (!L) return;
 
     // Clear offseason flag
     window.state.offseason = false;
     window.state.offseasonYear = null;
 
-    // Increment global year and season counters
-    window.state.year = (window.state.year || 2025) + 1;
-    window.state.season = (window.state.season || 1) + 1;
+    // Update Year - Derive from League Year to prevent desync
+    const currentYear = Number.isInteger(L.year) ? L.year : (window.state.year || 2025);
+    const nextYear = currentYear + 1;
 
-    // Reset playoff data
-    window.state.playoffs = null;
-
-    // Update league year and season. Increment league.season for salary cap tracking.
-    L.year = window.state.year;
+    window.state.year = nextYear;
+    L.year = nextYear;
     L.season = (L.season || 1) + 1;
     
-    // Reset week and clear previous results
     L.week = 1;
     L.resultsByWeek = [];
 
-    // Reset team records, clear per-game stats, and reset season stats
+    // Reset team records completely
     L.teams.forEach(team => {
+      // 1. Reset UI Record Object
       team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+
+      // 2. Reset Flat Stats (The source of truth conflicts)
+      team.wins = 0;
+      team.losses = 0;
+      team.ties = 0;
+      team.draws = 0;
+      team.ptsFor = 0;
+      team.ptsAgainst = 0;
+      team.pointsFor = 0;
+      team.pointsAgainst = 0;
+
+      // 3. Reset Player Stats
       if (team.stats) team.stats.season = {};
       if (team.roster) {
         team.roster.forEach(p => {
           if (p && p.stats) {
-            if (p.stats.game) delete p.stats.game;
-            // Reset season stats for the new season
-            p.stats.season = getZeroStats ? getZeroStats() : {};
+            delete p.stats.game;
+            p.stats.season = {};
           }
-          // Record starting OVR for season tracking
-          if (p && p.ovr !== undefined) {
-            p.seasonOVRStart = p.ovr;
-          }
+          if (p && p.ovr !== undefined) p.seasonOVRStart = p.ovr;
         });
       }
     });
 
-    // Recalculate cap for all teams (in case of changes during offseason)
-    if (typeof window.recalcAllTeamCaps === 'function') {
-      window.recalcAllTeamCaps(L);
-    } else if (typeof window.recalcCap === 'function') {
-      L.teams.forEach(team => {
-        try {
-          window.recalcCap(L, team);
-        } catch (error) {
-          console.error('Error recalculating cap for team', team?.abbr || team?.name, error);
-        }
-      });
-    }
-
-    // Generate a new schedule for the upcoming season
-    if (typeof window.makeSchedule === 'function') {
-      try {
-        L.schedule = window.makeSchedule(L.teams);
-      } catch (schedErr) {
-        console.error('Error generating new schedule:', schedErr);
-      }
-    }
-
-    // Generate new draft class for the next season
-    if (typeof window.generateDraftClass === 'function') {
-        // Pass year + 1 because the class is for the NEXT draft
-        window.generateDraftClass(window.state.year + 1);
-    } else if (typeof window.generateProspects === 'function') {
-        // Fallback
-        window.state.draftClass = window.generateProspects(window.state.year + 1);
-    }
-
-    // Persist the updated state
+    if (typeof window.makeSchedule === 'function') L.schedule = window.makeSchedule(L.teams);
+    if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
     if (typeof window.saveState === 'function') window.saveState();
-
-    // Refresh the UI for the new season
     if (typeof window.renderHub === 'function') window.renderHub();
-    if (typeof window.setStatus === 'function') {
-      window.setStatus(`Welcome to the ${window.state.year} season!`, 'success', 5000);
-    }
-    
-    // Update cap sidebar if available
-    if (typeof window.updateCapSidebar === 'function') {
-      window.updateCapSidebar();
-    }
+
   } catch (err) {
     console.error('Error starting new season:', err);
-    if (typeof window.setStatus === 'function') {
-      window.setStatus(`Error starting new season: ${err.message}`);
-    }
   }
 }
 
@@ -511,11 +448,8 @@ function simulateWeek(options = {}) {
     window.setStatus(`Simulating week ${L.week}...`);
 
     // NEW SEASON PROGRESSION CHECK
-    // If the regular season is over and a Super Bowl champion has been crowned,
-    // transition to offseason instead of starting new season immediately.
-    // FIXED: Add guard to prevent multiple calls
     if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
-      // Check if already in offseason to prevent multiple calls
+      // Check if already in offseason
       if (window.state.offseason === true) {
         console.log('Already in offseason, skipping transition');
         return;
@@ -524,16 +458,13 @@ function simulateWeek(options = {}) {
       console.log('Season complete, transitioning to offseason');
       window.setStatus('Season complete! Entering offseason...');
       
-      // Set flag immediately to prevent multiple calls
-      window.state.offseason = true;
+      // DO NOT set window.state.offseason = true here.
+      // startOffseason() checks this flag to prevent double-execution.
       
       if (typeof window.startOffseason === 'function') {
         window.startOffseason();
-      } else {
-        // Fallback: start new season if offseason function doesn't exist
-        if (typeof window.startNewSeason === 'function') {
-          window.startNewSeason();
-        }
+      } else if (typeof window.startNewSeason === 'function') {
+        window.startNewSeason();
       }
       return;
     }
