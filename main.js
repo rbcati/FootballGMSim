@@ -1,6 +1,6 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
-import { NewsEngine } from './news-engine.js';
+import { NewsEngine } from './news.engine.js';
 import { renderNews } from './news-viewer.js';
 
 // Update Checker System
