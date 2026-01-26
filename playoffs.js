@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats, initializePlayerStats } from './game-simulator.js';
+import { simGameStats, initializePlayerStats, accumulateStats } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -88,17 +88,7 @@ function simPlayoffWeek() {
                                 if (!p.stats.playoffs) p.stats.playoffs = {};
 
                                 // Accumulate game stats into playoff stats
-                                Object.keys(p.stats.game).forEach(key => {
-                                    const value = p.stats.game[key];
-                                    if (typeof value === 'number') {
-                                        if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
-                                            key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                                            key === 'avgKickYards' || key === 'completionPct') {
-                                            return;
-                                        }
-                                        p.stats.playoffs[key] = (p.stats.playoffs[key] || 0) + value;
-                                    }
-                                });
+                                accumulateStats(p.stats.game, p.stats.playoffs);
 
                                 // Track games played
                                 if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
