@@ -354,7 +354,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       abilities: [],
       college: generateCollege(),
       fatigue: 0,
-      stats: { game: {}, season: getZeroStats(), career: getZeroStats() },
+      stats: { game: getZeroStats(), season: getZeroStats(), career: getZeroStats() },
       statsHistory: [],
       history: [],
       awards: []
@@ -1074,7 +1074,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 
         // Statistics tracking
         stats: {
-          game: {},
+          game: getZeroStats(),
           season: getZeroStats(),
           career: getZeroStats()
         },

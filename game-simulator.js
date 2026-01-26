@@ -35,12 +35,12 @@ export function groupPlayersByPosition(roster) {
 export function initializePlayerStats(player) {
   if (!player.stats) {
     player.stats = {
-      game: {},
+      game: getZeroStats ? getZeroStats() : {},
       season: getZeroStats ? getZeroStats() : {},
       career: getZeroStats ? getZeroStats() : {}
     };
   }
-  if (!player.stats.game) player.stats.game = {};
+  if (!player.stats.game) player.stats.game = getZeroStats ? getZeroStats() : {};
 
   // Initialize season stats if missing or empty
   if (!player.stats.season || Object.keys(player.stats.season).length === 0) {

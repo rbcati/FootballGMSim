@@ -108,6 +108,24 @@ const initializeRoster = (team, Constants, Utils, makePlayer) => {
 };
 
 /**
+ * Returns an object with team stats initialized to 0.
+ * @returns {Object} Zeroed team stats object
+ */
+function getZeroTeamStats() {
+    return {
+        wins: 0, losses: 0, ties: 0,
+        ptsFor: 0, ptsAgainst: 0,
+        passYds: 0, rushYds: 0,
+        passTD: 0, rushTD: 0,
+        turnovers: 0,
+        sacks: 0,
+        // Game specific
+        thirdDownAttempts: 0, thirdDownConversions: 0,
+        redZoneTrips: 0, redZoneTDs: 0
+    };
+}
+
+/**
  * Main function to generate the league.
  * @param {Array} teams - Array of team objects.
  * @param {Object} dependencies - Optional dependencies (Constants, Utils, etc.).
@@ -160,7 +178,7 @@ function makeLeague(teams, dependencies = {}) {
             ptsAgainst: 0,
             // Legacy record object for compatibility
             record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
-            stats: { season: {}, game: {} },
+            stats: { season: getZeroTeamStats(), game: getZeroTeamStats() },
             history: [],
             capTotal: Constants.SALARY_CAP?.BASE || 220,
             deadCap: 0,
@@ -253,4 +271,4 @@ if (typeof window !== 'undefined') {
     window.makeLeague = makeLeague;
 }
 
-export { makeLeague };
+export { makeLeague, getZeroTeamStats };
