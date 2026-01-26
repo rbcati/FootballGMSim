@@ -97,7 +97,8 @@ export function accumulateStats(team, type = 'season') {
         });
 
         // Update Advanced Stats (WAR, etc.)
-        if (type === 'season' && updateAdvancedStats) {
+        // Safety check to ensure function is available and avoid ReferenceError
+        if (type === 'season' && typeof updateAdvancedStats === 'function') {
             updateAdvancedStats(p, p.stats.season);
         }
     }
