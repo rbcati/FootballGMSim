@@ -2398,3 +2398,64 @@ window.generateAITradeProposals = generateAITradeProposals;
 window.showPlayerDetails = showPlayerDetails;
 
 console.log('🎉 UI master file loaded successfully!');
+
+/**
+ * Shows a modal for a decision event
+ * @param {Object} event - The event object { title, text, options: [{label, effect, msg}] }
+ */
+window.showDecisionModal = function(event) {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+        <div class="modal-content decision-modal">
+            <div class="modal-header">
+                <h2>${event.title}</h2>
+            </div>
+            <div class="modal-body">
+                <p class="decision-text">${event.text}</p>
+                <div class="decision-options">
+                    ${event.options.map((opt, idx) => `
+                        <button class="btn decision-btn" data-idx="${idx}">${opt.label}</button>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add styles if not present
+    if (!document.getElementById('decisionStyles')) {
+        const style = document.createElement('style');
+        style.id = 'decisionStyles';
+        style.textContent = `
+            .decision-modal { border-left: 5px solid var(--accent); }
+            .decision-text { font-size: 1.1rem; margin-bottom: 20px; }
+            .decision-options { display: flex; gap: 10px; flex-wrap: wrap; }
+            .decision-btn { flex: 1; padding: 15px; text-align: center; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(modal);
+    modal.style.display = 'flex';
+
+    // Handle clicks
+    const buttons = modal.querySelectorAll('.decision-btn');
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const idx = parseInt(btn.dataset.idx);
+            const choice = event.options[idx];
+
+            // Apply effects (Mock implementation - simply logs or notifies)
+            console.log(`User chose: ${choice.label}`, choice.effect);
+
+            // Close decision modal
+            modal.remove();
+
+            // Show consequence
+            if (window.setStatus) {
+                window.setStatus(choice.msg, 'info', 4000);
+            }
+        });
+    });
+};

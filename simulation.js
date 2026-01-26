@@ -18,7 +18,8 @@ const {
   simGameStats,
   applyResult,
   initializePlayerStats,
-  accumulateStats
+  accumulateStats,
+  simulateMatchup
 } = GameSimulator;
 
 /**
@@ -632,13 +633,16 @@ function simulateWeek(options = {}) {
           homePlayerStats = overrideResult.boxScore?.home || {};
           awayPlayerStats = overrideResult.boxScore?.away || {};
         } else {
-          // Simulate the game (USING GameSimulator Logic)
-          let gameScores = simGameStats(home, away);
+          // Simulate the game (USING Unified Simulator)
+          // simulateMatchup handles stats accumulation and advanced stats update
+          const matchResult = simulateMatchup(home, away, 'season');
           
-          if (!gameScores) {
+          let gameScores;
+          if (matchResult) {
+              gameScores = { homeScore: matchResult.homeScore, awayScore: matchResult.awayScore };
+          } else {
             console.warn(`SimGameStats failed for ${away.abbr || 'Away'} @ ${home.abbr || 'Home'}, using fallback score.`);
             // Fallback: Generate random score to prevent season stall
-            // Use basic random generation if Utils unavailable
             const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
             const fallbackHome = r(10, 42);
             const fallbackAway = r(7, 35);
@@ -648,7 +652,7 @@ function simulateWeek(options = {}) {
           sH = gameScores.homeScore;
           sA = gameScores.awayScore;
 
-          // Capture player stats BEFORE accumulating (snapshot for box score)
+          // Capture player stats (snapshot for box score)
           const capturePlayerStats = (roster) => {
             const playerStats = {};
             roster.forEach(player => {
@@ -656,7 +660,7 @@ function simulateWeek(options = {}) {
                 playerStats[player.id] = {
                   name: player.name,
                   pos: player.pos,
-                  stats: { ...player.stats.game } // Shallow copy (sufficient as stats are flat)
+                  stats: { ...player.stats.game } // Shallow copy
                 };
               }
             });
@@ -666,37 +670,10 @@ function simulateWeek(options = {}) {
           homePlayerStats = capturePlayerStats(home.roster);
           awayPlayerStats = capturePlayerStats(away.roster);
 
-          // Update player season stats from game stats (AFTER capturing for box score)
-          const updatePlayerStats = (roster) => {
-            if (!Array.isArray(roster)) return;
-            
-            roster.forEach(p => {
-              if (p && p.stats && p.stats.game) {
-                initializePlayerStats(p);
-                
-                // Accumulate game stats into season stats
-                accumulateStats(p.stats.game, p.stats.season);
-                
-                // Track games played
-                if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                p.stats.season.gamesPlayed++;
-
-                // Update Advanced Stats (WAR, etc.) - Weekly Update
-                if (updateAdvancedStats) {
-                    updateAdvancedStats(p, p.stats.season);
-                }
-              }
-            });
-          };
-          
-          updatePlayerStats(home.roster);
-          updatePlayerStats(away.roster);
-
           // NEW: Update team season stats from game stats
           const updateTeamSeasonStats = (team) => {
               if (!team || !team.stats || !team.stats.game) return;
               if (!team.stats.season) team.stats.season = {};
-
               accumulateStats(team.stats.game, team.stats.season);
           };
 

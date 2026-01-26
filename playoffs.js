@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats, initializePlayerStats, accumulateStats } from './game-simulator.js';
+import { simulateMatchup } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -62,45 +62,17 @@ function simPlayoffWeek() {
     const P = window.state?.playoffs;
     if (!P || P.winner) return;
 
-    // Use imported simGameStats instead of global
-    const simGame = simGameStats;
-    if (!simGame) {
-        console.error("simGameStats not available");
-        return;
-    }
-
     const roundResults = { round: P.currentRound, games: [] };
 
     const simRound = (games) => {
         const winners = [];
         games.forEach(game => {
-            const result = simGame(game.home, game.away);
+            // Use unified simulator with 'playoff' context
+            const result = simulateMatchup(game.home, game.away, 'playoff');
+
             if (result) {
                 roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
                 winners.push(result.homeScore > result.awayScore ? game.home : game.away);
-
-                // Accumulate Playoff Stats
-                const accumulatePlayoffStats = (team) => {
-                    if (team && team.roster) {
-                        team.roster.forEach(p => {
-                             if (p && p.stats && p.stats.game) {
-                                initializePlayerStats(p);
-                                if (!p.stats.playoffs) p.stats.playoffs = {};
-
-                                // Accumulate game stats into playoff stats
-                                accumulateStats(p.stats.game, p.stats.playoffs);
-
-                                // Track games played
-                                if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
-                                p.stats.playoffs.gamesPlayed++;
-                            }
-                        });
-                    }
-                };
-
-                accumulatePlayoffStats(game.home);
-                accumulatePlayoffStats(game.away);
-
             } else {
                 console.error("Simulation failed for game", game);
                 // Fallback random winner to prevent crash
@@ -401,7 +373,11 @@ function getRoundName(roundNum) {
 }
 
 // Make functions globally available
-window.generatePlayoffs = generatePlayoffs;
-window.simPlayoffWeek = simPlayoffWeek;
-window.renderPlayoffs = renderPlayoffs;
-window.startPlayoffs = startPlayoffs;
+if (typeof window !== 'undefined') {
+    window.generatePlayoffs = generatePlayoffs;
+    window.simPlayoffWeek = simPlayoffWeek;
+    window.renderPlayoffs = renderPlayoffs;
+    window.startPlayoffs = startPlayoffs;
+}
+
+export { generatePlayoffs, simPlayoffWeek, renderPlayoffs, startPlayoffs };

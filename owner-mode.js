@@ -556,6 +556,7 @@ function renderOwnerModeInterface() {
         </div>
         
         <div class="owner-actions">
+          <button class="btn primary" onclick="location.hash='#/relocation'">Relocate Franchise</button>
           <button class="btn btn-secondary" onclick="disableOwnerMode()">Disable Owner Mode</button>
         </div>
       </div>

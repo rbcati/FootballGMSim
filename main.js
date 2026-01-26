@@ -1456,6 +1456,14 @@ class GameController {
                     window.renderInjuriesPage();
                 }
                 break;
+            case 'relocation':
+                if (window.renderRelocationPage) {
+                    window.renderRelocationPage();
+                } else {
+                    // Lazy load if needed, but it should be imported
+                    import('./relocation-viewer.js').then(m => m.renderRelocationPage());
+                }
+                break;
             case 'settings':
                 if (window.renderSettings) {
                     window.renderSettings();
