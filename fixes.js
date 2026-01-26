@@ -3,6 +3,7 @@
 // team-selection-fix.js, navbar-fix.js, and dom-helpers-fix.js
 import { renderCoachingStats } from './coaching.js';
 import { renderTradeProposals } from './tradeproposals.js';
+import './training.js';
 
 'use strict';
 
@@ -1117,10 +1118,19 @@ console.log('[LeagueCreationFix] Loaded');
             }
             break;
           case 'draft':
-          case 'scouting':
             if (window.renderDraft) {
               window.renderDraft();
-              console.log('✅ Draft/Scouting rendered');
+              console.log('✅ Draft rendered');
+            }
+            break;
+          case 'scouting':
+            if (window.renderScoutingInterface) {
+              window.renderScoutingInterface();
+              console.log('✅ Scouting Interface rendered');
+            } else if (window.renderScouting) {
+              window.renderScouting();
+            } else if (window.renderDraft) {
+              window.renderDraft();
             }
             break;
           case 'trade':
