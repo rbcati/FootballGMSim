@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats, initializePlayerStats, accumulateStats } from './game-simulator.js';
+import { simGameStats, initializePlayerStats, accumulateStats, simulateBatch } from './game-simulator.js';
 
 /**
  * Playoff Management System
@@ -73,40 +73,39 @@ function simPlayoffWeek() {
 
     const simRound = (games) => {
         const winners = [];
-        games.forEach(game => {
-            const result = simGame(game.home, game.away);
-            if (result) {
-                roundResults.games.push({ home: game.home, away: game.away, scoreHome: result.homeScore, scoreAway: result.awayScore });
-                winners.push(result.homeScore > result.awayScore ? game.home : game.away);
+        const gamesToSim = games.map(g => ({
+            home: g.home,
+            away: g.away,
+            year: P.year
+        })).filter(g => g.home && g.away);
 
-                // Accumulate Playoff Stats
-                const accumulatePlayoffStats = (team) => {
-                    if (team && team.roster) {
-                        team.roster.forEach(p => {
-                             if (p && p.stats && p.stats.game) {
-                                initializePlayerStats(p);
-                                if (!p.stats.playoffs) p.stats.playoffs = {};
+        if (gamesToSim.length === 0) return [];
 
-                                // Accumulate game stats into playoff stats
-                                accumulateStats(p.stats.game, p.stats.playoffs);
+        // Simulate batch with playoff flag
+        const results = simulateBatch(gamesToSim, { isPlayoff: true });
 
-                                // Track games played
-                                if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
-                                p.stats.playoffs.gamesPlayed++;
-                            }
-                        });
-                    }
-                };
+        results.forEach(res => {
+            // Find the original teams from the result (using IDs if possible, or name match)
+            // simulateBatch returns homeTeamName/awayTeamName
 
-                accumulatePlayoffStats(game.home);
-                accumulatePlayoffStats(game.away);
+            // Reconstruct game object for results
+            const gameHome = gamesToSim.find(g => g.home.name === res.homeTeamName)?.home;
+            const gameAway = gamesToSim.find(g => g.away.name === res.awayTeamName)?.away;
 
+            if (gameHome && gameAway) {
+                roundResults.games.push({
+                    home: gameHome,
+                    away: gameAway,
+                    scoreHome: res.scoreHome,
+                    scoreAway: res.scoreAway
+                });
+
+                winners.push(res.homeWin ? gameHome : gameAway);
             } else {
-                console.error("Simulation failed for game", game);
-                // Fallback random winner to prevent crash
-                winners.push(game.home);
+                console.error("Could not match result to team", res);
             }
         });
+
         return winners;
     };
 

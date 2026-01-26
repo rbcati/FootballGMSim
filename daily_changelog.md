@@ -81,3 +81,34 @@ Fully implemented the "RPG Coaching Skill Trees" feature proposed in the backlog
 | :--- | :--- | :--- |
 | **RPG Coaching** | **High** | Major gameplay depth addition. Long-term saves now have a "coaching carousel" meta-game where developing staff matters. |
 | **Sim Refactor** | **Low** | Cleanup of simulation logic improves maintainability. |
+
+---
+
+# Day 4 Optimization & Expansion
+
+## Summary of Changes
+Refactored the core simulation loop to eliminate duplication and expanded the Coaching System with a "Coaching Carousel" mechanism. Fixed critical regressions regarding playoff data integrity.
+
+### 1. Code Audit & Refactoring
+- **Batch Simulator:** Created `simulateBatch` in `game-simulator.js` to unify the game processing logic (simulation, stats accumulation, result application).
+- **Loop De-duplication:** Refactored `simulation.js` (Regular Season) and `playoffs.js` (Postseason) to use `simulateBatch`.
+- **Integrity Fix:** Updated `simulateBatch` to enforce strict separation between Regular Season and Playoff statistics. Playoff games no longer inflate regular season W-L records or player stats.
+
+### 2. Feature Pressure-Testing (Coaching Phase 2)
+- **Coaching Carousel:** Implemented `processStaffPoaching` in `coach-system.js`. Successful coordinators (High Wins/Level) can now be "poached" to become Head Coaches for other teams during the offseason.
+- **Expanded Archetypes:** Added new coaching archetypes to `COACH_SKILL_TREES` for greater strategic variety:
+    - **OC:** West Coast (Accuracy), Zone Run (Blocking).
+    - **DC:** Man Coverage (Defended Passes), Tampa 2 (Zone/Run Stop).
+
+### 3. UX & Performance
+- **Reduced Log Noise:** Implemented a `verbose` flag for `simulateBatch` and `simGameStats`. Regular season simulations now output clean, high-level summaries instead of per-game debug logs, improving console readability and performance.
+
+## Impact Ranking
+| Feature | Impact | Description |
+| :--- | :--- | :--- |
+| **Coaching Carousel** | **High** | Adds long-term dynasty realism. Coordinators leaving for HC jobs forces users to constantly develop their staff pipeline. |
+| **Sim Loop Refactor** | **Medium** | Major cleanup of technical debt. Reduces maintenance burden for future simulation features. |
+| **Expanded Archetypes** | **Low** | Adds flavor and variety to team strategies. |
+
+## Technical Risks & Notes
+- **Poaching Logic:** Currently, poaching creates a new HC entity. Future iterations should track coaching history more persistently across teams.

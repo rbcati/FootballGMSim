@@ -18,8 +18,12 @@ const {
   simGameStats,
   applyResult,
   initializePlayerStats,
-  accumulateStats
+  accumulateStats,
+  simulateBatch
 } = GameSimulator;
+
+// Import Coaching System
+import { processStaffPoaching } from './coach-system.js';
 
 /**
  * Validates that required global dependencies are available
@@ -301,6 +305,11 @@ function startOffseason() {
                 }
             });
         });
+
+        // Run the Coaching Carousel (Poaching)
+        if (processStaffPoaching) {
+            processStaffPoaching(leagueRef);
+        }
     }
     
     // Update owner mode at season end
@@ -584,165 +593,32 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    const results = [];
-    let gamesSimulated = 0;
-    const overrideResults = Array.isArray(options.overrideResults) ? options.overrideResults : [];
-    const overrideLookup = new Map(
-      overrideResults
-        .filter(result => result && Number.isInteger(result.home) && Number.isInteger(result.away))
-        .map(result => [`${result.home}-${result.away}`, result])
-    );
-
-    // Simulate each game
-    pairings.forEach((pair, index) => {
-      try {
-        console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${pairings.length}: Home=${pair.home}, Away=${pair.away}`);
-        // Handle bye weeks
+    // Prepare games for batch simulation
+    const gamesToSim = pairings.map(pair => {
+        // Handle bye weeks - pass through
         if (pair.bye !== undefined) {
-          results.push({
-            id: `w${L.week}b${pair.bye}`,
-            bye: pair.bye
-          });
-          return;
+            return { bye: pair.bye };
         }
 
-        // Validate team indices
-        if (!L.teams || !Array.isArray(L.teams)) {
-          console.error('Invalid teams array in league');
-          return;
-        }
-        
         const home = L.teams[pair.home];
         const away = L.teams[pair.away];
 
         if (!home || !away) {
-          console.warn('Invalid team IDs in pairing:', pair);
-          window.setStatus(`Warning: Invalid teams in game ${index + 1}`);
-          return;
+             console.warn('Invalid team IDs in pairing:', pair);
+             return null;
         }
 
-        const overrideResult = overrideLookup.get(`${pair.home}-${pair.away}`);
-        let sH;
-        let sA;
-        let homePlayerStats = {};
-        let awayPlayerStats = {};
+        return {
+            home: home,
+            away: away,
+            week: L.week,
+            year: L.year
+        };
+    }).filter(g => g !== null);
 
-        if (overrideResult) {
-          sH = overrideResult.scoreHome;
-          sA = overrideResult.scoreAway;
-          homePlayerStats = overrideResult.boxScore?.home || {};
-          awayPlayerStats = overrideResult.boxScore?.away || {};
-        } else {
-          // Simulate the game (USING GameSimulator Logic)
-          let gameScores = simGameStats(home, away);
-          
-          if (!gameScores) {
-            console.warn(`SimGameStats failed for ${away.abbr || 'Away'} @ ${home.abbr || 'Home'}, using fallback score.`);
-            // Fallback: Generate random score to prevent season stall
-            // Use basic random generation if Utils unavailable
-            const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-            const fallbackHome = r(10, 42);
-            const fallbackAway = r(7, 35);
-            gameScores = { homeScore: fallbackHome, awayScore: fallbackAway };
-          }
-          
-          sH = gameScores.homeScore;
-          sA = gameScores.awayScore;
-
-          // Capture player stats BEFORE accumulating (snapshot for box score)
-          const capturePlayerStats = (roster) => {
-            const playerStats = {};
-            roster.forEach(player => {
-              if (player && player.stats && player.stats.game) {
-                playerStats[player.id] = {
-                  name: player.name,
-                  pos: player.pos,
-                  stats: { ...player.stats.game } // Shallow copy (sufficient as stats are flat)
-                };
-              }
-            });
-            return playerStats;
-          };
-          
-          homePlayerStats = capturePlayerStats(home.roster);
-          awayPlayerStats = capturePlayerStats(away.roster);
-
-          // Update player season stats from game stats (AFTER capturing for box score)
-          const updatePlayerStats = (roster) => {
-            if (!Array.isArray(roster)) return;
-            
-            roster.forEach(p => {
-              if (p && p.stats && p.stats.game) {
-                initializePlayerStats(p);
-                
-                // Accumulate game stats into season stats
-                accumulateStats(p.stats.game, p.stats.season);
-                
-                // Track games played
-                if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                p.stats.season.gamesPlayed++;
-
-                // Update Advanced Stats (WAR, etc.) - Weekly Update
-                if (updateAdvancedStats) {
-                    updateAdvancedStats(p, p.stats.season);
-                }
-              }
-            });
-          };
-          
-          updatePlayerStats(home.roster);
-          updatePlayerStats(away.roster);
-
-          // NEW: Update team season stats from game stats
-          const updateTeamSeasonStats = (team) => {
-              if (!team || !team.stats || !team.stats.game) return;
-              if (!team.stats.season) team.stats.season = {};
-
-              accumulateStats(team.stats.game, team.stats.season);
-              team.stats.season.gamesPlayed = (team.stats.season.gamesPlayed || 0) + 1;
-          };
-
-          updateTeamSeasonStats(home);
-          updateTeamSeasonStats(away);
-        }
-        
-        // Store game result with complete box score
-        results.push({
-          id: `w${L.week}g${index}`,
-          home: pair.home,
-          away: pair.away,
-          scoreHome: sH,
-          scoreAway: sA,
-          homeWin: sH > sA,
-          week: L.week,
-          year: L.year,
-          homeTeamName: home.name,
-          awayTeamName: away.name,
-          homeTeamAbbr: home.abbr,
-          awayTeamAbbr: away.abbr,
-          boxScore: {
-            home: homePlayerStats,
-            away: awayPlayerStats
-          }
-        });
-
-        // Create a game object with the actual teams to pass to applyResult
-        const game = { home: home, away: away };
-
-        console.log(`[SIM-DEBUG] Pre-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
-        applyResult(game, sH, sA);
-        console.log(`[SIM-DEBUG] Post-applyResult: ${home.name} (${home.wins}-${home.losses}), ${away.name} (${away.wins}-${away.losses})`);
-
-
-        gamesSimulated++;
-
-        console.log(`[SIM-DEBUG] Game Complete: ${away.name || `Team ${pair.away}`} ${sA} @ ${home.name || `Team ${pair.home}`} ${sH}`);
-        
-      } catch (gameError) {
-        console.error(`[SIM-DEBUG] Error simulating game ${index + 1}:`, gameError);
-        window.setStatus(`Error in game ${index + 1}: ${gameError.message}`);
-      }
-    });
+    // Run Batch Simulation
+    const results = simulateBatch(gamesToSim, options);
+    const gamesSimulated = results.filter(r => !r.bye).length;
 
     // Store results for the week
     if (!L.resultsByWeek) L.resultsByWeek = {};

@@ -33,6 +33,26 @@ export const COACH_SKILL_TREES = {
                 { mods: { passAccuracy: 1.06, runVolume: 1.02, passVolume: 1.02 } },
                 { mods: { passAccuracy: 1.08, runVolume: 1.05, passVolume: 1.05 } }
             ]
+        },
+        'West Coast': {
+            description: 'Short, horizontal passing game focusing on high completion percentage.',
+            levels: [
+                { mods: { passAccuracy: 1.05 } },
+                { mods: { passAccuracy: 1.08, passVolume: 1.02 } },
+                { mods: { passAccuracy: 1.12, passVolume: 1.05 } },
+                { mods: { passAccuracy: 1.15, runVolume: 0.95 } },
+                { mods: { passAccuracy: 1.18, passVolume: 1.10 } }
+            ]
+        },
+        'Zone Run': {
+            description: 'Agile blocking scheme emphasizing vision and cutbacks.',
+            levels: [
+                { mods: { runVolume: 1.02, runBlock: 1.05 } },
+                { mods: { runVolume: 1.05, runBlock: 1.08 } },
+                { mods: { runVolume: 1.08, runBlock: 1.12 } },
+                { mods: { runVolume: 1.10, runBlock: 1.15, passBlock: 1.02 } },
+                { mods: { runVolume: 1.12, runBlock: 1.20, passBlock: 1.05 } }
+            ]
         }
     },
     DC: {
@@ -64,6 +84,26 @@ export const COACH_SKILL_TREES = {
                  { mods: { intChance: 1.0 } },
                  { mods: { intChance: 1.0 } },
                  { mods: { intChance: 1.0 } }
+            ]
+        },
+        'Man Coverage': {
+            description: 'Physical man-to-man defense requiring elite cornerbacks.',
+            levels: [
+                { mods: { passDefended: 1.05 } },
+                { mods: { passDefended: 1.10, intChance: 1.02 } },
+                { mods: { passDefended: 1.15, intChance: 1.05 } },
+                { mods: { passDefended: 1.20, sackChance: 1.05 } },
+                { mods: { passDefended: 1.25, intChance: 1.10 } }
+            ]
+        },
+        'Tampa 2': {
+            description: 'Zone defense that relies on linebackers dropping into coverage.',
+            levels: [
+                { mods: { intChance: 1.02, runStop: 1.02 } },
+                { mods: { intChance: 1.05, runStop: 1.05 } },
+                { mods: { intChance: 1.08, runStop: 1.08 } },
+                { mods: { intChance: 1.10, runStop: 1.10, sackChance: 0.95 } },
+                { mods: { intChance: 1.15, runStop: 1.15 } }
             ]
         }
     }
@@ -175,6 +215,112 @@ export function processStaffXp(staff, performance) {
     return leveledUp;
 }
 
+/**
+ * Processes the "Coaching Carousel" - poaching successful coordinators to be Head Coaches.
+ * @param {Object} league - The league object.
+ */
+export function processStaffPoaching(league) {
+    if (!league || !league.teams) return;
+
+    console.log("Processing Staff Poaching...");
+    const vacancies = [];
+    const candidates = [];
+
+    // 1. Identify Vacancies (Teams without HC or random firings)
+    league.teams.forEach(team => {
+        // Chance to fire HC if performance was poor
+        if (team.staff && team.staff.headCoach) {
+            const wins = team.wins || (team.record ? team.record.w : 0);
+            const tenure = team.staff.headCoach.tenure || 1;
+
+            // Fire logic: < 4 wins?
+            if (wins < 4 && Math.random() < 0.3) {
+                console.log(`🔥 ${team.name} has fired HC ${team.staff.headCoach.name} after a ${wins}-win season.`);
+                if (league.news) league.news.push(`${team.name} has fired Head Coach ${team.staff.headCoach.name}.`);
+                team.staff.headCoach = null; // Create vacancy
+            }
+        }
+
+        if (!team.staff || !team.staff.headCoach) {
+            vacancies.push(team);
+        }
+    });
+
+    if (vacancies.length === 0) {
+        console.log("No Head Coach vacancies.");
+        return;
+    }
+
+    // 2. Identify Candidates (Coordinators from other teams)
+    league.teams.forEach(team => {
+        if (!team.staff) return;
+        const wins = team.wins || (team.record ? team.record.w : 0);
+
+        // Coordinators on winning teams are candidates
+        if (wins >= 9) {
+            if (team.staff.offCoordinator) candidates.push({ coach: team.staff.offCoordinator, team: team, role: 'OC', wins: wins });
+            if (team.staff.defCoordinator) candidates.push({ coach: team.staff.defCoordinator, team: team, role: 'DC', wins: wins });
+        }
+    });
+
+    // Sort candidates by Wins desc, then Level desc
+    candidates.sort((a, b) => {
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        return (b.coach.level || 1) - (a.coach.level || 1);
+    });
+
+    // 3. Fill Vacancies
+    vacancies.forEach(team => {
+        if (candidates.length === 0) {
+            // No candidates left? Hire random (handled by legacy logic usually, but we can generate one)
+            const newHC = window.makeStaff ? window.makeStaff('HC') : null;
+            if (newHC) {
+                if (!team.staff) team.staff = {};
+                team.staff.headCoach = newHC;
+                console.log(`👔 ${team.name} hired ${newHC.name} (Unknown) as Head Coach.`);
+                if (league.news) league.news.push(`${team.name} hires unknown candidate ${newHC.name} as Head Coach.`);
+            }
+            return;
+        }
+
+        // Poach the best available candidate
+        const selection = candidates.shift(); // Remove from pool
+        const coach = selection.coach;
+        const oldTeam = selection.team;
+
+        // Promote to HC
+        const newHC = {
+            ...coach,
+            position: 'HC',
+            perk: coach.archetype || 'Strategist', // Convert archetype to HC perk
+            archetype: coach.archetype || 'Strategist',
+            xp: 0, // Reset XP for new role? Or keep? Let's keep partial.
+            level: 1, // Reset level for new role difficulty
+            history: coach.history || []
+        };
+
+        // Remove from old team
+        if (selection.role === 'OC') oldTeam.staff.offCoordinator = null;
+        if (selection.role === 'DC') oldTeam.staff.defCoordinator = null;
+
+        // Add to new team
+        if (!team.staff) team.staff = {};
+        team.staff.headCoach = newHC;
+
+        console.log(`🚀 ${team.name} poaches ${selection.role} ${coach.name} from ${oldTeam.name} to be Head Coach!`);
+        if (league.news) league.news.push(`${team.name} hires ${coach.name} (formerly ${oldTeam.abbr} ${selection.role}) as Head Coach!`);
+
+        // Refill old team's coordinator spot immediately (or let next offseason step handle it)
+        // For simplicity, generate a replacement for the old team now so they aren't empty
+        const replacement = window.makeStaff ? window.makeStaff(selection.role) : null;
+        if (replacement) {
+             if (selection.role === 'OC') oldTeam.staff.offCoordinator = replacement;
+             if (selection.role === 'DC') oldTeam.staff.defCoordinator = replacement;
+             console.log(`  -> ${oldTeam.name} promotes internal candidate ${replacement.name} to ${selection.role}.`);
+        }
+    });
+}
+
 // --- LEGACY SUPPORT ---
 // Keeping existing classes to prevent breakage if referenced elsewhere
 
@@ -248,5 +394,6 @@ if (typeof window !== 'undefined') {
     // Expose new functions
     window.getCoachingMods = getCoachingMods;
     window.processStaffXp = processStaffXp;
+    window.processStaffPoaching = processStaffPoaching;
     window.COACH_SKILL_TREES = COACH_SKILL_TREES;
 }

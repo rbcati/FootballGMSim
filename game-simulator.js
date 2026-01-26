@@ -121,8 +121,10 @@ export function updateTeamStandings(teamId, stats) {
  * @param {number} homeScore - The final score for the home team.
  * @param {number} awayScore - The final score for the away team.
  */
-export function applyResult(game, homeScore, awayScore) {
-  console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
+export function applyResult(game, homeScore, awayScore, options = {}) {
+  const verbose = options.verbose === true;
+  if (verbose) console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
+
   if (!game || typeof game !== 'object') return;
 
   const home = game.home;
@@ -155,12 +157,12 @@ export function applyResult(game, homeScore, awayScore) {
   }
 
   // UPDATE STATE via Setter
-  console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
+  if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
   const updatedHome = updateTeamStandings(home.id, homeStats);
   const updatedAway = updateTeamStandings(away.id, awayStats);
 
-  if (updatedHome) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
-  if (updatedAway) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
+  if (verbose && updatedHome) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
+  if (verbose && updatedAway) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
 
   // Sync back to passed objects (home/away) if they were different (e.g. copies or not the global ref)
   const syncObject = (target, source, stats) => {
@@ -517,9 +519,10 @@ function generatePunterStats(punter, teamScore, U) {
  * @param {object} away - The away team object.
  * @returns {object|null} An object with homeScore and awayScore, or null if error.
  */
-export function simGameStats(home, away) {
+export function simGameStats(home, away, options = {}) {
+  const verbose = options.verbose === true;
   try {
-    console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
+    if (verbose) console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
 
     // Enhanced dependency resolution with fallbacks
     const C_OBJ = Constants || (typeof window !== 'undefined' ? window.Constants : null);
@@ -577,7 +580,7 @@ export function simGameStats(home, away) {
     const homeStrength = calculateStrength(homeActive, home);
     const awayStrength = calculateStrength(awayActive, away);
 
-    console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
+    if (verbose) console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
 
     const calculateDefenseStrength = (groups) => {
       const defensivePositions = ['DL', 'LB', 'CB', 'S'];
@@ -616,13 +619,13 @@ export function simGameStats(home, away) {
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
-    console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
+    if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
     // --- STAFF PERKS INTEGRATION (RPG System) ---
     const homeMods = getCoachingMods(home.staff);
     const awayMods = getCoachingMods(away.staff);
 
-    console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
+    if (verbose) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
        team.roster.forEach(player => {
@@ -750,11 +753,180 @@ export function accumulateStats(source, target) {
     });
 }
 
+/**
+ * Simulates a batch of games.
+ * @param {Array} games - Array of game objects {home, away, ...}
+ * @param {Object} options - Simulation options {verbose: boolean, overrideResults: Array}
+ * @returns {Array} Array of result objects
+ */
+export function simulateBatch(games, options = {}) {
+    const results = [];
+    const verbose = options.verbose === true;
+    const overrideResults = Array.isArray(options.overrideResults) ? options.overrideResults : [];
+    const overrideLookup = new Map(
+      overrideResults
+        .filter(result => result && Number.isInteger(result.home) && Number.isInteger(result.away))
+        .map(result => [`${result.home}-${result.away}`, result])
+    );
+
+    if (!games || !Array.isArray(games)) return [];
+
+    games.forEach((pair, index) => {
+        try {
+            if (verbose) console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${games.length}: Home=${pair.home?.abbr}, Away=${pair.away?.abbr}`);
+
+            // Handle bye weeks
+            if (pair.bye !== undefined) {
+                results.push({
+                    id: `b${pair.bye}`,
+                    bye: pair.bye
+                });
+                return;
+            }
+
+            const home = pair.home;
+            const away = pair.away;
+
+            if (!home || !away) {
+                console.warn('Invalid team objects in pairing:', pair);
+                return;
+            }
+
+            const overrideResult = overrideLookup.get(`${home.id}-${away.id}`);
+            let sH;
+            let sA;
+            let homePlayerStats = {};
+            let awayPlayerStats = {};
+
+            if (overrideResult) {
+                sH = overrideResult.scoreHome;
+                sA = overrideResult.scoreAway;
+                homePlayerStats = overrideResult.boxScore?.home || {};
+                awayPlayerStats = overrideResult.boxScore?.away || {};
+            } else {
+                let gameScores = simGameStats(home, away, { verbose });
+
+                if (!gameScores) {
+                    if (verbose) console.warn(`SimGameStats failed for ${away.abbr} @ ${home.abbr}, using fallback score.`);
+                    const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+                    gameScores = { homeScore: r(10, 42), awayScore: r(7, 35) };
+                }
+
+                sH = gameScores.homeScore;
+                sA = gameScores.awayScore;
+
+                // Capture stats for box score
+                const capturePlayerStats = (roster) => {
+                    const playerStats = {};
+                    roster.forEach(player => {
+                        if (player && player.stats && player.stats.game) {
+                            playerStats[player.id] = {
+                                name: player.name,
+                                pos: player.pos,
+                                stats: { ...player.stats.game }
+                            };
+                        }
+                    });
+                    return playerStats;
+                };
+
+                homePlayerStats = capturePlayerStats(home.roster);
+                awayPlayerStats = capturePlayerStats(away.roster);
+
+                // Update Accumulators
+                const updatePlayerStats = (roster, isPlayoff = false) => {
+                    if (!Array.isArray(roster)) return;
+                    roster.forEach(p => {
+                        if (p && p.stats && p.stats.game) {
+                            initializePlayerStats(p);
+
+                            if (isPlayoff) {
+                                // Playoff Stats Only
+                                if (!p.stats.playoffs) p.stats.playoffs = {};
+                                accumulateStats(p.stats.game, p.stats.playoffs);
+                                if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
+                                p.stats.playoffs.gamesPlayed++;
+                            } else {
+                                // Regular Season Stats
+                                accumulateStats(p.stats.game, p.stats.season);
+                                if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
+                                p.stats.season.gamesPlayed++;
+
+                                // Advanced Stats (Season Only)
+                                if (updateAdvancedStats) {
+                                    updateAdvancedStats(p, p.stats.season);
+                                }
+                            }
+                        }
+                    });
+                };
+
+                const isPlayoff = options.isPlayoff === true;
+                updatePlayerStats(home.roster, isPlayoff);
+                updatePlayerStats(away.roster, isPlayoff);
+
+                // Update Team Stats
+                const updateTeamSeasonStats = (team) => {
+                    if (!team || !team.stats || !team.stats.game) return;
+
+                    if (isPlayoff) {
+                        // Optional: Accumulate playoff team stats if structure exists
+                    } else {
+                        if (!team.stats.season) team.stats.season = {};
+                        accumulateStats(team.stats.game, team.stats.season);
+                        team.stats.season.gamesPlayed = (team.stats.season.gamesPlayed || 0) + 1;
+                    }
+                };
+
+                updateTeamSeasonStats(home);
+                updateTeamSeasonStats(away);
+            }
+
+            // Record result
+            const resultObj = {
+                id: `g${index}`,
+                home: home.id || pair.home, // Use ID if possible
+                away: away.id || pair.away,
+                scoreHome: sH,
+                scoreAway: sA,
+                homeWin: sH > sA,
+                homeTeamName: home.name,
+                awayTeamName: away.name,
+                homeTeamAbbr: home.abbr,
+                awayTeamAbbr: away.abbr,
+                boxScore: {
+                    home: homePlayerStats,
+                    away: awayPlayerStats
+                }
+            };
+
+            // Add extra fields if provided
+            if (pair.week) resultObj.week = pair.week;
+            if (pair.year) resultObj.year = pair.year;
+
+            results.push(resultObj);
+
+            // Apply W/L (Regular Season Only)
+            const isPlayoff = options.isPlayoff === true;
+            if (!isPlayoff) {
+                const gameObj = { home: home, away: away };
+                applyResult(gameObj, sH, sA, { verbose });
+            }
+
+        } catch (error) {
+            console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);
+        }
+    });
+
+    return results;
+}
+
 // Default export if needed, or just named exports
 export default {
     simGameStats,
     applyResult,
     initializePlayerStats,
     groupPlayersByPosition,
-    accumulateStats
+    accumulateStats,
+    simulateBatch
 };
