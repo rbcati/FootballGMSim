@@ -42,9 +42,10 @@
   }
   
   .layout {
-    padding-left: var(--space-2) !important;
-    padding-right: var(--space-2) !important;
-    padding-top: 60px !important;
+    padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px)) !important;
+    padding-top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
     grid-template-columns: 1fr !important;
     gap: var(--space-2) !important;
     margin-top: 0 !important;
@@ -63,6 +64,9 @@
   
   .topbar {
     padding: var(--space-2) var(--space-3);
+    padding-top: calc(var(--space-2) + env(safe-area-inset-top, 0px));
+    padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
     z-index: 1001;
     position: sticky;
     top: 0;
@@ -201,6 +205,12 @@
   }
   
   /* Modals */
+  .modal {
+    z-index: 2100 !important;
+    padding-top: calc(60px + env(safe-area-inset-top, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
   .modal-content,
   #gameResultsModal .modal-content {
     max-width: 95vw;
@@ -290,8 +300,10 @@
   
   /* Navigation sidebar position */
   .nav-sidebar {
-    top: env(safe-area-inset-top, 0px);
-    height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    top: 0;
+    height: 100vh;
+    padding-top: calc(60px + env(safe-area-inset-top, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     z-index: 2000 !important;
   }
 
