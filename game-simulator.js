@@ -122,11 +122,15 @@ export function updateTeamStandings(teamId, stats) {
  * @param {number} awayScore - The final score for the away team.
  */
 export function applyResult(game, homeScore, awayScore) {
+  console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
   if (!game || typeof game !== 'object') return;
 
   const home = game.home;
   const away = game.away;
-  if (!home || !away) return;
+  if (!home || !away) {
+      console.error('[SIM-DEBUG] applyResult: Invalid home or away team objects', { home: !!home, away: !!away });
+      return;
+  }
 
   // Mark game as played on the schedule object passed in
   if (game.hasOwnProperty('played')) {
@@ -151,8 +155,12 @@ export function applyResult(game, homeScore, awayScore) {
   }
 
   // UPDATE STATE via Setter
+  console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
   const updatedHome = updateTeamStandings(home.id, homeStats);
   const updatedAway = updateTeamStandings(away.id, awayStats);
+
+  if (updatedHome) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
+  if (updatedAway) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
 
   // Sync back to passed objects (home/away) if they were different (e.g. copies or not the global ref)
   const syncObject = (target, source, stats) => {
@@ -511,12 +519,14 @@ function generatePunterStats(punter, teamScore, U) {
  */
 export function simGameStats(home, away) {
   try {
+    console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
+
     // Enhanced dependency resolution with fallbacks
     const C_OBJ = Constants || (typeof window !== 'undefined' ? window.Constants : null);
     const U = Utils || (typeof window !== 'undefined' ? window.Utils : null);
 
     if (!C_OBJ?.SIMULATION || !U) {
-      console.error('Missing simulation dependencies:', {
+      console.error('[SIM-DEBUG] Missing simulation dependencies:', {
           ConstantsLoaded: !!C_OBJ,
           SimulationConfig: !!C_OBJ?.SIMULATION,
           Utils: !!U
@@ -527,7 +537,7 @@ export function simGameStats(home, away) {
     const C = C_OBJ.SIMULATION;
 
     if (!home?.roster || !away?.roster || !Array.isArray(home.roster) || !Array.isArray(away.roster)) {
-      console.error('Invalid team roster data');
+      console.error('[SIM-DEBUG] Invalid team roster data');
       return null;
     }
 
@@ -567,6 +577,8 @@ export function simGameStats(home, away) {
     const homeStrength = calculateStrength(homeActive, home);
     const awayStrength = calculateStrength(awayActive, away);
 
+    console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
+
     const calculateDefenseStrength = (groups) => {
       const defensivePositions = ['DL', 'LB', 'CB', 'S'];
       let totalRating = 0;
@@ -604,10 +616,13 @@ export function simGameStats(home, away) {
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
+    console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
+
     // --- STAFF PERKS INTEGRATION (RPG System) ---
     const homeMods = getCoachingMods(home.staff);
     const awayMods = getCoachingMods(away.staff);
 
+    console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
        team.roster.forEach(player => {
@@ -620,6 +635,7 @@ export function simGameStats(home, away) {
       let totalPassAttempts = 30;
 
       if (qb) {
+        // console.log(`[SIM-DEBUG] Generating stats for QB ${qb.name}`);
         const qbStats = generateQBStats(qb, score, oppDefenseStrength, U, mods);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
@@ -706,7 +722,7 @@ export function simGameStats(home, away) {
     return { homeScore, awayScore };
 
   } catch (error) {
-    console.error('Error in simGameStats:', error);
+    console.error('[SIM-DEBUG] Error in simGameStats:', error);
     return null;
   }
 }
