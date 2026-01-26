@@ -46,7 +46,7 @@ This document outlines technical debt, code duplication, and refactoring opportu
 
 ### Simulation Cluster
 *   **Files**: `simulation.js`, `playoffs.js`, `coach-system.js`
-*   **Action**: Unify game simulation loops and result processing.
+*   **Action**: Unify game simulation loops and result processing. (Completed: Unified in `game-simulator.js` via `simulateMatchup`)
 
 ### UI/View Cluster
 *   **Files**: `ui.js`, `awards-viewer.js`, `stats-viewer.js`, `playoffs.js` (rendering parts)
