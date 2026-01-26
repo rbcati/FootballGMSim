@@ -196,7 +196,10 @@
                                 <th class="sortable" data-sort="ptsFor">PF</th>
                                 <th class="sortable" data-sort="ptsAgainst">PA</th>
                                 <th class="sortable" data-sort="passYds">Pass Yds</th>
+                                <th class="sortable" data-sort="passTD">Pass TD</th>
                                 <th class="sortable" data-sort="rushYds">Rush Yds</th>
+                                <th class="sortable" data-sort="rushTD">Rush TD</th>
+                                <th class="sortable" data-sort="turnovers">TOs</th>
                                 <th class="sortable" data-sort="sacksAllowed">Sk All</th>
                                 <th class="sortable" data-sort="defSacks">Def Sk</th>
                             </tr>
@@ -220,7 +223,10 @@
                                     <td>${t.ptsFor}</td>
                                     <td>${t.ptsAgainst}</td>
                                     <td>${t.passYds.toLocaleString()}</td>
+                                    <td>${t.passTD}</td>
                                     <td>${t.rushYds.toLocaleString()}</td>
+                                    <td>${t.rushTD}</td>
+                                    <td>${t.intsThrown + t.fumblesLost}</td>
                                     <td>${t.sacksAllowed}</td>
                                     <td>${t.defSacks}</td>
                                 </tr>

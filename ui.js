@@ -1849,6 +1849,49 @@ function showSimplePlayerStats(playerId) {
     return;
   }
   
+  // Generate stats HTML for fallback view
+  const s = player.stats?.season || {};
+  let statsHtml = '<p class="muted">No season stats available.</p>';
+
+  if (Object.keys(s).length > 0) {
+      statsHtml = '<div class="table-wrapper"><table class="table table-sm" style="width:100%; text-align: center;"><thead><tr>';
+      let rows = '';
+
+      const fmt = (val) => (val !== undefined && val !== null) ? val.toLocaleString() : '0';
+      const fmtPct = (val) => {
+          if (val === undefined || val === null) return '0.0%';
+          if (typeof val === 'string' && val.includes('%')) return val;
+          if (val <= 1 && val > 0) return (val * 100).toFixed(1) + '%';
+          return val.toFixed(1) + '%';
+      };
+      const fmtAvg = (val) => (val !== undefined && val !== null) ? val.toFixed(1) : '0.0';
+      const calcPct = (n, d) => (d > 0) ? n / d : 0;
+
+      if (player.pos === 'QB') {
+          const compPct = s.completionPct ?? calcPct(s.passComp, s.passAtt);
+          statsHtml += '<th>Yds</th><th>TD</th><th>INT</th><th>Comp%</th><th>Rate</th><th>Rush</th><th>Rush TD</th></tr></thead><tbody><tr>';
+          rows += `<td>${fmt(s.passYd)}</td><td>${fmt(s.passTD)}</td><td>${fmt(s.interceptions)}</td>
+                   <td>${fmtPct(compPct)}</td><td>${fmtAvg(s.passerRating)}</td>
+                   <td>${fmt(s.rushYd)}</td><td>${fmt(s.rushTD)}</td>`;
+      } else if (['RB', 'WR', 'TE'].includes(player.pos)) {
+          const ypc = s.yardsPerCarry ?? (s.rushAtt > 0 ? s.rushYd / s.rushAtt : 0);
+          statsHtml += '<th>Rush</th><th>TD</th><th>Avg</th><th>Rec</th><th>Yds</th><th>TD</th><th>Tgt</th></tr></thead><tbody><tr>';
+          rows += `<td>${fmt(s.rushYd)}</td><td>${fmt(s.rushTD)}</td><td>${fmtAvg(ypc)}</td>
+                   <td>${fmt(s.receptions)}</td><td>${fmt(s.recYd)}</td><td>${fmt(s.recTD)}</td><td>${fmt(s.targets)}</td>`;
+      } else if (['DL', 'LB', 'CB', 'S', 'DE', 'DT', 'OLB', 'MLB'].includes(player.pos)) {
+          statsHtml += '<th>Tkl</th><th>Sacks</th><th>INT</th><th>PD</th><th>TFL</th></tr></thead><tbody><tr>';
+          rows += `<td>${fmt(s.tackles)}</td><td>${fmt(s.sacks)}</td><td>${fmt(s.interceptions)}</td>
+                   <td>${fmt(s.passesDefended)}</td><td>${fmt(s.tacklesForLoss)}</td>`;
+      } else if (['K', 'P'].includes(player.pos)) {
+          statsHtml += '<th>FGM</th><th>FGA</th><th>%</th><th>Long</th></tr></thead><tbody><tr>';
+          rows += `<td>${fmt(s.fgMade)}</td><td>${fmt(s.fgAttempts)}</td><td>${fmtPct(s.successPct)}</td><td>${fmt(s.longestFG)}</td>`;
+      } else {
+          statsHtml += '<th>Games</th></tr></thead><tbody><tr>';
+          rows += `<td>${fmt(s.gamesPlayed)}</td>`;
+      }
+      statsHtml += rows + '</tr></tbody></table></div>';
+  }
+
   // Create simple modal (This is a simplified version of the one used in showPlayerDetails)
   const modal = document.createElement('div');
   modal.className = 'modal';
@@ -1865,6 +1908,12 @@ function showSimplePlayerStats(playerId) {
           <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
           <p><strong>Overall:</strong> ${player.ovr || 'N/A'}</p>
         </div>
+
+        <div class="stats-section mt">
+            <h3>Season Stats</h3>
+            ${statsHtml}
+        </div>
+
         ${player.ratings ? `
         <div class="stats-section mt">
           <h3>Ratings</h3>
