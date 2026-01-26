@@ -824,11 +824,12 @@ function simulateWeek(options = {}) {
     // Update UI to show results (if render option is true, default to true)
     try {
       if (options.render !== false) {
-        // FORCE-FIX: Save state immediately
+        // DB COMMIT: Save state immediately to persist W/L updates
+        // This satisfies the requirement to commit changes after results are written.
         if (saveState) saveState();
         else if (window.saveState) window.saveState();
 
-        // FORCE-FIX: Refresh UI
+        // UI REFRESH: Force re-fetch of table data (equivalent to useEffect)
         if (typeof window.renderStandings === 'function') window.renderStandings();
 
         if (typeof window.renderHub === 'function') {

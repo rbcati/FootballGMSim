@@ -65,6 +65,57 @@ function calculateWeeksWithTeam(player, team) {
 }
 
 /**
+ * Helper to update team standings in the global state (Setter Pattern).
+ * Ensures we are modifying the persistent source of truth.
+ * @param {number} teamId - The team ID to update.
+ * @param {object} stats - The stats to add/update { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 }.
+ */
+export function updateTeamStandings(teamId, stats) {
+    // 1. Resolve Team Object
+    let team = null;
+
+    // Primary Source: Global State
+    if (typeof window !== 'undefined' && window.state?.league?.teams) {
+        team = window.state.league.teams.find(t => t.id === teamId);
+    }
+
+    // Return null if we can't find the persistent record
+    if (!team) return null;
+
+    // 2. Apply Updates (incrementing existing values)
+    if (stats.wins) team.wins = (team.wins || 0) + stats.wins;
+    if (stats.losses) team.losses = (team.losses || 0) + stats.losses;
+    if (stats.ties) team.ties = (team.ties || 0) + stats.ties;
+
+    // Points are cumulative
+    if (stats.pf) {
+        team.ptsFor = (team.ptsFor || 0) + stats.pf;
+        team.pointsFor = team.ptsFor; // Alias
+    }
+    if (stats.pa) {
+        team.ptsAgainst = (team.ptsAgainst || 0) + stats.pa;
+        team.pointsAgainst = team.ptsAgainst; // Alias
+    }
+
+    // Ensure draws property is updated if used
+    if (stats.draws) {
+        team.draws = (team.draws || 0) + stats.draws;
+    } else if (stats.ties) {
+        team.draws = (team.draws || 0) + stats.ties;
+    }
+
+    // 3. Sync Legacy Record Object
+    if (!team.record) team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+    team.record.w = team.wins;
+    team.record.l = team.losses;
+    team.record.t = team.ties;
+    team.record.pf = team.ptsFor;
+    team.record.pa = team.ptsAgainst;
+
+    return team;
+}
+
+/**
  * Applies the result of a simulated game to the teams' records.
  * @param {object} game - An object containing the home and away team objects.
  * @param {number} homeScore - The final score for the home team.
@@ -77,107 +128,73 @@ export function applyResult(game, homeScore, awayScore) {
   const away = game.away;
   if (!home || !away) return;
 
-  const initializeTeamStats = (team) => {
-    if (!team) return;
-    team.wins = team.wins ?? 0;
-    team.losses = team.losses ?? 0;
-    team.ties = team.ties ?? 0;
-    team.draws = team.draws ?? team.ties ?? 0;
-    team.ptsFor = team.ptsFor ?? 0;
-    team.pointsFor = team.pointsFor ?? team.ptsFor ?? 0;
-    team.ptsAgainst = team.ptsAgainst ?? 0;
-    team.pointsAgainst = team.pointsAgainst ?? team.ptsAgainst ?? 0;
-
-    // Ensure record object exists for UI compatibility
-    if (!team.record) {
-        team.record = { w: team.wins, l: team.losses, t: team.ties, pf: team.ptsFor, pa: team.ptsAgainst };
-    }
-  };
-
-  initializeTeamStats(home);
-  initializeTeamStats(away);
-
+  // Mark game as played on the schedule object passed in
   if (game.hasOwnProperty('played')) {
     game.homeScore = homeScore;
     game.awayScore = awayScore;
     game.played = true;
   }
 
-  // Ensure we are updating the global state object if possible
-  let realHome = home;
-  let realAway = away;
-
-  if (typeof window !== 'undefined' && window.state?.league?.teams) {
-      if (home.id !== undefined) realHome = window.state.league.teams.find(t => t.id === home.id) || home;
-      if (away.id !== undefined) realAway = window.state.league.teams.find(t => t.id === away.id) || away;
-  }
-
-  // Ensure real objects are initialized
-  initializeTeamStats(realHome);
-  initializeTeamStats(realAway);
+  // Calculate results
+  const homeStats = { wins: 0, losses: 0, ties: 0, pf: homeScore, pa: awayScore };
+  const awayStats = { wins: 0, losses: 0, ties: 0, pf: awayScore, pa: homeScore };
 
   if (homeScore > awayScore) {
-    realHome.wins++;
-    realAway.losses++;
+    homeStats.wins = 1;
+    awayStats.losses = 1;
   } else if (awayScore > homeScore) {
-    realAway.wins++;
-    realHome.losses++;
+    awayStats.wins = 1;
+    homeStats.losses = 1;
   } else {
-    realHome.ties++;
-    realAway.ties++;
-    // Ensure draws property is updated if used elsewhere
-    realHome.draws = (realHome.draws || 0) + 1;
-    realAway.draws = (realAway.draws || 0) + 1;
+    homeStats.ties = 1;
+    awayStats.ties = 1;
   }
 
-  // Update points for real objects (persistent state)
-  realHome.ptsFor = (realHome.ptsFor || 0) + homeScore;
-  realHome.ptsAgainst = (realHome.ptsAgainst || 0) + awayScore;
-  realAway.ptsFor = (realAway.ptsFor || 0) + awayScore;
-  realAway.ptsAgainst = (realAway.ptsAgainst || 0) + homeScore;
+  // UPDATE STATE via Setter
+  const updatedHome = updateTeamStandings(home.id, homeStats);
+  const updatedAway = updateTeamStandings(away.id, awayStats);
 
-  // Update aliases for ranking logic compatibility
-  realHome.pointsFor = realHome.ptsFor;
-  realHome.pointsAgainst = realHome.ptsAgainst;
-  realAway.pointsFor = realAway.ptsFor;
-  realAway.pointsAgainst = realAway.ptsAgainst;
+  // Sync back to passed objects (home/away) if they were different (e.g. copies or not the global ref)
+  const syncObject = (target, source, stats) => {
+      // If we have a source (updated global state), use it
+      if (source) {
+          if (target !== source) {
+             target.wins = source.wins;
+             target.losses = source.losses;
+             target.ties = source.ties;
+             target.ptsFor = source.ptsFor;
+             target.ptsAgainst = source.ptsAgainst;
+             target.pointsFor = source.pointsFor;
+             target.pointsAgainst = source.pointsAgainst;
 
-  // Sync back to passed objects if they were different (e.g. copies)
-  if (realHome !== home) {
-      home.wins = realHome.wins;
-      home.losses = realHome.losses;
-      home.ties = realHome.ties;
-      home.ptsFor = realHome.ptsFor;
-      home.ptsAgainst = realHome.ptsAgainst;
-      home.pointsFor = realHome.pointsFor;
-      home.pointsAgainst = realHome.pointsAgainst;
-  }
-  if (realAway !== away) {
-      away.wins = realAway.wins;
-      away.losses = realAway.losses;
-      away.ties = realAway.ties;
-      away.ptsFor = realAway.ptsFor;
-      away.ptsAgainst = realAway.ptsAgainst;
-      away.pointsFor = realAway.pointsFor;
-      away.pointsAgainst = realAway.pointsAgainst;
-  }
+             if (!target.record) target.record = {};
+             target.record.w = source.record.w;
+             target.record.l = source.record.l;
+             target.record.t = source.record.t;
+             target.record.pf = source.record.pf;
+             target.record.pa = source.record.pa;
+          }
+      } else {
+          // Fallback: Manually update target if global update failed (e.g. testing)
+          target.wins = (target.wins || 0) + stats.wins;
+          target.losses = (target.losses || 0) + stats.losses;
+          target.ties = (target.ties || 0) + stats.ties;
+          target.ptsFor = (target.ptsFor || 0) + stats.pf;
+          target.ptsAgainst = (target.ptsAgainst || 0) + stats.pa;
+          target.pointsFor = target.ptsFor;
+          target.pointsAgainst = target.ptsAgainst;
 
-  // Sync legacy record object if it exists (for UI compatibility)
-  if (home.record) {
-    home.record.w = home.wins;
-    home.record.l = home.losses;
-    home.record.t = home.ties;
-    home.record.pf = home.ptsFor;
-    home.record.pa = home.ptsAgainst;
-  }
+          if (!target.record) target.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+          target.record.w = target.wins;
+          target.record.l = target.losses;
+          target.record.t = target.ties;
+          target.record.pf = target.ptsFor;
+          target.record.pa = target.ptsAgainst;
+      }
+  };
 
-  if (away.record) {
-    away.record.w = away.wins;
-    away.record.l = away.losses;
-    away.record.t = away.ties;
-    away.record.pf = away.ptsFor;
-    away.record.pa = away.ptsAgainst;
-  }
+  syncObject(home, updatedHome, homeStats);
+  syncObject(away, updatedAway, awayStats);
 }
 
 // --- STAT GENERATION HELPERS ---
