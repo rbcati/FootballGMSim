@@ -7015,3 +7015,24 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
+/* Skip Link for Accessibility */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 0;
+  background: var(--accent);
+  color: white;
+  padding: var(--space-3) var(--space-4);
+  z-index: 10000;
+  transition: top 0.2s ease;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius-md) 0;
+  box-shadow: var(--shadow-lg);
+}
+
+.skip-link:focus {
+  top: 0;
+  outline: 2px solid white;
+  outline-offset: -2px;
+}
