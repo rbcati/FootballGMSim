@@ -480,6 +480,27 @@ function fireStaffMember(position) {
 }
 
 /**
+ * Check job security and potentially fire the user
+ * @param {Object} team - Team object
+ * @returns {Object} Result { fired: boolean, reason: string }
+ */
+function checkJobSecurity(team) {
+    if (!window.state.ownerMode || !window.state.ownerMode.enabled) return { fired: false };
+
+    const sat = window.state.ownerMode.fanSatisfaction;
+
+    // Strict logic: If satisfaction < 10, YOU ARE FIRED.
+    if (sat < 10) {
+        return {
+            fired: true,
+            reason: `Owner approval dropped to ${sat}%. The board has terminated your contract.`
+        };
+    }
+
+    return { fired: false };
+}
+
+/**
  * Render owner mode interface
  */
 function renderOwnerModeInterface() {
@@ -552,6 +573,40 @@ function renderOwnerModeInterface() {
   const content = document.createElement('div');
   content.className = 'owner-mode-content';
   card.appendChild(content);
+
+  // --- GOALS SECTION ---
+  const goalsSection = document.createElement('div');
+  goalsSection.className = 'goals-section';
+  goalsSection.style.cssText = 'background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;';
+
+  const goalsTitle = document.createElement('h3');
+  goalsTitle.textContent = 'Owner Goals';
+  goalsSection.appendChild(goalsTitle);
+
+  const goalsGrid = document.createElement('div');
+  goalsGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;';
+
+  if (goals.length > 0) {
+      goals.forEach(g => {
+          let displayCurrent = g.current;
+          if(g.id === 'profit') displayCurrent = '$' + (g.current/1000000).toFixed(1) + 'M';
+          if(g.id === 'satisfaction') displayCurrent = g.current + '%';
+
+          const gDiv = document.createElement('div');
+          gDiv.style.cssText = `background: var(--surface); padding: 10px; border-radius: 4px; border-left: 4px solid ${g.achieved ? '#48bb78' : '#ed8936'};`;
+          gDiv.innerHTML = `
+              <div style="font-weight: bold;">${g.desc}</div>
+              <div style="font-size: 0.9rem; margin-top: 5px;">Progress: ${displayCurrent}</div>
+              ${g.achieved ? '<div style="color: #48bb78; font-size: 0.8rem; font-weight: bold;">COMPLETE</div>' : ''}
+          `;
+          goalsGrid.appendChild(gDiv);
+      });
+  } else {
+      goalsGrid.innerHTML = '<p class="muted">No active goals.</p>';
+  }
+
+  goalsSection.appendChild(goalsGrid);
+  content.appendChild(goalsSection);
 
   // Business Section
   const businessSection = document.createElement('div');
@@ -658,28 +713,9 @@ function renderOwnerModeInterface() {
       recsDiv.className = 'firing-recommendations';
       staffSection.appendChild(recsDiv);
       
-      <div class="owner-mode-content">
-        <div class="goals-section" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <h3>Owner Goals</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
-                ${goals.map(g => {
-                    let displayCurrent = g.current;
-                    if(g.id === 'profit') displayCurrent = '$' + (g.current/1000000).toFixed(1) + 'M';
-                    if(g.id === 'satisfaction') displayCurrent = g.current + '%';
-
-                    return `
-                    <div style="background: var(--surface); padding: 10px; border-radius: 4px; border-left: 4px solid ${g.achieved ? '#48bb78' : '#ed8936'};">
-                        <div style="font-weight: bold;">${g.desc}</div>
-                        <div style="font-size: 0.9rem; margin-top: 5px;">Progress: ${displayCurrent}</div>
-                        ${g.achieved ? '<div style="color: #48bb78; font-size: 0.8rem; font-weight: bold;">COMPLETE</div>' : ''}
-                    </div>
-                    `;
-                }).join('') || '<p class="muted">No active goals.</p>'}
-            </div>
-        </div>
-
-        <div class="business-section">
-          <h3>Business Management</h3>
+      firingRecommendations.forEach(rec => {
+          const item = document.createElement('div');
+          item.className = 'recommendation-item';
           
           const info = document.createElement('div');
           info.className = 'recommendation-info';
@@ -743,6 +779,7 @@ window.fireStaffMember = fireStaffMember;
 window.renderOwnerModeInterface = renderOwnerModeInterface;
 window.generateOwnerGoals = generateOwnerGoals;
 window.checkOwnerGoals = checkOwnerGoals;
+window.checkJobSecurity = checkJobSecurity;
 
 // Initialize on load
 if (window.state) {
