@@ -171,6 +171,161 @@ const INTERACTIVE_EVENTS = [
                 }
             }
         ]
+    },
+    {
+        id: 'qb_controversy',
+        title: 'Quarterback Controversy',
+        description: 'The starting QB is struggling, and the backup is looking sharp in practice. The media is asking who will start next week.',
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return false;
+
+            // Check losing streak or recent bad performance
+            // For simplicity, check if losses > wins
+            if (team.wins >= team.losses) return false;
+
+            // Find QBs
+            const qbs = team.roster.filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr);
+            if (qbs.length < 2) return false;
+
+            const starter = qbs[0];
+            const backup = qbs[1];
+
+            // Trigger if starter < 75 OR starter rating diff with backup < 5
+            if (starter.ovr < 75 || (starter.ovr - backup.ovr) < 5) {
+                // Random chance
+                return Math.random() < 0.15;
+            }
+            return false;
+        },
+        choices: [
+            {
+                text: 'Stick with Starter',
+                description: 'Publicly back the starter. Boosts his confidence but backup might be unhappy.',
+                effect: (league) => {
+                     const team = league.teams[window.state.userTeamId];
+                     const qbs = team.roster.filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr);
+                     const starter = qbs[0];
+                     const backup = qbs[1];
+
+                     starter.morale = Math.min(100, starter.morale + 10);
+                     backup.morale = Math.max(0, backup.morale - 10);
+
+                     return `You confirmed ${starter.name} is the guy. He appreciates the vote of confidence.`;
+                }
+            },
+            {
+                text: 'Start Backup',
+                description: 'Bench the starter. Backup gets a boost, starter morale crashes.',
+                effect: (league) => {
+                     const team = league.teams[window.state.userTeamId];
+                     const qbs = team.roster.filter(p => p.position === 'QB').sort((a, b) => b.ovr - a.ovr);
+                     const starter = qbs[0];
+                     const backup = qbs[1];
+
+                     // Swap depth chart (conceptually, though roster sort handles it mostly)
+                     // We can give backup a temp boost and starter a nerf?
+
+                     backup.ovr += 2; // Temporary boost? Permanent?
+                     starter.ovr -= 2;
+
+                     starter.morale = Math.max(0, starter.morale - 25);
+                     backup.morale = Math.min(100, backup.morale + 15);
+
+                     return `You named ${backup.name} the new starter. The locker room is shocked but intrigued.`;
+                }
+            },
+            {
+                text: 'Open Competition',
+                description: 'Let them battle it out in practice.',
+                effect: (league) => {
+                     return "You declared an open competition. Both QBs are on edge.";
+                }
+            }
+        ]
+    },
+    {
+        id: 'locker_room_mutiny',
+        title: 'Locker Room Mutiny',
+        description: 'The team is losing, morale is low, and players are blaming the coaching staff.',
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return false;
+
+            // Check bad record later in season
+            if (league.week < 6) return false;
+            if (team.wins > 2) return false; // Must be bad record
+
+            // Check morale
+            const avgMorale = team.roster.reduce((sum, p) => sum + p.morale, 0) / team.roster.length;
+            if (avgMorale < 40 && Math.random() < 0.1) return true;
+
+            return false;
+        },
+        choices: [
+            {
+                text: 'Fire Coordinator',
+                description: 'Sacrifice a coach to appease the players.',
+                effect: (league) => {
+                     // Need to call window.fireStaffMember
+                     if (window.fireStaffMember) {
+                         const result = window.fireStaffMember('OC'); // Default to OC for now
+                         if (result.success) {
+                             const team = league.teams[window.state.userTeamId];
+                             team.roster.forEach(p => p.morale += 10);
+                             return `You fired the Offensive Coordinator. The players feel heard.`;
+                         } else {
+                             return "Tried to fire someone but failed.";
+                         }
+                     }
+                     return "You promised changes.";
+                }
+            },
+            {
+                text: 'Team Meeting',
+                description: 'Hash it out.',
+                effect: (league) => {
+                    const team = league.teams[window.state.userTeamId];
+                    team.roster.forEach(p => p.morale += 5);
+                    return "The air was cleared, slightly.";
+                }
+            }
+        ]
+    },
+     {
+        id: 'rookie_phenom',
+        title: 'Rookie Phenom',
+        description: 'Your rookie is exceeding all expectations and becoming a star.',
+        trigger: (league) => {
+             const team = league.teams[window.state.userTeamId];
+             const rookies = team.roster.filter(p => p.experience === 0 && p.ovr > 80);
+
+             if (rookies.length > 0 && Math.random() < 0.2) return true;
+             return false;
+        },
+        choices: [
+            {
+                text: 'Build Around Him',
+                description: 'Designate him as a franchise cornerstone.',
+                effect: (league) => {
+                     const team = league.teams[window.state.userTeamId];
+                     const rookie = team.roster.find(p => p.experience === 0 && p.ovr > 80);
+                     if (rookie) {
+                         rookie.morale = 100;
+                         rookie.pot += 2; // Boost potential
+                         return `${rookie.name} loves the attention and looks ready to lead.`;
+                     }
+                     return "The rookie appreciates it.";
+                }
+            },
+            {
+                text: 'Keep Him Grounded',
+                description: 'Don\'t let it get to his head.',
+                effect: (league) => {
+                    return "You reminded him to stay humble. He respects your guidance.";
+                }
+            }
+        ]
     }
 ];
 

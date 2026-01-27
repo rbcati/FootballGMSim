@@ -1211,6 +1211,12 @@ console.log('[LeagueCreationFix] Loaded');
             renderSettings();
             console.log('✅ Settings rendered');
             break;
+          case 'relocation':
+            if (window.renderRelocationPage) {
+              window.renderRelocationPage();
+              console.log('✅ Relocation page rendered');
+            }
+            break;
           case 'playerDatabase':
             if (window.renderPlayerDatabase) {
               window.renderPlayerDatabase();

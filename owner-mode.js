@@ -69,6 +69,7 @@ function initializeOwnerMode() {
  * Enable owner mode
  */
 function enableOwnerMode() {
+  if (!window.state.ownerMode) initializeOwnerMode();
   window.state.ownerMode.enabled = true;
   window.state.playerRole = 'Owner';
   
@@ -104,6 +105,15 @@ function disableOwnerMode() {
  * @returns {number} Market multiplier
  */
 function getMarketMultiplier(team) {
+  // Check for dynamic market size first (from relocation)
+  if (team.marketSize) {
+      if (team.marketSize === 'Huge') return 1.5;
+      if (team.marketSize === 'Large') return 1.3;
+      if (team.marketSize === 'Medium') return 1.0;
+      if (team.marketSize === 'Small') return 0.8;
+      if (team.marketSize === 'Tiny') return 0.6;
+  }
+
   // Simple market size calculation based on team location
   const largeMarkets = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Philadelphia', 'Phoenix', 'San Antonio', 'San Diego', 'Dallas', 'San Jose'];
   const smallMarkets = ['Green Bay', 'Buffalo', 'Jacksonville', 'Cleveland', 'Cincinnati', 'Pittsburgh', 'Kansas City', 'Indianapolis'];
@@ -556,6 +566,8 @@ function renderOwnerModeInterface() {
         </div>
         
         <div class="owner-actions">
+          <button class="btn btn-primary" onclick="location.hash='#/relocation'">Relocate Franchise</button>
+          <div class="spacer"></div>
           <button class="btn btn-secondary" onclick="disableOwnerMode()">Disable Owner Mode</button>
         </div>
       </div>

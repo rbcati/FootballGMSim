@@ -1475,6 +1475,11 @@ class GameController {
                     window.renderSettings();
                 }
                 break;
+            case 'relocation':
+                if (window.renderRelocationPage) {
+                    window.renderRelocationPage();
+                }
+                break;
             case 'playoffs':
                 if (window.renderPlayoffs) {
                     window.renderPlayoffs();
