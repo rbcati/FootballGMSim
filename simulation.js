@@ -391,6 +391,9 @@ function startNewSeason() {
             p.stats.season = {};
           }
           if (p && p.ovr !== undefined) p.seasonOVRStart = p.ovr;
+
+          // Reset Season News
+          p.seasonNews = [];
         });
       }
     });
