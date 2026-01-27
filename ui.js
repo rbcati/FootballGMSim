@@ -660,101 +660,80 @@ window.renderRoster = function() {
  * @param {Object} player - Player object
  */
 function showPlayerDetails(player) {
-    const modal = document.createElement('div');
-    modal.className = 'modal';
-    // 🏆 ENHANCED: Added a ratings grid for better display of specific stats
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>${player.name || 'Unknown Player'} <span class="muted-tag">${player.pos || 'N/A'} (OVR ${player.ovr || 'N/A'})</span></h2>
-                <button type="button" class="close" aria-label="Close modal">&times;</button>
+    // 🏆 REFACTORED: Now uses ui-components.js Modal class
+    if (!window.Modal) {
+        console.error('Modal component not found, falling back to legacy render.');
+        return;
+    }
+
+    const content = `
+        <div class="player-info grid two">
+            <div class="player-basic">
+                <h4>Basic Info</h4>
+                <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
+                <p><strong>Contract:</strong> ${player.years || 0} years, $${(player.baseAnnual || 0).toFixed(1)}M/year</p>
+                <p><strong>Cap Hit (Current):</strong> $${(window.capHitFor ? window.capHitFor(player, 0) : player.baseAnnual || 0).toFixed(1)}M</p>
             </div>
-            <div class="modal-body">
-                <div class="player-info grid two">
-                    <div class="player-basic">
-                        <h4>Basic Info</h4>
-                        <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
-                        <p><strong>Contract:</strong> ${player.years || 0} years, $${(player.baseAnnual || 0).toFixed(1)}M/year</p>
-                        <p><strong>Cap Hit (Current):</strong> $${(window.capHitFor ? window.capHitFor(player, 0) : player.baseAnnual || 0).toFixed(1)}M</p>
-                    </div>
-                    ${player.ratings ? `
-                        <div class="player-ratings">
-                            <h4>Ratings Breakdown</h4>
-                            <div class="ratings-grid">
-                            ${Object.entries(player.ratings).map(([rating, value]) => `
-                                <div class="rating-item">
-                                    <span class="rating-name">${rating.toUpperCase()}:</span>
-                                    <span class="rating-value">${value}</span>
-                                </div>
-                            `).join('')}
-                            </div>
+            ${player.ratings ? `
+                <div class="player-ratings">
+                    <h4>Ratings Breakdown</h4>
+                    <div class="ratings-grid">
+                    ${Object.entries(player.ratings).map(([rating, value]) => `
+                        <div class="rating-item">
+                            <span class="rating-name">${rating.toUpperCase()}:</span>
+                            <span class="rating-value">${value}</span>
                         </div>
-                    ` : ''}
-                </div>
-                ${player.abilities && player.abilities.length > 0 ? `
-                    <div class="player-abilities mt">
-                        <h4>Abilities/Traits</h4>
-                        <p class="trait-list">${player.abilities.join(', ')}</p>
+                    `).join('')}
                     </div>
-                ` : ''}
-                
-                ${renderInjuryHistory(player)}
-                ${renderSeasonHistory(player)}
-                
-                <div class="player-actions mt">
-                    <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
-                    <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit Player</button>
-                    ${window.showPlayerComparison ? `<button class="btn secondary" onclick="window.showPlayerComparison('${player.id}')">Compare Player</button>` : ''}
                 </div>
+            ` : ''}
+        </div>
+        ${player.abilities && player.abilities.length > 0 ? `
+            <div class="player-abilities mt">
+                <h4>Abilities/Traits</h4>
+                <p class="trait-list">${player.abilities.join(', ')}</p>
             </div>
+        ` : ''}
+
+        ${renderInjuryHistory(player)}
+        ${renderSeasonHistory(player)}
+
+        <div class="player-actions mt">
+            <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
+            <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit Player</button>
+            ${window.showPlayerComparison ? `<button class="btn secondary" onclick="window.showPlayerComparison('${player.id}')">Compare Player</button>` : ''}
         </div>
     `;
-    
-    // Add temporary modal styles for the enhanced content
-    const tempModalStyles = document.createElement('style');
-    tempModalStyles.textContent = `
-        .modal {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); display: flex; justify-content: center; align-items: center; z-index: 1000;
-        }
-        .modal-content {
-            background: var(--background, #111111); padding: 20px; border-radius: 12px; width: 90%; max-width: 700px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-        }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--hairline); padding-bottom: 10px; margin-bottom: 15px; }
-        .modal-header h2 { margin: 0; color: var(--text); font-size: 1.5rem; }
-        .modal-header .muted-tag { font-size: 0.9rem; color: var(--text-muted); font-weight: 400; margin-left: 10px; }
-        .close { cursor: pointer; font-size: 1.5rem; color: var(--text-muted); }
-        .player-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .player-basic p { margin: 5px 0; font-size: 0.95rem; }
-        .player-ratings h4, .player-abilities h4 { color: var(--accent); margin-top: 0; margin-bottom: 10px; }
-        .ratings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 15px; font-size: 0.9rem; }
-        .rating-item { display: flex; justify-content: space-between; }
-        .rating-value { font-weight: 600; color: var(--text); }
-        .trait-list { font-style: italic; color: var(--text); }
-        .mt { margin-top: 20px; }
-        .player-actions button { margin-right: 10px; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; }
-        .player-actions .primary { background: var(--accent); color: var(--on-accent, #fff); }
-        .player-actions .secondary { background: var(--surface-secondary, #333); color: var(--text); }
-        @media (max-width: 600px) { .player-info { grid-template-columns: 1fr; } }
-    `;
-    document.head.appendChild(tempModalStyles);
 
-    document.body.appendChild(modal);
-    
-    // Close modal functionality
-    const closeBtn = modal.querySelector('.close');
-    closeBtn.onclick = () => {
-        modal.remove();
-        tempModalStyles.remove();
-    };
-    
-    modal.onclick = (e) => {
-        if (e.target === modal) {
-            modal.remove();
-            tempModalStyles.remove();
-        }
-    };
-    
-    modal.style.display = 'flex'; // Use flex to center
+    // Ensure CSS for grid layout exists
+    if (!document.getElementById('player-detail-styles')) {
+        const style = document.createElement('style');
+        style.id = 'player-detail-styles';
+        style.textContent = `
+            .player-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+            .player-basic p { margin: 5px 0; font-size: 0.95rem; }
+            .player-ratings h4, .player-abilities h4 { color: var(--accent); margin-top: 0; margin-bottom: 10px; }
+            .ratings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 15px; font-size: 0.9rem; }
+            .rating-item { display: flex; justify-content: space-between; }
+            .rating-value { font-weight: 600; color: var(--text); }
+            .trait-list { font-style: italic; color: var(--text); }
+            .mt { margin-top: 20px; }
+            .player-actions button { margin-right: 10px; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; }
+            .player-actions .primary { background: var(--accent); color: var(--on-accent, #fff); }
+            .player-actions .secondary { background: var(--surface-secondary, #333); color: var(--text); }
+            @media (max-width: 600px) { .player-info { grid-template-columns: 1fr; } }
+        `;
+        document.head.appendChild(style);
+    }
+
+    const modal = new window.Modal({
+        title: `${player.name || 'Unknown Player'} <span class="muted-tag" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400; margin-left: 10px;">${player.pos || 'N/A'} (OVR ${player.ovr || 'N/A'})</span>`,
+        content: content,
+        size: 'large'
+    });
+
+    const modalEl = modal.render(document.body);
+    modalEl.style.display = 'flex'; // Ensure centering via flexbox
 }
 
 /**
@@ -2388,6 +2367,73 @@ window.renderTradeCenter = function () {
 
   console.log('✅ Trade Center rendered');
 };
+/**
+ * Opens the Training Configuration Menu
+ */
+window.openTrainingMenu = function() {
+    if (!window.Modal) {
+        console.error('Modal component missing');
+        return;
+    }
+
+    // Ensure state exists
+    if (!window.state.trainingSettings) {
+        window.state.trainingSettings = { intensity: 'Normal', focus: 'Balanced' };
+    }
+    const settings = window.state.trainingSettings;
+
+    const content = `
+        <div class="training-menu">
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:600; margin-bottom:5px;">Training Intensity</label>
+                <select id="trainingIntensity" style="width:100%; padding:8px; border-radius:4px; background:var(--surface); color:var(--text); border:1px solid var(--hairline);">
+                    <option value="Low" ${settings.intensity === 'Low' ? 'selected' : ''}>Low (0.8x XP, No Injury Risk)</option>
+                    <option value="Normal" ${settings.intensity === 'Normal' ? 'selected' : ''}>Normal (1.0x XP, Very Low Risk)</option>
+                    <option value="Heavy" ${settings.intensity === 'Heavy' ? 'selected' : ''}>Heavy (1.3x XP, High Risk)</option>
+                </select>
+                <p class="muted small" style="margin-top:5px; font-size:0.85rem;">Higher intensity increases XP gains but introduces injury risk.</p>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 15px;">
+                <label style="display:block; font-weight:600; margin-bottom:5px;">Team Focus</label>
+                <select id="trainingFocus" style="width:100%; padding:8px; border-radius:4px; background:var(--surface); color:var(--text); border:1px solid var(--hairline);">
+                    <option value="Balanced" ${settings.focus === 'Balanced' ? 'selected' : ''}>Balanced (Standard)</option>
+                    <option value="Offense" ${settings.focus === 'Offense' ? 'selected' : ''}>Offense (+20% Offense XP, -10% Defense)</option>
+                    <option value="Defense" ${settings.focus === 'Defense' ? 'selected' : ''}>Defense (+20% Defense XP, -10% Offense)</option>
+                </select>
+                <p class="muted small" style="margin-top:5px; font-size:0.85rem;">Focus training prioritizes XP for one side of the ball at the cost of the other.</p>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end; margin-top:20px;">
+                <button class="btn primary" id="saveTrainingBtn">Save Settings</button>
+            </div>
+        </div>
+    `;
+
+    const modal = new window.Modal({
+        title: 'Weekly Training Settings',
+        content: content,
+        size: 'normal'
+    });
+
+    const modalEl = modal.render(document.body);
+    modalEl.style.display = 'flex';
+
+    // Bind save
+    const saveBtn = modalEl.querySelector('#saveTrainingBtn');
+    saveBtn.addEventListener('click', () => {
+        const intensity = modalEl.querySelector('#trainingIntensity').value;
+        const focus = modalEl.querySelector('#trainingFocus').value;
+
+        window.state.trainingSettings.intensity = intensity;
+        window.state.trainingSettings.focus = focus;
+
+        if (window.setStatus) window.setStatus(`Training updated: ${intensity} Intensity, ${focus} Focus`, 'success');
+
+        modalEl.remove();
+    });
+};
+
 // --- GLOBAL EXPORTS ---
 window.enhanceNavigation = enhanceNavigation;
 window.setupRosterEvents = setupRosterEvents;

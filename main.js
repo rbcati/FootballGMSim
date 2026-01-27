@@ -473,6 +473,10 @@ class GameController {
                                     <span style="font-size: 24px; margin-bottom: 4px;">📅</span>
                                     Sched
                                 </button>
+                                <button class="btn" onclick="window.openTrainingMenu()" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">🏋️</span>
+                                    Train
+                                </button>
                             </div>
                         </div>
                         <div>
