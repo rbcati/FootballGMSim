@@ -10,6 +10,7 @@ import { Constants } from './constants.js';
 import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats, getZeroStats } from './player.js';
 import { processStaffXp } from './coach-system.js';
+import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
@@ -607,13 +608,19 @@ function simulateWeek(options = {}) {
     const previousWeek = L.week;
     L.week++;
 
-    // Run weekly training if available
-    if (typeof window.runWeeklyTraining === 'function') {
+    // Run weekly training
+    if (typeof runWeeklyTraining === 'function') {
       try {
-        window.runWeeklyTraining(L);
+        runWeeklyTraining(L);
       } catch (trainingError) {
         console.error('Error in weekly training:', trainingError);
         // Don't stop simulation for training errors
+      }
+    } else if (typeof window.runWeeklyTraining === 'function') {
+      try {
+        window.runWeeklyTraining(L);
+      } catch (trainingError) {
+        console.error('Error in weekly training (window):', trainingError);
       }
     }
 

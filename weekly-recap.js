@@ -31,6 +31,9 @@ export function showWeeklyRecap(week, results, news) {
     // Determine outcome
     let outcomeHtml = '';
     let resultClass = '';
+    let heroHtml = '';
+    let schemeHtml = '';
+
     if (userGame) {
         const isHome = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId;
         const userScore = isHome ? userGame.scoreHome : userGame.scoreAway;
@@ -50,11 +53,83 @@ export function showWeeklyRecap(week, results, news) {
                 <div class="recap-opponent">vs ${opponent}</div>
             </div>
         `;
+
+        // Scheme Impact
+        if (userGame.schemeNote) {
+            const isGood = userGame.schemeNote.includes('Advantage');
+            const schemeColor = isGood ? '#4ade80' : '#f87171'; // Green or Red
+            schemeHtml = `
+                <div class="recap-section" style="border-left: 4px solid ${schemeColor};">
+                    <h4 style="color: ${schemeColor};">📋 Scheme Analysis</h4>
+                    <p style="margin: 0; font-size: 0.95rem;">${userGame.schemeNote}</p>
+                </div>
+            `;
+        }
+
+        // Hero of the Week (Best Rating)
+        if (userGame.boxScore) {
+            const userSide = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId ? 'home' : 'away';
+            const box = userGame.boxScore[userSide];
+            if (box) {
+                const players = Object.values(box);
+                // Calculate a simple game score
+                players.forEach(p => {
+                    p.gameScore = (p.stats.passTD || 0)*4 + (p.stats.rushTD || 0)*6 + (p.stats.recTD || 0)*6 + (p.stats.sacks || 0)*4 + (p.stats.interceptions || 0)*4 + (p.stats.passYd || 0)*0.04 + (p.stats.rushYd || 0)*0.1 + (p.stats.recYd || 0)*0.1 + (p.stats.tackles || 0)*1;
+                });
+                players.sort((a,b) => b.gameScore - a.gameScore);
+                const hero = players[0];
+
+                if (hero && hero.gameScore > 10) {
+                     heroHtml = `
+                        <div class="recap-section">
+                            <h4>⭐ Player of the Week</h4>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="font-weight: bold; font-size: 1.1rem;">${hero.name}</div>
+                                <div style="font-size: 0.9rem; opacity: 0.8;">${hero.pos}</div>
+                            </div>
+                            <div style="font-size: 0.9rem; margin-top: 5px;">
+                                ${hero.stats.passYd ? `${hero.stats.passYd} Yds, ${hero.stats.passTD} TD` : ''}
+                                ${hero.stats.rushYd ? `${hero.stats.rushYd} Rush Yds, ${hero.stats.rushTD} TD` : ''}
+                                ${hero.stats.recYd ? `${hero.stats.recYd} Rec Yds, ${hero.stats.recTD} TD` : ''}
+                                ${hero.stats.tackles ? `${hero.stats.tackles} Tkl, ${hero.stats.sacks || 0} Sacks` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
     } else {
         outcomeHtml = `
             <div class="recap-outcome bye">
                 <div class="recap-result-label">BYE WEEK</div>
                 <div class="recap-score">Rest & Recovery</div>
+            </div>
+        `;
+    }
+
+    // Development Watch
+    let devHtml = '';
+    const activeDev = userTeam.roster.filter(p => p.seasonNews && p.seasonNews.some(n => n.week === week && (n.headline.includes('Breakout') || n.headline.includes('Stalled') || n.headline.includes('Decline'))));
+
+    if (activeDev.length > 0) {
+        devHtml = `
+            <div class="recap-section">
+                <h4>🚀 Development Watch</h4>
+                <ul class="recap-list">
+                    ${activeDev.map(p => {
+                        const newsItem = p.seasonNews.find(n => n.week === week);
+                        const isGood = newsItem.headline.includes('Breakout');
+                        const tagClass = isGood ? 'good-tag' : 'bad-tag'; // Defined in CSS or style below
+                        return `
+                            <li>
+                                <strong style="color: ${isGood ? '#4ade80' : '#f87171'}">${newsItem.headline}</strong>
+                                <div><strong>${p.name}</strong> (${p.pos})</div>
+                                <div style="font-size: 0.85rem; color: #ccc;">${newsItem.story}</div>
+                            </li>
+                        `;
+                    }).join('')}
+                </ul>
             </div>
         `;
     }
@@ -101,6 +176,9 @@ export function showWeeklyRecap(week, results, news) {
         <div class="weekly-recap-container">
             ${outcomeHtml}
             <div class="recap-grid">
+                ${heroHtml}
+                ${schemeHtml}
+                ${devHtml}
                 ${injuriesHtml}
                 ${newsHtml}
             </div>
