@@ -663,6 +663,57 @@ export function simGameStats(home, away, options = {}) {
     const homeDefenseStrength = calculateDefenseStrength(awayGroups);
     const awayDefenseStrength = calculateDefenseStrength(homeGroups);
 
+    // --- SCHEME FIT IMPACT ---
+    let schemeNote = null;
+
+    // Check if scheme management is loaded
+    if (typeof window !== 'undefined' && window.calculateTeamRatingWithSchemeFit) {
+        const homeFit = window.calculateTeamRatingWithSchemeFit(home);
+        const awayFit = window.calculateTeamRatingWithSchemeFit(away);
+
+        // Get fit percentages (50 = neutral, 100 = perfect, 0 = terrible)
+        const hOffFit = homeFit.offensiveSchemeFit || 50;
+        const hDefFit = homeFit.defensiveSchemeFit || 50;
+        const aOffFit = awayFit.offensiveSchemeFit || 50;
+        const aDefFit = awayFit.defensiveSchemeFit || 50;
+
+        // Calculate multipliers (0.9 to 1.1 range)
+        // 100 fit = 1.1x, 0 fit = 0.9x
+        const getMod = (fit) => 0.9 + ((fit / 100) * 0.2);
+
+        const homeOffMod = getMod(hOffFit);
+        const homeDefMod = getMod(hDefFit);
+        const awayOffMod = getMod(aOffFit);
+        const awayDefMod = getMod(aDefFit);
+
+        // Apply to strengths (Assuming strength is roughly 0-100)
+        // Adjust home/away strength based on their aggregate fit
+        // Weighted slightly towards offense for narrative clarity
+        const homeFitBonus = ((homeOffMod + homeDefMod) / 2);
+        const awayFitBonus = ((awayOffMod + awayDefMod) / 2);
+
+        // Directly modify strength for score calculation
+        homeStrength *= homeFitBonus;
+        awayStrength *= awayFitBonus;
+
+        // Check for major mismatch to generate narrative
+        const homeTotalFit = hOffFit + hDefFit;
+        const awayTotalFit = aOffFit + aDefFit;
+        const diff = homeTotalFit - awayTotalFit;
+
+        if (Math.abs(diff) >= 30) {
+            const betterTeam = diff > 0 ? home.abbr : away.abbr;
+            const worseTeam = diff > 0 ? away.abbr : home.abbr;
+            schemeNote = `Scheme Advantage: ${betterTeam}'s roster fit perfectly with their systems, exploiting ${worseTeam}'s mismatches.`;
+        } else if (hOffFit < 40) {
+            schemeNote = `Scheme Issue: ${home.abbr} offense struggled due to poor roster fit.`;
+        } else if (aOffFit < 40) {
+            schemeNote = `Scheme Issue: ${away.abbr} offense struggled due to poor roster fit.`;
+        }
+
+        if (verbose) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
+    }
+
     const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
     const BASE_SCORE_MIN = C.BASE_SCORE_MIN || 10;
     const BASE_SCORE_MAX = C.BASE_SCORE_MAX || 35;
@@ -776,7 +827,7 @@ export function simGameStats(home, away, options = {}) {
     generateTeamStats(home, homeScore, homeStrength, awayStrength);
     generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
-    return { homeScore, awayScore };
+    return { homeScore, awayScore, schemeNote };
 
   } catch (error) {
     console.error('[SIM-DEBUG] Error in simGameStats:', error);
@@ -852,6 +903,8 @@ export function simulateBatch(games, options = {}) {
             let homePlayerStats = {};
             let awayPlayerStats = {};
 
+            let schemeNote = null;
+
             if (overrideResult) {
                 sH = overrideResult.scoreHome;
                 sA = overrideResult.scoreAway;
@@ -868,6 +921,7 @@ export function simulateBatch(games, options = {}) {
 
                 sH = gameScores.homeScore;
                 sA = gameScores.awayScore;
+                schemeNote = gameScores.schemeNote;
 
                 // Capture stats for box score
                 const capturePlayerStats = (roster) => {
@@ -953,6 +1007,10 @@ export function simulateBatch(games, options = {}) {
                     away: awayPlayerStats
                 }
             };
+
+            if (schemeNote) {
+                resultObj.schemeNote = schemeNote;
+            }
 
             // Add extra fields if provided
             if (pair.week) resultObj.week = pair.week;

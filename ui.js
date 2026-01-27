@@ -323,6 +323,18 @@ window.renderPlayerCard = function(player) {
         ).join('');
     }
 
+    // Development Status
+    let devTag = '';
+    if (player.developmentStatus) {
+        if (player.developmentStatus === 'BREAKOUT') {
+            devTag = '<span class="tag" style="background: #10b981; color: white;">🔥 BREAKOUT</span>';
+        } else if (player.developmentStatus === 'DECLINING') {
+            devTag = '<span class="tag" style="background: #ef4444; color: white;">📉 DECLINE</span>';
+        } else if (player.developmentStatus === 'STAGNATED') {
+            devTag = '<span class="tag" style="background: #f59e0b; color: white;">⚠️ STALLED</span>';
+        }
+    }
+
     return `
     <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
@@ -338,6 +350,7 @@ window.renderPlayerCard = function(player) {
                         <span class="tag">${player.pos}</span>
                         <span class="tag">${player.age} yo</span>
                         ${isInjured ? '<span class="tag" style="color:#FF3B30">INJ</span>' : ''}
+                        ${devTag}
                         ${traitsHtml}
                     </div>
                     <div class="grade-badge ${gradeClass}">${grade}</div>
@@ -593,7 +606,13 @@ window.renderRoster = function() {
             
             // Player info
             const nameCell = tr.insertCell();
-            nameCell.textContent = player.name || 'Unknown';
+            let nameHtml = player.name || 'Unknown';
+            // Add development indicator
+            if (player.developmentStatus === 'BREAKOUT') nameHtml += ' <span title="Breakout Player">🔥</span>';
+            else if (player.developmentStatus === 'DECLINING') nameHtml += ' <span title="Declining">📉</span>';
+            else if (player.developmentStatus === 'STAGNATED') nameHtml += ' <span title="Development Stalled">⚠️</span>';
+
+            nameCell.innerHTML = nameHtml;
             // nameCell.style.color and text-decoration removed, handled by CSS fix
             
             tr.insertCell().textContent = player.pos || 'N/A';

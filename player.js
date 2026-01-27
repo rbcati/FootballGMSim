@@ -1085,7 +1085,11 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 
         // Progression: Use DEV TRAITS and POTENTIAL
         devTrait: U.choice(['Normal', 'Star', 'Superstar', 'X-Factor']),
-        potential: Math.min(99, playerOvr + U.rand(0, 15 - Math.max(0, playerAge - 21))),
+        potential: Math.min(99, playerOvr + U.rand(0, 30)), // Increased max potential gap from 15 to 30
+
+        // Hidden Gems / Busts Factors
+        bustFactor: U.rand(0, 20),
+        boomFactor: U.rand(0, 20),
 
         // Collections
         abilities: [],
@@ -2011,7 +2015,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   const DRAFT_CONFIG = {
       DEFAULT_CLASS_SIZE: 150,
       ROOKIE_AGE: { MIN: 21, MAX: 23 },
-      POTENTIAL_VARIANCE: { MIN: 5, MAX: 15 },
+      POTENTIAL_VARIANCE: { MIN: 15, MAX: 30 }, // Significantly increased variance for draft risk (Task 3)
       OVERALL_BOUNDS: { MIN: 40, MAX: 99 },
       POSITIONS: {
           // More realistic position distribution weights
