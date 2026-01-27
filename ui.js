@@ -514,6 +514,7 @@ window.renderRoster = function() {
                     <th>Chem</th>
                     <th>Contract</th>
                     <th>Cap Hit</th>
+                    <th>Status</th>
                     <th>Abilities</th>
                 </tr>
             </thead>
@@ -525,7 +526,7 @@ window.renderRoster = function() {
             if (!team.roster || team.roster.length === 0) {
             const tr = tbody.insertRow();
             const td = tr.insertCell();
-            td.colSpan = 13;
+            td.colSpan = 14;
             td.textContent = 'No players on roster';
             return;
         }
@@ -644,6 +645,17 @@ window.renderRoster = function() {
             const capHit = window.capHitFor ? window.capHitFor(player, 0) : baseAnnual;
             tr.insertCell().textContent = `$${capHit.toFixed(1)}M`;
             
+            // Status (Injury)
+            const statusCell = tr.insertCell();
+            if (player.injured && player.injuries && player.injuries.length > 0) {
+                const injury = player.injuries[0];
+                statusCell.innerHTML = `<span style="color: #ff4444; font-weight: bold;">${injury.weeksRemaining}w (${injury.type})</span>`;
+                statusCell.title = `${injury.type}: ${injury.weeksRemaining} weeks remaining`;
+            } else {
+                statusCell.textContent = 'Healthy';
+                statusCell.style.color = '#44ff44';
+            }
+
             // Abilities
             const abilities = (player.abilities || []).slice(0, 2).join(', ') || 'None';
             const cellAbilities = tr.insertCell();
@@ -755,9 +767,10 @@ function showPlayerDetails(player) {
  * Render injury history section for player details
  */
 function renderInjuryHistory(player) {
-    if (!player || (!player.injuryHistory || player.injuryHistory.length === 0)) {
-        return '';
-    }
+    if (!player) return '';
+
+    // Ensure injuryHistory exists for assessment
+    if (!player.injuryHistory) player.injuryHistory = [];
     
     const assessment = window.getInjuryPronenessAssessment ? window.getInjuryPronenessAssessment(player) : null;
     
@@ -781,6 +794,7 @@ function renderInjuryHistory(player) {
             
             <div class="injury-history-list">
                 <h5>All Injuries</h5>
+                ${player.injuryHistory.length > 0 ? `
                 <table class="table table-sm">
                     <thead>
                         <tr>
@@ -803,6 +817,7 @@ function renderInjuryHistory(player) {
                         `).join('')}
                     </tbody>
                 </table>
+                ` : '<p class="muted">No recorded injuries.</p>'}
             </div>
         </div>
     `;

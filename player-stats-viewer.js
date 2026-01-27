@@ -476,6 +476,70 @@ class PlayerStatsViewer {
     }
 
     /**
+     * Generates Injury History & Assessment HTML
+     */
+    generateInjuryHTML(player) {
+        if (!player) return '';
+        // Ensure injuryHistory exists
+        if (!player.injuryHistory) player.injuryHistory = [];
+
+        const assessment = window.getInjuryPronenessAssessment ? window.getInjuryPronenessAssessment(player) : null;
+        if (!assessment) return '';
+
+        let html = `
+            <div class="stats-section">
+                <h3>🚑 Injury History & Assessment</h3>
+                <div class="injury-assessment" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 10px;">
+                    <div class="stats-row">
+                        <span class="stat-label">Proneness:</span>
+                        <span class="stat-value" style="font-weight: bold;">${assessment.level}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stat-label">Avg Weeks/Injury:</span>
+                        <span class="stat-value">${assessment.averageWeeksPerInjury}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span class="stat-label">Total Injuries:</span>
+                        <span class="stat-value">${assessment.totalInjuries}</span>
+                    </div>
+                </div>
+                <p class="text-muted small mt-2" style="margin-bottom: 10px; font-style: italic;">${assessment.recommendation}</p>
+        `;
+
+        if (player.injuryHistory.length > 0) {
+            html += `
+                <div class="table-wrapper">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>Type</th>
+                                <th>Severity</th>
+                                <th>Weeks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${player.injuryHistory.slice().reverse().map(injury => `
+                                <tr>
+                                    <td>${injury.year || 'N/A'}</td>
+                                    <td>${injury.type}</td>
+                                    <td>${injury.severity}</td>
+                                    <td>${injury.weeks}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        } else {
+            html += '<p class="muted small">No recorded injuries.</p>';
+        }
+
+        html += '</div>';
+        return html;
+    }
+
+    /**
      * Generates the main stats grid content.
      * @param {Object} player - The player object.
      * @param {Object} team - The team object (needed for training calculation).
@@ -508,6 +572,9 @@ class PlayerStatsViewer {
                 </div>
             `;
         }
+
+        // Section 1.5: Injury History & Assessment
+        statsHTML += this.generateInjuryHTML(player);
 
         // Section 2: Player Ratings/Attributes 
         if (player.ratings) {
