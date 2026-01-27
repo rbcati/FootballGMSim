@@ -321,17 +321,39 @@ class NewsEngine {
         });
 
         if (topPasser.yds > 400) {
-            this.addNewsItem(league,
-                `Air Raid: ${topPasser.player.name} Throws for ${topPasser.yds} Yards`,
-                `${topPasser.player.name} was unstoppable through the air this week, dissecting the defense for a massive yardage total.`,
-                null, 'stats');
+            const opponent = this.getOpponent(league, topPasser.team.id, week);
+            const opponentName = opponent ? opponent.name : 'Opponent';
+            const headline = `Air Raid: ${topPasser.team.name} QB ${topPasser.player.name} Throws for ${topPasser.yds} Yards`;
+            const story = `${topPasser.player.name} was unstoppable through the air this week against the ${opponentName}, dissecting the defense for a massive yardage total.`;
+
+            this.addNewsItem(league, headline, story, null, 'stats');
+
+            // Save to player history
+            if (!topPasser.player.seasonNews) topPasser.player.seasonNews = [];
+            topPasser.player.seasonNews.push({
+                week: week - 1,
+                headline: headline,
+                story: story,
+                opponent: opponentName
+            });
         }
 
         if (topRusher.yds > 200) {
-            this.addNewsItem(league,
-                `Ground Attack: ${topRusher.player.name} Rushes for ${topRusher.yds} Yards`,
-                `${topRusher.player.name} put the team on his back, running wild over the opposing defense.`,
-                null, 'stats');
+            const opponent = this.getOpponent(league, topRusher.team.id, week);
+            const opponentName = opponent ? opponent.name : 'Opponent';
+            const headline = `Ground Attack: ${topRusher.team.name} RB ${topRusher.player.name} Rushes for ${topRusher.yds} Yards`;
+            const story = `${topRusher.player.name} put the team on his back against the ${opponentName}, running wild over the opposing defense.`;
+
+            this.addNewsItem(league, headline, story, null, 'stats');
+
+            // Save to player history
+            if (!topRusher.player.seasonNews) topRusher.player.seasonNews = [];
+            topRusher.player.seasonNews.push({
+                week: week - 1,
+                headline: headline,
+                story: story,
+                opponent: opponentName
+            });
         }
     }
 
@@ -449,6 +471,31 @@ class NewsEngine {
         const oppScore = isHome ? game.scoreAway : game.scoreHome;
 
         return { won: score > oppScore, score, oppScore };
+    }
+
+    getOpponent(league, teamId, week) {
+        if (!league.resultsByWeek) return null;
+        // Game just played is week - 1 (since current week is upcoming)
+        // resultsByWeek is 0-indexed. week 1 results at index 0.
+        // So week 2 upcoming -> week 1 results -> index 0.
+        // week index = week - 2.
+        const weekIndex = week - 2;
+        if (weekIndex < 0) return null;
+
+        const results = league.resultsByWeek[weekIndex];
+        if (!results) return null;
+
+        const game = results.find(g => !g.bye && (g.home === teamId || g.away === teamId));
+        if (!game) return null;
+
+        const isHome = game.home === teamId;
+        const opponentId = isHome ? game.away : game.home;
+
+        // Find opponent team object (handle if IDs are used or objects)
+        // Usually objects in teams array, but results might store IDs.
+        // league.teams is array.
+        const opponent = league.teams.find(t => t.id === opponentId) || league.teams[opponentId];
+        return opponent;
     }
 }
 

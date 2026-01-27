@@ -630,6 +630,26 @@ class PlayerStatsViewer {
             `;
         }
 
+        // Section 7: Season Headlines
+        if (player.seasonNews && player.seasonNews.length > 0) {
+            statsHTML += `
+                <div class="stats-section full-width">
+                    <h3>📰 Season Headlines</h3>
+                    <div class="news-list" style="margin-top: 10px;">
+                        ${player.seasonNews.map(item => `
+                            <div class="news-item" style="padding: 10px; background: rgba(255,255,255,0.05); margin-bottom: 5px; border-radius: 4px; border-left: 3px solid var(--accent, #3b82f6);">
+                                <div style="font-weight: 600; font-size: 0.95rem;">${item.headline}</div>
+                                <div style="font-size: 0.85rem; color: #aaa; margin-top: 2px;">
+                                    <span class="tag" style="font-size: 0.75rem; background: rgba(255,255,255,0.1); padding: 1px 4px; border-radius: 3px; margin-right: 5px;">Week ${item.week || '?'}</span>
+                                    ${item.story}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
         return statsHTML;
     }
 

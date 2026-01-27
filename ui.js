@@ -712,6 +712,7 @@ function showPlayerDetails(player) {
 
         ${renderInjuryHistory(player)}
         ${renderSeasonHistory(player)}
+        ${renderPlayerNews(player)}
 
         <div class="player-actions mt">
             <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
@@ -807,6 +808,33 @@ function renderInjuryHistory(player) {
         </div>
     `;
     
+    return html;
+}
+
+/**
+ * Render season headlines/news for player
+ */
+function renderPlayerNews(player) {
+    if (!player || !player.seasonNews || player.seasonNews.length === 0) {
+        return '';
+    }
+
+    let html = `
+        <div class="player-season-news mt">
+            <h4>Season Headlines</h4>
+            <div class="news-list">
+                ${player.seasonNews.map(item => `
+                    <div class="news-item" style="padding: 10px; background: var(--surface); margin-bottom: 5px; border-radius: 4px; border-left: 3px solid var(--accent);">
+                        <div style="font-weight: 600; font-size: 0.95rem;">${item.headline}</div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">
+                            <span class="tag" style="font-size: 0.75rem; padding: 1px 4px; margin-right: 5px;">Week ${item.week || '?' }</span>
+                            ${item.story}
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
     return html;
 }
 
