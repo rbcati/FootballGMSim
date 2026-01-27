@@ -426,16 +426,10 @@ function renderOwnerModeInterface() {
     container.id = 'ownerModeInterface';
     container.className = 'owner-mode-interface';
     
-    // Insert after coaching role interface
-    const coachingInterface = document.getElementById('coachingRoleInterface');
-    if (coachingInterface) {
-      coachingInterface.parentNode.insertBefore(container, coachingInterface.nextSibling);
-    } else {
-      // Insert after hub content
-      const hubContent = document.querySelector('#hub .card');
-      if (hubContent) {
-        hubContent.parentNode.insertBefore(container, hubContent.nextSibling);
-      }
+    // Insert at the bottom of the hub
+    const hub = document.getElementById('hub');
+    if (hub) {
+      hub.appendChild(container);
     }
   }
   

@@ -169,6 +169,29 @@ class GameController {
                 window.updateTeamRatings(userTeam);
             }
 
+            // Find next game for user team FIRST (for header)
+            let nextGame = null;
+            let opponent = null;
+            let isHome = false;
+            let currentWeek = L.week || 1;
+
+            if (!isOffseason) {
+                let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
+
+                // Find current week data
+                const weekData = Array.isArray(scheduleWeeks) ?
+                    (scheduleWeeks.find(w => w && (w.weekNumber === currentWeek || w.week === currentWeek)) || scheduleWeeks[currentWeek - 1]) : null;
+
+                if (weekData && weekData.games) {
+                    nextGame = weekData.games.find(g => g.home === userTeamId || g.away === userTeamId);
+                    if (nextGame) {
+                        isHome = nextGame.home === userTeamId;
+                        const oppId = isHome ? nextGame.away : nextGame.home;
+                        opponent = L.teams[oppId];
+                    }
+                }
+            }
+
             // --- HEADER DASHBOARD GENERATION ---
             let headerDashboardHTML = '';
             if (userTeam && L) {
@@ -217,24 +240,46 @@ class GameController {
                     <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
 
-                            <!-- Record & Standing -->
-                            <div style="flex: 1; min-width: 140px;">
+                            <!-- Record, Standing & Ratings (Combined Column 1) -->
+                            <div style="flex: 1; min-width: 160px;">
                                 <div style="font-size: 2rem; font-weight: 800; line-height: 1;">${wins}-${losses}-${ties}</div>
                                 <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 5px;">
                                     ${divRank}${divSuffix} in Div • ${confRank}${confSuffix} in Conf
                                 </div>
+                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                                    <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">${ovr} OVR</div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">OFF ${offOvr} • DEF ${defOvr}</div>
+                                </div>
                             </div>
 
-                            <!-- Ratings -->
-                            <div style="flex: 1; min-width: 120px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;">
-                                <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Team OVR</div>
-                                <div style="display: flex; justify-content: space-around; align-items: center;">
-                                    <div title="Overall"><span style="font-weight: 700; font-size: 1.2rem;">${ovr}</span></div>
-                                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1);"></div>
-                                    <div title="Offense"><span style="font-size: 0.8rem; opacity: 0.7;">OFF</span> <span style="font-weight: 700;">${offOvr}</span></div>
-                                    <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.1);"></div>
-                                    <div title="Defense"><span style="font-size: 0.8rem; opacity: 0.7;">DEF</span> <span style="font-weight: 700;">${defOvr}</span></div>
-                                </div>
+                            <!-- Next Opponent (Middle Column) -->
+                            <div style="flex: 1; min-width: 200px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;">
+                                ${opponent ? (() => {
+                                    // Head to Head Logic
+                                    const h2h = userTeam.headToHead?.[opponent.id] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0, streak: 0 };
+                                    const streakText = h2h.streak > 0 ? `Won ${h2h.streak}` : h2h.streak < 0 ? `Lost ${Math.abs(h2h.streak)}` : 'None';
+                                    const streakColor = h2h.streak > 0 ? '#48bb78' : h2h.streak < 0 ? '#f56565' : 'white';
+
+                                    return `
+                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Week ${currentWeek}</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 4px;">
+                                        ${isHome ? 'vs' : '@'} ${opponent.abbr}
+                                        <span style="font-size: 0.9rem; opacity: 0.7; font-weight: 400;">(${opponent.record?.w || 0}-${opponent.record?.l || 0})</span>
+                                    </div>
+                                    <div style="font-size: 0.85rem; display: flex; justify-content: space-around;">
+                                        <div>Record: ${h2h.wins}-${h2h.losses}${h2h.ties > 0 ? '-'+h2h.ties : ''}</div>
+                                        <div style="color: ${streakColor};">${streakText}</div>
+                                    </div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 2px;">
+                                        PF: ${h2h.pf} | PA: ${h2h.pa}
+                                    </div>
+                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;">Play Game</button>' : ''}
+                                    `;
+                                })() : `
+                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Week ${currentWeek}</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 10px;">BYE WEEK</div>
+                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;">Simulate Bye</button>' : ''}
+                                `}
                             </div>
 
                             <!-- Rankings -->
@@ -357,96 +402,9 @@ class GameController {
                 `;
             }
             
-            // Find next game for user team
-            let nextGameHTML = '';
-            if (!isOffseason) {
-                const currentWeek = L.week || 1;
-                let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
-                // Handle different schedule formats (array of objects or array of arrays)
-                if (Array.isArray(scheduleWeeks) && scheduleWeeks.length > 0) {
-                    if (scheduleWeeks[0] && typeof scheduleWeeks[0] === 'object' && scheduleWeeks[0].weekNumber !== undefined) {
-                        scheduleWeeks = scheduleWeeks;
-                    } else if (Array.isArray(scheduleWeeks[0]) || (scheduleWeeks[0] && scheduleWeeks[0].games)) {
-                        scheduleWeeks = scheduleWeeks;
-                    }
-                }
-                // Find current week data
-                const weekData = Array.isArray(scheduleWeeks) ?
-                    (scheduleWeeks.find(w => w && (w.weekNumber === currentWeek || w.week === currentWeek)) || scheduleWeeks[currentWeek - 1]) : null;
-
-                if (weekData && weekData.games) {
-                    const nextGame = weekData.games.find(g => g.home === userTeamId || g.away === userTeamId);
-                    if (nextGame) {
-                        const isHome = nextGame.home === userTeamId;
-                        const oppId = isHome ? nextGame.away : nextGame.home;
-                        const opponent = L.teams[oppId];
-                        if (opponent) {
-                            const oppRecord = opponent.record ? `(${opponent.record.w}-${opponent.record.l})` : '';
-
-                            // Calculate Team Comparison Ratings
-                            let comparisonHTML = '';
-                            if (window.calculateTeamRating) {
-                                const userRatings = window.calculateTeamRating(userTeam);
-                                const oppRatings = window.calculateTeamRating(opponent);
-
-                                const getRatingColor = (val) => {
-                                    if (val >= 85) return '#34C759'; // elite/good
-                                    if (val >= 75) return '#34C759';
-                                    if (val >= 70) return '#FF9F0A'; // avg
-                                    return '#FF453A'; // poor
-                                };
-
-                                comparisonHTML = `
-                                    <div class="team-comparison" style="margin-bottom: 15px; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px;">
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; color: var(--text-muted);">
-                                            <div>YOU</div>
-                                            <div>STAT</div>
-                                            <div>OPP</div>
-                                        </div>
-                                        ${[
-                                            { label: 'OVR', u: userRatings.overall, o: oppRatings.overall },
-                                            { label: 'OFF', u: userRatings.offense.overall, o: oppRatings.offense.overall },
-                                            { label: 'DEF', u: userRatings.defense.overall, o: oppRatings.defense.overall },
-                                            { label: 'ST', u: userRatings.specialTeams, o: oppRatings.specialTeams }
-                                        ].map(stat => `
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; text-align: center; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                                <div style="color: ${getRatingColor(stat.u)}; font-weight: 700;">${stat.u}</div>
-                                                <div style="color: var(--text-muted); font-size: 0.8rem;">${stat.label}</div>
-                                                <div style="color: ${getRatingColor(stat.o)}; font-weight: 700;">${stat.o}</div>
-                                            </div>
-                                        `).join('')}
-                                    </div>
-                                `;
-                            }
-
-                            nextGameHTML = `
-                                <div class="card next-game-card" style="background: linear-gradient(135deg, rgba(30, 40, 60, 0.8), rgba(20, 25, 35, 0.9)); border: 1px solid var(--accent);">
-                                    <h3 style="color: var(--accent); margin-bottom: 10px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Next Opponent - Week ${currentWeek}</h3>
-                                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;">
-                                        <div style="font-size: 1.5rem; font-weight: 700;">${isHome ? 'vs' : '@'} ${opponent.name} <span style="font-size: 1rem; color: var(--text-muted); font-weight: 400;">${oppRecord}</span></div>
-                                        <div style="font-size: 2rem;">🏈</div>
-                                    </div>
-                                    ${comparisonHTML}
-                                    ${!isOffseason ? '<button class="btn primary" id="btnSimWeekHero" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">Play Week ' + currentWeek + '</button>' : ''}
-                                </div>
-                            `;
-                        }
-                    } else {
-                         nextGameHTML = `
-                            <div class="card next-game-card">
-                                <h3>Week ${currentWeek}</h3>
-                                <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 1.2rem;">BYE WEEK</div>
-                                ${!isOffseason ? '<button class="btn primary" id="btnSimWeekHero" style="width: 100%; padding: 12px; font-size: 1.1rem; font-weight: bold;">Simulate Bye Week</button>' : ''}
-                            </div>
-                        `;
-                    }
-                }
-            }
-
             hubContainer.innerHTML = `
                 ${headerDashboardHTML}
                 ${newsHTML}
-                ${nextGameHTML}
                 <div class="card">
                     <h2>Team Hub</h2>
                     <div class="grid two">

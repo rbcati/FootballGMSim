@@ -165,6 +165,33 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
     awayStats.ties = 1;
   }
 
+  // UPDATE HEAD-TO-HEAD STATS
+  const updateHeadToHead = (team, oppId, stats, win, loss, tie) => {
+      if (!team.headToHead) team.headToHead = {};
+      if (!team.headToHead[oppId]) {
+          team.headToHead[oppId] = { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0, streak: 0 };
+      }
+      const h2h = team.headToHead[oppId];
+      h2h.pf += stats.pf;
+      h2h.pa += stats.pa;
+
+      if (win) {
+          h2h.wins++;
+          if (h2h.streak > 0) h2h.streak++;
+          else h2h.streak = 1;
+      } else if (loss) {
+          h2h.losses++;
+          if (h2h.streak < 0) h2h.streak--;
+          else h2h.streak = -1;
+      } else {
+          h2h.ties++;
+          h2h.streak = 0; // Reset streak on tie
+      }
+  };
+
+  updateHeadToHead(home, away.id, homeStats, homeStats.wins > 0, homeStats.losses > 0, homeStats.ties > 0);
+  updateHeadToHead(away, home.id, awayStats, awayStats.wins > 0, awayStats.losses > 0, awayStats.ties > 0);
+
   // UPDATE STATE via Setter
   if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
 
