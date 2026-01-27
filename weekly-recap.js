@@ -105,7 +105,7 @@ export function showWeeklyRecap(week, results, news) {
             </div>
 
             <div class="recap-actions">
-                <button class="btn primary large" onclick="document.querySelector('.modal').remove(); if(window.renderHub) window.renderHub();">Continue to Week ${week + 1}</button>
+                <button class="btn primary large" onclick="this.closest('.modal').remove(); if(window.renderHub) window.renderHub();">Continue to Week ${week + 1}</button>
             </div>
         </div>
 
