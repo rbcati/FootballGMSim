@@ -17,7 +17,81 @@ class LiveGameViewer {
     this.onPlayCallback = null;
     this.onGameEndCallback = null;
     this.modal = null;
+    this.container = null;
+    this.viewMode = false;
     this.hasAppliedResult = false;
+  }
+
+  /**
+   * Render to a specific view container instead of modal
+   */
+  renderToView(containerId) {
+    const container = document.querySelector(containerId);
+    if (!container) return;
+
+    this.viewMode = true;
+    this.container = container;
+
+    // Create layout
+    container.innerHTML = `
+      <div class="card">
+        <div class="scoreboard"></div>
+        <div class="control-bar">
+            <button class="control-btn" id="btnPrevPlay">⏮ Prev</button>
+            <div class="control-divider"></div>
+            <button class="control-btn" id="btnPlayPause">⏯ Pause</button>
+            <button class="control-btn" id="btnNextPlay">Next Play ⏭</button>
+            <button class="control-btn" id="btnNextDrive">Next Drive ⏩</button>
+            <div class="control-divider"></div>
+            <div class="tempo-controls">
+                <button class="control-btn" data-tempo="slow">Slow</button>
+                <button class="control-btn active" data-tempo="normal">Normal</button>
+                <button class="control-btn" data-tempo="hurry-up">Fast</button>
+            </div>
+            <div class="spacer"></div>
+            <button class="control-btn" id="btnSkipEnd" style="color: var(--danger);">Skip to End</button>
+        </div>
+      </div>
+
+      <div class="grid two">
+        <div class="card" style="height: 600px; display: flex; flex-direction: column;">
+            <h3>Play-by-Play</h3>
+            <div class="play-log-enhanced"></div>
+        </div>
+        <div>
+            <div class="card">
+                <h3>Game Stats</h3>
+                <div class="game-dashboard" style="margin-bottom: 15px;">
+                    <div class="box-score-panel"></div>
+                    <div class="momentum-panel" style="margin-top: 10px;"></div>
+                </div>
+                <div class="stats-panel"></div>
+            </div>
+            <div class="card play-calling" style="display: none;">
+                <!-- Play calling UI injected here -->
+            </div>
+        </div>
+      </div>
+    `;
+
+    // Attach listeners
+    container.querySelector('#btnPlayPause').addEventListener('click', () => this.togglePause());
+    container.querySelector('#btnNextPlay').addEventListener('click', () => {
+        this.isPaused = true;
+        this.displayNextPlay();
+    });
+    container.querySelector('#btnNextDrive').addEventListener('click', () => this.skipToNextDrive());
+    container.querySelector('#btnSkipEnd').addEventListener('click', () => this.skipToEnd());
+
+    container.querySelectorAll('[data-tempo]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            this.setTempo(e.target.dataset.tempo);
+            container.querySelectorAll('[data-tempo]').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+        });
+    });
+
+    this.renderGame();
   }
 
   /**
@@ -37,13 +111,9 @@ class LiveGameViewer {
     this.playByPlay = [];
     this.currentPlayIndex = 0;
     this.isPlaying = false;
-    this.isPaused = false;
+    this.isPaused = false; // Start paused for better UX? No, auto-play.
     this.playCallQueue = null;
     this.hasAppliedResult = false;
-
-    this.createModal();
-    this.renderGame();
-    this.showModal();
 
     // Start game simulation
     this.simulateGame();
@@ -225,7 +295,7 @@ class LiveGameViewer {
       yardLine: gameState[gameState.ballPossession].yardLine,
       quarter: gameState.quarter,
       time: gameState.time,
-      result: null,
+      result: null, // Will be 'touchdown', 'turnover', 'sack', etc.
       yards: 0,
       message: ''
     };
@@ -260,6 +330,7 @@ class LiveGameViewer {
         if (Math.random() < (0.1 * variance + defModBigPlay)) {
             yards = U.rand(10, 25); // Big play
             momentumChange += 5;
+            play.result = 'big_play';
         }
       } else {
         yards = U.rand(-2, 3);
@@ -322,11 +393,12 @@ class LiveGameViewer {
         if (Math.random() < (bigPlayChance + defModBigPlay)) {
             yards = U.rand(20, 50);
             momentumChange += 10;
+            play.result = 'big_play';
         }
 
         // Interception
         if (Math.random() < (intChance + defModInt)) {
-          play.result = 'interception';
+          play.result = 'turnover'; // Standardize to turnover
           yards = 0;
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
           momentumChange -= 20;
@@ -392,7 +464,7 @@ class LiveGameViewer {
     gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? momentumChange : -momentumChange)));
 
     // Update yard line and down/distance
-    if (play.result !== 'interception' && play.result !== 'field_goal' && play.result !== 'field_goal_miss') {
+    if (play.result !== 'turnover' && play.result !== 'field_goal' && play.result !== 'field_goal_miss') {
       const newYardLine = gameState[gameState.ballPossession].yardLine + yards;
       gameState.drive.yards += yards;
 
@@ -412,7 +484,7 @@ class LiveGameViewer {
         if (baseType === 'run' && player) {
              const stats = ensureStats(player.id, player.name, player.pos, offense.team.id);
              stats.rushTD++;
-        } else if (baseType === 'pass' && !play.result.includes('interception')) {
+        } else if (baseType === 'pass' && !play.result?.includes('turnover')) {
              if (offense.qb) {
                  const qbStats = ensureStats(offense.qb.id, offense.qb.name, offense.qb.pos, offense.team.id);
                  qbStats.passTD++;
@@ -725,34 +797,51 @@ class LiveGameViewer {
    * Render a play to the UI
    */
   renderPlay(play) {
-    const playLog = this.modal.querySelector('.play-log');
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
+    const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
     if (!playLog) return;
 
     const playElement = document.createElement('div');
     playElement.className = 'play-item';
 
+    // Add specific classes based on result
+    if (play.result === 'touchdown') playElement.classList.add('play-touchdown');
+    else if (play.result === 'turnover' || play.result === 'turnover_downs') playElement.classList.add('play-turnover');
+    else if (play.result === 'sack') playElement.classList.add('play-sack');
+    else if (play.result === 'big_play') playElement.classList.add('play-big-play');
+
     if (play.type === 'play') {
       const offense = this.gameState[this.gameState.ballPossession === 'home' ? 'home' : 'away'];
-      const offenseTeam = offense.team;
+
+      // Determine Icon
+      let icon = '🏈';
+      if (play.playType.startsWith('run')) icon = '🏃';
+      else if (play.playType.startsWith('pass')) icon = '🎯';
+      else if (play.playType === 'field_goal') icon = '👟';
+      else if (play.playType === 'punt') icon = '🦵';
+
+      if (play.result === 'touchdown') icon = '🙌';
+      else if (play.result === 'turnover' || play.result === 'turnover_downs') icon = '🛑';
+      else if (play.result === 'sack') icon = '💥';
+
       playElement.innerHTML = `
-        <div class="play-info">
-          <span class="play-time">Q${play.quarter} ${this.formatTime(play.time)}</span>
-          <span class="play-down">${play.down} & ${play.distance}</span>
-          <span class="play-yardline">${play.yardLine} yard line</span>
-        </div>
-        <div class="play-result">
-          <span class="play-type">${play.playType.toUpperCase()}</span>
-          <span class="play-message">${play.message}</span>
+        <div class="play-icon">${icon}</div>
+        <div class="play-details">
+            <div class="play-meta">Q${play.quarter} ${this.formatTime(play.time)} • ${play.down} & ${play.distance} at ${play.yardLine}</div>
+            <div class="play-desc">${play.message}</div>
         </div>
       `;
     } else if (play.type === 'quarter_end') {
       playElement.className = 'play-item quarter-break';
-      playElement.innerHTML = `<div class="play-message">${play.message}</div>`;
+      playElement.innerHTML = `<div class="play-message" style="width:100%; text-align:center;">${play.message}</div>`;
     } else if (play.type === 'game_end') {
       playElement.className = 'play-item game-end';
       playElement.innerHTML = `
-        <div class="play-message">${play.message}</div>
-        <div class="final-score">
+        <div class="play-message" style="width:100%; text-align:center;">${play.message}</div>
+        <div class="final-score" style="width:100%; text-align:center; font-weight:bold;">
           Final: ${this.gameState.away.team.name || this.gameState.away.team.abbr} ${play.finalScore.away} - 
           ${this.gameState.home.team.name || this.gameState.home.team.abbr} ${play.finalScore.home}
         </div>
@@ -761,12 +850,17 @@ class LiveGameViewer {
       playElement.className = 'play-item drive-summary';
       playElement.style.borderLeftColor = '#888';
       playElement.style.fontStyle = 'italic';
-      playElement.style.fontSize = '0.85em';
-      playElement.innerHTML = `<div class="play-message">${play.message}</div>`;
+      playElement.style.fontSize = '0.9em';
+      playElement.innerHTML = `<div class="play-message">📊 ${play.message}</div>`;
     }
 
-    playLog.appendChild(playElement);
-    playLog.scrollTop = playLog.scrollHeight;
+    // Prepend to top if in view mode (newest first), otherwise append
+    if (this.viewMode) {
+        playLog.prepend(playElement);
+    } else {
+        playLog.appendChild(playElement);
+        playLog.scrollTop = playLog.scrollHeight;
+    }
 
     // Update scoreboard
     this.updateScoreboard();
@@ -776,7 +870,10 @@ class LiveGameViewer {
    * Update scoreboard display
    */
   updateScoreboard() {
-    const scoreboard = this.modal.querySelector('.scoreboard');
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    const scoreboard = parent.querySelector('.scoreboard');
     if (!scoreboard || !this.gameState) return;
 
     const home = this.gameState.home;
@@ -785,7 +882,7 @@ class LiveGameViewer {
 
     scoreboard.innerHTML = `
       <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
-        <div class="team-name">${away.team.name || away.team.abbr}</div>
+        <div class="team-name">${away.team.abbr}</div>
         <div class="team-score">${away.score}</div>
       </div>
       <div class="score-info">
@@ -795,7 +892,7 @@ class LiveGameViewer {
         </div>
       </div>
       <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
-        <div class="team-name">${home.team.name || home.team.abbr}</div>
+        <div class="team-name">${home.team.abbr}</div>
         <div class="team-score">${home.score}</div>
       </div>
     `;
@@ -814,7 +911,46 @@ class LiveGameViewer {
    * Show play calling interface
    */
   showPlayCalling() {
-    const playCalling = this.modal.querySelector('.play-calling');
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    // Check if we need to inject the buttons for view mode
+    if (this.viewMode) {
+        const pcContainer = parent.querySelector('.play-calling');
+        if (pcContainer && pcContainer.innerHTML.trim() === '') {
+            pcContainer.innerHTML = `
+                <div class="play-call-prompt" style="margin-bottom: 10px; font-weight: bold; color: var(--accent);">Call Your Play:</div>
+                <div class="play-call-buttons" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div class="play-row">
+                        <button class="play-call-btn" data-play="run_inside">Run Inside</button>
+                        <button class="play-call-btn" data-play="run_outside">Run Outside</button>
+                    </div>
+                    <div class="play-row">
+                        <button class="play-call-btn" data-play="pass_short">Short Pass</button>
+                        <button class="play-call-btn" data-play="pass_medium">Med Pass</button>
+                        <button class="play-call-btn" data-play="pass_long">Long Pass</button>
+                    </div>
+                    <div class="play-row">
+                        <button class="play-call-btn" data-play="field_goal">Field Goal</button>
+                        <button class="play-call-btn" data-play="punt">Punt</button>
+                    </div>
+                    <div class="play-row defense-row">
+                        <button class="play-call-btn" data-play="defense_blitz">Blitz</button>
+                        <button class="play-call-btn" data-play="defense_man">Man Coverage</button>
+                        <button class="play-call-btn" data-play="defense_zone">Zone Coverage</button>
+                    </div>
+                </div>
+            `;
+            // Attach events
+            pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    this.callPlay(e.target.dataset.play);
+                });
+            });
+        }
+    }
+
+    const playCalling = parent.querySelector('.play-calling');
     if (!playCalling) return;
 
     playCalling.style.display = 'flex';
@@ -831,11 +967,13 @@ class LiveGameViewer {
     if (isUserOffense) {
         offRows.forEach(r => r.style.display = 'flex');
         if (defRow) defRow.style.display = 'none';
-        playCalling.querySelector('.play-call-prompt').textContent = 'Call Offense:';
+        const prompt = playCalling.querySelector('.play-call-prompt');
+        if(prompt) prompt.textContent = 'Call Offense:';
     } else {
         offRows.forEach(r => r.style.display = 'none');
         if (defRow) defRow.style.display = 'flex';
-        playCalling.querySelector('.play-call-prompt').textContent = 'Call Defense:';
+        const prompt = playCalling.querySelector('.play-call-prompt');
+        if(prompt) prompt.textContent = 'Call Defense:';
     }
 
     // Clear any existing timeout
@@ -848,7 +986,10 @@ class LiveGameViewer {
    * Hide play calling interface
    */
   hidePlayCalling() {
-    const playCalling = this.modal.querySelector('.play-calling');
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    const playCalling = parent.querySelector('.play-calling');
     if (playCalling) {
       playCalling.style.display = 'none';
     }
@@ -909,10 +1050,17 @@ class LiveGameViewer {
    */
   setTempo(tempo) {
     this.tempo = tempo;
-    const tempoBtn = this.modal.querySelector(`.tempo-btn[data-tempo="${tempo}"]`);
-    if (tempoBtn) {
-      this.modal.querySelectorAll('.tempo-btn').forEach(btn => btn.classList.remove('active'));
-      tempoBtn.classList.add('active');
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    // Support both new control-btn and old tempo-btn classes
+    const selector = this.viewMode ? `button[data-tempo="${tempo}"]` : `.tempo-btn[data-tempo="${tempo}"]`;
+    const btn = parent.querySelector(selector);
+
+    if (btn) {
+      const allBtns = this.viewMode ? parent.querySelectorAll('button[data-tempo]') : parent.querySelectorAll('.tempo-btn');
+      allBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
     }
   }
 
@@ -921,9 +1069,14 @@ class LiveGameViewer {
    */
   togglePause() {
     this.isPaused = !this.isPaused;
-    const pauseBtn = this.modal.querySelector('.pause-btn');
-    if (pauseBtn) {
-      pauseBtn.textContent = this.isPaused ? '▶ Resume' : '⏸ Pause';
+    const parent = this.viewMode ? this.container : this.modal;
+    if (!parent) return;
+
+    // Support both new control-btn and old pause-btn
+    const btn = this.viewMode ? parent.querySelector('#btnPlayPause') : parent.querySelector('.pause-btn');
+
+    if (btn) {
+      btn.textContent = this.isPaused ? '▶ Resume' : '⏸ Pause';
     }
 
     if (!this.isPaused && this.isPlaying) {
@@ -1110,7 +1263,10 @@ class LiveGameViewer {
    * Render Box Score
    */
   renderBoxScore() {
-      const container = this.modal.querySelector('.box-score-panel');
+      const parent = this.viewMode ? this.container : this.modal;
+      if (!parent) return;
+
+      const container = parent.querySelector('.box-score-panel');
       if (!container) return;
 
       const home = this.gameState.home;
@@ -1141,7 +1297,10 @@ class LiveGameViewer {
    * Render Momentum
    */
   renderMomentum() {
-      const container = this.modal.querySelector('.momentum-panel');
+      const parent = this.viewMode ? this.container : this.modal;
+      if (!parent) return;
+
+      const container = parent.querySelector('.momentum-panel');
       if (!container) return;
 
       const m = this.gameState.momentum;
@@ -1164,7 +1323,10 @@ class LiveGameViewer {
    * Render Game Stats
    */
   renderGameStats() {
-      const container = this.modal.querySelector('.stats-panel');
+      const parent = this.viewMode ? this.container : this.modal;
+      if (!parent) return;
+
+      const container = parent.querySelector('.stats-panel');
       if (!container) return;
 
       const getTopStats = (teamKey) => {
@@ -1183,27 +1345,78 @@ class LiveGameViewer {
 
       const renderStatLine = (p, type) => {
           if (!p) return '<span style="color: #666;">-</span>';
-          if (type === 'pass') return `${p.name}: ${p.passComp}/${p.passAtt}, ${p.passYds} yds, ${p.passTD} TD`;
-          if (type === 'rush') return `${p.name}: ${p.rushAtt} car, ${p.rushYds} yds, ${p.rushTD} TD`;
-          if (type === 'rec') return `${p.name}: ${p.rec} rec, ${p.recYds} yds, ${p.recTD} TD`;
+          if (type === 'pass') return `<strong>${p.name}</strong><br>${p.passComp}/${p.passAtt}, ${p.passYds} yds, ${p.passTD} TD`;
+          if (type === 'rush') return `<strong>${p.name}</strong><br>${p.rushAtt} car, ${p.rushYds} yds, ${p.rushTD} TD`;
+          if (type === 'rec') return `<strong>${p.name}</strong><br>${p.rec} rec, ${p.recYds} yds, ${p.recTD} TD`;
       };
 
       container.innerHTML = `
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: var(--text);">
-            <div>
-                <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 5px;">${this.gameState.away.team.abbr} Leaders</div>
-                <div style="font-size: 0.85em; margin-bottom: 2px;">Pass: ${renderStatLine(awayStats.passer, 'pass')}</div>
-                <div style="font-size: 0.85em; margin-bottom: 2px;">Rush: ${renderStatLine(awayStats.rusher, 'rush')}</div>
-                <div style="font-size: 0.85em;">Rec: ${renderStatLine(awayStats.receiver, 'rec')}</div>
+        <div class="game-stats-panel" style="margin-top: 0;">
+            <div class="stats-column">
+                <h4>${this.gameState.away.team.abbr} Leaders</h4>
+                <div class="stat-leader">
+                    <div class="type">Passing</div>
+                    <div class="value">${renderStatLine(awayStats.passer, 'pass')}</div>
+                </div>
+                <div class="stat-leader">
+                    <div class="type">Rushing</div>
+                    <div class="value">${renderStatLine(awayStats.rusher, 'rush')}</div>
+                </div>
+                <div class="stat-leader">
+                    <div class="type">Receiving</div>
+                    <div class="value">${renderStatLine(awayStats.receiver, 'rec')}</div>
+                </div>
             </div>
-            <div>
-                <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 5px;">${this.gameState.home.team.abbr} Leaders</div>
-                <div style="font-size: 0.85em; margin-bottom: 2px;">Pass: ${renderStatLine(homeStats.passer, 'pass')}</div>
-                <div style="font-size: 0.85em; margin-bottom: 2px;">Rush: ${renderStatLine(homeStats.rusher, 'rush')}</div>
-                <div style="font-size: 0.85em;">Rec: ${renderStatLine(homeStats.receiver, 'rec')}</div>
+            <div class="stats-column">
+                <h4>${this.gameState.home.team.abbr} Leaders</h4>
+                <div class="stat-leader">
+                    <div class="type">Passing</div>
+                    <div class="value">${renderStatLine(homeStats.passer, 'pass')}</div>
+                </div>
+                <div class="stat-leader">
+                    <div class="type">Rushing</div>
+                    <div class="value">${renderStatLine(homeStats.rusher, 'rush')}</div>
+                </div>
+                <div class="stat-leader">
+                    <div class="type">Receiving</div>
+                    <div class="value">${renderStatLine(homeStats.receiver, 'rec')}</div>
+                </div>
             </div>
         </div>
       `;
+  }
+
+  /**
+   * Skip to next drive
+   */
+  skipToNextDrive() {
+      if (this.intervalId) clearTimeout(this.intervalId);
+      this.isPaused = false;
+      this.isPlaying = true;
+      this.isSkipping = true;
+
+      const currentPossession = this.gameState.ballPossession;
+      let safetyCounter = 0;
+
+      // Simulate until possession changes
+      while (this.gameState.ballPossession === currentPossession && !this.gameState.gameComplete && safetyCounter < 50) {
+          safetyCounter++;
+          const state = this.gameState;
+          const offense = state.ballPossession === 'home' ? state.home : state.away;
+          const defense = state.ballPossession === 'home' ? state.away : state.home;
+          const isUserOffense = offense.team.id === this.userTeamId;
+
+          const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+
+          this.playByPlay.push(play);
+          this.renderPlay(play);
+          this.updateGameState(play, state);
+          this.handleEndOfQuarter(state);
+      }
+
+      this.isSkipping = false;
+      this.isPaused = true; // Pause after drive
+      this.renderGame();
   }
 
   /**
@@ -1240,6 +1453,10 @@ class LiveGameViewer {
     if (this.modal) {
       this.modal.remove();
       this.modal = null;
+    }
+    if (this.container) {
+        this.container.innerHTML = '';
+        this.container = null;
     }
   }
 }
@@ -1293,7 +1510,13 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     const isUserGame = homeId === userTeamId || awayId === userTeamId;
     
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
+
+    // Start game but instead of showing modal, route to view
     window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+
+    // If not in view mode yet, route there
+    location.hash = '#/game-sim';
+
   } catch (error) {
     console.error('Error starting live game:', error);
     if (window.setStatus) {

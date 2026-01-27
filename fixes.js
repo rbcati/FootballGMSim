@@ -993,6 +993,8 @@ console.log('[LeagueCreationFix] Loaded');
     
     // Show target view
     const targetView = document.getElementById(targetViewId);
+    let viewContainer = targetView;
+
     if (targetView) {
       targetView.hidden = false;
       targetView.style.display = 'block';
@@ -1004,6 +1006,7 @@ console.log('[LeagueCreationFix] Loaded');
       if (hubView) {
         hubView.hidden = false;
         hubView.style.display = 'block';
+        viewContainer = hubView;
       }
     }
     
@@ -1044,7 +1047,8 @@ console.log('[LeagueCreationFix] Loaded');
     // Game is ready - log for debugging
     console.log('✅ Game ready, rendering view:', viewName);
     
-    // Render view-specific content
+    // Render view-specific content with timeout to prevent main thread freezing
+    // This allows the browser to render the "Loading..." state before heavy computations
     setTimeout(() => {
       try {
         switch(viewName) {
@@ -1192,9 +1196,13 @@ console.log('[LeagueCreationFix] Loaded');
               window.setupCoachingTabs();
             }
             // Render coaching stats
-            if (renderCoachingStats) {
-              renderCoachingStats();
+            // Prefer window.renderCoachingStats if available, otherwise fallback to imported
+            if (window.renderCoachingStats) {
+              window.renderCoachingStats();
               console.log('✅ Coaching rendered');
+            } else if (renderCoachingStats) {
+              renderCoachingStats();
+              console.log('✅ Coaching rendered (module)');
             } else {
               console.warn('⚠️ renderCoachingStats function not found');
             }
@@ -1257,13 +1265,40 @@ console.log('[LeagueCreationFix] Loaded');
               console.log('✅ Hall of Fame rendered');
             }
             break;
+          case 'game-sim':
+            if (window.liveGameViewer) {
+              // Ensure we have an active game simulation, otherwise redirect to hub
+              if (window.liveGameViewer.gameState) {
+                  window.liveGameViewer.renderToView('#game-sim');
+                  console.log('✅ Game Sim rendered');
+              } else {
+                  console.warn('⚠️ No active game for simulation, redirecting to hub');
+                  location.hash = '#/hub';
+              }
+            } else {
+                console.error('LiveGameViewer not found');
+            }
+            break;
           default:
             console.log('No specific renderer for view:', viewName);
         }
       } catch (error) {
         console.error('Error rendering view:', viewName, error);
+        if (viewContainer) {
+            viewContainer.innerHTML = `
+                <div class="error-panel" style="padding: 2rem; border: 1px solid rgba(255,59,48,0.3); background: rgba(255,59,48,0.05); border-radius: 8px; margin: 1rem;">
+                    <h3 style="color: #ff3b30; margin-top: 0;">Error Loading View</h3>
+                    <p>Something went wrong while loading this page. Please try again or return to the hub.</p>
+                    <div style="font-family: monospace; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; overflow-x: auto; margin: 1rem 0; font-size: 0.85rem;">
+                        ${error.message}<br>
+                        <span style="opacity: 0.7;">${error.stack ? error.stack.split('\n')[0] : ''}</span>
+                    </div>
+                    <button class="btn" onclick="location.hash='#/hub'" style="background: var(--surface); border: 1px solid var(--hairline);">Return to Hub</button>
+                </div>
+            `;
+        }
       }
-    }, 50);
+    }, 10);
   }
   
   // Basic settings renderer
