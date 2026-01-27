@@ -93,6 +93,8 @@ class RelocationManager {
         team.abbr = details.newAbbr;
         team.colors = { primary: details.primaryColor, secondary: details.secondaryColor };
         team.city = market.city;
+        team.marketSize = market.marketSize;
+        team.loyalty = market.loyalty;
         team.stadium = {
             name: `New ${market.city} Stadium`,
             capacity: stadium.capacity,

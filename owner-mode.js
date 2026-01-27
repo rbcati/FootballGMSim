@@ -108,6 +108,14 @@ function disableOwnerMode() {
  * @returns {number} Market multiplier
  */
 function getMarketMultiplier(team) {
+  // Check for dynamic market size first (from Relocation)
+  if (team.marketSize) {
+      if (team.marketSize === 'Huge') return 1.5;
+      if (team.marketSize === 'Large') return 1.3;
+      if (team.marketSize === 'Small') return 0.8;
+      return 1.0; // Medium
+  }
+
   // Simple market size calculation based on team location
   const largeMarkets = ['New York', 'Los Angeles', 'Chicago', 'Houston', 'Philadelphia', 'Phoenix', 'San Antonio', 'San Diego', 'Dallas', 'San Jose'];
   const smallMarkets = ['Green Bay', 'Buffalo', 'Jacksonville', 'Cleveland', 'Cincinnati', 'Pittsburgh', 'Kansas City', 'Indianapolis'];
@@ -179,7 +187,18 @@ function updateFanSatisfaction() {
   const totalGames = record.w + record.l + record.t;
   if (totalGames > 0) {
     const winPercentage = (record.w + record.t * 0.5) / totalGames;
-    satisfaction += (winPercentage - 0.5) * 40; // -20 to +20 based on win %
+    let perfModifier = (winPercentage - 0.5) * 40; // -20 to +20 based on win %
+
+    // Adjust for loyalty (Relocation)
+    if (team.loyalty) {
+        if (perfModifier < 0) { // Losing
+            if (team.loyalty === 'Very High') perfModifier *= 0.5; // Fans stay loyal
+            else if (team.loyalty === 'High') perfModifier *= 0.75;
+            else if (team.loyalty === 'Low') perfModifier *= 1.25; // Fans leave quickly
+        }
+    }
+
+    satisfaction += perfModifier;
   }
   
   // Pricing factor (30% of satisfaction)
@@ -490,16 +509,30 @@ function renderOwnerModeInterface() {
       hub.appendChild(container);
     }
   }
+
+  // Clear existing content
+  container.innerHTML = '';
   
   if (!ownerMode.enabled) {
-    container.innerHTML = `
-      <div class="card">
-        <h2>Owner Mode</h2>
-        <p>Take control of all business decisions including ticket prices, concessions, and staff management.</p>
-        <button class="btn btn-primary" onclick="enableOwnerMode()">Enable Owner Mode</button>
-      </div>
-    `;
-    return;
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const title = document.createElement('h2');
+      title.textContent = 'Owner Mode';
+      card.appendChild(title);
+
+      const p = document.createElement('p');
+      p.textContent = 'Take control of all business decisions including ticket prices, concessions, and staff management.';
+      card.appendChild(p);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary';
+      btn.textContent = 'Enable Owner Mode';
+      btn.addEventListener('click', enableOwnerMode);
+      card.appendChild(btn);
+
+      container.appendChild(card);
+      return;
   }
   
   // Calculate current revenue
@@ -509,9 +542,121 @@ function renderOwnerModeInterface() {
   const firingRecommendations = checkFiringRecommendations(team);
   const goals = ownerMode.goals || [];
   
-  container.innerHTML = `
-    <div class="card">
-      <h2>Owner Mode - ${team?.name || 'Team'} Management</h2>
+  const card = document.createElement('div');
+  card.className = 'card';
+
+  const title = document.createElement('h2');
+  title.textContent = `Owner Mode - ${team?.name || 'Team'} Management`;
+  card.appendChild(title);
+
+  const content = document.createElement('div');
+  content.className = 'owner-mode-content';
+  card.appendChild(content);
+
+  // Business Section
+  const businessSection = document.createElement('div');
+  businessSection.className = 'business-section';
+  content.appendChild(businessSection);
+
+  const businessTitle = document.createElement('h3');
+  businessTitle.textContent = 'Business Management';
+  businessSection.appendChild(businessTitle);
+
+  // Pricing Controls
+  const pricingControls = document.createElement('div');
+  pricingControls.className = 'pricing-controls';
+  businessSection.appendChild(pricingControls);
+
+  const pricingTitle = document.createElement('h4');
+  pricingTitle.textContent = 'Pricing Controls';
+  pricingControls.appendChild(pricingTitle);
+
+  const priceInputs = document.createElement('div');
+  priceInputs.className = 'price-inputs';
+  pricingControls.appendChild(priceInputs);
+
+  const createPriceInput = (label, value, min, max, key) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'price-input';
+
+      const labelEl = document.createElement('label');
+      labelEl.textContent = `${label}: $${value}`;
+      wrapper.appendChild(labelEl);
+
+      const input = document.createElement('input');
+      input.type = 'range';
+      input.min = min;
+      input.max = max;
+      input.value = value;
+      input.addEventListener('input', (e) => {
+          labelEl.textContent = `${label}: $${e.target.value}`;
+      });
+      input.addEventListener('change', (e) => {
+          const update = {};
+          update[key] = parseInt(e.target.value);
+          updateBusinessPrices(update);
+      });
+      wrapper.appendChild(input);
+
+      return wrapper;
+  };
+
+  priceInputs.appendChild(createPriceInput('Ticket Price', ownerMode.businessSettings.ticketPrice, OWNER_CONSTANTS.TICKET_PRICE_RANGE.min, OWNER_CONSTANTS.TICKET_PRICE_RANGE.max, 'ticketPrice'));
+  priceInputs.appendChild(createPriceInput('Concession Price', ownerMode.businessSettings.concessionPrice, OWNER_CONSTANTS.CONCESSION_PRICE_RANGE.min, OWNER_CONSTANTS.CONCESSION_PRICE_RANGE.max, 'concessionPrice'));
+  priceInputs.appendChild(createPriceInput('Parking Price', ownerMode.businessSettings.parkingPrice, OWNER_CONSTANTS.PARKING_PRICE_RANGE.min, OWNER_CONSTANTS.PARKING_PRICE_RANGE.max, 'parkingPrice'));
+  priceInputs.appendChild(createPriceInput('Merchandise Price', ownerMode.businessSettings.merchandisePrice, OWNER_CONSTANTS.MERCHANDISE_PRICE_RANGE.min, OWNER_CONSTANTS.MERCHANDISE_PRICE_RANGE.max, 'merchandisePrice'));
+
+  // Financial Summary
+  const finSummary = document.createElement('div');
+  finSummary.className = 'financial-summary';
+  businessSection.appendChild(finSummary);
+
+  const finTitle = document.createElement('h4');
+  finTitle.textContent = 'Financial Summary';
+  finSummary.appendChild(finTitle);
+
+  const finGrid = document.createElement('div');
+  finGrid.className = 'financial-grid';
+  finSummary.appendChild(finGrid);
+
+  const createFinItem = (label, value, valueClass = '') => {
+      const item = document.createElement('div');
+      item.className = 'financial-item';
+
+      const l = document.createElement('span');
+      l.className = 'label';
+      l.textContent = label;
+      item.appendChild(l);
+
+      const v = document.createElement('span');
+      v.className = `value ${valueClass}`;
+      v.textContent = value;
+      item.appendChild(v);
+
+      return item;
+  };
+
+  const satClass = ownerMode.fanSatisfaction >= 70 ? 'good' : ownerMode.fanSatisfaction >= 50 ? 'ok' : 'bad';
+  finGrid.appendChild(createFinItem('Fan Satisfaction:', `${ownerMode.fanSatisfaction}%`, satClass));
+  finGrid.appendChild(createFinItem('Revenue:', `$${(ownerMode.revenue.total / 1000000).toFixed(1)}M`));
+  finGrid.appendChild(createFinItem('Expenses:', `$${(ownerMode.expenses.total / 1000000).toFixed(1)}M`));
+  const profitClass = ownerMode.profit >= 0 ? 'good' : 'bad';
+  finGrid.appendChild(createFinItem('Profit:', `$${(ownerMode.profit / 1000000).toFixed(1)}M`, profitClass));
+
+
+  // Staff Management
+  const staffSection = document.createElement('div');
+  staffSection.className = 'staff-management';
+  content.appendChild(staffSection);
+
+  const staffTitle = document.createElement('h3');
+  staffTitle.textContent = 'Staff Management';
+  staffSection.appendChild(staffTitle);
+
+  if (firingRecommendations.length > 0) {
+      const recsDiv = document.createElement('div');
+      recsDiv.className = 'firing-recommendations';
+      staffSection.appendChild(recsDiv);
       
       <div class="owner-mode-content">
         <div class="goals-section" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
@@ -536,105 +681,57 @@ function renderOwnerModeInterface() {
         <div class="business-section">
           <h3>Business Management</h3>
           
-          <div class="pricing-controls">
-            <h4>Pricing Controls</h4>
-            <div class="price-inputs">
-              <div class="price-input">
-                <label>Ticket Price: $${ownerMode.businessSettings.ticketPrice}</label>
-                <input type="range" min="${OWNER_CONSTANTS.TICKET_PRICE_RANGE.min}" 
-                       max="${OWNER_CONSTANTS.TICKET_PRICE_RANGE.max}" 
-                       value="${ownerMode.businessSettings.ticketPrice}"
-                       onchange="updateBusinessPrices({ticketPrice: parseInt(this.value)})">
-              </div>
-              
-              <div class="price-input">
-                <label>Concession Price: $${ownerMode.businessSettings.concessionPrice}</label>
-                <input type="range" min="${OWNER_CONSTANTS.CONCESSION_PRICE_RANGE.min}" 
-                       max="${OWNER_CONSTANTS.CONCESSION_PRICE_RANGE.max}" 
-                       value="${ownerMode.businessSettings.concessionPrice}"
-                       onchange="updateBusinessPrices({concessionPrice: parseInt(this.value)})">
-              </div>
-              
-              <div class="price-input">
-                <label>Parking Price: $${ownerMode.businessSettings.parkingPrice}</label>
-                <input type="range" min="${OWNER_CONSTANTS.PARKING_PRICE_RANGE.min}" 
-                       max="${OWNER_CONSTANTS.PARKING_PRICE_RANGE.max}" 
-                       value="${ownerMode.businessSettings.parkingPrice}"
-                       onchange="updateBusinessPrices({parkingPrice: parseInt(this.value)})">
-              </div>
-              
-              <div class="price-input">
-                <label>Merchandise Price: $${ownerMode.businessSettings.merchandisePrice}</label>
-                <input type="range" min="${OWNER_CONSTANTS.MERCHANDISE_PRICE_RANGE.min}" 
-                       max="${OWNER_CONSTANTS.MERCHANDISE_PRICE_RANGE.max}" 
-                       value="${ownerMode.businessSettings.merchandisePrice}"
-                       onchange="updateBusinessPrices({merchandisePrice: parseInt(this.value)})">
-              </div>
-            </div>
-          </div>
+          const info = document.createElement('div');
+          info.className = 'recommendation-info';
+          const b = document.createElement('strong');
+          b.textContent = `${rec.position}: `;
+          info.appendChild(b);
+          info.appendChild(document.createTextNode(rec.name));
+          info.appendChild(document.createElement('br'));
+          const s = document.createElement('small');
+          s.textContent = rec.reason;
+          info.appendChild(s);
+          item.appendChild(info);
           
-          <div class="financial-summary">
-            <h4>Financial Summary</h4>
-            <div class="financial-grid">
-              <div class="financial-item">
-                <span class="label">Fan Satisfaction:</span>
-                <span class="value ${ownerMode.fanSatisfaction >= 70 ? 'good' : ownerMode.fanSatisfaction >= 50 ? 'ok' : 'bad'}">
-                  ${ownerMode.fanSatisfaction}%
-                </span>
-              </div>
-              <div class="financial-item">
-                <span class="label">Revenue:</span>
-                <span class="value">$${(ownerMode.revenue.total / 1000000).toFixed(1)}M</span>
-              </div>
-              <div class="financial-item">
-                <span class="label">Expenses:</span>
-                <span class="value">$${(ownerMode.expenses.total / 1000000).toFixed(1)}M</span>
-              </div>
-              <div class="financial-item">
-                <span class="label">Profit:</span>
-                <span class="value ${ownerMode.profit >= 0 ? 'good' : 'bad'}">
-                  $${(ownerMode.profit / 1000000).toFixed(1)}M
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="staff-management">
-          <h3>Staff Management</h3>
+          const btn = document.createElement('button');
+          btn.className = 'btn btn-danger btn-sm';
+          btn.textContent = 'Fire';
+          btn.addEventListener('click', () => {
+              fireStaffMember(rec.position === 'Head Coach' ? 'HC' : rec.position === 'Offensive Coordinator' ? 'OC' : 'DC');
+          });
+          item.appendChild(btn);
           
-          ${firingRecommendations.length > 0 ? `
-            <div class="firing-recommendations">
-              <h4>⚠️ Firing Recommendations</h4>
-              ${firingRecommendations.map(rec => `
-                <div class="firing-recommendation ${rec.severity}">
-                  <div class="recommendation-info">
-                    <strong>${rec.position}:</strong> ${rec.name}
-                    <br><small>${rec.reason}</small>
-                  </div>
-                  <button class="btn btn-danger btn-sm" 
-                          onclick="fireStaffMember('${rec.position === 'Head Coach' ? 'HC' : rec.position === 'Offensive Coordinator' ? 'OC' : 'DC'}')">
-                    Fire
-                  </button>
-                </div>
-              `).join('')}
-            </div>
-          ` : `
-            <div class="staff-status">
-              <h4>Staff Status</h4>
-              <p>All staff members are performing adequately.</p>
-            </div>
-          `}
-        </div>
-        
-        <div class="owner-actions">
-          <button class="btn btn-warning" onclick="location.hash='#/relocation'">Relocate Franchise</button>
-          <div class="spacer"></div>
-          <button class="btn btn-secondary" onclick="disableOwnerMode()">Disable Owner Mode</button>
-        </div>
-      </div>
-    </div>
-  `;
+          recsDiv.appendChild(item);
+      });
+  } else {
+      const status = document.createElement('div');
+      status.className = 'staff-status';
+      status.innerHTML = '<h4>Staff Status</h4><p>All staff members are performing adequately.</p>';
+      staffSection.appendChild(status);
+  }
+
+  // Actions
+  const actions = document.createElement('div');
+  actions.className = 'owner-actions';
+  content.appendChild(actions);
+
+  const relocateBtn = document.createElement('button');
+  relocateBtn.className = 'btn btn-warning';
+  relocateBtn.textContent = 'Relocate Franchise';
+  relocateBtn.addEventListener('click', () => { window.location.hash = '#/relocation'; });
+  actions.appendChild(relocateBtn);
+
+  const spacer = document.createElement('div');
+  spacer.className = 'spacer';
+  actions.appendChild(spacer);
+
+  const disableBtn = document.createElement('button');
+  disableBtn.className = 'btn btn-secondary';
+  disableBtn.textContent = 'Disable Owner Mode';
+  disableBtn.addEventListener('click', disableOwnerMode);
+  actions.appendChild(disableBtn);
+
+  container.appendChild(card);
 }
 
 // Make functions available globally

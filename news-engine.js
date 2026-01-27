@@ -1,6 +1,96 @@
 // news-engine.js
 import { Utils } from './utils.js';
 
+const MULTI_WEEK_STORYLINES = {
+    'contract_holdout': {
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return null;
+            // Trigger for star player with low morale
+            const star = team.roster.find(p => p.ovr > 85 && p.morale < 70);
+            if (star && Math.random() < 0.3) return { playerId: star.id, name: star.name };
+            return null;
+        },
+        stages: {
+            1: {
+                title: 'Contract Dispute',
+                description: (data) => `${data.name} is unhappy with his contract situation and is demanding a renegotiation.`,
+                choices: [
+                    {
+                        text: 'Promise Extension (Boost Morale)',
+                        effect: (league, story) => {
+                             const team = league.teams[story.teamId];
+                             const player = team.roster.find(p => p.id === story.data.playerId);
+                             if (player) player.morale = Math.min(100, player.morale + 20);
+                             story.resolved = true;
+                             return `You promised ${player ? player.name : 'him'} an extension. He seems satisfied for now.`;
+                        }
+                    },
+                    {
+                        text: 'Refuse Negotiation',
+                        effect: (league, story) => {
+                            story.stage = 2;
+                            story.nextUpdate = league.week + 1;
+                            const team = league.teams[story.teamId];
+                            const player = team.roster.find(p => p.id === story.data.playerId);
+                            if (player) player.morale = Math.max(0, player.morale - 15);
+                            return `You refused to negotiate. ${player ? player.name : 'He'} stormed out of your office.`;
+                        }
+                    }
+                ]
+            },
+            2: {
+                 title: 'Missed Practice',
+                 description: (data) => `${data.name} was absent from practice today without notice. The media is beginning to ask questions.`,
+                 choices: [
+                     {
+                         text: 'Fine The Player',
+                         effect: (league, story) => {
+                             story.stage = 3;
+                             story.nextUpdate = league.week + 1;
+                             const team = league.teams[story.teamId];
+                             const player = team.roster.find(p => p.id === story.data.playerId);
+                             if (player) player.morale = Math.max(0, player.morale - 20);
+                             return "You issued a fine for conduct detrimental to the team. The relationship is deteriorating rapidly.";
+                         }
+                     },
+                     {
+                         text: 'Ignore It',
+                         effect: (league, story) => {
+                             story.resolved = true;
+                             return "You decided to look the other way. He returned to practice the next day, but the tension remains.";
+                         }
+                     }
+                 ]
+            },
+            3: {
+                title: 'Trade Demand',
+                description: (data) => `${data.name} has formally requested a trade, citing "irreconcilable differences" with management.`,
+                choices: [
+                    {
+                        text: 'Seek Trade Partner',
+                        effect: (league, story) => {
+                            story.resolved = true;
+                            // In a real implementation, this would flag the player for trade block
+                            return `You announced that you will seek a trade partner for ${data.name}.`;
+                        }
+                    },
+                    {
+                        text: 'Refuse Trade',
+                        effect: (league, story) => {
+                            const team = league.teams[story.teamId];
+                            const player = team.roster.find(p => p.id === story.data.playerId);
+                            if (player) player.morale = 0;
+                            story.resolved = true;
+                            return `You publicly stated that ${player ? player.name : 'he'} will not be traded. He is furious and will likely play poorly.`;
+                        }
+                    }
+                ]
+            }
+        }
+    }
+};
+
 const INTERACTIVE_EVENTS = [
     {
         id: 'team_meeting_low_morale',
@@ -221,10 +311,38 @@ class NewsEngine {
 
     // New Method: Interactive Events
     generateInteractiveEvent(league) {
-        // Only one event per 3 weeks max
+        // 1. Check for Active Multi-Week Storylines that are ready for the next stage
+        if (league.storylines) {
+            const activeStory = league.storylines.find(s =>
+                !s.resolved &&
+                s.nextUpdate &&
+                s.nextUpdate <= league.week &&
+                s.teamId === window.state.userTeamId
+            );
+
+            if (activeStory) {
+                const template = MULTI_WEEK_STORYLINES[activeStory.type];
+                if (template && template.stages[activeStory.stage]) {
+                    const stageData = template.stages[activeStory.stage];
+
+                    // Construct event object
+                    return {
+                        id: `${activeStory.type}_stage_${activeStory.stage}`,
+                        title: stageData.title,
+                        description: typeof stageData.description === 'function' ? stageData.description(activeStory.data) : stageData.description,
+                        choices: stageData.choices.map(c => ({
+                            text: c.text,
+                            effect: (l) => c.effect(l, activeStory) // Wrap to pass story object
+                        }))
+                    };
+                }
+            }
+        }
+
+        // Only one random event per 3 weeks max
         if (league.week - this.lastEventWeek < 3) return null;
 
-        // Find a triggered event
+        // Find a triggered random event
         // Shuffle events to vary checks?
         const events = [...INTERACTIVE_EVENTS].sort(() => 0.5 - Math.random());
 
@@ -414,6 +532,34 @@ class NewsEngine {
     }
 
     checkForNewStorylines(league, week) {
+        if (!league.storylines) league.storylines = [];
+
+        // 1. Check for Multi-Week Storyline Triggers (User Team only for now)
+        if (window.state.userTeamId !== undefined) {
+            // Iterate through templates
+            for (const [type, template] of Object.entries(MULTI_WEEK_STORYLINES)) {
+                // Check if already active
+                const alreadyActive = league.storylines.some(s => s.type === type && s.teamId === window.state.userTeamId && !s.resolved);
+                if (!alreadyActive) {
+                    const data = template.trigger(league);
+                    if (data) {
+                        // Start new storyline
+                        league.storylines.push({
+                            id: Date.now() + Math.random(),
+                            type: type,
+                            teamId: window.state.userTeamId,
+                            stage: 1,
+                            data: data,
+                            resolved: false,
+                            startWeek: week,
+                            nextUpdate: week // Trigger immediately
+                        });
+                        console.log(`[NewsEngine] Started new storyline: ${type}`);
+                    }
+                }
+            }
+        }
+
         // Undefeated Watch (Start at Week 8)
         if (week === 8) {
             const undefeated = league.teams.filter(t => t.losses === 0 && t.ties === 0);
