@@ -140,6 +140,31 @@
    * Modal Component
    */
   class Modal extends Component {
+    /**
+     * Override render to append instead of replace
+     */
+    render(container = document.body) {
+      const html = this.renderHTML();
+
+      // Create temporary container to parse HTML
+      const temp = document.createElement('div');
+      temp.innerHTML = html;
+      this.element = temp.firstElementChild;
+
+      if (container) {
+        const containerEl = typeof container === 'string'
+          ? document.querySelector(container)
+          : container;
+
+        if (containerEl) {
+          containerEl.appendChild(this.element);
+        }
+      }
+
+      this.attachEvents();
+      return this.element;
+    }
+
     renderHTML() {
       const { 
         title, 
