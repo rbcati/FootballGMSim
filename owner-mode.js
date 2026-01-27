@@ -58,7 +58,8 @@ function initializeOwnerMode() {
       },
       profit: 0,
       fanSatisfaction: 75,
-      marketSize: 'Medium'
+      marketSize: 'Medium',
+      goals: [] // Goals array
     };
   }
   
@@ -81,6 +82,9 @@ function enableOwnerMode() {
     window.state.ownerMode.businessSettings.concessionPrice = Math.round(15 * marketMultiplier);
     window.state.ownerMode.businessSettings.parkingPrice = Math.round(25 * marketMultiplier);
     window.state.ownerMode.businessSettings.merchandisePrice = Math.round(50 * marketMultiplier);
+
+    // Generate initial goals
+    generateOwnerGoals(team);
   }
   
   window.setStatus('Owner mode enabled! You now control all business decisions.', 'success');
@@ -288,6 +292,9 @@ function calculateRevenue() {
   
   // Calculate profit
   ownerMode.profit = ownerMode.revenue.total - ownerMode.expenses.total;
+
+  // Check Goals
+  checkOwnerGoals(team);
 }
 
 /**
@@ -316,6 +323,57 @@ function calculateExpenses() {
     facilities: facilities,
     operations: operations
   };
+}
+
+/**
+ * Generate Owner Goals for the season
+ * @param {Object} team - Team object
+ */
+function generateOwnerGoals(team) {
+    if (!window.state.ownerMode) initializeOwnerMode();
+    const goals = [];
+
+    // Performance Goal: Based on Team Rating
+    const ovr = team.ratings?.overall || 75;
+    let winsTarget = Math.max(4, Math.min(13, Math.round((ovr - 60) / 2.5))); // 60->0 wins, 85->10 wins
+
+    goals.push({ id: 'wins', desc: `Win ${winsTarget}+ Games`, target: winsTarget, current: 0, achieved: false });
+
+    // Financial Goal
+    goals.push({ id: 'profit', desc: 'Positive Profit', target: 0, current: 0, achieved: false });
+
+    // Happiness Goal
+    goals.push({ id: 'satisfaction', desc: 'Fan Satisfaction > 60%', target: 60, current: 0, achieved: false });
+
+    window.state.ownerMode.goals = goals;
+}
+
+/**
+ * Check Owner Goals status
+ * @param {Object} team - Team object
+ */
+function checkOwnerGoals(team) {
+    if (!window.state.ownerMode || !window.state.ownerMode.goals) return;
+
+    const goals = window.state.ownerMode.goals;
+    const wins = team.record.w;
+    const profit = window.state.ownerMode.profit || 0;
+    const satisfaction = window.state.ownerMode.fanSatisfaction || 0;
+
+    goals.forEach(g => {
+        if (g.id === 'wins') {
+            g.current = wins;
+            if (wins >= g.target) g.achieved = true;
+        }
+        if (g.id === 'profit') {
+            g.current = profit; // in $
+            if (profit > g.target) g.achieved = true;
+        }
+        if (g.id === 'satisfaction') {
+            g.current = satisfaction;
+            if (satisfaction >= g.target) g.achieved = true;
+        }
+    });
 }
 
 /**
@@ -482,6 +540,7 @@ function renderOwnerModeInterface() {
   updateFanSatisfaction();
   
   const firingRecommendations = checkFiringRecommendations(team);
+  const goals = ownerMode.goals || [];
   
   const card = document.createElement('div');
   card.className = 'card';
@@ -599,13 +658,28 @@ function renderOwnerModeInterface() {
       recsDiv.className = 'firing-recommendations';
       staffSection.appendChild(recsDiv);
       
-      const recTitle = document.createElement('h4');
-      recTitle.textContent = '⚠️ Firing Recommendations';
-      recsDiv.appendChild(recTitle);
+      <div class="owner-mode-content">
+        <div class="goals-section" style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h3>Owner Goals</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                ${goals.map(g => {
+                    let displayCurrent = g.current;
+                    if(g.id === 'profit') displayCurrent = '$' + (g.current/1000000).toFixed(1) + 'M';
+                    if(g.id === 'satisfaction') displayCurrent = g.current + '%';
 
-      firingRecommendations.forEach(rec => {
-          const item = document.createElement('div');
-          item.className = `firing-recommendation ${rec.severity}`;
+                    return `
+                    <div style="background: var(--surface); padding: 10px; border-radius: 4px; border-left: 4px solid ${g.achieved ? '#48bb78' : '#ed8936'};">
+                        <div style="font-weight: bold;">${g.desc}</div>
+                        <div style="font-size: 0.9rem; margin-top: 5px;">Progress: ${displayCurrent}</div>
+                        ${g.achieved ? '<div style="color: #48bb78; font-size: 0.8rem; font-weight: bold;">COMPLETE</div>' : ''}
+                    </div>
+                    `;
+                }).join('') || '<p class="muted">No active goals.</p>'}
+            </div>
+        </div>
+
+        <div class="business-section">
+          <h3>Business Management</h3>
           
           const info = document.createElement('div');
           info.className = 'recommendation-info';
@@ -667,6 +741,8 @@ window.disableOwnerMode = disableOwnerMode;
 window.updateBusinessPrices = updateBusinessPrices;
 window.fireStaffMember = fireStaffMember;
 window.renderOwnerModeInterface = renderOwnerModeInterface;
+window.generateOwnerGoals = generateOwnerGoals;
+window.checkOwnerGoals = checkOwnerGoals;
 
 // Initialize on load
 if (window.state) {

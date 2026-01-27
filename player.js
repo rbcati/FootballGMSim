@@ -279,6 +279,23 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   }
 
   /**
+   * Generate Player Personality
+   */
+  function generatePersonality() {
+      const traits = [];
+      // Generate 1-2 traits
+      const numTraits = U ? U.rand(1, 2) : 1;
+      const possibleTraits = ['Winner', 'Loyal', 'Greedy', 'Clutch', 'Leader', 'Mentor', 'Injury Prone', 'Iron Man'];
+
+      for (let i = 0; i < numTraits; i++) {
+          const trait = U ? U.choice(possibleTraits) : 'Loyal';
+          if (!traits.includes(trait)) traits.push(trait);
+      }
+
+      return { traits };
+  }
+
+  /**
    * Returns an object with common stats initialized to 0.
    * @returns {Object} Zeroed stats object
    */
@@ -324,6 +341,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         injuryWeeks: 0,
         fatigue: 0,
         abilities: [],
+        personality: { traits: ['Loyal'] },
         stats: { game: {}, season: getZeroStats(), career: getZeroStats() },
         statsHistory: [],
         history: [],
@@ -352,6 +370,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       guaranteedPct: 0.5,
       ratings: generateBasicRatings(pos, playerOvr),
       abilities: [],
+      personality: generatePersonality(),
       college: generateCollege(),
       fatigue: 0,
       stats: { game: getZeroStats(), season: getZeroStats(), career: getZeroStats() },
@@ -1055,7 +1074,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         ovr: playerOvr,
         years: contractDetails.years,
         yearsTotal: contractDetails.yearsTotal || contractDetails.years, // Ensure yearsTotal is set for proration
-        baseAnnual: contractDetails.baseAnnual,
+        baseAnnual: contractDetails.baseAnnual * (player.personality?.traits?.includes('Greedy') ? 1.15 : (player.personality?.traits?.includes('Loyal') ? 0.9 : 1)),
         signingBonus: contractDetails.signingBonus || 0,
         guaranteedPct: contractDetails.guaranteedPct || 0.5,
 
@@ -1071,6 +1090,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         // Collections
         abilities: [],
         awards: [],
+        personality: generatePersonality(),
 
         // Statistics tracking
         stats: {
@@ -2288,7 +2308,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   export { initProgressionStats, calculateGameXP, addXP, applySkillTreeUpgrade };
 
   // Export main player functions
-  export { makePlayer, progressPlayer, getZeroStats };
+  export { makePlayer, progressPlayer, getZeroStats, generatePersonality };
 
   // Export legacy system
   export {

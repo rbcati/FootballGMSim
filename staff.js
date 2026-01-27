@@ -30,6 +30,11 @@ function makeStaff(position) {
         playcalling: U.rand(50, 99),
         scouting: U.rand(50, 99),
 
+        // Advanced Stats (for specific roles)
+        accuracy: U.rand(60, 99), // Scout accuracy
+        discovery: U.rand(50, 95), // Ability to find gems
+        speed: U.rand(50, 90),     // Scouting speed
+
         // RPG Elements
         xp: 0,
         level: 1,

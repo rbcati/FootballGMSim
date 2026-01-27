@@ -11,6 +11,8 @@ import { saveState } from './state.js';
 import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats, getZeroStats } from './player.js';
 import { processStaffXp } from './coach-system.js';
 import newsEngine from './news-engine.js';
+import { showWeeklyRecap } from './weekly-recap.js';
+import { checkAchievements } from './achievements.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -398,6 +400,11 @@ function startNewSeason() {
       }
     });
 
+    // Generate Owner Goals
+    if (window.generateOwnerGoals && window.state.userTeamId !== undefined) {
+        window.generateOwnerGoals(L.teams[window.state.userTeamId]);
+    }
+
     if (typeof window.makeSchedule === 'function') L.schedule = window.makeSchedule(L.teams);
     if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
     if (typeof window.saveState === 'function') window.saveState();
@@ -633,6 +640,11 @@ function simulateWeek(options = {}) {
         console.error('Error generating interactive event:', eventError);
     }
 
+    // Check Achievements (New Feature)
+    if (checkAchievements) {
+        checkAchievements(window.state);
+    }
+
     // Update UI to show results (if render option is true, default to true)
     try {
       if (options.render !== false) {
@@ -649,6 +661,11 @@ function simulateWeek(options = {}) {
         }
         if (typeof window.updateCapSidebar === 'function') {
           window.updateCapSidebar();
+        }
+
+        // Show Weekly Recap (New Feature)
+        if (showWeeklyRecap) {
+            showWeeklyRecap(previousWeek, results, L.news);
         }
 
         // Show success message
