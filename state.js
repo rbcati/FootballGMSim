@@ -705,6 +705,13 @@ export function saveState(stateToSave = null, options = {}) {
     const stateForSave = prepareStateForSave(stateObj, {
       keepBoxScoreWeeks: options.keepBoxScoreWeeks ?? 1
     });
+
+    // --- INTEGRATION FIX: Use Dashboard Save System if available ---
+    // This ensures auto-saves via beforeunload go to the same DB as manual saves
+    if (typeof window !== 'undefined' && window.saveGame && !options.legacyOnly) {
+        window.saveGame(stateForSave);
+        return true;
+    }
     const serialized = JSON.stringify(stateForSave);
     const activeSlot = stateObj.saveSlot || getActiveSaveSlot();
     const saveKey = saveKeyFor(activeSlot);
