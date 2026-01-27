@@ -316,7 +316,7 @@ window.renderPlayerCard = function(player) {
     const initial = player.name ? player.name.charAt(0) : '?';
 
     return `
-    <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.showPlayerDetails) window.showPlayerDetails(window.state.league.teams.find(t => t.roster.find(p => p.id === '${player.id}'))?.roster.find(p => p.id === '${player.id}'))">
+    <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
         <div class="card-content">
             <div class="portrait-container">
@@ -666,7 +666,14 @@ window.renderRoster = function() {
             tr.addEventListener('click', (e) => {
                 // Ensure clicking the checkbox doesn't trigger details
                 if (!e.target.matches('input[type="checkbox"]')) {
-                    location.hash = `#/player/${player.id}`;
+                    // Use modal view instead of navigation to keep context
+                    if (window.showPlayerDetails) {
+                        window.showPlayerDetails(player);
+                    } else if (window.viewPlayerStats) {
+                        window.viewPlayerStats(player.id);
+                    } else {
+                        location.hash = `#/player/${player.id}`;
+                    }
                 }
             });
         });
@@ -1850,6 +1857,23 @@ function initializeUI() {
 window.viewPlayerStats = function(playerId) {
   console.log('🔍 viewPlayerStats called with ID:', playerId);
   
+  // Find player object first to allow using showPlayerDetails (the rich card view)
+  let player = null;
+  if (window.state?.league?.teams) {
+      for (const team of window.state.league.teams) {
+          if (team.roster) {
+              player = team.roster.find(p => p.id === playerId);
+              if (player) break;
+          }
+      }
+  }
+
+  // Try to show detailed player card first (if player found)
+  if (player && window.showPlayerDetails) {
+      window.showPlayerDetails(player);
+      return;
+  }
+
   // Try to show player stats directly using the player stats viewer
   if (window.playerStatsViewer && window.playerStatsViewer.showPlayerStats) {
     window.playerStatsViewer.showPlayerStats(playerId);
