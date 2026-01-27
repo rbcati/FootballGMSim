@@ -42,12 +42,12 @@
   }
   
   .layout {
-    padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px)) !important;
-    padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px)) !important;
-    padding-top: calc(60px + env(safe-area-inset-top, 0px)) !important;
+    padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px)) !important;
+    padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px)) !important;
+    padding-top: calc(80px + env(safe-area-inset-top, 0px)) !important;
     padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
     grid-template-columns: 1fr !important;
-    gap: var(--space-2) !important;
+    gap: var(--space-4) !important;
     margin-top: 0 !important;
     min-height: auto !important;
   }
@@ -87,6 +87,9 @@
 
   .nav-toggle-container {
     z-index: 1002 !important;
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
   }
 
   /* Cards */
@@ -120,7 +123,7 @@
   
   /* Sidebar */
   .sidebar {
-    display: none;
+    display: none !important;
   }
   
   /* Grid layouts */
