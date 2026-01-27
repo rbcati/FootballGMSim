@@ -2,13 +2,6 @@
 // contract-management.js - Comprehensive contract management system
 'use strict';
 
-// Ensure necessary helper functions exist before use (prevents crashes)
-const U = global.Utils || window.Utils;
-const C = global.Constants || window.Constants;
-const capHitFor = global.capHitFor || window.capHitFor || ((player) => player.baseAnnual || 0);
-const recalcCap = global.recalcCap || window.recalcCap || (() => console.warn('recalcCap not found, skipping cap update.'));
-const setStatus = global.setStatus || window.setStatus || ((msg) => console.log('Status:', msg));
-
 /**
  * Helper function to round a number to a specific number of decimal places
  * @param {number} value - Value to round
@@ -32,7 +25,6 @@ function clamp(value, min, max) {
   if (typeof value !== 'number' || isNaN(value)) return min;
   return Math.max(min, Math.min(max, value));
 }
-
 
 // Contract management constants
 const CONTRACT_CONSTANTS = {
@@ -98,16 +90,26 @@ function getFifthYearOptionEligible(league, userTeamId) {
  * Calculates franchise tag salary for a position
  * @param {string} position - Player position
  * @param {Object} league - League object
+ * @param {Object} cachedSalaries - Optional pre-calculated salaries by position
  * @returns {number} Franchise tag salary in millions (rounded to 1 decimal)
  */
-function calculateFranchiseTagSalary(position, league) {
+function calculateFranchiseTagSalary(position, league, cachedSalaries = null) {
   if (!league?.teams) return 0;
   
-  const allPlayerSalaries = league.teams.flatMap(team => 
-    (team.roster || [])
-      .filter(player => player?.pos === position && player.baseAnnual > 0)
-      .map(player => capHitFor(player, 0)) // Use full current year cap hit
-  );
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  let allPlayerSalaries;
+
+  if (cachedSalaries && cachedSalaries[position]) {
+      allPlayerSalaries = cachedSalaries[position];
+  } else {
+      allPlayerSalaries = league.teams.flatMap(team =>
+        (team.roster || [])
+          .filter(player => player?.pos === position && player.baseAnnual > 0)
+          .map(player => capHitFor(player, 0)) // Use full current year cap hit
+      );
+      // Sort by salary (descending)
+      allPlayerSalaries.sort((a, b) => b - a);
+  }
   
   if (allPlayerSalaries.length < 5) {
     // Fallback if not enough players (using position estimates)
@@ -115,8 +117,6 @@ function calculateFranchiseTagSalary(position, league) {
     return estimates[position] || 10;
   }
   
-  // Sort by salary (descending) and get top 5 average
-  allPlayerSalaries.sort((a, b) => b - a);
   const top5Avg = allPlayerSalaries.slice(0, 5).reduce((sum, salary) => sum + salary, 0) / 5;
   
   return roundToDecimals(top5Avg * CONTRACT_CONSTANTS.FRANCHISE_TAG_MULTIPLIER, 1);
@@ -126,16 +126,26 @@ function calculateFranchiseTagSalary(position, league) {
  * Calculates transition tag salary for a position
  * @param {string} position - Player position
  * @param {Object} league - League object
+ * @param {Object} cachedSalaries - Optional pre-calculated salaries by position
  * @returns {number} Transition tag salary in millions (rounded to 1 decimal)
  */
-function calculateTransitionTagSalary(position, league) {
+function calculateTransitionTagSalary(position, league, cachedSalaries = null) {
   if (!league?.teams) return 0;
   
-  const allPlayerSalaries = league.teams.flatMap(team => 
-    team.roster
-      .filter(player => player?.pos === position && player.baseAnnual > 0)
-      .map(player => capHitFor(player, 0)) // Use full current year cap hit
-  );
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  let allPlayerSalaries;
+
+  if (cachedSalaries && cachedSalaries[position]) {
+      allPlayerSalaries = cachedSalaries[position];
+  } else {
+      allPlayerSalaries = league.teams.flatMap(team =>
+        team.roster
+          .filter(player => player?.pos === position && player.baseAnnual > 0)
+          .map(player => capHitFor(player, 0)) // Use full current year cap hit
+      );
+      // Sort by salary (descending)
+      allPlayerSalaries.sort((a, b) => b - a);
+  }
   
   if (allPlayerSalaries.length < 10) {
     // Fallback if not enough players (slightly lower estimates than franchise)
@@ -143,8 +153,6 @@ function calculateTransitionTagSalary(position, league) {
     return estimates[position] || 8;
   }
   
-  // Sort by salary (descending) and get top 10 average
-  allPlayerSalaries.sort((a, b) => b - a);
   const top10Avg = allPlayerSalaries.slice(0, 10).reduce((sum, salary) => sum + salary, 0) / 10;
   
   return roundToDecimals(top10Avg * CONTRACT_CONSTANTS.TRANSITION_TAG_MULTIPLIER, 1);
@@ -170,6 +178,9 @@ function calculateFifthYearOptionSalary(player) {
  * @returns {Object} Result object with success status and details
  */
 function applyFranchiseTag(league, team, player) {
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  const recalcCap = window.recalcCap || (() => {});
+
   if (!player || player.years !== 1) {
     return { success: false, message: 'Player must have an expiring contract to use the tag.' };
   }
@@ -208,8 +219,6 @@ function applyFranchiseTag(league, team, player) {
   };
 }
 
-// ... (applyTransitionTag, exerciseFifthYearOption functions remain similar but use U.round and setStatus)
-
 /**
  * Applies transition tag to a player
  * @param {Object} league - League object
@@ -218,6 +227,9 @@ function applyFranchiseTag(league, team, player) {
  * @returns {Object} Result object with success status and details
  */
 function applyTransitionTag(league, team, player) {
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  const recalcCap = window.recalcCap || (() => {});
+
   if (!player || player.years !== 1) {
     return { success: false, message: 'Player must have an expiring contract to use the transition tag.' };
   }
@@ -263,6 +275,9 @@ function applyTransitionTag(league, team, player) {
  * @returns {Object} Result object with success status and details
  */
 function exerciseFifthYearOption(league, team, player) {
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  const recalcCap = window.recalcCap || (() => {});
+
   const eligiblePlayers = getFifthYearOptionEligible(league, team.teamId || window.state?.userTeamId);
   if (!eligiblePlayers.includes(player)) {
     return { success: false, message: 'Player is not eligible for the 5th year option.' };
@@ -301,7 +316,8 @@ function exerciseFifthYearOption(league, team, player) {
  * @returns {Object} Result object with success status and details
  */
 function extendContract(league, team, player, years, baseSalary, signingBonus) {
-  // ... (Input validation checks remain)
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+  const recalcCap = window.recalcCap || (() => {});
   
   const totalContractValue = (baseSalary * years) + signingBonus;
   const firstYearCapHit = baseSalary + (signingBonus / years);
@@ -350,6 +366,8 @@ function extendContract(league, team, player, years, baseSalary, signingBonus) {
  * @returns {Object} Result of the update attempt
  */
 function updateContract(league, team, player, updates = {}) {
+  const recalcCap = window.recalcCap || (() => {});
+
   if (!league || !team || !player) {
     return { success: false, message: 'Invalid league, team, or player supplied.' };
   }
@@ -387,178 +405,205 @@ function updateContract(league, team, player, updates = {}) {
  * @param {number} userTeamId - User's team ID
  */
 function renderContractManagement(league, userTeamId) {
-  const container = document.getElementById('contractManagement');
-  if (!container) {
-    console.error('Contract management container not found');
-    return;
-  }
+  try {
+      const container = document.getElementById('contractManagement');
+      if (!container) {
+        console.error('Contract management container not found');
+        return;
+      }
 
-  if (!league || !league.teams) {
-    container.innerHTML = '<div class="card"><p class="muted">League data not available.</p></div>';
-    console.error('Invalid parameters for renderContractManagement: League data missing');
-    return;
-  }
+      if (!league || !league.teams) {
+        container.innerHTML = '<div class="card"><p class="muted">League data not available.</p></div>';
+        console.error('Invalid parameters for renderContractManagement: League data missing');
+        return;
+      }
 
-  if (typeof userTeamId !== 'number') {
-    userTeamId = window.state?.userTeamId || 0;
-  }
+      if (typeof userTeamId !== 'number') {
+        userTeamId = window.state?.userTeamId || 0;
+      }
 
-  const team = league.teams[userTeamId];
-  if (!team) {
-    container.innerHTML = '<div class="card"><p class="muted">Team not found. Please create a league.</p></div>';
-    return;
-  }
+      const team = league.teams[userTeamId];
+      if (!team) {
+        container.innerHTML = '<div class="card"><p class="muted">Team not found. Please create a league.</p></div>';
+        return;
+      }
 
-  // Ensure players have contracts
-  if (team.roster) {
-      (team.roster || []).forEach(p => {
-          if (!p.years || !p.baseAnnual) {
-              if (window.generateContract) {
-                  const c = window.generateContract(p.ovr || 50, p.pos);
-                  p.years = c.years;
-                  p.yearsTotal = c.yearsTotal;
-                  p.baseAnnual = c.baseAnnual;
-                  p.signingBonus = c.signingBonus;
-                  p.guaranteedPct = c.guaranteedPct;
+      const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+
+      // Ensure players have contracts
+      if (team.roster) {
+          (team.roster || []).forEach(p => {
+              if (!p.years || !p.baseAnnual) {
+                  if (window.generateContract) {
+                      const c = window.generateContract(p.ovr || 50, p.pos);
+                      p.years = c.years;
+                      p.yearsTotal = c.yearsTotal;
+                      p.baseAnnual = c.baseAnnual;
+                      p.signingBonus = c.signingBonus;
+                      p.guaranteedPct = c.guaranteedPct;
+                  }
               }
-          }
-      });
-  }
+          });
+      }
 
-  const expiring = getExpiringContracts(league, userTeamId);
-  const fifthYearEligible = getFifthYearOptionEligible(league, userTeamId);
+      const expiring = getExpiringContracts(league, userTeamId);
+      const fifthYearEligible = getFifthYearOptionEligible(league, userTeamId);
 
-  let html = `
-    <div class="contract-management-container">
-      <div class="contract-section">
-        <h3>Expiring Contracts (${expiring.length})</h3>
-        <p class="muted">Players with 1 year remaining on their contract</p>
-        <div class="contract-list">
-  `;
+      // --- OPTIMIZATION: Pre-calculate salaries by position for tag calculations ---
+      const salaryCache = {};
+      if (expiring.length > 0) {
+          // Flatten league roster ONCE into salaryCache
+          league.teams.forEach(t => {
+              (t.roster || []).forEach(p => {
+                  if (p.pos && p.baseAnnual > 0) {
+                      if (!salaryCache[p.pos]) salaryCache[p.pos] = [];
+                      salaryCache[p.pos].push(capHitFor(p, 0));
+                  }
+              });
+          });
+          // Sort salaries once
+          Object.values(salaryCache).forEach(salaries => salaries.sort((a, b) => b - a));
+      }
+      // -----------------------------------------------------------------------------
 
-  // Calculate next year's cap space (projected)
-  const nextYearCap = calculateNextYearCapSpace(league, team);
-  
-  if (expiring.length === 0) {
-    html += '<p class="muted">No expiring contracts at this time.</p>';
-  } else {
-    expiring.forEach(player => {
-      const currentCapHit = capHitFor(player, 0);
-      const franchiseSalary = calculateFranchiseTagSalary(player.pos, league);
-      const transitionSalary = calculateTransitionTagSalary(player.pos, league);
+      let html = `
+        <div class="contract-management-container">
+          <div class="contract-section">
+            <h3>Expiring Contracts (${expiring.length})</h3>
+            <p class="muted">Players with 1 year remaining on their contract</p>
+            <div class="contract-list">
+      `;
+
+      // Calculate next year's cap space (projected)
+      const nextYearCap = calculateNextYearCapSpace(league, team);
       
-      // Calculate position-specific grade
-      const positionGrade = calculatePositionGrade(player);
-      
-      html += `
-        <div class="contract-card">
-          <div class="contract-player-info">
-            <div>
-              <strong>${player.name || 'Unknown'}</strong> - ${player.pos || 'N/A'}
-              <div class="contract-details">
-                Age: ${player.age || 'N/A'} | OVR: ${player.ovr || 'N/A'} | 
-                Position Grade: <strong>${positionGrade.grade}</strong> (${positionGrade.description}) |
-                Current Cap: $${currentCapHit.toFixed(1)}M | Years Left: ${player.years || 0}
+      if (expiring.length === 0) {
+        html += '<p class="muted">No expiring contracts at this time.</p>';
+      } else {
+        expiring.forEach(player => {
+          const currentCapHit = capHitFor(player, 0);
+          // Pass salaryCache to optimize
+          const franchiseSalary = calculateFranchiseTagSalary(player.pos, league, salaryCache);
+          const transitionSalary = calculateTransitionTagSalary(player.pos, league, salaryCache);
+
+          // Calculate position-specific grade
+          const positionGrade = calculatePositionGrade(player);
+
+          html += `
+            <div class="contract-card">
+              <div class="contract-player-info">
+                <div>
+                  <strong>${player.name || 'Unknown'}</strong> - ${player.pos || 'N/A'}
+                  <div class="contract-details">
+                    Age: ${player.age || 'N/A'} | OVR: ${player.ovr || 'N/A'} |
+                    Position Grade: <strong>${positionGrade.grade}</strong> (${positionGrade.description}) |
+                    Current Cap: $${currentCapHit.toFixed(1)}M | Years Left: ${player.years || 0}
+                  </div>
+                  <div class="position-breakdown">
+                    ${positionGrade.breakdown}
+                  </div>
+                </div>
               </div>
-              <div class="position-breakdown">
-                ${positionGrade.breakdown}
+              <div class="contract-actions">
+                <button class="btn btn-sm" onclick="window.openContractExtensionModal('${player.id || ''}')">
+                  Extend Contract
+                </button>
+                ${!team.franchiseTagged ? `
+                  <button class="btn btn-sm" onclick="window.applyFranchiseTagToPlayer('${player.id || ''}')" title="Franchise Tag: $${franchiseSalary.toFixed(1)}M">
+                    Franchise Tag
+                  </button>
+                ` : ''}
+                ${!team.transitionTagged ? `
+                  <button class="btn btn-sm" onclick="window.applyTransitionTagToPlayer('${player.id || ''}')" title="Transition Tag: $${transitionSalary.toFixed(1)}M">
+                    Transition Tag
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      html += `
+            </div>
+          </div>
+
+          <div class="contract-section">
+            <h3>5th Year Option Eligible (${fifthYearEligible.length})</h3>
+            <p class="muted">1st round picks entering their 4th season</p>
+            <div class="contract-list">
+      `;
+
+      if (fifthYearEligible.length === 0) {
+        html += '<p class="muted">No players eligible for 5th year option.</p>';
+      } else {
+        fifthYearEligible.forEach(player => {
+          const optionSalary = calculateFifthYearOptionSalary(player);
+          html += `
+            <div class="contract-card">
+              <div class="contract-player-info">
+                <div>
+                  <strong>${player.name || 'Unknown'}</strong> - ${player.pos || 'N/A'}
+                  <div class="contract-details">
+                    Age: ${player.age || 'N/A'} | OVR: ${player.ovr || 'N/A'} |
+                    Draft Year: ${player.draftYear || 'N/A'} | 5th Year Salary: $${optionSalary.toFixed(1)}M
+                  </div>
+                </div>
+              </div>
+              <div class="contract-actions">
+                <button class="btn btn-sm" onclick="window.exerciseFifthYearOptionOnPlayer('${player.id || ''}')">
+                  Exercise 5th Year Option
+                </button>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      html += `
+            </div>
+          </div>
+
+          <div class="contract-section">
+            <h3>Salary Cap Summary</h3>
+            <div class="cap-summary">
+              <div class="cap-item">
+                <span>Total Cap (Current Year):</span>
+                <strong>$${team.capTotal?.toFixed(1) || '0.0'}M</strong>
+              </div>
+              <div class="cap-item">
+                <span>Cap Used:</span>
+                <strong>$${team.capUsed?.toFixed(1) || '0.0'}M</strong>
+              </div>
+              <div class="cap-item">
+                <span>Dead Cap:</span>
+                <strong>$${team.deadCap?.toFixed(1) || '0.0'}M</strong>
+              </div>
+              <div class="cap-item">
+                <span>Cap Room (Current Year):</span>
+                <strong style="color: ${(team.capRoom || 0) > 0 ? '#28a745' : '#dc3545'}">
+                  $${team.capRoom?.toFixed(1) || '0.0'}M
+                </strong>
+              </div>
+              <div class="cap-item cap-item-next-year">
+                <span>Projected Cap Room (Next Year):</span>
+                <strong style="color: ${(nextYearCap.room || 0) > 0 ? '#28a745' : '#dc3545'}">
+                  $${nextYearCap.room?.toFixed(1) || '0.0'}M
+                </strong>
+                <div class="muted small">(After expiring contracts)</div>
               </div>
             </div>
           </div>
-          <div class="contract-actions">
-            <button class="btn btn-sm" onclick="window.openContractExtensionModal('${player.id || ''}')">
-              Extend Contract
-            </button>
-            ${!team.franchiseTagged ? `
-              <button class="btn btn-sm" onclick="window.applyFranchiseTagToPlayer('${player.id || ''}')" title="Franchise Tag: $${franchiseSalary.toFixed(1)}M">
-                Franchise Tag
-              </button>
-            ` : ''}
-            ${!team.transitionTagged ? `
-              <button class="btn btn-sm" onclick="window.applyTransitionTagToPlayer('${player.id || ''}')" title="Transition Tag: $${transitionSalary.toFixed(1)}M">
-                Transition Tag
-              </button>
-            ` : ''}
-          </div>
         </div>
       `;
-    });
+
+      container.innerHTML = html;
+  } catch (err) {
+      console.error('Error in renderContractManagement:', err);
+      // Optional: Show error on UI
+      const container = document.getElementById('contractManagement');
+      if (container) container.innerHTML = '<div class="card error">Error loading contracts.</div>';
   }
-
-  html += `
-        </div>
-      </div>
-
-      <div class="contract-section">
-        <h3>5th Year Option Eligible (${fifthYearEligible.length})</h3>
-        <p class="muted">1st round picks entering their 4th season</p>
-        <div class="contract-list">
-  `;
-
-  if (fifthYearEligible.length === 0) {
-    html += '<p class="muted">No players eligible for 5th year option.</p>';
-  } else {
-    fifthYearEligible.forEach(player => {
-      const optionSalary = calculateFifthYearOptionSalary(player);
-      html += `
-        <div class="contract-card">
-          <div class="contract-player-info">
-            <div>
-              <strong>${player.name || 'Unknown'}</strong> - ${player.pos || 'N/A'}
-              <div class="contract-details">
-                Age: ${player.age || 'N/A'} | OVR: ${player.ovr || 'N/A'} | 
-                Draft Year: ${player.draftYear || 'N/A'} | 5th Year Salary: $${optionSalary.toFixed(1)}M
-              </div>
-            </div>
-          </div>
-          <div class="contract-actions">
-            <button class="btn btn-sm" onclick="window.exerciseFifthYearOptionOnPlayer('${player.id || ''}')">
-              Exercise 5th Year Option
-            </button>
-          </div>
-        </div>
-      `;
-    });
-  }
-
-  html += `
-        </div>
-      </div>
-
-      <div class="contract-section">
-        <h3>Salary Cap Summary</h3>
-        <div class="cap-summary">
-          <div class="cap-item">
-            <span>Total Cap (Current Year):</span>
-            <strong>$${team.capTotal?.toFixed(1) || '0.0'}M</strong>
-          </div>
-          <div class="cap-item">
-            <span>Cap Used:</span>
-            <strong>$${team.capUsed?.toFixed(1) || '0.0'}M</strong>
-          </div>
-          <div class="cap-item">
-            <span>Dead Cap:</span>
-            <strong>$${team.deadCap?.toFixed(1) || '0.0'}M</strong>
-          </div>
-          <div class="cap-item">
-            <span>Cap Room (Current Year):</span>
-            <strong style="color: ${(team.capRoom || 0) > 0 ? '#28a745' : '#dc3545'}">
-              $${team.capRoom?.toFixed(1) || '0.0'}M
-            </strong>
-          </div>
-          <div class="cap-item cap-item-next-year">
-            <span>Projected Cap Room (Next Year):</span>
-            <strong style="color: ${(nextYearCap.room || 0) > 0 ? '#28a745' : '#dc3545'}">
-              $${nextYearCap.room?.toFixed(1) || '0.0'}M
-            </strong>
-            <div class="muted small">(After expiring contracts)</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-
-  container.innerHTML = html;
 }
 
 /**
@@ -572,6 +617,7 @@ function calculateNextYearCapSpace(league, team) {
     return { total: 220, used: 0, room: 220 };
   }
   
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
   const C = window.Constants;
   const baseCap = C?.SALARY_CAP?.BASE || 220;
   const rollover = team.capRollover || 0;
@@ -695,6 +741,8 @@ if (typeof global !== 'undefined' && global !== null) {
   };
 }
 
+const setStatus = window.setStatus || ((msg) => console.log('Status:', msg));
+
 window.applyFranchiseTagToPlayer = function(playerId) {
   const league = window.state?.league;
   const team = league?.teams?.[window.state?.userTeamId];
@@ -749,6 +797,8 @@ window.openContractExtensionModal = function(playerId) {
   const team = league?.teams?.[window.state?.userTeamId];
   const player = team?.roster.find(p => p.id === playerId || p.id === parseInt(playerId));
   
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+
   if (!player) {
     setStatus('Player not found', 'error');
     return;
@@ -895,6 +945,8 @@ window.openContractExtensionModal = function(playerId) {
  * Updates contract extension summary
  */
 window.updateExtensionSummary = function() {
+  const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
+
   const yearsEl = document.getElementById('extYears');
   const baseSalaryEl = document.getElementById('extBaseSalary');
   const signingBonusEl = document.getElementById('extSigningBonus');
