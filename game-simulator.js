@@ -80,7 +80,13 @@ export function updateTeamStandings(teamId, stats) {
     }
 
     // Return null if we can't find the persistent record
-    if (!team) return null;
+    if (!team) {
+        console.log(`[QA-AUDIT] updateTeamStandings: Team ${teamId} NOT FOUND in global state!`);
+        return null;
+    }
+
+    // [QA-AUDIT]
+    console.log(`[QA-AUDIT] updateTeamStandings: Updating Team ${teamId} (${team.abbr || team.name}). Current Wins: ${team.wins}`);
 
     // 2. Apply Updates (incrementing existing values)
     if (stats.wins) team.wins = (team.wins || 0) + stats.wins;
@@ -111,6 +117,9 @@ export function updateTeamStandings(teamId, stats) {
     team.record.t = team.ties;
     team.record.pf = team.ptsFor;
     team.record.pa = team.ptsAgainst;
+
+    // [QA-AUDIT]
+    console.log(`[QA-AUDIT] updateTeamStandings: Updated Team ${teamId}. New Wins: ${team.wins}, Record.w: ${team.record.w}`);
 
     return team;
 }
@@ -158,6 +167,10 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
 
   // UPDATE STATE via Setter
   if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
+
+  // [QA-AUDIT]
+  console.log(`[QA-AUDIT] applyResult: Applying Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
+
   const updatedHome = updateTeamStandings(home.id, homeStats);
   const updatedAway = updateTeamStandings(away.id, awayStats);
 

@@ -445,6 +445,7 @@ function simulateWeek(options = {}) {
     }
 
     console.log(`[SIM-DEBUG] Simulating week ${L.week}...`);
+    console.log(`[QA-AUDIT] simulateWeek: Week ${L.week}, Schedule Length: ${scheduleWeeks.length}`);
     window.setStatus(`Simulating week ${L.week}...`);
 
     // NEW SEASON PROGRESSION CHECK
@@ -512,6 +513,7 @@ function simulateWeek(options = {}) {
 
     const pairings = weekData.games || [];
     console.log(`[SIM-DEBUG] Found ${pairings.length} games for week ${L.week}`);
+    console.log(`[QA-AUDIT] simulateWeek: Pairings found: ${pairings.length}`);
 
     if (pairings.length === 0) {
       console.warn(`No games scheduled for week ${L.week}`);
@@ -549,11 +551,13 @@ function simulateWeek(options = {}) {
 
     // Run Batch Simulation
     const results = simulateBatch(gamesToSim, options);
+    console.log(`[QA-AUDIT] simulateBatch returned ${results.length} results.`);
     const gamesSimulated = results.filter(r => !r.bye).length;
 
     // Store results for the week
     if (!L.resultsByWeek) L.resultsByWeek = {};
     L.resultsByWeek[L.week - 1] = results;
+    console.log(`[QA-AUDIT] Stored results for week ${L.week - 1}. Keys in resultsByWeek: ${Object.keys(L.resultsByWeek).join(',')}`);
 
     // Update single game records
     if (typeof window.updateSingleGameRecords === 'function') {
