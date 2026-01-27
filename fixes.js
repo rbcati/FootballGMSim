@@ -1243,6 +1243,14 @@ console.log('[LeagueCreationFix] Loaded');
               console.warn('⚠️ renderInjuriesPage function not found');
             }
             break;
+          case 'relocation':
+            if (window.renderRelocationPage) {
+              window.renderRelocationPage();
+              console.log('✅ Relocation page rendered');
+            } else {
+              console.warn('⚠️ renderRelocationPage function not found');
+            }
+            break;
           case 'hallOfFame':
             if (window.renderHallOfFame) {
               window.renderHallOfFame();
