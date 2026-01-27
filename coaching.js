@@ -1639,3 +1639,6 @@ function renderCoachingTrees(coaches) {
     </div>
   `;
 }
+
+// Make renderCoachingStats globally available
+window.renderCoachingStats = renderCoachingStats;
