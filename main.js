@@ -1,5 +1,7 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
+import { getActionItems } from './action-items.js';
+import { showWeeklyRecap } from './weekly-recap.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -300,6 +302,31 @@ class GameController {
                 `;
             }
 
+            // --- ACTION ITEMS (NEW) ---
+            let actionItemsHTML = '';
+            if (userTeam && !isOffseason) {
+                const { blockers, warnings } = getActionItems(L, userTeam);
+                if (blockers.length > 0 || warnings.length > 0) {
+                    const items = [...blockers, ...warnings];
+                    actionItemsHTML = `
+                        <div class="card mb-4 action-items" style="border-left: 4px solid ${blockers.length > 0 ? '#ef4444' : '#f59e0b'};">
+                            <h3>Action Items</h3>
+                            <div class="action-list">
+                                ${items.map(item => `
+                                    <div class="action-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
+                                        <div>
+                                            <strong style="color: ${item.id.includes('roster_max') || item.id.includes('salary_cap') ? '#ef4444' : '#f59e0b'}">${item.title}</strong>
+                                            <div style="font-size: 0.9rem; color: var(--text-muted);">${item.description}</div>
+                                        </div>
+                                        ${item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
             // --- NEWS SECTION ---
             let newsHTML = '';
             if (L.news && L.news.length > 0) {
@@ -459,6 +486,7 @@ class GameController {
             }
             
             hubContainer.innerHTML = `
+                ${actionItemsHTML}
                 ${headerDashboardHTML}
                 ${newsHTML}
                 ${topPlayersHTML}
@@ -543,11 +571,7 @@ class GameController {
             const btnSimWeekHQ = hubContainer.querySelector('#btnSimWeekHQ');
             if (btnSimWeekHQ) {
                 btnSimWeekHQ.addEventListener('click', () => {
-                    if (window.simulateWeek) {
-                        window.simulateWeek();
-                    } else {
-                        this.handleSimulateWeek();
-                    }
+                    this.handleGlobalAdvance();
                 });
             }
 
@@ -558,11 +582,7 @@ class GameController {
             const btnSimWeekHero = hubContainer.querySelector('#btnSimWeekHero');
             if (btnSimWeekHero) {
                 btnSimWeekHero.addEventListener('click', () => {
-                    if (window.simulateWeek) {
-                        window.simulateWeek();
-                    } else {
-                        this.handleSimulateWeek();
-                    }
+                    this.handleGlobalAdvance();
                 });
             }
 
@@ -610,16 +630,68 @@ class GameController {
     // This method has been moved to the async renderSchedule below (line ~519)
     // to properly delegate to scheduleViewer and avoid duplication
 
+    // --- GLOBAL ADVANCE (New) ---
+    handleGlobalAdvance() {
+        const L = window.state?.league;
+        const userTeam = L?.teams?.[window.state?.userTeamId];
+
+        if (!userTeam) return;
+
+        const { blockers } = getActionItems(L, userTeam);
+
+        if (blockers.length > 0) {
+            // Navigate to HQ
+            location.hash = '#/hub';
+            // Show modal
+            if (window.Modal) {
+                const list = blockers.map(b => `<li><strong>${b.title}</strong>: ${b.description}</li>`).join('');
+                const modal = new window.Modal({
+                    title: 'Cannot Advance',
+                    content: `
+                        <div class="blocker-modal">
+                            <p>You have blocking issues that must be resolved:</p>
+                            <ul>${list}</ul>
+                            <button class="btn primary" onclick="this.closest('.modal').remove()">OK</button>
+                        </div>
+                    `
+                });
+                modal.render();
+            } else {
+                alert(`Cannot advance:\n${blockers.map(b => b.description).join('\n')}`);
+            }
+            return;
+        }
+
+        // Proceed
+        this.handleSimulateWeek();
+    }
+
     // --- SIMULATION FUNCTIONS ---
     handleSimulateWeek() {
         try {
             console.log('Simulating week...');
             this.setStatus('Simulating week...', 'info');
+
+            // Capture week before sim
+            const currentWeek = window.state?.league?.week || 1;
+
             if (window.simulateWeek) {
                 window.simulateWeek();
                 this.saveGameState(); // Auto-save after week
                 this.setStatus('Week simulated successfully', 'success');
+
+                // Show Recap
+                const L = window.state.league;
+                const results = L.resultsByWeek[currentWeek - 1]; // Results are 0-indexed
+                // Ensure results exist before showing recap
+                if (results) {
+                    setTimeout(() => {
+                        showWeeklyRecap(currentWeek, results, L.news);
+                    }, 500);
+                }
+
             } else if (window.state?.league) {
+                // Fallback
                 const L = window.state.league;
                 if (L.week < 18) {
                     L.week++;
@@ -1313,6 +1385,14 @@ class GameController {
                 }
             });
         }
+
+        // --- NEW: Global Advance Button ---
+        const btnGlobalAdvance = document.getElementById('btnGlobalAdvance');
+        if (btnGlobalAdvance) {
+            this.addEventListener(btnGlobalAdvance, 'click', () => {
+                this.handleGlobalAdvance();
+            });
+        }
     }
 
     addEventListener(element, event, handler) {
@@ -1663,6 +1743,9 @@ window.handleSimulateSeason = function() {
         window.setStatus('Game not ready', 'error');
     }
 };
+// Export Global Advance
+window.handleGlobalAdvance = gameController.handleGlobalAdvance.bind(gameController);
+
 console.log('✅ GameController functions exported globally (patched version)');
 
 // --- HEADER & DASHBOARD FIXES ---

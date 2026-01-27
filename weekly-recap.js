@@ -1,4 +1,5 @@
 // weekly-recap.js
+// Integrated with Core Loop
 'use strict';
 
 /**

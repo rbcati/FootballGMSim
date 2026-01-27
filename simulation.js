@@ -296,6 +296,31 @@ function startOffseason() {
       try {
         window.updateFanSatisfaction();
         window.calculateRevenue();
+
+        // Check Job Security (New Feature)
+        if (typeof window.checkJobSecurity === 'function') {
+            const firingResult = window.checkJobSecurity(window.state.league.teams[window.state.userTeamId]);
+            if (firingResult.fired) {
+                // Show modal and reset
+                if (window.Modal) {
+                    new window.Modal({
+                        title: 'TERMINATED',
+                        content: `<div style="text-align:center;">
+                                    <h2 style="color: #ef4444; margin-bottom: 15px;">You Have Been Fired</h2>
+                                    <p style="margin-bottom: 20px;">${firingResult.reason}</p>
+                                    <button class="btn danger large" onclick="localStorage.removeItem('football_gm_league_' + window.state.leagueName); location.reload()">Game Over (Delete Save)</button>
+                                  </div>`,
+                        size: 'normal'
+                    }).render();
+                    return; // Stop processing
+                } else {
+                    alert(`FIRED: ${firingResult.reason}`);
+                    location.reload();
+                    return;
+                }
+            }
+        }
+
         if (typeof window.renderOwnerModeInterface === 'function') {
           window.renderOwnerModeInterface();
         }
