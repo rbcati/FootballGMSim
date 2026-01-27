@@ -16,6 +16,7 @@ This document outlines technical debt, code duplication, and refactoring opportu
 ### UI Rendering
 *   **Issue**: Multiple files (`ui.js`, `playoffs.js`, `roster.js`) implement their own HTML string builders for player cards, team rows, and game results.
 *   **Recommendation**: Create a dedicated `Component` library or use a lightweight templating system to standardize UI elements.
+*   **Status**: *In Progress*. `ui.js` refactored to use `ui-components.js` `Modal` class.
 
 ## 2. Global State & Dependencies
 

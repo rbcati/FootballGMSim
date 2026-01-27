@@ -112,3 +112,34 @@ Refactored the core simulation loop to eliminate duplication and expanded the Co
 
 ## Technical Risks & Notes
 - **Poaching Logic:** Currently, poaching creates a new HC entity. Future iterations should track coaching history more persistently across teams.
+
+---
+
+# Day 5 Optimization & Expansion
+
+## Summary of Changes
+Implemented a robust "Advanced Training System" allowing weekly customization of team preparation, and modernized UI components.
+
+### 1. Code Audit & Refactoring
+- **UI Modernization:** Refactored `ui.js` to utilize the modular `Modal` class from `ui-components.js` for player details and new menus, replacing fragile HTML string concatenation.
+- **Component Reuse:** Leveraged the shared `Modal` component to ensure consistent styling and behavior across different UI interactions.
+
+### 2. Feature Pressure-Testing (Training System)
+- **New Feature:** Implemented `Advanced Training` in `training.js`. Users can now set:
+    - **Intensity:** Low (Safe), Normal, Heavy (High Reward/High Risk).
+    - **Focus:** Balanced, Offense (+XP Offense), Defense (+XP Defense).
+- **Dynamic Progression:** Training choices now directly impact weekly XP generation and injury probabilities.
+- **Age Regression:** Added logic to simulate physical decline for older players (>29yo), adding realism to roster management.
+
+### 3. UX & Performance
+- **Hub Integration:** Added a "Train" quick action button to the Hub dashboard for easy access.
+- **Feedback:** Immediate visual confirmation of training setting changes via modal interface.
+
+## Impact Ranking
+| Feature | Impact | Description |
+| :--- | :--- | :--- |
+| **Advanced Training** | **High** | Adds weekly strategic decision-making. Users must balance development vs. injury risk. |
+| **UI Refactor** | **Low** | Improves code maintainability and UI consistency. |
+
+## Technical Risks & Notes
+- **Balance:** The "Heavy" intensity multiplier (1.3x) and injury risk need to be monitored in long-term sims to ensure it's not exploitable or too punitive.
