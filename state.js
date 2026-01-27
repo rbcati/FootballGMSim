@@ -617,6 +617,16 @@ function prepareStateForSave(stateObj, { keepBoxScoreWeeks = 1 } = {}) {
 export function saveState(stateToSave = null, options = {}) {
   try {
     const stateObj = stateToSave || window.state;
+
+    // [QA-AUDIT]
+    if (stateObj && stateObj.league) {
+        console.log(`[QA-AUDIT] saveState: Saving state. Week: ${stateObj.league.week}, Teams Count: ${stateObj.league.teams ? stateObj.league.teams.length : 0}`);
+        if (stateObj.league.teams && stateObj.league.teams.length > 0) {
+             console.log(`[QA-AUDIT] saveState: Sample Team 0 Wins: ${stateObj.league.teams[0].wins}`);
+        }
+    } else {
+        console.log(`[QA-AUDIT] saveState: Warning - stateObj or stateObj.league is missing!`);
+    }
     
     if (!stateObj) {
       console.error('No state object available to save');
