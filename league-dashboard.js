@@ -58,6 +58,67 @@ export function renderDashboard() {
     const list = document.getElementById('leagues-list');
     if (!list) return;
 
+    // --- NEW: Add Resume Button for Last Played League ---
+    const lastPlayed = getLastPlayedLeague();
+
+    // Remove existing resume section if present (to avoid duplicates)
+    const existingResume = document.getElementById('resume-league-section');
+    if (existingResume) existingResume.remove();
+
+    if (lastPlayed) {
+        // Verify the league actually exists in storage
+        if (localStorage.getItem(DB_KEY_PREFIX + lastPlayed)) {
+            const resumeSection = document.createElement('div');
+            resumeSection.id = 'resume-league-section';
+            resumeSection.className = 'dashboard-section mb-4';
+
+            const h3 = document.createElement('h3');
+            h3.textContent = 'Resume Playing';
+            resumeSection.appendChild(h3);
+
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.cssText = 'background: linear-gradient(to right, #2d3748, #1a202c); border-left: 5px solid var(--accent); margin-bottom: 20px;';
+
+            const flexDiv = document.createElement('div');
+            flexDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 10px;';
+
+            const infoDiv = document.createElement('div');
+            const nameDiv = document.createElement('div');
+            nameDiv.style.cssText = 'font-size: 1.4rem; font-weight: bold; color: white;';
+            nameDiv.textContent = lastPlayed;
+
+            const labelDiv = document.createElement('div');
+            labelDiv.style.cssText = 'font-size: 0.9rem; color: #cbd5e0;';
+            labelDiv.textContent = 'Last Active League';
+
+            infoDiv.appendChild(nameDiv);
+            infoDiv.appendChild(labelDiv);
+
+            const btn = document.createElement('button');
+            btn.className = 'btn primary';
+            btn.style.cssText = 'padding: 12px 24px; font-size: 1.1rem;';
+            btn.textContent = 'Resume Game';
+            btn.onclick = () => window.loadLeague(lastPlayed);
+
+            flexDiv.appendChild(infoDiv);
+            flexDiv.appendChild(btn);
+            card.appendChild(flexDiv);
+            resumeSection.appendChild(card);
+
+            // Insert at the top of the dashboard content, after the title
+            const container = document.querySelector('#leagueDashboard .card');
+            if (container) {
+                 const title = container.querySelector('h1');
+                 if (title && title.nextSibling) {
+                     container.insertBefore(resumeSection, title.nextSibling);
+                 } else {
+                     container.prepend(resumeSection);
+                 }
+            }
+        }
+    }
+
     list.innerHTML = '';
     let hasLeagues = false;
     let leagueCount = 0;
@@ -233,12 +294,14 @@ export function createNewLeague(name) {
 }
 
 // Expose globally
-window.saveGame = saveGame;
-window.renderDashboard = renderDashboard;
-window.loadLeague = loadLeague;
-window.deleteLeague = deleteLeague;
-window.createNewLeague = createNewLeague;
-window.getLastPlayedLeague = getLastPlayedLeague;
+if (typeof window !== 'undefined') {
+    window.saveGame = saveGame;
+    window.renderDashboard = renderDashboard;
+    window.loadLeague = loadLeague;
+    window.deleteLeague = deleteLeague;
+    window.createNewLeague = createNewLeague;
+    window.getLastPlayedLeague = getLastPlayedLeague;
+}
 
 // Bind UI events when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
