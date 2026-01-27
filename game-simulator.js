@@ -246,11 +246,14 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   if (modifiers.passAccuracy) baseCompPct *= modifiers.passAccuracy;
 
   const defenseFactor = 100 - (defenseStrength || 70);
-  const compPct = Math.max(45, Math.min(85, baseCompPct + (defenseFactor - 50) * 0.3));
+  // Tuned for ~64% average
+  const compPct = Math.max(45, Math.min(85, 58 + (baseCompPct - 70) * 0.5 + (defenseFactor - 50) * 0.3));
   const completions = Math.round(attempts * (compPct / 100));
 
-  const avgYardsPerAttempt = 5 + (throwPower / 20) + (teamScore / 5);
-  const yards = Math.round(completions * avgYardsPerAttempt + U.rand(-50, 100));
+  // Renamed to YardsPerComp for clarity, and reduced TeamScore impact
+  // Target ~11.0 YPCmp
+  const avgYardsPerComp = 6 + (throwPower / 25) + (teamScore / 20);
+  const yards = Math.round(completions * avgYardsPerComp + U.rand(-30, 60));
 
   const redZoneEfficiency = (awareness + throwAccuracy) / 200;
   const touchdowns = Math.max(0, Math.min(6, Math.round(teamScore / 7 + redZoneEfficiency * 2 + U.rand(-1, 2))));
@@ -295,7 +298,8 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   let carries = Math.round(baseTeamCarries * share);
   carries = Math.max(2, Math.min(35, carries));
 
-  const baseYPC = 3.5 + (speed + trucking + juking) / 100;
+  // Reduced base YPC to ~4.2 average
+  const baseYPC = 2.5 + (speed + trucking + juking) / 225;
   const defenseFactor = (100 - (defenseStrength || 70)) / 50;
   const yardsPerCarry = Math.max(2.0, Math.min(8.0, baseYPC + defenseFactor + U.rand(-0.5, 0.5)));
   const rushYd = Math.round(carries * yardsPerCarry + U.rand(-10, 20));
@@ -363,10 +367,12 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
 
   const catchRate = (catching + catchInTraffic) / 2;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
-  const receptionPct = Math.max(40, Math.min(90, catchRate + defenseFactor * 20));
+  // Lowered catch rate to realistic ~60%
+  const receptionPct = Math.max(40, Math.min(90, catchRate - 15 + defenseFactor * 20));
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (receptionPct / 100) + U.rand(-1, 1))));
 
-  const avgYardsPerCatch = 8 + (speed / 15);
+  // Adjusted YPC to match QB output ~11.0
+  const avgYardsPerCatch = 7 + (speed / 18);
   const recYd = Math.round(receptions * avgYardsPerCatch + U.rand(-20, 50));
 
   const recTD = Math.max(0, Math.min(3, Math.round((receptions / 5) * (teamScore / 14) + U.rand(-0.5, 1.5))));
