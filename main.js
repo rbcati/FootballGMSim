@@ -1470,6 +1470,11 @@ class GameController {
                     window.renderInjuriesPage();
                 }
                 break;
+            case 'relocation':
+                if (window.renderRelocationPage) {
+                    window.renderRelocationPage();
+                }
+                break;
             case 'settings':
                 if (window.renderSettings) {
                     window.renderSettings();
