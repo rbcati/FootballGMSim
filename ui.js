@@ -152,14 +152,29 @@ window.show = function(viewId) {
       pill.setAttribute('aria-current', isActive ? 'page' : null);
     });
 
+    // Update sidebar nav (.nav-item)
+    document.querySelectorAll('.nav-item').forEach(item => {
+      const href = item.getAttribute('href');
+      const isActive = href === `#/${viewId}`;
+      if (isActive) {
+          item.classList.add('active');
+          item.setAttribute('aria-current', 'page');
+      } else {
+          item.classList.remove('active');
+          item.removeAttribute('aria-current');
+      }
+    });
+
     // Update bottom nav
     document.querySelectorAll('.nav-item-bottom').forEach(item => {
         const href = item.getAttribute('href');
         const isActive = href === `#/${viewId}`;
         if (isActive) {
             item.classList.add('active');
+            item.setAttribute('aria-current', 'page');
         } else {
             item.classList.remove('active');
+            item.removeAttribute('aria-current');
         }
     });
 

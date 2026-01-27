@@ -1007,8 +1007,8 @@ console.log('[LeagueCreationFix] Loaded');
       }
     }
     
-    // Update navigation active states (both nav-item and nav-pill for compatibility)
-    document.querySelectorAll('.nav-item, .nav-pill').forEach(item => {
+    // Update navigation active states (nav-item, nav-pill, and nav-item-bottom)
+    document.querySelectorAll('.nav-item, .nav-pill, .nav-item-bottom').forEach(item => {
       const href = item.getAttribute('href');
       const isActive = href === path;
       
