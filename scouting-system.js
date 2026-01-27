@@ -112,16 +112,30 @@ function scoutProspect(prospectId, thoroughness = 'basic') {
  * @returns {Object} Scouting result
  */
 function performScouting(prospect, thoroughness) {
-  const accuracy = SCOUTING_CONSTANTS.SCOUTING_ACCURACY[thoroughness.toUpperCase()];
+  // Get User's Scout
+  const userTeamId = window.state.userTeamId;
+  const team = window.state.league.teams[userTeamId];
+  const scout = team.staff ? team.staff.scout : null;
+
+  // Base Accuracy
+  let accuracy = SCOUTING_CONSTANTS.SCOUTING_ACCURACY[thoroughness.toUpperCase()];
+
+  // Apply Scout Bonus
+  if (scout) {
+      const scoutAccuracy = scout.accuracy || 75;
+      const bonus = (scoutAccuracy - 75) * 0.5; // Up to +12.5% accuracy
+      accuracy += bonus;
+  }
+
   const actualOvr = prospect.ovr;
   
   // Calculate scouting accuracy with some randomness
   const accuracyRoll = Math.random() * 100;
-  const effectiveAccuracy = accuracy + (accuracyRoll - 50) * 0.1; // ±5% variation
+  const effectiveAccuracy = Math.min(99, accuracy + (accuracyRoll - 50) * 0.1); // ±5% variation
   
   // Determine how close the scouting gets to actual rating
   const accuracyFactor = effectiveAccuracy / 100;
-  const uncertainty = (1 - accuracyFactor) * 10; // Max 10 point uncertainty
+  const uncertainty = (1 - accuracyFactor) * 15; // Max 15 point uncertainty
   
   // Update scouted overall range
   const newMin = Math.max(40, actualOvr - uncertainty);
@@ -133,6 +147,14 @@ function performScouting(prospect, thoroughness) {
     confidence: Math.round(effectiveAccuracy)
   };
   
+  // Gem Discovery Chance
+  if (scout && scout.discovery) {
+      const discoveryChance = scout.discovery / 200; // e.g., 90/200 = 45%
+      if (Math.random() < discoveryChance && prospect.ovr > 80 && prospect.projectedRound > 3) {
+          prospect.isGem = true; // Flag for UI
+      }
+  }
+
   // Generate detailed scouting report
   const report = generateScoutingReport(prospect, thoroughness, effectiveAccuracy);
   
@@ -365,11 +387,28 @@ function renderScoutingInterface() {
   
   const budgetRemaining = scouting.budget - scouting.used;
   const budgetPercent = (budgetRemaining / scouting.budget) * 100;
+
+  // Get Head Scout
+  const userTeamId = window.state.userTeamId;
+  const team = window.state.league.teams[userTeamId];
+  const scout = team.staff ? team.staff.scout : null;
+  const scoutInfo = scout ? `
+      <div class="scout-profile" style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+          <div style="font-weight: bold; font-size: 1.1rem;">Head Scout: ${scout.name}</div>
+          <div style="display: flex; gap: 15px; font-size: 0.9rem; color: #ccc; margin-top: 5px;">
+              <span>Accuracy: <span style="color:white;">${scout.accuracy}</span></span>
+              <span>Discovery: <span style="color:white;">${scout.discovery}</span></span>
+              <span>Speed: <span style="color:white;">${scout.speed}</span></span>
+          </div>
+      </div>
+  ` : '<div class="muted">No Head Scout hired.</div>';
   
   container.innerHTML = `
     <div class="card">
       <h2>Scouting - ${window.state.league?.year + 1 || 2026} Draft Class</h2>
       
+      ${scoutInfo}
+
       <div class="scouting-overview">
         <div class="scouting-budget">
           <h3>Scouting Budget</h3>
@@ -447,9 +486,11 @@ function renderProspectsList(prospects) {
     const scouting = window.state.scouting;
     const report = scouting.scoutingReports[prospect.id];
     const isScouted = prospect.scouted || report;
+    const isGem = prospect.isGem;
     
     return `
-      <div class="prospect-card ${isScouted ? 'scouted' : 'unscouted'}" data-prospect-id="${prospect.id}">
+      <div class="prospect-card ${isScouted ? 'scouted' : 'unscouted'} ${isGem ? 'gem-card' : ''}" data-prospect-id="${prospect.id}">
+        ${isGem ? '<div class="gem-badge">💎 HIDDEN GEM</div>' : ''}
         <div class="prospect-header">
           <h4 class="prospect-name">${prospect.name}</h4>
           <span class="prospect-position">${prospect.pos}</span>

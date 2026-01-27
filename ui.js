@@ -315,6 +315,14 @@ window.renderPlayerCard = function(player) {
     // Portrait Initial
     const initial = player.name ? player.name.charAt(0) : '?';
 
+    // Personality Traits
+    let traitsHtml = '';
+    if (player.personality && player.personality.traits) {
+        traitsHtml = player.personality.traits.map(t =>
+            `<span class="tag" style="background: rgba(255,255,255,0.1); font-size: 0.7rem; margin-right: 2px;">${t}</span>`
+        ).join('');
+    }
+
     return `
     <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.showPlayerDetails) window.showPlayerDetails(window.state.league.teams.find(t => t.roster.find(p => p.id === '${player.id}'))?.roster.find(p => p.id === '${player.id}'))">
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
@@ -330,6 +338,7 @@ window.renderPlayerCard = function(player) {
                         <span class="tag">${player.pos}</span>
                         <span class="tag">${player.age} yo</span>
                         ${isInjured ? '<span class="tag" style="color:#FF3B30">INJ</span>' : ''}
+                        ${traitsHtml}
                     </div>
                     <div class="grade-badge ${gradeClass}">${grade}</div>
                 </div>

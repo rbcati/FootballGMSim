@@ -438,15 +438,30 @@ class GameController {
                             </div>
                         </div>
                         <div>
-                            <h3>League Actions</h3>
-                            <div class="actions" style="display: flex; flex-direction: column; gap: 8px;">
-                                ${!isOffseason ? '<button class="btn" id="btnSimSeason" onclick="handleSimulateSeason()" style="justify-content: center;">Simulate Season</button>' : ''}
+                            <h3>Week HQ</h3>
+                            <div class="week-hq-card" style="background: var(--surface); padding: 15px; border-radius: 8px; border: 1px solid var(--hairline);">
+                                <ul class="week-checklist" style="list-style: none; padding: 0; margin: 0 0 15px 0;">
+                                    <li style="margin-bottom: 5px;">✅ <strong>Gameplan:</strong> Set</li>
+                                    <li style="margin-bottom: 5px;">${window.state.scouting && window.state.scouting.used < window.state.scouting.budget ? '⚠️' : '✅'} <strong>Scouting:</strong> ${window.state.scouting ? Math.round((window.state.scouting.budget - window.state.scouting.used)/1000) + 'k left' : 'N/A'}</li>
+                                    <li>✅ <strong>Training:</strong> Normal</li>
+                                </ul>
+
+                                ${!isOffseason ? `
+                                    <button class="btn primary large" id="btnSimWeekHQ" style="width: 100%; padding: 15px; font-size: 1.1rem; justify-content: center; font-weight: bold; margin-bottom: 10px;">
+                                        Advance Week >
+                                    </button>
+                                ` : ''}
+
+                                <button class="btn btn-sm" id="btnSimSeason" onclick="handleSimulateSeason()" style="width: 100%; justify-content: center; opacity: 0.7;">Simulate Season</button>
+
                                 ${(!isOffseason && L.week > 18 && (!window.state?.playoffs || !window.state.playoffs.winner))
-                                    ? `<button class="btn primary" onclick="if(window.startPlayoffs) window.startPlayoffs();" style="justify-content: center;">Start Playoffs</button>`
+                                    ? `<button class="btn primary" onclick="if(window.startPlayoffs) window.startPlayoffs();" style="justify-content: center; width: 100%;">Start Playoffs</button>`
                                     : ''
                                 }
-                                <button class="btn" onclick="location.hash='#/standings'" style="justify-content: center;">View Standings</button>
-                                ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
+
+                                <button class="btn btn-sm" onclick="location.hash='#/standings'" style="justify-content: center; width: 100%; margin-top: 5px;">View Standings</button>
+
+                                ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px; width: 100%;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -468,6 +483,17 @@ class GameController {
                 ` : ''}
             `;
             // Add event listeners for simulate buttons
+            const btnSimWeekHQ = hubContainer.querySelector('#btnSimWeekHQ');
+            if (btnSimWeekHQ) {
+                btnSimWeekHQ.addEventListener('click', () => {
+                    if (window.simulateWeek) {
+                        window.simulateWeek();
+                    } else {
+                        this.handleSimulateWeek();
+                    }
+                });
+            }
+
             const btnSimSeason = hubContainer.querySelector('#btnSimSeason');
             const btnStartNewSeason = hubContainer.querySelector('#btnStartNewSeason');
 
