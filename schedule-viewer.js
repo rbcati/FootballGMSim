@@ -193,7 +193,7 @@ class ScheduleViewer {
                                         '<span class="time">TBD</span>'
                                     }
                                 </div>
-                                ${isPlayed ? `<button class="btn btn-sm" onclick="window.showBoxScore(${weekNumber}, ${gameIndex})">Box Score</button>` : ''}
+                                ${isPlayed ? `<button class="btn btn-sm" onclick="window.showBoxScore(${weekNumber}, ${gameIndex})">Box Score</button>` : `<button class="btn btn-sm btn-primary watch-live-btn" onclick="if(window.watchLiveGame) { window.watchLiveGame(${game.home}, ${game.away}); } else { console.error('watchLiveGame not available'); }">📺 Watch Live</button>`}
                             </div>
                         `;
                     }

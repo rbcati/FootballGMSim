@@ -1257,6 +1257,20 @@ console.log('[LeagueCreationFix] Loaded');
               console.log('✅ Hall of Fame rendered');
             }
             break;
+          case 'game-sim':
+            if (window.liveGameViewer) {
+              // Ensure we have an active game simulation, otherwise redirect to hub
+              if (window.liveGameViewer.gameState) {
+                  window.liveGameViewer.renderToView('#game-sim');
+                  console.log('✅ Game Sim rendered');
+              } else {
+                  console.warn('⚠️ No active game for simulation, redirecting to hub');
+                  location.hash = '#/hub';
+              }
+            } else {
+                console.error('LiveGameViewer not found');
+            }
+            break;
           default:
             console.log('No specific renderer for view:', viewName);
         }
