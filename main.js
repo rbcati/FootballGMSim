@@ -273,7 +273,7 @@ class GameController {
                                     <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 2px;">
                                         PF: ${h2h.pf} | PA: ${h2h.pa}
                                     </div>
-                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;">Play Game</button>' : ''}
+                                    ${!isOffseason ? `<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); } else { console.error('watchLiveGame not available'); }">Watch Game</button>` : ''}
                                     `;
                                 })() : `
                                     <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Week ${currentWeek}</div>
@@ -554,17 +554,17 @@ class GameController {
             const btnSimSeason = hubContainer.querySelector('#btnSimSeason');
             const btnStartNewSeason = hubContainer.querySelector('#btnStartNewSeason');
 
-            // Handle Hero Sim Button
-            const btnSimWeekHero = hubContainer.querySelector('#btnSimWeekHero');
-            if (btnSimWeekHero) {
-                btnSimWeekHero.addEventListener('click', () => {
-                    if (window.simulateWeek) {
-                        window.simulateWeek();
-                    } else {
-                        this.handleSimulateWeek();
-                    }
-                });
-            }
+            // Handle Hero Sim Button - handled inline now for Watch Game
+            // const btnSimWeekHero = hubContainer.querySelector('#btnSimWeekHero');
+            // if (btnSimWeekHero) {
+            //     btnSimWeekHero.addEventListener('click', () => {
+            //         if (window.simulateWeek) {
+            //             window.simulateWeek();
+            //         } else {
+            //             this.handleSimulateWeek();
+            //         }
+            //     });
+            // }
 
             // btnSimWeek handled in events.js to avoid duplicates
             // Render additional interfaces
