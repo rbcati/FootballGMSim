@@ -56,6 +56,25 @@ class LiveGameViewer {
     const homeQB = homeTeam.roster?.find(p => p.pos === 'QB');
     const awayQB = awayTeam.roster?.find(p => p.pos === 'QB');
 
+    // Helper to get key players
+    const getKeyPlayers = (team) => ({
+        qb: team.roster?.find(p => p.pos === 'QB'),
+        rbs: team.roster?.filter(p => p.pos === 'RB').sort((a,b) => (b.ovr||0) - (a.ovr||0)) || [],
+        wrs: team.roster?.filter(p => p.pos === 'WR').sort((a,b) => (b.ovr||0) - (a.ovr||0)) || [],
+        tes: team.roster?.filter(p => p.pos === 'TE').sort((a,b) => (b.ovr||0) - (a.ovr||0)) || [],
+        k: team.roster?.find(p => p.pos === 'K')
+    });
+
+    const homePlayers = getKeyPlayers(homeTeam);
+    const awayPlayers = getKeyPlayers(awayTeam);
+
+    const initStats = () => ({
+        players: {}, // Map player ID to stats
+        team: {
+            rushYds: 0, passYds: 0, totalYds: 0, turnovers: 0
+        }
+    });
+
     return {
       home: {
         team: homeTeam,
@@ -65,7 +84,8 @@ class LiveGameViewer {
         distance: 10,
         yardLine: 25, // Start at own 25
         timeouts: 3,
-        qb: homeQB
+        qb: homeQB,
+        players: homePlayers
       },
       away: {
         team: awayTeam,
@@ -75,12 +95,28 @@ class LiveGameViewer {
         distance: 10,
         yardLine: 25,
         timeouts: 3,
-        qb: awayQB
+        qb: awayQB,
+        players: awayPlayers
       },
       quarter: 1,
       time: 900, // 15 minutes in seconds
       ballPossession: 'home', // 'home' or 'away'
-      gameComplete: false
+      gameComplete: false,
+      quarterScores: {
+          home: [0, 0, 0, 0],
+          away: [0, 0, 0, 0]
+      },
+      drive: {
+          plays: 0,
+          yards: 0,
+          startTime: 900,
+          startYardLine: 25
+      },
+      momentum: 0, // -100 (Away) to 100 (Home)
+      stats: {
+          home: initStats(),
+          away: initStats()
+      }
     };
   }
 
@@ -159,6 +195,26 @@ class LiveGameViewer {
 
     const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100));
 
+    // Update Drive Info
+    gameState.drive.plays++;
+
+    // PLAYER SELECTION
+    let player = null;
+
+    // Helper to init player stats
+    const ensureStats = (pid, name, pos, teamId) => {
+        const teamStats = gameState.stats[teamId === gameState.home.team.id ? 'home' : 'away'];
+        if (!teamStats.players[pid]) {
+            teamStats.players[pid] = {
+                name, pos,
+                passAtt: 0, passComp: 0, passYds: 0, passTD: 0, passInt: 0,
+                rushAtt: 0, rushYds: 0, rushTD: 0,
+                recTargets: 0, rec: 0, recYds: 0, recTD: 0
+            };
+        }
+        return teamStats.players[pid];
+    };
+
     const play = {
       type: 'play',
       playType: playType,
@@ -177,6 +233,7 @@ class LiveGameViewer {
     // Simulate play result
     const success = Math.random() < successChance;
     let yards = 0;
+    let momentumChange = 0;
 
     // Normalize subtypes
     let baseType = playType;
@@ -184,6 +241,11 @@ class LiveGameViewer {
     if (playType.startsWith('pass_')) baseType = 'pass';
 
     if (baseType === 'run') {
+      // Pick RB
+      const rbs = offense.players.rbs;
+      const rb = rbs.length > 0 ? rbs[0] : null; // Simple depth chart: RB1
+      player = rb || offense.qb;
+
       let runBonus = 0;
       let variance = 1;
 
@@ -195,13 +257,39 @@ class LiveGameViewer {
 
       if (success) {
         yards = Math.round(U.rand(2, 8) + runBonus + defModRun);
-        if (Math.random() < (0.1 * variance + defModBigPlay)) yards = U.rand(10, 25); // Big play
+        if (Math.random() < (0.1 * variance + defModBigPlay)) {
+            yards = U.rand(10, 25); // Big play
+            momentumChange += 5;
+        }
       } else {
         yards = U.rand(-2, 3);
         // Blitz TFL chance
-        if (Math.random() < defModSack * 0.5) yards -= 2;
+        if (Math.random() < defModSack * 0.5) {
+            yards -= 2;
+            momentumChange -= 2;
+        }
       }
+
+      // Update Stats
+      if (player) {
+          const stats = ensureStats(player.id, player.name, player.pos, offense.team.id);
+          stats.rushAtt++;
+          stats.rushYds += yards;
+      }
+
     } else if (baseType === 'pass') {
+      // Pick Target
+      const targets = [...offense.players.wrs, ...offense.players.tes];
+      const target = targets.length > 0 ? targets[Math.floor(Math.random() * targets.length)] : null;
+      player = target;
+      const qb = offense.qb;
+
+      // Update QB Stats (Attempts)
+      if (qb) {
+          const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
+          qbStats.passAtt++;
+      }
+
       let completeBonus = 0;
       let yardBonus = 0;
       let intChance = 0.03;
@@ -220,6 +308,12 @@ class LiveGameViewer {
           yards = -U.rand(5, 10);
           play.result = 'sack';
           play.message = 'SACKED!';
+          momentumChange -= 10;
+
+          if (qb) {
+             const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
+             qbStats.rushAtt++;
+          }
       } else if (Math.random() < (successChance + completeBonus)) {
         // Completion
         yards = Math.max(1, Math.round(U.rand(5, 15) + yardBonus + defModPass));
@@ -227,6 +321,7 @@ class LiveGameViewer {
         // Big play
         if (Math.random() < (bigPlayChance + defModBigPlay)) {
             yards = U.rand(20, 50);
+            momentumChange += 10;
         }
 
         // Interception
@@ -234,14 +329,37 @@ class LiveGameViewer {
           play.result = 'interception';
           yards = 0;
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
+          momentumChange -= 20;
+
+          if (qb) {
+             const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
+             qbStats.passInt++;
+          }
+        } else {
+             // Successful Completion
+             if (qb) {
+                 const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
+                 qbStats.passComp++;
+                 qbStats.passYds += yards;
+             }
+             if (target) {
+                 const targetStats = ensureStats(target.id, target.name, target.pos, offense.team.id);
+                 targetStats.rec++;
+                 targetStats.recYds += yards;
+                 targetStats.recTargets++;
+             }
         }
       } else {
         yards = 0;
         play.result = 'incomplete';
         play.message = 'Incomplete pass';
+        if (target) {
+             const targetStats = ensureStats(target.id, target.name, target.pos, offense.team.id);
+             targetStats.recTargets++;
+        }
       }
     } else if (playType === 'field_goal') {
-      const kicker = offense.team.roster?.find(p => p.pos === 'K');
+      const kicker = offense.players.k;
       const kickStrength = kicker?.ovr || 70;
       const distance = 100 - gameState[gameState.ballPossession].yardLine;
       const successChance = Math.max(0.3, Math.min(0.95, 0.9 - (distance - 20) / 30));
@@ -250,11 +368,18 @@ class LiveGameViewer {
         play.result = 'field_goal';
         play.message = `Field goal is GOOD! (${distance} yards)`;
         offense.score += 3;
-        // Switch possession
+
+        // Update Quarter Score
+        const qIdx = gameState.quarter - 1;
+        if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
+            gameState.quarterScores[gameState.ballPossession][qIdx] += 3;
+        }
+        momentumChange += 5;
         this.switchPossession(gameState);
       } else {
         play.result = 'field_goal_miss';
         play.message = `Field goal is NO GOOD (${distance} yards)`;
+        momentumChange -= 10;
         this.switchPossession(gameState);
       }
     } else if (playType === 'punt') {
@@ -263,23 +388,67 @@ class LiveGameViewer {
       this.switchPossession(gameState);
     }
 
+    // Update Momentum
+    gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? momentumChange : -momentumChange)));
+
     // Update yard line and down/distance
     if (play.result !== 'interception' && play.result !== 'field_goal' && play.result !== 'field_goal_miss') {
       const newYardLine = gameState[gameState.ballPossession].yardLine + yards;
-      
+      gameState.drive.yards += yards;
+
       if (newYardLine >= 100) {
         // Touchdown!
         play.result = 'touchdown';
         play.message = `TOUCHDOWN! ${offense.team.name || offense.team.abbr}`;
         offense.score += 7;
+
+        // Update Quarter Score
+        const qIdx = gameState.quarter - 1;
+        if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
+            gameState.quarterScores[gameState.ballPossession][qIdx] += 7;
+        }
+
+        // Stats for TD
+        if (baseType === 'run' && player) {
+             const stats = ensureStats(player.id, player.name, player.pos, offense.team.id);
+             stats.rushTD++;
+        } else if (baseType === 'pass' && !play.result.includes('interception')) {
+             if (offense.qb) {
+                 const qbStats = ensureStats(offense.qb.id, offense.qb.name, offense.qb.pos, offense.team.id);
+                 qbStats.passTD++;
+             }
+             if (player) {
+                 const targetStats = ensureStats(player.id, player.name, player.pos, offense.team.id);
+                 targetStats.recTD++;
+             }
+        }
+
         // Try for extra point (auto-success for now)
         offense.score += 1;
+        if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
+             gameState.quarterScores[gameState.ballPossession][qIdx] += 1;
+        }
+
+        momentumChange += 15;
+        gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? 15 : -15)));
+
         this.switchPossession(gameState);
       } else if (newYardLine <= 0) {
         // Safety
         play.result = 'safety';
         play.message = 'SAFETY!';
         defense.score += 2;
+
+        // Update Defense Score (Quarter)
+        const defPossession = gameState.ballPossession === 'home' ? 'away' : 'home';
+        const qIdx = gameState.quarter - 1;
+        if (gameState.quarterScores[defPossession][qIdx] !== undefined) {
+             gameState.quarterScores[defPossession][qIdx] += 2;
+        }
+
+        momentumChange -= 20;
+        gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? -20 : 20)));
+
         this.switchPossession(gameState);
       } else {
         gameState[gameState.ballPossession].yardLine = newYardLine;
@@ -290,12 +459,17 @@ class LiveGameViewer {
           gameState[gameState.ballPossession].down = 1;
           gameState[gameState.ballPossession].distance = 10;
           play.message = `First down! ${yards} yard${yards !== 1 ? 's' : ''} gained`;
+
+          momentumChange += 2;
+          gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? 2 : -2)));
         } else {
           gameState[gameState.ballPossession].down++;
           if (gameState[gameState.ballPossession].down > 4) {
             // Turnover on downs
             play.result = 'turnover_downs';
             play.message = 'Turnover on downs';
+            momentumChange -= 10;
+            gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? -10 : 10)));
             this.switchPossession(gameState);
           } else {
             play.message = `${yards >= 0 ? '+' : ''}${yards} yards. ${gameState[gameState.ballPossession].down} & ${gameState[gameState.ballPossession].distance}`;
@@ -306,9 +480,23 @@ class LiveGameViewer {
 
     play.yards = yards;
     if (!play.message) {
-      play.message = playType === 'run' ? 
-        `Run for ${yards} yard${yards !== 1 ? 's' : ''}` : 
-        `Pass for ${yards} yard${yards !== 1 ? 's' : ''}`;
+      if (baseType === 'run') {
+           play.message = `${player?.name || 'RB'} run for ${yards} yard${yards !== 1 ? 's' : ''}`;
+      } else if (baseType === 'pass') {
+           if (play.result === 'sack') {
+               play.message = `${offense.qb?.name || 'QB'} SACKED for ${yards} yards!`;
+           } else if (play.result === 'interception') {
+               play.message = `INTERCEPTION! ${offense.qb?.name || 'QB'} picked off!`;
+           } else if (play.result === 'incomplete') {
+               play.message = `${offense.qb?.name || 'QB'} pass incomplete to ${player?.name || 'Receiver'}`;
+           } else {
+               play.message = `${offense.qb?.name || 'QB'} pass to ${player?.name || 'Receiver'} for ${yards} yards`;
+           }
+      } else {
+           play.message = playType === 'run' ?
+            `Run for ${yards} yard${yards !== 1 ? 's' : ''}` :
+            `Pass for ${yards} yard${yards !== 1 ? 's' : ''}`;
+      }
     }
 
     // Update game clock
@@ -366,6 +554,25 @@ class LiveGameViewer {
    * Switch ball possession
    */
   switchPossession(gameState) {
+    // Generate Drive Summary
+    const drive = gameState.drive;
+    const timeElapsed = Math.max(0, drive.startTime - gameState.time);
+    const summary = `Drive Summary: ${drive.plays} plays, ${drive.yards} yards, ${this.formatTime(timeElapsed)}`;
+
+    // Render Drive Summary
+    this.renderPlay({
+        type: 'drive_summary',
+        message: summary
+    });
+
+    // Reset Drive Stats
+    gameState.drive = {
+        plays: 0,
+        yards: 0,
+        startTime: gameState.time,
+        startYardLine: 25
+    };
+
     gameState.ballPossession = gameState.ballPossession === 'home' ? 'away' : 'home';
     const newOffense = gameState[gameState.ballPossession];
     newOffense.down = 1;
@@ -550,6 +757,12 @@ class LiveGameViewer {
           ${this.gameState.home.team.name || this.gameState.home.team.abbr} ${play.finalScore.home}
         </div>
       `;
+    } else if (play.type === 'drive_summary') {
+      playElement.className = 'play-item drive-summary';
+      playElement.style.borderLeftColor = '#888';
+      playElement.style.fontStyle = 'italic';
+      playElement.style.fontSize = '0.85em';
+      playElement.innerHTML = `<div class="play-message">${play.message}</div>`;
     }
 
     playLog.appendChild(playElement);
@@ -653,6 +866,42 @@ class LiveGameViewer {
     if (this.isPlaying) {
       this.displayNextPlay();
     }
+  }
+
+  /**
+   * Skip to end of game
+   */
+  skipToEnd() {
+      if (this.intervalId) clearTimeout(this.intervalId);
+      this.isPaused = false;
+      this.isPlaying = true;
+      this.isSkipping = true;
+
+      let playsSimulated = 0;
+
+      while (!this.gameState.gameComplete && playsSimulated < 500) {
+          playsSimulated++;
+          const state = this.gameState;
+          const offense = state.ballPossession === 'home' ? state.home : state.away;
+          const defense = state.ballPossession === 'home' ? state.away : state.home;
+          const isUserOffense = offense.team.id === this.userTeamId;
+
+          // Auto-pick for user (AI)
+          const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+
+          this.playByPlay.push(play);
+          this.renderPlay(play);
+          this.updateGameState(play, state);
+          this.handleEndOfQuarter(state);
+      }
+
+      this.isSkipping = false;
+      this.renderGame();
+      this.endGame();
+
+      // Scroll log to bottom
+      const playLog = this.modal.querySelector('.play-log');
+      if (playLog) playLog.scrollTop = playLog.scrollHeight;
   }
 
   /**
@@ -774,7 +1023,14 @@ class LiveGameViewer {
           <button class="tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
           <button class="tempo-btn" data-tempo="slow">Slow</button>
           <button class="pause-btn">⏸ Pause</button>
+          <button class="skip-btn" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
         </div>
+
+        <div class="game-dashboard" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); margin-top: 10px; border-radius: 8px;">
+            <div class="box-score-panel"></div>
+            <div class="momentum-panel"></div>
+        </div>
+        <div class="stats-panel" style="padding: 10px; font-size: 0.8em; overflow-x: auto; background: rgba(0,0,0,0.1); margin-top: 10px; border-radius: 8px;"></div>
 
         <div class="play-calling" style="display: none;">
           <div class="play-call-prompt">Call Your Play:</div>
@@ -824,6 +1080,7 @@ class LiveGameViewer {
       });
     });
     modal.querySelector('.pause-btn').addEventListener('click', () => this.togglePause());
+    modal.querySelector('.skip-btn').addEventListener('click', () => this.skipToEnd());
     modal.querySelectorAll('.play-call-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         this.callPlay(e.target.dataset.play);
@@ -844,6 +1101,109 @@ class LiveGameViewer {
    */
   renderGame() {
     this.updateScoreboard();
+    this.renderBoxScore();
+    this.renderMomentum();
+    this.renderGameStats();
+  }
+
+  /**
+   * Render Box Score
+   */
+  renderBoxScore() {
+      const container = this.modal.querySelector('.box-score-panel');
+      if (!container) return;
+
+      const home = this.gameState.home;
+      const away = this.gameState.away;
+      const qH = this.gameState.quarterScores.home;
+      const qA = this.gameState.quarterScores.away;
+
+      container.innerHTML = `
+        <table class="box-score-table" style="width:100%; font-size: 0.8em; color: var(--text);">
+            <thead><tr><th style="text-align:left;">Team</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>T</th></tr></thead>
+            <tbody>
+                <tr>
+                    <td>${away.team.abbr}</td>
+                    <td>${qA[0]}</td><td>${qA[1]}</td><td>${qA[2]}</td><td>${qA[3]}</td>
+                    <td><b>${away.score}</b></td>
+                </tr>
+                <tr>
+                    <td>${home.team.abbr}</td>
+                    <td>${qH[0]}</td><td>${qH[1]}</td><td>${qH[2]}</td><td>${qH[3]}</td>
+                    <td><b>${home.score}</b></td>
+                </tr>
+            </tbody>
+        </table>
+      `;
+  }
+
+  /**
+   * Render Momentum
+   */
+  renderMomentum() {
+      const container = this.modal.querySelector('.momentum-panel');
+      if (!container) return;
+
+      const m = this.gameState.momentum;
+      const pct = (m + 100) / 2;
+
+      container.innerHTML = `
+        <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
+        <div style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
+            <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
+            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: var(--text-muted);">
+            <span>${this.gameState.away.team.abbr}</span>
+            <span>${this.gameState.home.team.abbr}</span>
+        </div>
+      `;
+  }
+
+  /**
+   * Render Game Stats
+   */
+  renderGameStats() {
+      const container = this.modal.querySelector('.stats-panel');
+      if (!container) return;
+
+      const getTopStats = (teamKey) => {
+          const stats = this.gameState.stats[teamKey].players;
+          const players = Object.values(stats);
+
+          const passer = players.filter(p => p.passAtt > 0).sort((a,b) => b.passYds - a.passYds)[0];
+          const rusher = players.filter(p => p.rushAtt > 0).sort((a,b) => b.rushYds - a.rushYds)[0];
+          const receiver = players.filter(p => p.rec > 0).sort((a,b) => b.recYds - a.recYds)[0];
+
+          return { passer, rusher, receiver };
+      };
+
+      const homeStats = getTopStats('home');
+      const awayStats = getTopStats('away');
+
+      const renderStatLine = (p, type) => {
+          if (!p) return '<span style="color: #666;">-</span>';
+          if (type === 'pass') return `${p.name}: ${p.passComp}/${p.passAtt}, ${p.passYds} yds, ${p.passTD} TD`;
+          if (type === 'rush') return `${p.name}: ${p.rushAtt} car, ${p.rushYds} yds, ${p.rushTD} TD`;
+          if (type === 'rec') return `${p.name}: ${p.rec} rec, ${p.recYds} yds, ${p.recTD} TD`;
+      };
+
+      container.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; color: var(--text);">
+            <div>
+                <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 5px;">${this.gameState.away.team.abbr} Leaders</div>
+                <div style="font-size: 0.85em; margin-bottom: 2px;">Pass: ${renderStatLine(awayStats.passer, 'pass')}</div>
+                <div style="font-size: 0.85em; margin-bottom: 2px;">Rush: ${renderStatLine(awayStats.rusher, 'rush')}</div>
+                <div style="font-size: 0.85em;">Rec: ${renderStatLine(awayStats.receiver, 'rec')}</div>
+            </div>
+            <div>
+                <div style="font-weight: bold; border-bottom: 1px solid #444; margin-bottom: 5px;">${this.gameState.home.team.abbr} Leaders</div>
+                <div style="font-size: 0.85em; margin-bottom: 2px;">Pass: ${renderStatLine(homeStats.passer, 'pass')}</div>
+                <div style="font-size: 0.85em; margin-bottom: 2px;">Rush: ${renderStatLine(homeStats.rusher, 'rush')}</div>
+                <div style="font-size: 0.85em;">Rec: ${renderStatLine(homeStats.receiver, 'rec')}</div>
+            </div>
+        </div>
+      `;
   }
 
   /**
