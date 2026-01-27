@@ -1405,7 +1405,10 @@ console.log('[LeagueCreationFix] Loaded');
     const savedState = localStorage.getItem('navSidebarCollapsed');
     
     // Create overlay element for mobile
-    let navOverlay = document.getElementById('navOverlay');
+    let navOverlay = document.getElementById('menu-overlay');
+    if (!navOverlay) {
+        navOverlay = document.getElementById('navOverlay');
+    }
     if (!navOverlay) {
       navOverlay = document.createElement('div');
       navOverlay.id = 'navOverlay';
@@ -1443,6 +1446,7 @@ console.log('[LeagueCreationFix] Loaded');
       navToggle.setAttribute('aria-expanded', 'true');
       if (isMobile && navOverlay) {
         navOverlay.classList.add('show');
+        navOverlay.classList.add('active');
         document.body.classList.add('nav-open');
       }
     }
@@ -1454,6 +1458,7 @@ console.log('[LeagueCreationFix] Loaded');
       navToggle.setAttribute('aria-expanded', 'false');
       if (navOverlay) {
         navOverlay.classList.remove('show');
+        navOverlay.classList.remove('active');
         document.body.classList.remove('nav-open');
       }
     }
@@ -1980,7 +1985,8 @@ window.on = on;
     const navSidebar = document.getElementById('nav-sidebar');
     const navToggle = document.getElementById('navToggle');
     const layout = document.querySelector('.layout');
-    const navOverlay = document.getElementById('navOverlay');
+    // Prioritize existing menu-overlay
+    const navOverlay = document.getElementById('menu-overlay') || document.getElementById('navOverlay');
     const isMobile = window.innerWidth < 1024;
     
     if (!navSidebar || !navToggle) {
@@ -2004,6 +2010,7 @@ window.on = on;
       if (isMobile && navOverlay) {
         navOverlay.style.display = 'block';
         navOverlay.classList.add('show');
+        navOverlay.classList.add('active');
       }
       console.log('✅ Navigation expanded');
     } else {
@@ -2020,6 +2027,7 @@ window.on = on;
       if (navOverlay) {
         navOverlay.style.display = 'none';
         navOverlay.classList.remove('show');
+        navOverlay.classList.remove('active');
       }
       console.log('✅ Navigation collapsed');
     }

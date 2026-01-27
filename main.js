@@ -322,6 +322,62 @@ class GameController {
                     </div>
                 `;
             }
+
+            // --- TOP PLAYERS / MATCHUP PREVIEW ---
+            let topPlayersHTML = '';
+            if (userTeam && !isOffseason) {
+                const getTop3 = (team) => {
+                    if (!team || !team.roster) return [];
+                    return [...team.roster]
+                        .sort((a, b) => (b.ovr || 0) - (a.ovr || 0))
+                        .slice(0, 3);
+                };
+
+                const userTop3 = getTop3(userTeam);
+                const oppTop3 = opponent ? getTop3(opponent) : [];
+
+                topPlayersHTML = `
+                    <div class="card mb-4" id="hubTopPlayers">
+                        <h3>Matchup Preview: Top Talent</h3>
+                        <div class="grid two">
+                            <div>
+                                <h4 style="border-bottom: 1px solid var(--hairline); padding-bottom: 5px; margin-bottom: 10px;">
+                                    ${userTeam.name}
+                                </h4>
+                                <div class="player-list">
+                                    ${userTop3.map(p => `
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${p.id}')">
+                                            <div>
+                                                <span style="font-weight: 600;">${p.name}</span>
+                                                <span class="text-muted small">(${p.pos})</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">${p.ovr}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="border-bottom: 1px solid var(--hairline); padding-bottom: 5px; margin-bottom: 10px;">
+                                    ${opponent ? opponent.name : 'No Opponent'}
+                                </h4>
+                                ${opponent ? `
+                                <div class="player-list">
+                                    ${oppTop3.map(p => `
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${p.id}')">
+                                            <div>
+                                                <span style="font-weight: 600;">${p.name}</span>
+                                                <span class="text-muted small">(${p.pos})</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">${p.ovr}</div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                                ` : '<p class="muted">Bye Week or Season Over</p>'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
             
             let divisionStandingsHTML = '';
             if (userTeam && L) {
@@ -405,6 +461,7 @@ class GameController {
             hubContainer.innerHTML = `
                 ${headerDashboardHTML}
                 ${newsHTML}
+                ${topPlayersHTML}
                 <div class="card">
                     <h2>Team Hub</h2>
                     <div class="grid two">
