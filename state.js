@@ -64,6 +64,50 @@ const LAST_NAMES = (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES)
 // --- State Management System ---
 
 /**
+ * Returns an object with common stats initialized to 0.
+ * @returns {Object} Zeroed stats object
+ */
+function getZeroStats() {
+  return {
+    // General
+    gamesPlayed: 0,
+
+    // Passing
+    passYd: 0, passTD: 0, interceptions: 0, passAtt: 0, passComp: 0, sacks: 0,
+
+    // Rushing
+    rushYd: 0, rushTD: 0, rushAtt: 0, fumbles: 0,
+
+    // Receiving
+    recYd: 0, recTD: 0, receptions: 0, targets: 0, drops: 0,
+
+    // Defense
+    tackles: 0, forcedFumbles: 0, passesDefended: 0, tacklesForLoss: 0,
+
+    // Kicking/Punting
+    fgMade: 0, fgAttempts: 0, xpMade: 0, xpAttempts: 0, punts: 0, puntYards: 0
+  };
+}
+
+/**
+ * Returns an object with team stats initialized to 0.
+ * @returns {Object} Zeroed team stats object
+ */
+function getZeroTeamStats() {
+    return {
+        wins: 0, losses: 0, ties: 0,
+        ptsFor: 0, ptsAgainst: 0,
+        passYds: 0, rushYds: 0,
+        passTD: 0, rushTD: 0,
+        turnovers: 0,
+        sacks: 0,
+        // Game specific
+        thirdDownAttempts: 0, thirdDownConversions: 0,
+        redZoneTrips: 0, redZoneTDs: 0
+    };
+}
+
+/**
  * Centralized utility object for managing the game state schema.
  */
 export const State = {
@@ -370,6 +414,11 @@ export const State = {
       if (!Array.isArray(migratedTeam.picks)) {
         migratedTeam.picks = [];
       }
+
+      // Ensure team stats are initialized
+      if (!migratedTeam.stats) {
+        migratedTeam.stats = { season: getZeroTeamStats(), game: getZeroTeamStats() };
+      }
       
       // Migrate player structures if needed
       migratedTeam.roster = migratedTeam.roster.map(player => {
@@ -380,8 +429,22 @@ export const State = {
         if (!migratedPlayer.id) {
           migratedPlayer.id = `migrated_${Date.now()}_${Math.random()}`;
         }
+
+        // Initialize or fix player stats
         if (!migratedPlayer.stats) {
-          migratedPlayer.stats = { game: {}, season: {}, career: {} };
+          migratedPlayer.stats = {
+            game: getZeroStats(),
+            season: getZeroStats(),
+            career: getZeroStats()
+          };
+        } else {
+          // Ensure sub-objects exist and have default values if empty
+          if (!migratedPlayer.stats.game) migratedPlayer.stats.game = getZeroStats();
+          if (!migratedPlayer.stats.season) migratedPlayer.stats.season = getZeroStats();
+          else if (Object.keys(migratedPlayer.stats.season).length === 0) migratedPlayer.stats.season = getZeroStats();
+
+          if (!migratedPlayer.stats.career) migratedPlayer.stats.career = getZeroStats();
+          else if (Object.keys(migratedPlayer.stats.career).length === 0) migratedPlayer.stats.career = getZeroStats();
         }
         
         return migratedPlayer;
