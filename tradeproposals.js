@@ -357,3 +357,7 @@ export function renderTradeProposals() {
     }
   });
 }
+
+// Expose helpers for inline handlers or non-module callers.
+window.generateAITradeProposals = generateAITradeProposals;
+window.renderTradeProposals = renderTradeProposals;
