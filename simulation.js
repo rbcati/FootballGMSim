@@ -613,6 +613,19 @@ function simulateWeek(options = {}) {
         console.error('Error generating news:', newsError);
     }
 
+    // Check for Interactive Events (The Newsroom)
+    try {
+        if (newsEngine && newsEngine.generateInteractiveEvent) {
+             const event = newsEngine.generateInteractiveEvent(L);
+             if (event) {
+                 console.log("Interactive event triggered:", event.title);
+                 window.state.pendingEvent = event;
+             }
+        }
+    } catch (eventError) {
+        console.error('Error generating interactive event:', eventError);
+    }
+
     // Update UI to show results (if render option is true, default to true)
     try {
       if (options.render !== false) {

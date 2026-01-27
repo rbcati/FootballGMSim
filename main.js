@@ -534,6 +534,13 @@ class GameController {
                 if (isOffseason && typeof window.renderHubStandings === 'function') {
                     window.renderHubStandings(L);
                 }
+
+                // Show Pending Interactive Event
+                if (window.state.pendingEvent && window.showDecisionModal) {
+                    console.log("Showing pending decision modal");
+                    window.showDecisionModal(window.state.pendingEvent);
+                    window.state.pendingEvent = null;
+                }
             }, 100);
             if (btnSimSeason) {
                 btnSimSeason.addEventListener('click', () => this.handleSimulateSeason());
@@ -625,9 +632,16 @@ class GameController {
 
                 // Allow UI to update status
                 await new Promise(resolve => setTimeout(resolve, 50));
+
+                // Check for interactive event interruption
+                if (window.state.pendingEvent) {
+                    console.log("Stopping simulation for interactive event");
+                    this.setStatus("Simulation paused for important decision!", "warning");
+                    break;
+                }
             }
 
-            this.setStatus('Season simulation complete.', 'success');
+            this.setStatus(window.state.pendingEvent ? 'Simulation paused.' : 'Season simulation complete.', 'success');
             this.saveGameState(); // Auto-save after season
             setTimeout(() => this.renderHub(), 500);
 
