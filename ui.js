@@ -2398,3 +2398,73 @@ window.generateAITradeProposals = generateAITradeProposals;
 window.showPlayerDetails = showPlayerDetails;
 
 console.log('🎉 UI master file loaded successfully!');
+
+/**
+ * Show a decision modal for an interactive event
+ * @param {Object} event - The interactive event object from news-engine.js
+ */
+window.showDecisionModal = function(event) {
+    if (!event || !window.Modal) return;
+
+    const content = `
+        <div class="decision-modal-content">
+            <p class="decision-description" style="font-size: 1.1rem; margin-bottom: 20px;">${event.description}</p>
+            <div class="decision-choices" style="display: grid; gap: 10px;">
+                ${event.choices.map((choice, index) => `
+                    <button class="btn choice-btn" data-index="${index}" style="padding: 15px; text-align: left; display: block; width: 100%;">
+                        <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 4px;">${choice.text}</div>
+                        <div style="font-size: 0.9rem; opacity: 0.8;">${choice.description || ''}</div>
+                    </button>
+                `).join('')}
+            </div>
+        </div>
+    `;
+
+    const modal = new window.Modal({
+        title: event.title,
+        content: content,
+        size: 'normal'
+    });
+
+    const modalEl = modal.render(document.body);
+    modalEl.style.display = 'flex'; // Ensure it's visible (flex for centering)
+
+    // Attach click handlers
+    const buttons = modalEl.querySelectorAll('.choice-btn');
+    buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.index);
+            const choice = event.choices[index];
+
+            // Execute effect
+            if (choice.effect && typeof choice.effect === 'function') {
+                const resultMessage = choice.effect(window.state.league);
+
+                // Show result (using setStatus or alert)
+                if (window.setStatus) {
+                    window.setStatus(resultMessage, 'success', 5000);
+                } else {
+                    alert(resultMessage);
+                }
+
+                // Add news item about the decision
+                if (window.newsEngine) {
+                    window.newsEngine.addNewsItem(
+                        window.state.league,
+                        `Decision: ${event.title}`,
+                        `GM decided: "${choice.text}". Result: ${resultMessage}`,
+                        null,
+                        'decision'
+                    );
+                }
+            }
+
+            // Close modal
+            modalEl.remove();
+
+            // Update UI
+            if (window.updateHeader) window.updateHeader();
+            if (window.renderHub) window.renderHub();
+        });
+    });
+};
