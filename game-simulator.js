@@ -247,6 +247,83 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
   syncObject(away, updatedAway, awayStats);
 }
 
+/**
+ * Updates rivalry scores between two teams based on the game result.
+ * @param {object} home - Home team object
+ * @param {object} away - Away team object
+ * @param {number} homeScore - Home score
+ * @param {number} awayScore - Away score
+ * @param {boolean} isPlayoff - Whether this is a playoff game
+ */
+function updateRivalries(home, away, homeScore, awayScore, isPlayoff) {
+  if (!home || !away) return;
+
+  // Ensure rivalry objects exist
+  if (!home.rivalries) home.rivalries = {};
+  if (!away.rivalries) away.rivalries = {};
+
+  // Initialize specific opponent rivalry if missing
+  if (!home.rivalries[away.id]) home.rivalries[away.id] = { score: 0, events: [] };
+  if (!away.rivalries[home.id]) away.rivalries[home.id] = { score: 0, events: [] };
+
+  const homeRiv = home.rivalries[away.id];
+  const awayRiv = away.rivalries[home.id];
+
+  const diff = Math.abs(homeScore - awayScore);
+  const homeWon = homeScore > awayScore;
+  let points = 0;
+  let event = null;
+
+  // 1. Division Rivalry (Regular Season Only)
+  if (!isPlayoff && home.conf === away.conf && home.div === away.div) {
+    points += 5;
+  }
+
+  // 2. Playoff Intensity
+  if (isPlayoff) {
+    points += 25;
+    if (homeWon) {
+      // Loser gets a massive grudge
+      awayRiv.score += 40;
+      awayRiv.events.unshift(`Eliminated by ${home.abbr} in Playoffs`);
+      // Winner gets some rivalry points too (competitive respect/animosity)
+      homeRiv.score += 15;
+    } else {
+      homeRiv.score += 40;
+      homeRiv.events.unshift(`Eliminated by ${away.abbr} in Playoffs`);
+      awayRiv.score += 15;
+    }
+    // Return early or continue? Continue to add close game points etc.
+  }
+
+  // 3. Close Game
+  if (diff < 8) {
+    points += 5;
+  }
+
+  // 4. Blowout (Embarrassment)
+  if (diff > 24) {
+    points += 5;
+    if (homeWon) {
+      awayRiv.score += 10; // Loser hates the winner more
+    } else {
+      homeRiv.score += 10;
+    }
+  }
+
+  // Apply general points
+  homeRiv.score += points;
+  awayRiv.score += points;
+
+  // Cap scores (optional, but good for sanity)
+  if (homeRiv.score > 100) homeRiv.score = 100;
+  if (awayRiv.score > 100) awayRiv.score = 100;
+
+  // Trim events
+  if (homeRiv.events.length > 3) homeRiv.events.length = 3;
+  if (awayRiv.events.length > 3) awayRiv.events.length = 3;
+}
+
 // --- STAT GENERATION HELPERS ---
 
 function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}) {
@@ -717,7 +794,22 @@ export function simGameStats(home, away, options = {}) {
     const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
     const BASE_SCORE_MIN = C.BASE_SCORE_MIN || 10;
     const BASE_SCORE_MAX = C.BASE_SCORE_MAX || 35;
-    const SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+    let SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+
+    // Check Rivalry Context for Variance
+    // Higher rivalry score = higher variance (more upsets, crazier games)
+    if (home.rivalries && away.rivalries) {
+        const homeRiv = home.rivalries[away.id]?.score || 0;
+        const awayRiv = away.rivalries[home.id]?.score || 0;
+        const intensity = Math.max(homeRiv, awayRiv);
+
+        if (intensity > 50) {
+             SCORE_VARIANCE += 10;
+             if (verbose) console.log(`[SIM-DEBUG] Rivalry Game! Intensity: ${intensity}, Variance boosted.`);
+        } else if (intensity > 25) {
+             SCORE_VARIANCE += 5;
+        }
+    }
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
 
@@ -1024,6 +1116,10 @@ export function simulateBatch(games, options = {}) {
                 const gameObj = { home: home, away: away };
                 applyResult(gameObj, sH, sA, { verbose });
             }
+
+            // Update Rivalries
+            // Use local vars sH/sA which are defined in the loop scope
+            updateRivalries(home, away, sH, sA, isPlayoff);
 
         } catch (error) {
             console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);
