@@ -424,22 +424,35 @@ class GameController {
                 const { blockers, warnings } = getActionItems(L, userTeam);
                 if (blockers.length > 0 || warnings.length > 0) {
                     const items = [...blockers, ...warnings];
-                    actionItemsHTML = `
-                        <div class="card mb-4 action-items" style="border-left: 4px solid ${blockers.length > 0 ? '#ef4444' : '#f59e0b'};">
-                            <h3>Action Items</h3>
-                            <div class="action-list">
-                                ${items.map(item => `
-                                    <div class="action-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
-                                        <div>
-                                            <strong style="color: ${item.id.includes('roster_max') || item.id.includes('salary_cap') ? '#ef4444' : '#f59e0b'}">${item.title}</strong>
-                                            <div style="font-size: 0.9rem; color: var(--text-muted);">${item.description}</div>
-                                        </div>
-                                        ${item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''}
-                                    </div>
-                                `).join('')}
+                    const listContent = items.map(item => `
+                        <div class="action-item" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--hairline);">
+                            <div>
+                                <strong style="color: ${item.id.includes('roster_max') || item.id.includes('salary_cap') ? '#ef4444' : '#f59e0b'}">${item.title}</strong>
+                                <div style="font-size: 0.9rem; color: var(--text-muted);">${item.description}</div>
                             </div>
+                            ${item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''}
                         </div>
-                    `;
+                    `).join('');
+
+                    if (window.Card) {
+                        const borderColor = blockers.length > 0 ? '#ef4444' : '#f59e0b';
+                        // Create card using component
+                        const card = new window.Card({
+                            title: 'Action Items',
+                            className: 'mb-4 action-items',
+                            children: `<div class="action-list">${listContent}</div>`
+                        });
+                        // Hack to inject style for border color since Card component doesn't support style prop yet
+                        actionItemsHTML = card.renderHTML().replace('class="card', `style="border-left: 4px solid ${borderColor};" class="card`);
+                    } else {
+                        // Fallback
+                        actionItemsHTML = `
+                            <div class="card mb-4 action-items" style="border-left: 4px solid ${blockers.length > 0 ? '#ef4444' : '#f59e0b'};">
+                                <h3>Action Items</h3>
+                                <div class="action-list">${listContent}</div>
+                            </div>
+                        `;
+                    }
                 }
             }
 

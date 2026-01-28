@@ -5,6 +5,7 @@ import { launchConfetti } from './confetti.js';
 import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
+import GameRunner from './game-runner.js';
 
 /**
  * Playoff Management System
@@ -74,8 +75,8 @@ function simPlayoffWeek() {
     };
 
     if (P.currentRound === 0) { // Wildcard
-        const afcWinners = simRound(P.rounds.afc[0]);
-        const nfcWinners = simRound(P.rounds.nfc[0]);
+        const afcWinners = processRound(P.rounds.afc[0]);
+        const nfcWinners = processRound(P.rounds.nfc[0]);
         afcWinners.push(P.rounds.afc[0].bye);
         nfcWinners.push(P.rounds.nfc[0].bye);
         afcWinners.sort((a,b) => a.seed - b.seed);
@@ -83,18 +84,18 @@ function simPlayoffWeek() {
         P.rounds.afc[1] = [{home: afcWinners[0], away: afcWinners[3]}, {home: afcWinners[1], away: afcWinners[2]}];
         P.rounds.nfc[1] = [{home: nfcWinners[0], away: nfcWinners[3]}, {home: nfcWinners[1], away: nfcWinners[2]}];
     } else if (P.currentRound === 1) { // Divisional
-        const afcWinners = simRound(P.rounds.afc[1]);
-        const nfcWinners = simRound(P.rounds.nfc[1]);
+        const afcWinners = processRound(P.rounds.afc[1]);
+        const nfcWinners = processRound(P.rounds.nfc[1]);
         afcWinners.sort((a,b) => a.seed - b.seed);
         nfcWinners.sort((a,b) => a.seed - b.seed);
         P.rounds.afc[2] = [{home: afcWinners[0], away: afcWinners[1]}];
         P.rounds.nfc[2] = [{home: nfcWinners[0], away: nfcWinners[1]}];
     } else if (P.currentRound === 2) { // Conference
-        const afcChamp = simRound(P.rounds.afc[2])[0];
-        const nfcChamp = simRound(P.rounds.nfc[2])[0];
+        const afcChamp = processRound(P.rounds.afc[2])[0];
+        const nfcChamp = processRound(P.rounds.nfc[2])[0];
         P.rounds.superbowl = [{ home: afcChamp, away: nfcChamp }];
     } else if (P.currentRound === 3) { // Super Bowl
-        const winner = simRound(P.rounds.superbowl)[0];
+        const winner = processRound(P.rounds.superbowl)[0];
         P.winner = winner;
         
         // Record Super Bowl in history

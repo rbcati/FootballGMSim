@@ -14,6 +14,7 @@ import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
+import GameRunner from './game-runner.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -517,25 +518,8 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    // Handle both schedule formats (legacy compatibility)
+    // NEW SEASON PROGRESSION CHECK (Pre-Simulation)
     const scheduleWeeks = L.schedule.weeks || L.schedule;
-    if (!scheduleWeeks || !Array.isArray(scheduleWeeks)) {
-      console.error('Invalid schedule format for simulation');
-      window.setStatus('Error: Invalid schedule format');
-      return;
-    }
-
-    // Ensure week is properly initialized
-    if (!L.week || typeof L.week !== 'number') {
-      L.week = 1;
-      console.log('Initialized league week to 1');
-    }
-
-    console.log(`[SIM-DEBUG] Simulating week ${L.week}...`);
-    console.log(`[QA-AUDIT] simulateWeek: Week ${L.week}, Schedule Length: ${scheduleWeeks.length}`);
-    window.setStatus(`Simulating week ${L.week}...`);
-
-    // NEW SEASON PROGRESSION CHECK
     if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
       // Check if already in offseason
       if (window.state.offseason === true) {
@@ -546,9 +530,6 @@ function simulateWeek(options = {}) {
       console.log('Season complete, transitioning to offseason');
       window.setStatus('Season complete! Entering offseason...');
       
-      // DO NOT set window.state.offseason = true here.
-      // startOffseason() checks this flag to prevent double-execution.
-      
       if (typeof window.startOffseason === 'function') {
         window.startOffseason();
       } else if (typeof window.startNewSeason === 'function') {
@@ -557,8 +538,11 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    // Check if season is over
-    if (L.week > scheduleWeeks.length) {
+    // Delegate to GameRunner
+    const result = GameRunner.simulateRegularSeasonWeek(L, options);
+
+    // Check for Season Over
+    if (result && result.seasonOver) {
       console.log('Regular season complete, checking playoffs...');
 
       // FIXED: If playoffs are already active, don't restart them
