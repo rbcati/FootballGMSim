@@ -251,7 +251,8 @@ function makePlayer(pos, overrides = {}) {
   }
 
   // Generate detailed ratings based on position
-  const ratings = generatePlayerRatings(pos);
+  const targetOvr = overrides.ovr || null;
+  const ratings = generatePlayerRatings(pos, targetOvr);
   
   // Calculate overall rating
   const ovr = calculateOvr(pos, ratings);
@@ -304,31 +305,47 @@ function makePlayer(pos, overrides = {}) {
 /**
  * Generates ratings for a player based on position
  * @param {string} pos - Player position
+ * @param {number} [targetOvr] - Optional target overall rating
  * @returns {Object} Ratings object
  */
-function generatePlayerRatings(pos) {
+function generatePlayerRatings(pos, targetOvr = null) {
   const U = window.Utils;
   
+  // Helper to generate rating around a target
+  const genRating = (min, max, weight = 1.0) => {
+      if (targetOvr) {
+          // Center around targetOvr, with variance
+          const variance = 10;
+          let r = targetOvr + U.rand(-variance, variance);
+
+          // Apply positional weighting (some stats are naturally higher for position)
+          r = r * weight;
+
+          return U.clamp(Math.round(r), min, max);
+      }
+      return U.rand(min, max);
+  };
+
   const baseRatings = {
-    throwPower: U.rand(50, 99),
-    throwAccuracy: U.rand(50, 99),
-    awareness: U.rand(40, 99),
-    catching: U.rand(40, 99),
-    catchInTraffic: U.rand(40, 99),
-    acceleration: U.rand(60, 99),
-    speed: U.rand(60, 99),
-    agility: U.rand(60, 99),
-    trucking: U.rand(40, 99),
-    juking: U.rand(40, 99),
-    passRushSpeed: U.rand(40, 99),
-    passRushPower: U.rand(40, 99),
-    runStop: U.rand(40, 99),
-    coverage: U.rand(40, 99),
-    runBlock: U.rand(50, 99),
-    passBlock: U.rand(50, 99),
-    intelligence: U.rand(40, 99),
-    kickPower: U.rand(60, 99),
-    kickAccuracy: U.rand(60, 99),
+    throwPower: genRating(50, 99),
+    throwAccuracy: genRating(50, 99),
+    awareness: genRating(40, 99),
+    catching: genRating(40, 99),
+    catchInTraffic: genRating(40, 99),
+    acceleration: genRating(60, 99),
+    speed: genRating(60, 99),
+    agility: genRating(60, 99),
+    trucking: genRating(40, 99),
+    juking: genRating(40, 99),
+    passRushSpeed: genRating(40, 99),
+    passRushPower: genRating(40, 99),
+    runStop: genRating(40, 99),
+    coverage: genRating(40, 99),
+    runBlock: genRating(50, 99),
+    passBlock: genRating(50, 99),
+    intelligence: genRating(40, 99),
+    kickPower: genRating(60, 99),
+    kickAccuracy: genRating(60, 99),
     height: U.rand(68, 80), // inches
     weight: U.rand(180, 320) // pounds
   };
@@ -386,7 +403,7 @@ function generatePlayerRatings(pos) {
   // Apply position-specific ranges
   Object.keys(adjustments).forEach(stat => {
     const [min, max] = adjustments[stat];
-    baseRatings[stat] = U.rand(min, max);
+    baseRatings[stat] = genRating(min, max);
   });
 
   return baseRatings;
@@ -1991,10 +2008,11 @@ window.on = on;
           // Fallback: direct call to initNewGame
           const teamSelect = document.getElementById('onboardTeam');
           const chosenMode = document.querySelector('input[name="namesMode"]:checked')?.value || 'fictional';
+          const startPoint = document.querySelector('input[name="startPoint"]:checked')?.value || 'regular';
           const teamIdx = teamSelect?.value ?? '0';
           
           if (teamSelect && teamSelect.value !== '') {
-            window.initNewGame({ chosenMode, teamIdx }).catch(err => {
+            window.initNewGame({ chosenMode, teamIdx, startPoint }).catch(err => {
               console.error('Failed to initialize game:', err);
               window.setStatus?.('Failed to start game. Please try again.', 'error');
             });

@@ -58,15 +58,22 @@ const initializeRoster = (team, Constants, Utils, makePlayer) => {
     positions.forEach(pos => {
         const count = Constants.DEPTH_NEEDS[pos];
         for (let j = 0; j < count; j++) {
-            // Logic for rating ranges
-            let ovrRange = Constants.POS_RATING_RANGES?.[pos] || [60, 85];
+            // Logic for rating ranges (simplified OVR targets)
+            let ovrRange = [65, 75]; // Default backup range
 
-            // First player at position should be better (starter material)
-            if (j === 0) {
-                ovrRange = [
-                    Math.max(70, ovrRange[0]),
-                    Math.min(99, ovrRange[1] + 5)
-                ];
+            // Starters should be better
+            const startersCount = {
+                QB: 1, RB: 1, WR: 3, TE: 1, OL: 5,
+                DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1
+            }[pos] || 1;
+
+            if (j < startersCount) {
+                ovrRange = [76, 90]; // Starter material
+                if (j === 0 && ['QB', 'WR', 'DL', 'LB'].includes(pos)) {
+                    ovrRange = [82, 95]; // Star material
+                }
+            } else {
+                ovrRange = [60, 74]; // Depth
             }
 
             const ovr = Utils.rand(ovrRange[0], ovrRange[1]);
@@ -80,25 +87,25 @@ const initializeRoster = (team, Constants, Utils, makePlayer) => {
                 const playersRemaining = totalPlayersNeeded - playersCreated - 1;
                 // Reserve ~0.8M per remaining player
                 const reservedBudget = playersRemaining * 0.8;
+
+                // Calculate current cap hit (base + prorated bonus)
+                let capHit = (player.baseAnnual || 0) + ((player.signingBonus || 0) / (player.yearsTotal || 1));
+
                 const availableBudget = safeCapLimit - estimatedCapUsed - reservedBudget;
 
                 // If player salary exceeds available budget, clamp it
-                if (player.baseAnnual > availableBudget) {
-                    // But don't go below minimum (0.75M) unless absolutely necessary
-                    // Allow at least 0.8M or availableBudget, whichever is higher (but handled by min() logic)
-                    // Actually, if availableBudget is negative, we are in trouble.
-                    // Just force to min salary (0.75-1.0)
+                if (capHit > availableBudget) {
+                    // Force restructure/reduction to fit cap
+                    const maxAllowedHit = Math.max(0.75, availableBudget);
 
-                    const newSalary = Math.max(0.75, Math.min(player.baseAnnual, availableBudget));
+                    // Simple reduction: set bonus to 0 and clamp base salary
+                    player.signingBonus = 0;
+                    player.baseAnnual = Math.max(0.75, Math.min(player.baseAnnual, maxAllowedHit));
 
-                    // If the reduction is significant (>20%), treat it as a restructure/force
-                    if (newSalary < player.baseAnnual * 0.8) {
-                        player.baseAnnual = newSalary;
-                        player.signingBonus = 0; // Remove bonus to save cap
-                    }
+                    capHit = player.baseAnnual;
                 }
 
-                estimatedCapUsed += (player.baseAnnual || 0);
+                estimatedCapUsed += capHit;
                 roster.push(player);
                 playersCreated++;
             }
@@ -155,11 +162,14 @@ function makeLeague(teams, dependencies = {}) {
 
     const leagueYear = (typeof window !== 'undefined' && window.state?.year) || 2025;
 
+    const { startPoint } = dependencies;
+
     const league = {
         teams: [],
         year: leagueYear,
         season: 1,
-        week: 1,
+        week: startPoint === 'offseason' ? 0 : 1,
+        offseason: startPoint === 'offseason',
         schedule: null,
         resultsByWeek: [],
         transactions: []

@@ -1431,7 +1431,7 @@ class GameController {
             if (!window.makeLeague) {
                 throw new Error('League creation system not available');
             }
-            window.state.league = window.makeLeague(teams);
+            window.state.league = window.makeLeague(teams, options);
             if (window.ensureFA) {
                 try {
                     window.ensureFA();
@@ -1753,6 +1753,10 @@ class GameController {
     handleHashChange() {
         try {
             const hash = location.hash.slice(2) || 'hub';
+            // Save current view to state for persistence
+            if (window.state) {
+                window.state.currentView = hash;
+            }
             if (window.router && typeof window.router === 'function') {
                 window.router(hash);
             }

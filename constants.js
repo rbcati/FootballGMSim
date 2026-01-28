@@ -60,8 +60,8 @@
   };
   
   const DEPTH_NEEDS = {
-    QB: 2, RB: 3, WR: 4, TE: 2, OL: 6,
-    DL: 5, LB: 4, CB: 4, S: 3, K: 1, P: 1
+    QB: 3, RB: 4, WR: 6, TE: 3, OL: 9,
+    DL: 9, LB: 7, CB: 6, S: 4, K: 1, P: 1
   };
 
   // --- IV. RATING & ATTRIBUTE LOGIC ---
