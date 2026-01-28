@@ -522,7 +522,15 @@ class LiveGameViewer {
         momentumChange += 15;
         gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? 15 : -15)));
 
-        this.switchPossession(gameState);
+        // OT Rule: Touchdown ends game on first possession (or any possession if sudden death)
+        if (gameState.isOvertime) {
+            play.message += " (Game Winner!)";
+            gameState.time = 0; // End game immediately
+            gameState.gameComplete = true; // Force completion
+        } else {
+            this.switchPossession(gameState);
+        }
+
       } else if (newYardLine <= 0) {
         // Safety
         play.result = 'safety';
@@ -539,7 +547,15 @@ class LiveGameViewer {
         momentumChange -= 20;
         gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? -20 : 20)));
 
-        this.switchPossession(gameState);
+        // OT Rule: Safety ends game
+        if (gameState.isOvertime) {
+             play.message += " (Game Winner!)";
+             gameState.time = 0;
+             gameState.gameComplete = true;
+        } else {
+             this.switchPossession(gameState);
+        }
+
       } else {
         gameState[gameState.ballPossession].yardLine = newYardLine;
         gameState[gameState.ballPossession].distance -= yards;
@@ -696,17 +712,62 @@ class LiveGameViewer {
       this.playByPlay.push(quarterPlay);
       this.renderPlay(quarterPlay);
     } else {
-      gameState.gameComplete = true;
-      const finalPlay = {
-        type: 'game_end',
-        message: 'Game Over',
-        finalScore: {
-          home: gameState.home.score,
-          away: gameState.away.score
-        }
-      };
-      this.playByPlay.push(finalPlay);
-      this.renderPlay(finalPlay);
+      // CHECK FOR TIE (OVERTIME)
+      if (gameState.home.score === gameState.away.score && !gameState.gameComplete) {
+          const isPlayoff = window.state?.league?.playoffs?.teams?.some(t => t.id === gameState.home.team.id) || false; // Approximation
+          const allowTies = !isPlayoff && (typeof window !== 'undefined' ? window.state?.settings?.allowTies !== false : true);
+
+          // Regular Season: Max 1 OT period (usually). We'll allow Q5.
+          // If already in Q5 (OT) and tied, and allowTies is true, end game.
+          if (gameState.quarter >= 5 && allowTies) {
+              gameState.gameComplete = true;
+              const finalPlay = {
+                type: 'game_end',
+                message: 'Game Over (Tie)',
+                finalScore: { home: gameState.home.score, away: gameState.away.score }
+              };
+              this.playByPlay.push(finalPlay);
+              this.renderPlay(finalPlay);
+              return;
+          }
+
+          // Start OT
+          gameState.quarter++;
+          gameState.time = 600; // 10 min OT for reg season standard
+          gameState.isOvertime = true;
+
+          // Coin Toss
+          const winner = Math.random() < 0.5 ? 'home' : 'away';
+          gameState.ballPossession = winner;
+          gameState.otFirstPossession = true;
+
+          // Reset field
+          const offense = gameState[winner];
+          offense.down = 1;
+          offense.distance = 10;
+          offense.yardLine = 25;
+
+          const otPlay = {
+            type: 'quarter_end', // Reuse style
+            quarter: 'OT',
+            message: `End of Regulation. Overtime! ${winner.toUpperCase()} wins toss.`
+          };
+          this.playByPlay.push(otPlay);
+          this.renderPlay(otPlay);
+
+      } else {
+          gameState.gameComplete = true;
+          const finalPlay = {
+            type: 'game_end',
+            message: 'Game Over',
+            finalScore: {
+              home: gameState.home.score,
+              away: gameState.away.score
+            }
+          };
+          this.playByPlay.push(finalPlay);
+          this.renderPlay(finalPlay);
+      }
     }
   }
 
