@@ -649,8 +649,11 @@ function simulateWeek(options = {}) {
       return;
     }
 
+    console.log(`[SIM-DEBUG] Advance Week: Season ${L.year}, Week ${L.week} - Starting Simulation`);
+
     // Delegate to GameRunner
     const result = GameRunner.simulateRegularSeasonWeek(L, options);
+    const { gamesSimulated } = result;
 
     // Check for Season Over
     if (result && result.seasonOver) {
@@ -683,8 +686,6 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    // DELEGATE TO GAME RUNNER
-    const { gamesSimulated } = GameRunner.simulateRegularSeasonWeek(L, options);
     const previousWeek = L.week - 1; // Since GameRunner incremented it
 
     console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);

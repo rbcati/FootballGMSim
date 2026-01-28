@@ -19,12 +19,21 @@ class GameRunner {
      * @returns {Object} Results { gamesSimulated: number, results: Array }
      */
     static simulateRegularSeasonWeek(league, options = {}) {
-        const weekIndex = (league.week || 1) - 1;
-        const scheduleWeeks = league.schedule.weeks || league.schedule;
-        const weekData = scheduleWeeks[weekIndex];
+        const weekNum = league.week || 1;
+        console.log(`[GameRunner] Simulating Week ${weekNum}`);
+
+        // Use helper to get schedule data
+        let weekData;
+        if (window.Scheduler && window.Scheduler.getWeekGames) {
+            weekData = window.Scheduler.getWeekGames(league.schedule, weekNum);
+        } else {
+            // Fallback
+            const scheduleWeeks = league.schedule.weeks || league.schedule;
+            weekData = scheduleWeeks[weekNum - 1];
+        }
 
         if (!weekData) {
-            console.error(`No data found for week ${league.week}`);
+            console.error(`[GameRunner] No data found for week ${weekNum}`);
             return { gamesSimulated: 0, results: [] };
         }
 
@@ -34,47 +43,58 @@ class GameRunner {
         const gamesToSim = pairings.map(pair => {
             if (pair.bye !== undefined) return { bye: pair.bye };
 
-            const home = league.teams[pair.home];
-            const away = league.teams[pair.away];
+            // Ensure we use IDs to find teams if pair.home/away are IDs
+            const homeId = typeof pair.home === 'object' ? pair.home.id : pair.home;
+            const awayId = typeof pair.away === 'object' ? pair.away.id : pair.away;
+
+            const home = league.teams.find(t => t.id === homeId);
+            const away = league.teams.find(t => t.id === awayId);
 
             if (!home || !away) return null;
 
             return {
                 home: home,
                 away: away,
-                week: league.week,
+                week: weekNum,
                 year: league.year
             };
         }).filter(g => g !== null);
 
         // Run Batch Simulation
+        // simulateBatch internally calls finalizeGameResult which updates schedule
         const results = simulateBatch(gamesToSim, options);
         const gamesSimulated = results.filter(r => !r.bye).length;
 
         // Store results
         if (!league.resultsByWeek) league.resultsByWeek = {};
-        league.resultsByWeek[league.week - 1] = results;
+        league.resultsByWeek[weekNum - 1] = results;
 
         // [QA-AUDIT] Validate Finalization
+        let finalizationError = false;
         if (weekData.games) {
             weekData.games.forEach(g => {
                 if (!g.bye && !g.finalized) {
                     console.error(`[QA-AUDIT] Critical: Game not finalized after simulation! ${g.home} vs ${g.away}`);
+                    finalizationError = true;
                 }
             });
+        }
+
+        if (finalizationError && options.throwOnFailure) {
+            throw new Error('Simulation failed to finalize all games.');
         }
 
         // Update single game records
         if (typeof window.updateSingleGameRecords === 'function') {
             try {
-                window.updateSingleGameRecords(league, league.year, league.week);
+                window.updateSingleGameRecords(league, league.year, weekNum);
             } catch (e) {
                 console.error('Error updating records:', e);
             }
         }
 
         // Advance Week
-        const previousWeek = league.week;
+        const previousWeek = weekNum;
         league.week++;
 
         // Training

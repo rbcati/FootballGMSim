@@ -560,11 +560,30 @@
         }
     }
 
+    /**
+     * Retrieves the games for a specific week number
+     * @param {Object} schedule - Schedule object
+     * @param {number} weekNumber - 1-based week number
+     * @returns {Object} Week object with games
+     */
+    function getWeekGames(schedule, weekNumber) {
+        if (!schedule) return null;
+        const weeks = schedule.weeks || schedule;
+        if (!Array.isArray(weeks)) return null;
+
+        // Handle 1-based indexing
+        const index = weekNumber - 1;
+        if (index < 0 || index >= weeks.length) return null;
+
+        return weeks[index];
+    }
+
     // Expose the Scheduler object globally
     global.Scheduler = {
         makeAccurateSchedule,
         createNFLStyleSchedule,
-        createSimpleSchedule
+        createSimpleSchedule,
+        getWeekGames
     };
 
     // Make your primary function globally available under the name the game expects.
