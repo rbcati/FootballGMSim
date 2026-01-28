@@ -848,6 +848,94 @@ export function simGameStats(home, away, options = {}) {
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
+    // --- OVERTIME LOGIC ---
+    // If tied at end of regulation, simulate OT
+    if (homeScore === awayScore) {
+        if (verbose) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
+        const isPlayoff = options.isPlayoff === true;
+        const allowTies = !isPlayoff && (typeof window !== 'undefined' ? window.state?.settings?.allowTies !== false : true); // Default allow ties in Reg Season
+
+        let otPeriod = 1;
+        let gameOver = false;
+        // Simple possession loop model for OT
+        // Coin toss: 0 = Home, 1 = Away
+        let possession = Math.random() < 0.5 ? 'home' : 'away';
+
+        // Track first possession score for modified sudden death
+        let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
+        let possessions = 0;
+
+        const maxPossessions = allowTies ? 4 : 20; // Limit for reg season to avoid infinite loops, higher for playoffs
+
+        while (!gameOver && possessions < maxPossessions) {
+            possessions++;
+            // Simulate a drive
+            // Chance to score based on strength diff
+            const offStrength = possession === 'home' ? homeStrength : awayStrength;
+            const defStrength = possession === 'home' ? awayStrength : homeStrength;
+
+            // Base score chance ~35% per drive
+            const diff = offStrength - defStrength;
+            const scoreChance = 0.35 + (diff / 200);
+
+            let drivePoints = 0;
+            if (U.rand(0, 100) / 100 < scoreChance) {
+                // Scored! TD or FG?
+                // TD Chance ~60% of scores
+                if (U.rand(0, 100) < 60) {
+                    drivePoints = 6 + (U.rand(0,100) < 95 ? 1 : 0); // TD + XP
+                } else {
+                    drivePoints = 3; // FG
+                }
+            }
+
+            if (verbose) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
+
+            // Apply NFL OT Rules
+            if (possessions === 1) {
+                if (drivePoints >= 6) {
+                    // TD on first possession = Game Over
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                } else if (drivePoints === 3) {
+                    // FG on first possession = Other team gets a chance
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    firstPossessionScore = 3;
+                }
+            } else if (possessions === 2 && firstPossessionScore === 3) {
+                // Second possession after a FG
+                if (drivePoints >= 6) {
+                    // TD beats FG -> Win
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                } else if (drivePoints === 3) {
+                    // FG ties FG -> Sudden Death continues
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    // Game continues to next possession as sudden death
+                } else {
+                    // No score -> Loss (First team wins)
+                    gameOver = true;
+                }
+            } else {
+                // Sudden Death (Possession 3+ OR Possession 2 if 1st was 0)
+                if (drivePoints > 0) {
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                }
+            }
+
+            // Switch possession
+            possession = possession === 'home' ? 'away' : 'home';
+        }
+
+        if (verbose) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
+    }
+
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {

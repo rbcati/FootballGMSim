@@ -702,18 +702,24 @@ window.renderRoster = function() {
             
             // Add click handler for player details
             tr.addEventListener('click', (e) => {
-                // Prevent bubbling to avoid interfering with other UI interactions (like shake effects)
+                // Prevent bubbling to avoid interfering with other UI interactions
                 e.stopPropagation();
 
                 // Ensure clicking the checkbox doesn't trigger details
                 if (e.target.matches('input[type="checkbox"]')) return;
 
                 // Use modal view instead of navigation to keep context
-                if (window.showPlayerDetails) {
-                    window.showPlayerDetails(player);
-                } else if (window.viewPlayerStats) {
-                    window.viewPlayerStats(player.id);
-                } else {
+                // Prioritize showPlayerDetails (Card View) -> viewPlayerStats (Stats Modal) -> Route
+                try {
+                    if (window.showPlayerDetails) {
+                        window.showPlayerDetails(player);
+                    } else if (window.viewPlayerStats) {
+                        window.viewPlayerStats(player.id);
+                    } else {
+                        location.hash = `#/player/${player.id}`;
+                    }
+                } catch (err) {
+                    console.error("Error handling player click:", err);
                     location.hash = `#/player/${player.id}`;
                 }
             });
@@ -738,6 +744,9 @@ function showPlayerDetails(player) {
     // 🏆 REFACTORED: Now uses ui-components.js Modal class
     if (!window.Modal) {
         console.error('Modal component not found, falling back to legacy render.');
+        // Fallback to simple stats viewer or route
+        if (window.viewPlayerStats) window.viewPlayerStats(player.id);
+        else location.hash = `#/player/${player.id}`;
         return;
     }
 
