@@ -8,7 +8,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { saveState } from './state.js';
-import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats, getZeroStats } from './player.js';
+import { calculateWAR, calculateQBRating, calculatePasserRatingWhenTargeted, updateAdvancedStats, getZeroStats, updatePlayerSeasonLegacy, checkHallOfFameEligibility } from './player.js';
 import { processStaffXp } from './coach-system.js';
 import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
@@ -170,6 +170,20 @@ function startOffseason() {
     window.state.offseason = true;
     window.state.offseasonYear = L.year;
     
+    // LEGACY: Update season legacy before wiping season stats
+    if (updatePlayerSeasonLegacy) {
+        console.log('Updating player season legacy...');
+        L.teams.forEach(team => {
+            if (team.roster) {
+                team.roster.forEach(player => {
+                    if (player.stats && player.stats.season) {
+                        updatePlayerSeasonLegacy(player, player.stats.season, team, L.year);
+                    }
+                });
+            }
+        });
+    }
+
     // Accumulate season stats into career stats for all players
     accumulateCareerStats(L);
     console.log('[QA-AUDIT] startOffseason: Career stats accumulated.');
@@ -198,6 +212,64 @@ function startOffseason() {
       });
     }
     
+    // Update Team Legacy (Phase 6)
+    try {
+        const playoffs = window.state.playoffs;
+        const playoffTeamIds = new Set();
+        if (playoffs && playoffs.teams) {
+             playoffs.teams.forEach(t => playoffTeamIds.add(t.id));
+        } else if (playoffs && playoffs.results) {
+             // Fallback: extract from results
+             playoffs.results.forEach(r => {
+                 if(r.games) r.games.forEach(g => {
+                     if(g.home) playoffTeamIds.add(g.home.id);
+                     if(g.away) playoffTeamIds.add(g.away.id);
+                 });
+             });
+        }
+
+        L.teams.forEach(team => {
+            if (!team.legacy) team.legacy = {
+                playoffStreak: 0,
+                championships: [],
+                divisionTitles: 0,
+                bestSeason: null
+            };
+
+            // Update Playoff Streak
+            if (playoffTeamIds.has(team.id)) {
+                 team.legacy.playoffStreak++;
+            } else {
+                 team.legacy.playoffStreak = 0;
+            }
+
+            // Track Best Season (Wins + Point Diff)
+            const wins = team.wins || 0;
+            const pointDiff = (team.ptsFor || 0) - (team.ptsAgainst || 0);
+            const seasonScore = wins * 10 + pointDiff * 0.1;
+
+            if (!team.legacy.bestSeason || seasonScore > team.legacy.bestSeason.score) {
+                team.legacy.bestSeason = {
+                    year: L.year,
+                    wins: wins,
+                    losses: team.losses || 0,
+                    pointDiff: pointDiff,
+                    score: seasonScore
+                };
+                // News for user team
+                if (newsEngine && team.id === window.state.userTeamId) {
+                     newsEngine.addNewsItem(L,
+                        `Franchise Record: ${team.name}`,
+                        `The ${team.name} have set a new franchise record for best season performance with ${wins} wins.`,
+                        null, 'team'
+                    );
+                }
+            }
+        });
+    } catch (e) {
+        console.error("Error updating team legacy:", e);
+    }
+
     // Record coach rankings for the season
     if (typeof window.calculateAndRecordCoachRankings === 'function') {
       try {
@@ -228,15 +300,56 @@ function startOffseason() {
     }
     
     // Process retirements
+    let newlyRetired = [];
     if (typeof window.processRetirements === 'function') {
       try {
         const retirementResults = window.processRetirements(L, L.year);
-        if (retirementResults.retired && retirementResults.retired.length > 0) {
-          console.log(`Processed ${retirementResults.retired.length} retirements`);
+        if (retirementResults && retirementResults.retired) {
+            // retirementResults.retired is array of { player, team, year }
+            newlyRetired = retirementResults.retired.map(item => item.player);
+            console.log(`Processed ${newlyRetired.length} retirements`);
+
+            // Persist noteworthy retired players for future HOF voting
+            if (!L.retiredPlayers) L.retiredPlayers = [];
+
+            // Only keep players who might make HOF (Legacy Score > 40 or OVR > 80) to save space
+            const candidates = newlyRetired.filter(p => {
+                const score = p.legacy?.metrics?.legacyScore || 0;
+                return score > 40 || p.ovr > 80;
+            });
+
+            L.retiredPlayers.push(...candidates);
         }
       } catch (error) {
         console.error('Error processing retirements:', error);
       }
+    }
+
+    // Hall of Fame Induction (Check ALL eligible retired players)
+    if (checkHallOfFameEligibility && L.retiredPlayers) {
+        const inducted = [];
+
+        // Scan all retired players
+        L.retiredPlayers.forEach(p => {
+            // checkHallOfFameEligibility handles the "5 years wait" internally if we pass currentYear
+            // It also checks if already inducted.
+            if (checkHallOfFameEligibility(p, L.year)) {
+                 inducted.push(p);
+
+                 // Add news
+                 if (newsEngine) {
+                    newsEngine.addNewsItem(L,
+                        `Hall of Fame: ${p.name} Inducted`,
+                        `${p.name} has been elected to the Hall of Fame following a legendary career.`,
+                        null, 'award'
+                    );
+                }
+            }
+        });
+
+        if (inducted.length > 0) {
+             if (window.setStatus) window.setStatus(`${inducted.length} players inducted into Hall of Fame!`, 'success');
+        }
     }
 
     // Run any offseason processing hooks (e.g., coaching stats)
