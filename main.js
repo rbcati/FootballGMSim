@@ -2,7 +2,7 @@ import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
-import { GAME_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
+import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -448,9 +448,10 @@ class GameController {
             if (userTeam && !isOffseason && opponent) {
                 // Ensure state exists
                 if (!L.weeklyGamePlan) {
-                    L.weeklyGamePlan = { planId: 'BALANCED', riskId: 'BALANCED' };
+                    L.weeklyGamePlan = { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED' };
                 }
-                const currentPlan = GAME_PLANS[L.weeklyGamePlan.planId] || GAME_PLANS.BALANCED;
+                const currentOff = OFFENSIVE_PLANS[L.weeklyGamePlan.offPlanId] || OFFENSIVE_PLANS.BALANCED;
+                const currentDef = DEFENSIVE_PLANS[L.weeklyGamePlan.defPlanId] || DEFENSIVE_PLANS.BALANCED;
                 const currentRisk = RISK_PROFILES[L.weeklyGamePlan.riskId] || RISK_PROFILES.BALANCED;
 
                 // Infer Opponent Tendency (Simple Logic)
@@ -476,22 +477,32 @@ class GameController {
                         </div>
 
                         <div class="grid two" style="gap: 20px;">
-                            <!-- Game Plan -->
+                            <!-- Game Plans -->
                             <div>
-                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">1. Game Plan Changer</label>
-                                <select id="managerGamePlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
-                                    ${Object.values(GAME_PLANS).map(p => `
-                                        <option value="${p.id}" ${p.id === currentPlan.id ? 'selected' : ''}>${p.name}</option>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">1. Offensive Plan</label>
+                                <select id="managerOffPlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
+                                    ${Object.values(OFFENSIVE_PLANS).map(p => `
+                                        <option value="${p.id}" ${p.id === currentOff.id ? 'selected' : ''}>${p.name}</option>
                                     `).join('')}
                                 </select>
-                                <div id="planDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                                <div id="offPlanDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                                    <!-- Dynamic content rendered below -->
+                                </div>
+
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">2. Defensive Plan</label>
+                                <select id="managerDefPlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
+                                    ${Object.values(DEFENSIVE_PLANS).map(p => `
+                                        <option value="${p.id}" ${p.id === currentDef.id ? 'selected' : ''}>${p.name}</option>
+                                    `).join('')}
+                                </select>
+                                <div id="defPlanDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
                                     <!-- Dynamic content rendered below -->
                                 </div>
                             </div>
 
                             <!-- Risk Profile -->
                             <div>
-                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">2. Risk Profile</label>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">3. Risk Profile</label>
                                 <div class="btn-group" style="display:flex; gap:5px; margin-bottom: 10px;">
                                     ${Object.values(RISK_PROFILES).map(r => `
                                         <button class="btn btn-sm ${r.id === currentRisk.id ? 'primary' : 'secondary'} risk-btn"
@@ -756,57 +767,92 @@ class GameController {
             `;
             // Add event listeners for Manager Panel
             if (managerPanelHTML) {
-                const planSelect = hubContainer.querySelector('#managerGamePlan');
-                if (planSelect) {
-                    const updateVisuals = (planId) => {
-                        const plan = GAME_PLANS[planId];
-                        const descEl = hubContainer.querySelector('#planDesc');
-                        if (plan && descEl) {
-                             // Create Visual Badges based on modifiers
-                             let badgesHtml = '';
-                             if (plan.modifiers) {
-                                Object.entries(plan.modifiers).forEach(([key, val]) => {
-                                    // Heuristic mapping for visuals
-                                    let label = key;
-                                    let isPositive = val > 1.0;
+                const offSelect = hubContainer.querySelector('#managerOffPlan');
+                const defSelect = hubContainer.querySelector('#managerDefPlan');
 
-                                    // Custom labels
-                                    if(key === 'passVolume') label = 'Passing';
-                                    if(key === 'runVolume') label = 'Rushing';
-                                    if(key === 'intChance') { label = 'INT Risk'; isPositive = val < 1.0; } // Lower is better
-                                    if(key === 'sackChance') { label = 'Sack Risk'; isPositive = val < 1.0; }
-                                    if(key === 'variance') label = 'Variance';
+                const renderBadges = (plan) => {
+                     let badgesHtml = '';
+                     if (plan.modifiers) {
+                        Object.entries(plan.modifiers).forEach(([key, val]) => {
+                            let label = key;
+                            let isPositive = val > 1.0;
 
-                                    // Skip minor mods
-                                    if (Math.abs(val - 1.0) < 0.05) return;
+                            if(key === 'passVolume') label = 'Passing';
+                            if(key === 'runVolume') label = 'Rushing';
+                            if(key === 'intChance') { label = 'INT Risk'; isPositive = val < 1.0; }
+                            if(key === 'sackChance') { label = 'Sack Risk'; isPositive = val < 1.0; }
+                            if(key === 'variance') label = 'Variance';
+                            if(key === 'defRunStop') label = 'Run Stop';
+                            if(key === 'defPassCov') label = 'Pass Cov';
+                            if(key === 'defIntChance') label = 'Int Chance';
+                            if(key === 'defSackChance') label = 'Sack Chance';
+                            if(key === 'defBigPlayAllowed') { label = 'Big Play'; isPositive = val < 1.0; }
 
-                                    const color = isPositive ? '#48bb78' : '#f56565';
-                                    const arrow = val > 1.0 ? '▲' : '▼';
+                            if (Math.abs(val - 1.0) < 0.05) return;
 
-                                    badgesHtml += `<span style="display:inline-block; background:${color}22; color:${color}; border:1px solid ${color}44; border-radius:4px; padding:2px 6px; margin-right:4px; margin-bottom:4px; font-size:0.75rem; font-weight:bold;">${label} ${arrow}</span>`;
-                                });
-                             }
+                            const color = isPositive ? '#48bb78' : '#f56565';
+                            const arrow = val > 1.0 ? '▲' : '▼';
 
-                             descEl.innerHTML = `
-                                <div style="margin-bottom: 8px;">${plan.description}</div>
-                                <div style="margin-bottom: 6px;">${badgesHtml}</div>
-                                <div style="font-size: 0.8rem; opacity: 0.8;">
-                                    <span style="color: #48bb78;">+ ${plan.bonus}</span><br>
-                                    <span style="color: #f56565;">- ${plan.penalty}</span>
-                                </div>
-                             `;
-                        }
-                    };
+                            badgesHtml += `<span style="display:inline-block; background:${color}22; color:${color}; border:1px solid ${color}44; border-radius:4px; padding:2px 6px; margin-right:4px; margin-bottom:4px; font-size:0.75rem; font-weight:bold;">${label} ${arrow}</span>`;
+                        });
+                     }
+                     return badgesHtml;
+                };
 
-                    // Initial Render
-                    updateVisuals(planSelect.value);
+                const updateOffVisuals = (planId) => {
+                    const plan = OFFENSIVE_PLANS[planId];
+                    const descEl = hubContainer.querySelector('#offPlanDesc');
+                    if (plan && descEl) {
+                         const badgesHtml = renderBadges(plan);
+                         descEl.innerHTML = `
+                            <div style="margin-bottom: 8px;">${plan.description}</div>
+                            <div style="margin-bottom: 6px;">${badgesHtml}</div>
+                            <div style="font-size: 0.8rem; opacity: 0.8;">
+                                <span style="color: #48bb78;">+ ${plan.bonus}</span><br>
+                                <span style="color: #f56565;">- ${plan.penalty}</span>
+                            </div>
+                         `;
+                    }
+                };
 
-                    planSelect.addEventListener('change', (e) => {
-                        const newPlanId = e.target.value;
-                        const currentRiskId = window.state.league.weeklyGamePlan?.riskId || 'BALANCED';
-                        updateWeeklyStrategy(window.state.league, newPlanId, currentRiskId);
-                        // Update visuals locally to avoid full re-render flicker
-                        updateVisuals(newPlanId);
+                const updateDefVisuals = (planId) => {
+                    const plan = DEFENSIVE_PLANS[planId];
+                    const descEl = hubContainer.querySelector('#defPlanDesc');
+                    if (plan && descEl) {
+                         const badgesHtml = renderBadges(plan);
+                         descEl.innerHTML = `
+                            <div style="margin-bottom: 8px;">${plan.description}</div>
+                            <div style="margin-bottom: 6px;">${badgesHtml}</div>
+                            <div style="font-size: 0.8rem; opacity: 0.8;">
+                                <span style="color: #48bb78;">+ ${plan.bonus}</span><br>
+                                <span style="color: #f56565;">- ${plan.penalty}</span>
+                            </div>
+                         `;
+                    }
+                };
+
+                // Initial Render
+                if (offSelect) updateOffVisuals(offSelect.value);
+                if (defSelect) updateDefVisuals(defSelect.value);
+
+                const saveStrategy = () => {
+                    const offPlan = offSelect ? offSelect.value : 'BALANCED';
+                    const defPlan = defSelect ? defSelect.value : 'BALANCED';
+                    const riskId = window.state.league.weeklyGamePlan?.riskId || 'BALANCED';
+                    updateWeeklyStrategy(window.state.league, offPlan, defPlan, riskId);
+                };
+
+                if (offSelect) {
+                    offSelect.addEventListener('change', (e) => {
+                        updateOffVisuals(e.target.value);
+                        saveStrategy();
+                    });
+                }
+
+                if (defSelect) {
+                    defSelect.addEventListener('change', (e) => {
+                        updateDefVisuals(e.target.value);
+                        saveStrategy();
                     });
                 }
 
@@ -814,8 +860,9 @@ class GameController {
                 riskBtns.forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         const newRiskId = e.target.getAttribute('data-id');
-                        const currentPlanId = window.state.league.weeklyGamePlan?.planId || 'BALANCED';
-                        updateWeeklyStrategy(window.state.league, currentPlanId, newRiskId);
+                        const offPlan = offSelect ? offSelect.value : 'BALANCED';
+                        const defPlan = defSelect ? defSelect.value : 'BALANCED';
+                        updateWeeklyStrategy(window.state.league, offPlan, defPlan, newRiskId);
                         this.renderHub();
                     });
                 });
@@ -1223,7 +1270,12 @@ class GameController {
                                     // Ensure team IDs are numbers for watchLiveGame
                                     const homeId = typeof game.home === 'object' ? game.home.id : game.home;
                                     const awayId = typeof game.away === 'object' ? game.away.id : game.away;
-                                    scheduleHTML += `<button class="btn btn-sm btn-primary watch-live-btn" onclick="if(window.watchLiveGame) { window.watchLiveGame(${homeId}, ${awayId}); } else { console.error('watchLiveGame not available'); }">📺 Watch Live</button>`;
+
+                                    if (game.finalized) {
+                                        scheduleHTML += `<button class="btn btn-sm" onclick="window.showBoxScore && window.showBoxScore(${week}, ${idx})">📊 Box Score</button>`;
+                                    } else {
+                                        scheduleHTML += `<button class="btn btn-sm btn-primary watch-live-btn" onclick="if(window.watchLiveGame) { window.watchLiveGame(${homeId}, ${awayId}); } else { console.error('watchLiveGame not available'); }">📺 Watch Live</button>`;
+                                    }
                                 }
                                 
                                 scheduleHTML += `</div>`;
