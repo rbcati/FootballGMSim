@@ -326,6 +326,107 @@ function updateRivalries(home, away, homeScore, awayScore, isPlayoff) {
   if (awayRiv.events.length > 3) awayRiv.events.length = 3;
 }
 
+/**
+ * Generates post-game callbacks based on pre-game context and actual stats.
+ * @param {Object} context - Pre-game context { matchup, offPlanId, defPlanId, riskId, stakes, userIsHome }
+ * @param {Object} stats - Game stats object { home: {players: ...}, away: {players: ...} }
+ * @param {number} homeScore
+ * @param {number} awayScore
+ * @returns {Array} Array of callback strings
+ */
+export function generatePostGameCallbacks(context, stats, homeScore, awayScore) {
+    if (!context) return [];
+    const callbacks = [];
+    const { matchup, offPlanId, defPlanId, riskId, stakes, userIsHome } = context;
+
+    // Use safe access for stats
+    const userStats = userIsHome ? stats.home : stats.away;
+    const oppStats = userIsHome ? stats.away : stats.home;
+    const userScore = userIsHome ? homeScore : awayScore;
+    const oppScore = userIsHome ? awayScore : homeScore;
+    const won = userScore > oppScore;
+
+    // Helper to sum stats
+    const sumStat = (teamStats, statName) => {
+        if (!teamStats || !teamStats.players) return 0;
+        return Object.values(teamStats.players).reduce((sum, p) => sum + (p.stats[statName] || 0), 0);
+    };
+
+    // Helper to check for big plays (simplistic check on longest)
+    const hasBigPlay = (teamStats) => {
+        if (!teamStats || !teamStats.players) return false;
+        return Object.values(teamStats.players).some(p => (p.stats.longestPass > 45) || (p.stats.longestRun > 35));
+    };
+
+    const userRushYds = sumStat(userStats, 'rushYd');
+    const userPassYds = sumStat(userStats, 'passYd');
+    const userTurnovers = sumStat(userStats, 'interceptions') + sumStat(userStats, 'fumbles');
+    const userSacks = sumStat(userStats, 'sacksAllowed'); // allowed by offense
+    const userDefSacks = sumStat(userStats, 'sacks'); // made by defense
+    const userBigPlays = hasBigPlay(userStats);
+
+    const oppRushYds = sumStat(oppStats, 'rushYd');
+    const oppPassYds = sumStat(oppStats, 'passYd');
+
+    // 1. Matchup Callbacks
+    if (matchup) {
+        if (matchup.toLowerCase().includes("passing") && userPassYds > 275) {
+            callbacks.push("Your passing attack exploited the matchup as expected.");
+        } else if (matchup.toLowerCase().includes("passing") && userPassYds < 175) {
+            callbacks.push("Despite a favorable matchup, the passing game stalled.");
+        } else if (matchup.toLowerCase().includes("rushing") && userRushYds > 160) {
+            callbacks.push("Ground game dominated their weak run defense.");
+        } else if (matchup.toLowerCase().includes("rushing") && userRushYds < 60) {
+            callbacks.push("Run game failed to gain traction despite the advantage.");
+        }
+    }
+
+    // 2. Strategy Callbacks
+    if (offPlanId === 'AGGRESSIVE_PASSING') {
+        if (userPassYds > 300) callbacks.push("Aggressive passing strategy led to huge yardage.");
+        else if (userTurnovers >= 3) callbacks.push("Aggressive air attack resulted in costly turnovers.");
+    } else if (offPlanId === 'BALL_CONTROL') {
+        if (userRushYds > 150 && won) callbacks.push("Ball control strategy wore them down perfectly.");
+        else if (userScore < 14) callbacks.push("Conservative offense failed to generate points.");
+    } else if (offPlanId === 'PROTECT_QB') {
+        if (userSacks === 0) callbacks.push("Protection schemes kept the QB clean all day.");
+        else if (userSacks >= 4) callbacks.push("Protection broke down despite the focus on safety.");
+    } else if (offPlanId === 'FEED_STAR') {
+        // Hard to check star without ID, but assume high usage if stats are skewed?
+        // Skip for now to keep simple
+    }
+
+    if (defPlanId === 'BLITZ_HEAVY') {
+        if (userDefSacks >= 4) callbacks.push("Blitz packages overwhelmed their line.");
+        else if (oppScore > 28) callbacks.push("Heavy blitzing left the secondary exposed.");
+    } else if (defPlanId === 'SELL_OUT_RUN') {
+        if (oppPassYds > 280) callbacks.push("Selling out vs run left passing lanes wide open.");
+        else if (oppRushYds < 60) callbacks.push("Run defense completely shut them down.");
+    } else if (defPlanId === 'DISGUISE_COVERAGE') {
+        const oppInts = sumStat(oppStats, 'interceptions');
+        if (oppInts >= 2) callbacks.push("Confusing looks forced multiple turnovers.");
+        else if (oppPassYds > 280) callbacks.push("Complex coverage schemes were picked apart.");
+    }
+
+    // 3. Risk Profile Callbacks
+    if (riskId === 'AGGRESSIVE') {
+        if (userBigPlays && won) callbacks.push("High-risk approach sparked explosive plays.");
+        else if (userTurnovers >= 3) callbacks.push("Gambling on big plays backfired with turnovers.");
+    } else if (riskId === 'CONSERVATIVE') {
+        if (won && userTurnovers === 0) callbacks.push("Mistake-free football secured the win.");
+        else if (!won && userScore < 17) callbacks.push("Conservative play limited comeback chances.");
+    }
+
+    // 4. Stakes Callbacks
+    if (stakes && stakes > 50) {
+        if (won) callbacks.push("Clutch performance in a high-stakes rivalry game.");
+        else callbacks.push("Crushing defeat to a bitter rival.");
+    }
+
+    // Limit to 3 unique lines
+    return [...new Set(callbacks)].slice(0, 3);
+}
+
 // --- STAT GENERATION HELPERS ---
 
 function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}) {
@@ -848,6 +949,94 @@ export function simGameStats(home, away, options = {}) {
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
+    // --- OVERTIME LOGIC ---
+    // If tied at end of regulation, simulate OT
+    if (homeScore === awayScore) {
+        if (verbose) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
+        const isPlayoff = options.isPlayoff === true;
+        const allowTies = !isPlayoff && (typeof window !== 'undefined' ? window.state?.settings?.allowTies !== false : true); // Default allow ties in Reg Season
+
+        let otPeriod = 1;
+        let gameOver = false;
+        // Simple possession loop model for OT
+        // Coin toss: 0 = Home, 1 = Away
+        let possession = Math.random() < 0.5 ? 'home' : 'away';
+
+        // Track first possession score for modified sudden death
+        let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
+        let possessions = 0;
+
+        const maxPossessions = allowTies ? 4 : 20; // Limit for reg season to avoid infinite loops, higher for playoffs
+
+        while (!gameOver && possessions < maxPossessions) {
+            possessions++;
+            // Simulate a drive
+            // Chance to score based on strength diff
+            const offStrength = possession === 'home' ? homeStrength : awayStrength;
+            const defStrength = possession === 'home' ? awayStrength : homeStrength;
+
+            // Base score chance ~35% per drive
+            const diff = offStrength - defStrength;
+            const scoreChance = 0.35 + (diff / 200);
+
+            let drivePoints = 0;
+            if (U.rand(0, 100) / 100 < scoreChance) {
+                // Scored! TD or FG?
+                // TD Chance ~60% of scores
+                if (U.rand(0, 100) < 60) {
+                    drivePoints = 6 + (U.rand(0,100) < 95 ? 1 : 0); // TD + XP
+                } else {
+                    drivePoints = 3; // FG
+                }
+            }
+
+            if (verbose) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
+
+            // Apply NFL OT Rules
+            if (possessions === 1) {
+                if (drivePoints >= 6) {
+                    // TD on first possession = Game Over
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                } else if (drivePoints === 3) {
+                    // FG on first possession = Other team gets a chance
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    firstPossessionScore = 3;
+                }
+            } else if (possessions === 2 && firstPossessionScore === 3) {
+                // Second possession after a FG
+                if (drivePoints >= 6) {
+                    // TD beats FG -> Win
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                } else if (drivePoints === 3) {
+                    // FG ties FG -> Sudden Death continues
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    // Game continues to next possession as sudden death
+                } else {
+                    // No score -> Loss (First team wins)
+                    gameOver = true;
+                }
+            } else {
+                // Sudden Death (Possession 3+ OR Possession 2 if 1st was 0)
+                if (drivePoints > 0) {
+                    if (possession === 'home') homeScore += drivePoints;
+                    else awayScore += drivePoints;
+                    gameOver = true;
+                }
+            }
+
+            // Switch possession
+            possession = possession === 'home' ? 'away' : 'home';
+        }
+
+        if (verbose) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
+    }
+
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
@@ -1144,6 +1333,14 @@ export function finalizeGameResult(league, gameData, options = {}) {
         year: league.year
     };
 
+    // 5b. Generate Callbacks (if pre-game context exists)
+    if (gameData.preGameContext) {
+        const callbacks = generatePostGameCallbacks(gameData.preGameContext, stats, homeScore, awayScore);
+        if (callbacks && callbacks.length > 0) {
+            resultObj.callbacks = callbacks;
+        }
+    }
+
     // 6. Store in resultsByWeek
     if (!league.resultsByWeek) league.resultsByWeek = {};
     if (!league.resultsByWeek[weekIndex]) league.resultsByWeek[weekIndex] = [];
@@ -1364,6 +1561,7 @@ export function simulateBatch(games, options = {}) {
                     homeScore: sH,
                     awayScore: sA,
                     isPlayoff: options.isPlayoff || false,
+                    preGameContext: pair.preGameContext, // PASS CONTEXT
                     stats: {
                         home: { players: homePlayerStats },
                         away: { players: awayPlayerStats }

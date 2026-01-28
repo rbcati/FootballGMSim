@@ -12,6 +12,18 @@ export function getActionItems(league, team) {
 
     // --- BLOCKERS ---
 
+    // 0. Save Game (Priority)
+    if (window.state && window.state.needsSave) {
+        // We push this as a WARNING so it doesn't block simulation, but it's high priority
+        warnings.push({
+            id: 'unsaved_progress',
+            title: 'Unsaved Progress',
+            description: 'You have unsaved changes. Save your game to avoid losing progress.',
+            action: 'if(window.saveGame) window.saveGame()',
+            actionLabel: 'Save Game'
+        });
+    }
+
     // 1. Roster Limits
     // NFL limit is 53. We enforce strict 53 max during season.
     const rosterSize = team.roster.length;

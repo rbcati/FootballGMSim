@@ -1,6 +1,7 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { renderMatchupComparison } from './matchup-comparison.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
+import { hasSavedLeagues } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
@@ -33,6 +34,130 @@ document.addEventListener("visibilitychange", () => {
 
 // Check on initial load
 checkForUpdates();
+
+/**
+ * Calculate team ranks for Pass/Rush Offense/Defense
+ * @param {Object} league - League object
+ * @returns {Object} Map of teamId -> { passOffRank, rushOffRank, passDefRank, rushDefRank }
+ */
+function calculateTeamRanks(league) {
+    if (!league || !league.teams) return {};
+
+    const stats = league.teams.map(t => ({
+        id: t.id,
+        passOff: 0,
+        rushOff: 0,
+        passDef: 0,
+        rushDef: 0,
+        gamesPlayed: 0
+    }));
+
+    const teamMap = new Map(stats.map(s => [s.id, s]));
+
+    // 1. Offense Stats (from Rosters - accumulated season stats)
+    league.teams.forEach(team => {
+        const teamStat = teamMap.get(team.id);
+        if (!teamStat) return;
+
+        if (team.roster) {
+            team.roster.forEach(p => {
+                if (p.stats && p.stats.season) {
+                    teamStat.passOff += (p.stats.season.passYd || 0);
+                    teamStat.rushOff += (p.stats.season.rushYd || 0);
+                }
+            });
+        }
+    });
+
+    // 2. Defense Stats (from Results)
+    if (league.resultsByWeek) {
+        Object.values(league.resultsByWeek).forEach(weekGames => {
+            if (Array.isArray(weekGames)) {
+                weekGames.forEach(game => {
+                    if (!game.finalized) return;
+
+                    const homeId = typeof game.home === 'object' ? game.home.id : game.home;
+                    const awayId = typeof game.away === 'object' ? game.away.id : game.away;
+
+                    const homeStat = teamMap.get(homeId);
+                    const awayStat = teamMap.get(awayId);
+
+                    // Calculate Game Yards from Box Score
+                    let homePass = 0, homeRush = 0;
+                    let awayPass = 0, awayRush = 0;
+
+                    if (game.boxScore) {
+                        if (game.boxScore.home) {
+                            Object.values(game.boxScore.home).forEach(p => {
+                                if (p.stats) {
+                                    homePass += (p.stats.passYd || 0);
+                                    homeRush += (p.stats.rushYd || 0);
+                                }
+                            });
+                        }
+                        if (game.boxScore.away) {
+                            Object.values(game.boxScore.away).forEach(p => {
+                                if (p.stats) {
+                                    awayPass += (p.stats.passYd || 0);
+                                    awayRush += (p.stats.rushYd || 0);
+                                }
+                            });
+                        }
+                    }
+
+                    if (homeStat) {
+                        homeStat.passDef += awayPass;
+                        homeStat.rushDef += awayRush;
+                        homeStat.gamesPlayed++;
+                    }
+
+                    if (awayStat) {
+                        awayStat.passDef += homePass;
+                        awayStat.rushDef += homeRush;
+                        awayStat.gamesPlayed++;
+                    }
+                });
+            }
+        });
+    }
+
+    // 3. Normalize per Game (needed because bye weeks create uneven games played)
+    stats.forEach(s => {
+        // Use max(1) to avoid division by zero if no games played,
+        // though totals would be 0 anyway.
+        const g = Math.max(1, s.gamesPlayed);
+
+        // For offense, we summed season totals. We should divide by games played if we want per-game rank.
+        // Assuming team.stats.season.gamesPlayed tracks the same count, but using our calculated count is safer for consistency.
+        if (s.gamesPlayed > 0) {
+            s.passOff /= g;
+            s.rushOff /= g;
+            s.passDef /= g;
+            s.rushDef /= g;
+        }
+    });
+
+    // 4. Sort and Rank
+    const getRank = (list, id) => list.findIndex(s => s.id === id) + 1;
+
+    const byPassOff = [...stats].sort((a, b) => b.passOff - a.passOff);
+    const byRushOff = [...stats].sort((a, b) => b.rushOff - a.rushOff);
+    // Defense: Lower yards allowed is better
+    const byPassDef = [...stats].sort((a, b) => a.passDef - b.passDef);
+    const byRushDef = [...stats].sort((a, b) => a.rushDef - b.rushDef);
+
+    const ranks = {};
+    stats.forEach(s => {
+        ranks[s.id] = {
+            passOff: getRank(byPassOff, s.id),
+            rushOff: getRank(byRushOff, s.id),
+            passDef: getRank(byPassDef, s.id),
+            rushDef: getRank(byRushDef, s.id)
+        };
+    });
+
+    return ranks;
+}
 
 /**
  * Enhanced Main Game Controller with improved performance and error handling
@@ -200,7 +325,7 @@ class GameController {
                 }
             }
 
-            // --- HEADER DASHBOARD GENERATION ---
+            // --- HEADER DASHBOARD GENERATION (ENHANCED) ---
             let headerDashboardHTML = '';
             if (userTeam && L) {
                 // 1. Record & Standing
@@ -214,7 +339,7 @@ class GameController {
                     const wa = a.wins ?? a.record?.w ?? 0;
                     const wb = b.wins ?? b.record?.w ?? 0;
                     if (wa !== wb) return wb - wa;
-                    return 0; // Simplified tie-breaker
+                    return 0;
                 });
                 const divRank = divTeams.findIndex(t => t.id === userTeam.id) + 1;
                 const divSuffix = divRank === 1 ? 'st' : divRank === 2 ? 'nd' : divRank === 3 ? 'rd' : 'th';
@@ -228,61 +353,61 @@ class GameController {
                     return 0;
                 });
                 const confRank = confTeams.findIndex(t => t.id === userTeam.id) + 1;
-                const confSuffix = confRank === 1 ? 'st' : confRank === 2 ? 'nd' : confRank === 3 ? 'rd' : 'th';
 
-                // 2. Overalls
+                // 2. Ratings (Enhanced)
                 const ovr = userTeam.ratings?.overall ?? userTeam.overallRating ?? 0;
                 const offOvr = userTeam.ratings?.offense?.overall ?? userTeam.offensiveRating ?? 0;
                 const defOvr = userTeam.ratings?.defense?.overall ?? userTeam.defensiveRating ?? 0;
 
-                // 3. League Ranks (Off/Def)
-                // Sort all teams by Points For (Offense Proxy) and Points Against (Defense Proxy)
-                const sortedByPF = [...L.teams].sort((a, b) => (b.ptsFor ?? b.record?.pf ?? 0) - (a.ptsFor ?? a.record?.pf ?? 0));
-                const offRank = sortedByPF.findIndex(t => t.id === userTeam.id) + 1;
+                // 3. Playoff Status / Odds
+                let playoffStatus = "On Track";
+                let playoffColor = "#48bb78";
 
-                // For Defense, lower points against is better
-                const sortedByPA = [...L.teams].sort((a, b) => (a.ptsAgainst ?? a.record?.pa ?? 0) - (b.ptsAgainst ?? b.record?.pa ?? 0));
-                const defRank = sortedByPA.findIndex(t => t.id === userTeam.id) + 1;
+                if (confRank <= 4) { playoffStatus = "Division Leader"; playoffColor = "#34d399"; }
+                else if (confRank <= 7) { playoffStatus = "Playoff Seed"; playoffColor = "#60a5fa"; }
+                else if (confRank <= 9) { playoffStatus = "On the Bubble"; playoffColor = "#fbbf24"; }
+                else if (currentWeek > 14) { playoffStatus = "Long Shot"; playoffColor = "#f87171"; }
+                else { playoffStatus = "In the Hunt"; playoffColor = "#9ca3af"; }
 
-                // --- Calculate Dynamic Header Metrics ---
-                // 1. Current Streak
+                if (wins === 0 && currentWeek > 4) { playoffStatus = "Draft Mode"; playoffColor = "#c084fc"; }
+
+                // 4. Strengths & Weaknesses (Snapshot)
+                const getPosGroupAvg = (pos) => {
+                    const players = userTeam.roster.filter(p => p.pos === pos).sort((a,b) => b.ovr - a.ovr);
+                    if (!players.length) return 0;
+                    const count = ['QB','K','P'].includes(pos) ? 1 : ['RB','TE','S'].includes(pos) ? 2 : ['WR','LB','CB'].includes(pos) ? 3 : 4;
+                    const top = players.slice(0, count);
+                    return top.reduce((sum, p) => sum + (p.ovr || 0), 0) / top.length;
+                };
+
+                const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+                const groupRatings = positions.map(pos => ({ pos, rating: getPosGroupAvg(pos) })).sort((a,b) => b.rating - a.rating);
+
+                const strengths = groupRatings.slice(0, 2).map(g => g.pos).join('/');
+                const weaknesses = groupRatings.slice(-2).reverse().map(g => g.pos).join('/');
+
+                // 5. Streak
                 let streak = 0;
                 if (L.resultsByWeek) {
                     for (let w = (L.week || 1) - 1; w >= 0; w--) {
                         const weekResults = L.resultsByWeek[w] || [];
                         const game = weekResults.find(g => g.home === userTeamId || g.away === userTeamId);
-                        if (!game) continue; // Skip bye weeks, keep streak intact
-
+                        if (!game) continue;
                         const isHome = game.home === userTeamId;
                         const userScore = isHome ? game.scoreHome : game.scoreAway;
                         const oppScore = isHome ? game.scoreAway : game.scoreHome;
                         const won = userScore > oppScore;
                         const tied = userScore === oppScore;
-
-                        if (tied) break; // Streak ends on tie
-
-                        if (streak === 0) {
-                            streak = won ? 1 : -1;
-                        } else if (streak > 0 && won) {
-                            streak++;
-                        } else if (streak < 0 && !won) {
-                            streak--;
-                        } else {
-                            break; // Streak broken
-                        }
+                        if (tied) break;
+                        if (streak === 0) streak = won ? 1 : -1;
+                        else if (streak > 0 && won) streak++;
+                        else if (streak < 0 && !won) streak--;
+                        else break;
                     }
                 }
-                const streakStr = streak > 0 ? `W-${streak}` : (streak < 0 ? `L-${Math.abs(streak)}` : '-');
+                const streakStr = streak > 0 ? `W${streak}` : (streak < 0 ? `L${Math.abs(streak)}` : '-');
 
-                // 2. Cap Space
-                const capSpace = (userTeam.capRoom || 0).toFixed(1);
-
-                // 3. Team Morale (Avg Player Morale)
-                const avgMorale = userTeam.roster && userTeam.roster.length > 0
-                    ? Math.round(userTeam.roster.reduce((sum, p) => sum + (p.morale || 50), 0) / userTeam.roster.length)
-                    : 50;
-
-                // 4. Owner Grade
+                // 6. Owner Grade & Cap
                 const fanSat = window.state.ownerMode ? window.state.ownerMode.fanSatisfaction : 50;
                 let ownerGrade = 'C';
                 if (fanSat >= 90) ownerGrade = 'A';
@@ -291,130 +416,77 @@ class GameController {
                 else if (fanSat >= 60) ownerGrade = 'D';
                 else ownerGrade = 'F';
 
-                // --- WEEKLY STAKES GENERATION ---
-                let stakesMsg = "";
-                let stakesClass = "info";
+                const capSpace = (userTeam.capRoom || 0).toFixed(1);
+                const capColor = userTeam.capRoom > 10 ? '#48bb78' : userTeam.capRoom > 0 ? '#fbbf24' : '#f87171';
 
-                if (!isOffseason) {
-                    if (fanSat < 45) {
-                        stakesMsg = "⚠️ JOB SECURITY CRITICAL: Owner is losing patience.";
-                        stakesClass = "danger";
-                    } else if (currentWeek > 12) {
-                         // Playoff Push Logic
-                         const inPlayoffs = confRank <= 7;
-                         const close = confRank > 7 && confRank <= 10;
-                         if (inPlayoffs) {
-                             stakesMsg = "🏆 PLAYOFF PUSH: Maintain your seed!";
-                             stakesClass = "success";
-                         } else if (close) {
-                             stakesMsg = "🔥 MUST WIN: Playoff hopes alive but fading.";
-                             stakesClass = "warning";
-                         } else if (wins < 4 && currentWeek > 14) {
-                             stakesMsg = "👀 DRAFT WATCH: Tank for the #1 pick?";
-                             stakesClass = "info";
-                         }
-                    } else if (opponent && opponent.div === userTeam.div) {
-                        stakesMsg = "⚔️ RIVALRY WEEK: Division game double stakes.";
-                        stakesClass = "warning";
-                    } else if (streak < -2) {
-                        stakesMsg = "🛑 STOP THE BLEEDING: Team needs a win badly.";
-                        stakesClass = "danger";
-                    }
-                }
-
-                let stakesHTML = stakesMsg ? `
-                    <div class="card mb-4" style="background: var(--surface-strong); border-left: 4px solid var(--${stakesClass}); padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
-                        <span style="font-weight: 700; font-size: 1.1rem; color: var(--text);">WEEKLY STAKES:</span>
-                        <span style="font-size: 1.05rem; color: var(--text); opacity: 0.9;">${stakesMsg}</span>
-                    </div>
-                ` : '';
-
-                // --- SCOUTING REPORT (WATCH GAME EXCITEMENT) ---
-                let scoutingReportHTML = '';
-                if (opponent) {
-                    let scoutMsg = "";
-                    let scoutColor = "#fbbf24"; // warning yellow
-
-                    const oppOff = opponent.ratings?.offense?.overall || opponent.offensiveRating || 70;
-                    const oppDef = opponent.ratings?.defense?.overall || opponent.defensiveRating || 70;
-                    const oppOvr = opponent.ratings?.overall || opponent.overallRating || 70;
-
-                    if (oppOvr > ovr + 5) {
-                        scoutMsg = "UNDERDOG ALERT: They are heavy favorites.";
-                        scoutColor = "#f87171";
-                    } else if (oppOff > 85) {
-                        scoutMsg = "DANGER: High-powered offense.";
-                        scoutColor = "#f87171";
-                    } else if (oppDef < 70) {
-                        scoutMsg = "OPPORTUNITY: Weak defense to exploit.";
-                        scoutColor = "#48bb78";
-                    } else if (oppOvr < ovr - 5) {
-                        scoutMsg = "TRAP GAME: Don't underestimate them.";
-                        scoutColor = "#fbbf24";
-                    }
-
-                    if (scoutMsg) {
-                        scoutingReportHTML = `
-                            <div style="font-size: 0.8rem; margin-bottom: 8px; color: ${scoutColor}; font-weight: 700; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px;">
-                                ${scoutMsg}
-                            </div>
-                        `;
-                    }
-                }
-
+                // --- HTML CONSTRUCTION ---
                 headerDashboardHTML = `
-                    ${stakesHTML}
-                    <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: center;">
+                    <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent); padding: 12px 16px;">
+                        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.2fr 1fr; gap: 15px; align-items: center;">
 
-                            <!-- Record, Standing & Ratings -->
+                            <!-- 1. Team Identity -->
                             <div>
-                                <div style="font-size: 2rem; font-weight: 800; line-height: 1;">${wins}-${losses}-${ties}</div>
-                                <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 5px;">
-                                    ${divRank}${divSuffix} in Div • ${confRank}${confSuffix} in Conf
+                                <div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1;">
+                                    ${wins}-${losses}-${ties}
+                                    <span style="font-size: 1rem; opacity: 0.8; font-weight: 600; margin-left: 8px;">${streakStr}</span>
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
-                                    <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">${ovr} OVR</div>
-                                    <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">Grade: ${ownerGrade}</div>
+                                <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 4px;">
+                                    <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span> • #${confRank} Conf
+                                    <div style="font-size: 0.8rem; color: ${playoffColor}; font-weight: 600;">${playoffStatus}</div>
+                                </div>
+                                <div style="margin-top: 10px; font-size: 0.85rem; font-weight: 500; line-height: 1.4; opacity: 0.9;">
+                                    <div style="display: flex; gap: 12px;">
+                                        <span style="color: ${getRankColor(userRanks.passOff)}">Pass O #${userRanks.passOff}</span>
+                                        <span style="opacity: 0.4">•</span>
+                                        <span style="color: ${getRankColor(userRanks.rushOff)}">Rush O #${userRanks.rushOff}</span>
+                                    </div>
+                                    <div style="display: flex; gap: 12px;">
+                                        <span style="color: ${getRankColor(userRanks.passDef)}">Pass D #${userRanks.passDef}</span>
+                                        <span style="opacity: 0.4">•</span>
+                                        <span style="color: ${getRankColor(userRanks.rushDef)}">Rush D #${userRanks.rushDef}</span>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Expanded Metrics (SIMPLIFIED) -->
-                            <div style="display: grid; grid-template-columns: 1fr; gap: 8px; font-size: 0.9rem;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
-                                    <span style="opacity: 0.7;">Streak</span>
-                                    <span style="font-weight: 700; color: ${streak > 0 ? '#48bb78' : streak < 0 ? '#f87171' : 'white'};">${streakStr}</span>
+                            <!-- 2. Performance Specs -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.9rem;">
+                                <div>
+                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Overall</div>
+                                    <div style="font-weight: 800; font-size: 1.4rem;">${ovr}</div>
                                 </div>
                                 <div>
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                        <span style="opacity: 0.7;">Payroll Health</span>
-                                        <span style="font-weight: 700; color: ${userTeam.capRoom >= 5 ? '#48bb78' : userTeam.capRoom >= 0 ? '#fbbf24' : '#f87171'};">$${capSpace}M Space</span>
+                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Off / Def</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem;">
+                                        <span style="color: #60a5fa;">${offOvr}</span> / <span style="color: #f87171;">${defOvr}</span>
                                     </div>
-                                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
-                                        <div style="height: 100%; width: ${Math.min(100, (userTeam.capUsed / (userTeam.capTotal || 220)) * 100)}%; background: ${userTeam.capRoom >= 5 ? '#48bb78' : userTeam.capRoom >= 0 ? '#fbbf24' : '#f87171'};"></div>
-                                    </div>
+                                </div>
+                                <div style="grid-column: span 2; display: flex; gap: 10px; font-size: 0.8rem; margin-top: 4px;">
+                                    <div><span style="color: #48bb78;">Strong:</span> ${strengths}</div>
+                                    <div><span style="color: #f87171;">Weak:</span> ${weaknesses}</div>
                                 </div>
                             </div>
 
-                            <!-- Next Opponent (Excitement Boosted) -->
-                            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                            <!-- 3. Front Office -->
+                            <div style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
+                                <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Owner Grade</div>
+                                <div style="font-weight: 800; font-size: 1.4rem; color: ${ownerGrade === 'A' || ownerGrade === 'B' ? '#48bb78' : ownerGrade === 'F' ? '#f87171' : '#fbbf24'};">${ownerGrade} <span style="font-size: 0.9rem; font-weight: 400; color: white;">(${fanSat}%)</span></div>
+                                <div style="font-size: 0.85rem; margin-top: 4px;">
+                                    Cap: <span style="font-weight: 700; color: ${capColor};">$${capSpace}M</span>
+                                </div>
+                            </div>
+
+                            <!-- 4. Next Opponent Action -->
+                            <div style="text-align: right;">
                                 ${opponent ? `
-                                    ${(userTeam.rivalries && userTeam.rivalries[opponent.id] && userTeam.rivalries[opponent.id].score > 25) ? `
-                                        <div style="margin-bottom: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); padding: 4px; border-radius: 4px;">
-                                            <div style="color: #fca5a5; font-weight: bold; font-size: 0.8rem;">${userTeam.rivalries[opponent.id].score > 50 ? '🔥 HATED RIVAL' : '⚔️ RIVALRY GAME'}</div>
-                                            <div style="color: white; font-size: 0.7rem; opacity: 0.9;">${userTeam.rivalries[opponent.id].events && userTeam.rivalries[opponent.id].events.length > 0 ? userTeam.rivalries[opponent.id].events[0] : ''}</div>
-                                        </div>
-                                    ` : ''}
-                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7;">Week ${currentWeek}</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; margin: 4px 0;">
+                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Week ${currentWeek}</div>
+                                    <div style="font-weight: 700; font-size: 1rem; margin-bottom: 6px;">
                                         ${isHome ? 'vs' : '@'} ${opponent.abbr}
+                                        <span style="font-size: 0.8rem; opacity: 0.8;">(${opponent.ratings?.overall || 70})</span>
                                     </div>
-                                    ${scoutingReportHTML}
-                                    <div style="font-size: 0.8rem; opacity: 0.7;">(${opponent.record?.w || 0}-${opponent.record?.l || 0})</div>
-                                    ${!isOffseason ? `<button class="btn btn-sm primary mt-2" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); } else { console.error('watchLiveGame not available'); }">Watch Game</button>` : ''}
+                                    ${!isOffseason ? `<button class="btn btn-sm primary" style="width: 100%; justify-content: center;" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); }">Watch</button>` : ''}
                                 ` : `
-                                    <div style="font-weight: 700; font-size: 1.1rem;">BYE WEEK</div>
-                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" onclick="if(window.gameController && window.gameController.handleGlobalAdvance) window.gameController.handleGlobalAdvance();">Simulate Bye</button>' : ''}
+                                    <div style="font-weight: 700;">BYE WEEK</div>
+                                    ${!isOffseason ? '<button class="btn btn-sm" onclick="if(window.gameController) window.gameController.handleGlobalAdvance();">Sim</button>' : ''}
                                 `}
                             </div>
 
@@ -435,7 +507,10 @@ class GameController {
                                 <strong style="color: ${item.id.includes('roster_max') || item.id.includes('salary_cap') ? '#ef4444' : '#f59e0b'}">${item.title}</strong>
                                 <div style="font-size: 0.9rem; color: var(--text-muted);">${item.description}</div>
                             </div>
-                            ${item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''}
+                            ${item.action ?
+                                `<button class="btn btn-sm" onclick="${item.action}">${item.actionLabel || 'Fix'}</button>` :
+                                item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''
+                            }
                         </div>
                     `).join('');
 
@@ -540,6 +615,7 @@ class GameController {
                             </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 0.8rem; font-weight: bold; opacity: 0.6;">WEEKLY STRATEGY</div>
+                                <button class="btn btn-sm" onclick="if(window.saveGame) window.saveGame()" style="margin-top: 4px;">Save Game</button>
                             </div>
                         </div>
 
@@ -763,6 +839,10 @@ class GameController {
                         <div>
                             <h3>Quick Actions</h3>
                             <div class="actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;">
+                                <button class="btn" onclick="if(window.saveGame) window.saveGame()" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center; border: 1px solid var(--accent);">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">💾</span>
+                                    Save
+                                </button>
                                 <button class="btn" onclick="location.hash='#/roster'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
                                     <span style="font-size: 24px; margin-bottom: 4px;">👥</span>
                                     Roster
@@ -815,12 +895,6 @@ class GameController {
 
                                 ${isOffseason ? `<button class="btn primary" id="btnStartNewSeason" style="justify-content: center; padding: 12px; width: 100%;">Start ${(L?.year || 2025) + 1} Season</button>` : ''}
                             </div>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <h3>Team Status</h3>
-                        <div id="teamStatus">
-                            <p>Team information will be displayed here</p>
                         </div>
                     </div>
                 </div>
@@ -1626,27 +1700,25 @@ class GameController {
     async _performInit() {
         console.log('GameController: Initializing...');
         try {
-            const loadResult = await this.loadGameState();
-            // Accept saved state if it contains a league, even if onboarded flag is missing
-            if (loadResult.success && loadResult.gameData && (loadResult.gameData.onboarded || loadResult.gameData.league)) {
-                // Note: migration is handled inside loadState now if using state.js loadState
-                // But let's trust loadResult.gameData is already migrated if loadState does it.
-                // state.js loadState does calls migrate.
-                window.state = loadResult.gameData;
+            // ENTRY FLOW UPDATE: Check for saves first
+            const hasSaves = hasSavedLeagues ? hasSavedLeagues() : (window.hasSavedLeagues ? window.hasSavedLeagues() : false);
 
-                this.applyTheme(window.state.theme || 'dark');
-                if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
-                if (typeof window.renderSaveDataManager === 'function') window.renderSaveDataManager();
-                if (typeof window.updateCapSidebar === 'function') window.updateCapSidebar();
-                this.setStatus('Game loaded successfully', 'success', 2000);
-            } else {
-                window.state = initState();
-                this.applyTheme(window.state.theme || 'dark');
+            // Initialize base state (for theme, etc)
+            window.state = initState();
+            this.applyTheme(window.state.theme || 'dark');
 
-                // Trigger new league setup if no save data exists
-                this.setStatus('No active save found.', 'info');
+            if (hasSaves) {
+                // Saves exist: Go to Dashboard (Entry Screen)
+                console.log('Saves found, routing to dashboard.');
                 location.hash = '#/leagueDashboard';
+                // Explicitly call router since listeners might not be ready
+                this.router('leagueDashboard');
+            } else {
+                // No saves: Go to Onboarding
+                console.log('No saves found, starting onboarding.');
+                await this.openOnboard();
             }
+
             this.setupEventListeners();
             if (typeof window.setupEventListeners === 'function') {
                 window.setupEventListeners();
