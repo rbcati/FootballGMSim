@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats, initializePlayerStats, accumulateStats, simulateBatch } from './game-simulator.js';
+import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import GameRunner from './game-runner.js';
@@ -65,48 +65,12 @@ function simPlayoffWeek() {
     const P = window.state?.playoffs;
     if (!P || P.winner) return;
 
-    // Use imported simGameStats instead of global
-    const simGame = simGameStats;
-    if (!simGame) {
-        console.error("simGameStats not available");
-        return;
-    }
-
     const roundResults = { round: P.currentRound, games: [] };
 
-    const processRound = (games) => {
-        const results = GameRunner.simulatePlayoffGames(games, P.year);
-        const winners = [];
-
-        results.forEach(res => {
-            // Find original game object to get Team objects (GameRunner returns IDs in result)
-            const gameMatch = games.find(g =>
-                (g.home.id === res.home || g.home.id === res.home.id) &&
-                (g.away.id === res.away || g.away.id === res.away.id)
-            );
-
-            if (gameMatch) {
-                const gameHome = gameMatch.home;
-                const gameAway = gameMatch.away;
-
-                roundResults.games.push({
-                    home: gameHome,
-                    away: gameAway,
-                    scoreHome: res.scoreHome,
-                    scoreAway: res.scoreAway
-                });
-
-                winners.push(res.homeWin ? gameHome : gameAway);
-
-                // Process Playoff Revenue for User Home Games
-                if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
-                    window.processPlayoffRevenue(gameHome);
-                }
-            } else {
-                 console.error("Could not match result to bracket game", res);
-            }
-        });
-
+    const simRound = (games) => {
+        if (!games || games.length === 0) return [];
+        const { winners, results } = GameRunner.simulatePlayoffGames(games, P.year);
+        roundResults.games.push(...results);
         return winners;
     };
 

@@ -26,6 +26,9 @@ const {
   simulateBatch
 } = GameSimulator;
 
+// Import GameRunner
+import GameRunner from './game-runner.js';
+
 // Import Coaching System
 import { processStaffPoaching } from './coach-system.js';
 
@@ -567,6 +570,46 @@ function simulateWeek(options = {}) {
         }
       }
       return;
+    }
+
+    // DELEGATE TO GAME RUNNER
+    const { gamesSimulated } = GameRunner.simulateRegularSeasonWeek(L, options);
+    const previousWeek = L.week - 1; // Since GameRunner incremented it
+
+    console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
+
+    // Update UI to show results (if render option is true, default to true)
+    try {
+      if (options.render !== false) {
+        // DB COMMIT: Save state immediately to persist W/L updates
+        // This satisfies the requirement to commit changes after results are written.
+        if (saveState) saveState();
+        else if (window.saveState) window.saveState();
+
+        // UI REFRESH: Force re-fetch of table data (equivalent to useEffect)
+        if (typeof window.renderStandings === 'function') window.renderStandings();
+
+        if (typeof window.renderHub === 'function') {
+          window.renderHub();
+        }
+        if (typeof window.updateCapSidebar === 'function') {
+          window.updateCapSidebar();
+        }
+
+        // Note: showWeeklyRecap is handled inside GameRunner
+
+        // Show success message
+        window.setStatus(`Week ${previousWeek} simulated - ${gamesSimulated} games completed`);
+
+        // Auto-show results on hub
+        if (window.location && window.location.hash !== '#/hub') {
+          window.location.hash = '#/hub';
+        }
+      }
+
+    } catch (uiError) {
+      console.error('Error updating UI after simulation:', uiError);
+      window.setStatus(`Week simulated but UI update failed`);
     }
 
   } catch (error) {
