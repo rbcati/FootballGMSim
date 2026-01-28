@@ -7,8 +7,9 @@
  * @param {number} week - The week number that just finished.
  * @param {Array} results - Array of game result objects for the week.
  * @param {Array} news - Array of news objects (optional).
+ * @param {Object} stakesContext - Context object from DramaEngine (optional).
  */
-export function showWeeklyRecap(week, results, news) {
+export function showWeeklyRecap(week, results, news, stakesContext) {
     if (!window.Modal) {
         console.warn('Modal component not found, skipping recap.');
         return;
@@ -33,6 +34,7 @@ export function showWeeklyRecap(week, results, news) {
     let resultClass = '';
     let heroHtml = '';
     let schemeHtml = '';
+    let stakesHtml = '';
 
     if (userGame) {
         const isHome = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId;
@@ -52,6 +54,49 @@ export function showWeeklyRecap(week, results, news) {
                 <div class="recap-score">${scoreText}</div>
             </div>
         `;
+
+        // Stakes Result (Drama Engine)
+        if (stakesContext) {
+            let stakesTitle = 'High Stakes Result';
+            let stakesMessage = '';
+
+            if (win) {
+                if (stakesContext.tag.includes('CLINCH')) {
+                    stakesTitle = '🏆 GOAL ACHIEVED';
+                    stakesMessage = `You rose to the occasion! ${stakesContext.reason.replace('Win to', 'Victory')}`;
+                } else if (stakesContext.tag.includes('JOB')) {
+                    stakesTitle = '👔 JOB SAVED';
+                    stakesMessage = 'A crucial win to silence the critics.';
+                } else {
+                    stakesTitle = '🔥 HUGE WIN';
+                    stakesMessage = 'A massive victory in a critical moment.';
+                }
+            } else if (tie) {
+                stakesTitle = '😐 STALEMATE';
+                stakesMessage = 'The pressure remains.';
+            } else {
+                if (stakesContext.tag.includes('ELIMINATION')) {
+                    stakesTitle = '💔 HEARTBREAKER';
+                    stakesMessage = 'The dream ends here.';
+                } else if (stakesContext.tag.includes('CLINCH')) {
+                    stakesTitle = '😞 OPPORTUNITY MISSED';
+                    stakesMessage = 'The celebration is on hold.';
+                } else if (stakesContext.tag.includes('JOB')) {
+                    stakesTitle = '⚠️ ON THE BRINK';
+                    stakesMessage = 'Your seat is getting hotter.';
+                } else {
+                    stakesTitle = '📉 SETBACK';
+                    stakesMessage = 'A tough loss when it mattered most.';
+                }
+            }
+
+            stakesHtml = `
+                <div class="recap-section" style="border-left: 6px solid ${win ? '#4ade80' : (tie ? '#f59e0b' : '#ef4444')}; background: ${win ? 'rgba(74, 222, 128, 0.1)' : (tie ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)')};">
+                    <h4 style="color: ${win ? '#4ade80' : (tie ? '#f59e0b' : '#ef4444')}; font-size: 1.2rem; margin-bottom: 5px;">${stakesTitle}</h4>
+                    <p style="margin: 0; font-size: 1.1rem; font-weight: bold;">${stakesMessage}</p>
+                </div>
+            `;
+        }
 
         // Scheme Impact
         if (userGame.schemeNote) {
@@ -175,6 +220,7 @@ export function showWeeklyRecap(week, results, news) {
         <div class="weekly-recap-container">
             ${outcomeHtml}
             <div class="recap-grid">
+                ${stakesHtml}
                 ${heroHtml}
                 ${schemeHtml}
                 ${devHtml}

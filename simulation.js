@@ -14,6 +14,7 @@ import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
+import DramaEngine from './drama-engine.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -582,12 +583,26 @@ function simulateWeek(options = {}) {
              return null;
         }
 
-        return {
+        const gameObj = {
             home: home,
             away: away,
             week: L.week,
             year: L.year
         };
+
+        // Check for High Stakes (User Team Only)
+        if (window.state.userTeamId !== undefined && (home.id === window.state.userTeamId || away.id === window.state.userTeamId)) {
+             if (DramaEngine) {
+                 const ctx = DramaEngine.evaluateWeek(L, window.state.userTeamId);
+                 if (ctx) {
+                     gameObj.isHighStakes = true;
+                     gameObj.stakesContext = ctx;
+                     console.log("[DramaEngine] Simulating High Stakes Game:", ctx);
+                 }
+             }
+        }
+
+        return gameObj;
     }).filter(g => g !== null);
 
     // Run Batch Simulation
@@ -702,7 +717,15 @@ function simulateWeek(options = {}) {
 
         // Show Weekly Recap (New Feature)
         if (showWeeklyRecap) {
-            showWeeklyRecap(previousWeek, results, L.news);
+            // Find user's high stakes context
+            let userStakes = null;
+            if (gamesToSim) {
+                 const userGame = gamesToSim.find(g => g.home && g.away && (g.home.id === window.state.userTeamId || g.away.id === window.state.userTeamId));
+                 if (userGame && userGame.stakesContext) {
+                     userStakes = userGame.stakesContext;
+                 }
+            }
+            showWeeklyRecap(previousWeek, results, L.news, userStakes);
         }
 
         // Show success message

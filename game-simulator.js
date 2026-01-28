@@ -637,8 +637,8 @@ export function simGameStats(home, away, options = {}) {
       }, 0) / activeRoster.length;
     };
 
-    const homeStrength = calculateStrength(homeActive, home);
-    const awayStrength = calculateStrength(awayActive, away);
+    let homeStrength = calculateStrength(homeActive, home);
+    let awayStrength = calculateStrength(awayActive, away);
 
     if (verbose) console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
 
@@ -717,7 +717,19 @@ export function simGameStats(home, away, options = {}) {
     const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
     const BASE_SCORE_MIN = C.BASE_SCORE_MIN || 10;
     const BASE_SCORE_MAX = C.BASE_SCORE_MAX || 35;
-    const SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+    let SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+
+    // --- DRAMA ENGINE VARIANCE ---
+    if (options.isHighStakes) {
+        SCORE_VARIANCE = Math.round(SCORE_VARIANCE * 1.5); // 50% more variance
+        // "Any Given Sunday" Boost (50/50 chance for a small boost to either side to shake things up)
+        if (U.rand(0, 100) < 50) {
+            homeStrength *= 1.05;
+        } else {
+            awayStrength *= 1.05;
+        }
+        if (verbose) console.log("[DramaEngine] High Stakes Modifiers Applied");
+    }
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
 
@@ -911,7 +923,7 @@ export function simulateBatch(games, options = {}) {
                 homePlayerStats = overrideResult.boxScore?.home || {};
                 awayPlayerStats = overrideResult.boxScore?.away || {};
             } else {
-                let gameScores = simGameStats(home, away, { verbose });
+                let gameScores = simGameStats(home, away, { verbose, isHighStakes: pair.isHighStakes });
 
                 if (!gameScores) {
                     if (verbose) console.warn(`SimGameStats failed for ${away.abbr} @ ${home.abbr}, using fallback score.`);

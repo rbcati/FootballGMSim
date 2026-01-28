@@ -2,6 +2,7 @@ import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
+import DramaEngine from './drama-engine.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -177,6 +178,12 @@ class GameController {
             let isHome = false;
             let currentWeek = L.week || 1;
 
+            // --- DRAMA ENGINE CHECK ---
+            let stakesContext = null;
+            if (userTeam && L && DramaEngine) {
+                stakesContext = DramaEngine.evaluateWeek(L, userTeamId);
+            }
+
             if (!isOffseason) {
                 let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
 
@@ -196,6 +203,21 @@ class GameController {
 
             // --- HEADER DASHBOARD GENERATION ---
             let headerDashboardHTML = '';
+
+            // High Stakes Banner
+            if (stakesContext) {
+                const severityColor = stakesContext.severity >= 9 ? '#b91c1c' : (stakesContext.severity >= 7 ? '#c2410c' : '#b45309');
+                headerDashboardHTML += `
+                    <div class="high-stakes-banner context-${stakesContext.tag}" style="background: linear-gradient(90deg, ${severityColor}, #1a202c); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; border-left: 5px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); animation: pulse-border 2s infinite;">
+                        <div style="font-size: 2rem;">🔥</div>
+                        <div>
+                            <div style="font-weight: 900; text-transform: uppercase; letter-spacing: 1px; font-size: 0.8rem; opacity: 0.8;">High Stakes Matchup</div>
+                            <div style="font-size: 1.3rem; font-weight: bold; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">${stakesContext.reason}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
             if (userTeam && L) {
                 // 1. Record & Standing
                 const wins = userTeam.wins ?? userTeam.record?.w ?? 0;
@@ -285,7 +307,7 @@ class GameController {
                 else if (fanSat >= 60) ownerGrade = 'D';
                 else ownerGrade = 'F';
 
-                headerDashboardHTML = `
+                headerDashboardHTML += `
                     <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: center;">
 
@@ -572,8 +594,8 @@ class GameController {
                                 </ul>
 
                                 ${!isOffseason ? `
-                                    <button class="btn primary large" id="btnSimWeekHQ" style="width: 100%; padding: 15px; font-size: 1.1rem; justify-content: center; font-weight: bold; margin-bottom: 10px;">
-                                        Advance Week >
+                                    <button class="btn primary large ${stakesContext ? 'btn-high-stakes' : ''}" id="btnSimWeekHQ" style="width: 100%; padding: 15px; font-size: 1.1rem; justify-content: center; font-weight: bold; margin-bottom: 10px; ${stakesContext ? 'background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); border: 1px solid #fca5a5;' : ''}">
+                                        ${stakesContext ? '⚠️ PLAY CRITICAL GAME >' : 'Advance Week >'}
                                     </button>
                                 ` : ''}
 
