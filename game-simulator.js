@@ -716,8 +716,8 @@ export function simGameStats(home, away, options = {}) {
       }, 0) / activeRoster.length;
     };
 
-    const homeStrength = calculateStrength(homeActive, home);
-    const awayStrength = calculateStrength(awayActive, away);
+    let homeStrength = calculateStrength(homeActive, home);
+    let awayStrength = calculateStrength(awayActive, away);
 
     if (verbose) console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
 
@@ -1320,10 +1320,11 @@ export function simulateBatch(games, options = {}) {
 
                             // LEGACY INTEGRATION
                             if (updatePlayerGameLegacy) {
+                                const wonGame = (team.id === home.id) ? (sH > sA) : (sA > sH);
                                 const gameContext = {
                                     year: pair.year || window.state?.league?.year || 2025,
                                     week: pair.week || window.state?.league?.week || 1,
-                                    teamWon: resultObj.home === team.id ? resultObj.homeWin : !resultObj.homeWin,
+                                    teamWon: wonGame,
                                     isPlayoff: isPlayoff,
                                     opponent: opponent.name
                                 };
@@ -1358,8 +1359,8 @@ export function simulateBatch(games, options = {}) {
             const league = window.state?.league;
             if (league) {
                 const gameData = {
-                    homeTeamId: home.id || pair.home,
-                    awayTeamId: away.id || pair.away,
+                    homeTeamId: (home.id !== undefined) ? home.id : pair.home,
+                    awayTeamId: (away.id !== undefined) ? away.id : pair.away,
                     homeScore: sH,
                     awayScore: sA,
                     isPlayoff: options.isPlayoff || false,

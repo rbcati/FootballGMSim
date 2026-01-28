@@ -20,7 +20,7 @@ export function showWeeklyRecap(week, results, news) {
     const userTeamId = state.userTeamId;
     const userTeam = state.league.teams[userTeamId];
 
-    // Find User's Game
+    // Find User's Game in Results
     let userGame = null;
     if (results) {
         userGame = results.find(r => {
@@ -28,6 +28,19 @@ export function showWeeklyRecap(week, results, news) {
             const awayId = typeof r.away === 'object' ? r.away.id : r.away;
             return homeId === userTeamId || awayId === userTeamId;
         });
+    }
+
+    // Check if user had a scheduled game (to distinguish BYE from Error)
+    let scheduledGame = null;
+    if (window.Scheduler && window.Scheduler.getWeekGames) {
+        const weekData = window.Scheduler.getWeekGames(state.league.schedule, week);
+        if (weekData && weekData.games) {
+            scheduledGame = weekData.games.find(g =>
+                !g.bye &&
+                ((typeof g.home === 'object' ? g.home.id : g.home) === userTeamId ||
+                 (typeof g.away === 'object' ? g.away.id : g.away) === userTeamId)
+            );
+        }
     }
 
     // Determine outcome
@@ -156,6 +169,14 @@ export function showWeeklyRecap(week, results, news) {
             }
         }
 
+    } else if (scheduledGame) {
+        outcomeHtml = `
+            <div class="recap-outcome loss" style="background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%);">
+                <div class="recap-result-label">SIMULATION ISSUE</div>
+                <div class="recap-score">Result Pending</div>
+                <div style="font-size: 1rem; margin-top: 5px;">Game was scheduled but results are missing.</div>
+            </div>
+        `;
     } else {
         outcomeHtml = `
             <div class="recap-outcome bye">
