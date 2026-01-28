@@ -395,6 +395,11 @@ function startNewSeason() {
     L.week = 1;
     L.resultsByWeek = [];
 
+    // Reset Owner Mode Seasonal Data
+    if (window.state.ownerMode && window.state.ownerMode.revenue) {
+        window.state.ownerMode.revenue.playoffs = 0;
+    }
+
     // Reset team records completely
     L.teams.forEach(team => {
       // 1. Reset UI Record Object

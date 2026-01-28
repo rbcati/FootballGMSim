@@ -88,6 +88,120 @@ const MULTI_WEEK_STORYLINES = {
                 ]
             }
         }
+    },
+    'qb_controversy': {
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return null;
+            // Trigger if starting QB is playing poorly or morale is low, and backup is decent
+            const qbs = team.roster.filter(p => p.pos === 'QB').sort((a, b) => b.ovr - a.ovr);
+            if (qbs.length < 2) return null;
+
+            const starter = qbs[0];
+            const backup = qbs[1];
+
+            if (starter.morale < 60 && backup.ovr > 70 && Math.random() < 0.2) {
+                return { starterId: starter.id, starterName: starter.name, backupId: backup.id, backupName: backup.name };
+            }
+            return null;
+        },
+        stages: {
+            1: {
+                title: 'QB Controversy Brewing',
+                description: (data) => `Fans are calling for ${data.backupName} to start after recent struggles by ${data.starterName}. The media is asking who will be under center next week.`,
+                choices: [
+                    {
+                        text: 'Stick with Starter',
+                        effect: (league, story) => {
+                            const team = league.teams[story.teamId];
+                            const starter = team.roster.find(p => p.id === story.data.starterId);
+                            if (starter) starter.morale = Math.min(100, starter.morale + 10);
+                            const backup = team.roster.find(p => p.id === story.data.backupId);
+                            if (backup) backup.morale = Math.max(0, backup.morale - 10);
+
+                            story.resolved = true;
+                            return `You publicly committed to ${data.starterName}. He appreciates the vote of confidence.`;
+                        }
+                    },
+                    {
+                        text: 'Open Competition',
+                        effect: (league, story) => {
+                            story.stage = 2;
+                            story.nextUpdate = league.week + 1;
+                            return `You declared the position open for competition in practice. Both QBs are on edge.`;
+                        }
+                    }
+                ]
+            },
+            2: {
+                title: 'Practice Report',
+                description: (data) => `Reports from practice suggest ${data.backupName} is outperforming ${data.starterName}. The pressure is mounting.`,
+                choices: [
+                    {
+                        text: 'Bench Starter',
+                        effect: (league, story) => {
+                            const team = league.teams[story.teamId];
+                            const starter = team.roster.find(p => p.id === story.data.starterId);
+                            const backup = team.roster.find(p => p.id === story.data.backupId);
+
+                            if (starter) starter.morale = Math.max(0, starter.morale - 20);
+                            if (backup) backup.morale = Math.min(100, backup.morale + 20);
+
+                            story.resolved = true;
+                            return `You named ${data.backupName} the new starter. Make sure to update your depth chart!`;
+                        }
+                    },
+                    {
+                        text: 'Stay the Course',
+                        effect: (league, story) => {
+                            story.resolved = true;
+                            return `You decided practice isn't everything. ${data.starterName} retains the job.`;
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    'rookie_watch': {
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return null;
+            // Find a rookie with good dev trait
+            // Rookie definition: 0 years played? Or age? Let's use age <= 23 + developmentStatus
+            const rookie = team.roster.find(p => p.age <= 23 && p.developmentStatus === 'BREAKOUT');
+            if (rookie && Math.random() < 0.3) {
+                return { playerId: rookie.id, name: rookie.name };
+            }
+            return null;
+        },
+        stages: {
+            1: {
+                title: 'Rookie Turning Heads',
+                description: (data) => `Rookie ${data.name} is looking impressive in practice. Coaches are suggesting he get more playing time.`,
+                choices: [
+                    {
+                        text: 'Increase Workload',
+                        effect: (league, story) => {
+                            const team = league.teams[story.teamId];
+                            const player = team.roster.find(p => p.id === story.data.playerId);
+                            if (player) {
+                                player.ovr = (player.ovr || 50) + 2;
+                                player.morale = Math.min(100, (player.morale || 50) + 10);
+                            }
+                            story.resolved = true;
+                            return `${data.name} responded well to the extra reps. Ratings boosted.`;
+                        }
+                    },
+                    {
+                        text: 'Bring Him Along Slowly',
+                        effect: (league, story) => {
+                            story.resolved = true;
+                            return `You decided to protect ${data.name} from too much too soon.`;
+                        }
+                    }
+                ]
+            }
+        }
     }
 };
 
@@ -102,11 +216,6 @@ const INTERACTIVE_EVENTS = [
             const team = league.teams[userTeamId];
             if (!team) return false;
 
-            // Trigger if losing streak >= 3
-            // We need to check recent results.
-            // Simplified: check if last 3 games were losses.
-            // Or just use a random chance if morale is low.
-
             // Calculate avg morale
             let totalMorale = 0;
             let count = 0;
@@ -118,8 +227,6 @@ const INTERACTIVE_EVENTS = [
             }
             const avgMorale = count > 0 ? totalMorale / count : 50;
 
-            // Trigger if morale < 60 OR losing streak (inferred from morale drop or manual check)
-            // Let's use a simpler check: random chance if morale is low
             if (avgMorale < 60 && Math.random() < 0.3) return true;
 
             return false;
@@ -173,8 +280,6 @@ const INTERACTIVE_EVENTS = [
             if (userTeamId === undefined) return false;
             const team = league.teams[userTeamId];
 
-            // Trigger if winning streak (e.g., won last 2 games) and high fan satisfaction (if owner mode)
-            // Or just random chance if record is good (> .600)
             const wins = team.wins || (team.record?.w || 0);
             const total = wins + (team.losses || (team.record?.l || 0));
             const pct = total > 0 ? wins/total : 0;
@@ -218,7 +323,6 @@ const INTERACTIVE_EVENTS = [
         title: 'Media Controversy',
         description: 'A reporter has written a scathing article criticizing your star player\'s recent performance.',
         trigger: (league) => {
-             // Random low chance
              return Math.random() < 0.05;
         },
         choices: [
@@ -227,7 +331,6 @@ const INTERACTIVE_EVENTS = [
                 description: 'Publicly back your player. Boosts player morale, may annoy fans/media.',
                 effect: (league) => {
                     const team = league.teams[window.state.userTeamId];
-                    // Find a star player
                     const star = team.roster.reduce((prev, current) => (prev.ovr > current.ovr) ? prev : current);
                     star.morale = Math.min(100, star.morale + 10);
 
@@ -255,8 +358,46 @@ const INTERACTIVE_EVENTS = [
                         star.morale = Math.max(0, star.morale - 15);
                         return `${star.name} felt betrayed by your comments. Morale dropped.`;
                     } else {
-                        // Maybe boost attributes slightly?
                         return `${star.name} took the criticism to heart and promised to improve.`;
+                    }
+                }
+            }
+        ]
+    },
+    {
+        id: 'fan_protest',
+        title: 'Fan Protest',
+        description: 'Angry fans are protesting outside the stadium due to high ticket prices and poor team performance.',
+        trigger: (league) => {
+            if (!window.state.ownerMode || !window.state.ownerMode.enabled) return false;
+            const team = league.teams[window.state.userTeamId];
+            const sat = window.state.ownerMode.fanSatisfaction;
+            const record = team.record;
+            const winPct = (record.w + record.l) > 0 ? record.w / (record.w + record.l) : 0;
+            return sat < 40 && winPct < 0.4 && Math.random() < 0.2;
+        },
+        choices: [
+            {
+                text: 'Lower Ticket Prices (-10%)',
+                description: 'Drop ticket prices to appease the mob.',
+                effect: (league) => {
+                    if (window.state.ownerMode) {
+                        window.state.ownerMode.businessSettings.ticketPrice = Math.floor(window.state.ownerMode.businessSettings.ticketPrice * 0.9);
+                        window.state.ownerMode.fanSatisfaction += 10;
+                    }
+                    return "Fans welcomed the price cut. Satisfaction improved.";
+                }
+            },
+            {
+                text: 'Address the Crowd',
+                description: 'Promise better results on the field.',
+                effect: (league) => {
+                    if (Math.random() > 0.5) {
+                        if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction += 5;
+                        return "The crowd seemed to buy your promises for now.";
+                    } else {
+                        if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction -= 5;
+                        return "They didn't want to hear excuses. The protest intensified.";
                     }
                 }
             }
@@ -268,17 +409,14 @@ class NewsEngine {
     constructor() {
         this.storyEvents = [];
         this.initialized = false;
-        this.lastEventWeek = 0; // Prevent spamming events
+        this.lastEventWeek = 0;
     }
 
     initialize() {
         if (this.initialized) return;
-
-        // Load story templates
         if (window.storyEvents) {
             this.storyEvents = window.storyEvents;
         }
-
         this.initialized = true;
     }
 
@@ -287,31 +425,21 @@ class NewsEngine {
         this.initialize();
 
         if (!league.news) league.news = [];
-
-        // Initialize storylines container if missing
         if (!league.storylines) league.storylines = [];
 
         const week = league.week;
         const year = league.year;
 
-        // 1. Generate Game-Based Headlines (Upsets, Blowouts)
         this.generateGameHeadlines(league, week, year);
-
-        // 2. Generate Stat-Based Headlines (League Leaders, Records)
         this.generateStatHeadlines(league, week, year);
-
-        // 3. Process Dynamic Storylines (The Newsroom)
         this.processStorylines(league, week, year);
 
-        // Trim old news (keep last 50 items)
         if (league.news.length > 50) {
             league.news = league.news.slice(-50);
         }
     }
 
-    // New Method: Interactive Events
     generateInteractiveEvent(league) {
-        // 1. Check for Active Multi-Week Storylines that are ready for the next stage
         if (league.storylines) {
             const activeStory = league.storylines.find(s =>
                 !s.resolved &&
@@ -324,26 +452,21 @@ class NewsEngine {
                 const template = MULTI_WEEK_STORYLINES[activeStory.type];
                 if (template && template.stages[activeStory.stage]) {
                     const stageData = template.stages[activeStory.stage];
-
-                    // Construct event object
                     return {
                         id: `${activeStory.type}_stage_${activeStory.stage}`,
                         title: stageData.title,
                         description: typeof stageData.description === 'function' ? stageData.description(activeStory.data) : stageData.description,
                         choices: stageData.choices.map(c => ({
                             text: c.text,
-                            effect: (l) => c.effect(l, activeStory) // Wrap to pass story object
+                            effect: (l) => c.effect(l, activeStory)
                         }))
                     };
                 }
             }
         }
 
-        // Only one random event per 3 weeks max
         if (league.week - this.lastEventWeek < 3) return null;
 
-        // Find a triggered random event
-        // Shuffle events to vary checks?
         const events = [...INTERACTIVE_EVENTS].sort(() => 0.5 - Math.random());
 
         for (const event of events) {
@@ -373,10 +496,43 @@ class NewsEngine {
     }
 
     generateGameHeadlines(league, week, year) {
+        // Handle Playoff Results
+        if (window.state && window.state.playoffs && window.state.playoffs.results && window.state.playoffs.results.length > 0) {
+            // Check for new playoff results (from the last round run)
+            // Ideally we check results added in the current simulation step.
+            // Since we can't easily track "newly added", we can check against recent history or assume called after sim
+            // For now, let's just check the latest available round results if they match "current" week context
+            const playoffResults = window.state.playoffs.results;
+            const lastRound = playoffResults[playoffResults.length - 1]; // Latest round simulated
+
+            if (lastRound && lastRound.games) {
+                // Ensure we haven't processed this round yet?
+                // We'll rely on the fact this is called once per week/round sim.
+
+                lastRound.games.forEach(game => {
+                    const home = game.home;
+                    const away = game.away;
+                    const scoreHome = game.scoreHome;
+                    const scoreAway = game.scoreAway;
+                    const winner = scoreHome > scoreAway ? home : away;
+                    const loser = scoreHome > scoreAway ? away : home;
+                    const scoreDiff = Math.abs(scoreHome - scoreAway);
+
+                    // Add news
+                    this.addNewsItem(league,
+                        `${winner.name} Advance in Playoffs`,
+                        `The ${winner.name} defeated the ${loser.name} ${Math.max(scoreHome, scoreAway)}-${Math.min(scoreHome, scoreAway)} to move on to the next round.`,
+                        null, 'playoffs'
+                    );
+                });
+                return; // Prioritize playoff news
+            }
+        }
+
+        // Regular Season Logic
         if (!league.resultsByWeek) return;
 
-        // Check last week's results
-        const lastWeekIndex = week - 2; // current week is upcoming, so check week - 1 (index week - 2)
+        const lastWeekIndex = week - 2;
         if (lastWeekIndex < 0) return;
 
         const results = league.resultsByWeek[lastWeekIndex];
@@ -393,7 +549,6 @@ class NewsEngine {
             const winner = game.scoreHome > game.scoreAway ? home : away;
             const loser = game.scoreHome > game.scoreAway ? away : home;
 
-            // Blowout check
             if (scoreDiff >= 28) {
                 this.addNewsItem(league,
                     `${winner.name} Dominate ${loser.name} in ${scoreDiff}-Point Rout`,
@@ -401,7 +556,6 @@ class NewsEngine {
                     null, 'game');
             }
 
-            // Upset check (using OVR as proxy for odds)
             const winnerOvr = winner.ovr || 50;
             const loserOvr = loser.ovr || 50;
 
@@ -412,7 +566,6 @@ class NewsEngine {
                     null, 'game');
             }
 
-            // Shootout check
             if (game.scoreHome + game.scoreAway > 70) {
                 this.addNewsItem(league,
                     `Offensive Explosion: ${winner.name} Win Shootout`,
@@ -423,7 +576,6 @@ class NewsEngine {
     }
 
     generateStatHeadlines(league, week, year) {
-        // Find top performances
         let topPasser = { yds: 0, player: null };
         let topRusher = { yds: 0, player: null };
         let topReceiver = { yds: 0, player: null };
@@ -446,7 +598,6 @@ class NewsEngine {
 
             this.addNewsItem(league, headline, story, null, 'stats');
 
-            // Save to player history
             if (!topPasser.player.seasonNews) topPasser.player.seasonNews = [];
             topPasser.player.seasonNews.push({
                 week: week - 1,
@@ -464,7 +615,6 @@ class NewsEngine {
 
             this.addNewsItem(league, headline, story, null, 'stats');
 
-            // Save to player history
             if (!topRusher.player.seasonNews) topRusher.player.seasonNews = [];
             topRusher.player.seasonNews.push({
                 week: week - 1,
@@ -476,17 +626,13 @@ class NewsEngine {
     }
 
     processStorylines(league, week, year) {
-        // 1. Update Existing Storylines
         this.updateActiveStorylines(league, week);
-
-        // 2. Check for New Storylines
         this.checkForNewStorylines(league, week);
     }
 
     updateActiveStorylines(league, week) {
         if (!league.storylines) return;
 
-        // Filter out completed storylines
         league.storylines = league.storylines.filter(story => !story.resolved);
 
         league.storylines.forEach(story => {
@@ -509,7 +655,6 @@ class NewsEngine {
             } else if (story.type === 'losing_streak') {
                 const team = league.teams.find(t => t.id === story.teamId);
                 if (team) {
-                    // Check if they won last week
                     const lastResult = this.getLastGameResult(league, team.id);
                     if (lastResult && lastResult.won) {
                         this.addNewsItem(league,
@@ -518,8 +663,7 @@ class NewsEngine {
                             null, 'story');
                         story.resolved = true;
                     } else {
-                         // Still losing
-                         if (week % 4 === 0) { // Update every 4 weeks
+                         if (week % 4 === 0) {
                              this.addNewsItem(league,
                                 `Rock Bottom? ${team.name} Losses Continue Pile Up`,
                                 `The ${team.name} are searching for answers as their losing streak extends.`,
@@ -534,16 +678,12 @@ class NewsEngine {
     checkForNewStorylines(league, week) {
         if (!league.storylines) league.storylines = [];
 
-        // 1. Check for Multi-Week Storyline Triggers (User Team only for now)
         if (window.state.userTeamId !== undefined) {
-            // Iterate through templates
             for (const [type, template] of Object.entries(MULTI_WEEK_STORYLINES)) {
-                // Check if already active
                 const alreadyActive = league.storylines.some(s => s.type === type && s.teamId === window.state.userTeamId && !s.resolved);
                 if (!alreadyActive) {
                     const data = template.trigger(league);
                     if (data) {
-                        // Start new storyline
                         league.storylines.push({
                             id: Date.now() + Math.random(),
                             type: type,
@@ -552,7 +692,7 @@ class NewsEngine {
                             data: data,
                             resolved: false,
                             startWeek: week,
-                            nextUpdate: week // Trigger immediately
+                            nextUpdate: week
                         });
                         console.log(`[NewsEngine] Started new storyline: ${type}`);
                     }
@@ -560,11 +700,9 @@ class NewsEngine {
             }
         }
 
-        // Undefeated Watch (Start at Week 8)
         if (week === 8) {
             const undefeated = league.teams.filter(t => t.losses === 0 && t.ties === 0);
             undefeated.forEach(team => {
-                // Check if already tracking
                 if (!league.storylines.some(s => s.type === 'undefeated' && s.teamId === team.id)) {
                     league.storylines.push({
                         id: Utils.id ? Utils.id() : Date.now(),
@@ -581,7 +719,6 @@ class NewsEngine {
             });
         }
 
-        // Losing Streak Watch (Start at Week 6 if 0-5)
         if (week >= 6) {
             const winless = league.teams.filter(t => t.wins === 0 && t.ties === 0);
             winless.forEach(team => {
@@ -604,13 +741,12 @@ class NewsEngine {
 
     getLastGameResult(league, teamId) {
         if (!league.resultsByWeek) return null;
-        const lastWeek = league.week - 1; // Assuming league.week is upcoming
-        // Check previous week (index = week - 2)
+        const lastWeek = league.week - 1;
         const results = league.resultsByWeek[lastWeek - 1];
         if (!results) return null;
 
         const game = results.find(g => !g.bye && (g.home === teamId || g.away === teamId));
-        if (!game) return null; // Bye week or no game
+        if (!game) return null;
 
         const isHome = game.home === teamId;
         const score = isHome ? game.scoreHome : game.scoreAway;
@@ -621,10 +757,6 @@ class NewsEngine {
 
     getOpponent(league, teamId, week) {
         if (!league.resultsByWeek) return null;
-        // Game just played is week - 1 (since current week is upcoming)
-        // resultsByWeek is 0-indexed. week 1 results at index 0.
-        // So week 2 upcoming -> week 1 results -> index 0.
-        // week index = week - 2.
         const weekIndex = week - 2;
         if (weekIndex < 0) return null;
 
@@ -637,19 +769,14 @@ class NewsEngine {
         const isHome = game.home === teamId;
         const opponentId = isHome ? game.away : game.home;
 
-        // Find opponent team object (handle if IDs are used or objects)
-        // Usually objects in teams array, but results might store IDs.
-        // league.teams is array.
         const opponent = league.teams.find(t => t.id === opponentId) || league.teams[opponentId];
         return opponent;
     }
 }
 
-// Export singleton
 const newsEngine = new NewsEngine();
 export default newsEngine;
 
-// Legacy export
 if (typeof window !== 'undefined') {
     window.newsEngine = newsEngine;
 }
