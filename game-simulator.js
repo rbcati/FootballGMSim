@@ -8,6 +8,7 @@ import { Constants } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
+import { saveState } from './state.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -973,9 +974,10 @@ export function accumulateStats(source, target) {
  * Finalizes a game result, updating schedule, standings, stats, and history.
  * @param {object} league - The league object.
  * @param {object} gameData - Contains { homeTeamId, awayTeamId, homeScore, awayScore, stats }
+ * @param {object} options - Options object { autoSave: boolean }
  * @returns {object} The created result object or null on failure.
  */
-export function finalizeGameResult(league, gameData) {
+export function finalizeGameResult(league, gameData, options = {}) {
     if (!league || !gameData) return null;
 
     const { homeTeamId, awayTeamId, homeScore, awayScore, stats } = gameData;
@@ -1115,6 +1117,16 @@ export function finalizeGameResult(league, gameData) {
         league.resultsByWeek[weekIndex].push(resultObj);
     }
 
+    // 7. Save State (Commit)
+    if (options.autoSave !== false && saveState) {
+        saveState();
+    }
+
+    // 8. QA Audit
+    if (homeScore === 0 && awayScore === 0) {
+        console.warn(`[QA-AUDIT] Game finalized with 0-0 score: ${home.abbr} vs ${away.abbr}. This might be an error unless it is a rare tie.`);
+    }
+
     return resultObj;
 }
 
@@ -1203,10 +1215,16 @@ export function simulateBatch(games, options = {}) {
                 homePlayerStats = overrideResult.boxScore?.home || {};
                 awayPlayerStats = overrideResult.boxScore?.away || {};
             } else {
-                let gameScores = simGameStats(home, away, { verbose });
+                // 0-0 Prevention Loop
+                let gameScores;
+                let attempts = 0;
+                do {
+                    gameScores = simGameStats(home, away, { verbose });
+                    attempts++;
+                } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 
-                if (!gameScores) {
-                    if (verbose) console.warn(`SimGameStats failed for ${away.abbr} @ ${home.abbr}, using fallback score.`);
+                if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
+                    if (verbose) console.warn(`SimGameStats failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
                     const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
                     gameScores = { homeScore: r(10, 42), awayScore: r(7, 35) };
                 }
@@ -1309,7 +1327,8 @@ export function simulateBatch(games, options = {}) {
                     }
                 };
 
-                const resultObj = finalizeGameResult(league, gameData);
+                // Disable auto-save for batch efficiency; handled by caller (GameRunner/Simulation)
+                const resultObj = finalizeGameResult(league, gameData, { autoSave: false });
                 if (schemeNote && resultObj) {
                     resultObj.schemeNote = schemeNote;
                 }

@@ -702,16 +702,19 @@ window.renderRoster = function() {
             
             // Add click handler for player details
             tr.addEventListener('click', (e) => {
+                // Prevent bubbling to avoid interfering with other UI interactions (like shake effects)
+                e.stopPropagation();
+
                 // Ensure clicking the checkbox doesn't trigger details
-                if (!e.target.matches('input[type="checkbox"]')) {
-                    // Use modal view instead of navigation to keep context
-                    if (window.showPlayerDetails) {
-                        window.showPlayerDetails(player);
-                    } else if (window.viewPlayerStats) {
-                        window.viewPlayerStats(player.id);
-                    } else {
-                        location.hash = `#/player/${player.id}`;
-                    }
+                if (e.target.matches('input[type="checkbox"]')) return;
+
+                // Use modal view instead of navigation to keep context
+                if (window.showPlayerDetails) {
+                    window.showPlayerDetails(player);
+                } else if (window.viewPlayerStats) {
+                    window.viewPlayerStats(player.id);
+                } else {
+                    location.hash = `#/player/${player.id}`;
                 }
             });
         });
@@ -2106,6 +2109,37 @@ window.renderTradeCenter = function () {
     console.error('renderTradeCenter: #trade not found');
     return;
   }
+
+  // --- Inject Trade Finder (Proposals) at Top ---
+  let proposalsContainer = document.getElementById('tradeProposalsContainer');
+  if (!proposalsContainer) {
+      proposalsContainer = document.createElement('div');
+      proposalsContainer.id = 'tradeProposalsContainer';
+      proposalsContainer.style.marginBottom = '20px';
+
+      // Structure it so renderTradeProposals finds what it needs
+      proposalsContainer.innerHTML = `
+        <div class="card">
+            <div class="row">
+                <h3>Trade Finder</h3>
+                <div class="spacer"></div>
+                <button id="btnRefreshProposals" class="btn btn-sm">Refresh</button>
+            </div>
+            <div id="tradeProposalsList"></div>
+        </div>
+      `;
+
+      if (tradeContainer.firstChild) {
+          tradeContainer.insertBefore(proposalsContainer, tradeContainer.firstChild);
+      } else {
+          tradeContainer.appendChild(proposalsContainer);
+      }
+  }
+
+  if (window.renderTradeProposals) {
+      window.renderTradeProposals();
+  }
+  // ---------------------------------------------
 
   const selectA     = document.getElementById('tradeA');
   const selectB     = document.getElementById('tradeB');

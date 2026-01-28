@@ -1175,7 +1175,7 @@ class LiveGameViewer {
 
     if (result) {
         console.log("Game finalized successfully:", result);
-        if (window.saveGameState) window.saveGameState();
+        // saveState is now called within finalizeGameResult
         if (window.setStatus) window.setStatus("Game Saved!", "success");
     } else {
         console.error("Failed to finalize game");
