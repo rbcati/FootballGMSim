@@ -1,5 +1,8 @@
 // error-boundary.js - Global Error Handling for Vanilla JS
 
+// Initialize error log
+window._errorLog = window._errorLog || [];
+
 export function initErrorBoundary() {
     window.addEventListener('error', (event) => {
         handleGlobalError(event.error || event.message);
@@ -12,6 +15,24 @@ export function initErrorBoundary() {
 
 function handleGlobalError(error) {
     console.error('Global Error Caught:', error);
+
+    // Log to internal memory for Diagnostics
+    if (window._errorLog) {
+        window._errorLog.unshift({
+            timestamp: new Date().toISOString(),
+            message: error ? error.toString() : 'Unknown Error',
+            stack: error && error.stack ? error.stack : null
+        });
+        // Keep log size manageable
+        if (window._errorLog.length > 50) window._errorLog.pop();
+    }
+
+    // Update App Health Indicator if it exists
+    const healthIndicator = document.getElementById('appHealthIndicator');
+    if (healthIndicator) {
+        healthIndicator.className = 'health-error';
+        healthIndicator.title = 'Errors detected (Click for Diagnostics)';
+    }
 
     // Prevent multiple modals
     if (document.getElementById('error-boundary-modal')) return;
@@ -66,7 +87,7 @@ function handleGlobalError(error) {
     }
 
     const btnContainer = document.createElement('div');
-    btnContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end; margin-top: 1rem;';
+    btnContainer.style.cssText = 'display: flex; gap: 10px; justify-content: flex-end; margin-top: 1rem; flex-wrap: wrap;';
 
     const reloadBtn = document.createElement('button');
     reloadBtn.textContent = 'Reload Page';
@@ -81,12 +102,21 @@ function handleGlobalError(error) {
         window.location.reload(); // Safer to reload
     };
 
+    const diagnosticsBtn = document.createElement('button');
+    diagnosticsBtn.textContent = 'Diagnostics';
+    diagnosticsBtn.style.cssText = 'background: #d97706; color: white; border: none; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;';
+    diagnosticsBtn.onclick = () => {
+        modal.remove();
+        window.location.hash = '#/diagnostics';
+    };
+
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Dismiss (Risk)';
     closeBtn.style.cssText = 'background: transparent; border: 1px solid #4b5563; color: #9ca3af; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer;';
     closeBtn.onclick = () => modal.remove();
 
     btnContainer.appendChild(closeBtn);
+    btnContainer.appendChild(diagnosticsBtn);
     btnContainer.appendChild(homeBtn);
     btnContainer.appendChild(reloadBtn);
 

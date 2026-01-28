@@ -1634,6 +1634,10 @@ window.renderSettings = function() {
                         <div class="form-group">
                             <label><input type="checkbox" id="settingCoachFiring" ${window.state?.settings?.allowCoachFiring !== false ? 'checked' : ''}> Coaches can be fired</label>
                         </div>
+                        <div style="margin-top: 20px; border-top: 1px solid var(--hairline); padding-top: 15px;">
+                            <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-highlight);">Diagnostics</h4>
+                            <a href="#/diagnostics" class="btn secondary" style="width: 100%; text-align: center; display: block; text-decoration: none;">Open Control Panel (Diagnostics)</a>
+                        </div>
                     </div>
                     <div>
                         <h3>Save Data</h3>

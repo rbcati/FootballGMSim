@@ -1,5 +1,6 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { renderMatchupComparison } from './matchup-comparison.js';
+import { renderDiagnostics } from './diagnostics.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 import { hasSavedLeagues } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
@@ -291,8 +292,25 @@ class GameController {
                 console.warn('Hub container not found');
                 return;
             }
+
+            // [DIAGNOSTICS] Prevent broken hub if league not loaded
+            if (!window.state || !window.state.league) {
+                hubContainer.innerHTML = `
+                    <div class="card" style="text-align: center; padding: 40px;">
+                        <h2>No Active League</h2>
+                        <p class="muted">Load a save or create a new league to continue.</p>
+                        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                            <button class="btn primary" onclick="location.hash='#/leagueDashboard'">Load Save</button>
+                            <button class="btn" onclick="window.gameController.startNewLeague()">New League</button>
+                            <button class="btn secondary" onclick="location.hash='#/diagnostics'">Diagnostics</button>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
             // Enhanced hub content with simulate league button
-            const L = window.state?.league;
+            const L = window.state.league;
             const userTeamId = window.state?.userTeamId || 0;
             const userTeam = L?.teams?.[userTeamId];
             const isOffseason = window.state?.offseason === true;
@@ -2070,6 +2088,9 @@ class GameController {
                     window.renderRelocationPage();
                 }
                 break;
+            case 'diagnostics':
+                renderDiagnostics();
+                break;
             case 'settings':
                 if (window.renderSettings) {
                     window.renderSettings();
@@ -2231,6 +2252,42 @@ window.updateHeader = function() {
     const deadCap = document.getElementById('deadCap');
     const capRoom = document.getElementById('capRoom');
     const hubWeek = document.getElementById('hubWeek');
+
+    // [DIAGNOSTICS] App Health Indicator
+    let healthIndicator = document.getElementById('appHealthIndicator');
+    if (!healthIndicator) {
+        const headerRight = document.querySelector('.header-right') || document.querySelector('.nav-items-right') || document.body;
+        // Try to find a good spot in the header
+        const navToggle = document.getElementById('navToggle');
+        if (navToggle && navToggle.parentNode) {
+            healthIndicator = document.createElement('div');
+            healthIndicator.id = 'appHealthIndicator';
+            // Insert before the toggle
+            navToggle.parentNode.insertBefore(healthIndicator, navToggle);
+        }
+    }
+
+    if (healthIndicator) {
+        healthIndicator.style.width = '12px';
+        healthIndicator.style.height = '12px';
+        healthIndicator.style.borderRadius = '50%';
+        healthIndicator.style.display = 'inline-block';
+        healthIndicator.style.marginRight = '15px';
+        healthIndicator.style.cursor = 'pointer';
+        healthIndicator.onclick = () => location.hash = '#/diagnostics';
+
+        const errorCount = window._errorLog ? window._errorLog.length : 0;
+        if (errorCount > 0) {
+            healthIndicator.style.backgroundColor = '#f87171'; // Red
+            healthIndicator.title = `${errorCount} Errors Detected`;
+        } else if (window.state && window.state.needsSave) {
+            healthIndicator.style.backgroundColor = '#fbbf24'; // Yellow
+            healthIndicator.title = 'Unsaved Changes';
+        } else {
+            healthIndicator.style.backgroundColor = '#34d399'; // Green
+            healthIndicator.title = 'System Healthy';
+        }
+    }
 
     if (L) {
         if (seasonNow) seasonNow.textContent = L.year || new Date().getFullYear();

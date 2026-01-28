@@ -3,6 +3,7 @@
 // team-selection-fix.js, navbar-fix.js, and dom-helpers-fix.js
 import { renderCoachingStats } from './coaching.js';
 import { renderTradeProposals } from './tradeproposals.js';
+import { renderDiagnostics } from './diagnostics.js';
 import './training.js';
 
 'use strict';
@@ -1067,6 +1068,17 @@ console.log('[LeagueCreationFix] Loaded');
         targetViewId = 'leagueStats';
     }
 
+    // Handle Diagnostics Route
+    if (viewName === 'diagnostics') {
+        targetViewId = 'diagnostics-view';
+        if (!document.getElementById(targetViewId)) {
+            const v = document.createElement('div');
+            v.id = targetViewId;
+            v.className = 'view';
+            (document.getElementById('app-content') || document.body).appendChild(v);
+        }
+    }
+
     // Handle Player Profile Route
     if (viewName.startsWith('player/')) {
         const playerId = viewName.split('/')[1];
@@ -1117,9 +1129,9 @@ console.log('[LeagueCreationFix] Loaded');
       }
     });
     
-    // Only render content if game is ready
+    // Only render content if game is ready, unless accessing diagnostics or hub (which handles empty state)
     const currentState = window.state || {};
-    if (!currentState.league || !currentState.onboarded) {
+    if ((!currentState.league || !currentState.onboarded) && viewName !== 'diagnostics' && viewName !== 'hub') {
       console.log('Game not ready, skipping content rendering', {
         hasLeague: !!currentState.league,
         onboarded: currentState.onboarded
@@ -1309,6 +1321,10 @@ console.log('[LeagueCreationFix] Loaded');
           case 'settings':
             renderSettings();
             console.log('✅ Settings rendered');
+            break;
+          case 'diagnostics':
+            renderDiagnostics();
+            console.log('✅ Diagnostics rendered');
             break;
           case 'playerDatabase':
             if (window.renderPlayerDatabase) {
