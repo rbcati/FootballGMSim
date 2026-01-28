@@ -242,13 +242,25 @@ function renderFreeAgency() {
     
     // Enhanced Free Agency UI with filters and search
     let html = `
+      ${capRoom < 5 ? `
+        <div class="card warning" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); margin-bottom: 1rem;">
+           <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 24px;">⚠️</span>
+              <div>
+                  <h3 style="margin: 0; color: #f87171;">Low Cap Space</h3>
+                  <div style="opacity: 0.9;">You have less than $5M in cap space. You may need to restructure contracts or release players to sign free agents.</div>
+              </div>
+           </div>
+        </div>
+      ` : ''}
+
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px;">
           <h2 style="margin: 0;">Free Agency</h2>
           <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <div style="display: flex; align-items: center; gap: 5px;">
-              <strong style="color: var(--text-muted); font-size: 14px;">Cap Room:</strong>
-              <span style="color: ${capRoom >= 0 ? 'var(--success-text)' : 'var(--error-text)'}; font-weight: 600; font-size: 16px;">
+            <div style="background: var(--surface); padding: 8px 12px; border-radius: 6px; border: 1px solid var(--hairline); display: flex; align-items: center; gap: 8px;">
+              <strong style="color: var(--text-muted); font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Cap Room</strong>
+              <span style="color: ${capRoom >= 0 ? 'var(--success-text)' : 'var(--error-text)'}; font-weight: 800; font-size: 20px;">
                 $${capRoom.toFixed(1)}M
               </span>
             </div>
