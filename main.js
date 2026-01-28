@@ -1,4 +1,5 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
+import { renderMatchupComparison } from './matchup-comparison.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 import { hasSavedLeagues } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
@@ -578,6 +579,12 @@ class GameController {
                 }
             }
 
+            // --- MATCHUP COMPARISON STRIP (NEW) ---
+            let matchupStripHTML = '';
+            if (userTeam && !isOffseason && opponent) {
+                 matchupStripHTML = renderMatchupComparison(userTeam, opponent, L);
+            }
+
             // --- MANAGER PANEL (NEW) ---
             let managerPanelHTML = '';
             if (userTeam && !isOffseason && opponent) {
@@ -822,6 +829,7 @@ class GameController {
                 ${actionItemsHTML}
                 ${playerTrackingHTML}
                 ${headerDashboardHTML}
+                ${matchupStripHTML}
                 ${managerPanelHTML}
                 ${newsHTML}
                 ${topPlayersHTML}
