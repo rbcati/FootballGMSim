@@ -90,11 +90,22 @@ export function showWeeklyRecap(week, results, news) {
              highStakesClass = 'playoff';
         }
 
+        // Post-Game Callbacks (New)
+        let callbacksHtml = '';
+        if (userGame.callbacks && userGame.callbacks.length > 0) {
+            callbacksHtml = `
+                <div class="recap-callbacks" style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                    ${userGame.callbacks.map(cb => `<div style="font-size: 1.05rem; font-style: italic; margin-bottom: 4px;">"${cb}"</div>`).join('')}
+                </div>
+            `;
+        }
+
         outcomeHtml = `
             <div class="recap-outcome ${resultClass} ${highStakesClass}">
                 <div class="recap-result-label" style="font-size: ${highStakesClass ? '2.2rem' : '1.8rem'};">${resultText}</div>
                 ${highStakesClass ? `<div style="font-size: 1rem; opacity: 0.9; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px;">vs ${opponent}</div>` : ''}
                 <div class="recap-score">${scoreText}</div>
+                ${callbacksHtml}
             </div>
         `;
 

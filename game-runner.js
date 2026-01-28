@@ -52,12 +52,59 @@ class GameRunner {
 
             if (!home || !away) return null;
 
-            return {
+            const gameObj = {
                 home: home,
                 away: away,
                 week: weekNum,
                 year: league.year
             };
+
+            // Capture User Context for Post-Game Callbacks
+            if (league.userTeamId !== undefined && (home.id === league.userTeamId || away.id === league.userTeamId)) {
+                const isHome = home.id === league.userTeamId;
+                const userTeam = isHome ? home : away;
+                const oppTeam = isHome ? away : home;
+                const plan = league.weeklyGamePlan || {};
+
+                // Get ratings (fallback to OVR if missing)
+                const getRat = (t, type) => (t.ratings && t.ratings[type] ? t.ratings[type].overall : (t.ovr || 50));
+
+                const userOff = getRat(userTeam, 'offense');
+                const userDef = getRat(userTeam, 'defense');
+                const oppOff = getRat(oppTeam, 'offense');
+                const oppDef = getRat(oppTeam, 'defense');
+
+                let matchupStr = null;
+
+                // Heuristic for team identity
+                const qb = userTeam.roster ? userTeam.roster.find(p => p.pos === 'QB') : null;
+                const bestRB = userTeam.roster ? userTeam.roster.filter(p => p.pos === 'RB').sort((a,b) => (b.ovr||0) - (a.ovr||0))[0] : null;
+                const passingStrength = (qb?.ovr || 0);
+                const rushingStrength = (bestRB?.ovr || 0);
+
+                if (userOff > oppDef + 3) {
+                     if (passingStrength >= rushingStrength) matchupStr = "Favorable matchup for Passing";
+                     else matchupStr = "Favorable matchup for Rushing";
+                } else if (userOff < oppDef - 4) {
+                     matchupStr = "Tough matchup for Offense";
+                }
+
+                let stakesVal = 0;
+                if (userTeam.rivalries && userTeam.rivalries[oppTeam.id]) {
+                    stakesVal = userTeam.rivalries[oppTeam.id].score;
+                }
+
+                gameObj.preGameContext = {
+                    matchup: matchupStr,
+                    offPlanId: plan.offPlanId,
+                    defPlanId: plan.defPlanId,
+                    riskId: plan.riskId,
+                    stakes: stakesVal,
+                    userIsHome: isHome
+                };
+            }
+
+            return gameObj;
         }).filter(g => g !== null);
 
         // Run Batch Simulation
