@@ -162,6 +162,22 @@
         </div>
     `;
 
+    // Game Story Section (Callbacks)
+    if (gameResult.callbacks && gameResult.callbacks.length > 0) {
+        html += `
+            <div class="box-score-section">
+                <h3>Game Story</h3>
+                <ul style="list-style-type: none; padding: 0; margin: 0;">
+                    ${gameResult.callbacks.map(cb => `
+                        <li style="padding: 10px; margin-bottom: 8px; background: rgba(0,0,0,0.2); border-left: 3px solid #3b82f6; border-radius: 4px; font-style: italic; font-size: 1.05em;">
+                            "${cb}"
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
     // Offensive stats section
     html += `
       <div class="box-score-section">
