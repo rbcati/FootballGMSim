@@ -1,6 +1,7 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
 import { saveState } from './state.js';
 import { generateDepthChart, renderDepthChart, movePlayerDepth, initializeDepthChartStats, calculateEffectiveRating, generateDraftClass } from './player.js';
+import { toggleFollow, getPlayerInterestReason } from './player-tracking.js';
 
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
@@ -345,6 +346,7 @@ window.renderPlayerCard = function(player) {
 
     return `
     <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
+        ${player.isFollowed ? '<div class="follow-indicator" style="position:absolute; top:5px; right:5px; font-size:1.2rem; color:#eab308; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">⭐</div>' : ''}
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
         <div class="card-content">
             <div class="portrait-container">
@@ -741,6 +743,8 @@ function showPlayerDetails(player) {
         return;
     }
 
+    const interestReason = getPlayerInterestReason ? getPlayerInterestReason(player) : '';
+
     const content = `
         <div class="player-info grid two">
             <div class="player-basic">
@@ -748,6 +752,7 @@ function showPlayerDetails(player) {
                 <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
                 <p><strong>Contract:</strong> ${player.years || 0} years, $${(player.baseAnnual || 0).toFixed(1)}M/year</p>
                 <p><strong>Cap Hit (Current):</strong> $${(window.capHitFor ? window.capHitFor(player, 0) : player.baseAnnual || 0).toFixed(1)}M</p>
+                ${interestReason ? `<p style="color: #fbbf24; font-size: 0.9rem; margin-top: 5px;"><em>💡 ${interestReason}</em></p>` : ''}
             </div>
             ${player.ratings ? `
                 <div class="player-ratings">
@@ -774,10 +779,15 @@ function showPlayerDetails(player) {
         ${renderSeasonHistory(player)}
         ${renderPlayerNews(player)}
 
-        <div class="player-actions mt">
-            <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
-            <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit Player</button>
-            ${window.showPlayerComparison ? `<button class="btn secondary" onclick="window.showPlayerComparison('${player.id}')">Compare Player</button>` : ''}
+        <div class="player-actions mt" style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
+                <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit Player</button>
+                ${window.showPlayerComparison ? `<button class="btn secondary" onclick="window.showPlayerComparison('${player.id}')">Compare Player</button>` : ''}
+            </div>
+            <button id="btnToggleFollow_${player.id}" class="btn ${player.isFollowed ? 'primary' : 'secondary'}" style="margin-left: auto;">
+                ${player.isFollowed ? '⭐ Unfollow' : '📌 Follow'}
+            </button>
         </div>
     `;
 
@@ -810,6 +820,32 @@ function showPlayerDetails(player) {
 
     const modalEl = modal.render(document.body);
     modalEl.style.display = 'flex'; // Ensure centering via flexbox
+
+    // Attach Follow Listener
+    const followBtn = modalEl.querySelector(`#btnToggleFollow_${player.id}`);
+    if (followBtn) {
+        followBtn.addEventListener('click', () => {
+            if (toggleFollow) {
+                const result = toggleFollow(player);
+                if (result.success) {
+                    followBtn.innerHTML = result.isFollowed ? '⭐ Unfollow' : '📌 Follow';
+                    followBtn.className = `btn ${result.isFollowed ? 'primary' : 'secondary'}`;
+                    if (window.setStatus) window.setStatus(result.message, 'success');
+
+                    // Refresh view if needed
+                    if (window.renderHub && window.location.hash === '#/hub') {
+                        // Ideally just refresh the tracking card, but full render is safer
+                        window.renderHub();
+                    }
+                } else {
+                    if (window.setStatus) window.setStatus(result.message, 'error');
+                    else alert(result.message);
+                }
+            } else {
+                console.error('toggleFollow not available');
+            }
+        });
+    }
 }
 
 /**

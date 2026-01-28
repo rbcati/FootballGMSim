@@ -1,6 +1,7 @@
 // weekly-recap.js
 // Integrated with Core Loop
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES } from './strategy.js';
+import { getTrackedPlayerUpdates } from './player-tracking.js';
 
 'use strict';
 
@@ -274,6 +275,27 @@ export function showWeeklyRecap(week, results, news) {
         `;
     }
 
+    // Tracked Player Updates
+    let trackedUpdatesHtml = '';
+    if (getTrackedPlayerUpdates) {
+        const trackedUpdates = getTrackedPlayerUpdates(state.league, week, results);
+        if (trackedUpdates && trackedUpdates.length > 0) {
+            trackedUpdatesHtml = `
+                <div class="recap-section">
+                    <h4>📌 Tracked Player Updates</h4>
+                    <ul class="recap-list">
+                        ${trackedUpdates.map(u => `
+                            <li>
+                                <strong>${u.player.name}</strong>: ${u.message}
+                                <span class="tag ${u.type === 'good' ? 'is-success' : u.type === 'bad' || u.type === 'injury' ? 'is-danger' : 'is-info'}">${u.type.toUpperCase()}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+    }
+
     // Strategy Report (New)
     let strategyHtml = '';
     const strategy = state.league.weeklyGamePlan;
@@ -314,6 +336,7 @@ export function showWeeklyRecap(week, results, news) {
             ${outcomeHtml}
             <div class="recap-grid">
                 ${strategyHtml}
+                ${trackedUpdatesHtml}
                 ${heroHtml}
                 ${schemeHtml}
                 ${rivalryHtml}

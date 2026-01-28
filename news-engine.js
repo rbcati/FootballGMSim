@@ -1,5 +1,6 @@
 // news-engine.js
 import { Utils } from './utils.js';
+import { checkFollowedPlayerAlerts } from './player-tracking.js';
 
 const MULTI_WEEK_STORYLINES = {
     'contract_holdout': {
@@ -447,6 +448,14 @@ class NewsEngine {
         this.generateGameHeadlines(league, week, year);
         this.generateStatHeadlines(league, week, year);
         this.processStorylines(league, week, year);
+
+        // Player Tracking Alerts
+        if (checkFollowedPlayerAlerts) {
+            const trackingAlerts = checkFollowedPlayerAlerts(league);
+            trackingAlerts.forEach(alert => {
+                this.addNewsItem(league, alert.headline, alert.story, null, alert.type);
+            });
+        }
 
         if (league.news.length > 50) {
             league.news = league.news.slice(-50);
