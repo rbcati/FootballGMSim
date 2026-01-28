@@ -293,7 +293,7 @@ window.renderPlayerCard = function(player) {
     }
 
     // Determine Grade
-    const ovr = player.ovr || 50;
+    const ovr = player.displayOvr || player.ovr || 50;
     let grade = 'C';
     let gradeClass = 'C';
     if (ovr >= 95) { grade = 'S'; gradeClass = 'A'; } // Elite
@@ -512,7 +512,7 @@ window.renderRoster = function() {
             gridContainer.style.display = 'grid';
 
             // Sort by OVR for cards
-            const cardSortedRoster = [...team.roster].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+            const cardSortedRoster = [...team.roster].sort((a, b) => (b.displayOvr || b.ovr || 0) - (a.displayOvr || a.ovr || 0));
             gridContainer.innerHTML = cardSortedRoster.map(p => window.renderPlayerCard(p)).join('');
             return; // Exit here for card view
         } else {
@@ -617,7 +617,7 @@ window.renderRoster = function() {
             
             tr.insertCell().textContent = player.pos || 'N/A';
             tr.insertCell().textContent = player.age || 'N/A';
-            tr.insertCell().textContent = player.ovr || 'N/A';
+            tr.insertCell().textContent = player.displayOvr || player.ovr || 'N/A';
             
             // Effective Rating (from depth chart)
             const effCell = tr.insertCell();
@@ -790,7 +790,7 @@ function showPlayerDetails(player) {
     }
 
     const modal = new window.Modal({
-        title: `${player.name || 'Unknown Player'} <span class="muted-tag" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400; margin-left: 10px;">${player.pos || 'N/A'} (OVR ${player.ovr || 'N/A'})</span>`,
+        title: `${player.name || 'Unknown Player'} <span class="muted-tag" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400; margin-left: 10px;">${player.pos || 'N/A'} (OVR ${player.displayOvr || player.ovr || 'N/A'})</span>`,
         content: content,
         size: 'large'
     });
@@ -1276,7 +1276,7 @@ function renderPowerRankings() {
             } else {
                 // Fallback: calculate basic rating from roster
                 if (team.roster && team.roster.length > 0) {
-                    const avgOvr = team.roster.reduce((sum, player) => sum + (player.ovr || 0), 0) / team.roster.length;
+                    const avgOvr = team.roster.reduce((sum, player) => sum + (player.displayOvr || player.ovr || 0), 0) / team.roster.length;
                     teamRating = Math.round(avgOvr);
                 } else {
                     teamRating = 50; // Default rating for teams without roster data
@@ -1995,7 +1995,7 @@ function showSimplePlayerStats(playerId) {
           <h3>Player Information</h3>
           <p><strong>Position:</strong> ${player.pos || 'N/A'}</p>
           <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
-          <p><strong>Overall:</strong> ${player.ovr || 'N/A'}</p>
+          <p><strong>Overall:</strong> ${player.displayOvr || player.ovr || 'N/A'}</p>
         </div>
 
         <div class="stats-section mt">

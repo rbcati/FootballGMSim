@@ -461,6 +461,16 @@ function startNewSeason() {
 
     if (typeof window.makeSchedule === 'function') L.schedule = window.makeSchedule(L.teams);
     if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
+
+    // Recalibrate player ratings for the new season
+    if (typeof window.updateLeaguePlayers === 'function') {
+        window.updateLeaguePlayers(L);
+    }
+    // Update team ratings
+    if (typeof window.updateAllTeamRatings === 'function') {
+        window.updateAllTeamRatings(L);
+    }
+
     if (typeof window.saveState === 'function') window.saveState();
     if (typeof window.renderHub === 'function') window.renderHub();
 

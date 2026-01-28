@@ -247,6 +247,10 @@ function makeLeague(teams, dependencies = {}) {
         window.state.week = league.week;
 
         // Update ratings if function exists
+        if (window.updateLeaguePlayers) {
+            window.updateLeaguePlayers(league);
+        }
+
         if (window.updateAllTeamOveralls) {
             window.updateAllTeamOveralls(league);
         } else if (window.updateAllTeamRatings) {
