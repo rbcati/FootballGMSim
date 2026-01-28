@@ -33,6 +33,7 @@ export function showWeeklyRecap(week, results, news) {
     let resultClass = '';
     let heroHtml = '';
     let schemeHtml = '';
+    let rivalryHtml = '';
 
     if (userGame) {
         const isHome = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId;
@@ -63,6 +64,33 @@ export function showWeeklyRecap(week, results, news) {
                     <p style="margin: 0; font-size: 0.95rem;">${userGame.schemeNote}</p>
                 </div>
             `;
+        }
+
+        // Rivalry Impact
+        if (userTeam.rivalries) {
+            const oppId = isHome ? (typeof userGame.away === 'object' ? userGame.away.id : userGame.away) : (typeof userGame.home === 'object' ? userGame.home.id : userGame.home);
+            const riv = userTeam.rivalries[oppId];
+
+            if (riv && riv.score > 20) {
+                // Determine narrative
+                let narrative = "";
+                if (win) {
+                    narrative = riv.score > 50 ? "A massive win against a bitter rival!" : "Beating a rival always feels good.";
+                    if (riv.events && riv.events[0] && riv.events[0].includes("Eliminated")) {
+                        narrative = "Revenge exacted for past heartbreak!";
+                    }
+                } else {
+                    narrative = "Losing to them hurts more than usual.";
+                }
+
+                rivalryHtml = `
+                    <div class="recap-section" style="border-left: 4px solid #f59e0b;">
+                        <h4 style="color: #f59e0b;">⚔️ Rivalry Report</h4>
+                        <p style="margin: 0; font-size: 0.95rem;">${narrative}</p>
+                        <div style="font-size: 0.8rem; margin-top: 4px; opacity: 0.8;">Rivalry Intensity: ${riv.score}/100</div>
+                    </div>
+                `;
+            }
         }
 
         // Hero of the Week (Best Rating)
@@ -201,7 +229,7 @@ export function showWeeklyRecap(week, results, news) {
             <div class="recap-grid">
                 ${heroHtml}
                 ${schemeHtml}
-                ${milestonesHtml}
+                ${rivalryHtml}
                 ${devHtml}
                 ${injuriesHtml}
                 ${newsHtml}

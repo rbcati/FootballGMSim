@@ -513,6 +513,29 @@ function startNewSeason() {
         window.state.ownerMode.revenue.playoffs = 0;
     }
 
+    // Decay Rivalries (Persistence Layer)
+    L.teams.forEach(team => {
+      if (team.rivalries) {
+        Object.keys(team.rivalries).forEach(oppId => {
+          const riv = team.rivalries[oppId];
+          // Decay score
+          riv.score = Math.floor((riv.score || 0) * 0.75);
+
+          // Clear old events
+          if (riv.events && riv.events.length > 0) {
+              // Maybe keep only the most recent one? Or just let them fade naturally.
+              // Logic: Only keep events if score is high enough to matter
+              if (riv.score < 10) riv.events = [];
+          }
+
+          // Cleanup weak rivalries
+          if (riv.score < 5 && (!riv.events || riv.events.length === 0)) {
+            delete team.rivalries[oppId];
+          }
+        });
+      }
+    });
+
     // Reset team records completely
     L.teams.forEach(team => {
       // 1. Reset UI Record Object
