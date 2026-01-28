@@ -46,12 +46,40 @@ export function showWeeklyRecap(week, results, news) {
         const tie = userScore === oppScore;
 
         resultClass = win ? 'win' : (tie ? 'tie' : 'loss');
-        const resultText = win ? `Victory vs ${opponent}` : (tie ? `Draw vs ${opponent}` : `Defeat vs ${opponent}`);
+        let resultText = win ? `Victory vs ${opponent}` : (tie ? `Draw vs ${opponent}` : `Defeat vs ${opponent}`);
         const scoreText = `${userScore} - ${oppScore}`;
 
+        // ENHANCED TENSION: High Stakes Logic
+        let highStakesClass = '';
+        const oppId = isHome ? (typeof userGame.away === 'object' ? userGame.away.id : userGame.away) : (typeof userGame.home === 'object' ? userGame.home.id : userGame.home);
+
+        // Rivalry Check
+        const rivalry = userTeam.rivalries ? userTeam.rivalries[oppId] : null;
+        if (rivalry && rivalry.score > 50) {
+            resultText = win ? `RIVALRY VICTORY` : `BITTER DEFEAT`;
+            highStakesClass = 'high-stakes';
+        }
+
+        // Playoff Implications (Late Season)
+        if (week > 14 && !state.offseason) {
+            // Simplified check: if margin was close (< 4 points)
+            const margin = Math.abs(userScore - oppScore);
+            if (margin <= 3 && !tie) {
+                 resultText = win ? `CLUTCH WIN` : `HEARTBREAKER`;
+                 highStakesClass = 'high-stakes';
+            }
+        }
+
+        // Playoff Game
+        if (week > 18) { // Assuming 18 week season
+             resultText = win ? `PLAYOFF ADVANCE` : `SEASON OVER`;
+             highStakesClass = 'playoff';
+        }
+
         outcomeHtml = `
-            <div class="recap-outcome ${resultClass}">
-                <div class="recap-result-label" style="font-size: 1.8rem;">${resultText}</div>
+            <div class="recap-outcome ${resultClass} ${highStakesClass}">
+                <div class="recap-result-label" style="font-size: ${highStakesClass ? '2.2rem' : '1.8rem'};">${resultText}</div>
+                ${highStakesClass ? `<div style="font-size: 1rem; opacity: 0.9; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 2px;">vs ${opponent}</div>` : ''}
                 <div class="recap-score">${scoreText}</div>
             </div>
         `;
@@ -286,7 +314,12 @@ export function showWeeklyRecap(week, results, news) {
             .recap-outcome.tie { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
             .recap-outcome.bye { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
 
-            .recap-result-label { font-size: 2rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px; }
+            /* High Stakes Variations */
+            .recap-outcome.win.high-stakes { background: linear-gradient(135deg, #059669 0%, #047857 50%, #10b981 100%); border: 2px solid #fbbf24; box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); }
+            .recap-outcome.loss.high-stakes { background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 50%, #ef4444 100%); border: 2px solid #1f2937; }
+            .recap-outcome.playoff { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); border: 2px solid white; }
+
+            .recap-result-label { font-size: 2rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
             .recap-score { font-size: 3rem; font-weight: 700; line-height: 1; }
             .recap-opponent { font-size: 1.2rem; opacity: 0.9; margin-top: 5px; }
 

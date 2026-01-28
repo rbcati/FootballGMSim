@@ -241,14 +241,18 @@ function renderFreeAgency() {
     }
     
     // Enhanced Free Agency UI with filters and search
+    // Enhance Cap Warning Visibility
+    const isCriticalCap = capRoom < 2;
+    const isLowCap = capRoom < 5;
+
     let html = `
-      ${capRoom < 5 ? `
-        <div class="card warning" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); margin-bottom: 1rem;">
+      ${isLowCap ? `
+        <div class="card warning" style="background: ${isCriticalCap ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.15)'}; border-left: 4px solid #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); margin-bottom: 1rem;">
            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 24px;">⚠️</span>
+              <span style="font-size: 24px;">${isCriticalCap ? '🚨' : '⚠️'}</span>
               <div>
-                  <h3 style="margin: 0; color: #f87171;">Low Cap Space</h3>
-                  <div style="opacity: 0.9;">You have less than $5M in cap space. You may need to restructure contracts or release players to sign free agents.</div>
+                  <h3 style="margin: 0; color: #f87171;">${isCriticalCap ? 'CRITICAL CAP SPACE' : 'Low Cap Space'}</h3>
+                  <div style="opacity: 0.9;">${isCriticalCap ? 'You have less than $2M in cap space. Signing players is severely restricted.' : 'You have less than $5M in cap space. Monitor your budget carefully.'}</div>
               </div>
            </div>
         </div>
@@ -420,6 +424,7 @@ window.filterFreeAgents = function() {
     const totalValue = (p.baseAnnual || 0) * (p.yearsTotal || 1) + (p.signingBonus || 0);
     const firstYearCapHit = (p.baseAnnual || 0) + ((p.signingBonus || 0) / (p.yearsTotal || 1));
     const canAfford = capRoom >= firstYearCapHit;
+    const tightCap = canAfford && (capRoom - firstYearCapHit < 2.0); // Warning if < 2M left after signing
     
     const tr = document.createElement('tr');
     tr.style.cursor = 'pointer';
@@ -449,9 +454,9 @@ window.filterFreeAgents = function() {
       <td style="padding: 10px; text-align: center; white-space: nowrap;">
         <button class="btn btn-sm sign-btn"
                 onclick="event.stopPropagation(); signPlayer(${originalIndex})"
-                style="padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; margin-right: 5px;"
-                ${!canAfford ? 'disabled title="Insufficient cap space"' : ''}>
-          Sign
+                style="padding: 6px 12px; background: ${!canAfford ? '#6b7280' : (tightCap ? '#f59e0b' : '#10b981')}; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; margin-right: 5px;"
+                ${!canAfford ? 'disabled title="Insufficient cap space"' : (tightCap ? 'title="Warning: Leaves < $2M cap space"' : '')}>
+          ${tightCap ? 'Sign ⚠️' : 'Sign'}
         </button>
         <button class="btn btn-sm" 
                 onclick="event.stopPropagation(); openContractNegotiation(${originalIndex})" 
