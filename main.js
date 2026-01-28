@@ -285,7 +285,79 @@ class GameController {
                 else if (fanSat >= 60) ownerGrade = 'D';
                 else ownerGrade = 'F';
 
+                // --- WEEKLY STAKES GENERATION ---
+                let stakesMsg = "";
+                let stakesClass = "info";
+
+                if (!isOffseason) {
+                    if (fanSat < 45) {
+                        stakesMsg = "⚠️ JOB SECURITY CRITICAL: Owner is losing patience.";
+                        stakesClass = "danger";
+                    } else if (currentWeek > 12) {
+                         // Playoff Push Logic
+                         const inPlayoffs = confRank <= 7;
+                         const close = confRank > 7 && confRank <= 10;
+                         if (inPlayoffs) {
+                             stakesMsg = "🏆 PLAYOFF PUSH: Maintain your seed!";
+                             stakesClass = "success";
+                         } else if (close) {
+                             stakesMsg = "🔥 MUST WIN: Playoff hopes alive but fading.";
+                             stakesClass = "warning";
+                         } else if (wins < 4 && currentWeek > 14) {
+                             stakesMsg = "👀 DRAFT WATCH: Tank for the #1 pick?";
+                             stakesClass = "info";
+                         }
+                    } else if (opponent && opponent.div === userTeam.div) {
+                        stakesMsg = "⚔️ RIVALRY WEEK: Division game double stakes.";
+                        stakesClass = "warning";
+                    } else if (streak < -2) {
+                        stakesMsg = "🛑 STOP THE BLEEDING: Team needs a win badly.";
+                        stakesClass = "danger";
+                    }
+                }
+
+                let stakesHTML = stakesMsg ? `
+                    <div class="card mb-4" style="background: var(--surface-strong); border-left: 4px solid var(--${stakesClass}); padding: 12px 16px; display: flex; align-items: center; gap: 10px;">
+                        <span style="font-weight: 700; font-size: 1.1rem; color: var(--text);">WEEKLY STAKES:</span>
+                        <span style="font-size: 1.05rem; color: var(--text); opacity: 0.9;">${stakesMsg}</span>
+                    </div>
+                ` : '';
+
+                // --- SCOUTING REPORT (WATCH GAME EXCITEMENT) ---
+                let scoutingReportHTML = '';
+                if (opponent) {
+                    let scoutMsg = "";
+                    let scoutColor = "#fbbf24"; // warning yellow
+
+                    const oppOff = opponent.ratings?.offense?.overall || opponent.offensiveRating || 70;
+                    const oppDef = opponent.ratings?.defense?.overall || opponent.defensiveRating || 70;
+                    const oppOvr = opponent.ratings?.overall || opponent.overallRating || 70;
+
+                    if (oppOvr > ovr + 5) {
+                        scoutMsg = "UNDERDOG ALERT: They are heavy favorites.";
+                        scoutColor = "#f87171";
+                    } else if (oppOff > 85) {
+                        scoutMsg = "DANGER: High-powered offense.";
+                        scoutColor = "#f87171";
+                    } else if (oppDef < 70) {
+                        scoutMsg = "OPPORTUNITY: Weak defense to exploit.";
+                        scoutColor = "#48bb78";
+                    } else if (oppOvr < ovr - 5) {
+                        scoutMsg = "TRAP GAME: Don't underestimate them.";
+                        scoutColor = "#fbbf24";
+                    }
+
+                    if (scoutMsg) {
+                        scoutingReportHTML = `
+                            <div style="font-size: 0.8rem; margin-bottom: 8px; color: ${scoutColor}; font-weight: 700; background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px;">
+                                ${scoutMsg}
+                            </div>
+                        `;
+                    }
+                }
+
                 headerDashboardHTML = `
+                    ${stakesHTML}
                     <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: center;">
 
@@ -301,33 +373,31 @@ class GameController {
                                 </div>
                             </div>
 
-                            <!-- Expanded Metrics -->
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.9rem;">
-                                <div>
-                                    <div style="opacity: 0.7; font-size: 0.8rem;">Current Streak</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; color: ${streak > 0 ? '#48bb78' : streak < 0 ? '#f87171' : 'white'};">${streakStr}</div>
+                            <!-- Expanded Metrics (SIMPLIFIED) -->
+                            <div style="display: grid; grid-template-columns: 1fr; gap: 8px; font-size: 0.9rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px;">
+                                    <span style="opacity: 0.7;">Streak</span>
+                                    <span style="font-weight: 700; color: ${streak > 0 ? '#48bb78' : streak < 0 ? '#f87171' : 'white'};">${streakStr}</span>
                                 </div>
                                 <div>
-                                    <div style="opacity: 0.7; font-size: 0.8rem;">Cap Space</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; color: ${userTeam.capRoom >= 0 ? '#48bb78' : '#f87171'};">$${capSpace}M</div>
-                                </div>
-                                <div>
-                                    <div style="opacity: 0.7; font-size: 0.8rem;">Team Morale</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem;">${avgMorale}%</div>
-                                </div>
-                                <div>
-                                    <div style="opacity: 0.7; font-size: 0.8rem;">Off/Def Rank</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem;">#${offRank} / #${defRank}</div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                        <span style="opacity: 0.7;">Payroll Health</span>
+                                        <span style="font-weight: 700; color: ${userTeam.capRoom >= 5 ? '#48bb78' : userTeam.capRoom >= 0 ? '#fbbf24' : '#f87171'};">$${capSpace}M Space</span>
+                                    </div>
+                                    <div style="height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden;">
+                                        <div style="height: 100%; width: ${Math.min(100, (userTeam.capUsed / (userTeam.capTotal || 220)) * 100)}%; background: ${userTeam.capRoom >= 5 ? '#48bb78' : userTeam.capRoom >= 0 ? '#fbbf24' : '#f87171'};"></div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Next Opponent (Simplifed) -->
+                            <!-- Next Opponent (Excitement Boosted) -->
                             <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
                                 ${opponent ? `
                                     <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7;">Week ${currentWeek}</div>
                                     <div style="font-weight: 700; font-size: 1.1rem; margin: 4px 0;">
                                         ${isHome ? 'vs' : '@'} ${opponent.abbr}
                                     </div>
+                                    ${scoutingReportHTML}
                                     <div style="font-size: 0.8rem; opacity: 0.7;">(${opponent.record?.w || 0}-${opponent.record?.l || 0})</div>
                                     ${!isOffseason ? `<button class="btn btn-sm primary mt-2" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); } else { console.error('watchLiveGame not available'); }">Watch Game</button>` : ''}
                                 ` : `

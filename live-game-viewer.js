@@ -91,6 +91,21 @@ class LiveGameViewer {
         });
     });
 
+    // Restore play history if available
+    if (this.playByPlay && this.playByPlay.length > 0) {
+        console.log('Restoring play history:', this.playByPlay.length, 'plays');
+        // Render all past plays
+        this.playByPlay.forEach(play => {
+            this.renderPlay(play);
+        });
+
+        // Scroll to bottom
+        const playLog = container.querySelector('.play-log-enhanced');
+        if (playLog) {
+            playLog.scrollTop = playLog.scrollHeight;
+        }
+    }
+
     this.renderGame();
   }
 
