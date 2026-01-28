@@ -7,6 +7,7 @@ import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats } from './player.js';
+import { getStrategyModifiers } from './strategy.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -740,6 +741,26 @@ export function simGameStats(home, away, options = {}) {
     const homeDefenseStrength = calculateDefenseStrength(awayGroups);
     const awayDefenseStrength = calculateDefenseStrength(homeGroups);
 
+    // --- STAFF PERKS & STRATEGY INTEGRATION ---
+    const homeMods = getCoachingMods(home.staff);
+    const awayMods = getCoachingMods(away.staff);
+
+    if (typeof window !== 'undefined' && window.state?.userTeamId !== undefined && window.state?.league?.weeklyGamePlan) {
+        const history = window.state.league.strategyHistory || {};
+        if (home.id === window.state.userTeamId) {
+             const { planId, riskId } = window.state.league.weeklyGamePlan;
+             const stratMods = getStrategyModifiers(planId, riskId, history);
+             if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Home):`, stratMods);
+             Object.assign(homeMods, stratMods);
+        } else if (away.id === window.state.userTeamId) {
+             const { planId, riskId } = window.state.league.weeklyGamePlan;
+             const stratMods = getStrategyModifiers(planId, riskId, history);
+             if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Away):`, stratMods);
+             Object.assign(awayMods, stratMods);
+        }
+    }
+
+    if (verbose) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
     // --- SCHEME FIT IMPACT ---
     let schemeNote = null;
 
@@ -816,19 +837,17 @@ export function simGameStats(home, away, options = {}) {
     let homeScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) + Math.round(strengthDiff / 5);
     let awayScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) - Math.round(strengthDiff / 5);
 
-    homeScore += U.rand(0, SCORE_VARIANCE);
-    awayScore += U.rand(0, SCORE_VARIANCE);
+    // Apply Variance from Mods
+    const homeVar = SCORE_VARIANCE * (homeMods.variance || 1.0);
+    const awayVar = SCORE_VARIANCE * (awayMods.variance || 1.0);
+
+    homeScore += U.rand(0, homeVar);
+    awayScore += U.rand(0, awayVar);
 
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
-
-    // --- STAFF PERKS INTEGRATION (RPG System) ---
-    const homeMods = getCoachingMods(home.staff);
-    const awayMods = getCoachingMods(away.staff);
-
-    if (verbose) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
        team.roster.forEach(player => {
