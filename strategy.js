@@ -3,10 +3,10 @@
  * Handles Weekly Game Plans and Risk Profiles
  */
 
-export const GAME_PLANS = {
+export const OFFENSIVE_PLANS = {
     BALANCED: {
         id: 'BALANCED',
-        name: 'Balanced Gameplan',
+        name: 'Balanced Offense',
         description: 'No specific focus. Adapt to the flow of the game.',
         bonus: 'None',
         penalty: 'None',
@@ -40,6 +40,41 @@ export const GAME_PLANS = {
             variance: 0.8 // Consistent but lower ceiling
         }
     },
+    PROTECT_QB: {
+        id: 'PROTECT_QB',
+        name: 'Protect the QB',
+        description: 'Max protection schemes and quick releases.',
+        bonus: '-Sacks, -Injuries',
+        penalty: '-Offensive Upside',
+        modifiers: {
+            sackChance: 0.4,
+            passVolume: 0.9,
+            passAccuracy: 0.95
+        }
+    },
+    FEED_STAR: {
+        id: 'FEED_STAR',
+        name: 'Feed the Star',
+        description: 'Force feed your best playmaker.',
+        bonus: '+Top Player Stats',
+        penalty: '-Secondary Options, +Predictability',
+        modifiers: {
+            starUsage: 1.5,
+            othersUsage: 0.8,
+            variance: 1.2
+        }
+    }
+};
+
+export const DEFENSIVE_PLANS = {
+    BALANCED: {
+        id: 'BALANCED',
+        name: 'Balanced Defense',
+        description: 'Standard defensive sets.',
+        bonus: 'None',
+        penalty: 'None',
+        modifiers: {}
+    },
     SELL_OUT_RUN: {
         id: 'SELL_OUT_RUN',
         name: 'Sell Out vs Run',
@@ -63,28 +98,30 @@ export const GAME_PLANS = {
             defBigPlayAllowed: 1.3
         }
     },
-    PROTECT_QB: {
-        id: 'PROTECT_QB',
-        name: 'Protect the QB',
-        description: 'Max protection schemes and quick releases.',
-        bonus: '-Sacks, -Injuries',
-        penalty: '-Offensive Upside',
+    BLITZ_HEAVY: {
+        id: 'BLITZ_HEAVY',
+        name: 'Blitz Heavy',
+        description: 'Send extra rushers frequently.',
+        bonus: '+Sack Chance, +Pressure',
+        penalty: '+Big Play Risk',
         modifiers: {
-            sackChance: 0.4,
-            passVolume: 0.9,
-            passAccuracy: 0.95
+            defSackChance: 1.4,
+            defPressure: 1.3,
+            defBigPlayAllowed: 1.25,
+            defRunStop: 0.9
         }
     },
-    FEED_STAR: {
-        id: 'FEED_STAR',
-        name: 'Feed the Star',
-        description: 'Force feed your best playmaker.',
-        bonus: '+Top Player Stats',
-        penalty: '-Secondary Options, +Predictability',
+    TWO_HIGH_SAFE: {
+        id: 'TWO_HIGH_SAFE',
+        name: 'Two-High Safety',
+        description: 'Keep everything in front of the defense.',
+        bonus: '-Big Plays Allowed',
+        penalty: '+Opponent Run Efficiency',
         modifiers: {
-            starUsage: 1.5,
-            othersUsage: 0.8,
-            variance: 1.2
+            defBigPlayAllowed: 0.6,
+            defPassCov: 1.1,
+            defRunStop: 0.8,
+            defIntChance: 0.8
         }
     }
 };
@@ -124,28 +161,34 @@ export const RISK_PROFILES = {
 
 /**
  * Get the combined modifiers for a given game plan and risk profile.
- * @param {string} planId
+ * @param {string} offPlanId
+ * @param {string} defPlanId
  * @param {string} riskId
  * @param {object} usageHistory - Optional map of planId -> usageCount
  * @returns {object} Combined modifiers
  */
-export function getStrategyModifiers(planId, riskId, usageHistory = {}) {
-    const plan = GAME_PLANS[planId] || GAME_PLANS.BALANCED;
+export function getStrategyModifiers(offPlanId, defPlanId, riskId, usageHistory = {}) {
+    const offPlan = OFFENSIVE_PLANS[offPlanId] || OFFENSIVE_PLANS.BALANCED;
+    const defPlan = DEFENSIVE_PLANS[defPlanId] || DEFENSIVE_PLANS.BALANCED;
     const risk = RISK_PROFILES[riskId] || RISK_PROFILES.BALANCED;
 
-    const mods = { ...plan.modifiers };
+    const mods = { ...offPlan.modifiers, ...defPlan.modifiers };
 
     // Apply Diminishing Returns (Task 5)
     // If a plan is used frequently, opponents adapt.
-    const usage = usageHistory && usageHistory[planId] ? usageHistory[planId] : 0;
-    const penaltyFactor = usage > 3 ? 0.9 : 1.0; // 10% effectiveness reduction if overused
+    const offUsage = usageHistory && usageHistory[offPlanId] ? usageHistory[offPlanId] : 0;
+    const defUsage = usageHistory && usageHistory[defPlanId] ? usageHistory[defPlanId] : 0;
 
-    if (usage > 3) {
-        // console.log(`[Strategy] Diminishing returns applied to ${plan.name} (Used ${usage} times)`);
-        // Dampen positive modifiers (> 1.0) and worsen negative ones (< 1.0) slightly
-        Object.keys(mods).forEach(key => {
-            if (mods[key] > 1.0) {
-                mods[key] = 1.0 + (mods[key] - 1.0) * penaltyFactor;
+    // Check overuse
+    if (offUsage > 3 || defUsage > 3) {
+        const penaltyFactor = 0.9;
+         Object.keys(mods).forEach(key => {
+            // Apply penalty only if the modifier comes from the overused plan
+            // Heuristic: Check if modifier exists in the specific plan
+            if ((offUsage > 3 && offPlan.modifiers[key]) || (defUsage > 3 && defPlan.modifiers[key])) {
+                if (mods[key] > 1.0) {
+                    mods[key] = 1.0 + (mods[key] - 1.0) * penaltyFactor;
+                }
             }
         });
     }
@@ -165,25 +208,42 @@ export function getStrategyModifiers(planId, riskId, usageHistory = {}) {
 /**
  * Update the user's strategy in the league state.
  * @param {object} league
- * @param {string} planId
+ * @param {string} offPlanId
+ * @param {string} defPlanId
  * @param {string} riskId
  */
-export function updateWeeklyStrategy(league, planId, riskId) {
+export function updateWeeklyStrategy(league, offPlanId, defPlanId, riskId) {
     if (!league) return;
+
+    // Default to balanced if missing
+    if (!offPlanId) offPlanId = 'BALANCED';
+    if (!defPlanId) defPlanId = 'BALANCED';
+    if (!riskId) riskId = 'BALANCED';
+
     league.weeklyGamePlan = {
-        planId: planId,
+        offPlanId: offPlanId,
+        defPlanId: defPlanId,
         riskId: riskId
     };
 
     // Also track usage for continuity (Task 5)
     if (!league.strategyHistory) league.strategyHistory = {};
-    if (!league.strategyHistory[planId]) league.strategyHistory[planId] = 0;
-    league.strategyHistory[planId]++;
 
-    console.log(`[Strategy] Updated to Plan: ${planId}, Risk: ${riskId}`);
+    if (!league.strategyHistory[offPlanId]) league.strategyHistory[offPlanId] = 0;
+    league.strategyHistory[offPlanId]++;
+
+    if (!league.strategyHistory[defPlanId]) league.strategyHistory[defPlanId] = 0;
+    league.strategyHistory[defPlanId]++;
+
+    console.log(`[Strategy] Updated to Off: ${offPlanId}, Def: ${defPlanId}, Risk: ${riskId}`);
 }
 
+// Keep GAME_PLANS for backward compatibility if needed, but alias to merged
+export const GAME_PLANS = { ...OFFENSIVE_PLANS, ...DEFENSIVE_PLANS };
+
 export default {
+    OFFENSIVE_PLANS,
+    DEFENSIVE_PLANS,
     GAME_PLANS,
     RISK_PROFILES,
     getStrategyModifiers,

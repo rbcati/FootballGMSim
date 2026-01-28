@@ -1,6 +1,6 @@
 // weekly-recap.js
 // Integrated with Core Loop
-import { GAME_PLANS, RISK_PROFILES } from './strategy.js';
+import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES } from './strategy.js';
 
 'use strict';
 
@@ -205,7 +205,8 @@ export function showWeeklyRecap(week, results, news) {
     let strategyHtml = '';
     const strategy = state.league.weeklyGamePlan;
     if (strategy && userGame && !userGame.bye) {
-        const plan = GAME_PLANS[strategy.planId] || GAME_PLANS.BALANCED;
+        const offPlan = OFFENSIVE_PLANS[strategy.offPlanId] || OFFENSIVE_PLANS.BALANCED;
+        const defPlan = DEFENSIVE_PLANS[strategy.defPlanId] || DEFENSIVE_PLANS.BALANCED;
         const risk = RISK_PROFILES[strategy.riskId] || RISK_PROFILES.BALANCED;
 
         // Simple narrative logic based on outcome
@@ -213,12 +214,11 @@ export function showWeeklyRecap(week, results, news) {
         let narrative = '';
 
         if (isWin) {
-             narrative = `Your decision to use <strong>${plan.name}</strong> paid off.`;
+             narrative = `Your decision to use <strong>${offPlan.name}</strong> and <strong>${defPlan.name}</strong> paid off.`;
              if (strategy.riskId === 'AGGRESSIVE') narrative += ` The aggressive approach overwhelmed them.`;
              else if (strategy.riskId === 'CONSERVATIVE') narrative += ` Playing it safe secured the victory.`;
         } else {
-             const oppName = (typeof userGame.home === 'object' ? userGame.home.abbr : (userGame.home === userTeamId ? 'OPP' : 'OPP'));
-             narrative = `The <strong>${plan.name}</strong> strategy struggled.`;
+             narrative = `The combination of <strong>${offPlan.name}</strong> and <strong>${defPlan.name}</strong> struggled.`;
              if (strategy.riskId === 'AGGRESSIVE') narrative += ` High risk led to costly mistakes.`;
              else if (strategy.riskId === 'CONSERVATIVE') narrative += ` Too conservative to keep up.`;
         }
@@ -226,8 +226,9 @@ export function showWeeklyRecap(week, results, news) {
         strategyHtml = `
             <div class="recap-section">
                 <h4>📋 Strategy Report</h4>
-                <div style="font-size: 0.95rem; margin-bottom: 5px;">
-                    <span class="tag" style="background: #4a5568; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">${plan.name}</span>
+                <div style="font-size: 0.95rem; margin-bottom: 5px; display: flex; flex-wrap: wrap; gap: 4px;">
+                    <span class="tag" style="background: #4a5568; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">${offPlan.name}</span>
+                    <span class="tag" style="background: #4a5568; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">${defPlan.name}</span>
                     <span class="tag" style="background: #4a5568; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8rem;">${risk.name}</span>
                 </div>
                 <div style="font-size: 0.9rem; opacity: 0.9; line-height: 1.4;">${narrative}</div>

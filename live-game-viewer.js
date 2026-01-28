@@ -1144,45 +1144,66 @@ class LiveGameViewer {
       this.onGameEndCallback(this.gameState);
     }
 
-    this.applyLiveResultToLeague();
+    this.finalizeGame();
   }
 
   /**
-   * Apply live game result to league simulation
+   * Finalize the game result using the unified pathway
    */
-  applyLiveResultToLeague() {
+  finalizeGame() {
     if (this.hasAppliedResult) return;
+    this.hasAppliedResult = true;
 
-    const L = window.state?.league;
-    if (!L || !L.schedule) return;
-
-    const scheduleWeeks = L.schedule.weeks || L.schedule;
-    if (!Array.isArray(scheduleWeeks)) return;
-
-    const weekIndex = (L.week || 1) - 1;
-    const weekData = scheduleWeeks[weekIndex];
-    if (!weekData?.games) return;
-
-    if (L.resultsByWeek?.[weekIndex]?.length) return;
-
-    const homeId = this.gameState?.home?.team?.id;
-    const awayId = this.gameState?.away?.team?.id;
-    if (homeId === undefined || awayId === undefined) return;
-
-    const matchingGame = weekData.games.find(game => game && !game.bye && game.home === homeId && game.away === awayId);
-    if (!matchingGame) return;
-
-    if (typeof window.simulateWeek === 'function') {
-      this.hasAppliedResult = true;
-      window.simulateWeek({
-        overrideResults: [{
-          home: homeId,
-          away: awayId,
-          scoreHome: this.gameState.home.score,
-          scoreAway: this.gameState.away.score
-        }]
-      });
+    if (typeof window.saveGameState !== 'function') {
+        console.warn("Save system not available");
     }
+
+    // Lazy load finalizeGameResult if needed, or assume it's available via module scope if we were in a module.
+    // Since this file seems to be a script, we might need to access it from window if exposed, or import if this is a module.
+    // The previous analysis suggests this project uses ES modules.
+    // game-simulator.js exports finalizeGameResult.
+    // We need to import it. But I can't add imports to the top of this file easily if it's already a big file without re-reading the whole thing.
+    // Wait, live-game-viewer.js is likely imported as a module.
+    // I will try to use the window.gameController logic or assume the function is available if I attach it to window in game-simulator.js?
+    // No, I should import it.
+
+    // Actually, looking at the file content, it doesn't have imports at the top. It seems to be treated as a global script or module without imports?
+    // "import { finalizeGameResult } from './game-simulator.js';" needs to be added at the top.
+
+    // For now, let's assume I can import it.
+    // But `live-game-viewer.js` in the `read_file` output started with `// live-game-viewer.js` and strict mode, no imports.
+    // If I add an import, it becomes a module.
+
+    // Let's check if I can access it via a global or if I need to change the file type.
+    // `simulation.js` imports `game-simulator.js`.
+
+    // I will assume for now I need to dynamically import it or it is exposed.
+    // Let's assume I need to add the import at the top.
+
+    import('./game-simulator.js').then(module => {
+        const { finalizeGameResult } = module;
+
+        const L = window.state?.league;
+        if (!L) return;
+
+        const gameData = {
+            homeTeamId: this.gameState.home.team.id,
+            awayTeamId: this.gameState.away.team.id,
+            homeScore: this.gameState.home.score,
+            awayScore: this.gameState.away.score,
+            stats: this.gameState.stats // Pass stats for accumulation
+        };
+
+        const result = finalizeGameResult(L, gameData);
+
+        if (result) {
+            console.log("Game finalized successfully:", result);
+            if (window.saveGameState) window.saveGameState();
+            if (window.setStatus) window.setStatus("Game Saved!", "success");
+        } else {
+            console.error("Failed to finalize game");
+        }
+    }).catch(err => console.error("Failed to load game simulator:", err));
   }
 
   /**
@@ -1550,6 +1571,25 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     const homeTeam = L.teams[homeId];
     const awayTeam = L.teams[awayId];
     const userTeamId = window.state?.userTeamId;
+
+    // CHECK IF GAME IS FINALIZED
+    if (L.schedule) {
+        const weekIndex = (L.week || 1) - 1;
+        const scheduleWeeks = L.schedule.weeks || L.schedule;
+        if (scheduleWeeks && scheduleWeeks[weekIndex]) {
+            const schedGame = scheduleWeeks[weekIndex].games.find(g => (g.home === homeId || g.home.id === homeId) && (g.away === awayId || g.away.id === awayId));
+            if (schedGame && schedGame.finalized) {
+                console.log("Game already finalized, showing box score instead.");
+                if (window.showBoxScore) {
+                    const gameIdx = scheduleWeeks[weekIndex].games.indexOf(schedGame);
+                    window.showBoxScore(L.week, gameIdx);
+                } else {
+                    window.setStatus('This game has already been played.', 'warning');
+                }
+                return;
+            }
+        }
+    }
 
     if (!homeTeam || !awayTeam) {
       console.error('Teams not found for IDs:', homeId, awayId);

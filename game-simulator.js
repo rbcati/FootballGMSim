@@ -748,13 +748,13 @@ export function simGameStats(home, away, options = {}) {
     if (typeof window !== 'undefined' && window.state?.userTeamId !== undefined && window.state?.league?.weeklyGamePlan) {
         const history = window.state.league.strategyHistory || {};
         if (home.id === window.state.userTeamId) {
-             const { planId, riskId } = window.state.league.weeklyGamePlan;
-             const stratMods = getStrategyModifiers(planId, riskId, history);
+             const { offPlanId, defPlanId, riskId } = window.state.league.weeklyGamePlan;
+             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
              if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Home):`, stratMods);
              Object.assign(homeMods, stratMods);
         } else if (away.id === window.state.userTeamId) {
-             const { planId, riskId } = window.state.league.weeklyGamePlan;
-             const stratMods = getStrategyModifiers(planId, riskId, history);
+             const { offPlanId, defPlanId, riskId } = window.state.league.weeklyGamePlan;
+             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
              if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Away):`, stratMods);
              Object.assign(awayMods, stratMods);
         }
@@ -970,6 +970,150 @@ export function accumulateStats(source, target) {
 }
 
 /**
+ * Finalizes a game result, updating schedule, standings, stats, and history.
+ * @param {object} league - The league object.
+ * @param {object} gameData - Contains { homeTeamId, awayTeamId, homeScore, awayScore, stats }
+ * @returns {object} The created result object or null on failure.
+ */
+export function finalizeGameResult(league, gameData) {
+    if (!league || !gameData) return null;
+
+    const { homeTeamId, awayTeamId, homeScore, awayScore, stats } = gameData;
+    const home = league.teams.find(t => t.id === homeTeamId);
+    const away = league.teams.find(t => t.id === awayTeamId);
+
+    if (!home || !away) {
+        console.error('Teams not found for finalization', homeTeamId, awayTeamId);
+        return null;
+    }
+
+    // 1. Update Schedule (Find the game)
+    // Try to find the game in the current week's schedule
+    const weekIndex = (league.week || 1) - 1;
+    const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
+    const weekSchedule = scheduleWeeks[weekIndex];
+
+    let scheduledGame = null;
+    if (weekSchedule && weekSchedule.games) {
+        scheduledGame = weekSchedule.games.find(g =>
+            (g.home === homeTeamId || g.home.id === homeTeamId) &&
+            (g.away === awayTeamId || g.away.id === awayTeamId)
+        );
+    }
+
+    if (scheduledGame) {
+        scheduledGame.played = true;
+        scheduledGame.finalized = true;
+        scheduledGame.homeScore = homeScore;
+        scheduledGame.awayScore = awayScore;
+    }
+
+    // 2. Update Standings / Team Records
+    const isPlayoff = false; // Live Sim only supports regular season currently via this path
+    const gameObj = { home: home, away: away };
+    applyResult(gameObj, homeScore, awayScore);
+
+    // 3. Update Player Stats & Accumulators
+    // Assuming stats provided in gameData are compatible with accumulateStats
+    // If stats are not provided (e.g. fast sim), we assume they were applied during sim
+    if (stats) {
+        // Helper to update roster stats
+        const updateRosterStats = (team, teamStats) => {
+            if (!teamStats || !teamStats.players) return;
+            team.roster.forEach(p => {
+                const pStats = teamStats.players[p.id];
+                if (pStats) {
+                    initializePlayerStats(p);
+                    // Copy game stats to player object first (for consistency)
+                    p.stats.game = { ...pStats };
+                    accumulateStats(p.stats.game, p.stats.season);
+                    if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
+                    p.stats.season.gamesPlayed++;
+
+                    if (updateAdvancedStats) {
+                        updateAdvancedStats(p, p.stats.season);
+                    }
+                }
+            });
+        };
+
+        updateRosterStats(home, stats.home);
+        updateRosterStats(away, stats.away);
+
+        // Also update Team Season Stats
+        const updateTeamStats = (team, teamStats) => {
+             if (!team.stats) team.stats = { season: {} };
+             if (!team.stats.season) team.stats.season = {};
+             // Accumulate from teamStats (which should have agg stats) or player sums
+             // For simplicity, we trust the sim logic updated player.stats.game and we can just sum them
+             // OR if stats has team totals:
+             if (teamStats.team) {
+                 Object.keys(teamStats.team).forEach(k => {
+                     team.stats.season[k] = (team.stats.season[k] || 0) + teamStats.team[k];
+                 });
+             }
+             team.stats.season.gamesPlayed = (team.stats.season.gamesPlayed || 0) + 1;
+        };
+        updateTeamStats(home, stats.home);
+        updateTeamStats(away, stats.away);
+    }
+
+    // 4. Update Rivalries
+    updateRivalries(home, away, homeScore, awayScore, isPlayoff);
+
+    // 5. Create Result Object
+    const resultObj = {
+        id: `g_final_${Date.now()}`,
+        home: homeTeamId,
+        away: awayTeamId,
+        scoreHome: homeScore,
+        scoreAway: awayScore,
+        homeWin: homeScore > awayScore,
+        homeTeamName: home.name,
+        awayTeamName: away.name,
+        homeTeamAbbr: home.abbr,
+        awayTeamAbbr: away.abbr,
+        boxScore: {
+            // Need to transform stats to boxScore format if needed
+            home: transformStatsForBoxScore(stats?.home?.players, home.roster),
+            away: transformStatsForBoxScore(stats?.away?.players, away.roster)
+        },
+        week: league.week,
+        year: league.year
+    };
+
+    // 6. Store in resultsByWeek
+    if (!league.resultsByWeek) league.resultsByWeek = {};
+    if (!league.resultsByWeek[weekIndex]) league.resultsByWeek[weekIndex] = [];
+
+    // Check if result already exists to avoid dupes (idempotency)
+    const existingIndex = league.resultsByWeek[weekIndex].findIndex(r => r.home === homeTeamId && r.away === awayTeamId);
+    if (existingIndex >= 0) {
+        league.resultsByWeek[weekIndex][existingIndex] = resultObj;
+    } else {
+        league.resultsByWeek[weekIndex].push(resultObj);
+    }
+
+    return resultObj;
+}
+
+function transformStatsForBoxScore(playerStatsMap, roster) {
+    if (!playerStatsMap) return {};
+    const box = {};
+    Object.keys(playerStatsMap).forEach(pid => {
+        const p = roster.find(pl => pl.id == pid);
+        if (p) {
+            box[pid] = {
+                name: p.name,
+                pos: p.pos,
+                stats: playerStatsMap[pid]
+            };
+        }
+    });
+    return box;
+}
+
+/**
  * Simulates a batch of games.
  * @param {Array} games - Array of game objects {home, away, ...}
  * @param {Object} options - Simulation options {verbose: boolean, overrideResults: Array}
@@ -1006,6 +1150,20 @@ export function simulateBatch(games, options = {}) {
             if (!home || !away) {
                 console.warn('Invalid team objects in pairing:', pair);
                 return;
+            }
+
+            // CHECK IF GAME IS ALREADY FINALIZED
+            if (pair.week && window.state && window.state.league) {
+                 const L = window.state.league;
+                 const weekIndex = pair.week - 1;
+                 if (L.resultsByWeek && L.resultsByWeek[weekIndex]) {
+                     const existing = L.resultsByWeek[weekIndex].find(r => r.home === home.id && r.away === away.id);
+                     if (existing) {
+                         console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
+                         results.push(existing);
+                         return;
+                     }
+                 }
             }
 
             const overrideResult = overrideLookup.get(`${home.id}-${away.id}`);
@@ -1116,16 +1274,15 @@ export function simulateBatch(games, options = {}) {
                 boxScore: {
                     home: homePlayerStats,
                     away: awayPlayerStats
-                }
+                },
+                week: pair.week,
+                year: pair.year,
+                finalized: true // Mark as finalized
             };
 
             if (schemeNote) {
                 resultObj.schemeNote = schemeNote;
             }
-
-            // Add extra fields if provided
-            if (pair.week) resultObj.week = pair.week;
-            if (pair.year) resultObj.year = pair.year;
 
             results.push(resultObj);
 
@@ -1134,6 +1291,21 @@ export function simulateBatch(games, options = {}) {
             if (!isPlayoff) {
                 const gameObj = { home: home, away: away };
                 applyResult(gameObj, sH, sA, { verbose });
+
+                // MARK AS PLAYED IN SCHEDULE (Optimization)
+                if (window.state?.league?.schedule) {
+                     const weekIndex = (pair.week || 1) - 1;
+                     const scheduleWeeks = window.state.league.schedule.weeks || window.state.league.schedule;
+                     if (scheduleWeeks && scheduleWeeks[weekIndex]) {
+                         const schedGame = scheduleWeeks[weekIndex].games.find(g => (g.home === home.id || g.home === home) && (g.away === away.id || g.away === away));
+                         if (schedGame) {
+                             schedGame.played = true;
+                             schedGame.finalized = true;
+                             schedGame.homeScore = sH;
+                             schedGame.awayScore = sA;
+                         }
+                     }
+                }
             }
 
             // Update Rivalries

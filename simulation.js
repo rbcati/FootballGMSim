@@ -730,7 +730,7 @@ function simulateWeek(options = {}) {
 
         // Reset Strategy for Next Week (Task 5)
         if (L.weeklyGamePlan) {
-             L.weeklyGamePlan = { planId: 'BALANCED', riskId: 'BALANCED' };
+             L.weeklyGamePlan = { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED' };
         }
 
         // Show success message
