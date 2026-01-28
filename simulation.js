@@ -21,7 +21,9 @@ const {
   applyResult,
   initializePlayerStats,
   accumulateStats,
-  simulateBatch
+  simulateBatch,
+  validateLeagueState,
+  commitGameResult
 } = GameSimulator;
 
 // Import GameRunner
@@ -655,6 +657,15 @@ function simulateWeek(options = {}) {
     const result = GameRunner.simulateRegularSeasonWeek(L, options);
     const { gamesSimulated } = result;
 
+    // VALIDATION
+    if (validateLeagueState) {
+        const validation = validateLeagueState(L);
+        if (!validation.valid) {
+            console.error('[SIM-AUDIT] League state invalid after sim:', validation.errors);
+            if (window.setStatus) window.setStatus('Warning: Simulation produced inconsistent data.', 'error');
+        }
+    }
+
     // Check for Season Over
     if (result && result.seasonOver) {
       console.log('Regular season complete, checking playoffs...');
@@ -690,14 +701,15 @@ function simulateWeek(options = {}) {
 
     console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
 
+    // DB COMMIT: Save state immediately to persist W/L updates
+    // This satisfies the requirement to commit changes after results are written.
+    // Moved outside render check to ensure persistence even in background sims
+    if (saveState) saveState();
+    else if (window.saveState) window.saveState();
+
     // Update UI to show results (if render option is true, default to true)
     try {
       if (options.render !== false) {
-        // DB COMMIT: Save state immediately to persist W/L updates
-        // This satisfies the requirement to commit changes after results are written.
-        if (saveState) saveState();
-        else if (window.saveState) window.saveState();
-
         // UI REFRESH: Force re-fetch of table data (equivalent to useEffect)
         if (typeof window.renderStandings === 'function') window.renderStandings();
 
@@ -741,7 +753,8 @@ export {
   startOffseason,
   startNewSeason,
   initializePlayerStats,
-  accumulateCareerStats
+  accumulateCareerStats,
+  commitGameResult
 };
 
 // ============================================================================
@@ -757,4 +770,5 @@ if (typeof window !== 'undefined') {
   window.startNewSeason = startNewSeason;
   window.initializePlayerStats = initializePlayerStats;
   window.accumulateCareerStats = accumulateCareerStats;
+  window.commitGameResult = commitGameResult;
 }
