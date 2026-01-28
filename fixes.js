@@ -1052,7 +1052,8 @@ console.log('[LeagueCreationFix] Loaded');
     resetUIInteractivity(); // iOS defensive fix
 
     const path = location.hash || '#/hub';
-    const viewName = path.slice(2);
+    // Split off query parameters for view matching
+    const viewName = path.slice(2).split('?')[0];
     
     console.log('🧭 Routing to:', viewName, 'from path:', path);
 
@@ -1070,13 +1071,7 @@ console.log('[LeagueCreationFix] Loaded');
 
     // Handle Diagnostics Route
     if (viewName === 'diagnostics') {
-        targetViewId = 'diagnostics-view';
-        if (!document.getElementById(targetViewId)) {
-            const v = document.createElement('div');
-            v.id = targetViewId;
-            v.className = 'view';
-            (document.getElementById('app-content') || document.body).appendChild(v);
-        }
+        // targetViewId defaults to 'diagnostics' which matches index.html
     }
 
     // Handle Player Profile Route
@@ -1434,6 +1429,10 @@ console.log('[LeagueCreationFix] Loaded');
           </div>
           <div class="section">
             <button id="btnResetGame" class="btn danger">Reset Game</button>
+          </div>
+          <div style="margin-top: 20px; border-top: 1px solid var(--hairline); padding-top: 15px;">
+            <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-highlight);">Diagnostics</h4>
+            <a href="#/diagnostics" class="btn secondary" style="width: 100%; text-align: center; display: block; text-decoration: none;">Open Control Panel (Diagnostics)</a>
           </div>
         </div>
       `;
@@ -2435,7 +2434,9 @@ window.on = on;
     setTimeout(() => {
       try {
         const currentState = window.state || {};
-        if (!currentState.league || !currentState.onboarded) {
+            const isDiagnostics = location.hash.includes('diagnostics');
+
+            if ((!currentState.league || !currentState.onboarded) && !isDiagnostics) {
           const modal = document.getElementById('onboardModal');
           if (modal && modal.hidden) {
             console.log('🎯 Game not ready - ensuring onboarding modal is visible');
