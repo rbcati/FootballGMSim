@@ -1300,8 +1300,8 @@ class GameController {
                 this.applyTheme(window.state.theme || 'dark');
 
                 // Trigger new league setup if no save data exists
-                this.setStatus('No save found. Starting new league setup...', 'info');
-                await this.openOnboard();
+                this.setStatus('No active save found.', 'info');
+                location.hash = '#/leagueDashboard';
             }
             this.setupEventListeners();
             if (typeof window.setupEventListeners === 'function') {

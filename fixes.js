@@ -970,6 +970,12 @@ console.log('[LeagueCreationFix] Loaded');
     const viewName = path.slice(2);
     
     console.log('🧭 Routing to:', viewName, 'from path:', path);
+
+    // Cleanup Live Game Viewer if leaving the simulation route
+    if (viewName !== 'game-sim' && window.liveGameViewer && (window.liveGameViewer.isPlaying || window.liveGameViewer.gameState)) {
+        console.log('🛑 Cleaning up Live Game Viewer');
+        window.liveGameViewer.destroy();
+    }
     
     // Map legacy/sub-views to actual DOM view IDs
     let targetViewId = viewName;
