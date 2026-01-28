@@ -221,39 +221,37 @@ export function renderTradeProposals() {
         existingContainer.className = 'card mt';
         tradeView.appendChild(existingContainer);
       }
+
+      // Inject UI with Filters
       existingContainer.innerHTML = `
         <div class="row">
           <h3>Trade Finder</h3>
           <div class="spacer"></div>
           <button id="btnRefreshProposals" class="btn btn-sm">Refresh</button>
         </div>
+        <div id="tpFilterBar" class="row mb" style="margin: 10px 0; gap: 5px;">
+            <select id="tpFilterPos" class="input-sm" style="padding: 4px; border-radius: 4px;">
+                <option value="all">All Positions</option>
+                <option value="QB">QB</option><option value="RB">RB</option>
+                <option value="WR">WR</option><option value="TE">TE</option>
+                <option value="OL">OL</option><option value="DL">DL</option>
+                <option value="LB">LB</option><option value="DB">DB</option>
+            </select>
+            <select id="tpFilterAge" class="input-sm" style="padding: 4px; border-radius: 4px;">
+                <option value="all">Any Age</option>
+                <option value="young">Young (<25)</option>
+                <option value="prime">Prime (25-29)</option>
+                <option value="vet">Vet (30+)</option>
+            </select>
+            <button id="tpFilterBtn" class="btn btn-sm secondary">Filter</button>
+        </div>
         <div id="tradeProposalsList"></div>
       `;
       listEl = document.getElementById('tradeProposalsList');
       refreshBtn = document.getElementById('btnRefreshProposals');
-    }
-  }
-  // If container not found, try to create it in trade view
-  if (!listEl) {
-    const tradeView = document.getElementById('trade');
-    if (tradeView) {
-      let existingContainer = tradeView.querySelector('#tradeProposalsContainer');
-      if (!existingContainer) {
-        existingContainer = document.createElement('div');
-        existingContainer.id = 'tradeProposalsContainer';
-        existingContainer.className = 'card mt';
-        existingContainer.innerHTML = `
-          <div class="row">
-            <h3>AI Trade Proposals</h3>
-            <div class="spacer"></div>
-            <button id="btnRefreshProposals" class="btn btn-sm">Refresh</button>
-          </div>
-          <div id="tradeProposalsList"></div>
-        `;
-        tradeView.appendChild(existingContainer);
-      }
-      listEl = document.getElementById('tradeProposalsList');
-      refreshBtn = document.getElementById('btnRefreshProposals');
+
+      const filterBtn = document.getElementById('tpFilterBtn');
+      if (filterBtn) filterBtn.addEventListener('click', renderTradeProposals);
     }
   }
   
@@ -264,7 +262,31 @@ export function renderTradeProposals() {
   if (!window.state.tradeProposals) {
     generateAITradeProposals();
   }
-  const proposals = window.state.tradeProposals || [];
+  let proposals = window.state.tradeProposals || [];
+
+  // Apply Filters
+  const filterPos = document.getElementById('tpFilterPos')?.value || 'all';
+  const filterAge = document.getElementById('tpFilterAge')?.value || 'all';
+
+  // Persist filter selection visual state if re-rendering
+  if (document.getElementById('tpFilterPos')) {
+      // This part assumes we didn't just overwrite innerHTML if it existed, but we did.
+      // Ideally we should preserve values, but for now defaults or reset is acceptable for MVP.
+  }
+
+  if (filterPos !== 'all' || filterAge !== 'all') {
+      proposals = proposals.filter(p => {
+          return p.cpuPlayers.some(pl => {
+              const matchesPos = filterPos === 'all' || pl.pos === filterPos || (filterPos === 'DB' && ['CB','S'].includes(pl.pos)) || (filterPos === 'OL' && ['T','G','C'].includes(pl.pos));
+              let matchesAge = true;
+              if (filterAge === 'young') matchesAge = pl.age < 25;
+              else if (filterAge === 'prime') matchesAge = pl.age >= 25 && pl.age < 30;
+              else if (filterAge === 'vet') matchesAge = pl.age >= 30;
+              return matchesPos && matchesAge;
+          });
+      });
+  }
+
   if (refreshBtn && !refreshBtn._tpBound) {
     refreshBtn.addEventListener('click', () => {
       generateAITradeProposals();
@@ -276,7 +298,7 @@ export function renderTradeProposals() {
     listEl.innerHTML = `
       <div class="card">
         <h3>Trade Proposals</h3>
-        <p class="muted">No AI trade proposals right now. Try refreshing after a few games.</p>
+        <p class="muted">No matching proposals found. Try refreshing or changing filters.</p>
       </div>
     `;
     return;

@@ -171,7 +171,14 @@ class ScheduleViewer {
                     
                     if (homeTeam && awayTeam) {
                         // Check for result
-                        const result = weekResults ? weekResults.find(r => r.home === game.home && r.away === game.away) : null;
+                        let resultIndex = -1;
+                        let result = null;
+
+                        if (weekResults) {
+                            resultIndex = weekResults.findIndex(r => r.home === game.home && r.away === game.away);
+                            if (resultIndex >= 0) result = weekResults[resultIndex];
+                        }
+
                         const isPlayed = !!result;
                         const homeScore = isPlayed ? result.scoreHome : (game.homeScore !== undefined ? game.homeScore : '');
                         const awayScore = isPlayed ? result.scoreAway : (game.awayScore !== undefined ? game.awayScore : '');
@@ -193,7 +200,7 @@ class ScheduleViewer {
                                         '<span class="time">TBD</span>'
                                     }
                                 </div>
-                                ${isPlayed ? `<button class="btn btn-sm" onclick="window.showBoxScore(${weekNumber}, ${gameIndex})">Box Score</button>` : `<button class="btn btn-sm btn-primary watch-live-btn" onclick="if(window.watchLiveGame) { window.watchLiveGame(${game.home}, ${game.away}); } else { console.error('watchLiveGame not available'); }">📺 Watch Live</button>`}
+                                ${isPlayed ? `<button class="btn btn-sm" onclick="window.showBoxScore(${weekNumber}, ${resultIndex})">Box Score</button>` : `<button class="btn btn-sm btn-primary watch-live-btn" onclick="if(window.watchLiveGame) { window.watchLiveGame(${game.home}, ${game.away}); } else { console.error('watchLiveGame not available'); }">📺 Watch Live</button>`}
                             </div>
                         `;
                     }
