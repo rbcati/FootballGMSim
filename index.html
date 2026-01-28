@@ -445,6 +445,13 @@
             <label><input type="radio" name="gameMode" value="career"> Career Mode</label>
           </div>
         </div>
+        <div class="section">
+          <label>Starting Point</label>
+          <div class="row">
+            <label><input type="radio" name="startPoint" value="regular" checked> Week 1</label>
+            <label><input type="radio" name="startPoint" value="offseason"> Offseason (Draft/FA)</label>
+          </div>
+        </div>
         <div id="careerOptions" class="section" hidden>
           <label for="careerRole">Your Role</label>
           <select id="careerRole">
@@ -532,7 +539,7 @@
 <script src="game-results-viewer.js?v=1.0.1"></script>
 <script src="schedule-viewer.js?v=1.0.1"></script>
 <script src="box-score-viewer.js?v=1.0.1"></script>
-<script src="live-game-viewer.js?v=1.0.1"></script>
+<script type="module" src="live-game-viewer.js?v=1.0.1"></script>
 <script type="module" src="standings-page.js?v=1.0.1"></script>
 <script src="power-rankings.js?v=1.0.1"></script>
 

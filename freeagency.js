@@ -588,13 +588,20 @@ function signFreeAgent(playerIndex) {
 
     if (capEnabled && capAfter > capTotal) {
       const overage = capAfter - capTotal;
-      window.setStatus(`Signing would exceed salary cap by $${overage.toFixed(1)}M`);
+      window.setStatus(`Signing would exceed salary cap by $${overage.toFixed(1)}M`, 'error');
       return;
     }
 
     // Ensure roster exists
     if (!Array.isArray(team.roster)) {
       team.roster = team.roster ? Array.from(team.roster) : [];
+    }
+
+    // Check roster limit
+    const ROSTER_LIMIT = 53;
+    if (team.roster.length >= ROSTER_LIMIT) {
+        window.setStatus(`Cannot sign player. Roster full (${team.roster.length}/${ROSTER_LIMIT}). Release a player first.`, 'error');
+        return;
     }
 
     // Add player to team
@@ -968,13 +975,20 @@ function signFreeAgentWithContract(playerIndex, years, baseSalary, signingBonus)
 
     if (capEnabled && capAfter > capTotal) {
       const overage = capAfter - capTotal;
-      window.setStatus(`Signing would exceed salary cap by $${overage.toFixed(1)}M`);
+      window.setStatus(`Signing would exceed salary cap by $${overage.toFixed(1)}M`, 'error');
       return;
     }
 
     // Ensure roster exists
     if (!Array.isArray(team.roster)) {
       team.roster = team.roster ? Array.from(team.roster) : [];
+    }
+
+    // Check roster limit
+    const ROSTER_LIMIT = 53;
+    if (team.roster.length >= ROSTER_LIMIT) {
+        window.setStatus(`Cannot sign player. Roster full (${team.roster.length}/${ROSTER_LIMIT}). Release a player first.`, 'error');
+        return;
     }
 
     // Add player to team

@@ -6,7 +6,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
-import { updateAdvancedStats, getZeroStats } from './player.js';
+import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
 
 /**
@@ -1009,13 +1009,14 @@ export function finalizeGameResult(league, gameData) {
     }
 
     // 2. Update Standings / Team Records
-    const isPlayoff = false; // Live Sim only supports regular season currently via this path
-    const gameObj = { home: home, away: away };
-    applyResult(gameObj, homeScore, awayScore);
+    const isPlayoff = gameData.isPlayoff || false;
+
+    if (!isPlayoff) {
+        const gameObj = { home: home, away: away };
+        applyResult(gameObj, homeScore, awayScore);
+    }
 
     // 3. Update Player Stats & Accumulators
-    // Assuming stats provided in gameData are compatible with accumulateStats
-    // If stats are not provided (e.g. fast sim), we assume they were applied during sim
     if (stats) {
         // Helper to update roster stats
         const updateRosterStats = (team, teamStats) => {
@@ -1026,12 +1027,32 @@ export function finalizeGameResult(league, gameData) {
                     initializePlayerStats(p);
                     // Copy game stats to player object first (for consistency)
                     p.stats.game = { ...pStats };
-                    accumulateStats(p.stats.game, p.stats.season);
-                    if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
-                    p.stats.season.gamesPlayed++;
 
-                    if (updateAdvancedStats) {
-                        updateAdvancedStats(p, p.stats.season);
+                    if (isPlayoff) {
+                        if (!p.stats.playoffs) p.stats.playoffs = {};
+                        accumulateStats(p.stats.game, p.stats.playoffs);
+                        if (!p.stats.playoffs.gamesPlayed) p.stats.playoffs.gamesPlayed = 0;
+                        p.stats.playoffs.gamesPlayed++;
+                    } else {
+                        accumulateStats(p.stats.game, p.stats.season);
+                        if (!p.stats.season.gamesPlayed) p.stats.season.gamesPlayed = 0;
+                        p.stats.season.gamesPlayed++;
+
+                        if (updateAdvancedStats) {
+                            updateAdvancedStats(p, p.stats.season);
+                        }
+                    }
+
+                    // LEGACY INTEGRATION (Milestones, etc)
+                    if (updatePlayerGameLegacy) {
+                         const gameContext = {
+                            year: league.year || 2025,
+                            week: league.week || 1,
+                            teamWon: (team.id === homeTeamId ? homeScore > awayScore : awayScore > homeScore),
+                            isPlayoff: isPlayoff,
+                            opponent: (team.id === homeTeamId ? away.name : home.name)
+                        };
+                        updatePlayerGameLegacy(p, p.stats.game, gameContext);
                     }
                 }
             });
@@ -1273,58 +1294,45 @@ export function simulateBatch(games, options = {}) {
                 updateTeamSeasonStats(away);
             }
 
-            // Record result
-            const resultObj = {
-                id: `g${index}`,
-                home: home.id || pair.home, // Use ID if possible
-                away: away.id || pair.away,
-                scoreHome: sH,
-                scoreAway: sA,
-                homeWin: sH > sA,
-                homeTeamName: home.name,
-                awayTeamName: away.name,
-                homeTeamAbbr: home.abbr,
-                awayTeamAbbr: away.abbr,
-                boxScore: {
-                    home: homePlayerStats,
-                    away: awayPlayerStats
-                },
-                week: pair.week,
-                year: pair.year,
-                finalized: true // Mark as finalized
-            };
+            // Finalize Game Result
+            const league = window.state?.league;
+            if (league) {
+                const gameData = {
+                    homeTeamId: home.id || pair.home,
+                    awayTeamId: away.id || pair.away,
+                    homeScore: sH,
+                    awayScore: sA,
+                    isPlayoff: options.isPlayoff || false,
+                    stats: {
+                        home: { players: homePlayerStats },
+                        away: { players: awayPlayerStats }
+                    }
+                };
 
-            if (schemeNote) {
-                resultObj.schemeNote = schemeNote;
-            }
-
-            results.push(resultObj);
-
-            // Apply W/L (Regular Season Only)
-            const isPlayoff = options.isPlayoff === true;
-            if (!isPlayoff) {
-                const gameObj = { home: home, away: away };
-                applyResult(gameObj, sH, sA, { verbose });
-
-                // MARK AS PLAYED IN SCHEDULE (Optimization)
-                if (window.state?.league?.schedule) {
-                     const weekIndex = (pair.week || 1) - 1;
-                     const scheduleWeeks = window.state.league.schedule.weeks || window.state.league.schedule;
-                     if (scheduleWeeks && scheduleWeeks[weekIndex]) {
-                         const schedGame = scheduleWeeks[weekIndex].games.find(g => (g.home === home.id || g.home === home) && (g.away === away.id || g.away === away));
-                         if (schedGame) {
-                             schedGame.played = true;
-                             schedGame.finalized = true;
-                             schedGame.homeScore = sH;
-                             schedGame.awayScore = sA;
-                         }
-                     }
+                const resultObj = finalizeGameResult(league, gameData);
+                if (schemeNote && resultObj) {
+                    resultObj.schemeNote = schemeNote;
                 }
-            }
 
-            // Update Rivalries
-            // Use local vars sH/sA which are defined in the loop scope
-            updateRivalries(home, away, sH, sA, isPlayoff);
+                if (resultObj) {
+                    results.push(resultObj);
+                }
+            } else {
+                console.error('League not found for finalizeGameResult in simulateBatch');
+                // Fallback result object creation if league missing
+                results.push({
+                    id: `g${index}`,
+                    home: home.id || pair.home,
+                    away: away.id || pair.away,
+                    scoreHome: sH,
+                    scoreAway: sA,
+                    homeWin: sH > sA,
+                    boxScore: { home: homePlayerStats, away: awayPlayerStats },
+                    week: pair.week,
+                    year: pair.year,
+                    finalized: true
+                });
+            }
 
         } catch (error) {
             console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);

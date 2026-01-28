@@ -280,6 +280,11 @@ label {
   -webkit-overflow-scrolling: touch;
 }
 
+.table-wrapper table th,
+.table-wrapper table td {
+  white-space: nowrap;
+}
+
 /* ============================================================================
    MODALS
    ============================================================================ */
