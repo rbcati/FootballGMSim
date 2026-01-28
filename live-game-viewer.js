@@ -20,6 +20,7 @@ class LiveGameViewer {
     this.container = null;
     this.viewMode = false;
     this.hasAppliedResult = false;
+    this.isGameEnded = false;
   }
 
   /**
@@ -734,9 +735,18 @@ class LiveGameViewer {
    * Display next play
    */
   displayNextPlay() {
+    if (this.isGameEnded) return;
+
     if (this.gameState?.gameComplete) {
       this.endGame();
       return;
+    }
+
+    // Check UI existence
+    if (!this.viewMode && !this.modal) {
+        console.warn('LiveGameViewer: Modal missing, stopping playback.');
+        this.destroy();
+        return;
     }
 
     // Check if user needs to call a play
@@ -1013,7 +1023,12 @@ class LiveGameViewer {
    * Skip to end of game
    */
   skipToEnd() {
-      if (this.intervalId) clearTimeout(this.intervalId);
+      if (this.intervalId) {
+          clearTimeout(this.intervalId);
+          this.intervalId = null;
+      }
+      if (this.isGameEnded) return;
+
       this.isPaused = false;
       this.isPlaying = true;
       this.isSkipping = true;
@@ -1088,6 +1103,9 @@ class LiveGameViewer {
    * End game
    */
   endGame() {
+    if (this.isGameEnded) return;
+    this.isGameEnded = true;
+
     this.isPlaying = false;
     this.isPaused = true;
 
@@ -1096,10 +1114,15 @@ class LiveGameViewer {
       this.intervalId = null;
     }
 
-    // Show final stats
-    const finalStats = this.modal.querySelector('.final-stats');
-    if (finalStats) {
-      finalStats.style.display = 'block';
+    // Show final stats safely
+    const parent = this.viewMode ? this.container : this.modal;
+    if (parent) {
+        const finalStats = parent.querySelector('.final-stats');
+        if (finalStats) {
+            finalStats.style.display = 'block';
+        }
+    } else {
+        console.warn('LiveGameViewer: UI missing during endGame');
     }
 
     if (this.onGameEndCallback) {
@@ -1449,15 +1472,28 @@ class LiveGameViewer {
    * Cleanup
    */
   destroy() {
+    this.isPlaying = false;
+    this.isPaused = true;
+    this.isGameEnded = true; // Prevent further updates
+
+    if (this.intervalId) {
+      clearTimeout(this.intervalId);
+      this.intervalId = null;
+    }
+
     this.hideModal();
+
     if (this.modal) {
       this.modal.remove();
       this.modal = null;
     }
+
     if (this.container) {
         this.container.innerHTML = '';
         this.container = null;
     }
+
+    this.gameState = null;
   }
 }
 
