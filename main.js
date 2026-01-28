@@ -1,5 +1,6 @@
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
+import { hasSavedLeagues } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
@@ -433,7 +434,10 @@ class GameController {
                                 <strong style="color: ${item.id.includes('roster_max') || item.id.includes('salary_cap') ? '#ef4444' : '#f59e0b'}">${item.title}</strong>
                                 <div style="font-size: 0.9rem; color: var(--text-muted);">${item.description}</div>
                             </div>
-                            ${item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''}
+                            ${item.action ?
+                                `<button class="btn btn-sm" onclick="${item.action}">${item.actionLabel || 'Fix'}</button>` :
+                                item.route ? `<button class="btn btn-sm" onclick="location.hash='${item.route}'">${item.actionLabel || 'Fix'}</button>` : ''
+                            }
                         </div>
                     `).join('');
 
@@ -489,6 +493,7 @@ class GameController {
                             </div>
                             <div style="text-align: right;">
                                 <div style="font-size: 0.8rem; font-weight: bold; opacity: 0.6;">WEEKLY STRATEGY</div>
+                                <button class="btn btn-sm" onclick="if(window.saveGame) window.saveGame()" style="margin-top: 4px;">Save Game</button>
                             </div>
                         </div>
 
@@ -710,6 +715,10 @@ class GameController {
                         <div>
                             <h3>Quick Actions</h3>
                             <div class="actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;">
+                                <button class="btn" onclick="if(window.saveGame) window.saveGame()" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center; border: 1px solid var(--accent);">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">💾</span>
+                                    Save
+                                </button>
                                 <button class="btn" onclick="location.hash='#/roster'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
                                     <span style="font-size: 24px; margin-bottom: 4px;">👥</span>
                                     Roster
@@ -1573,27 +1582,25 @@ class GameController {
     async _performInit() {
         console.log('GameController: Initializing...');
         try {
-            const loadResult = await this.loadGameState();
-            // Accept saved state if it contains a league, even if onboarded flag is missing
-            if (loadResult.success && loadResult.gameData && (loadResult.gameData.onboarded || loadResult.gameData.league)) {
-                // Note: migration is handled inside loadState now if using state.js loadState
-                // But let's trust loadResult.gameData is already migrated if loadState does it.
-                // state.js loadState does calls migrate.
-                window.state = loadResult.gameData;
+            // ENTRY FLOW UPDATE: Check for saves first
+            const hasSaves = hasSavedLeagues ? hasSavedLeagues() : (window.hasSavedLeagues ? window.hasSavedLeagues() : false);
 
-                this.applyTheme(window.state.theme || 'dark');
-                if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
-                if (typeof window.renderSaveDataManager === 'function') window.renderSaveDataManager();
-                if (typeof window.updateCapSidebar === 'function') window.updateCapSidebar();
-                this.setStatus('Game loaded successfully', 'success', 2000);
-            } else {
-                window.state = initState();
-                this.applyTheme(window.state.theme || 'dark');
+            // Initialize base state (for theme, etc)
+            window.state = initState();
+            this.applyTheme(window.state.theme || 'dark');
 
-                // Trigger new league setup if no save data exists
-                this.setStatus('No active save found.', 'info');
+            if (hasSaves) {
+                // Saves exist: Go to Dashboard (Entry Screen)
+                console.log('Saves found, routing to dashboard.');
                 location.hash = '#/leagueDashboard';
+                // Explicitly call router since listeners might not be ready
+                this.router('leagueDashboard');
+            } else {
+                // No saves: Go to Onboarding
+                console.log('No saves found, starting onboarding.');
+                await this.openOnboard();
             }
+
             this.setupEventListeners();
             if (typeof window.setupEventListeners === 'function') {
                 window.setupEventListeners();
