@@ -6,6 +6,7 @@ import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy }
 import { simulateWeek } from './simulation.js';
 import { initErrorBoundary } from './error-boundary.js';
 import { showLoading, hideLoading } from './loading-spinner.js';
+import { getTrackedPlayerUpdates, getFollowedPlayers } from './player-tracking.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -459,6 +460,49 @@ class GameController {
                 }
             }
 
+            // --- PLAYER TRACKING (NEW) ---
+            let playerTrackingHTML = '';
+            if (userTeam) {
+                const updates = getTrackedPlayerUpdates ? getTrackedPlayerUpdates(L, currentWeek) : [];
+                const followedPlayers = getFollowedPlayers ? getFollowedPlayers(L) : [];
+
+                // Show updates or just list followed players if no updates
+                let content = '';
+                if (updates.length > 0) {
+                    content = updates.slice(0, 3).map(update => `
+                        <div class="tracking-item" style="border-bottom: 1px solid var(--hairline); padding: 8px 0; cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${update.player.id}')">
+                            <div style="display: flex; justify-content: space-between;">
+                                <strong>${update.player.name} <span class="text-muted small">(${update.player.pos})</span></strong>
+                                <span class="tag ${update.type === 'good' ? 'is-success' : update.type === 'bad' || update.type === 'injury' ? 'is-danger' : 'is-info'}">${update.type.toUpperCase()}</span>
+                            </div>
+                            <div style="font-size: 0.9rem; color: var(--text); opacity: 0.9;">${update.message}</div>
+                        </div>
+                    `).join('');
+                } else if (followedPlayers.length > 0) {
+                    content = followedPlayers.slice(0, 3).map(p => `
+                        <div class="tracking-item" style="border-bottom: 1px solid var(--hairline); padding: 8px 0; cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${p.id}')">
+                            <div style="display: flex; justify-content: space-between;">
+                                <strong>${p.name}</strong>
+                                <span class="text-muted small">${p.pos} • OVR ${p.displayOvr || p.ovr}</span>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-muted);">Status: ${p.injuryWeeks > 0 ? 'Injured' : 'Active'}</div>
+                        </div>
+                    `).join('');
+                }
+
+                if (content) {
+                    playerTrackingHTML = `
+                        <div class="card mb-4" id="hubTracking">
+                            <h3 style="margin-bottom: 10px;">📌 Players You're Tracking</h3>
+                            <div class="tracking-list">
+                                ${content}
+                            </div>
+                            ${followedPlayers.length > 3 ? `<div style="text-align: right; margin-top: 5px;"><small class="text-muted">And ${followedPlayers.length - 3} others...</small></div>` : ''}
+                        </div>
+                    `;
+                }
+            }
+
             // --- MANAGER PANEL (NEW) ---
             let managerPanelHTML = '';
             if (userTeam && !isOffseason && opponent) {
@@ -700,6 +744,7 @@ class GameController {
             
             hubContainer.innerHTML = `
                 ${actionItemsHTML}
+                ${playerTrackingHTML}
                 ${headerDashboardHTML}
                 ${managerPanelHTML}
                 ${newsHTML}

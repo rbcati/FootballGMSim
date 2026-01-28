@@ -353,6 +353,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         fatigue: 0,
         abilities: [],
         personality: { traits: ['Loyal'] },
+        isFollowed: false,
         stats: { game: {}, season: getZeroStats(), career: getZeroStats() },
         statsHistory: [],
         history: [],
@@ -1101,6 +1102,9 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         // Hidden Gems / Busts Factors
         bustFactor: U.rand(0, 20),
         boomFactor: U.rand(0, 20),
+
+        // Player Tracking
+        isFollowed: false,
 
         // Collections
         abilities: [],
