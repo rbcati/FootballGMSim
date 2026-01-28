@@ -1,7 +1,10 @@
 
 // diagnostics.js - In-App Control Panel for Debugging & Recovery
 
-import { saveState } from './state.js';
+import { saveState, loadState, clearSavedState, listSaveSlots, getSaveMetadata, setActiveSaveSlot } from './state.js';
+import { getLogger } from './logger.js';
+import { getActionItems } from './action-items.js';
+import { finalizeGameResult, simGameStats } from './game-simulator.js';
 
 export function renderDiagnostics() {
     console.log('Rendering Diagnostics Control Panel...');
@@ -18,330 +21,443 @@ export function renderDiagnostics() {
         container.appendChild(diagView);
     }
 
-    // Hide other views (standard behavior)
+    // Hide other views
     document.querySelectorAll('.view').forEach(v => {
         if (v.id !== 'diagnostics-view') v.style.display = 'none';
     });
     diagView.style.display = 'block';
 
-    // 1. GATHER DATA
-    const state = window.state || {};
-    const league = state.league || {};
-
-    // Game Stats Logic
-    let currentWeekStats = { total: 0, final: 0, pending: 0 };
-    let lastFinalizedGame = 'None';
-
-    if (league.schedule) {
-        const weekNum = league.week || 1;
-        let weekGames = [];
-
-        // Handle different schedule structures
-        if (Array.isArray(league.schedule)) {
-            // Flat array or array of weeks?
-            if (league.schedule[0] && league.schedule[0].games) {
-                const w = league.schedule.find(w => w.weekNumber === weekNum || w.week === weekNum) || league.schedule[weekNum - 1];
-                if (w) weekGames = w.games;
-            } else if (league.schedule[weekNum]) {
-                weekGames = league.schedule[weekNum]; // Legacy
-            }
-        } else if (league.schedule.weeks) {
-            const w = league.schedule.weeks.find(w => w.weekNumber === weekNum) || league.schedule.weeks[weekNum - 1];
-            if (w) weekGames = w.games;
-        }
-
-        if (Array.isArray(weekGames)) {
-            currentWeekStats.total = weekGames.length;
-            weekGames.forEach(g => {
-                if (g.finalized || (g.homeScore !== undefined && g.awayScore !== undefined)) {
-                    currentWeekStats.final++;
-                    // Track last finalized
-                    if (g.gameId) lastFinalizedGame = `ID: ${g.gameId} (W${weekNum})`;
-                } else {
-                    currentWeekStats.pending++;
-                }
-            });
-        }
-    }
-
-    // Storage Check
-    let storageStatus = 'Unknown';
-    let storageClass = 'text-muted';
-    let storageKeys = [];
-    try {
-        const testKey = '__test__';
-        localStorage.setItem(testKey, '1');
-        localStorage.removeItem(testKey);
-        storageStatus = 'Available / Writable';
-        storageClass = 'text-success';
-
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && (key.startsWith('football_gm') || key.startsWith('nflGM'))) {
-                storageKeys.push(key);
-            }
-        }
-    } catch (e) {
-        storageStatus = 'Blocked / Full / Error';
-        storageClass = 'text-danger';
-    }
-
-    const storageUsage = estimateStorageUsage();
-
-    // UI Lock Check
-    const modalsOpen = document.querySelectorAll('.modal').length;
-    const bodyClasses = document.body.className;
-    const backdrops = document.querySelectorAll('.modal-backdrop').length;
-
-    // Error Log
-    const errors = window._errorLog || [];
-
-    // Helper for safe HTML
     const safe = (text) => {
         if (!text) return '';
         return text.toString().replace(/</g, "&lt;").replace(/>/g, "&gt;");
     };
 
+    // State Data
+    const state = window.state || {};
+    const league = state.league || {};
+    const logger = getLogger();
+
     // 2. BUILD UI
     diagView.innerHTML = `
-        <div class="card" style="max-width: 800px; margin: 20px auto; border-left: 5px solid #d97706;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h2 style="margin: 0;">🛠️ Diagnostics & Control Panel</h2>
-                <button class="btn" onclick="window.location.hash='#/hub'">Back to Hub</button>
-            </div>
-
-            <p class="muted">Use this panel to diagnose issues, check save data integrity, or recover from crashes (especially on iOS).</p>
-
-            <div class="grid two" style="gap: 20px;">
-                <!-- STATE HEALTH -->
-                <div class="diag-section">
-                    <h3>📊 State Health</h3>
-                    <table class="table table-sm">
-                        <tr><td>League Loaded:</td> <td>${league.teams ? '✅ Yes' : '❌ No'}</td></tr>
-                        <tr><td>League Name:</td> <td>${safe(state.leagueName || 'N/A')}</td></tr>
-                        <tr><td>Week / Year:</td> <td>${safe(league.week || '-')} / ${safe(league.year || '-')}</td></tr>
-                        <tr><td>User Team:</td> <td>${league.teams ? safe(league.teams[state.userTeamId]?.name || state.userTeamId) : '-'}</td></tr>
-                        <tr><td>Games (W${safe(league.week)}):</td> <td>${currentWeekStats.total} Total / ${currentWeekStats.final} Final / ${currentWeekStats.pending} Pending</td></tr>
-                        <tr><td>Last Finalized:</td> <td>${safe(lastFinalizedGame)}</td></tr>
-                        <tr><td>Save Slot:</td> <td>${safe(state.saveSlot || 'Default')}</td></tr>
-                        <tr><td>Last Saved:</td> <td>${safe(state.lastSaved ? new Date(state.lastSaved).toLocaleString() : 'Never')}</td></tr>
-                    </table>
-                </div>
-
-                <!-- STORAGE HEALTH -->
-                <div class="diag-section">
-                    <h3>💾 Storage Health</h3>
-                    <table class="table table-sm">
-                        <tr><td>Status:</td> <td class="${storageClass}">${storageStatus}</td></tr>
-                        <tr><td>Usage (Est):</td> <td>${storageUsage}</td></tr>
-                        <tr><td>Keys Found:</td> <td>${localStorage.length} (Listed below)</td></tr>
-                    </table>
-                    <div style="max-height: 100px; overflow-y: auto; background: rgba(0,0,0,0.2); padding: 5px; font-size: 0.75rem; margin-top: 5px;">
-                        ${storageKeys.length ? storageKeys.map(k => `<div>${safe(k)}</div>`).join('') : 'No game keys found'}
-                    </div>
-                    <div style="margin-top: 10px;">
-                        <button class="btn primary btn-sm" id="btnForceSave">Force Save Now</button>
-                    </div>
+        <div class="card" style="max-width: 900px; margin: 20px auto; border-left: 5px solid #d97706;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h2 style="margin: 0;">🛠️ Mini Dev Tools</h2>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn primary btn-sm" id="btnCopyReport">📋 Copy Report</button>
+                    <button class="btn btn-sm" onclick="window.location.hash='#/hub'">Back to Hub</button>
                 </div>
             </div>
 
-            <hr style="border-color: var(--hairline); margin: 20px 0;">
-
-            <!-- UI LOCKS & RECOVERY -->
-            <div class="diag-section">
-                <h3>🔓 UI & Recovery</h3>
-                <div style="display: flex; gap: 15px; margin-bottom: 15px; align-items: center; flex-wrap: wrap;">
-                    <div class="status-pill ${modalsOpen > 0 ? 'danger' : 'success'}">Modals: ${modalsOpen}</div>
-                    <div class="status-pill ${backdrops > 0 ? 'danger' : 'success'}">Backdrops: ${backdrops}</div>
-                    <code style="font-size: 0.8rem; background: var(--surface-secondary); padding: 4px;">Body: ${safe(bodyClasses || 'none')}</code>
-                </div>
-
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn secondary" id="btnClearLocks">🛡️ Clear UI Locks</button>
-                    <button class="btn secondary" id="btnReloadApp">🔄 Reload App State</button>
-                    <button class="btn secondary" id="btnHardReload" onclick="window.location.reload(true)">⚠️ Hard Refresh</button>
-                </div>
+            <div class="diag-tabs">
+                <button class="tab-btn active" data-tab="console">Console</button>
+                <button class="tab-btn" data-tab="state">State</button>
+                <button class="tab-btn" data-tab="storage">Storage</button>
+                <button class="tab-btn" data-tab="sim">Sim Tools</button>
+                <button class="tab-btn" data-tab="ui">UI / Locks</button>
+                <button class="tab-btn" data-tab="network">Network</button>
             </div>
 
-            <hr style="border-color: var(--hairline); margin: 20px 0;">
-
-            <!-- DATA MANAGEMENT -->
-            <div class="diag-section">
-                <h3>📤 Data Management</h3>
-                <div style="margin-bottom: 10px;">
-                    <button class="btn" id="btnExportSave">Export Save to JSON</button>
-                    <button class="btn" id="btnImportSave">Import Save from JSON</button>
-                </div>
-                <div id="exportArea" style="display: none;">
-                    <p class="muted small">Copy this text to save externally, or paste valid JSON here to import.</p>
-                    <textarea id="saveDataText" style="width: 100%; height: 150px; background: #111; color: #fff; font-family: monospace; font-size: 0.8rem; border: 1px solid #444; padding: 10px;"></textarea>
-                    <div style="text-align: right; margin-top: 5px;">
-                        <button class="btn primary btn-sm" id="btnConfirmImport">Load Data</button>
-                        <button class="btn btn-sm" onclick="document.getElementById('exportArea').style.display='none'">Close</button>
-                    </div>
-                </div>
+            <div id="diag-content" style="min-height: 400px;">
+                <!-- TABS CONTENT WILL BE RENDERED HERE -->
             </div>
-
-            <hr style="border-color: var(--hairline); margin: 20px 0;">
-
-            <!-- ERROR LOG -->
-            <div class="diag-section">
-                <h3>⚠️ Error Log (${errors.length})</h3>
-                <div style="background: #111; border: 1px solid #444; border-radius: 4px; padding: 10px; max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.8rem;">
-                    ${errors.length > 0
-                        ? errors.map(e => `
-                            <div style="border-bottom: 1px solid #333; padding-bottom: 5px; margin-bottom: 5px;">
-                                <div style="color: #f87171;">${safe(e.timestamp)}</div>
-                                <div>${safe(e.message)}</div>
-                                ${e.stack ? `<div style="color: #666; font-size: 0.75rem; white-space: pre-wrap;">${safe(e.stack.split('\n')[0])}...</div>` : ''}
-                            </div>
-                        `).join('')
-                        : '<span class="text-muted">No errors logged since last reload.</span>'
-                    }
-                </div>
-            </div>
-
         </div>
-
         <style>
-            .diag-section h3 { margin-top: 0; font-size: 1.1rem; color: var(--text-highlight); border-bottom: 1px solid var(--hairline); padding-bottom: 5px; }
-            .status-pill { padding: 4px 8px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; background: #333; }
-            .status-pill.success { background: #064e3b; color: #6ee7b7; }
-            .status-pill.danger { background: #7f1d1d; color: #fca5a5; }
-            .text-success { color: #48bb78; }
-            .text-danger { color: #f56565; }
+            .diag-tabs { display: flex; gap: 5px; margin-bottom: 15px; border-bottom: 1px solid #444; padding-bottom: 5px; overflow-x: auto; }
+            .tab-btn { background: transparent; border: none; color: #aaa; padding: 8px 15px; cursor: pointer; border-radius: 4px 4px 0 0; font-weight: bold; }
+            .tab-btn.active { background: #333; color: white; border-bottom: 2px solid #d97706; }
+            .tab-btn:hover { color: white; }
+            .log-entry { font-family: monospace; font-size: 0.8rem; border-bottom: 1px solid #333; padding: 4px; display: flex; gap: 10px; }
+            .log-time { color: #666; min-width: 140px; }
+            .log-msg { white-space: pre-wrap; word-break: break-word; flex: 1; }
+            .log-info { color: #aaa; }
+            .log-warn { color: #f59e0b; }
+            .log-error { color: #ef4444; background: rgba(239, 68, 68, 0.1); }
+            .kv-table td { padding: 4px 8px; border-bottom: 1px solid #333; }
+            .kv-table tr:last-child td { border-bottom: none; }
+            .section-header { margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid #444; padding-bottom: 5px; color: #ddd; font-size: 1.1em;}
+            .storage-slot { background: #222; padding: 10px; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; border-radius: 4px; }
+            .storage-slot.active { border-left: 3px solid #48bb78; }
         </style>
     `;
 
-    // 3. BIND EVENTS
-
-    // Force Save
-    document.getElementById('btnForceSave').onclick = async () => {
-        const btn = document.getElementById('btnForceSave');
-        btn.disabled = true;
-        btn.textContent = 'Saving...';
-
-        try {
-            let success = false;
-            // Try modern save
-            if (window.saveGame) {
-                window.saveGame();
-                success = true;
-            } else if (window.saveGameState) {
-                const result = await window.saveGameState();
-                success = result.success;
-            } else if (saveState) {
-                success = saveState();
-            }
-
-            if (success) {
-                alert('Save successful!');
-            } else {
-                alert('Save reported failure. Check logs.');
-            }
-        } catch (e) {
-            alert('Save crashed: ' + e.message);
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Force Save Now';
-            renderDiagnostics(); // Refresh data
-        }
+    // Render Helpers
+    const renderConsole = (contentDiv) => {
+        const logs = [...logger.logs, ...logger.errors.map(e => ({...e, level: 'error'}))].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+        contentDiv.innerHTML = `
+            <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                <div class="small muted">${logs.length} entries captured</div>
+                <div>
+                    <button class="btn btn-sm" id="btnClearLogs">Clear</button>
+                </div>
+            </div>
+            <div style="background: #111; border: 1px solid #444; height: 400px; overflow-y: auto; padding: 5px;">
+                ${logs.map(l => `
+                    <div class="log-entry log-${l.level}">
+                        <div class="log-time">${l.timestamp.split('T')[1].replace('Z','')}</div>
+                        <div class="log-msg">${safe(l.message)} ${l.stack ? `<br><small>${safe(l.stack)}</small>` : ''}</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        document.getElementById('btnClearLogs')?.addEventListener('click', () => {
+            logger.clear();
+            renderDiagnostics(); // Re-render to refresh list
+        });
     };
 
-    // Clear Locks
-    document.getElementById('btnClearLocks').onclick = () => {
-        document.body.className = document.body.className.replace(/modal-open|no-scroll|overflow-hidden/g, '');
-        document.body.style.overflow = '';
-        document.body.style.position = '';
-        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
-        document.querySelectorAll('.modal').forEach(el => {
-             // Only remove dynamic modals, hide others
-             if (el.id === 'error-boundary-modal' || !el.id) el.remove();
-             else el.style.display = 'none';
+    const renderState = (contentDiv) => {
+        const week = league.week || 1;
+        let scheduleSummary = 'No schedule';
+        if (league.schedule) {
+             scheduleSummary = `Week ${week}: ` + (league.resultsByWeek && league.resultsByWeek[week-1] ? `${league.resultsByWeek[week-1].length} Results` : 'Pending');
+        }
+
+        let blockers = [];
+        if (state.league && state.league.teams && state.userTeamId !== undefined) {
+             const userTeam = state.league.teams.find(t => t.id === state.userTeamId);
+             if (userTeam) blockers = getActionItems(state.league, userTeam).blockers;
+        }
+
+        contentDiv.innerHTML = `
+            <div class="grid two" style="gap:20px;">
+                <div>
+                    <h3 class="section-header">League Metadata</h3>
+                    <table class="kv-table" style="width:100%;">
+                        <tr><td>League ID</td><td>${safe(state.leagueId || 'N/A')}</td></tr>
+                        <tr><td>Season</td><td>${safe(league.year)} (Season ${safe(state.season)})</td></tr>
+                        <tr><td>Week</td><td>${safe(league.week)}</td></tr>
+                        <tr><td>Phase</td><td>${safe(state.offseason ? 'Offseason' : 'Regular/Playoffs')}</td></tr>
+                        <tr><td>User Team ID</td><td>${safe(state.userTeamId)}</td></tr>
+                        <tr><td>Schedule</td><td>${scheduleSummary}</td></tr>
+                    </table>
+                </div>
+                <div>
+                    <h3 class="section-header">Game State</h3>
+                    <table class="kv-table" style="width:100%;">
+                        <tr><td>Last Saved</td><td>${safe(state.lastSaved)}</td></tr>
+                        <tr><td>Save Slot</td><td>${safe(state.saveSlot)}</td></tr>
+                        <tr><td>Game Mode</td><td>${safe(state.gameMode)}</td></tr>
+                    </table>
+
+                    <h3 class="section-header" style="margin-top:15px;">Blockers</h3>
+                    ${blockers.length ? blockers.map(b => `<div style="color:#ef4444;">• ${safe(b.title)}</div>`).join('') : '<div style="color:#48bb78;">No blockers active</div>'}
+                </div>
+            </div>
+
+            <div style="margin-top:20px; background:#222; padding:10px; border-radius:4px;">
+                <h3 class="section-header">Weekly Plan</h3>
+                <pre style="font-size:0.8rem; color:#aaa;">${JSON.stringify(league.weeklyGamePlan || {}, null, 2)}</pre>
+            </div>
+        `;
+    };
+
+    const renderStorage = (contentDiv) => {
+        let slots = [];
+        try { slots = listSaveSlots(); } catch(e) { console.error(e); }
+
+        const activeSlot = state.saveSlot || 1;
+
+        contentDiv.innerHTML = `
+            <div style="margin-bottom:15px; display:flex; gap:10px;">
+                <button class="btn primary" id="btnForceSave">Force Save Now</button>
+                <button class="btn" id="btnReloadLast">Reload Last Save</button>
+            </div>
+
+            <h3 class="section-header">Save Slots</h3>
+            <div>
+                ${slots.map((s, i) => {
+                    const slotNum = i + 1;
+                    if (!s) return `
+                        <div class="storage-slot ${slotNum === activeSlot ? 'active' : ''}">
+                            <span>Slot ${slotNum}: Empty</span>
+                            <button class="btn btn-sm" onclick="window.switchSaveSlot(${slotNum})">Switch</button>
+                        </div>`;
+
+                    return `
+                        <div class="storage-slot ${slotNum === activeSlot ? 'active' : ''}">
+                            <div>
+                                <div><strong>Slot ${slotNum}: ${safe(s.team)}</strong> <small class="muted">(${safe(s.mode)})</small></div>
+                                <div class="small muted">${safe(s.lastSaved)}</div>
+                            </div>
+                            <div style="display:flex; gap:5px;">
+                                ${slotNum !== activeSlot ? `<button class="btn btn-sm" onclick="window.switchSaveSlot(${slotNum})">Switch</button>` : '<span class="tag">Active</span>'}
+                                <button class="btn btn-sm danger" data-slot="${slotNum}" class="btnClearSlot">Clear</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+
+        // Bind events
+        document.getElementById('btnForceSave')?.addEventListener('click', () => {
+            if (saveState()) alert('Saved successfully!');
+            else alert('Save failed. Check console.');
+            renderDiagnostics(); // refresh ts
         });
 
-        // Reset specific known UI blockers from memory
-        if (window.resetUIInteractivity) window.resetUIInteractivity();
-
-        alert('UI Locks cleared. Try scrolling or clicking now.');
-        renderDiagnostics();
-    };
-
-    // Reload App
-    document.getElementById('btnReloadApp').onclick = async () => {
-        if (window.gameController && window.gameController.init) {
-            alert('Re-initializing game controller...');
-            await window.gameController.init();
-            window.location.hash = '#/hub';
-        } else {
-            alert('Game controller not found. Reloading page...');
-            window.location.reload();
-        }
-    };
-
-    // Export Save
-    document.getElementById('btnExportSave').onclick = () => {
-        const area = document.getElementById('exportArea');
-        const textArea = document.getElementById('saveDataText');
-        area.style.display = 'block';
-
-        if (window.state) {
-            try {
-                // Pretty print for readability, though larger
-                textArea.value = JSON.stringify(window.state, null, 2);
-                textArea.select();
-                // document.execCommand('copy'); // Optional auto-copy
-                // alert('Save data copied to clipboard (if supported). You can also copy from the box.');
-            } catch (e) {
-                textArea.value = 'Error generating JSON: ' + e.message;
+        document.getElementById('btnReloadLast')?.addEventListener('click', () => {
+            if (confirm('Reload last save? Unsaved progress will be lost.')) {
+                if (loadState()) window.location.reload();
+                else alert('Failed to reload.');
             }
-        } else {
-            textArea.value = 'No state found to export.';
-        }
+        });
+
+        contentDiv.querySelectorAll('.btnClearSlot').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const slot = e.target.dataset.slot;
+                if (confirm(`Clear Slot ${slot}? This cannot be undone.`)) {
+                    clearSavedState(slot);
+                    renderDiagnostics();
+                }
+            });
+        });
     };
 
-    // Import Save
-    document.getElementById('btnImportSave').onclick = () => {
-        const area = document.getElementById('exportArea');
-        const textArea = document.getElementById('saveDataText');
-        area.style.display = 'block';
-        textArea.value = '';
-        textArea.placeholder = 'Paste JSON save data here...';
+    const renderSim = (contentDiv) => {
+        // Find current game
+        let userGame = null;
+        if (league.schedule) {
+            const weeks = league.schedule.weeks || league.schedule; // support both structures
+            const currentWeekData = Array.isArray(weeks) ? (weeks.find(w => w.weekNumber === league.week) || weeks[league.week-1]) : null;
+
+            if (currentWeekData && currentWeekData.games) {
+                userGame = currentWeekData.games.find(g => (g.home === state.userTeamId || g.home.id === state.userTeamId) || (g.away === state.userTeamId || g.away.id === state.userTeamId));
+            }
+        }
+
+        let gameStatus = 'No game found';
+        if (userGame) {
+            const homeId = (typeof userGame.home === 'object' && userGame.home !== null) ? userGame.home.id : userGame.home;
+            const awayId = (typeof userGame.away === 'object' && userGame.away !== null) ? userGame.away.id : userGame.away;
+            const oppId = (homeId === state.userTeamId) ? awayId : homeId;
+
+            const opp = league.teams ? league.teams.find(t => t.id === oppId) : null;
+            gameStatus = `vs ${opp ? opp.name : 'Unknown'} (${homeId === state.userTeamId ? 'Home' : 'Away'})`;
+            if (userGame.finalized) gameStatus += " [FINAL]";
+        }
+
+        contentDiv.innerHTML = `
+            <div style="background:#222; padding:15px; border-radius:4px; margin-bottom:20px;">
+                <h3 class="section-header">Current Week: ${league.week}</h3>
+                <div style="font-size:1.2em; font-weight:bold; margin-bottom:10px;">${safe(gameStatus)}</div>
+
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn" id="btnDryRun">🧪 Dry Run Sim (Log Only)</button>
+                    ${userGame && !userGame.finalized ? `<button class="btn" id="btnFinalizeWeek">🏁 Finalize Pending Week</button>` : ''}
+                    <button class="btn secondary" id="btnRebuildStandings">📊 Rebuild Standings</button>
+                </div>
+            </div>
+            <div id="simOutput" style="background:#111; padding:10px; font-family:monospace; min-height:100px; max-height:300px; overflow-y:auto; border:1px solid #444;">
+                Ready...
+            </div>
+        `;
+
+        const output = (msg) => {
+            const el = document.getElementById('simOutput');
+            if (el) el.innerHTML += `<div>${safe(msg)}</div>`;
+        };
+
+        document.getElementById('btnDryRun')?.addEventListener('click', () => {
+            output('--- Starting Dry Run ---');
+            if (userGame && !userGame.finalized) {
+                const homeId = (typeof userGame.home === 'object' && userGame.home !== null) ? userGame.home.id : userGame.home;
+                const awayId = (typeof userGame.away === 'object' && userGame.away !== null) ? userGame.away.id : userGame.away;
+
+                const h = league.teams ? league.teams.find(t => t.id === homeId) : null;
+                const a = league.teams ? league.teams.find(t => t.id === awayId) : null;
+
+                if (h && a) {
+                    const res = simGameStats(h, a, { verbose: true });
+                    output(`Result: ${h.abbr} ${res.homeScore} - ${a.abbr} ${res.awayScore}`);
+                    output('See Console for full details.');
+                } else {
+                    output('Error: Teams not found');
+                }
+            } else {
+                output('No pending game to sim.');
+            }
+        });
+
+        document.getElementById('btnFinalizeWeek')?.addEventListener('click', () => {
+            if (confirm('Manually finalize the week? This will advance records and stats.')) {
+                if (window.gameController && window.gameController.handleGlobalAdvance) {
+                    window.gameController.handleGlobalAdvance();
+                    output('Triggered Global Advance.');
+                } else {
+                    output('GameController not found.');
+                }
+            }
+        });
+
+        document.getElementById('btnRebuildStandings')?.addEventListener('click', () => {
+             // Logic to rebuild standings from resultsByWeek
+             if (!confirm('Recalculate all W-L-T from game results?')) return;
+
+             league.teams.forEach(t => {
+                 t.wins = 0; t.losses = 0; t.ties = 0;
+                 t.record = { w:0, l:0, t:0, pf:0, pa:0 };
+             });
+
+             if (league.resultsByWeek) {
+                 Object.values(league.resultsByWeek).forEach(weekResults => {
+                     weekResults.forEach(r => {
+                         const h = league.teams[r.home];
+                         const a = league.teams[r.away];
+                         if (h && a) {
+                             if (r.scoreHome > r.scoreAway) { h.wins++; h.record.w++; a.losses++; a.record.l++; }
+                             else if (r.scoreAway > r.scoreHome) { a.wins++; a.record.w++; h.losses++; h.record.l++; }
+                             else { h.ties++; h.record.t++; a.ties++; a.record.t++; }
+                         }
+                     });
+                 });
+                 output('Standings rebuilt.');
+                 saveState();
+             }
+        });
     };
 
-    document.getElementById('btnConfirmImport').onclick = () => {
-        const textArea = document.getElementById('saveDataText');
-        const json = textArea.value.trim();
-        if (!json) return;
+    const renderUI = (contentDiv) => {
+        const bodyClass = document.body.className;
+        const modals = document.querySelectorAll('.modal');
+        const activeModals = Array.from(modals).filter(m => !m.hidden && m.style.display !== 'none');
+        const backdrops = document.querySelectorAll('.modal-backdrop, .nav-overlay, .error-overlay');
+        const activeBackdrops = Array.from(backdrops).filter(b => !b.hidden && b.style.display !== 'none' && b.classList.contains('active'));
 
-        if (!confirm('WARNING: This will overwrite your current game state with the pasted data. This cannot be undone. Are you sure?')) {
-            return;
-        }
+        contentDiv.innerHTML = `
+            <div class="grid two" style="gap:20px;">
+                <div>
+                    <h3 class="section-header">UI State</h3>
+                    <table class="kv-table" style="width:100%;">
+                        <tr><td>Body Classes</td><td>${safe(bodyClass || 'None')}</td></tr>
+                        <tr><td>Active Modals</td><td>${activeModals.length}</td></tr>
+                        <tr><td>Active Overlays</td><td>${activeBackdrops.length}</td></tr>
+                    </table>
+                </div>
+                <div>
+                    <h3 class="section-header">Actions</h3>
+                    <div style="display:flex; flex-direction:column; gap:10px;">
+                        <button class="btn" id="btnClearUI">🛡️ Clear UI Locks (Emergency)</button>
+                        <button class="btn" id="btnProbeTap">🕵️ Probe Tap (Identify Elements)</button>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="section-header" style="margin-top:20px;">Active Modals</h3>
+            ${activeModals.length ? activeModals.map(m => `<div style="background:#222; padding:5px;">#${m.id} (z: ${window.getComputedStyle(m).zIndex})</div>`).join('') : '<div class="muted">None</div>'}
+        `;
+
+        document.getElementById('btnClearUI')?.addEventListener('click', () => {
+            if (window.resetUIInteractivity) window.resetUIInteractivity();
+            // Manual cleanup just in case
+            document.body.className = '';
+            document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+            document.querySelectorAll('.modal').forEach(el => el.style.display = 'none');
+            alert('UI Locks Cleared.');
+            renderDiagnostics();
+        });
+
+        document.getElementById('btnProbeTap')?.addEventListener('click', () => {
+            const handler = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const el = e.target;
+                const info = {
+                    tag: el.tagName,
+                    id: el.id,
+                    class: el.className,
+                    text: el.innerText ? el.innerText.substring(0, 30) : '',
+                    zIndex: window.getComputedStyle(el).zIndex,
+                    position: window.getComputedStyle(el).position
+                };
+                alert(`Element Probed:\n${JSON.stringify(info, null, 2)}`);
+                document.removeEventListener('click', handler, true);
+                document.body.style.cursor = '';
+            };
+            document.addEventListener('click', handler, true);
+            document.body.style.cursor = 'crosshair';
+            alert('Probe active. Tap any element to inspect it (One-time).');
+        });
+    };
+
+    const renderNetwork = (contentDiv) => {
+        const netLogs = logger.network || [];
+        contentDiv.innerHTML = `
+            <h3 class="section-header">Recent Network Activity (${netLogs.length})</h3>
+            <div style="background: #111; border: 1px solid #444; height: 400px; overflow-y: auto; padding: 5px;">
+                ${netLogs.map(l => `
+                    <div class="log-entry">
+                        <div class="log-time">${l.timestamp.split('T')[1].replace('Z','')}</div>
+                        <div class="log-msg">
+                            <span style="font-weight:bold; color:${l.status >= 400 ? '#f56565' : '#48bb78'}">${l.method} ${l.status}</span>
+                            ${safe(l.url)}
+                            <span class="muted">(${l.duration}ms)</span>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    };
+
+    // Tab Logic
+    const contentDiv = document.getElementById('diag-content');
+    const tabs = document.querySelectorAll('.tab-btn');
+
+    // Store current tab in memory to persist refresh
+    let currentTab = window._diagTab || 'console';
+
+    function switchTab(tab) {
+        window._diagTab = tab;
+        tabs.forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+
+        contentDiv.innerHTML = '<div style="padding:20px; text-align:center;">Loading...</div>';
+
+        // Use timeout to allow UI update
+        setTimeout(() => {
+            if (tab === 'console') {
+                renderConsole(contentDiv);
+            } else if (tab === 'state') {
+                renderState(contentDiv);
+            } else if (tab === 'storage') {
+                renderStorage(contentDiv);
+            } else if (tab === 'sim') {
+                renderSim(contentDiv);
+            } else if (tab === 'ui') {
+                renderUI(contentDiv);
+            } else if (tab === 'network') {
+                renderNetwork(contentDiv);
+            }
+        }, 10);
+    }
+
+    tabs.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+    // Copy Report Logic
+    document.getElementById('btnCopyReport').onclick = () => {
+        const report = {
+            userAgent: navigator.userAgent,
+            timestamp: new Date().toISOString(),
+            url: window.location.href,
+            state: {
+                year: league.year,
+                week: league.week,
+                teamId: state.userTeamId,
+                lastSaved: state.lastSaved
+            },
+            logs: logger.logs.slice(0, 50),
+            errors: logger.errors,
+            network: logger.network.slice(0, 10)
+        };
 
         try {
-            const parsed = JSON.parse(json);
-            if (!parsed || typeof parsed !== 'object') throw new Error('Invalid JSON');
-
-            window.state = parsed;
-
-            // Force save immediately to persist
-            if (window.saveGame) window.saveGame();
-            else if (saveState) saveState();
-
-            alert('Import successful! Reloading...');
-            window.location.reload();
-        } catch (e) {
-            alert('Import failed: ' + e.message);
+            const blob = JSON.stringify(report, null, 2);
+            navigator.clipboard.writeText(blob);
+            alert('Debug report copied to clipboard!');
+        } catch(e) {
+            alert('Failed to copy report: ' + e.message);
         }
     };
-}
 
-function estimateStorageUsage() {
-    let total = 0;
-    for (let x in localStorage) {
-        if (localStorage.hasOwnProperty(x)) {
-            total += ((localStorage[x].length + x.length) * 2);
-        }
-    }
-    return (total / 1024).toFixed(2) + " KB";
+    // Initialize
+    switchTab(currentTab);
 }

@@ -1,3 +1,4 @@
+import './logger.js';
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { renderMatchupComparison } from './matchup-comparison.js';
 import { renderDiagnostics } from './diagnostics.js';
@@ -1724,6 +1725,16 @@ class GameController {
             // Initialize base state (for theme, etc)
             window.state = initState();
             this.applyTheme(window.state.theme || 'dark');
+
+            // [DIAGNOSTICS] Allow direct access to diagnostics
+            if (location.hash && location.hash.startsWith('#/diagnostics')) {
+                console.log('Diagnostics mode detected, bypassing auth flow.');
+                this.setupEventListeners();
+                this.setupAutoSave();
+                this.initialized = true;
+                this.router('diagnostics');
+                return;
+            }
 
             if (hasSaves) {
                 // Saves exist: Go to Dashboard (Entry Screen)
