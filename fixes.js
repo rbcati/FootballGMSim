@@ -388,7 +388,8 @@ function calculateOvr(pos, ratings) {
   
   for (const stat in weights) {
     const weight = weights[stat];
-    const rating = ratings[stat] || 50;
+    let rating = parseInt(ratings[stat], 10);
+    if (isNaN(rating)) rating = 50;
     weightedSum += rating * weight;
     totalWeight += weight;
   }
