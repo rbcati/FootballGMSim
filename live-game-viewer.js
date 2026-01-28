@@ -1178,7 +1178,10 @@ class LiveGameViewer {
         // saveState is now called within finalizeGameResult
         if (window.setStatus) window.setStatus("Game Saved!", "success");
     } else {
-        console.error("Failed to finalize game");
+        console.error("Failed to finalize game: Result was null");
+        if (window.setStatus) window.setStatus("Error: Could not save game result. Please try again.", "error");
+        // Reset flag so user can try again (e.g. if they fix the issue)
+        this.hasAppliedResult = false;
     }
   }
 

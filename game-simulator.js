@@ -993,9 +993,11 @@ export function finalizeGameResult(league, gameData, options = {}) {
     // Try to find the game in the current week's schedule
     const weekIndex = (league.week || 1) - 1;
     const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
-    const weekSchedule = scheduleWeeks[weekIndex];
 
     let scheduledGame = null;
+
+    // Strategy 1: Look in current week (if structured with weeks)
+    const weekSchedule = scheduleWeeks[weekIndex];
     if (weekSchedule && weekSchedule.games) {
         scheduledGame = weekSchedule.games.find(g =>
             (g.home === homeTeamId || g.home.id === homeTeamId) &&
@@ -1003,11 +1005,48 @@ export function finalizeGameResult(league, gameData, options = {}) {
         );
     }
 
+    // Strategy 2: Look in flat array (if schedule is flat array of games)
+    if (!scheduledGame && Array.isArray(scheduleWeeks)) {
+        scheduledGame = scheduleWeeks.find(g =>
+            (g.week === league.week) &&
+            (g.home === homeTeamId || g.home.id === homeTeamId) &&
+            (g.away === awayTeamId || g.away.id === awayTeamId)
+        );
+    }
+
+    // Strategy 3: Global search (fallback)
+    if (!scheduledGame && league.schedule) {
+        // Iterate all weeks if structure is nested
+        if (league.schedule.weeks) {
+            for (const w of league.schedule.weeks) {
+                if (w.games) {
+                    const g = w.games.find(g =>
+                        (g.home === homeTeamId || g.home.id === homeTeamId) &&
+                        (g.away === awayTeamId || g.away.id === awayTeamId)
+                    );
+                    if (g) {
+                        scheduledGame = g;
+                        break;
+                    }
+                }
+            }
+        } else if (Array.isArray(league.schedule)) {
+             // Already checked flat array above for current week, check others?
+             scheduledGame = league.schedule.find(g =>
+                (g.home === homeTeamId || g.home.id === homeTeamId) &&
+                (g.away === awayTeamId || g.away.id === awayTeamId)
+            );
+        }
+    }
+
     if (scheduledGame) {
         scheduledGame.played = true;
         scheduledGame.finalized = true;
         scheduledGame.homeScore = homeScore;
         scheduledGame.awayScore = awayScore;
+        console.log(`[SIM-DEBUG] Scheduled game updated: ${home.abbr} vs ${away.abbr}`);
+    } else {
+        console.warn(`[SIM-DEBUG] Could not find scheduled game for ${home.abbr} vs ${away.abbr} (Week ${league.week})`);
     }
 
     // 2. Update Standings / Team Records
@@ -1119,7 +1158,10 @@ export function finalizeGameResult(league, gameData, options = {}) {
 
     // 7. Save State (Commit)
     if (options.autoSave !== false && saveState) {
-        saveState();
+        console.log('[SIM-DEBUG] FinalizeGameResult: Calling saveState...');
+        const saved = saveState();
+        if (saved) console.log('[SIM-DEBUG] State saved successfully.');
+        else console.error('[SIM-DEBUG] State save failed.');
     }
 
     // 8. QA Audit

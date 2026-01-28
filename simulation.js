@@ -14,8 +14,6 @@ import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
-import GameRunner from './game-runner.js';
-
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
 const {

@@ -3,6 +3,9 @@ import { init as initState, loadState, saveState, hookAutoSave, clearSavedState,
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
+import { simulateWeek } from './simulation.js';
+import { initErrorBoundary } from './error-boundary.js';
+import { showLoading, hideLoading } from './loading-spinner.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -992,16 +995,20 @@ class GameController {
     }
 
     // --- SIMULATION FUNCTIONS ---
-    handleSimulateWeek() {
+    async handleSimulateWeek() {
         try {
             console.log('Simulating week...');
+            showLoading('Simulating Week...');
             this.setStatus('Simulating week...', 'info');
+
+            // Allow UI to update
+            await new Promise(resolve => requestAnimationFrame(resolve));
 
             // Capture week before sim
             const currentWeek = window.state?.league?.week || 1;
 
-            if (window.simulateWeek) {
-                window.simulateWeek();
+            if (simulateWeek) {
+                simulateWeek();
                 this.saveGameState(); // Auto-save after week
                 this.setStatus('Week simulated successfully', 'success');
 
@@ -1031,12 +1038,15 @@ class GameController {
         } catch (error) {
             console.error('Error simulating week:', error);
             this.setStatus('Failed to simulate week', 'error');
+        } finally {
+            hideLoading();
         }
     }
 
     async handleSimulateSeason() {
         try {
             console.log('Simulating season...');
+            showLoading('Simulating Season...');
             this.setStatus('Simulating season...', 'info');
 
             if (!window.state?.league) {
@@ -1090,6 +1100,8 @@ class GameController {
         } catch (error) {
             console.error('Error simulating season:', error);
             this.setStatus('Failed to simulate season', 'error');
+        } finally {
+            hideLoading();
         }
     }
 
@@ -2043,6 +2055,9 @@ class GameController {
         });
     }
 }
+
+// Initialize Error Boundary
+initErrorBoundary();
 
 // Create and initialize the game controller
 const gameController = new GameController();
