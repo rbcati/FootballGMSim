@@ -1131,6 +1131,8 @@ export function simulateBatch(games, options = {}) {
 
     if (!games || !Array.isArray(games)) return [];
 
+    console.log(`[QA-AUDIT] simulateBatch: Processing batch of ${games.length} games`);
+
     games.forEach((pair, index) => {
         try {
             if (verbose) console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${games.length}: Home=${pair.home?.abbr}, Away=${pair.away?.abbr}`);
