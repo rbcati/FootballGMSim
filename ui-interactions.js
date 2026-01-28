@@ -103,6 +103,10 @@
 
     // Prevent pull-to-refresh on iOS
     document.addEventListener('touchmove', (e) => {
+      // Don't block scrolling in modals or other scrollable containers
+      const scrollable = e.target.closest('.modal-content, .menu-items, .table-wrapper, .play-log, .scrollable');
+      if (scrollable) return;
+
       if (window.scrollY === 0 && e.touches[0].clientY > touchStartY) {
         e.preventDefault();
       }

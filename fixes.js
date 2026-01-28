@@ -964,8 +964,53 @@ console.log('[LeagueCreationFix] Loaded');
 (function() {
   console.log('🧭 Loading complete navigation fix...');
 
+  // Force reset UI interactivity (iOS fix)
+  function resetUIInteractivity() {
+    // console.log('🔓 Resetting UI interactivity...');
+
+    // 1. Hide Overlays
+    const overlays = ['menu-overlay', 'navOverlay', 'errorOverlay'];
+    overlays.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.classList.remove('show', 'active');
+            el.style.display = 'none';
+        }
+    });
+
+    // 2. Close Modals (excluding onboardModal if we are onboarding)
+    document.querySelectorAll('.modal').forEach(modal => {
+        if (modal.id !== 'onboardModal' && !modal.hidden && modal.style.display !== 'none') {
+            modal.hidden = true;
+            modal.style.display = 'none';
+            modal.classList.remove('show', 'active');
+        }
+    });
+
+    // 3. Reset Body
+    document.body.classList.remove('modal-open', 'nav-open', 'no-scroll');
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+    document.body.style.pointerEvents = 'auto';
+
+    // 4. Reset Navigation Sidebar (Mobile)
+    const navSidebar = document.getElementById('nav-sidebar');
+    if (navSidebar && window.innerWidth <= 768) {
+         navSidebar.classList.remove('active', 'nav-open');
+         navSidebar.classList.add('collapsed');
+         const layout = document.querySelector('.layout');
+         if (layout) layout.classList.add('nav-collapsed');
+    }
+  }
+  window.resetUIInteractivity = resetUIInteractivity;
+
   // Enhanced router function
   function fixedRouter() {
+    resetUIInteractivity(); // iOS defensive fix
+
     const path = location.hash || '#/hub';
     const viewName = path.slice(2);
     
@@ -2458,3 +2503,60 @@ function setupCoachingTabs() {
 window.setupCoachingTabs = setupCoachingTabs;
 
 console.log('✅ Combined fixes.js loaded - includes error-overlay, missing-functions, league-creation-fix, team-selection-fix, navbar-fix, dom-helpers-fix, and critical-fixes');
+
+// ============================================================================
+// DEBUG HELPER (iOS Fix)
+// ============================================================================
+
+(function() {
+  window.dumpUILockState = function() {
+    console.log('--- UI LOCK STATE DUMP ---');
+    console.log('Hash:', location.hash);
+    console.log('Body Classes:', document.body.className);
+    console.log('Body Styles:', document.body.style.cssText);
+
+    const overlays = ['menu-overlay', 'navOverlay', 'errorOverlay'];
+    overlays.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        console.log(`Overlay #${id}:`, {
+          display: el.style.display,
+          hidden: el.hidden,
+          classList: el.classList.toString(),
+          zIndex: getComputedStyle(el).zIndex
+        });
+      } else {
+        console.log(`Overlay #${id}: Not Found`);
+      }
+    });
+
+    console.log('Active Modals:');
+    document.querySelectorAll('.modal').forEach(m => {
+      if (!m.hidden && m.style.display !== 'none') {
+        console.log(`- #${m.id} (z-index: ${getComputedStyle(m).zIndex})`);
+      }
+    });
+
+    console.log('Active Element:', document.activeElement);
+
+    // Check center point
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+    const elAtCenter = document.elementFromPoint(cx, cy);
+    console.log('Element at center:', elAtCenter);
+
+    console.log('--------------------------');
+  };
+
+  // Add hidden debug button
+  if (location.search.includes('debug=1')) {
+      const btn = document.createElement('button');
+      btn.textContent = 'Fix UI';
+      btn.style.cssText = 'position:fixed;bottom:60px;right:10px;z-index:9999;background:red;color:white;padding:5px;';
+      btn.onclick = function() {
+          if (window.resetUIInteractivity) window.resetUIInteractivity();
+          else console.log('resetUIInteractivity not found');
+      };
+      document.body.appendChild(btn);
+  }
+})();
