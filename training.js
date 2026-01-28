@@ -109,6 +109,9 @@ export function runWeeklyTraining(league) {
             if (intensity === 'Heavy' && Math.random() < intensityMod.injuryChance) {
                 handleTrainingInjury(player);
             }
+
+            // H. Development Events (Breakout, Stagnation, Decline)
+            handleDevelopmentEvents(player, league, team);
         });
     });
 
@@ -167,6 +170,101 @@ function handleRegression(player) {
 
             // Recalculate OVR if possible (simple approximation if helper not available)
             // Ideally we'd call calculateOverall(player)
+        }
+    }
+}
+
+/**
+ * Handle weekly development events (Breakout, Stagnation, Decline)
+ */
+function handleDevelopmentEvents(player, league, team) {
+    // Clear old status occasionally to allow resets
+    if (player.developmentStatus === 'BREAKOUT' && Math.random() < 0.15) player.developmentStatus = 'NORMAL';
+    if (player.developmentStatus === 'STAGNATED' && Math.random() < 0.10) player.developmentStatus = 'NORMAL';
+
+    const age = player.age;
+    const potential = player.potential || 70;
+    const ovr = player.ovr || 50;
+
+    // 1. BREAKOUT (Young players)
+    // Chance increases if playing well (checked via game stats presence)
+    if (age <= 25 && ovr < potential && player.developmentStatus !== 'BREAKOUT') {
+        let breakoutChance = 0.005; // 0.5% base
+
+        // Performance bonus check (simplified)
+        if (player.stats?.game && Object.keys(player.stats.game).length > 0) {
+             breakoutChance += 0.01; // Boost for active players
+        }
+
+        // HIDDEN FACTOR: Boom Factor (Hidden Gems)
+        // Players with high boomFactor have significantly higher breakout odds
+        if (player.boomFactor && player.boomFactor > 5) {
+            breakoutChance += (player.boomFactor / 100); // Up to +20% chance if maxed (rare)
+        }
+
+        if (Math.random() < breakoutChance) {
+            player.developmentStatus = 'BREAKOUT';
+            const boostXP = (Math.floor(Math.random() * 2) + 2) * 1000; // 2000-3000 XP
+            addXP(player, boostXP);
+
+            // Add News
+            if (league.news) {
+                league.news.push({
+                    type: 'development',
+                    headline: `Breakout: ${player.name} (${team.abbr})`,
+                    story: `${player.pos} ${player.name} is showing rapid improvement in practice and games!`,
+                    week: league.week,
+                    team: team.id
+                });
+            }
+
+            if (!player.seasonNews) player.seasonNews = [];
+            player.seasonNews.push({
+                headline: 'Breakout Player',
+                story: 'Coaches report exceptional progress.',
+                week: league.week,
+                year: league.year
+            });
+        }
+    }
+
+    // 2. STAGNATION (High potential but failing to develop)
+    if (age <= 26 && potential > ovr + 8 && player.developmentStatus !== 'STAGNATED' && player.developmentStatus !== 'BREAKOUT') {
+        let stagnationChance = 0.003;
+
+        // HIDDEN FACTOR: Bust Factor
+        // Players with high bustFactor are prone to stalling early
+        if (player.bustFactor && player.bustFactor > 5) {
+            stagnationChance += (player.bustFactor / 100);
+        }
+
+        if (Math.random() < stagnationChance) {
+             player.developmentStatus = 'STAGNATED';
+             player.potential = Math.max(player.ovr, player.potential - (Math.floor(Math.random() * 3) + 1));
+
+             if (!player.seasonNews) player.seasonNews = [];
+             player.seasonNews.push({
+                headline: 'Development Stalled',
+                story: 'Player is struggling to reach their potential.',
+                week: league.week,
+                year: league.year
+            });
+        }
+    }
+
+    // 3. DECLINE (Older players)
+    if (age >= 30 && player.developmentStatus !== 'DECLINING') {
+        let declineChance = 0.005 + ((age - 30) * 0.005);
+        if (Math.random() < declineChance) {
+            player.developmentStatus = 'DECLINING';
+            // Regression is handled by handleRegression, this is just the tag/narrative
+             if (!player.seasonNews) player.seasonNews = [];
+             player.seasonNews.push({
+                headline: 'Physical Decline',
+                story: 'Player is showing signs of age-related regression.',
+                week: league.week,
+                year: league.year
+            });
         }
     }
 }

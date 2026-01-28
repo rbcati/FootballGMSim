@@ -3,6 +3,8 @@
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
 import { simGameStats, initializePlayerStats, accumulateStats, simulateBatch } from './game-simulator.js';
+import newsEngine from './news-engine.js';
+import { showWeeklyRecap } from './weekly-recap.js';
 
 /**
  * Playoff Management System
@@ -101,6 +103,12 @@ function simPlayoffWeek() {
                 });
 
                 winners.push(res.homeWin ? gameHome : gameAway);
+
+                // Process Playoff Revenue for User Home Games
+                if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
+                    window.processPlayoffRevenue(gameHome);
+                }
+
             } else {
                 console.error("Could not match result to team", res);
             }
@@ -162,6 +170,17 @@ function simPlayoffWeek() {
     }
 
     if (window.renderPlayoffs) renderPlayoffs();
+
+    // Trigger News and Recap
+    if (newsEngine) {
+        newsEngine.generateWeeklyNews(window.state.league);
+    }
+
+    if (showWeeklyRecap) {
+        // Use a special week number for playoffs (19+) to indicate post-season in recap
+        const playoffWeek = 19 + P.currentRound;
+        showWeeklyRecap(playoffWeek, roundResults.games, window.state.league.news);
+    }
 }
 
 // --- PLAYOFF INITIALIZATION ---

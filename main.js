@@ -239,63 +239,102 @@ class GameController {
                 const sortedByPA = [...L.teams].sort((a, b) => (a.ptsAgainst ?? a.record?.pa ?? 0) - (b.ptsAgainst ?? b.record?.pa ?? 0));
                 const defRank = sortedByPA.findIndex(t => t.id === userTeam.id) + 1;
 
+                // --- Calculate Dynamic Header Metrics ---
+                // 1. Current Streak
+                let streak = 0;
+                if (L.resultsByWeek) {
+                    for (let w = (L.week || 1) - 1; w >= 0; w--) {
+                        const weekResults = L.resultsByWeek[w] || [];
+                        const game = weekResults.find(g => g.home === userTeamId || g.away === userTeamId);
+                        if (!game) continue; // Skip bye weeks, keep streak intact
+
+                        const isHome = game.home === userTeamId;
+                        const userScore = isHome ? game.scoreHome : game.scoreAway;
+                        const oppScore = isHome ? game.scoreAway : game.scoreHome;
+                        const won = userScore > oppScore;
+                        const tied = userScore === oppScore;
+
+                        if (tied) break; // Streak ends on tie
+
+                        if (streak === 0) {
+                            streak = won ? 1 : -1;
+                        } else if (streak > 0 && won) {
+                            streak++;
+                        } else if (streak < 0 && !won) {
+                            streak--;
+                        } else {
+                            break; // Streak broken
+                        }
+                    }
+                }
+                const streakStr = streak > 0 ? `W-${streak}` : (streak < 0 ? `L-${Math.abs(streak)}` : '-');
+
+                // 2. Cap Space
+                const capSpace = (userTeam.capRoom || 0).toFixed(1);
+
+                // 3. Team Morale (Avg Player Morale)
+                const avgMorale = userTeam.roster && userTeam.roster.length > 0
+                    ? Math.round(userTeam.roster.reduce((sum, p) => sum + (p.morale || 50), 0) / userTeam.roster.length)
+                    : 50;
+
+                // 4. Owner Grade
+                const fanSat = window.state.ownerMode ? window.state.ownerMode.fanSatisfaction : 50;
+                let ownerGrade = 'C';
+                if (fanSat >= 90) ownerGrade = 'A';
+                else if (fanSat >= 80) ownerGrade = 'B';
+                else if (fanSat >= 70) ownerGrade = 'C';
+                else if (fanSat >= 60) ownerGrade = 'D';
+                else ownerGrade = 'F';
+
                 headerDashboardHTML = `
                     <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent);">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: center;">
 
-                            <!-- Record, Standing & Ratings (Combined Column 1) -->
-                            <div style="flex: 1; min-width: 160px;">
+                            <!-- Record, Standing & Ratings -->
+                            <div>
                                 <div style="font-size: 2rem; font-weight: 800; line-height: 1;">${wins}-${losses}-${ties}</div>
                                 <div style="font-size: 0.9rem; opacity: 0.8; margin-top: 5px;">
                                     ${divRank}${divSuffix} in Div • ${confRank}${confSuffix} in Conf
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
                                     <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">${ovr} OVR</div>
-                                    <div style="font-size: 0.8rem; opacity: 0.7;">OFF ${offOvr} • DEF ${defOvr}</div>
+                                    <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">Grade: ${ownerGrade}</div>
                                 </div>
                             </div>
 
-                            <!-- Next Opponent (Middle Column) -->
-                            <div style="flex: 1; min-width: 200px; text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 8px;">
-                                ${opponent ? (() => {
-                                    // Head to Head Logic
-                                    const h2h = userTeam.headToHead?.[opponent.id] || { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0, streak: 0 };
-                                    const streakText = h2h.streak > 0 ? `Won ${h2h.streak}` : h2h.streak < 0 ? `Lost ${Math.abs(h2h.streak)}` : 'None';
-                                    const streakColor = h2h.streak > 0 ? '#48bb78' : h2h.streak < 0 ? '#f56565' : 'white';
-
-                                    return `
-                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Week ${currentWeek}</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 4px;">
-                                        ${isHome ? 'vs' : '@'} ${opponent.abbr}
-                                        <span style="font-size: 0.9rem; opacity: 0.7; font-weight: 400;">(${opponent.record?.w || 0}-${opponent.record?.l || 0})</span>
-                                    </div>
-                                    <div style="font-size: 0.85rem; display: flex; justify-content: space-around;">
-                                        <div>Record: ${h2h.wins}-${h2h.losses}${h2h.ties > 0 ? '-'+h2h.ties : ''}</div>
-                                        <div style="color: ${streakColor};">${streakText}</div>
-                                    </div>
-                                    <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 2px;">
-                                        PF: ${h2h.pf} | PA: ${h2h.pa}
-                                    </div>
-                                    ${!isOffseason ? `<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); } else { console.error('watchLiveGame not available'); }">Watch Game</button>` : ''}
-                                    `;
-                                })() : `
-                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; opacity: 0.7;">Week ${currentWeek}</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem; margin-bottom: 10px;">BYE WEEK</div>
-                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" style="width: 100%;">Simulate Bye</button>' : ''}
-                                `}
-                            </div>
-
-                            <!-- Rankings -->
-                            <div style="flex: 1; min-width: 140px; text-align: right;">
-                                <div style="margin-bottom: 4px;">
-                                    <span style="opacity: 0.7; font-size: 0.85rem;">Offense Rank:</span>
-                                    <span style="font-weight: 700; color: ${offRank <= 5 ? '#48bb78' : 'white'};">#${offRank}</span>
+                            <!-- Expanded Metrics -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.9rem;">
+                                <div>
+                                    <div style="opacity: 0.7; font-size: 0.8rem;">Current Streak</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; color: ${streak > 0 ? '#48bb78' : streak < 0 ? '#f87171' : 'white'};">${streakStr}</div>
                                 </div>
                                 <div>
-                                    <span style="opacity: 0.7; font-size: 0.85rem;">Defense Rank:</span>
-                                    <span style="font-weight: 700; color: ${defRank <= 5 ? '#48bb78' : 'white'};">#${defRank}</span>
+                                    <div style="opacity: 0.7; font-size: 0.8rem;">Cap Space</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; color: ${userTeam.capRoom >= 0 ? '#48bb78' : '#f87171'};">$${capSpace}M</div>
                                 </div>
-                                <div style="font-size: 0.75rem; opacity: 0.5; margin-top: 4px;">(Based on Pts)</div>
+                                <div>
+                                    <div style="opacity: 0.7; font-size: 0.8rem;">Team Morale</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem;">${avgMorale}%</div>
+                                </div>
+                                <div>
+                                    <div style="opacity: 0.7; font-size: 0.8rem;">Off/Def Rank</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem;">#${offRank} / #${defRank}</div>
+                                </div>
+                            </div>
+
+                            <!-- Next Opponent (Simplifed) -->
+                            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                                ${opponent ? `
+                                    <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7;">Week ${currentWeek}</div>
+                                    <div style="font-weight: 700; font-size: 1.1rem; margin: 4px 0;">
+                                        ${isHome ? 'vs' : '@'} ${opponent.abbr}
+                                    </div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">(${opponent.record?.w || 0}-${opponent.record?.l || 0})</div>
+                                    ${!isOffseason ? `<button class="btn btn-sm primary mt-2" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); } else { console.error('watchLiveGame not available'); }">Watch Game</button>` : ''}
+                                ` : `
+                                    <div style="font-weight: 700; font-size: 1.1rem;">BYE WEEK</div>
+                                    ${!isOffseason ? '<button class="btn btn-sm primary mt-2" id="btnSimWeekHero" onclick="if(window.gameController && window.gameController.handleGlobalAdvance) window.gameController.handleGlobalAdvance();">Simulate Bye</button>' : ''}
+                                `}
                             </div>
 
                         </div>
@@ -426,7 +465,8 @@ class GameController {
                 const getTop3 = (team) => {
                     if (!team || !team.roster) return [];
                     return [...team.roster]
-                        .sort((a, b) => (b.ovr || 0) - (a.ovr || 0))
+                        .filter(p => p && typeof p.ovr === 'number' && !isNaN(p.ovr))
+                        .sort((a, b) => b.ovr - a.ovr)
                         .slice(0, 3);
                 };
 
@@ -1397,10 +1437,9 @@ class GameController {
                 window.state = initState();
                 this.applyTheme(window.state.theme || 'dark');
 
-                // Show Dashboard instead of immediate onboarding
-                if (window.show) window.show('leagueDashboard');
-                if (window.renderDashboard) window.renderDashboard();
-                this.setStatus('Welcome to NFL GM. Please select or create a league.', 'info');
+                // Trigger new league setup if no save data exists
+                this.setStatus('No save found. Starting new league setup...', 'info');
+                await this.openOnboard();
             }
             this.setupEventListeners();
             if (typeof window.setupEventListeners === 'function') {

@@ -279,12 +279,16 @@ function calculateRevenue() {
   const merchBuyRate = getBuyRate(settings.merchandisePrice, 50, 0.3);
   const merchandiseRevenue = actualAttendance * homeGames * settings.merchandisePrice * merchBuyRate;
   
+  // Add Playoff Revenue (accumulated separately)
+  const playoffRevenue = ownerMode.revenue.playoffs || 0;
+
   ownerMode.revenue = {
-    total: ticketRevenue + concessionRevenue + parkingRevenue + merchandiseRevenue,
+    total: ticketRevenue + concessionRevenue + parkingRevenue + merchandiseRevenue + playoffRevenue,
     ticketSales: ticketRevenue,
     concessions: concessionRevenue,
     parking: parkingRevenue,
-    merchandise: merchandiseRevenue
+    merchandise: merchandiseRevenue,
+    playoffs: playoffRevenue
   };
   
   // Calculate expenses
@@ -780,6 +784,49 @@ window.renderOwnerModeInterface = renderOwnerModeInterface;
 window.generateOwnerGoals = generateOwnerGoals;
 window.checkOwnerGoals = checkOwnerGoals;
 window.checkJobSecurity = checkJobSecurity;
+
+/**
+ * Process revenue for a single playoff home game
+ * @param {Object} team - Team object
+ */
+function processPlayoffRevenue(team) {
+    if (!window.state.ownerMode || !window.state.ownerMode.enabled) return;
+
+    // Initialize if needed
+    if (!window.state.ownerMode.revenue) window.state.ownerMode.revenue = {};
+    if (!window.state.ownerMode.revenue.playoffs) window.state.ownerMode.revenue.playoffs = 0;
+
+    const settings = window.state.ownerMode.businessSettings;
+    const fanSatisfaction = window.state.ownerMode.fanSatisfaction;
+    const marketMultiplier = getMarketMultiplier(team);
+
+    // Playoff Hype Multipliers
+    const attendanceMultiplier = (fanSatisfaction / 100) * 1.2; // +20% demand
+    const baseAttendance = 65000;
+    const actualAttendance = Math.min(80000, Math.round(baseAttendance * attendanceMultiplier * marketMultiplier));
+
+    // Calculate Game Revenue
+    // Fans willing to pay more in playoffs, assume price is static but demand holds up
+    const ticketRevenue = actualAttendance * settings.ticketPrice;
+
+    // Higher concession/merch spend per fan in playoffs
+    const concessionRevenue = actualAttendance * settings.concessionPrice * 0.9;
+    const parkingRevenue = (actualAttendance / 2.5) * settings.parkingPrice;
+    const merchandiseRevenue = actualAttendance * settings.merchandisePrice * 0.6;
+
+    const gameRevenue = ticketRevenue + concessionRevenue + parkingRevenue + merchandiseRevenue;
+
+    window.state.ownerMode.revenue.playoffs += gameRevenue;
+
+    // Update Total Immediately for UI
+    window.state.ownerMode.revenue.total += gameRevenue;
+    window.state.ownerMode.profit += gameRevenue; // Expenses are fixed annual, so this is pure profit margin boost
+
+    console.log(`[OwnerMode] Playoff Game Revenue: $${(gameRevenue / 1000000).toFixed(2)}M`);
+    if (window.setStatus) window.setStatus(`Playoff Home Game generated $${(gameRevenue / 1000000).toFixed(1)}M`, 'success');
+}
+
+window.processPlayoffRevenue = processPlayoffRevenue;
 
 // Initialize on load
 if (window.state) {

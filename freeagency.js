@@ -434,7 +434,13 @@ window.filterFreeAgents = function() {
       <td style="padding: 10px; text-align: right; color: var(--text);">$${(p.baseAnnual || 0).toFixed(1)}M</td>
       <td style="padding: 10px; text-align: right; color: var(--text-muted); font-size: 12px;">$${(p.signingBonus || 0).toFixed(1)}M</td>
       <td style="padding: 10px; text-align: center; color: var(--text);">${p.yearsTotal || 0}</td>
-      <td style="padding: 10px; text-align: center;">
+      <td style="padding: 10px; text-align: center; white-space: nowrap;">
+        <button class="btn btn-sm sign-btn"
+                onclick="event.stopPropagation(); signPlayer(${originalIndex})"
+                style="padding: 6px 12px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500; margin-right: 5px;"
+                ${!canAfford ? 'disabled title="Insufficient cap space"' : ''}>
+          Sign
+        </button>
         <button class="btn btn-sm" 
                 onclick="event.stopPropagation(); openContractNegotiation(${originalIndex})" 
                 style="padding: 6px 12px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 500;"
@@ -1043,3 +1049,4 @@ window.closeContractModal = closeContractModal;
 window.submitContractOffer = submitContractOffer;
 window.updateCapSidebar = updateCapSidebar;
 window.signFreeAgentWithContract = signFreeAgentWithContract;
+window.signPlayer = signFreeAgent;
