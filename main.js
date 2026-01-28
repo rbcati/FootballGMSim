@@ -324,6 +324,12 @@ class GameController {
                             <!-- Next Opponent (Simplifed) -->
                             <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 10px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center;">
                                 ${opponent ? `
+                                    ${(userTeam.rivalries && userTeam.rivalries[opponent.id] && userTeam.rivalries[opponent.id].score > 25) ? `
+                                        <div style="margin-bottom: 8px; background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.5); padding: 4px; border-radius: 4px;">
+                                            <div style="color: #fca5a5; font-weight: bold; font-size: 0.8rem;">${userTeam.rivalries[opponent.id].score > 50 ? '🔥 HATED RIVAL' : '⚔️ RIVALRY GAME'}</div>
+                                            <div style="color: white; font-size: 0.7rem; opacity: 0.9;">${userTeam.rivalries[opponent.id].events && userTeam.rivalries[opponent.id].events.length > 0 ? userTeam.rivalries[opponent.id].events[0] : ''}</div>
+                                        </div>
+                                    ` : ''}
                                     <div style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7;">Week ${currentWeek}</div>
                                     <div style="font-weight: 700; font-size: 1.1rem; margin: 4px 0;">
                                         ${isHome ? 'vs' : '@'} ${opponent.abbr}
