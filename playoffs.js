@@ -5,6 +5,7 @@ import { launchConfetti } from './confetti.js';
 import { simGameStats, initializePlayerStats, accumulateStats, simulateBatch } from './game-simulator.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
+import GameRunner from './game-runner.js';
 
 /**
  * Playoff Management System
@@ -73,28 +74,21 @@ function simPlayoffWeek() {
 
     const roundResults = { round: P.currentRound, games: [] };
 
-    const simRound = (games) => {
+    const processRound = (games) => {
+        const results = GameRunner.simulatePlayoffGames(games, P.year);
         const winners = [];
-        const gamesToSim = games.map(g => ({
-            home: g.home,
-            away: g.away,
-            year: P.year
-        })).filter(g => g.home && g.away);
-
-        if (gamesToSim.length === 0) return [];
-
-        // Simulate batch with playoff flag
-        const results = simulateBatch(gamesToSim, { isPlayoff: true });
 
         results.forEach(res => {
-            // Find the original teams from the result (using IDs if possible, or name match)
-            // simulateBatch returns homeTeamName/awayTeamName
+            // Find original game object to get Team objects (GameRunner returns IDs in result)
+            const gameMatch = games.find(g =>
+                (g.home.id === res.home || g.home.id === res.home.id) &&
+                (g.away.id === res.away || g.away.id === res.away.id)
+            );
 
-            // Reconstruct game object for results
-            const gameHome = gamesToSim.find(g => g.home.name === res.homeTeamName)?.home;
-            const gameAway = gamesToSim.find(g => g.away.name === res.awayTeamName)?.away;
+            if (gameMatch) {
+                const gameHome = gameMatch.home;
+                const gameAway = gameMatch.away;
 
-            if (gameHome && gameAway) {
                 roundResults.games.push({
                     home: gameHome,
                     away: gameAway,
@@ -108,9 +102,8 @@ function simPlayoffWeek() {
                 if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
                     window.processPlayoffRevenue(gameHome);
                 }
-
             } else {
-                console.error("Could not match result to team", res);
+                 console.error("Could not match result to bracket game", res);
             }
         });
 
@@ -118,8 +111,8 @@ function simPlayoffWeek() {
     };
 
     if (P.currentRound === 0) { // Wildcard
-        const afcWinners = simRound(P.rounds.afc[0]);
-        const nfcWinners = simRound(P.rounds.nfc[0]);
+        const afcWinners = processRound(P.rounds.afc[0]);
+        const nfcWinners = processRound(P.rounds.nfc[0]);
         afcWinners.push(P.rounds.afc[0].bye);
         nfcWinners.push(P.rounds.nfc[0].bye);
         afcWinners.sort((a,b) => a.seed - b.seed);
@@ -127,18 +120,18 @@ function simPlayoffWeek() {
         P.rounds.afc[1] = [{home: afcWinners[0], away: afcWinners[3]}, {home: afcWinners[1], away: afcWinners[2]}];
         P.rounds.nfc[1] = [{home: nfcWinners[0], away: nfcWinners[3]}, {home: nfcWinners[1], away: nfcWinners[2]}];
     } else if (P.currentRound === 1) { // Divisional
-        const afcWinners = simRound(P.rounds.afc[1]);
-        const nfcWinners = simRound(P.rounds.nfc[1]);
+        const afcWinners = processRound(P.rounds.afc[1]);
+        const nfcWinners = processRound(P.rounds.nfc[1]);
         afcWinners.sort((a,b) => a.seed - b.seed);
         nfcWinners.sort((a,b) => a.seed - b.seed);
         P.rounds.afc[2] = [{home: afcWinners[0], away: afcWinners[1]}];
         P.rounds.nfc[2] = [{home: nfcWinners[0], away: nfcWinners[1]}];
     } else if (P.currentRound === 2) { // Conference
-        const afcChamp = simRound(P.rounds.afc[2])[0];
-        const nfcChamp = simRound(P.rounds.nfc[2])[0];
+        const afcChamp = processRound(P.rounds.afc[2])[0];
+        const nfcChamp = processRound(P.rounds.nfc[2])[0];
         P.rounds.superbowl = [{ home: afcChamp, away: nfcChamp }];
     } else if (P.currentRound === 3) { // Super Bowl
-        const winner = simRound(P.rounds.superbowl)[0];
+        const winner = processRound(P.rounds.superbowl)[0];
         P.winner = winner;
         
         // Record Super Bowl in history

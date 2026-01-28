@@ -115,6 +115,10 @@
     MIN_RUSH_ATTEMPTS: 15, MAX_RUSH_ATTEMPTS: 30,
     YARDS_PER_COMPLETION: { MIN: 8, MAX: 15 }, YARDS_PER_CARRY: { MIN: 3, MAX: 6 }
   };
+
+  const PLAYOFFS = {
+    TEAMS_PER_CONF: 7
+  };
   
   const HALL_OF_FAME = {
     MIN_YEARS: 5, LEGACY_THRESHOLD: 30, RETIREMENT_AGE_START: 33,
@@ -197,6 +201,7 @@
     DRAFT_CONFIG,
     FREE_AGENCY,
     SIMULATION,
+    PLAYOFFS,
     HALL_OF_FAME,
     
     // Position/Roster/Scheme

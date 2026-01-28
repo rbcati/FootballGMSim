@@ -14,6 +14,7 @@ import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
+import GameRunner from './game-runner.js';
 
 // Import GameSimulator
 import GameSimulator from './game-simulator.js';
@@ -514,25 +515,8 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    // Handle both schedule formats (legacy compatibility)
+    // NEW SEASON PROGRESSION CHECK (Pre-Simulation)
     const scheduleWeeks = L.schedule.weeks || L.schedule;
-    if (!scheduleWeeks || !Array.isArray(scheduleWeeks)) {
-      console.error('Invalid schedule format for simulation');
-      window.setStatus('Error: Invalid schedule format');
-      return;
-    }
-
-    // Ensure week is properly initialized
-    if (!L.week || typeof L.week !== 'number') {
-      L.week = 1;
-      console.log('Initialized league week to 1');
-    }
-
-    console.log(`[SIM-DEBUG] Simulating week ${L.week}...`);
-    console.log(`[QA-AUDIT] simulateWeek: Week ${L.week}, Schedule Length: ${scheduleWeeks.length}`);
-    window.setStatus(`Simulating week ${L.week}...`);
-
-    // NEW SEASON PROGRESSION CHECK
     if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
       // Check if already in offseason
       if (window.state.offseason === true) {
@@ -543,9 +527,6 @@ function simulateWeek(options = {}) {
       console.log('Season complete, transitioning to offseason');
       window.setStatus('Season complete! Entering offseason...');
       
-      // DO NOT set window.state.offseason = true here.
-      // startOffseason() checks this flag to prevent double-execution.
-      
       if (typeof window.startOffseason === 'function') {
         window.startOffseason();
       } else if (typeof window.startNewSeason === 'function') {
@@ -554,8 +535,11 @@ function simulateWeek(options = {}) {
       return;
     }
 
-    // Check if season is over
-    if (L.week > scheduleWeeks.length) {
+    // Delegate to GameRunner
+    const result = GameRunner.simulateRegularSeasonWeek(L, options);
+
+    // Check for Season Over
+    if (result && result.seasonOver) {
       console.log('Regular season complete, checking playoffs...');
 
       // FIXED: If playoffs are already active, don't restart them
@@ -583,188 +567,6 @@ function simulateWeek(options = {}) {
         }
       }
       return;
-    }
-
-    // Get current week's games
-    const weekIndex = L.week - 1;
-    const weekData = scheduleWeeks[weekIndex];
-
-    if (!weekData) {
-      console.error(`No data found for week ${L.week}`);
-      window.setStatus(`Error: No data for week ${L.week}`);
-      return;
-    }
-
-    const pairings = weekData.games || [];
-    console.log(`[SIM-DEBUG] Found ${pairings.length} games for week ${L.week}`);
-    console.log(`[QA-AUDIT] simulateWeek: Pairings found: ${pairings.length}`);
-
-    if (pairings.length === 0) {
-      console.warn(`No games scheduled for week ${L.week}`);
-      window.setStatus(`No games scheduled for week ${L.week}`);
-      // Still advance the week
-      L.week++;
-      if (typeof window.renderHub === 'function') {
-        window.renderHub();
-      }
-      return;
-    }
-
-    // Prepare games for batch simulation
-    const gamesToSim = pairings.map(pair => {
-        // Handle bye weeks - pass through
-        if (pair.bye !== undefined) {
-            return { bye: pair.bye };
-        }
-
-        const home = L.teams[pair.home];
-        const away = L.teams[pair.away];
-
-        if (!home || !away) {
-             console.warn('Invalid team IDs in pairing:', pair);
-             return null;
-        }
-
-        return {
-            home: home,
-            away: away,
-            week: L.week,
-            year: L.year
-        };
-    }).filter(g => g !== null);
-
-    // Run Batch Simulation
-    const results = simulateBatch(gamesToSim, options);
-    console.log(`[QA-AUDIT] simulateBatch returned ${results.length} results.`);
-    const gamesSimulated = results.filter(r => !r.bye).length;
-
-    // Store results for the week
-    if (!L.resultsByWeek) L.resultsByWeek = {};
-    L.resultsByWeek[L.week - 1] = results;
-    console.log(`[QA-AUDIT] Stored results for week ${L.week - 1}. Keys in resultsByWeek: ${Object.keys(L.resultsByWeek).join(',')}`);
-
-    // Update single game records
-    if (typeof window.updateSingleGameRecords === 'function') {
-      try {
-        window.updateSingleGameRecords(L, L.year || L.season || 2025, L.week);
-      } catch (recordsError) {
-        console.error('Error updating single game records:', recordsError);
-      }
-    }
-
-    // Advance to next week
-    const previousWeek = L.week;
-    L.week++;
-
-    // Run weekly training
-    if (typeof runWeeklyTraining === 'function') {
-      try {
-        runWeeklyTraining(L);
-      } catch (trainingError) {
-        console.error('Error in weekly training:', trainingError);
-        // Don't stop simulation for training errors
-      }
-    } else if (typeof window.runWeeklyTraining === 'function') {
-      try {
-        window.runWeeklyTraining(L);
-      } catch (trainingError) {
-        console.error('Error in weekly training (window):', trainingError);
-      }
-    }
-
-    // Process weekly depth chart updates (playbook knowledge, chemistry)
-    if (typeof window.processWeeklyDepthChartUpdates === 'function') {
-      try {
-        L.teams.forEach(team => {
-          if (team && team.roster) {
-            window.processWeeklyDepthChartUpdates(team);
-          }
-        });
-      } catch (depthChartError) {
-        console.error('Error in depth chart updates:', depthChartError);
-        // Don't stop simulation for depth chart errors
-      }
-    }
-
-    console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
-
-    // Update owner mode revenue and fan satisfaction after games
-    if (window.state?.ownerMode?.enabled && typeof window.calculateRevenue === 'function' && typeof window.updateFanSatisfaction === 'function') {
-      try {
-        window.updateFanSatisfaction();
-        window.calculateRevenue();
-      } catch (ownerError) {
-        console.error('Error updating owner mode:', ownerError);
-      }
-    }
-
-    // Generate Weekly News
-    try {
-        if (newsEngine && newsEngine.generateWeeklyNews) {
-            newsEngine.generateWeeklyNews(L);
-        }
-    } catch (newsError) {
-        console.error('Error generating news:', newsError);
-    }
-
-    // Check for Interactive Events (The Newsroom)
-    try {
-        if (newsEngine && newsEngine.generateInteractiveEvent) {
-             const event = newsEngine.generateInteractiveEvent(L);
-             if (event) {
-                 console.log("Interactive event triggered:", event.title);
-                 window.state.pendingEvent = event;
-             }
-        }
-    } catch (eventError) {
-        console.error('Error generating interactive event:', eventError);
-    }
-
-    // Check Achievements (New Feature)
-    if (checkAchievements) {
-        checkAchievements(window.state);
-    }
-
-    // Update UI to show results (if render option is true, default to true)
-    try {
-      if (options.render !== false) {
-        // DB COMMIT: Save state immediately to persist W/L updates
-        // This satisfies the requirement to commit changes after results are written.
-        if (saveState) saveState();
-        else if (window.saveState) window.saveState();
-
-        // UI REFRESH: Force re-fetch of table data (equivalent to useEffect)
-        if (typeof window.renderStandings === 'function') window.renderStandings();
-
-        if (typeof window.renderHub === 'function') {
-          window.renderHub();
-        }
-        if (typeof window.updateCapSidebar === 'function') {
-          window.updateCapSidebar();
-        }
-
-        // Show Weekly Recap (New Feature)
-        if (showWeeklyRecap) {
-            showWeeklyRecap(previousWeek, results, L.news);
-        }
-
-        // Reset Strategy for Next Week (Task 5)
-        if (L.weeklyGamePlan) {
-             L.weeklyGamePlan = { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED' };
-        }
-
-        // Show success message
-        window.setStatus(`Week ${previousWeek} simulated - ${gamesSimulated} games completed`);
-
-        // Auto-show results on hub
-        if (window.location && window.location.hash !== '#/hub') {
-          window.location.hash = '#/hub';
-        }
-      }
-
-    } catch (uiError) {
-      console.error('Error updating UI after simulation:', uiError);
-      window.setStatus(`Week simulated but UI update failed`);
     }
 
   } catch (error) {
