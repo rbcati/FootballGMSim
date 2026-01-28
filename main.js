@@ -2,6 +2,7 @@ import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
+import { GAME_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -327,6 +328,75 @@ class GameController {
                 }
             }
 
+            // --- MANAGER PANEL (NEW) ---
+            let managerPanelHTML = '';
+            if (userTeam && !isOffseason && opponent) {
+                // Ensure state exists
+                if (!L.weeklyGamePlan) {
+                    L.weeklyGamePlan = { planId: 'BALANCED', riskId: 'BALANCED' };
+                }
+                const currentPlan = GAME_PLANS[L.weeklyGamePlan.planId] || GAME_PLANS.BALANCED;
+                const currentRisk = RISK_PROFILES[L.weeklyGamePlan.riskId] || RISK_PROFILES.BALANCED;
+
+                // Infer Opponent Tendency (Simple Logic)
+                const oppPassAtt = opponent.stats?.season?.passAtt || 0;
+                const oppRushAtt = opponent.stats?.season?.rushAtt || 0;
+                const totalPlays = oppPassAtt + oppRushAtt;
+                let tendency = 'Balanced';
+                if (totalPlays > 20) {
+                    if (oppPassAtt / totalPlays > 0.60) tendency = 'Pass Heavy';
+                    else if (oppRushAtt / totalPlays > 0.55) tendency = 'Run Heavy';
+                }
+
+                managerPanelHTML = `
+                    <div class="card mb-4 manager-panel" style="border-left: 4px solid var(--accent); position: relative; overflow: hidden;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--hairline); padding-bottom: 10px;">
+                            <div>
+                                <h3 style="margin:0; font-size: 1.2rem;">Manager Control Panel</h3>
+                                <div style="font-size: 0.85rem; opacity: 0.8;">vs ${opponent.name} <span class="tag is-dark">${tendency}</span></div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8rem; font-weight: bold; opacity: 0.6;">WEEKLY STRATEGY</div>
+                            </div>
+                        </div>
+
+                        <div class="grid two" style="gap: 20px;">
+                            <!-- Game Plan -->
+                            <div>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">1. Game Plan Changer</label>
+                                <select id="managerGamePlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
+                                    ${Object.values(GAME_PLANS).map(p => `
+                                        <option value="${p.id}" ${p.id === currentPlan.id ? 'selected' : ''}>${p.name}</option>
+                                    `).join('')}
+                                </select>
+                                <div id="planDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                                    <!-- Dynamic content rendered below -->
+                                </div>
+                            </div>
+
+                            <!-- Risk Profile -->
+                            <div>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">2. Risk Profile</label>
+                                <div class="btn-group" style="display:flex; gap:5px; margin-bottom: 10px;">
+                                    ${Object.values(RISK_PROFILES).map(r => `
+                                        <button class="btn btn-sm ${r.id === currentRisk.id ? 'primary' : 'secondary'} risk-btn"
+                                            data-id="${r.id}" style="flex:1; padding: 10px;">
+                                            ${r.name}
+                                        </button>
+                                    `).join('')}
+                                </div>
+                                <div id="riskDesc" style="font-size:0.85rem; color: var(--text-muted); padding: 0 5px;">
+                                    ${currentRisk.description}
+                                    <div style="margin-top:5px; font-weight:bold; color: ${currentRisk.id === 'AGGRESSIVE' ? '#f56565' : currentRisk.id === 'CONSERVATIVE' ? '#4299e1' : '#ed8936'};">
+                                        Volatility: ${currentRisk.id === 'AGGRESSIVE' ? 'HIGH' : currentRisk.id === 'CONSERVATIVE' ? 'LOW' : 'NORMAL'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
             // --- NEWS SECTION ---
             let newsHTML = '';
             if (L.news && L.news.length > 0) {
@@ -488,6 +558,7 @@ class GameController {
             hubContainer.innerHTML = `
                 ${actionItemsHTML}
                 ${headerDashboardHTML}
+                ${managerPanelHTML}
                 ${newsHTML}
                 ${topPlayersHTML}
                 <div class="card">
@@ -567,6 +638,73 @@ class GameController {
                     </div>
                 ` : ''}
             `;
+            // Add event listeners for Manager Panel
+            if (managerPanelHTML) {
+                const planSelect = hubContainer.querySelector('#managerGamePlan');
+                if (planSelect) {
+                    const updateVisuals = (planId) => {
+                        const plan = GAME_PLANS[planId];
+                        const descEl = hubContainer.querySelector('#planDesc');
+                        if (plan && descEl) {
+                             // Create Visual Badges based on modifiers
+                             let badgesHtml = '';
+                             if (plan.modifiers) {
+                                Object.entries(plan.modifiers).forEach(([key, val]) => {
+                                    // Heuristic mapping for visuals
+                                    let label = key;
+                                    let isPositive = val > 1.0;
+
+                                    // Custom labels
+                                    if(key === 'passVolume') label = 'Passing';
+                                    if(key === 'runVolume') label = 'Rushing';
+                                    if(key === 'intChance') { label = 'INT Risk'; isPositive = val < 1.0; } // Lower is better
+                                    if(key === 'sackChance') { label = 'Sack Risk'; isPositive = val < 1.0; }
+                                    if(key === 'variance') label = 'Variance';
+
+                                    // Skip minor mods
+                                    if (Math.abs(val - 1.0) < 0.05) return;
+
+                                    const color = isPositive ? '#48bb78' : '#f56565';
+                                    const arrow = val > 1.0 ? '▲' : '▼';
+
+                                    badgesHtml += `<span style="display:inline-block; background:${color}22; color:${color}; border:1px solid ${color}44; border-radius:4px; padding:2px 6px; margin-right:4px; margin-bottom:4px; font-size:0.75rem; font-weight:bold;">${label} ${arrow}</span>`;
+                                });
+                             }
+
+                             descEl.innerHTML = `
+                                <div style="margin-bottom: 8px;">${plan.description}</div>
+                                <div style="margin-bottom: 6px;">${badgesHtml}</div>
+                                <div style="font-size: 0.8rem; opacity: 0.8;">
+                                    <span style="color: #48bb78;">+ ${plan.bonus}</span><br>
+                                    <span style="color: #f56565;">- ${plan.penalty}</span>
+                                </div>
+                             `;
+                        }
+                    };
+
+                    // Initial Render
+                    updateVisuals(planSelect.value);
+
+                    planSelect.addEventListener('change', (e) => {
+                        const newPlanId = e.target.value;
+                        const currentRiskId = window.state.league.weeklyGamePlan?.riskId || 'BALANCED';
+                        updateWeeklyStrategy(window.state.league, newPlanId, currentRiskId);
+                        // Update visuals locally to avoid full re-render flicker
+                        updateVisuals(newPlanId);
+                    });
+                }
+
+                const riskBtns = hubContainer.querySelectorAll('.risk-btn');
+                riskBtns.forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const newRiskId = e.target.getAttribute('data-id');
+                        const currentPlanId = window.state.league.weeklyGamePlan?.planId || 'BALANCED';
+                        updateWeeklyStrategy(window.state.league, currentPlanId, newRiskId);
+                        this.renderHub();
+                    });
+                });
+            }
+
             // Add event listeners for simulate buttons
             const btnSimWeekHQ = hubContainer.querySelector('#btnSimWeekHQ');
             if (btnSimWeekHQ) {
