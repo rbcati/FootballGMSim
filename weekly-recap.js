@@ -43,14 +43,13 @@ export function showWeeklyRecap(week, results, news) {
         const tie = userScore === oppScore;
 
         resultClass = win ? 'win' : (tie ? 'tie' : 'loss');
-        const resultText = win ? 'VICTORY' : (tie ? 'DRAW' : 'DEFEAT');
+        const resultText = win ? `Victory vs ${opponent}` : (tie ? `Draw vs ${opponent}` : `Defeat vs ${opponent}`);
         const scoreText = `${userScore} - ${oppScore}`;
 
         outcomeHtml = `
             <div class="recap-outcome ${resultClass}">
-                <div class="recap-result-label">${resultText}</div>
+                <div class="recap-result-label" style="font-size: 1.8rem;">${resultText}</div>
                 <div class="recap-score">${scoreText}</div>
-                <div class="recap-opponent">vs ${opponent}</div>
             </div>
         `;
 
