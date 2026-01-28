@@ -1,4 +1,4 @@
-// team-ratings.js - Team Rating System
+// team-ratings.js - Team Rating System & League Calibration
 'use strict';
 
 /**
@@ -16,264 +16,190 @@ function groupPlayersByPosition(roster) {
         groups[pos].push(player);
     }
     // Pre-sort by overall rating descending for faster access
+    // Use raw OVR for sorting to find best players
     for (const pos in groups) {
         groups[pos].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
     }
     return groups;
 }
 
+// ============================================================================
+// LEAGUE CALIBRATION SYSTEM
+// ============================================================================
+
 /**
- * Calculates team offensive rating based on offensive players
- * @param {Object} team - Team object
- * @param {Object} positionGroups - Optional pre-grouped players
- * @returns {Object} Offensive rating data
+ * Calculates league-wide stats (Mean/StdDev) based on projected starters.
+ * @param {Object} league - League object
+ * @returns {Object} { mean, stdDev }
  */
-function calculateOffensiveRating(team, positionGroups = null) {
-    if (!team || !team.roster) {
-        return { overall: 0, breakdown: {}, positions: {} };
-    }
+function calculateLeagueStats(league) {
+    if (!league || !league.teams) return { mean: 75, stdDev: 10 };
 
-    const groups = positionGroups || groupPlayersByPosition(team.roster);
-    const offensivePositions = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'];
+    const starterOVRs = [];
     
-    let totalOffensivePlayers = 0;
-    offensivePositions.forEach(pos => {
-        if (groups[pos]) totalOffensivePlayers += groups[pos].length;
-    });
-
-    if (totalOffensivePlayers === 0) {
-        return { overall: 0, breakdown: {}, positions: {} };
-    }
-
-    const positionRatings = {};
-    let totalRating = 0;
-    let totalWeight = 0;
-
-    // Calculate position-specific ratings with weights
-    offensivePositions.forEach(pos => {
-        const players = groups[pos] || [];
-        if (players.length > 0) {
-            // Already sorted by groupPlayersByPosition
-            
-            // Calculate weighted average based on depth
-            let positionRating = 0;
-            let weight = 0;
-            
-            players.forEach((player, index) => {
-                const playerWeight = Math.max(0.1, 1 - (index * 0.3)); // Diminishing returns
-                positionRating += (player.ovr || 50) * playerWeight;
-                weight += playerWeight;
-            });
-            
-            positionRatings[pos] = Math.round(positionRating / weight);
-        } else {
-            positionRatings[pos] = 0;
-        }
-    });
-
-    // Position weights for overall offensive rating
-    const positionWeights = {
-        'QB': 0.35,    // Quarterback is most important
-        'OL': 0.25,    // Offensive line is crucial
-        'WR': 0.20,    // Wide receivers
-        'RB': 0.15,    // Running backs
-        'TE': 0.03,    // Tight ends
-        'K': 0.02      // Kickers
+    // Definition of a "Starter" structure per team for calibration
+    const starterCounts = {
+        'QB': 1, 'RB': 1, 'WR': 3, 'TE': 1, 'OL': 5,
+        'DL': 4, 'LB': 3, 'CB': 3, 'S': 2, 'K': 1, 'P': 1
     };
+    // Map general positions if needed (CB/S -> DB handled below if groups are specific)
 
-    // Calculate weighted overall offensive rating
-    Object.keys(positionRatings).forEach(pos => {
-        if (positionRatings[pos] > 0) {
-            totalRating += positionRatings[pos] * (positionWeights[pos] || 0);
-            totalWeight += positionWeights[pos] || 0;
-        }
+    league.teams.forEach(team => {
+        const groups = groupPlayersByPosition(team.roster);
+
+        Object.keys(starterCounts).forEach(pos => {
+            const count = starterCounts[pos];
+            // Handle DB split if needed, but assuming standard positions
+            let players = groups[pos] || [];
+            
+            // If pos is DB, combine CB and S? No, standard positions usually distinct.
+            // But if roster uses DL/LB/CB/S, we are good.
+            
+            for (let i = 0; i < Math.min(count, players.length); i++) {
+                starterOVRs.push(players[i].ovr || 50);
+            }
+        });
     });
 
-    const overall = totalWeight > 0 ? Math.round(totalRating / totalWeight) : 0;
+    if (starterOVRs.length === 0) return { mean: 75, stdDev: 10 };
 
-    return {
-        overall,
-        breakdown: positionRatings,
-        positions: offensivePositions,
-        playerCount: totalOffensivePlayers
-    };
+    // Calculate Mean
+    const sum = starterOVRs.reduce((a, b) => a + b, 0);
+    const mean = sum / starterOVRs.length;
+
+    // Calculate StdDev
+    const sqDiffSum = starterOVRs.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+    const stdDev = Math.sqrt(sqDiffSum / starterOVRs.length);
+
+    console.log(`[Calibration] Starters: ${starterOVRs.length}, Mean: ${mean.toFixed(2)}, StdDev: ${stdDev.toFixed(2)}`);
+
+    return { mean, stdDev };
 }
 
 /**
- * Calculates team defensive rating based on defensive players
- * @param {Object} team - Team object
- * @param {Object} positionGroups - Optional pre-grouped players
- * @returns {Object} Defensive rating data
+ * Calibrates a raw OVR to a display OVR based on league stats.
+ * Target: League Average Starter ≈ 70 OVR (can be tuned).
+ * Formula: 70 + z-score * 7 (scaling factor)
+ * @param {number} rawOvr - The internal/raw overall rating
+ * @param {Object} stats - { mean, stdDev }
+ * @returns {number} Calibrated display OVR
  */
-function calculateDefensiveRating(team, positionGroups = null) {
-    if (!team || !team.roster) {
-        return { overall: 0, breakdown: {}, positions: {} };
-    }
-
-    const groups = positionGroups || groupPlayersByPosition(team.roster);
-    const defensivePositions = ['DL', 'LB', 'CB', 'S', 'P'];
+function calibrateRating(rawOvr, stats) {
+    if (!stats || !stats.stdDev) return rawOvr;
     
-    let totalDefensivePlayers = 0;
-    defensivePositions.forEach(pos => {
-        if (groups[pos]) totalDefensivePlayers += groups[pos].length;
-    });
+    const zScore = (rawOvr - stats.mean) / stats.stdDev;
+    // Target mean 73 to make it feel a bit better than 70
+    const calibrated = 73 + (zScore * 8);
 
-    if (totalDefensivePlayers === 0) {
-        return { overall: 0, breakdown: {}, positions: {} };
-    }
-
-    const positionRatings = {};
-    let totalRating = 0;
-    let totalWeight = 0;
-
-    // Calculate position-specific ratings with weights
-    defensivePositions.forEach(pos => {
-        const players = groups[pos] || [];
-        if (players.length > 0) {
-            // Already sorted
-            
-            // Calculate weighted average based on depth
-            let positionRating = 0;
-            let weight = 0;
-            
-            players.forEach((player, index) => {
-                const playerWeight = Math.max(0.1, 1 - (index * 0.3)); // Diminishing returns
-                positionRating += (player.ovr || 50) * playerWeight;
-                weight += playerWeight;
-            });
-            
-            positionRatings[pos] = Math.round(positionRating / weight);
-        } else {
-            positionRatings[pos] = 0;
-        }
-    });
-
-    // Position weights for overall defensive rating
-    const positionWeights = {
-        'DL': 0.30,    // Defensive line is most important
-        'LB': 0.25,    // Linebackers
-        'CB': 0.25,    // Cornerbacks
-        'S': 0.18,     // Safeties
-        'P': 0.02      // Punters
-    };
-
-    // Calculate weighted overall defensive rating
-    Object.keys(positionRatings).forEach(pos => {
-        if (positionRatings[pos] > 0) {
-            totalRating += positionRatings[pos] * (positionWeights[pos] || 0);
-            totalWeight += positionWeights[pos] || 0;
-        }
-    });
-
-    const overall = totalWeight > 0 ? Math.round(totalRating / totalWeight) : 0;
-
-    return {
-        overall,
-        breakdown: positionRatings,
-        positions: defensivePositions,
-        playerCount: totalDefensivePlayers
-    };
+    return Math.round(Math.max(40, Math.min(99, calibrated)));
 }
 
 /**
- * Calculates overall team rating
+ * Updates all players in the league with a calibrated displayOvr.
+ * Should be called at league creation and start of each season.
+ * @param {Object} league - League object
+ */
+function updateLeaguePlayers(league) {
+    if (!league || !league.teams) return;
+
+    const stats = calculateLeagueStats(league);
+    league.ratingStats = stats; // Store for use by new players
+
+    league.teams.forEach(team => {
+        if (team.roster) {
+            team.roster.forEach(player => {
+                player.displayOvr = calibrateRating(player.ovr || 50, stats);
+            });
+        }
+    });
+
+    console.log('[Calibration] League players updated.');
+}
+
+// ============================================================================
+// TEAM RATING SYSTEM (STARTERS ONLY)
+// ============================================================================
+
+/**
+ * Calculates team ratings using "Starters Only" logic.
  * @param {Object} team - Team object
- * @returns {Object} Complete team rating data
+ * @returns {Object} Rating data
  */
 function calculateTeamRating(team) {
     if (!team || !team.roster) {
         return {
             overall: 0,
-            offense: { overall: 0, breakdown: {}, positions: [] },
-            defense: { overall: 0, breakdown: {}, positions: [] },
-            specialTeams: 0,
-            depth: 0,
-            starPower: 0
+            offense: { overall: 0 },
+            defense: { overall: 0 },
+            specialTeams: 0
         };
     }
 
-    // Single pass to group all players
     const groups = groupPlayersByPosition(team.roster);
 
-    const offensiveRating = calculateOffensiveRating(team, groups);
-    const defensiveRating = calculateDefensiveRating(team, groups);
+    // Helper to get average of top N players
+    const getTopAverage = (pos, n, weight = 1.0) => {
+        const players = groups[pos] || [];
+        if (players.length === 0) return 50; // Replacement level
 
-    // Calculate special teams rating (K + P)
-    let specialTeamsRating = 0;
-    const kickers = groups['K'] || [];
-    const punters = groups['P'] || [];
-    const specialTeamsPlayers = [...kickers, ...punters];
+        let total = 0;
+        let count = 0;
+        for (let i = 0; i < Math.min(n, players.length); i++) {
+            // Use displayOvr if available, else ovr
+            total += (players[i].displayOvr !== undefined ? players[i].displayOvr : players[i].ovr);
+            count++;
+        }
+
+        // Fill empty slots with replacement level (55)
+        while (count < n) {
+            total += 55;
+            count++;
+        }
+
+        return (total / count) * weight;
+    };
+
+    // --- OFFENSE ---
+    // QB Heavy, OL Heavy
+    const qbRating = getTopAverage('QB', 1, 1.0);
+    const rbRating = getTopAverage('RB', 1, 1.0); // reduced from 2
+    const wrRating = getTopAverage('WR', 3, 1.0);
+    const teRating = getTopAverage('TE', 1, 1.0);
+    const olRating = getTopAverage('OL', 5, 1.0);
+
+    // Weights for Offense OVR
+    // QB: 30%, OL: 25%, WR: 20%, RB: 15%, TE: 10%
+    const offScore = (qbRating * 0.35) + (olRating * 0.25) + (wrRating * 0.20) + (rbRating * 0.15) + (teRating * 0.05);
     
-    if (specialTeamsPlayers.length > 0) {
-        specialTeamsRating = Math.round(specialTeamsPlayers.reduce((sum, p) => sum + (p.ovr || 50), 0) / specialTeamsPlayers.length);
-    }
-
-    // Calculate depth rating (how many quality players beyond starters)
-    const depthRating = calculateDepthRating(team, groups);
+    // --- DEFENSE ---
+    // DB Heavy-ish
+    const dlRating = getTopAverage('DL', 4, 1.0);
+    const lbRating = getTopAverage('LB', 3, 1.0);
+    const cbRating = getTopAverage('CB', 3, 1.0);
+    const sRating = getTopAverage('S', 2, 1.0);
     
-    // Calculate star power (players with 85+ overall)
-    // Optimized: iterate over roster directly as grouping doesn't help much here unless we iterate groups
-    const starPlayers = team.roster.filter(p => (p.ovr || 0) >= 85);
-    const starPower = starPlayers.length;
+    // Combine CB/S into DB for calculation if preferred, or keep separate
+    // Weights: DL: 30%, LB: 25%, CB: 25%, S: 20%
+    const defScore = (dlRating * 0.30) + (lbRating * 0.25) + (cbRating * 0.25) + (sRating * 0.20);
 
-    // Overall team rating (weighted average)
-    const overall = Math.round(
-        (offensiveRating.overall * 0.45) + 
-        (defensiveRating.overall * 0.45) + 
-        (specialTeamsRating * 0.10)
-    );
+    // --- SPECIAL TEAMS ---
+    const kRating = getTopAverage('K', 1, 1.0);
+    const pRating = getTopAverage('P', 1, 1.0);
+    const stScore = (kRating + pRating) / 2;
+
+    // --- OVERALL ---
+    // Off: 45%, Def: 45%, ST: 10%
+    const overall = Math.round((offScore * 0.45) + (defScore * 0.45) + (stScore * 0.10));
 
     return {
         overall,
-        offense: offensiveRating,
-        defense: defensiveRating,
-        specialTeams: specialTeamsRating,
-        depth: depthRating,
-        starPower,
+        offense: { overall: Math.round(offScore) },
+        defense: { overall: Math.round(defScore) },
+        specialTeams: Math.round(stScore),
+        depth: 0, // Legacy/Optional
+        starPower: 0, // Legacy/Optional
         totalPlayers: team.roster.length
     };
-}
-
-/**
- * Calculates team depth rating
- * @param {Object} team - Team object
- * @param {Object} positionGroups - Optional pre-grouped players
- * @returns {number} Depth rating (0-100)
- */
-function calculateDepthRating(team, positionGroups = null) {
-    if (!team || !team.roster) return 0;
-
-    const groups = positionGroups || groupPlayersByPosition(team.roster);
-    const positions = ['QB', 'RB', 'WR', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
-    let totalDepthScore = 0;
-    let positionCount = 0;
-
-    positions.forEach(pos => {
-        const sortedPlayers = groups[pos] || [];
-        if (sortedPlayers.length > 0) {
-            // Already sorted
-            
-            // Calculate depth score based on quality of backups
-            let depthScore = 0;
-            if (sortedPlayers.length >= 2) {
-                // Starter quality
-                depthScore += (sortedPlayers[0].ovr || 50) * 0.5;
-                // Backup quality
-                depthScore += (sortedPlayers[1].ovr || 50) * 0.3;
-                // Additional depth
-                if (sortedPlayers.length >= 3) {
-                    depthScore += (sortedPlayers[2].ovr || 50) * 0.2;
-                }
-            } else {
-                depthScore = sortedPlayers[0].ovr || 50;
-            }
-            
-            totalDepthScore += depthScore;
-            positionCount++;
-        }
-    });
-
-    return positionCount > 0 ? Math.round(totalDepthScore / positionCount) : 0;
 }
 
 /**
@@ -287,13 +213,14 @@ function updateTeamRatings(team) {
     const ratings = calculateTeamRating(team);
     team.ratings = ratings;
     
-    // Also store individual ratings for easy access
+    // Store flat ratings for easy access
     team.offensiveRating = ratings.offense.overall;
     team.defensiveRating = ratings.defense.overall;
-    team.overallRating = ratings.overall;
+    team.overallRating = ratings.overall; // This is the new calibrated display OVR
     team.specialTeamsRating = ratings.specialTeams;
-    team.depthRating = ratings.depth;
-    team.starPower = ratings.starPower;
+
+    // Legacy fallback
+    team.ovr = ratings.overall;
 
     return team;
 }
@@ -310,63 +237,15 @@ function updateAllTeamRatings(league) {
         updateTeamRatings(team);
     });
 
-    // Sort teams by overall rating for power rankings
-    league.teams.sort((a, b) => (b.overallRating || 0) - (a.overallRating || 0));
+    // Sort teams by overall rating for power rankings (internal utility, doesn't reorder array)
+    // league.teams.sort((a, b) => (b.overallRating || 0) - (a.overallRating || 0));
 
     return league;
 }
 
-/**
- * Renders team ratings in the UI
- * @param {Object} team - Team object
- * @param {string} containerId - ID of container to render ratings
- */
-function renderTeamRatings(team, containerId) {
-    const container = document.getElementById(containerId);
-    if (!container || !team) return;
-
-    const ratings = team.ratings || calculateTeamRating(team);
-    
-    const html = `
-        <div class="team-ratings">
-            <h3>Team Ratings</h3>
-            <div class="rating-grid">
-                <div class="rating-item overall">
-                    <div class="rating-label">Overall</div>
-                    <div class="rating-value rating-${getRatingClass(ratings.overall)}">${ratings.overall}</div>
-                </div>
-                <div class="rating-item offense">
-                    <div class="rating-label">Offense</div>
-                    <div class="rating-value rating-${getRatingClass(ratings.offense.overall)}">${ratings.offense.overall}</div>
-                </div>
-                <div class="rating-item defense">
-                    <div class="rating-label">Defense</div>
-                    <div class="rating-value rating-${getRatingClass(ratings.defense.overall)}">${ratings.defense.overall}</div>
-                </div>
-                <div class="rating-item special">
-                    <div class="rating-label">Special Teams</div>
-                    <div class="rating-value rating-${getRatingClass(ratings.specialTeams)}">${ratings.specialTeams}</div>
-                </div>
-            </div>
-            <div class="rating-details">
-                <div class="detail-item">
-                    <span class="label">Depth:</span>
-                    <span class="value">${ratings.depth}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="label">Star Players:</span>
-                    <span class="value">${ratings.starPower}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="label">Total Players:</span>
-                    <span class="value">${ratings.totalPlayers}</span>
-                </div>
-            </div>
-        </div>
-    `;
-
-    container.innerHTML = html;
-}
+// ============================================================================
+// UI RENDERERS
+// ============================================================================
 
 /**
  * Gets CSS class for rating styling
@@ -379,12 +258,98 @@ function getRatingClass(rating) {
     if (rating >= 80) return 'very-good';
     if (rating >= 75) return 'good';
     if (rating >= 70) return 'average';
-    if (rating >= 65) return 'below-average';
+    if (rating >= 60) return 'below-average';
     return 'poor';
 }
 
 /**
- * Renders league-wide team ratings overview
+ * Renders team ratings in the UI (Team Dashboard)
+ * @param {Object} team - Team object
+ * @param {string} containerId - ID of container to render ratings
+ */
+function renderTeamRatings(team, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container || !team) return;
+
+    const ratings = team.ratings || calculateTeamRating(team);
+    
+    const html = `
+        <div class="team-ratings-card">
+            <div class="rating-main">
+                <div class="rating-circle ${getRatingClass(ratings.overall)}">
+                    <span class="rating-number">${ratings.overall}</span>
+                    <span class="rating-label">OVR</span>
+                </div>
+            </div>
+            <div class="rating-splits">
+                <div class="split-item">
+                    <span class="split-label">OFF</span>
+                    <span class="split-value ${getRatingClass(ratings.offense.overall)}">${ratings.offense.overall}</span>
+                </div>
+                <div class="split-item">
+                    <span class="split-label">DEF</span>
+                    <span class="split-value ${getRatingClass(ratings.defense.overall)}">${ratings.defense.overall}</span>
+                </div>
+                <div class="split-item">
+                    <span class="split-label">ST</span>
+                    <span class="split-value ${getRatingClass(ratings.specialTeams)}">${ratings.specialTeams}</span>
+                </div>
+            </div>
+        </div>
+        <style>
+            .team-ratings-card {
+                display: flex;
+                align-items: center;
+                gap: 1.5rem;
+                padding: 1rem;
+                background: var(--surface);
+                border-radius: var(--radius-lg);
+                border: 1px solid var(--hairline);
+            }
+            .rating-main {
+                flex-shrink: 0;
+            }
+            .rating-circle {
+                width: 60px;
+                height: 60px;
+                border-radius: 50%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                background: var(--surface-2);
+                border: 3px solid currentColor;
+            }
+            .rating-circle.elite { color: #8b5cf6; border-color: #8b5cf6; }
+            .rating-circle.excellent { color: #3b82f6; border-color: #3b82f6; }
+            .rating-circle.good { color: #10b981; border-color: #10b981; }
+            .rating-circle.average { color: #f59e0b; border-color: #f59e0b; }
+            .rating-circle.poor { color: #ef4444; border-color: #ef4444; }
+
+            .rating-number { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+            .rating-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; }
+
+            .rating-splits {
+                display: flex;
+                gap: 1.5rem;
+                flex-grow: 1;
+                justify-content: space-around;
+            }
+            .split-item { display: flex; flex-direction: column; align-items: center; }
+            .split-label { font-size: 0.75rem; color: var(--text-muted); font-weight: 600; }
+            .split-value { font-size: 1.25rem; font-weight: 700; }
+            .split-value.elite { color: #8b5cf6; }
+            .split-value.good { color: #10b981; }
+            .split-value.average { color: #f59e0b; }
+            .split-value.poor { color: #ef4444; }
+        </style>
+    `;
+
+    container.innerHTML = html;
+}
+
+/**
+ * Renders league-wide team ratings overview (Hub)
  * @param {Object} league - League object
  * @param {string} containerId - ID of container to render ratings
  */
@@ -392,55 +357,61 @@ function renderLeagueTeamRatings(league, containerId) {
     const container = document.getElementById(containerId);
     if (!container || !league?.teams) return;
 
-    // Update all team ratings first
-    updateAllTeamRatings(league);
+    // Ensure ratings are up to date
+    // updateAllTeamRatings(league); // Don't force update here to avoid loops, rely on state
     
     // Sort teams by overall rating
     const sortedTeams = [...league.teams].sort((a, b) => (b.overallRating || 0) - (a.overallRating || 0));
+    const topTeams = sortedTeams.slice(0, 5); // Show top 5
     
     const html = `
-        <div class="league-ratings-overview">
-            ${sortedTeams.map((team, index) => {
-                const ratings = team.ratings || calculateTeamRating(team);
-                const rank = index + 1;
-                const rankClass = rank <= 3 ? 'top-rank' : rank <= 8 ? 'playoff-rank' : 'regular-rank';
-                
-                return `
-                    <div class="league-team-card ${rankClass}">
-                        <div class="league-team-header">
-                            <div class="league-team-name">${rank}. ${team.name}</div>
-                            <div class="league-team-overall rating-${getRatingClass(ratings.overall)}">${ratings.overall}</div>
+        <div class="card mt">
+            <h3>League Power Rankings</h3>
+            <div class="league-ratings-list">
+                ${topTeams.map((team, index) => {
+                    const ratings = team.ratings || calculateTeamRating(team);
+                    return `
+                        <div class="rating-row">
+                            <div class="rank">${index + 1}</div>
+                            <div class="team-info">
+                                <span class="team-name">${team.name}</span>
+                                <span class="record text-muted">${team.record?.w || 0}-${team.record?.l || 0}</span>
+                            </div>
+                            <div class="rating-pill ${getRatingClass(ratings.overall)}">${ratings.overall}</div>
                         </div>
-                        <div class="league-team-stats">
-                            <div class="league-team-stat">
-                                <span class="label">Offense</span>
-                                <span class="value rating-${getRatingClass(ratings.offense.overall)}">${ratings.offense.overall}</span>
-                            </div>
-                            <div class="league-team-stat">
-                                <span class="label">Defense</span>
-                                <span class="value rating-${getRatingClass(ratings.defense.overall)}">${ratings.defense.overall}</span>
-                            </div>
-                            <div class="league-team-stat">
-                                <span class="label">Special Teams</span>
-                                <span class="value rating-${getRatingClass(ratings.specialTeams)}">${ratings.specialTeams}</span>
-                            </div>
-                            <div class="league-team-stat">
-                                <span class="label">Depth</span>
-                                <span class="value">${ratings.depth}</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('')}
+                    `;
+                }).join('')}
+            </div>
+            <div class="mt text-center">
+                 <a href="#/powerRankings" class="btn btn-sm">View All Rankings</a>
+            </div>
         </div>
+        <style>
+            .league-ratings-list { display: flex; flex-direction: column; gap: 0.5rem; }
+            .rating-row { display: flex; align-items: center; padding: 0.5rem; background: var(--surface-2); border-radius: 6px; }
+            .rating-row .rank { font-weight: 700; width: 30px; color: var(--text-muted); }
+            .rating-row .team-info { flex-grow: 1; display: flex; flex-direction: column; }
+            .rating-row .team-name { font-weight: 600; }
+            .rating-pill {
+                padding: 0.25rem 0.75rem; border-radius: 1rem;
+                font-weight: 700; font-size: 0.9rem;
+                color: white; background: #555;
+            }
+            .rating-pill.elite { background: #8b5cf6; }
+            .rating-pill.excellent { background: #3b82f6; }
+            .rating-pill.good { background: #10b981; }
+            .rating-pill.average { background: #f59e0b; }
+            .rating-pill.poor { background: #ef4444; }
+        </style>
     `;
 
     container.innerHTML = html;
 }
 
 // Make functions globally available
-window.calculateOffensiveRating = calculateOffensiveRating;
-window.calculateDefensiveRating = calculateDefensiveRating;
+window.calculateLeagueStats = calculateLeagueStats;
+window.calibrateRating = calibrateRating;
+window.updateLeaguePlayers = updateLeaguePlayers;
 window.calculateTeamRating = calculateTeamRating;
 window.updateTeamRatings = updateTeamRatings;
 window.updateAllTeamRatings = updateAllTeamRatings;

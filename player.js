@@ -1074,7 +1074,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         ovr: playerOvr,
         years: contractDetails.years,
         yearsTotal: contractDetails.yearsTotal || contractDetails.years, // Ensure yearsTotal is set for proration
-        baseAnnual: contractDetails.baseAnnual * (player.personality?.traits?.includes('Greedy') ? 1.15 : (player.personality?.traits?.includes('Loyal') ? 0.9 : 1)),
+        baseAnnual: contractDetails.baseAnnual,
         signingBonus: contractDetails.signingBonus || 0,
         guaranteedPct: contractDetails.guaranteedPct || 0.5,
 
@@ -1116,6 +1116,13 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 
       // Initialize depth chart stats
       initializeDepthChartStats(player);
+
+      // Adjust salary based on personality (Fixed self-reference)
+      if (player.personality?.traits?.includes('Greedy')) {
+          player.baseAnnual *= 1.15;
+      } else if (player.personality?.traits?.includes('Loyal')) {
+          player.baseAnnual *= 0.9;
+      }
 
       // Add position-specific abilities (from fixes.js)
       if (window.tagAbilities) {

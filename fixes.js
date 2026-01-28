@@ -244,6 +244,16 @@ function makePlayer(pos, overrides = {}) {
   
   // Calculate overall rating
   const ovr = calculateOvr(pos, ratings);
+
+  // Calculate calibrated display rating if league stats exist
+  let displayOvr = ovr;
+  if (window.state?.league?.ratingStats && window.calibrateRating) {
+      displayOvr = window.calibrateRating(ovr, window.state.league.ratingStats);
+  } else {
+      // Fallback calibration if no league stats yet (approximate)
+      // Assume mean 75, stdDev 10 for initial guess
+      displayOvr = Math.round(Math.max(40, Math.min(99, 73 + ((ovr - 75) / 10) * 8)));
+  }
   
   // Generate contract details
   const contractDetails = generateContract(ovr, pos);
@@ -255,6 +265,7 @@ function makePlayer(pos, overrides = {}) {
     age: overrides.age || U.rand(C.PLAYER_CONFIG.MIN_AGE, C.PLAYER_CONFIG.MAX_AGE),
     ratings: ratings,
     ovr: ovr,
+    displayOvr: displayOvr,
     years: contractDetails.years,
     yearsTotal: contractDetails.yearsTotal || contractDetails.years, // Ensure yearsTotal is set
     baseAnnual: contractDetails.baseAnnual,
