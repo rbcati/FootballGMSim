@@ -1387,7 +1387,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       }
       
       // Check for milestones
-      checkCareerMilestones(player);
+      checkCareerMilestones(player, gameContext);
       
     } catch (error) {
       console.error('Error updating player game legacy:', error);
@@ -1541,8 +1541,9 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   /**
    * Check for career milestones
    * @param {Object} player - Player object
+   * @param {Object} gameContext - Game context (optional)
    */
-  function checkCareerMilestones(player) {
+  function checkCareerMilestones(player, gameContext = {}) {
     if (!player.stats.career) return;
     
     const career = player.stats.career;
@@ -1564,6 +1565,27 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         { stat: 'recYd', thresholds: [1000, 5000, 10000, 15000, 20000], suffix: 'Receiving Yards' },
         { stat: 'receptions', thresholds: [100, 500, 1000, 1500], suffix: 'Receptions' },
         { stat: 'recTD', thresholds: [10, 25, 50, 100, 150], suffix: 'Receiving TDs' }
+      ],
+      TE: [
+        { stat: 'recYd', thresholds: [1000, 5000, 10000, 15000], suffix: 'Receiving Yards' },
+        { stat: 'receptions', thresholds: [100, 500, 1000], suffix: 'Receptions' },
+        { stat: 'recTD', thresholds: [10, 25, 50, 100], suffix: 'Receiving TDs' }
+      ],
+      DL: [
+        { stat: 'sacks', thresholds: [25, 50, 75, 100, 150], suffix: 'Sacks' },
+        { stat: 'tackles', thresholds: [100, 300, 500], suffix: 'Tackles' }
+      ],
+      LB: [
+        { stat: 'tackles', thresholds: [100, 500, 1000, 1500], suffix: 'Tackles' },
+        { stat: 'interceptions', thresholds: [10, 20, 30], suffix: 'Interceptions' }
+      ],
+      CB: [
+        { stat: 'interceptions', thresholds: [10, 25, 50, 75], suffix: 'Interceptions' },
+        { stat: 'passesDefended', thresholds: [50, 100, 200], suffix: 'Passes Defended' }
+      ],
+      S: [
+        { stat: 'interceptions', thresholds: [10, 25, 50], suffix: 'Interceptions' },
+        { stat: 'tackles', thresholds: [100, 500, 1000], suffix: 'Tackles' }
       ]
     };
     
@@ -1578,7 +1600,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         if (currentValue >= threshold && !milestones.find(m => m.key === milestoneKey)) {
           milestones.push({
             key: milestoneKey,
-            year: (window.state?.league?.year) || 2025,
+            year: gameContext.year || (window.state?.league?.year) || 2025,
+            week: gameContext.week || (window.state?.league?.week) || 1,
             description: `${threshold.toLocaleString()} ${milestoneSet.suffix}`,
             value: currentValue,
             rarity: getMilestoneRarity(threshold, milestoneSet.stat)
@@ -1961,24 +1984,36 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
     if (!player.legacy) return false;
     
     const hof = player.legacy.hallOfFame;
+
+    // If already inducted, return true
+    if (hof.inducted) return true;
+
+    // If eligibility year is set, check against it
+    if (hof.eligibilityYear) {
+        if (currentYear >= hof.eligibilityYear) {
+             const legacyThreshold = getHOFThreshold(player.pos);
+             if (player.legacy.metrics.legacyScore >= legacyThreshold) {
+                 hof.inducted = true;
+                 return true;
+             }
+        }
+        return false;
+    }
+
     const careerLength = player.legacy.teamHistory?.length || 0;
     
-    // Must be retired for 5 years and played at least 5 seasons
+    // Determine retirement year (scan history or assume recent)
+    // If newly retired (years <= 0), set eligibility year
     if (player.years <= 0 && careerLength >= 5) {
-      const retirementYear = currentYear; // Simplified
-      const eligibilityYear = retirementYear + 5;
-      
-      if (currentYear >= eligibilityYear) {
-        hof.eligible = true;
+        // Assume retired this year if not set
+        const lastSeason = player.legacy.teamHistory[player.legacy.teamHistory.length - 1]?.year || currentYear;
+        const retirementYear = lastSeason;
+        const eligibilityYear = retirementYear + 5;
+
         hof.eligibilityYear = eligibilityYear;
         
-        // Check if worthy of induction
-        const legacyThreshold = getHOFThreshold(player.pos);
-        if (player.legacy.metrics.legacyScore >= legacyThreshold) {
-          hof.inducted = true;
-          return true;
-        }
-      }
+        // Recursive call to check if eligible NOW (e.g. if we fast forwarded)
+        return checkHallOfFameEligibility(player, currentYear);
     }
     
     return false;

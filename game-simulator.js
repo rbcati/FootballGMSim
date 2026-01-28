@@ -6,7 +6,7 @@
 import { Utils } from './utils.js';
 import { Constants } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
-import { updateAdvancedStats, getZeroStats } from './player.js';
+import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -942,7 +942,7 @@ export function simulateBatch(games, options = {}) {
                 awayPlayerStats = capturePlayerStats(away.roster);
 
                 // Update Accumulators
-                const updatePlayerStats = (roster, isPlayoff = false) => {
+                const updatePlayerStats = (roster, team, opponent, isPlayoff = false) => {
                     if (!Array.isArray(roster)) return;
                     roster.forEach(p => {
                         if (p && p.stats && p.stats.game) {
@@ -965,13 +965,25 @@ export function simulateBatch(games, options = {}) {
                                     updateAdvancedStats(p, p.stats.season);
                                 }
                             }
+
+                            // LEGACY INTEGRATION
+                            if (updatePlayerGameLegacy) {
+                                const gameContext = {
+                                    year: pair.year || window.state?.league?.year || 2025,
+                                    week: pair.week || window.state?.league?.week || 1,
+                                    teamWon: resultObj.home === team.id ? resultObj.homeWin : !resultObj.homeWin,
+                                    isPlayoff: isPlayoff,
+                                    opponent: opponent.name
+                                };
+                                updatePlayerGameLegacy(p, p.stats.game, gameContext);
+                            }
                         }
                     });
                 };
 
                 const isPlayoff = options.isPlayoff === true;
-                updatePlayerStats(home.roster, isPlayoff);
-                updatePlayerStats(away.roster, isPlayoff);
+                updatePlayerStats(home.roster, home, away, isPlayoff);
+                updatePlayerStats(away.roster, away, home, isPlayoff);
 
                 // Update Team Stats
                 const updateTeamSeasonStats = (team) => {

@@ -335,6 +335,14 @@ window.renderPlayerCard = function(player) {
         }
     }
 
+    // HOF Status
+    const isHOF = player.legacy && player.legacy.hallOfFame && player.legacy.hallOfFame.inducted;
+    let hofTag = isHOF ? '<span class="tag" style="background: #fbbf24; color: black; font-weight: bold;">🏆 HOF</span>' : '';
+
+    // Legacy Score (if > 0)
+    const legacyScore = player.legacy && player.legacy.metrics ? player.legacy.metrics.legacyScore : 0;
+    let legacyTag = legacyScore > 0 ? `<span class="tag" style="background: #4b5563; color: white;" title="Legacy Score">🏅 ${legacyScore}</span>` : '';
+
     return `
     <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
@@ -351,6 +359,8 @@ window.renderPlayerCard = function(player) {
                         <span class="tag">${player.age} yo</span>
                         ${isInjured ? '<span class="tag" style="color:#FF3B30">INJ</span>' : ''}
                         ${devTag}
+                        ${hofTag}
+                        ${legacyTag}
                         ${traitsHtml}
                     </div>
                     <div class="grade-badge ${gradeClass}">${grade}</div>
@@ -2594,24 +2604,48 @@ window.showDecisionModal = function(event) {
 
             // Execute effect
             if (choice.effect && typeof choice.effect === 'function') {
-                const resultMessage = choice.effect(window.state.league);
-
-                // Show result (using setStatus or alert)
-                if (window.setStatus) {
-                    window.setStatus(resultMessage, 'success', 5000);
-                } else {
-                    alert(resultMessage);
+                // GUARD: Ensure context is available
+                if (!window.state || !window.state.league) {
+                    console.error('Missing state/league context for decision effect');
+                    if (window.setStatus) window.setStatus('Error: Could not apply decision (Missing Data)', 'error');
+                    else alert('Error: Could not apply decision (Missing Data)');
+                    modalEl.remove();
+                    return;
                 }
 
-                // Add news item about the decision
-                if (window.newsEngine) {
-                    window.newsEngine.addNewsItem(
-                        window.state.league,
-                        `Decision: ${event.title}`,
-                        `GM decided: "${choice.text}". Result: ${resultMessage}`,
-                        null,
-                        'decision'
-                    );
+                // CREATE CONTEXT
+                const ctx = {
+                    league: window.state.league,
+                    team: window.state.userTeamId !== undefined ? window.state.league.teams[window.state.userTeamId] : null,
+                    week: window.state.league.week,
+                    year: window.state.league.year
+                };
+
+                try {
+                    const resultMessage = choice.effect(ctx);
+
+                    // Show result (using setStatus or alert)
+                    if (window.setStatus) {
+                        window.setStatus(resultMessage, 'success', 5000);
+                    } else {
+                        alert(resultMessage);
+                    }
+
+                    // Add news item about the decision
+                    if (window.newsEngine) {
+                        window.newsEngine.addNewsItem(
+                            window.state.league,
+                            `Decision: ${event.title}`,
+                            `GM decided: "${choice.text}". Result: ${resultMessage}`,
+                            null,
+                            'decision'
+                        );
+                    }
+                } catch (err) {
+                    console.error('Error executing decision effect:', err);
+                    const msg = err.message || 'Unknown error';
+                    if (window.setStatus) window.setStatus(`Error applying decision: ${msg}`, 'error');
+                    else alert(`Error applying decision: ${msg}`);
                 }
             }
 

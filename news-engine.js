@@ -18,7 +18,8 @@ const MULTI_WEEK_STORYLINES = {
                 choices: [
                     {
                         text: 'Promise Extension (Boost Morale)',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                             const league = ctx.league;
                              const team = league.teams[story.teamId];
                              const player = team.roster.find(p => p.id === story.data.playerId);
                              if (player) player.morale = Math.min(100, player.morale + 20);
@@ -28,7 +29,8 @@ const MULTI_WEEK_STORYLINES = {
                     },
                     {
                         text: 'Refuse Negotiation',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             story.stage = 2;
                             story.nextUpdate = league.week + 1;
                             const team = league.teams[story.teamId];
@@ -45,7 +47,8 @@ const MULTI_WEEK_STORYLINES = {
                  choices: [
                      {
                          text: 'Fine The Player',
-                         effect: (league, story) => {
+                         effect: (ctx, story) => {
+                             const league = ctx.league;
                              story.stage = 3;
                              story.nextUpdate = league.week + 1;
                              const team = league.teams[story.teamId];
@@ -56,7 +59,7 @@ const MULTI_WEEK_STORYLINES = {
                      },
                      {
                          text: 'Ignore It',
-                         effect: (league, story) => {
+                         effect: (ctx, story) => {
                              story.resolved = true;
                              return "You decided to look the other way. He returned to practice the next day, but the tension remains.";
                          }
@@ -69,15 +72,16 @@ const MULTI_WEEK_STORYLINES = {
                 choices: [
                     {
                         text: 'Seek Trade Partner',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
                             story.resolved = true;
                             // In a real implementation, this would flag the player for trade block
-                            return `You announced that you will seek a trade partner for ${data.name}.`;
+                            return `You announced that you will seek a trade partner for ${story.data.name}.`;
                         }
                     },
                     {
                         text: 'Refuse Trade',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             const team = league.teams[story.teamId];
                             const player = team.roster.find(p => p.id === story.data.playerId);
                             if (player) player.morale = 0;
@@ -112,7 +116,8 @@ const MULTI_WEEK_STORYLINES = {
                 choices: [
                     {
                         text: 'Stick with Starter',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             const team = league.teams[story.teamId];
                             const starter = team.roster.find(p => p.id === story.data.starterId);
                             if (starter) starter.morale = Math.min(100, starter.morale + 10);
@@ -120,12 +125,13 @@ const MULTI_WEEK_STORYLINES = {
                             if (backup) backup.morale = Math.max(0, backup.morale - 10);
 
                             story.resolved = true;
-                            return `You publicly committed to ${data.starterName}. He appreciates the vote of confidence.`;
+                            return `You publicly committed to ${story.data.starterName}. He appreciates the vote of confidence.`;
                         }
                     },
                     {
                         text: 'Open Competition',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             story.stage = 2;
                             story.nextUpdate = league.week + 1;
                             return `You declared the position open for competition in practice. Both QBs are on edge.`;
@@ -139,7 +145,8 @@ const MULTI_WEEK_STORYLINES = {
                 choices: [
                     {
                         text: 'Bench Starter',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             const team = league.teams[story.teamId];
                             const starter = team.roster.find(p => p.id === story.data.starterId);
                             const backup = team.roster.find(p => p.id === story.data.backupId);
@@ -148,14 +155,14 @@ const MULTI_WEEK_STORYLINES = {
                             if (backup) backup.morale = Math.min(100, backup.morale + 20);
 
                             story.resolved = true;
-                            return `You named ${data.backupName} the new starter. Make sure to update your depth chart!`;
+                            return `You named ${story.data.backupName} the new starter. Make sure to update your depth chart!`;
                         }
                     },
                     {
                         text: 'Stay the Course',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
                             story.resolved = true;
-                            return `You decided practice isn't everything. ${data.starterName} retains the job.`;
+                            return `You decided practice isn't everything. ${story.data.starterName} retains the job.`;
                         }
                     }
                 ]
@@ -181,7 +188,8 @@ const MULTI_WEEK_STORYLINES = {
                 choices: [
                     {
                         text: 'Increase Workload',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
+                            const league = ctx.league;
                             const team = league.teams[story.teamId];
                             const player = team.roster.find(p => p.id === story.data.playerId);
                             if (player) {
@@ -189,14 +197,14 @@ const MULTI_WEEK_STORYLINES = {
                                 player.morale = Math.min(100, (player.morale || 50) + 10);
                             }
                             story.resolved = true;
-                            return `${data.name} responded well to the extra reps. Ratings boosted.`;
+                            return `${story.data.name} responded well to the extra reps. Ratings boosted.`;
                         }
                     },
                     {
                         text: 'Bring Him Along Slowly',
-                        effect: (league, story) => {
+                        effect: (ctx, story) => {
                             story.resolved = true;
-                            return `You decided to protect ${data.name} from too much too soon.`;
+                            return `You decided to protect ${story.data.name} from too much too soon.`;
                         }
                     }
                 ]
@@ -235,7 +243,8 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Pep Talk (Boost Morale)',
                 description: 'Give a rousing speech to lift spirits. Small reliable boost.',
-                effect: (league) => {
+                effect: (ctx) => {
+                    const league = ctx.league;
                     const team = league.teams[window.state.userTeamId];
                     let boosted = 0;
                     team.roster.forEach(p => {
@@ -250,7 +259,8 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Hard Truth (High Risk/Reward)',
                 description: 'Call them out. Could fire them up or cause a mutiny.',
-                effect: (league) => {
+                effect: (ctx) => {
+                     const league = ctx.league;
                      const team = league.teams[window.state.userTeamId];
                      const success = Math.random() > 0.4; // 60% chance of success
                      if (success) {
@@ -265,7 +275,7 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Ignore It',
                 description: 'Let them work it out themselves.',
-                effect: (league) => {
+                effect: (ctx) => {
                     return "You decided to stay out of it. The tension remains.";
                 }
             }
@@ -292,7 +302,7 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Discount Tickets (Boost Satisfaction)',
                 description: 'Lower ticket prices for the next game. Fans will love it, but revenue will drop.',
-                effect: (league) => {
+                effect: (ctx) => {
                     if (window.state.ownerMode) {
                         window.state.ownerMode.fanSatisfaction = Math.min(100, (window.state.ownerMode.fanSatisfaction || 50) + 10);
                         return "Fans are thrilled with the discount! Satisfaction up.";
@@ -303,7 +313,8 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Meet & Greet (Boost Morale)',
                 description: 'Have players sign autographs. Boosts team morale.',
-                effect: (league) => {
+                effect: (ctx) => {
+                    const league = ctx.league;
                     const team = league.teams[window.state.userTeamId];
                     team.roster.forEach(p => p.morale = Math.min(100, p.morale + 3));
                     return "Players enjoyed connecting with the community. Morale up.";
@@ -312,7 +323,7 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Pass',
                 description: 'Focus on football.',
-                effect: (league) => {
+                effect: (ctx) => {
                     return "You decided to focus on practice instead.";
                 }
             }
@@ -329,7 +340,8 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Defend Player',
                 description: 'Publicly back your player. Boosts player morale, may annoy fans/media.',
-                effect: (league) => {
+                effect: (ctx) => {
+                    const league = ctx.league;
                     const team = league.teams[window.state.userTeamId];
                     const star = team.roster.reduce((prev, current) => (prev.ovr > current.ovr) ? prev : current);
                     star.morale = Math.min(100, star.morale + 10);
@@ -343,14 +355,15 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'No Comment',
                 description: 'Stay neutral.',
-                effect: (league) => {
+                effect: (ctx) => {
                     return "You gave a generic non-answer. The story will blow over.";
                 }
             },
             {
                 text: 'Agree with Media (Motivate)',
                 description: 'Challenge the player to do better. High risk.',
-                effect: (league) => {
+                effect: (ctx) => {
+                    const league = ctx.league;
                     const team = league.teams[window.state.userTeamId];
                     const star = team.roster.reduce((prev, current) => (prev.ovr > current.ovr) ? prev : current);
 
@@ -380,7 +393,8 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Lower Ticket Prices (-10%)',
                 description: 'Drop ticket prices to appease the mob.',
-                effect: (league) => {
+                effect: (ctx) => {
+                    const league = ctx.league;
                     if (window.state.ownerMode) {
                         window.state.ownerMode.businessSettings.ticketPrice = Math.floor(window.state.ownerMode.businessSettings.ticketPrice * 0.9);
                         window.state.ownerMode.fanSatisfaction += 10;
@@ -391,7 +405,7 @@ const INTERACTIVE_EVENTS = [
             {
                 text: 'Address the Crowd',
                 description: 'Promise better results on the field.',
-                effect: (league) => {
+                effect: (ctx) => {
                     if (Math.random() > 0.5) {
                         if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction += 5;
                         return "The crowd seemed to buy your promises for now.";
@@ -458,7 +472,7 @@ class NewsEngine {
                         description: typeof stageData.description === 'function' ? stageData.description(activeStory.data) : stageData.description,
                         choices: stageData.choices.map(c => ({
                             text: c.text,
-                            effect: (l) => c.effect(l, activeStory)
+                            effect: (ctx) => c.effect(ctx, activeStory)
                         }))
                     };
                 }

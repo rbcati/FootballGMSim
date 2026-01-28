@@ -158,6 +158,7 @@
           <button class="tab-btn active" data-tab="superbowls">Super Bowls</button>
           <button class="tab-btn" data-tab="mvps">MVPs & Awards</button>
           <button class="tab-btn" data-tab="coaches">Coach Rankings</button>
+          <button class="tab-btn" data-tab="hof">Hall of Fame</button>
         </div>
 
         <div id="history-tab-content">
@@ -184,9 +185,52 @@
           tabContent.innerHTML = renderMVPsAndAwards(history.mvps, history.awards);
         } else if (tab === 'coaches') {
           tabContent.innerHTML = renderCoachRankings(history.coachRankings);
+        } else if (tab === 'hof') {
+          tabContent.innerHTML = renderHallOfFame(L.retiredPlayers || []);
         }
       });
     });
+  }
+
+  /**
+   * Render Hall of Fame
+   */
+  function renderHallOfFame(retiredPlayers) {
+    const hofPlayers = retiredPlayers.filter(p => p.legacy && p.legacy.hallOfFame && p.legacy.hallOfFame.inducted);
+
+    if (!hofPlayers || hofPlayers.length === 0) {
+        return '<div class="history-section"><p>No Hall of Fame inductees yet.</p></div>';
+    }
+
+    // Sort by induction year (descending), then Legacy Score
+    hofPlayers.sort((a, b) => {
+        const yearA = a.legacy.hallOfFame.eligibilityYear || 0;
+        const yearB = b.legacy.hallOfFame.eligibilityYear || 0;
+        if (yearB !== yearA) return yearB - yearA;
+        return (b.legacy.metrics.legacyScore || 0) - (a.legacy.metrics.legacyScore || 0);
+    });
+
+    return `
+      <div class="history-section">
+        <h3>Hall of Fame Inductees</h3>
+        <div class="hof-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 15px;">
+          ${hofPlayers.map(p => `
+            <div class="hof-card" style="background: var(--surface); padding: 15px; border-radius: 8px; border: 1px solid #fbbf24;">
+                <div style="display: flex; justify-content: space-between; align-items: start;">
+                    <div style="font-weight: bold; font-size: 1.1rem;">${p.name}</div>
+                    <div style="background: #fbbf24; color: black; font-size: 0.8rem; padding: 2px 6px; border-radius: 4px; font-weight: bold;">HOF</div>
+                </div>
+                <div style="color: var(--text-muted); font-size: 0.9rem;">${p.pos} • Score: ${p.legacy.metrics.legacyScore}</div>
+                <div style="margin-top: 10px; font-size: 0.85rem;">
+                    <div>🏆 ${p.awards.filter(a => a.award === 'Super Bowl Champion').length} Rings</div>
+                    <div>🏅 ${p.legacy.awards.playerOfYear || 0} MVPs</div>
+                    <div>⭐ ${p.legacy.awards.proBowl || 0} Pro Bowls</div>
+                </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
   }
 
   /**

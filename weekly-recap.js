@@ -133,6 +133,30 @@ export function showWeeklyRecap(week, results, news) {
         `;
     }
 
+    // Milestones
+    let milestonesHtml = '';
+    const milestonePlayers = userTeam.roster.filter(p => p.legacy && p.legacy.milestones && p.legacy.milestones.some(m => m.week === week && m.year === state.league.year));
+
+    if (milestonePlayers.length > 0) {
+        milestonesHtml = `
+            <div class="recap-section" style="border-left: 4px solid #fbbf24;">
+                <h4 style="color: #fbbf24;">🏅 Milestone Achievements</h4>
+                <ul class="recap-list">
+                    ${milestonePlayers.map(p => {
+                        const milestones = p.legacy.milestones.filter(m => m.week === week && m.year === state.league.year);
+                        return milestones.map(m => `
+                            <li>
+                                <strong style="color: #fbbf24;">${m.description}</strong>
+                                <div><strong>${p.name}</strong> (${p.pos})</div>
+                                <div style="font-size: 0.85rem; color: #ccc;">${m.rarity} Milestone Reached</div>
+                            </li>
+                        `).join('');
+                    }).join('')}
+                </ul>
+            </div>
+        `;
+    }
+
     // Injuries (User Team)
     let injuriesHtml = '';
     const newInjuries = userTeam.roster.filter(p => p.injuryWeeks > 0 && p.injuries && p.injuries[0] && p.injuries[0].week === week);
@@ -177,6 +201,7 @@ export function showWeeklyRecap(week, results, news) {
             <div class="recap-grid">
                 ${heroHtml}
                 ${schemeHtml}
+                ${milestonesHtml}
                 ${devHtml}
                 ${injuriesHtml}
                 ${newsHtml}
