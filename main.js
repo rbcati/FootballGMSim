@@ -34,6 +34,130 @@ document.addEventListener("visibilitychange", () => {
 checkForUpdates();
 
 /**
+ * Calculate team ranks for Pass/Rush Offense/Defense
+ * @param {Object} league - League object
+ * @returns {Object} Map of teamId -> { passOffRank, rushOffRank, passDefRank, rushDefRank }
+ */
+function calculateTeamRanks(league) {
+    if (!league || !league.teams) return {};
+
+    const stats = league.teams.map(t => ({
+        id: t.id,
+        passOff: 0,
+        rushOff: 0,
+        passDef: 0,
+        rushDef: 0,
+        gamesPlayed: 0
+    }));
+
+    const teamMap = new Map(stats.map(s => [s.id, s]));
+
+    // 1. Offense Stats (from Rosters - accumulated season stats)
+    league.teams.forEach(team => {
+        const teamStat = teamMap.get(team.id);
+        if (!teamStat) return;
+
+        if (team.roster) {
+            team.roster.forEach(p => {
+                if (p.stats && p.stats.season) {
+                    teamStat.passOff += (p.stats.season.passYd || 0);
+                    teamStat.rushOff += (p.stats.season.rushYd || 0);
+                }
+            });
+        }
+    });
+
+    // 2. Defense Stats (from Results)
+    if (league.resultsByWeek) {
+        Object.values(league.resultsByWeek).forEach(weekGames => {
+            if (Array.isArray(weekGames)) {
+                weekGames.forEach(game => {
+                    if (!game.finalized) return;
+
+                    const homeId = typeof game.home === 'object' ? game.home.id : game.home;
+                    const awayId = typeof game.away === 'object' ? game.away.id : game.away;
+
+                    const homeStat = teamMap.get(homeId);
+                    const awayStat = teamMap.get(awayId);
+
+                    // Calculate Game Yards from Box Score
+                    let homePass = 0, homeRush = 0;
+                    let awayPass = 0, awayRush = 0;
+
+                    if (game.boxScore) {
+                        if (game.boxScore.home) {
+                            Object.values(game.boxScore.home).forEach(p => {
+                                if (p.stats) {
+                                    homePass += (p.stats.passYd || 0);
+                                    homeRush += (p.stats.rushYd || 0);
+                                }
+                            });
+                        }
+                        if (game.boxScore.away) {
+                            Object.values(game.boxScore.away).forEach(p => {
+                                if (p.stats) {
+                                    awayPass += (p.stats.passYd || 0);
+                                    awayRush += (p.stats.rushYd || 0);
+                                }
+                            });
+                        }
+                    }
+
+                    if (homeStat) {
+                        homeStat.passDef += awayPass;
+                        homeStat.rushDef += awayRush;
+                        homeStat.gamesPlayed++;
+                    }
+
+                    if (awayStat) {
+                        awayStat.passDef += homePass;
+                        awayStat.rushDef += homeRush;
+                        awayStat.gamesPlayed++;
+                    }
+                });
+            }
+        });
+    }
+
+    // 3. Normalize per Game (needed because bye weeks create uneven games played)
+    stats.forEach(s => {
+        // Use max(1) to avoid division by zero if no games played,
+        // though totals would be 0 anyway.
+        const g = Math.max(1, s.gamesPlayed);
+
+        // For offense, we summed season totals. We should divide by games played if we want per-game rank.
+        // Assuming team.stats.season.gamesPlayed tracks the same count, but using our calculated count is safer for consistency.
+        if (s.gamesPlayed > 0) {
+            s.passOff /= g;
+            s.rushOff /= g;
+            s.passDef /= g;
+            s.rushDef /= g;
+        }
+    });
+
+    // 4. Sort and Rank
+    const getRank = (list, id) => list.findIndex(s => s.id === id) + 1;
+
+    const byPassOff = [...stats].sort((a, b) => b.passOff - a.passOff);
+    const byRushOff = [...stats].sort((a, b) => b.rushOff - a.rushOff);
+    // Defense: Lower yards allowed is better
+    const byPassDef = [...stats].sort((a, b) => a.passDef - b.passDef);
+    const byRushDef = [...stats].sort((a, b) => a.rushDef - b.rushDef);
+
+    const ranks = {};
+    stats.forEach(s => {
+        ranks[s.id] = {
+            passOff: getRank(byPassOff, s.id),
+            rushOff: getRank(byRushOff, s.id),
+            passDef: getRank(byPassDef, s.id),
+            rushDef: getRank(byRushDef, s.id)
+        };
+    });
+
+    return ranks;
+}
+
+/**
  * Enhanced Main Game Controller with improved performance and error handling
  *
  * This patched version addresses two issues that prevented saved games from loading
@@ -243,6 +367,17 @@ class GameController {
                 const sortedByPA = [...L.teams].sort((a, b) => (a.ptsAgainst ?? a.record?.pa ?? 0) - (b.ptsAgainst ?? b.record?.pa ?? 0));
                 const defRank = sortedByPA.findIndex(t => t.id === userTeam.id) + 1;
 
+                // --- NEW: Detailed Pass/Rush Ranks ---
+                const teamRanks = calculateTeamRanks(L);
+                const userRanks = teamRanks[userTeam.id] || { passOff: '-', rushOff: '-', passDef: '-', rushDef: '-' };
+
+                const getRankColor = (rank) => {
+                    if (typeof rank !== 'number') return 'inherit';
+                    if (rank <= 10) return '#48bb78'; // Green
+                    if (rank >= 23) return '#f87171'; // Red
+                    return 'inherit';
+                };
+
                 // --- Calculate Dynamic Header Metrics ---
                 // 1. Current Streak
                 let streak = 0;
@@ -375,6 +510,18 @@ class GameController {
                                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
                                     <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">${ovr} OVR</div>
                                     <div class="ovr-badge" style="background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; font-weight: 700;">Grade: ${ownerGrade}</div>
+                                </div>
+                                <div style="margin-top: 10px; font-size: 0.85rem; font-weight: 500; line-height: 1.4; opacity: 0.9;">
+                                    <div style="display: flex; gap: 12px;">
+                                        <span style="color: ${getRankColor(userRanks.passOff)}">Pass O #${userRanks.passOff}</span>
+                                        <span style="opacity: 0.4">•</span>
+                                        <span style="color: ${getRankColor(userRanks.rushOff)}">Rush O #${userRanks.rushOff}</span>
+                                    </div>
+                                    <div style="display: flex; gap: 12px;">
+                                        <span style="color: ${getRankColor(userRanks.passDef)}">Pass D #${userRanks.passDef}</span>
+                                        <span style="opacity: 0.4">•</span>
+                                        <span style="color: ${getRankColor(userRanks.rushDef)}">Rush D #${userRanks.rushDef}</span>
+                                    </div>
                                 </div>
                             </div>
 
