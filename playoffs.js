@@ -2,7 +2,7 @@
 
 import { saveState } from './state.js';
 import { launchConfetti } from './confetti.js';
-import { simGameStats, initializePlayerStats, accumulateStats, simulateBatch } from './game-simulator.js';
+import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 
@@ -64,56 +64,12 @@ function simPlayoffWeek() {
     const P = window.state?.playoffs;
     if (!P || P.winner) return;
 
-    // Use imported simGameStats instead of global
-    const simGame = simGameStats;
-    if (!simGame) {
-        console.error("simGameStats not available");
-        return;
-    }
-
     const roundResults = { round: P.currentRound, games: [] };
 
     const simRound = (games) => {
-        const winners = [];
-        const gamesToSim = games.map(g => ({
-            home: g.home,
-            away: g.away,
-            year: P.year
-        })).filter(g => g.home && g.away);
-
-        if (gamesToSim.length === 0) return [];
-
-        // Simulate batch with playoff flag
-        const results = simulateBatch(gamesToSim, { isPlayoff: true });
-
-        results.forEach(res => {
-            // Find the original teams from the result (using IDs if possible, or name match)
-            // simulateBatch returns homeTeamName/awayTeamName
-
-            // Reconstruct game object for results
-            const gameHome = gamesToSim.find(g => g.home.name === res.homeTeamName)?.home;
-            const gameAway = gamesToSim.find(g => g.away.name === res.awayTeamName)?.away;
-
-            if (gameHome && gameAway) {
-                roundResults.games.push({
-                    home: gameHome,
-                    away: gameAway,
-                    scoreHome: res.scoreHome,
-                    scoreAway: res.scoreAway
-                });
-
-                winners.push(res.homeWin ? gameHome : gameAway);
-
-                // Process Playoff Revenue for User Home Games
-                if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
-                    window.processPlayoffRevenue(gameHome);
-                }
-
-            } else {
-                console.error("Could not match result to team", res);
-            }
-        });
-
+        if (!games || games.length === 0) return [];
+        const { winners, results } = GameRunner.simulatePlayoffGames(games, P.year);
+        roundResults.games.push(...results);
         return winners;
     };
 
