@@ -12,6 +12,16 @@ export function setLastPlayedLeague(name) {
     }
 }
 
+export function hasSavedLeagues() {
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(DB_KEY_PREFIX)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // 1. Function to Save Current Game
 export function saveGame(stateToSave) {
     const gameState = stateToSave || window.state;
@@ -19,6 +29,10 @@ export function saveGame(stateToSave) {
         console.warn("No league to save.");
         return;
     }
+
+    // Update save status
+    gameState.needsSave = false;
+    gameState.lastSaved = new Date().toISOString();
 
     let leagueName = gameState.leagueName;
     if (!leagueName) {
@@ -301,6 +315,7 @@ if (typeof window !== 'undefined') {
     window.deleteLeague = deleteLeague;
     window.createNewLeague = createNewLeague;
     window.getLastPlayedLeague = getLastPlayedLeague;
+    window.hasSavedLeagues = hasSavedLeagues;
 }
 
 // Bind UI events when DOM is ready

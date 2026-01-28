@@ -1628,6 +1628,9 @@ window.renderSettings = function() {
                     </div>
                     <div>
                         <h3>Save Data</h3>
+                        <div style="margin-bottom: 10px;">
+                            <button class="btn primary" onclick="if(window.saveGame) window.saveGame()" style="width: 100%;">Save Current Game</button>
+                        </div>
                         <div id="saveDataManager"></div>
                     </div>
                 </div>
