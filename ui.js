@@ -130,6 +130,19 @@ const enhancedCSS = `
   background-color: var(--accent);
   color: var(--on-accent, #fff);
 }
+
+.clickable {
+  cursor: pointer;
+}
+
+.dark-player-card.clickable, .player-card.clickable {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dark-player-card.clickable:hover, .player-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
 `;
 
 const styleElement = document.createElement('style');
@@ -345,7 +358,7 @@ window.renderPlayerCard = function(player) {
     let legacyTag = legacyScore > 0 ? `<span class="tag" style="background: #4b5563; color: white;" title="Legacy Score">🏅 ${legacyScore}</span>` : '';
 
     return `
-    <div class="dark-player-card ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
+    <div class="dark-player-card clickable ${ovr >= 90 ? 'elite' : ''}" onclick="if(window.viewPlayerStats) window.viewPlayerStats('${player.id}')">
         ${player.isFollowed ? '<div class="follow-indicator" style="position:absolute; top:5px; right:5px; font-size:1.2rem; color:#eab308; text-shadow: 0 1px 2px rgba(0,0,0,0.8);">⭐</div>' : ''}
         <div class="status-indicator ${isInjured ? 'injured' : ''}"></div>
         <div class="card-content">
@@ -590,6 +603,7 @@ window.renderRoster = function() {
             const tr = tbody.insertRow();
             tr.dataset.playerId = player.id;
             tr.style.cursor = 'pointer';
+            tr.classList.add('clickable');
             
             // Initialize depth chart stats if not already done
             if (initializeDepthChartStats) {
@@ -1001,13 +1015,7 @@ function renderSeasonHistory(player) {
     return html;
 }
 
-// window.renderStandings remains the same structure
-window.renderStandings = function() {
-    // ... This is where the renderStandings function goes ...
-    // Placeholder to keep context
-    console.log('Rendering Standings...'); 
-    // This function needs the full logic from your game files.
-};
+// window.renderStandings removed to allow standings-page.js implementation to take precedence
 
 window.renderHub = function() {
     console.log('Rendering hub...');
