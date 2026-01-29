@@ -5,7 +5,6 @@ import { launchConfetti } from './confetti.js';
 import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
-import GameRunner from './game-runner.js';
 
 /**
  * Playoff Management System
