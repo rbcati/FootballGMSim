@@ -438,6 +438,16 @@ class GameController {
                 const capSpace = (userTeam.capRoom || 0).toFixed(1);
                 const capColor = userTeam.capRoom > 10 ? '#48bb78' : userTeam.capRoom > 0 ? '#fbbf24' : '#f87171';
 
+                // Calculate Ranks
+                const ranks = calculateTeamRanks(L);
+                const userRanks = ranks[userTeamId] || { passOff: 0, rushOff: 0, passDef: 0, rushDef: 0 };
+
+                const getRankColor = (rank) => {
+                    if (rank <= 5) return '#48bb78'; // Top 5 Green
+                    if (rank >= 28) return '#f87171'; // Bottom 5 Red
+                    return 'inherit';
+                };
+
                 // --- HTML CONSTRUCTION ---
                 headerDashboardHTML = `
                     <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent); padding: 12px 16px;">
@@ -1590,6 +1600,12 @@ class GameController {
                 throw new Error('League creation system not available');
             }
             window.state.league = window.makeLeague(teams, options);
+
+            // [Fix] Post-Creation Validation
+            if (!window.state.league || !window.state.league.teams || window.state.league.teams.length === 0) {
+                throw new Error('League generation failed: League object incomplete');
+            }
+
             if (window.ensureFA) {
                 try {
                     window.ensureFA();
@@ -1597,10 +1613,27 @@ class GameController {
                     console.warn('Failed to initialize free agency:', error);
                 }
             }
+
+            // [Fix] Storage Health Check
+            try {
+                localStorage.setItem('__storage_test__', '1');
+                localStorage.removeItem('__storage_test__');
+            } catch (e) {
+                console.error('Storage health check failed:', e);
+                // On iOS, quota exceeded or private mode can cause this
+                const proceed = confirm("Storage Warning: Local storage is unavailable or full. Progress will not be saved.\n\nContinue playing without saving?");
+                if (!proceed) {
+                    throw new Error("Storage unavailable (User cancelled)");
+                }
+                window.state.noSave = true;
+            }
+
             // Save state via wrapper; returns an object with success
-            const saveResult = await this.saveGameState();
-            if (!saveResult.success) {
-                console.warn('Failed to save initial game state:', saveResult.error);
+            if (!window.state.noSave) {
+                const saveResult = await this.saveGameState();
+                if (!saveResult.success) {
+                    console.warn('Failed to save initial game state:', saveResult.error);
+                }
             }
             // Hide modal
             const modal = this.getElement('onboardModal');
@@ -1952,6 +1985,12 @@ class GameController {
 
     // --- ENHANCED SAVE/LOAD ---
     async saveGameState(stateToSave = null) {
+        // [Fix] Respect noSave flag
+        if (window.state && window.state.noSave) {
+            console.warn('Save skipped: noSave mode active');
+            return { success: true, skipped: true };
+        }
+
         try {
             // Use new Dashboard Save System if available
             if (window.saveGame) {

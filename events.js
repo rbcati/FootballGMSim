@@ -220,44 +220,68 @@ async function handleOnboardStart(e) {
     const { teamSelect, startButton } = getOnboardingElements();
     const chosenMode = document.querySelector('input[name="namesMode"]:checked')?.value || 'fictional';
 
-    if (startButton) startButton.disabled = true;
-
-    const populated = await refreshTeamDropdown(chosenMode);
-    if (!populated) {
-        if (startButton) startButton.disabled = false;
-        return;
+    if (startButton) {
+        startButton.disabled = true;
+        startButton.textContent = 'Creating...';
     }
 
-    const teams = (typeof window.listByMode === 'function') ? window.listByMode(chosenMode) : [];
-    const teamIdx = teamSelect?.value ?? '0';
-
-    if (!teams.length) {
-        window.setStatus?.('No teams available for selected mode. Please reload teams and try again.', 'error');
-        console.error('Start Season blocked: no teams available for mode', chosenMode);
-        if (startButton) startButton.disabled = false;
-        return;
-    }
-
-    if (!teams[Number(teamIdx)]) {
-        window.setStatus?.('Select a valid team before starting the season.', 'error');
-        if (startButton) startButton.disabled = false;
-        return;
-    }
-
+    // Wrap entire process in try/catch for safety
     try {
+        const populated = await refreshTeamDropdown(chosenMode);
+        if (!populated) {
+            throw new Error('Failed to load teams for selected mode');
+        }
+
+        const teams = (typeof window.listByMode === 'function') ? window.listByMode(chosenMode) : [];
+        const teamIdx = teamSelect?.value ?? '0';
+
+        if (!teams.length) {
+            throw new Error('No teams available for selected mode');
+        }
+
+        if (!teams[Number(teamIdx)]) {
+            throw new Error('Invalid team selection');
+        }
+
         if (window.initNewGame) {
             console.log('🚀 Starting new game with options:', { chosenMode, teamIdx });
-            await window.initNewGame({ chosenMode, teamIdx });
+
+            // Watchdog: 8 second timeout to prevent freezing
+            let timeoutId;
+            const timeoutPromise = new Promise((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('League creation timed out (8s limit)')), 8000);
+            });
+
+            try {
+                await Promise.race([
+                    window.initNewGame({ chosenMode, teamIdx }),
+                    timeoutPromise
+                ]);
+            } finally {
+                clearTimeout(timeoutId);
+            }
+
             console.log('✅ New game initialization completed');
+
+            // Success: Ensure UI is unlocked
+            if (window.resetUIInteractivity) window.resetUIInteractivity();
         } else {
-            console.error('❌ initNewGame function not available');
-            window.setStatus?.('Game controller unavailable. Please refresh.', 'error');
+            throw new Error('Game controller unavailable');
         }
     } catch (error) {
         console.error('❌ Error starting new game:', error);
+
+        // Ensure UI is unlocked on error
+        if (window.resetUIInteractivity) window.resetUIInteractivity();
+
+        // Show visible error
         window.setStatus?.(`Failed to start game: ${error.message}`, 'error');
-    } finally {
-        if (startButton) startButton.disabled = false;
+
+        // Re-enable button
+        if (startButton) {
+            startButton.disabled = false;
+            startButton.textContent = 'Start Season';
+        }
     }
 }
 

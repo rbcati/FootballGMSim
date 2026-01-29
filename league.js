@@ -157,129 +157,135 @@ function makeLeague(teams, dependencies = {}) {
 
     if (missingDependencies.length > 0) {
         console.error('Critical dependencies missing for league creation:', missingDependencies);
-        return null;
+        throw new Error(`Critical dependencies missing: ${missingDependencies.join(', ')}`);
     }
 
-    const leagueYear = (typeof window !== 'undefined' && window.state?.year) || 2025;
+    try {
+        const leagueYear = (typeof window !== 'undefined' && window.state?.year) || 2025;
 
-    const { startPoint } = dependencies;
+        const { startPoint } = dependencies;
 
-    const league = {
-        teams: [],
-        year: leagueYear,
-        season: 1,
-        week: startPoint === 'offseason' ? 0 : 1,
-        offseason: startPoint === 'offseason',
-        schedule: null,
-        resultsByWeek: [],
-        transactions: []
-    };
-
-    // Main Orchestration Loop
-    league.teams = teams.map((teamData, index) => {
-        const team = {
-            ...teamData,
-            id: index,
-            // Explicitly initialize standings properties
-            wins: 0,
-            losses: 0,
-            ties: 0,
-            ptsFor: 0,
-            ptsAgainst: 0,
-            // Legacy record object for compatibility
-            record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
-            stats: { season: getZeroTeamStats(), game: getZeroTeamStats() },
-            history: [],
-            capTotal: Constants.SALARY_CAP?.BASE || 220,
-            deadCap: 0,
-            capRollover: 0,
-            capUsed: 0,
-            capRoom: Constants.SALARY_CAP?.BASE || 220
+        const league = {
+            teams: [],
+            year: leagueYear,
+            season: 1,
+            week: startPoint === 'offseason' ? 0 : 1,
+            offseason: startPoint === 'offseason',
+            schedule: null,
+            resultsByWeek: [],
+            transactions: []
         };
 
-        // Delegate tasks to specialized functions
-        team.roster = initializeRoster(team, Constants, Utils, makePlayer);
-        team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils);
-
-        if (generateInitialStaff) {
-            team.staff = generateInitialStaff();
-        } else {
-             // Fallback staff generation
-             team.staff = {
-                headCoach: { name: 'Interim HC', ovr: 70 },
-                offCoordinator: { name: 'Interim OC', ovr: 70 },
-                defCoordinator: { name: 'Interim DC', ovr: 70 },
-                scout: { name: 'Head Scout', ovr: 70 }
+        // Main Orchestration Loop
+        league.teams = teams.map((teamData, index) => {
+            const team = {
+                ...teamData,
+                id: index,
+                // Explicitly initialize standings properties
+                wins: 0,
+                losses: 0,
+                ties: 0,
+                ptsFor: 0,
+                ptsAgainst: 0,
+                // Legacy record object for compatibility
+                record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
+                stats: { season: getZeroTeamStats(), game: getZeroTeamStats() },
+                history: [],
+                capTotal: Constants.SALARY_CAP?.BASE || 220,
+                deadCap: 0,
+                capRollover: 0,
+                capUsed: 0,
+                capRoom: Constants.SALARY_CAP?.BASE || 220
             };
-        }
 
-        // Initialize Coaching Stats
-        if (initializeCoachingStats) {
-             if (team.staff?.headCoach) initializeCoachingStats(team.staff.headCoach);
-        }
+            // Delegate tasks to specialized functions
+            team.roster = initializeRoster(team, Constants, Utils, makePlayer);
+            team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils);
 
-        // Set Strategies
-        team.strategies = {
-            offense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
-            defense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative'])
-        };
-
-        // Initial Cap Check
-        if (recalcCap) {
-            recalcCap(league, team);
-            
-            // Log warning if still over cap (sanity check)
-            if (team.capUsed > team.capTotal) {
-                console.warn(`⚠️ Team ${team.name || team.abbr} created over cap: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
+            if (generateInitialStaff) {
+                team.staff = generateInitialStaff();
+            } else {
+                 // Fallback staff generation
+                 team.staff = {
+                    headCoach: { name: 'Interim HC', ovr: 70 },
+                    offCoordinator: { name: 'Interim OC', ovr: 70 },
+                    defCoordinator: { name: 'Interim DC', ovr: 70 },
+                    scout: { name: 'Head Scout', ovr: 70 }
+                };
             }
-        } else {
-             // Fallback simple calc
-             team.capUsed = team.roster.reduce((sum, p) => sum + (p.baseAnnual || 0), 0);
-             team.capRoom = team.capTotal - team.capUsed;
-        }
 
-        return team;
-    });
+            // Initialize Coaching Stats
+            if (initializeCoachingStats) {
+                 if (team.staff?.headCoach) initializeCoachingStats(team.staff.headCoach);
+            }
 
-    // Final Setup
-    if (makeSchedule) {
-        league.schedule = makeSchedule(league.teams);
-    } else {
-        console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
-    }
+            // Set Strategies
+            team.strategies = {
+                offense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
+                defense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative'])
+            };
 
-    // Update state only once at the end
-    if (typeof window !== 'undefined') {
-        if (!window.state) window.state = {};
-        window.state.league = league;
-        window.state.year = league.year;
-        window.state.season = league.season;
-        window.state.week = league.week;
+            // Initial Cap Check
+            if (recalcCap) {
+                recalcCap(league, team);
 
-        // Update ratings if function exists
-        if (window.updateLeaguePlayers) {
-            window.updateLeaguePlayers(league);
-        }
-
-        if (window.updateAllTeamOveralls) {
-            window.updateAllTeamOveralls(league);
-        } else if (window.updateAllTeamRatings) {
-            window.updateAllTeamRatings(league);
-        } else {
-            // Simple rating calculation fallback
-            league.teams.forEach(t => {
-                if (t.roster.length) {
-                    const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
-                    t.ovr = Math.round(totalOvr / t.roster.length);
-                } else {
-                    t.ovr = 75;
+                // Log warning if still over cap (sanity check)
+                if (team.capUsed > team.capTotal) {
+                    console.warn(`⚠️ Team ${team.name || team.abbr} created over cap: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
                 }
-            });
+            } else {
+                 // Fallback simple calc
+                 team.capUsed = team.roster.reduce((sum, p) => sum + (p.baseAnnual || 0), 0);
+                 team.capRoom = team.capTotal - team.capUsed;
+            }
+
+            return team;
+        });
+
+        // Final Setup
+        if (makeSchedule) {
+            league.schedule = makeSchedule(league.teams);
+        } else {
+            console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
         }
-    }
+
+        // Update state only once at the end
+        if (typeof window !== 'undefined') {
+            if (!window.state) window.state = {};
+            window.state.league = league;
+            window.state.year = league.year;
+            window.state.season = league.season;
+            window.state.week = league.week;
+
+            // Update ratings if function exists
+            if (window.updateLeaguePlayers) {
+                window.updateLeaguePlayers(league);
+            }
+
+            if (window.updateAllTeamOveralls) {
+                window.updateAllTeamOveralls(league);
+            } else if (window.updateAllTeamRatings) {
+                window.updateAllTeamRatings(league);
+            } else {
+                // Simple rating calculation fallback
+                league.teams.forEach(t => {
+                    if (t.roster.length) {
+                        const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
+                        t.ovr = Math.round(totalOvr / t.roster.length);
+                    } else {
+                        t.ovr = 75;
+                    }
+                });
+            }
+        }
 
     console.log('✨ League creation complete and modularized!');
     return league;
+
+    } catch (error) {
+        console.error('CRITICAL: League generation failed:', error);
+        throw error;
+    }
 }
 
 // Make available globally and export
