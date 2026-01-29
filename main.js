@@ -326,21 +326,51 @@ class GameController {
             let opponent = null;
             let isHome = false;
             let currentWeek = L.week || 1;
+            let currentWeekGames = [];
 
             if (!isOffseason) {
+                // Support both legacy (Array of games per index) and new (Array of objects with weeks)
+                // New format: L.schedule is Array of { weekNumber: 1, games: [...] }
+                // Legacy format: L.schedule is Array of [game, game...] (flat) OR L.schedule.weeks
                 let scheduleWeeks = L.schedule?.weeks || L.schedule || [];
 
-                // Find current week data
-                const weekData = Array.isArray(scheduleWeeks) ?
-                    (scheduleWeeks.find(w => w && (w.weekNumber === currentWeek || w.week === currentWeek)) || scheduleWeeks[currentWeek - 1]) : null;
+                console.log(`[HUB-DEBUG] Resolving schedule for Week ${currentWeek}. Schedule type: ${Array.isArray(scheduleWeeks) ? 'Array' : typeof scheduleWeeks}`);
 
-                if (weekData && weekData.games) {
-                    nextGame = weekData.games.find(g => g.home === userTeamId || g.away === userTeamId);
-                    if (nextGame) {
-                        isHome = nextGame.home === userTeamId;
-                        const oppId = isHome ? nextGame.away : nextGame.home;
-                        opponent = L.teams[oppId];
+                // Find current week data
+                let weekData = null;
+
+                if (Array.isArray(scheduleWeeks)) {
+                    // Try to find by weekNumber property first
+                    weekData = scheduleWeeks.find(w => w && (w.weekNumber === currentWeek || w.week === currentWeek));
+
+                    // Fallback to index-based access (Week 1 is usually index 0)
+                    if (!weekData && scheduleWeeks[currentWeek - 1]) {
+                        weekData = scheduleWeeks[currentWeek - 1];
                     }
+                } else if (typeof scheduleWeeks === 'object') {
+                    // Handle object map { 1: [...], 2: [...] } if legacy persists
+                    weekData = scheduleWeeks[currentWeek];
+                }
+
+                if (weekData) {
+                    // Normalize games array
+                    currentWeekGames = Array.isArray(weekData) ? weekData : (weekData.games || []);
+
+                    if (currentWeekGames.length > 0) {
+                        nextGame = currentWeekGames.find(g => (g.home === userTeamId || g.home.id === userTeamId) || (g.away === userTeamId || g.away.id === userTeamId));
+
+                        if (nextGame) {
+                            // Ensure IDs are extracted correctly (handle object vs ID)
+                            const homeId = typeof nextGame.home === 'object' ? nextGame.home.id : nextGame.home;
+                            const awayId = typeof nextGame.away === 'object' ? nextGame.away.id : nextGame.away;
+
+                            isHome = homeId === userTeamId;
+                            const oppId = isHome ? awayId : homeId;
+                            opponent = L.teams[oppId];
+                        }
+                    }
+                } else {
+                    console.warn(`[HUB-DEBUG] No week data found for week ${currentWeek}`);
                 }
             }
 
@@ -718,6 +748,51 @@ class GameController {
                 `;
             }
 
+            // --- THIS WEEK'S GAMES (NEW) ---
+            let thisWeekGamesHTML = '';
+            if (!isOffseason && currentWeekGames.length > 0) {
+                thisWeekGamesHTML = `
+                    <div class="card mb-4">
+                        <h3>This Week's Games (Week ${currentWeek})</h3>
+                        <div class="games-list-preview" style="max-height: 300px; overflow-y: auto;">
+                            ${currentWeekGames.map(g => {
+                                const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                                const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                                const hTeam = L.teams[hId];
+                                const aTeam = L.teams[aId];
+                                const isUserGame = hId === userTeamId || aId === userTeamId;
+                                const isFinal = g.finalized || g.played;
+
+                                return `
+                                    <div class="game-row ${isUserGame ? 'user-game-row' : ''}" style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid var(--hairline); background: ${isUserGame ? 'rgba(52, 211, 153, 0.1)' : 'transparent'};">
+                                        <div style="flex: 1;">
+                                            <span style="${g.scoreAway > g.scoreHome ? 'font-weight:bold' : ''}">${aTeam ? aTeam.abbr : 'UNK'}</span>
+                                            ${isFinal ? `<span class="muted">${g.scoreAway}</span>` : ''}
+                                        </div>
+                                        <div style="flex: 0 0 20px; text-align: center;">@</div>
+                                        <div style="flex: 1; text-align: right;">
+                                            ${isFinal ? `<span class="muted">${g.scoreHome}</span>` : ''}
+                                            <span style="${g.scoreHome > g.scoreAway ? 'font-weight:bold' : ''}">${hTeam ? hTeam.abbr : 'UNK'}</span>
+                                        </div>
+                                        <div style="flex: 0 0 80px; text-align: right; margin-left: 10px;">
+                                            ${isFinal
+                                                ? `<span class="tag">Final</span>`
+                                                : (isUserGame
+                                                    ? `<button class="btn btn-xs primary" onclick="window.watchLiveGame(${hId}, ${aId})">Watch</button>`
+                                                    : `<span class="muted text-small">vs</span>`)
+                                            }
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        <div style="margin-top: 10px; text-align: center;">
+                            <button class="btn btn-sm secondary" onclick="location.hash='#/schedule'">View Full Schedule</button>
+                        </div>
+                    </div>
+                `;
+            }
+
             // --- TOP PLAYERS / MATCHUP PREVIEW ---
             let topPlayersHTML = '';
             if (userTeam && !isOffseason) {
@@ -861,6 +936,7 @@ class GameController {
                 ${matchupStripHTML}
                 ${managerPanelHTML}
                 ${newsHTML}
+                ${thisWeekGamesHTML}
                 ${topPlayersHTML}
                 <div class="card">
                     <h2>Team Hub</h2>
@@ -1147,6 +1223,7 @@ class GameController {
         }
 
         // Proceed
+        console.log('[GameController] Global Advance triggered');
         this.handleSimulateWeek();
     }
 
@@ -1164,13 +1241,22 @@ class GameController {
             const currentWeek = window.state?.league?.week || 1;
 
             if (simulateWeek) {
+                console.log('[GameController] Calling simulateWeek()');
                 simulateWeek();
-                this.saveGameState(); // Auto-save after week
+
+                // Save is handled inside simulateWeek (via saveState), but redundancy is fine
+                this.saveGameState();
+
                 this.setStatus('Week simulated successfully', 'success');
+
+                // Force UI Refresh
+                this.renderHub();
+                if (window.renderSchedule) window.renderSchedule();
 
                 // Show Recap
                 const L = window.state.league;
                 const results = L.resultsByWeek[currentWeek - 1]; // Results are 0-indexed
+
                 // Ensure results exist before showing recap
                 if (results) {
                     setTimeout(() => {
@@ -1178,18 +1264,9 @@ class GameController {
                     }, 500);
                 }
 
-            } else if (window.state?.league) {
-                // Fallback
-                const L = window.state.league;
-                if (L.week < 18) {
-                    L.week++;
-                    this.setStatus(`Advanced to week ${L.week}`, 'success');
-                    setTimeout(() => this.renderHub(), 1000);
-                } else {
-                    this.setStatus('Season complete!', 'success');
-                }
             } else {
-                this.setStatus('No league data available', 'error');
+                console.error('[GameController] simulateWeek function missing');
+                this.setStatus('Simulation function not available', 'error');
             }
         } catch (error) {
             console.error('Error simulating week:', error);

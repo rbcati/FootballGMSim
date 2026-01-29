@@ -1691,11 +1691,18 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
-    // Start game but instead of showing modal, route to view
-    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+    // 1. Ensure we are on the correct view
+    if (location.hash !== '#/game-sim') {
+        location.hash = '#/game-sim';
+    }
 
-    // If not in view mode yet, route there
-    location.hash = '#/game-sim';
+    // 2. Initialize UI immediately
+    // Wait a tick for router to potentially show the section
+    setTimeout(() => {
+        window.liveGameViewer.renderToView('#game-sim');
+        // 3. Start Game
+        window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+    }, 50);
 
   } catch (error) {
     console.error('Error starting live game:', error);
