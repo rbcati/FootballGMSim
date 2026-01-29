@@ -478,79 +478,148 @@ class GameController {
                     return 'inherit';
                 };
 
-                // --- HTML CONSTRUCTION ---
+                // --- HTML CONSTRUCTION (IMPROVED) ---
                 headerDashboardHTML = `
-                    <div class="card mb-4" style="background: linear-gradient(to right, #1a202c, #2d3748); color: white; border-left: 4px solid var(--accent); padding: 12px 16px;">
-                        <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.2fr 1fr; gap: 15px; align-items: center;">
+                    <div class="team-header">
+                        <div class="team-primary-info">
+                            <h1 class="team-name">${userTeam.name}</h1>
+                            <div class="team-record">
+                                ${wins}-${losses}-${ties} <span style="font-size: 0.8em; opacity: 0.7;">(${streakStr})</span>
+                            </div>
+                            <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 4px;">
+                                <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span> • #${confRank} Conf
+                                <div style="font-size: 0.8rem; color: ${playoffColor}; font-weight: 600;">${playoffStatus}</div>
+                            </div>
+                        </div>
 
-                            <!-- 1. Team Identity -->
-                            <div>
-                                <div style="font-size: 1.8rem; font-weight: 800; line-height: 1.1;">
-                                    ${wins}-${losses}-${ties}
-                                    <span style="font-size: 1rem; opacity: 0.8; font-weight: 600; margin-left: 8px;">${streakStr}</span>
-                                </div>
-                                <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 4px;">
-                                    <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span> • #${confRank} Conf
-                                    <div style="font-size: 0.8rem; color: ${playoffColor}; font-weight: 600;">${playoffStatus}</div>
-                                </div>
-                                <div style="margin-top: 10px; font-size: 0.85rem; font-weight: 500; line-height: 1.4; opacity: 0.9;">
-                                    <div style="display: flex; gap: 12px;">
-                                        <span style="color: ${getRankColor(userRanks.passOff)}">Pass O #${userRanks.passOff}</span>
-                                        <span style="opacity: 0.4">•</span>
-                                        <span style="color: ${getRankColor(userRanks.rushOff)}">Rush O #${userRanks.rushOff}</span>
-                                    </div>
-                                    <div style="display: flex; gap: 12px;">
-                                        <span style="color: ${getRankColor(userRanks.passDef)}">Pass D #${userRanks.passDef}</span>
-                                        <span style="opacity: 0.4">•</span>
-                                        <span style="color: ${getRankColor(userRanks.rushDef)}">Rush D #${userRanks.rushDef}</span>
-                                    </div>
-                                </div>
+                        <div class="team-stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-label">Overall</div>
+                                <div class="stat-value">${ovr}</div>
                             </div>
 
-                            <!-- 2. Performance Specs -->
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.9rem;">
-                                <div>
-                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Overall</div>
-                                    <div style="font-weight: 800; font-size: 1.4rem;">${ovr}</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Off / Def</div>
-                                    <div style="font-weight: 700; font-size: 1.1rem;">
-                                        <span style="color: #60a5fa;">${offOvr}</span> / <span style="color: #f87171;">${defOvr}</span>
-                                    </div>
-                                </div>
-                                <div style="grid-column: span 2; display: flex; gap: 10px; font-size: 0.8rem; margin-top: 4px;">
-                                    <div><span style="color: #48bb78;">Strong:</span> ${strengths}</div>
-                                    <div><span style="color: #f87171;">Weak:</span> ${weaknesses}</div>
-                                </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Offense</div>
+                                <div class="stat-value" style="color: #60a5fa;">${offOvr}</div>
                             </div>
 
-                            <!-- 3. Front Office -->
-                            <div style="border-left: 1px solid rgba(255,255,255,0.1); padding-left: 15px;">
-                                <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Owner Grade</div>
-                                <div style="font-weight: 800; font-size: 1.4rem; color: ${ownerGrade === 'A' || ownerGrade === 'B' ? '#48bb78' : ownerGrade === 'F' ? '#f87171' : '#fbbf24'};">${ownerGrade} <span style="font-size: 0.9rem; font-weight: 400; color: white;">(${fanSat}%)</span></div>
-                                <div style="font-size: 0.85rem; margin-top: 4px;">
-                                    Cap: <span style="font-weight: 700; color: ${capColor};">$${capSpace}M</span>
-                                </div>
+                            <div class="stat-card">
+                                <div class="stat-label">Defense</div>
+                                <div class="stat-value" style="color: #f87171;">${defOvr}</div>
                             </div>
 
-                            <!-- 4. Next Opponent Action -->
-                            <div style="text-align: right;">
+                            <div class="stat-card">
+                                <div class="stat-label">Cap Space</div>
+                                <div class="stat-value" style="color: ${capColor}; font-size: 1.2rem;">$${capSpace}M</div>
+                            </div>
+
+                            <div class="stat-card" style="border: 1px solid rgba(255, 255, 255, 0.2);">
+                                <div class="stat-label">Next Game</div>
                                 ${opponent ? `
-                                    <div style="font-size: 0.75rem; text-transform: uppercase; color: #a0aec0;">Week ${currentWeek}</div>
-                                    <div style="font-weight: 700; font-size: 1rem; margin-bottom: 6px;">
+                                    <div style="font-weight: bold; font-size: 1.1rem; color: white;">
                                         ${isHome ? 'vs' : '@'} ${opponent.abbr}
-                                        <span style="font-size: 0.8rem; opacity: 0.8;">(${opponent.ratings?.overall || 70})</span>
                                     </div>
-                                    ${!isOffseason ? `<button class="btn btn-sm primary" style="width: 100%; justify-content: center;" onclick="if(window.watchLiveGame) { window.watchLiveGame(${userTeamId}, ${opponent.id}); }">Watch</button>` : ''}
+                                    <div style="font-size: 0.8rem; color: #aaa;">Week ${currentWeek}</div>
                                 ` : `
-                                    <div style="font-weight: 700;">BYE WEEK</div>
-                                    ${!isOffseason ? '<button class="btn btn-sm" onclick="if(window.gameController) window.gameController.handleGlobalAdvance();">Sim</button>' : ''}
+                                    <div style="font-weight: bold; font-size: 1.1rem; color: white;">BYE</div>
                                 `}
                             </div>
-
                         </div>
                     </div>
+
+                    <style>
+                    /* Improve top header spacing and sizing */
+                    .team-header {
+                        padding: 20px;
+                        background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+                        border-radius: 12px;
+                        margin-bottom: 20px;
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 20px;
+                    }
+
+                    .team-primary-info {
+                        flex: 1;
+                        min-width: 250px;
+                    }
+
+                    .team-name {
+                        font-size: 28px;
+                        font-weight: bold;
+                        margin-bottom: 8px;
+                        margin-top: 0;
+                        color: white;
+                    }
+
+                    .team-record {
+                        font-size: 24px;
+                        color: #00d4ff;
+                        font-weight: 600;
+                        margin-bottom: 8px;
+                    }
+
+                    .team-stats-grid {
+                        display: flex;
+                        gap: 15px;
+                        flex-wrap: wrap;
+                        flex: 2;
+                        justify-content: flex-end;
+                    }
+
+                    .stat-card {
+                        background: rgba(255, 255, 255, 0.05);
+                        padding: 12px 15px;
+                        border-radius: 8px;
+                        text-align: center;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        min-width: 90px;
+                        flex: 1;
+                    }
+
+                    .stat-card .stat-label {
+                        font-size: 11px;
+                        color: #999;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        margin-bottom: 6px;
+                    }
+
+                    .stat-card .stat-value {
+                        font-size: 22px;
+                        font-weight: bold;
+                        color: white;
+                    }
+
+                    /* Mobile adjustments */
+                    @media (max-width: 768px) {
+                        .team-header {
+                            padding: 16px;
+                            flex-direction: column;
+                            align-items: flex-start;
+                        }
+
+                        .team-stats-grid {
+                            width: 100%;
+                            display: grid;
+                            grid-template-columns: repeat(3, 1fr);
+                        }
+
+                        .team-name {
+                            font-size: 24px;
+                        }
+
+                        .team-record {
+                            font-size: 20px;
+                        }
+
+                        .stat-value {
+                            font-size: 18px;
+                        }
+                    }
+                    </style>
                 `;
             }
 
@@ -1847,7 +1916,24 @@ class GameController {
             }
 
             if (hasSaves) {
-                // Saves exist: Go to Dashboard (Entry Screen)
+                // Check if we can resume the last played league
+                const lastLeague = window.getLastPlayedLeague ? window.getLastPlayedLeague() : null;
+                if (lastLeague && window.loadLeague) {
+                    const loaded = window.loadLeague(lastLeague); // This updates window.state
+                    if (loaded) {
+                        console.log("Resuming last played league:", lastLeague);
+                        this.initialized = true;
+                        this.setupEventListeners();
+                        this.setupAutoSave();
+                        // Route to hub (or current view if saved)
+                        const savedView = window.state.currentView || 'hub';
+                        location.hash = `#/${savedView}`;
+                        this.router(savedView);
+                        return; // Skip dashboard
+                    }
+                }
+
+                // Saves exist but resume failed or no last played: Go to Dashboard (Entry Screen)
                 console.log('Saves found, routing to dashboard.');
                 location.hash = '#/leagueDashboard';
                 // Explicitly call router since listeners might not be ready
@@ -1949,33 +2035,25 @@ class GameController {
         const sidebar = document.getElementById('nav-sidebar');
         const overlay = document.getElementById('menu-overlay');
 
-        // Initial setup for mobile
-        if (window.innerWidth <= 768) {
-            if (sidebar && !sidebar.classList.contains('collapsed')) {
-                sidebar.classList.add('collapsed');
-            }
-        }
-
-        function toggleMenu() {
-            // Toggle collapsed class (collapsed = hidden)
-            if (sidebar) sidebar.classList.toggle('collapsed');
-
-            // Toggle active on overlay (active = visible)
-            if (overlay) overlay.classList.toggle('active');
-
-            // Toggle body class for styling if needed
-            document.body.classList.toggle('nav-open');
-        }
+        // Note: ui-interactions.js also handles mobile menu toggle.
+        // We ensure this handler cooperates or delegates.
 
         if (menuBtn) {
             this.addEventListener(menuBtn, 'click', (e) => {
                 e.preventDefault();
-                toggleMenu();
+                // Simple toggle using class expected by CSS
+                document.body.classList.toggle('nav-open');
+                if (sidebar) sidebar.classList.toggle('nav-open');
+                if (overlay) overlay.classList.toggle('active');
             });
         }
 
         if (overlay) {
-             this.addEventListener(overlay, 'click', toggleMenu);
+             this.addEventListener(overlay, 'click', () => {
+                document.body.classList.remove('nav-open');
+                if (sidebar) sidebar.classList.remove('nav-open');
+                if (overlay) overlay.classList.remove('active');
+             });
         }
 
         // FIX: Dashboard Button
