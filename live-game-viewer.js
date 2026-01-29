@@ -1,5 +1,5 @@
 // live-game-viewer.js - Live game simulation with play-by-play and play calling
-import { finalizeGameResult } from './game-simulator.js';
+import { commitGameResult } from './game-simulator.js';
 
 'use strict';
 
@@ -1281,11 +1281,11 @@ class LiveGameViewer {
         preGameContext: this.preGameContext // PASS CONTEXT
     };
 
-    const result = finalizeGameResult(L, gameData);
+    const result = commitGameResult(L, gameData);
 
     if (result) {
         console.log("Game finalized successfully:", result);
-        // saveState is now called within finalizeGameResult
+        // saveState is now called within commitGameResult
         if (window.setStatus) window.setStatus("Game Saved!", "success");
     } else {
         console.error("Failed to finalize game: Result was null");
