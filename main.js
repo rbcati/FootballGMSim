@@ -7,7 +7,7 @@ import { hasSavedLeagues } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
-import { simulateWeek } from './simulation.js';
+import { simulateWeek, startNewSeason } from './simulation.js';
 import { initErrorBoundary } from './error-boundary.js';
 import { showLoading, hideLoading } from './loading-spinner.js';
 import { getTrackedPlayerUpdates, getFollowedPlayers } from './player-tracking.js';
@@ -1244,8 +1244,8 @@ class GameController {
             }
             if (btnStartNewSeason) {
                 btnStartNewSeason.addEventListener('click', () => {
-                    if (typeof window.startNewSeason === 'function') {
-                        window.startNewSeason();
+                    if (startNewSeason) {
+                        startNewSeason();
                     } else {
                         this.setStatus('Error: startNewSeason function not available', 'error');
                     }
@@ -1371,8 +1371,8 @@ class GameController {
                 const startWeek = L.week;
 
                 // Simulate week without rendering full UI
-                if (window.simulateWeek) {
-                    window.simulateWeek({ render: false });
+                if (simulateWeek) {
+                    simulateWeek({ render: false });
                 } else {
                     // Fallback logic if simulateWeek not available
                     L.week++;

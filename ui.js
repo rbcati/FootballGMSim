@@ -2,6 +2,7 @@ import { generateAITradeProposals, renderTradeProposals } from './tradeproposals
 import { saveState } from './state.js';
 import { generateDepthChart, renderDepthChart, movePlayerDepth, initializeDepthChartStats, calculateEffectiveRating, generateDraftClass } from './player.js';
 import { toggleFollow, getPlayerInterestReason } from './player-tracking.js';
+import { startNewSeason } from './simulation.js';
 
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
@@ -1072,8 +1073,8 @@ window.renderHub = function() {
                 const btnStartNewSeason = document.getElementById('btnStartNewSeason');
                 if (btnStartNewSeason) {
                     btnStartNewSeason.onclick = function() {
-                        if (window.startNewSeason) {
-                            window.startNewSeason();
+                        if (startNewSeason) {
+                            startNewSeason();
                         } else {
                             window.setStatus('Error: startNewSeason function not available', 'error');
                         }
