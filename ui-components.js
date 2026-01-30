@@ -61,10 +61,12 @@
    */
   class Card extends Component {
     renderHTML() {
-      const { title, className = '', children = '', actions = '' } = this.props;
+      const { title, className = '', style = '', children = '', actions = '' } = this.props;
+
+      const styleAttr = style ? `style="${style}"` : '';
       
       return `
-        <div class="card ${className}">
+        <div class="card ${className}" ${styleAttr}>
           ${title ? `<h3>${title}</h3>` : ''}
           <div class="card-content">
             ${children}

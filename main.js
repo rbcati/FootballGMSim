@@ -651,10 +651,10 @@ class GameController {
                         const card = new window.Card({
                             title: 'Action Items',
                             className: 'mb-4 action-items',
+                            style: `border-left: 4px solid ${borderColor};`,
                             children: `<div class="action-list">${listContent}</div>`
                         });
-                        // Hack to inject style for border color since Card component doesn't support style prop yet
-                        actionItemsHTML = card.renderHTML().replace('class="card', `style="border-left: 4px solid ${borderColor};" class="card`);
+                        actionItemsHTML = card.renderHTML();
                     } else {
                         // Fallback
                         actionItemsHTML = `
