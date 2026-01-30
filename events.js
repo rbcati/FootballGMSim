@@ -1,6 +1,7 @@
 'use strict';
 
 import { saveState, loadState } from './state.js';
+import { simulateWeek } from './simulation.js';
 
 /**
  * Handles core game events (onboarding, saving, loading, simulating).
@@ -330,9 +331,7 @@ async function handleSimulateWeek(button) {
             button.textContent = 'Simulating...';
         }
         await new Promise(resolve => setTimeout(resolve, 50));
-        if (window.simulateWeek) {
-            window.simulateWeek();
-        }
+        simulateWeek();
     } catch (error) {
         console.error('Error in handleSimulateWeek:', error);
         window.setStatus(`Error: ${error.message}`, 'error');
