@@ -1,5 +1,72 @@
 const DB_KEY_PREFIX = 'football_gm_league_';
+const METADATA_KEY = 'football_gm_leagues_metadata';
 const LAST_PLAYED_KEY = 'football_gm_last_played';
+
+// Metadata helpers
+function saveLeagueMetadata(meta) {
+    try {
+        localStorage.setItem(METADATA_KEY, JSON.stringify(meta));
+    } catch (e) {
+        console.error("Failed to save league metadata:", e);
+    }
+}
+
+function rebuildMetadata() {
+    console.log("Rebuilding league metadata...");
+    const meta = {};
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(DB_KEY_PREFIX)) {
+            try {
+                const raw = localStorage.getItem(key);
+                const league = JSON.parse(raw);
+                if (league && league.name) {
+                    meta[league.name] = {
+                        name: league.name,
+                        team: league.team || "Unknown",
+                        year: league.year || 2025,
+                        lastPlayed: league.lastPlayed || new Date().toLocaleString()
+                    };
+                }
+            } catch (e) {
+                console.error("Error parsing league for metadata:", key, e);
+            }
+        }
+    }
+    saveLeagueMetadata(meta);
+    return meta;
+}
+
+function getLeagueMetadata() {
+    const raw = localStorage.getItem(METADATA_KEY);
+    if (raw) {
+        try {
+            return JSON.parse(raw);
+        } catch (e) {
+            console.warn("Corrupt metadata, rebuilding...");
+        }
+    }
+    return rebuildMetadata();
+}
+
+function updateLeagueMetadata(leagueData) {
+    const meta = getLeagueMetadata();
+    meta[leagueData.name] = {
+        name: leagueData.name,
+        team: leagueData.team,
+        year: leagueData.year,
+        lastPlayed: leagueData.lastPlayed
+    };
+    saveLeagueMetadata(meta);
+}
+
+function removeLeagueMetadata(leagueName) {
+    const meta = getLeagueMetadata();
+    if (meta[leagueName]) {
+        delete meta[leagueName];
+        saveLeagueMetadata(meta);
+    }
+}
 
 // Helper to manage last played league
 export function getLastPlayedLeague() {
@@ -58,6 +125,10 @@ export function saveGame(stateToSave) {
     try {
         localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
         setLastPlayedLeague(leagueName); // Update last played
+
+        // Update metadata index for performance
+        updateLeagueMetadata(saveData);
+
         if (window.setStatus) window.setStatus("League saved: " + leagueName, "success");
         console.log("Game saved successfully to " + leagueName);
         renderDashboard();
@@ -137,57 +208,74 @@ export function renderDashboard() {
     let hasLeagues = false;
     let leagueCount = 0;
 
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(DB_KEY_PREFIX)) {
-            hasLeagues = true;
-            leagueCount++;
-            try {
-                const raw = localStorage.getItem(key);
-                const league = JSON.parse(raw);
+    // Use metadata index for performance instead of iterating all storage
+    const metadata = getLeagueMetadata();
+    const sortedLeagues = Object.values(metadata).sort((a, b) => {
+        // Sort by last played descending (newest first)
+        return new Date(b.lastPlayed) - new Date(a.lastPlayed);
+    });
 
-                const row = document.createElement('tr');
-                row.style.cursor = 'pointer';
-                // Explicit onclick handler for robustness as requested
-                row.setAttribute('onclick', `if(!event.target.closest('.btn')) window.loadLeague('${league.name.replace(/'/g, "\\'")}')`);
-                row.innerHTML = `
-                    <td><strong>${league.name}</strong></td>
-                    <td>${league.team}</td>
-                    <td>${league.year}</td>
-                    <td>${league.lastPlayed}</td>
-                    <td>
-                        <div class="row">
-                            <button class="btn-load btn primary btn-sm" style="margin-right:5px">Play</button>
-                            <button class="btn-danger btn danger btn-sm">Delete</button>
-                        </div>
-                    </td>
-                `;
-                list.appendChild(row);
-
-                // Add event listeners safely
-                const loadBtn = row.querySelector('.btn-load');
-                const delBtn = row.querySelector('.btn-danger');
-
-                // Make entire row clickable for loading (Listener + Attribute for safety)
-                row.addEventListener('click', (e) => {
-                    // Prevent firing if clicking buttons specifically
-                    if (e.target.closest('.btn')) return;
-                    loadLeague(league.name);
-                });
-
-                if (loadBtn) loadBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    loadLeague(league.name);
-                };
-                if (delBtn) delBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    deleteLeague(league.name);
-                };
-
-            } catch (e) {
-                console.error("Error parsing league", key, e);
+    let dirty = false;
+    for (const league of sortedLeagues) {
+        // Verify existence cheaply (O(1)) without parsing full file
+        if (!localStorage.getItem(DB_KEY_PREFIX + league.name)) {
+            // Self-healing: remove from metadata if file is gone
+            if (metadata[league.name]) {
+                delete metadata[league.name];
+                dirty = true;
             }
+            continue;
         }
+
+        hasLeagues = true;
+        leagueCount++;
+
+        try {
+            const row = document.createElement('tr');
+            row.style.cursor = 'pointer';
+            // Explicit onclick handler for robustness as requested
+            row.setAttribute('onclick', `if(!event.target.closest('.btn')) window.loadLeague('${league.name.replace(/'/g, "\\'")}')`);
+            row.innerHTML = `
+                <td><strong>${league.name}</strong></td>
+                <td>${league.team}</td>
+                <td>${league.year}</td>
+                <td>${league.lastPlayed}</td>
+                <td>
+                    <div class="row">
+                        <button class="btn-load btn primary btn-sm" style="margin-right:5px">Play</button>
+                        <button class="btn-danger btn danger btn-sm">Delete</button>
+                    </div>
+                </td>
+            `;
+            list.appendChild(row);
+
+            // Add event listeners safely
+            const loadBtn = row.querySelector('.btn-load');
+            const delBtn = row.querySelector('.btn-danger');
+
+            // Make entire row clickable for loading (Listener + Attribute for safety)
+            row.addEventListener('click', (e) => {
+                // Prevent firing if clicking buttons specifically
+                if (e.target.closest('.btn')) return;
+                loadLeague(league.name);
+            });
+
+            if (loadBtn) loadBtn.onclick = (e) => {
+                e.stopPropagation();
+                loadLeague(league.name);
+            };
+            if (delBtn) delBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteLeague(league.name);
+            };
+
+        } catch (e) {
+            console.error("Error rendering league row", league.name, e);
+        }
+    }
+
+    if (dirty) {
+        saveLeagueMetadata(metadata);
     }
 
     const noLeaguesMsg = document.getElementById('no-leagues-msg');
@@ -267,6 +355,8 @@ export function loadLeague(leagueName) {
 export function deleteLeague(leagueName) {
     if (confirm(`Delete league "${leagueName}"? This cannot be undone.`)) {
         localStorage.removeItem(DB_KEY_PREFIX + leagueName);
+        removeLeagueMetadata(leagueName);
+
         if (getLastPlayedLeague() === leagueName) {
             localStorage.removeItem(LAST_PLAYED_KEY);
         }
