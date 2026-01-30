@@ -1207,8 +1207,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     }
 
     const { homeTeamId, awayTeamId, homeScore, awayScore, stats } = gameData;
-    const home = league.teams.find(t => t.id === homeTeamId);
-    const away = league.teams.find(t => t.id === awayTeamId);
+    const home = league.teams.find(t => t && t.id === homeTeamId);
+    const away = league.teams.find(t => t && t.id === awayTeamId);
 
     if (!home || !away) {
         throw new Error(`Teams not found: ${homeTeamId}, ${awayTeamId}`);
@@ -1255,8 +1255,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             }
         } else if (Array.isArray(league.schedule)) {
              scheduledGame = league.schedule.find(g =>
-                (g.home === homeTeamId || g.home.id === homeTeamId) &&
-                (g.away === awayTeamId || g.away.id === awayTeamId)
+                (g.home === homeTeamId || (g.home && g.home.id === homeTeamId)) &&
+                (g.away === awayTeamId || (g.away && g.away.id === awayTeamId))
             );
         }
     }

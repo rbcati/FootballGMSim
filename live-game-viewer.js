@@ -26,6 +26,16 @@ class LiveGameViewer {
   }
 
   /**
+   * Helper to check if UI is available
+   */
+  checkUI() {
+    if (this.viewMode) {
+      return this.container && document.body.contains(this.container);
+    }
+    return this.modal && document.body.contains(this.modal);
+  }
+
+  /**
    * Render to a specific view container instead of modal
    */
   renderToView(containerId) {
@@ -868,10 +878,10 @@ class LiveGameViewer {
       return;
     }
 
-    // Check UI existence
-    if (!this.viewMode && !this.modal) {
-        console.warn('LiveGameViewer: Modal missing, stopping playback.');
-        this.destroy();
+    // CRITICAL FIX: If UI is missing, we must FINISH the game safely, not destroy it.
+    if (!this.checkUI()) {
+        console.warn('LiveGameViewer: UI missing, skipping to end to save state.');
+        this.skipToEnd();
         return;
     }
 
@@ -933,8 +943,8 @@ class LiveGameViewer {
    * Render a play to the UI
    */
   renderPlay(play) {
+    if (!this.checkUI()) return; // Safety guard
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
@@ -1006,8 +1016,8 @@ class LiveGameViewer {
    * Update scoreboard display
    */
   updateScoreboard() {
+    if (!this.checkUI()) return; // Safety guard
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     const scoreboard = parent.querySelector('.scoreboard');
     if (!scoreboard || !this.gameState) return;
@@ -1047,8 +1057,8 @@ class LiveGameViewer {
    * Show play calling interface
    */
   showPlayCalling() {
+    if (!this.checkUI()) return;
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     // Check if we need to inject the buttons for view mode
     if (this.viewMode) {
@@ -1122,8 +1132,8 @@ class LiveGameViewer {
    * Hide play calling interface
    */
   hidePlayCalling() {
+    if (!this.checkUI()) return;
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     const playCalling = parent.querySelector('.play-calling');
     if (playCalling) {
@@ -1147,6 +1157,7 @@ class LiveGameViewer {
 
   /**
    * Skip to end of game
+   * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
    */
   skipToEnd() {
       if (this.intervalId) {
@@ -1159,6 +1170,7 @@ class LiveGameViewer {
       this.isPlaying = true;
       this.isSkipping = true;
 
+      // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
       let playsSimulated = 0;
 
       while (!this.gameState.gameComplete && playsSimulated < 500) {
@@ -1172,18 +1184,30 @@ class LiveGameViewer {
           const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
 
           this.playByPlay.push(play);
-          this.renderPlay(play);
+          // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
+          // However, we DO update the state
           this.updateGameState(play, state);
           this.handleEndOfQuarter(state);
       }
 
       this.isSkipping = false;
-      this.renderGame();
-      this.endGame();
 
-      // Scroll log to bottom
-      const playLog = this.modal.querySelector('.play-log');
-      if (playLog) playLog.scrollTop = playLog.scrollHeight;
+      // 1. SAVE FIRST (Persistence)
+      this.finalizeGame();
+
+      // 2. Update UI if it exists (Safe DOM Access)
+      if (this.checkUI()) {
+          this.renderGame();
+          // Scroll log to bottom safely
+          const parent = this.viewMode ? this.container : this.modal;
+          if (parent) {
+             const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
+             if (playLog) playLog.scrollTop = playLog.scrollHeight;
+          }
+      }
+
+      // 3. Cleanup
+      this.endGame();
   }
 
   /**
@@ -1191,8 +1215,8 @@ class LiveGameViewer {
    */
   setTempo(tempo) {
     this.tempo = tempo;
+    if (!this.checkUI()) return;
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     // Support both new control-btn and old tempo-btn classes
     const selector = this.viewMode ? `button[data-tempo="${tempo}"]` : `.tempo-btn[data-tempo="${tempo}"]`;
@@ -1210,8 +1234,8 @@ class LiveGameViewer {
    */
   togglePause() {
     this.isPaused = !this.isPaused;
+    if (!this.checkUI()) return;
     const parent = this.viewMode ? this.container : this.modal;
-    if (!parent) return;
 
     // Support both new control-btn and old pause-btn
     const btn = this.viewMode ? parent.querySelector('#btnPlayPause') : parent.querySelector('.pause-btn');
@@ -1229,7 +1253,11 @@ class LiveGameViewer {
    * End game
    */
   endGame() {
-    if (this.isGameEnded) return;
+    if (this.isGameEnded) {
+        // Double check save if called redundantly
+        this.finalizeGame();
+        return;
+    }
     this.isGameEnded = true;
 
     this.isPlaying = false;
@@ -1241,20 +1269,19 @@ class LiveGameViewer {
     }
 
     // Show final stats safely
-    const parent = this.viewMode ? this.container : this.modal;
-    if (parent) {
+    if (this.checkUI()) {
+        const parent = this.viewMode ? this.container : this.modal;
         const finalStats = parent.querySelector('.final-stats');
         if (finalStats) {
             finalStats.style.display = 'block';
         }
-    } else {
-        console.warn('LiveGameViewer: UI missing during endGame');
     }
 
     if (this.onGameEndCallback) {
       this.onGameEndCallback(this.gameState);
     }
 
+    // ENSURE SAVE
     this.finalizeGame();
   }
 
@@ -1272,6 +1299,12 @@ class LiveGameViewer {
     const L = window.state?.league;
     if (!L) return;
 
+    // Add safeguards for gameState null
+    if (!this.gameState || !this.gameState.home) {
+        console.error("Cannot finalize game: Invalid gameState");
+        return;
+    }
+
     const gameData = {
         homeTeamId: this.gameState.home.team.id,
         awayTeamId: this.gameState.away.team.id,
@@ -1281,17 +1314,21 @@ class LiveGameViewer {
         preGameContext: this.preGameContext // PASS CONTEXT
     };
 
-    const result = commitGameResult(L, gameData);
+    try {
+        const result = commitGameResult(L, gameData);
 
-    if (result) {
-        console.log("Game finalized successfully:", result);
-        // saveState is now called within commitGameResult
-        if (window.setStatus) window.setStatus("Game Saved!", "success");
-    } else {
-        console.error("Failed to finalize game: Result was null");
-        if (window.setStatus) window.setStatus("Error: Could not save game result. Please try again.", "error");
-        // Reset flag so user can try again (e.g. if they fix the issue)
-        this.hasAppliedResult = false;
+        if (result) {
+            console.log("Game finalized successfully:", result);
+            // saveState is now called within commitGameResult
+            if (window.setStatus) window.setStatus("Game Saved!", "success");
+        } else {
+            console.error("Failed to finalize game: Result was null");
+            if (window.setStatus) window.setStatus("Error: Could not save game result. Please try again.", "error");
+            this.hasAppliedResult = false;
+        }
+    } catch (e) {
+        console.error("Exception in finalizeGame:", e);
+        if (window.setStatus) window.setStatus("CRITICAL ERROR SAVING GAME", "error");
     }
   }
 
@@ -1401,6 +1438,7 @@ class LiveGameViewer {
    * Render game UI
    */
   renderGame() {
+    if (!this.checkUI()) return;
     if (!this.gameState) return;
     this.updateScoreboard();
     this.renderBoxScore();
@@ -1412,9 +1450,9 @@ class LiveGameViewer {
    * Render Box Score
    */
   renderBoxScore() {
+      if (!this.checkUI()) return;
       if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
-      if (!parent) return;
 
       const container = parent.querySelector('.box-score-panel');
       if (!container) return;
@@ -1447,9 +1485,9 @@ class LiveGameViewer {
    * Render Momentum
    */
   renderMomentum() {
+      if (!this.checkUI()) return;
       if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
-      if (!parent) return;
 
       const container = parent.querySelector('.momentum-panel');
       if (!container) return;
@@ -1474,9 +1512,9 @@ class LiveGameViewer {
    * Render Game Stats
    */
   renderGameStats() {
+      if (!this.checkUI()) return;
       if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
-      if (!parent) return;
 
       const container = parent.querySelector('.stats-panel');
       if (!container) return;
@@ -1561,14 +1599,14 @@ class LiveGameViewer {
           const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
 
           this.playByPlay.push(play);
-          this.renderPlay(play);
+          this.renderPlay(play); // Safe guarded
           this.updateGameState(play, state);
           this.handleEndOfQuarter(state);
       }
 
       this.isSkipping = false;
       this.isPaused = true; // Pause after drive
-      this.renderGame();
+      this.renderGame(); // Safe guarded
   }
 
   /**
