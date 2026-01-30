@@ -106,8 +106,10 @@ export class FootballDB {
         // we'll use the game_id index.
         const playerStats = new Map(); // player_id -> { rush_yards: 0, ... }
 
-        for (const gameId of gameIds) {
-            const logs = await this.getLogsByGameId(gameId);
+        const logsPromises = gameIds.map(gameId => this.getLogsByGameId(gameId));
+        const allLogs = await Promise.all(logsPromises);
+
+        for (const logs of allLogs) {
             for (const log of logs) {
                 if (log.play_type === 'run') { // Matches python: WHERE play_type = 'run'
                     const pid = log.player_id;
