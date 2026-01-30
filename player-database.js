@@ -168,8 +168,27 @@
       }
     });
 
+    // Pre-calculate view data for performance
+    const enhancedPlayers = allPlayers.map(player => {
+      const legacy = player.legacy || {};
+      const metrics = legacy.metrics || {};
+      const awards = legacy.awards || {};
+      const legacyScore = metrics.legacyScore || 0;
+      const hofThreshold = window.getHOFThreshold ? window.getHOFThreshold(player.pos) : 70;
+      const hofProgress = Math.min(100, (legacyScore / hofThreshold) * 100);
+      const totalAwards = (awards.playerOfYear || 0) + (awards.allPro || 0) + (awards.proBowl || 0) + (awards.rookie || 0);
+
+      return {
+        ...player,
+        _legacyScore: legacyScore,
+        _hofThreshold: hofThreshold,
+        _hofProgress: hofProgress,
+        _totalAwards: totalAwards
+      };
+    });
+
     // Sort players by OVR (descending)
-    const sortedPlayers = [...allPlayers].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    const sortedPlayers = enhancedPlayers.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
 
     // Filter options
     let html = `
@@ -326,9 +345,7 @@
       filtered.sort((a, b) => {
         switch(sortBy) {
           case 'legacy':
-            const aLegacy = a.legacy?.metrics?.legacyScore || 0;
-            const bLegacy = b.legacy?.metrics?.legacyScore || 0;
-            return bLegacy - aLegacy;
+            return (b._legacyScore || 0) - (a._legacyScore || 0);
           case 'age':
             return (b.age || 0) - (a.age || 0);
           case 'name':
