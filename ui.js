@@ -1971,8 +1971,13 @@ window.viewPlayerStats = function(playerId) {
 
   // Try to show detailed player card first (if player found)
   if (player && window.showPlayerDetails) {
-      window.showPlayerDetails(player);
-      return;
+      try {
+          window.showPlayerDetails(player);
+          return;
+      } catch (err) {
+          console.error("Error showing detailed player card:", err);
+          // Fall through to simple stats
+      }
   }
 
   // Try to show player stats directly using the player stats viewer

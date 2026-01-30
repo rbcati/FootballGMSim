@@ -1386,6 +1386,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         const saved = saveState();
         if (!saved) {
              console.error('[commitGameResult] CRITICAL: Save failed!');
+             if (typeof window !== 'undefined' && window.setStatus) {
+                 window.setStatus("CRITICAL ERROR: Game result NOT saved. Check console.", "error");
+             }
         }
     }
 

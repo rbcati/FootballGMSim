@@ -144,7 +144,8 @@ class ScheduleViewer {
         if (weekData.games) {
             const L = window.state.league;
             const userTeamId = window.state.userTeamId;
-            const weekResults = L.resultsByWeek ? L.resultsByWeek[weekNumber - 1] : []; // Results are 0-indexed
+            // Robust access to week results
+            const weekResults = (L.resultsByWeek && L.resultsByWeek[weekNumber - 1]) || []; // Results are 0-indexed
 
             weekData.games.forEach((game, gameIndex) => {
                 if (game.bye) {
