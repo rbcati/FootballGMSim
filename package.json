@@ -2,5 +2,8 @@
   "dependencies": {
     "jsdom": "^27.4.0",
     "playwright": "^1.58.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0"
   }
 }

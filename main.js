@@ -1782,7 +1782,9 @@ class GameController {
                 const saveResult = await this.saveGameState();
                 if (!saveResult.success) {
                     console.error('Failed to save initial game state:', saveResult.error);
-                    throw new Error('Failed to persist new game: ' + saveResult.error);
+                    // Downgrade to no-save mode instead of crashing
+                    window.state.noSave = true;
+                    this.setStatus('Warning: Save failed (Storage Full). Game will not be persisted.', 'warning', 5000);
                 }
             }
             

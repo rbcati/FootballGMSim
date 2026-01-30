@@ -243,12 +243,20 @@ function getZeroStats() {
  * @param {Object} overrides - Optional overrides for specific attributes
  * @returns {Object} Complete player object
  */
-function makePlayer(pos, overrides = {}) {
+function makePlayer(pos, overridesOrAge = {}, ovrArg = null) {
   const U = window.Utils;
   const C = window.Constants;
   
   if (!U || !C) {
     throw new Error('Utils and Constants must be loaded');
+  }
+
+  // Handle legacy signature (pos, age, ovr)
+  let overrides = {};
+  if (typeof overridesOrAge === 'number') {
+      overrides = { age: overridesOrAge, ovr: ovrArg };
+  } else if (overridesOrAge && typeof overridesOrAge === 'object') {
+      overrides = overridesOrAge;
   }
 
   // Generate detailed ratings based on position
