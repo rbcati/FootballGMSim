@@ -296,10 +296,13 @@ class GameController {
 
             // [DIAGNOSTICS] Prevent broken hub if league not loaded
             if (!window.state || !window.state.league) {
+                const errDetail = !window.state ? 'State object missing' : 'League object missing';
+                console.error(`[Hub] Render blocked: ${errDetail}`);
                 hubContainer.innerHTML = `
                     <div class="card" style="text-align: center; padding: 40px;">
                         <h2>No Active League</h2>
                         <p class="muted">Load a save or create a new league to continue.</p>
+                        <p class="small text-danger" style="margin-top:5px; opacity:0.8;">Error: ${errDetail}</p>
                         <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
                             <button class="btn primary" onclick="location.hash='#/leagueDashboard'">Load Save</button>
                             <button class="btn" onclick="window.gameController.startNewLeague()">New League</button>
@@ -1778,14 +1781,9 @@ class GameController {
             if (!window.state.noSave) {
                 const saveResult = await this.saveGameState();
                 if (!saveResult.success) {
-                    console.warn('Failed to save initial game state:', saveResult.error);
+                    console.error('Failed to save initial game state:', saveResult.error);
+                    throw new Error('Failed to persist new game: ' + saveResult.error);
                 }
-            }
-            // Hide modal
-            const modal = this.getElement('onboardModal');
-            if (modal) {
-                modal.hidden = true;
-                modal.style.display = 'none';
             }
             
             // Ensure state is properly set
@@ -1793,9 +1791,9 @@ class GameController {
                 window.state.onboarded = true;
             }
             
-            // Mark state as needing save
+            // Reset needsSave since we just saved
             if (window.state) {
-                window.state.needsSave = true;
+                window.state.needsSave = false;
             }
             
             console.log('✅ League created successfully:', {
@@ -1804,11 +1802,6 @@ class GameController {
                 onboarded: window.state.onboarded,
                 hasLeague: !!window.state.league
             });
-            
-            // Ensure state is fully ready
-            if (window.state.league && !window.state.onboarded) {
-                window.state.onboarded = true;
-            }
             
             // Hide modal first
             const modalEl = document.getElementById('onboardModal');
@@ -1882,6 +1875,8 @@ class GameController {
         } catch (error) {
             console.error('Error in initNewGame:', error);
             this.setStatus(`Failed to create new game: ${error.message}`, 'error');
+            // Clean up partial state to prevent zombie UI
+            window.state = null;
             throw error;
         }
     }
@@ -1920,7 +1915,9 @@ class GameController {
                 const lastLeague = window.getLastPlayedLeague ? window.getLastPlayedLeague() : null;
                 if (lastLeague && window.loadLeague) {
                     const loaded = window.loadLeague(lastLeague); // This updates window.state
-                    if (loaded) {
+
+                    // STRICT CHECK: Ensure league object exists
+                    if (loaded && window.state && window.state.league) {
                         console.log("Resuming last played league:", lastLeague);
                         this.initialized = true;
                         this.setupEventListeners();
@@ -1930,6 +1927,8 @@ class GameController {
                         location.hash = `#/${savedView}`;
                         this.router(savedView);
                         return; // Skip dashboard
+                    } else {
+                        console.error("Resume failed: Loaded state is invalid or league missing.", { loaded: !!loaded, state: !!window.state, league: !!window.state?.league });
                     }
                 }
 

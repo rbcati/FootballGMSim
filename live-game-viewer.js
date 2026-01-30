@@ -1401,6 +1401,7 @@ class LiveGameViewer {
    * Render game UI
    */
   renderGame() {
+    if (!this.gameState) return;
     this.updateScoreboard();
     this.renderBoxScore();
     this.renderMomentum();
@@ -1411,6 +1412,7 @@ class LiveGameViewer {
    * Render Box Score
    */
   renderBoxScore() {
+      if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
       if (!parent) return;
 
@@ -1445,6 +1447,7 @@ class LiveGameViewer {
    * Render Momentum
    */
   renderMomentum() {
+      if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
       if (!parent) return;
 
@@ -1471,6 +1474,7 @@ class LiveGameViewer {
    * Render Game Stats
    */
   renderGameStats() {
+      if (!this.gameState) return;
       const parent = this.viewMode ? this.container : this.modal;
       if (!parent) return;
 
