@@ -189,15 +189,15 @@ export class FootballDB {
 
     for (const gameId of gameIdsToDelete) {
         // Delete logs for this game
-        // We need to find keys first.
-        // Or we can just iterate the cursor on the index and delete.
-        const request = index.openKeyCursor(IDBKeyRange.only(gameId));
+        // Optimization: Use getAllKeys instead of cursor iteration to reduce IPC overhead
+        const request = index.getAllKeys(gameId);
 
         request.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                logsStore.delete(cursor.primaryKey);
-                cursor.continue();
+            const keys = event.target.result;
+            if (keys && keys.length > 0) {
+                for (const key of keys) {
+                    logsStore.delete(key);
+                }
             }
         };
     }
