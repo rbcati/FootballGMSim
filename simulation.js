@@ -643,10 +643,10 @@ function simulateWeek(options = {}) {
       console.log('Season complete, transitioning to offseason');
       window.setStatus('Season complete! Entering offseason...');
       
-      if (typeof window.startOffseason === 'function') {
-        window.startOffseason();
-      } else if (typeof window.startNewSeason === 'function') {
-        window.startNewSeason();
+      if (startOffseason) {
+        startOffseason();
+      } else if (startNewSeason) {
+        startNewSeason();
       }
       return;
     }
@@ -757,18 +757,3 @@ export {
   commitGameResult
 };
 
-// ============================================================================
-// BACKWARD COMPATIBILITY SHIMS
-// ============================================================================
-// TODO: Remove these once all code is migrated to ES modules
-
-if (typeof window !== 'undefined') {
-  window.simulateWeek = simulateWeek;
-  window.simGameStats = simGameStats;
-  window.applyResult = applyResult;
-  window.startOffseason = startOffseason;
-  window.startNewSeason = startNewSeason;
-  window.initializePlayerStats = initializePlayerStats;
-  window.accumulateCareerStats = accumulateCareerStats;
-  window.commitGameResult = commitGameResult;
-}

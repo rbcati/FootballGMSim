@@ -106,8 +106,10 @@ export class FootballDB {
         // we'll use the game_id index.
         const playerStats = new Map(); // player_id -> { rush_yards: 0, ... }
 
-        for (const gameId of gameIds) {
-            const logs = await this.getLogsByGameId(gameId);
+        const logsPromises = gameIds.map(gameId => this.getLogsByGameId(gameId));
+        const allLogs = await Promise.all(logsPromises);
+
+        for (const logs of allLogs) {
             for (const log of logs) {
                 if (log.play_type === 'run') { // Matches python: WHERE play_type = 'run'
                     const pid = log.player_id;
@@ -187,15 +189,15 @@ export class FootballDB {
 
     for (const gameId of gameIdsToDelete) {
         // Delete logs for this game
-        // We need to find keys first.
-        // Or we can just iterate the cursor on the index and delete.
-        const request = index.openKeyCursor(IDBKeyRange.only(gameId));
+        // Optimization: Use getAllKeys instead of cursor iteration to reduce IPC overhead
+        const request = index.getAllKeys(gameId);
 
         request.onsuccess = (event) => {
-            const cursor = event.target.result;
-            if (cursor) {
-                logsStore.delete(cursor.primaryKey);
-                cursor.continue();
+            const keys = event.target.result;
+            if (keys && keys.length > 0) {
+                for (const key of keys) {
+                    logsStore.delete(key);
+                }
             }
         };
     }

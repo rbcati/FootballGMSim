@@ -4,6 +4,10 @@
 (function() {
   'use strict';
 
+  // Pagination State
+  let currentPage = 1;
+  const pageSize = 50;
+
   /**
    * Get all players from all teams
    * @returns {Array} Array of all players with team info
@@ -48,9 +52,97 @@
   }
 
   /**
+   * Render the table rows for the current page
+   * @param {Array} players - List of filtered/sorted players
+   * @param {HTMLElement} tbody - The table body element
+   */
+  function renderTablePage(players, tbody) {
+    if (!tbody) return;
+
+    const start = (currentPage - 1) * pageSize;
+    const end = Math.min(start + pageSize, players.length);
+    const pagePlayers = players.slice(start, end);
+
+    tbody.innerHTML = pagePlayers.map((player, index) => {
+      const legacy = player.legacy || {};
+      const metrics = legacy.metrics || {};
+      const awards = legacy.awards || {};
+      const hof = legacy.hallOfFame || {};
+      const legacyScore = metrics.legacyScore || 0;
+      const hofThreshold = window.getHOFThreshold ? window.getHOFThreshold(player.pos) : 70;
+      const hofProgress = Math.min(100, (legacyScore / hofThreshold) * 100);
+      const totalAwards = (awards.playerOfYear || 0) + (awards.allPro || 0) + (awards.proBowl || 0) + (awards.rookie || 0);
+
+      // Rank is overall index + 1
+      const rank = start + index + 1;
+
+      return `
+        <tr class="player-row" data-player-id="${player.id}" data-position="${player.pos}">
+          <td>${rank}</td>
+          <td class="player-name">${player.name || 'Unknown'}</td>
+          <td>${player.pos || 'N/A'}</td>
+          <td>${player.teamAbbr || player.teamName || 'FA'}</td>
+          <td>${player.age || 'N/A'}</td>
+          <td class="ovr-cell">${player.ovr || 'N/A'}</td>
+          <td>
+            <div class="legacy-score">
+              <span class="legacy-value">${legacyScore}</span>
+              <div class="legacy-bar">
+                <div class="legacy-fill" style="width: ${legacyScore}%"></div>
+              </div>
+            </div>
+          </td>
+          <td>
+            ${hof.inducted ? '<span class="hof-badge inducted">HoF</span>' :
+              hof.eligible ? `<span class="hof-badge eligible">Eligible</span>` :
+              `<div class="hof-progress">
+                <div class="hof-progress-bar">
+                  <div class="hof-progress-fill" style="width: ${hofProgress}%"></div>
+                </div>
+                <span class="hof-progress-text">${Math.round(hofProgress)}%</span>
+              </div>`}
+          </td>
+          <td>
+            <div class="awards-count" title="Awards: ${totalAwards} total">
+              ${totalAwards > 0 ? `🏆 ${totalAwards}` : '—'}
+            </div>
+          </td>
+          <td>
+            <button class="btn btn-sm" onclick="showPlayerDatabaseDetails('${player.id}')">View</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Update pagination controls if they exist
+    updatePaginationControls(players.length);
+  }
+
+  /**
+   * Update pagination controls state
+   * @param {number} totalItems - Total number of items
+   */
+  function updatePaginationControls(totalItems) {
+    const prevBtn = document.getElementById('dbPrevBtn');
+    const nextBtn = document.getElementById('dbNextBtn');
+    const pageInfo = document.getElementById('dbPageInfo');
+
+    if (prevBtn && nextBtn && pageInfo) {
+      const totalPages = Math.ceil(totalItems / pageSize);
+
+      prevBtn.disabled = currentPage === 1;
+      nextBtn.disabled = currentPage >= totalPages || totalPages === 0;
+
+      pageInfo.textContent = `Page ${currentPage} of ${totalPages || 1} (${totalItems} players)`;
+    }
+  }
+
+  /**
    * Render player database view
    */
   function renderPlayerDatabase() {
+    currentPage = 1; // Reset to page 1 on every full render
+
     const container = document.getElementById('playerDatabase');
     if (!container) {
       console.warn('Player database container not found');
@@ -76,23 +168,27 @@
       }
     });
 
-    // Pre-calculate view properties
-    allPlayers.forEach(player => {
+    // Pre-calculate view data for performance
+    const enhancedPlayers = allPlayers.map(player => {
       const legacy = player.legacy || {};
       const metrics = legacy.metrics || {};
       const awards = legacy.awards || {};
-      const hof = legacy.hallOfFame || {};
+      const legacyScore = metrics.legacyScore || 0;
+      const hofThreshold = window.getHOFThreshold ? window.getHOFThreshold(player.pos) : 70;
+      const hofProgress = Math.min(100, (legacyScore / hofThreshold) * 100);
+      const totalAwards = (awards.playerOfYear || 0) + (awards.allPro || 0) + (awards.proBowl || 0) + (awards.rookie || 0);
 
-      player._legacyScore = metrics.legacyScore || 0;
-      player._hofThreshold = window.getHOFThreshold ? window.getHOFThreshold(player.pos) : 70;
-      player._hofProgress = Math.min(100, (player._legacyScore / player._hofThreshold) * 100);
-      player._totalAwards = (awards.playerOfYear || 0) + (awards.allPro || 0) + (awards.proBowl || 0) + (awards.rookie || 0);
-      player._isInducted = hof.inducted;
-      player._isEligible = hof.eligible;
+      return {
+        ...player,
+        _legacyScore: legacyScore,
+        _hofThreshold: hofThreshold,
+        _hofProgress: hofProgress,
+        _totalAwards: totalAwards
+      };
     });
 
     // Sort players by OVR (descending)
-    const sortedPlayers = allPlayers.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    const sortedPlayers = enhancedPlayers.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
 
     // Filter options
     let html = `
@@ -173,46 +269,15 @@
               </tr>
             </thead>
             <tbody>
-              ${sortedPlayers.map((player, index) => {
-                return `
-                  <tr class="player-row" data-player-id="${player.id}" data-position="${player.pos}">
-                    <td>${index + 1}</td>
-                    <td class="player-name">${player.name || 'Unknown'}</td>
-                    <td>${player.pos || 'N/A'}</td>
-                    <td>${player.teamAbbr || player.teamName || 'FA'}</td>
-                    <td>${player.age || 'N/A'}</td>
-                    <td class="ovr-cell">${player.ovr || 'N/A'}</td>
-                    <td>
-                      <div class="legacy-score">
-                        <span class="legacy-value">${player._legacyScore}</span>
-                        <div class="legacy-bar">
-                          <div class="legacy-fill" style="width: ${player._legacyScore}%"></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      ${player._isInducted ? '<span class="hof-badge inducted">HoF</span>' :
-                        player._isEligible ? `<span class="hof-badge eligible">Eligible</span>` :
-                        `<div class="hof-progress">
-                          <div class="hof-progress-bar">
-                            <div class="hof-progress-fill" style="width: ${player._hofProgress}%"></div>
-                          </div>
-                          <span class="hof-progress-text">${Math.round(player._hofProgress)}%</span>
-                        </div>`}
-                    </td>
-                    <td>
-                      <div class="awards-count" title="Awards: ${player._totalAwards} total">
-                        ${player._totalAwards > 0 ? `🏆 ${player._totalAwards}` : '—'}
-                      </div>
-                    </td>
-                    <td>
-                      <button class="btn btn-sm" onclick="showPlayerDatabaseDetails('${player.id}')">View</button>
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
+              <!-- Populated via pagination -->
             </tbody>
           </table>
+        </div>
+
+        <div class="pagination-controls row" style="margin-top: 20px; justify-content: center; align-items: center; gap: 15px;">
+             <button id="dbPrevBtn" class="btn btn-sm">Previous</button>
+             <span id="dbPageInfo" style="font-weight: 500;">Page 1</span>
+             <button id="dbNextBtn" class="btn btn-sm">Next</button>
         </div>
       </div>
     `;
@@ -222,14 +287,47 @@
     // Set up filters
     const positionFilter = document.getElementById('dbPosition');
     const sortSelect = document.getElementById('dbSort');
+    const prevBtn = document.getElementById('dbPrevBtn');
+    const nextBtn = document.getElementById('dbNextBtn');
     
     if (positionFilter) {
-      positionFilter.addEventListener('change', () => filterAndSortPlayers());
+      positionFilter.addEventListener('change', () => {
+          currentPage = 1; // Reset to page 1 on filter change
+          filterAndSortPlayers();
+      });
     }
     
     if (sortSelect) {
-      sortSelect.addEventListener('change', () => filterAndSortPlayers());
+      sortSelect.addEventListener('change', () => {
+          currentPage = 1; // Reset to page 1 on sort change
+          filterAndSortPlayers();
+      });
     }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                filterAndSortPlayers();
+                // Scroll to table top
+                const table = document.getElementById('playerDatabaseTable');
+                if (table) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    }
+
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+            currentPage++;
+            filterAndSortPlayers();
+            // Scroll to table top
+            const table = document.getElementById('playerDatabaseTable');
+            if (table) table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    }
+
+    // Initial render
+    filterAndSortPlayers();
 
     function filterAndSortPlayers() {
       const position = positionFilter?.value || '';
@@ -258,45 +356,7 @@
         }
       });
 
-      // Re-render table
-      tbody.innerHTML = filtered.map((player, index) => {
-        return `
-          <tr class="player-row" data-player-id="${player.id}" data-position="${player.pos}">
-            <td>${index + 1}</td>
-            <td class="player-name">${player.name || 'Unknown'}</td>
-            <td>${player.pos || 'N/A'}</td>
-            <td>${player.teamAbbr || player.teamName || 'FA'}</td>
-            <td>${player.age || 'N/A'}</td>
-            <td class="ovr-cell">${player.ovr || 'N/A'}</td>
-            <td>
-              <div class="legacy-score">
-                <span class="legacy-value">${player._legacyScore}</span>
-                <div class="legacy-bar">
-                  <div class="legacy-fill" style="width: ${player._legacyScore}%"></div>
-                </div>
-              </div>
-            </td>
-            <td>
-              ${player._isInducted ? '<span class="hof-badge inducted">HoF</span>' :
-                player._isEligible ? `<span class="hof-badge eligible">Eligible</span>` :
-                `<div class="hof-progress">
-                  <div class="hof-progress-bar">
-                    <div class="hof-progress-fill" style="width: ${player._hofProgress}%"></div>
-                  </div>
-                  <span class="hof-progress-text">${Math.round(player._hofProgress)}%</span>
-                </div>`}
-            </td>
-            <td>
-              <div class="awards-count" title="Awards: ${player._totalAwards} total">
-                ${player._totalAwards > 0 ? `🏆 ${player._totalAwards}` : '—'}
-              </div>
-            </td>
-            <td>
-              <button class="btn btn-sm" onclick="showPlayerDatabaseDetails('${player.id}')">View</button>
-            </td>
-          </tr>
-        `;
-      }).join('');
+      renderTablePage(filtered, tbody);
     }
   }
 
