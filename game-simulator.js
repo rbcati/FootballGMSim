@@ -83,12 +83,8 @@ export function updateTeamStandings(teamId, stats) {
 
     // Return null if we can't find the persistent record
     if (!team) {
-        console.log(`[QA-AUDIT] updateTeamStandings: Team ${teamId} NOT FOUND in global state!`);
         return null;
     }
-
-    // [QA-AUDIT]
-    console.log(`[QA-AUDIT] updateTeamStandings: Updating Team ${teamId} (${team.abbr || team.name}). Current Wins: ${team.wins}`);
 
     // 2. Apply Updates (incrementing existing values)
     if (stats.wins) team.wins = (team.wins || 0) + stats.wins;
@@ -119,9 +115,6 @@ export function updateTeamStandings(teamId, stats) {
     team.record.t = team.ties;
     team.record.pf = team.ptsFor;
     team.record.pa = team.ptsAgainst;
-
-    // [QA-AUDIT]
-    console.log(`[QA-AUDIT] updateTeamStandings: Updated Team ${teamId}. New Wins: ${team.wins}, Record.w: ${team.record.w}`);
 
     return team;
 }
@@ -196,9 +189,6 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
 
   // UPDATE STATE via Setter
   if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
-
-  // [QA-AUDIT]
-  console.log(`[QA-AUDIT] applyResult: Applying Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
 
   const updatedHome = updateTeamStandings(home.id, homeStats);
   const updatedAway = updateTeamStandings(away.id, awayStats);
@@ -1175,7 +1165,6 @@ export function validateLeagueState(league) {
                 results.forEach(game => {
                     if (game.scoreHome === 0 && game.scoreAway === 0 && !game.bye) {
                         // Warning only for now as tie logic exists, but ideally shouldn't happen often
-                        console.warn(`[QA-AUDIT] Week ${week}: Game ${game.homeTeamAbbr} vs ${game.awayTeamAbbr} has 0-0 score.`);
                     }
                 });
             }
@@ -1392,11 +1381,6 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         }
     }
 
-    // 8. QA Audit
-    if (homeScore === 0 && awayScore === 0) {
-        console.warn(`[QA-AUDIT] Game finalized with 0-0 score: ${home.abbr} vs ${away.abbr}.`);
-    }
-
     return resultObj;
 }
 
@@ -1436,8 +1420,6 @@ export function simulateBatch(games, options = {}) {
     );
 
     if (!games || !Array.isArray(games)) return [];
-
-    console.log(`[QA-AUDIT] simulateBatch: Processing batch of ${games.length} games`);
 
     games.forEach((pair, index) => {
         try {

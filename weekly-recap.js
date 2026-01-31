@@ -2,6 +2,7 @@
 // Integrated with Core Loop
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES } from './strategy.js';
 import { getTrackedPlayerUpdates } from './player-tracking.js';
+import soundManager from './sound-manager.js';
 
 'use strict';
 
@@ -392,6 +393,15 @@ export function showWeeklyRecap(week, results, news) {
             .btn.large { padding: 15px 30px; font-size: 1.2rem; width: 100%; }
         </style>
     `;
+
+    // Play Sound
+    if (resultClass === 'win') {
+        soundManager.playCheer();
+    } else if (resultClass === 'loss') {
+        soundManager.playFailure();
+    } else if (resultClass === 'tie') {
+        soundManager.playWhistle();
+    }
 
     const modal = new window.Modal({
         title: `Week ${week} Recap`,

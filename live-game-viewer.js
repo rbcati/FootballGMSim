@@ -1,5 +1,7 @@
 // live-game-viewer.js - Live game simulation with play-by-play and play calling
 import { commitGameResult } from './game-simulator.js';
+import soundManager from './sound-manager.js';
+import { launchConfetti } from './confetti.js';
 
 'use strict';
 
@@ -13,6 +15,7 @@ class LiveGameViewer {
     this.currentPlayIndex = 0;
     this.isPlaying = false;
     this.isPaused = false;
+    this.isSkipping = false; // Added flag for skipping animations
     this.tempo = 'normal'; // 'hurry-up', 'normal', 'slow'
     this.playCallQueue = null; // User's play call
     this.intervalId = null;
@@ -23,6 +26,23 @@ class LiveGameViewer {
     this.viewMode = false;
     this.hasAppliedResult = false;
     this.isGameEnded = false;
+
+    // Streak / Momentum state
+    this.streak = 0; // Positive for user success, negative for failure (approx)
+  }
+
+  /**
+   * Stop the current game loop and cleanup
+   */
+  stopGame() {
+    this.isPlaying = false;
+    this.isPaused = true;
+    if (this.intervalId) {
+        clearTimeout(this.intervalId);
+        this.intervalId = null;
+    }
+    this.gameState = null;
+    this.isGameEnded = true; // Prevent any pending callbacks
   }
 
   /**
@@ -33,6 +53,34 @@ class LiveGameViewer {
       return this.container && document.body.contains(this.container);
     }
     return this.modal && document.body.contains(this.modal);
+  }
+
+  triggerShake() {
+      const target = this.viewMode ? this.container : this.modal;
+      if (target) {
+          target.classList.remove('shake');
+          void target.offsetWidth; // Force reflow
+          target.classList.add('shake');
+          setTimeout(() => target.classList.remove('shake'), 500);
+      }
+  }
+
+  triggerFlash() {
+      const flash = document.createElement('div');
+      flash.className = 'flash-overlay';
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 600);
+  }
+
+  triggerFloatText(text, type = '') {
+      const el = document.createElement('div');
+      el.className = `float-text ${type}`;
+      el.textContent = text;
+      el.style.left = '50%';
+      el.style.top = '40%';
+      el.style.marginLeft = `-${text.length * 10}px`; // Rough centering
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1500);
   }
 
   /**
@@ -47,11 +95,12 @@ class LiveGameViewer {
 
     // Create layout
     container.innerHTML = `
-      <div class="card">
+      <div class="card live-game-header">
         <div class="scoreboard"></div>
         <div class="field-container"></div>
+        <div class="field-wrapper" style="margin: 10px 0;"></div> <!-- Field Container -->
         <div class="control-bar">
-            <button class="control-btn" id="btnPrevPlay">⏮ Prev</button>
+            <button class="control-btn" id="btnPrevPlay" disabled>⏮ Prev</button>
             <div class="control-divider"></div>
             <button class="control-btn" id="btnPlayPause">⏯ Pause</button>
             <button class="control-btn" id="btnNextPlay">Next Play ⏭</button>
@@ -68,14 +117,14 @@ class LiveGameViewer {
       </div>
 
       <div class="grid two">
-        <div class="card" style="height: 600px; display: flex; flex-direction: column;">
+        <div class="card live-game-log-card">
             <h3>Play-by-Play</h3>
             <div class="play-log-enhanced"></div>
         </div>
         <div>
             <div class="card">
                 <h3>Game Stats</h3>
-                <div class="game-dashboard" style="margin-bottom: 15px;">
+                <div class="game-dashboard live-game-dashboard">
                     <div class="box-score-panel"></div>
                     <div class="momentum-panel" style="margin-top: 10px;"></div>
                 </div>
@@ -87,6 +136,9 @@ class LiveGameViewer {
         </div>
       </div>
     `;
+
+    // Render Field
+    this.renderField(container.querySelector('.field-wrapper'));
 
     // Attach listeners
     container.querySelector('#btnPlayPause').addEventListener('click', () => this.togglePause());
@@ -108,15 +160,20 @@ class LiveGameViewer {
     // Restore play history if available
     if (this.playByPlay && this.playByPlay.length > 0) {
         console.log('Restoring play history:', this.playByPlay.length, 'plays');
-        // Render all past plays
         this.playByPlay.forEach(play => {
             this.renderPlay(play);
         });
 
-        // Scroll to bottom
         const playLog = container.querySelector('.play-log-enhanced');
         if (playLog) {
             playLog.scrollTop = playLog.scrollHeight;
+        }
+
+        // Update field to last known state
+        if (this.gameState) {
+             const ballPos = this.gameState.ballPossession;
+             const yardLine = this.gameState[ballPos].yardLine;
+             this.updateFieldState(yardLine, ballPos === 'home');
         }
     }
 
@@ -124,12 +181,151 @@ class LiveGameViewer {
   }
 
   /**
+   * Render the visual field
+   */
+  renderField(container) {
+      if (!container) return;
+
+      const homeName = this.gameState?.home?.team?.abbr || 'HOME';
+      const awayName = this.gameState?.away?.team?.abbr || 'AWAY';
+      const homeColor = this.gameState?.home?.team?.color || '#003366';
+      const awayColor = this.gameState?.away?.team?.color || '#990000';
+
+      container.innerHTML = `
+        <div class="football-field-container">
+           <div class="endzone left" style="background-color: ${homeColor}; opacity: 0.8;">${homeName}</div>
+           <div class="field-background"></div>
+
+           <!-- Yard Numbers (Every 10 yards) -->
+           ${[10, 20, 30, 40, 50, 40, 30, 20, 10].map((num, i) =>
+               `<div class="yard-marker" style="left: ${(10 + (i+1)*10) / 1.2}%">${num}</div>`
+           ).join('')}
+
+           <div class="marker-los" style="left: 50%;"></div>
+           <div class="marker-first-down" style="left: 58.33%;"></div>
+           <div class="football-ball" style="left: 50%;"></div>
+
+           <div class="endzone right" style="background-color: ${awayColor}; opacity: 0.8;">${awayName}</div>
+        </div>
+      `;
+  }
+
+  /**
+   * Update field markers instantly (no animation)
+   */
+  updateFieldState(yardLine, isHomePossession) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      const ballEl = parent.querySelector('.football-ball');
+      const losEl = parent.querySelector('.marker-los');
+      const fdEl = parent.querySelector('.marker-first-down');
+
+      if (!ballEl) return;
+
+      // Calculate Visual Percentage (0-100% of container)
+      // Total units = 120 (10 left EZ + 100 field + 10 right EZ)
+      // Home drives Left -> Right (0 -> 100)
+      // Away drives Right -> Left (100 -> 0)
+
+      let visualYard = isHomePossession ? yardLine : (100 - yardLine);
+      let pct = (10 + visualYard) / 1.2;
+
+      ballEl.style.left = `${pct}%`;
+      ballEl.style.transition = 'none';
+      losEl.style.left = `${pct}%`;
+
+      // First Down Marker
+      const state = this.gameState;
+      if (state) {
+          const dist = state[isHomePossession ? 'home' : 'away'].distance;
+          // Target yard line for 1st down
+          let targetYard = yardLine + dist;
+          if (targetYard > 100) targetYard = 100; // Goal line
+
+          let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
+          let fdPct = (10 + visualTarget) / 1.2;
+          fdEl.style.left = `${fdPct}%`;
+          fdEl.style.display = 'block';
+      }
+
+      // Force reflow
+      void ballEl.offsetWidth;
+      ballEl.style.transition = ''; // Restore transition from CSS
+  }
+
+  /**
+   * Animate the play on the field
+   * @param {Object} play
+   * @returns {Promise}
+   */
+  animatePlay(play) {
+      if (this.isSkipping || !this.checkUI()) {
+          return Promise.resolve();
+      }
+
+      const parent = this.viewMode ? this.container : this.modal;
+      const ballEl = parent.querySelector('.football-ball');
+      if (!ballEl) return Promise.resolve();
+
+      return new Promise(resolve => {
+          const isHome = this.gameState.ballPossession === 'home';
+
+          // Start Position (Current YardLine)
+          const startYard = play.yardLine;
+          // End Position
+          let endYard = startYard + play.yards;
+
+          // Cap at endzones for visual sanity
+          if (endYard > 100) endYard = 105; // Into EZ
+          if (endYard < 0) endYard = -5; // Safety
+
+          let startVisual = isHome ? startYard : (100 - startYard);
+          let endVisual = isHome ? endYard : (100 - endYard);
+
+          const startPct = (10 + startVisual) / 1.2;
+          const endPct = (10 + endVisual) / 1.2;
+
+          // 1. Set Start Position (Instant)
+          ballEl.style.transition = 'none';
+          ballEl.style.left = `${startPct}%`;
+
+          // Force Reflow
+          void ballEl.offsetWidth;
+
+          // 2. Animate to End
+          let duration = 0.8; // default
+          if (play.playType.startsWith('pass')) duration = 1.2;
+          if (play.playType === 'punt' || play.playType === 'field_goal') duration = 1.5;
+          if (this.tempo === 'hurry-up') duration *= 0.5;
+
+          ballEl.style.transition = `left ${duration}s ease-in-out`;
+          ballEl.style.left = `${endPct}%`;
+
+          // Special Visuals
+          if (play.result === 'touchdown' || play.result === 'field_goal') {
+               ballEl.classList.add('animate-pulse');
+          } else {
+               ballEl.classList.remove('animate-pulse');
+          }
+
+          setTimeout(() => {
+              // Cleanup pulse
+              if (play.result === 'touchdown' || play.result === 'field_goal') {
+                   setTimeout(() => ballEl.classList.remove('animate-pulse'), 1000);
+              }
+              resolve();
+          }, duration * 1000);
+      });
+  }
+
+  /**
    * Initialize and show live game viewer
    * @param {Object} homeTeam - Home team object
    * @param {Object} awayTeam - Away team object
    * @param {number} userTeamId - ID of user's team (for play calling)
+   * @param {boolean} autoStart - Whether to start playback immediately
    */
-  startGame(homeTeam, awayTeam, userTeamId) {
+  initGame(homeTeam, awayTeam, userTeamId) {
     if (!homeTeam || !awayTeam) {
       console.error('Invalid teams for live game');
       return;
@@ -188,12 +384,17 @@ class LiveGameViewer {
     this.playByPlay = [];
     this.currentPlayIndex = 0;
     this.isPlaying = false;
-    this.isPaused = false; // Start paused for better UX? No, auto-play.
+    this.isPaused = false;
+    this.isSkipping = false;
     this.playCallQueue = null;
     this.hasAppliedResult = false;
+  }
 
-    // Start game simulation
-    this.simulateGame();
+  /**
+   * Start simulation loop
+   */
+  startSim() {
+      this.simulateGame();
   }
 
   /**
@@ -270,7 +471,7 @@ class LiveGameViewer {
   /**
    * Simulate the entire game with play-by-play
    */
-  simulateGame() {
+  simulateGame(autoStart = true) {
     const state = this.gameState;
     const C = window.Constants?.SIMULATION || {};
     const U = window.Utils;
@@ -292,8 +493,10 @@ class LiveGameViewer {
       targetAwayScore
     };
 
-    // Start displaying plays
-    this.startPlayback();
+    // Start displaying plays if auto-start is enabled
+    if (autoStart) {
+        this.startPlayback();
+    }
   }
 
   /**
@@ -750,6 +953,10 @@ class LiveGameViewer {
    */
   updateGameState(play, gameState) {
     // State is updated within generatePlay
+    // But we need to update the visual field markers for the NEXT play
+    const ballPos = gameState.ballPossession;
+    const yardLine = gameState[ballPos].yardLine;
+    this.updateFieldState(yardLine, ballPos === 'home');
   }
 
   /**
@@ -922,6 +1129,10 @@ class LiveGameViewer {
 
     this.playByPlay.push(play);
     this.currentPlayIndex = this.playByPlay.length;
+
+    // ANIMATE!
+    await this.animatePlay(play);
+
     this.renderPlay(play);
     this.updateGameState(play, state);
 
@@ -950,11 +1161,44 @@ class LiveGameViewer {
    * Get delay between plays based on tempo
    */
   getPlayDelay() {
+    // Reduce delays slightly since animation takes time now
     switch (this.tempo) {
-      case 'hurry-up': return 800; // 0.8 seconds
-      case 'slow': return 3000; // 3 seconds
-      default: return 1500; // 1.5 seconds
+      case 'hurry-up': return 200; // was 800
+      case 'slow': return 2000; // was 3000
+      default: return 800; // was 1500
     }
+  }
+
+  /**
+   * Trigger visual feedback for game events
+   */
+  triggerVisualFeedback(type, text) {
+    if (!this.checkUI()) return;
+    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = `game-event-overlay ${type}`;
+    overlay.innerHTML = `<div class="event-text">${text}</div>`;
+
+    // Append to container (ensure relative positioning for parent if needed, though overlay is absolute)
+    // In view mode, container is .card usually, which is relative?
+    // .card has position: relative in CSS.
+    // In modal mode, .modal-content needs position: relative?
+    // .modal-content usually has no position set, default static.
+    // Let's set position relative on parent if static.
+    if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+    }
+
+    parent.appendChild(overlay);
+
+    // Remove after animation (1.5s)
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.remove();
+        }
+    }, 2000);
   }
 
   /**
@@ -962,20 +1206,89 @@ class LiveGameViewer {
    */
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
+
+    // Sound & Juice Triggers
+    if (play.result === 'touchdown') {
+        soundManager.playScore();
+        soundManager.playCheer();
+        this.triggerFlash();
+        this.triggerFloatText('TOUCHDOWN!');
+    } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+        soundManager.playFailure();
+        this.triggerShake();
+        this.triggerFloatText('TURNOVER!', 'bad');
+    } else if (play.result === 'field_goal_miss') {
+        soundManager.playFailure();
+        this.triggerShake();
+        this.triggerFloatText('NO GOOD!', 'bad');
+    } else if (play.result === 'sack') {
+        soundManager.playHit();
+        this.triggerShake();
+        this.triggerFloatText('SACKED!', 'bad');
+    } else if (play.result === 'big_play') {
+        soundManager.playCheer();
+        this.triggerFloatText('BIG PLAY!');
+    } else if (play.result === 'field_goal') {
+        soundManager.playScore();
+        soundManager.playKick();
+        this.triggerFloatText('GOOD!');
+    } else if (play.type === 'game_end') {
+        // Check winner
+        const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
+        if (userWon) {
+            soundManager.playCheer();
+            launchConfetti();
+        } else {
+            soundManager.playWhistle();
+        }
+    } else if (play.type === 'quarter_end') {
+        soundManager.playWhistle();
+    }
+
     const parent = this.viewMode ? this.container : this.modal;
 
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
     if (!playLog) return;
 
+    // Game Juice & Sounds
+    if (!this.isSkipping) {
+        if (play.result === 'touchdown') {
+            soundManager.playCheer();
+            launchConfetti();
+            this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
+        } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+            soundManager.playTackle();
+            this.triggerVisualFeedback('negative', 'TURNOVER');
+            // Screen shake
+            if (this.container) this.container.classList.add('shake');
+            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
+            setTimeout(() => {
+                if (this.container) this.container.classList.remove('shake');
+                else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake');
+            }, 500);
+        } else if (play.result === 'sack') {
+             soundManager.playTackle();
+             this.triggerVisualFeedback('negative', 'SACK!');
+        } else if (play.result === 'field_goal') {
+             soundManager.playPing();
+             this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+        } else if (play.type === 'quarter_end') {
+             soundManager.playWhistle();
+        }
+    }
+
     const playElement = document.createElement('div');
     playElement.className = 'play-item';
 
     // Add specific classes based on result
+    playElement.classList.add('slide-in'); // Animation entry
+
     if (play.result === 'touchdown') playElement.classList.add('play-touchdown');
     else if (play.result === 'turnover' || play.result === 'turnover_downs') playElement.classList.add('play-turnover');
     else if (play.result === 'sack') playElement.classList.add('play-sack');
     else if (play.result === 'big_play') playElement.classList.add('play-big-play');
+    else if (play.result === 'field_goal') playElement.classList.add('play-field-goal');
 
     if (play.type === 'play') {
       const offense = this.gameState[this.gameState.ballPossession === 'home' ? 'home' : 'away'];
@@ -1031,6 +1344,28 @@ class LiveGameViewer {
   }
 
   /**
+   * Trigger visual feedback overlay
+   */
+  triggerVisualFeedback(type, text) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+
+      const overlay = document.createElement('div');
+      overlay.className = `score-overlay ${type}`;
+      overlay.textContent = text;
+
+      // Append to relative parent
+      const container = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      container.style.position = 'relative'; // Ensure positioning context
+      container.appendChild(overlay);
+
+      // Remove after animation
+      setTimeout(() => {
+          overlay.remove();
+      }, 1500);
+  }
+
+  /**
    * Update scoreboard display
    */
   updateScoreboard() {
@@ -1050,11 +1385,17 @@ class LiveGameViewer {
 
     const homeScoreChanged = home.score !== oldHomeScore;
     const awayScoreChanged = away.score !== oldAwayScore;
+    // Detect score change
+    const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
+    const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
+    this.lastHomeScore = home.score;
+    this.lastAwayScore = away.score;
 
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''} ${awayScoreClass}">
         <div class="team-name">${away.team.abbr}</div>
         <div class="team-score ${awayScoreChanged ? 'pulse-score' : ''}">${away.score}</div>
+        <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
       </div>
       <div class="score-info">
         <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
@@ -1062,11 +1403,15 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''} ${homeScoreClass}">
         <div class="team-name">${home.team.abbr}</div>
         <div class="team-score ${homeScoreChanged ? 'pulse-score' : ''}">${home.score}</div>
+        <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
       </div>
     `;
+
+    // Remove flash classes after animation completes (if using pure CSS animation, this might not be strictly necessary if we re-render often, but good practice)
+    // Actually, since we re-render scoreboard on every play/tick, the class will be removed on next render if score doesn't change again.
   }
 
   /**
@@ -1122,7 +1467,8 @@ class LiveGameViewer {
     // Check if we need to inject the buttons for view mode
     if (this.viewMode) {
         const pcContainer = parent.querySelector('.play-calling');
-        if (pcContainer && pcContainer.innerHTML.trim() === '') {
+        // Check if buttons exist, ignoring whitespace/comments
+        if (pcContainer && !pcContainer.querySelector('.play-call-buttons')) {
             pcContainer.innerHTML = `
                 <div class="play-call-prompt" style="margin-bottom: 10px; font-weight: bold; color: var(--accent);">Call Your Play:</div>
                 <div class="play-call-buttons" style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -1149,7 +1495,14 @@ class LiveGameViewer {
             // Attach events
             pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    this.callPlay(e.target.dataset.play);
+                    // Visual feedback
+                    pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+                    e.target.classList.add('selected');
+
+                    // Small delay to show feedback before hiding
+                    setTimeout(() => {
+                        this.callPlay(e.target.dataset.play);
+                    }, 150);
                 });
             });
         }
@@ -1327,6 +1680,29 @@ class LiveGameViewer {
       this.intervalId = null;
     }
 
+    // Enhanced Game Over Screen
+    if (this.checkUI() && !this.isSkipping) {
+        const userTeam = this.userTeamId ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
+
+        // Only show overlay if user is playing
+        if (userTeam) {
+             const isHome = this.gameState.home.team.id === this.userTeamId;
+             const userScore = isHome ? this.gameState.home.score : this.gameState.away.score;
+             const oppScore = isHome ? this.gameState.away.score : this.gameState.home.score;
+
+             if (userScore > oppScore) {
+                 soundManager.playCheer();
+                 if (soundManager.playHorns) soundManager.playHorns();
+                 launchConfetti();
+                 this.showGameOverOverlay('VICTORY', userScore, oppScore, 'positive');
+             } else if (userScore < oppScore) {
+                  this.showGameOverOverlay('DEFEAT', userScore, oppScore, 'negative');
+             } else {
+                  this.showGameOverOverlay('DRAW', userScore, oppScore, 'neutral');
+             }
+        }
+    }
+
     // Show final stats safely
     if (this.checkUI()) {
         const parent = this.viewMode ? this.container : this.modal;
@@ -1342,6 +1718,31 @@ class LiveGameViewer {
 
     // ENSURE SAVE
     this.finalizeGame();
+  }
+
+  showGameOverOverlay(title, scoreA, scoreB, type) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      if (!parent) return;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'game-over-overlay';
+      overlay.innerHTML = `
+        <div class="game-over-title" style="color: ${type === 'positive' ? '#4cd964' : type === 'negative' ? '#ff3b30' : '#fff'}">${title}</div>
+        <div class="game-over-score">${scoreA} - ${scoreB}</div>
+        <button class="btn primary" id="dismissOverlay">Continue</button>
+      `;
+
+      // Ensure positioning
+      if (getComputedStyle(parent).position === 'static') {
+          parent.style.position = 'relative';
+      }
+
+      parent.appendChild(overlay);
+
+      overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
+          overlay.remove();
+      });
   }
 
   /**
@@ -1414,6 +1815,7 @@ class LiveGameViewer {
         </div>
         
         <div class="scoreboard"></div>
+        <div class="field-wrapper" style="margin: 10px; padding: 0 10px;"></div> <!-- Field -->
         
         <div class="field-container" style="margin: 0 var(--space-4);"></div>
 
@@ -1471,6 +1873,9 @@ class LiveGameViewer {
     document.body.appendChild(modal);
     this.modal = modal;
 
+    // Render Field
+    this.renderField(modal.querySelector('.field-wrapper'));
+
     // Event listeners
     modal.querySelector('.close').addEventListener('click', () => this.hideModal());
     modal.querySelectorAll('.tempo-btn').forEach(btn => {
@@ -1482,7 +1887,13 @@ class LiveGameViewer {
     modal.querySelector('.skip-btn').addEventListener('click', () => this.skipToEnd());
     modal.querySelectorAll('.play-call-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        this.callPlay(e.target.dataset.play);
+        // Visual feedback
+        modal.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+
+        setTimeout(() => {
+             this.callPlay(e.target.dataset.play);
+        }, 150);
       });
     });
     modal.querySelector('.close-game-btn')?.addEventListener('click', () => this.hideModal());
@@ -1618,9 +2029,15 @@ class LiveGameViewer {
       const m = this.gameState.momentum;
       const pct = (m + 100) / 2;
 
+      // Streak indicator
+      let streakHtml = '';
+      if (this.streak >= 3) {
+          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 0.8em; margin-top: 4px;">🔥 ON FIRE! 🔥</div>`;
+      }
+
       container.innerHTML = `
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
-        <div style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
+        <div class="${Math.abs(m) > 75 ? 'momentum-surge' : ''}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
             <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
         </div>
@@ -1628,6 +2045,7 @@ class LiveGameViewer {
             <span>${this.gameState.away.team.abbr}</span>
             <span>${this.gameState.home.team.abbr}</span>
         </div>
+        ${streakHtml}
       `;
   }
 
@@ -1856,17 +2274,22 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
-    // 1. Ensure we are on the correct view
+    // 1. Initialize Game State FIRST (paused) to pass router checks
+    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+
+    // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {
         location.hash = '#/game-sim';
     }
 
-    // 2. Initialize UI immediately
-    // Wait a tick for router to potentially show the section
+    // 2. Initialize State immediately (so router sees active game)
+    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
+
+    // 3. Wait a tick for router to render view, then start sim
     setTimeout(() => {
+        // Double check render if router missed it
         window.liveGameViewer.renderToView('#game-sim');
-        // 3. Start Game
-        window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+        window.liveGameViewer.startSim();
     }, 50);
 
   } catch (error) {
