@@ -1017,6 +1017,10 @@ function initializePlayerStatsViewer() {
         window.cleanupStalePlayerData = () => playerStatsViewer?.cleanupStaleData();
         window.refreshClickablePlayers = () => playerStatsViewer?.refreshClickablePlayers();
         
+        // FIX: Expose viewPlayerStats globally for click handlers
+        window.viewPlayerStats = (id) => playerStatsViewer.showPlayerStats(id);
+        window.showPlayerDetails = window.viewPlayerStats;
+
         // Add debug function
         window.debugPlayerStats = (playerId) => {
              // ... (UNCHANGED DEBUG LOGIC) ...
