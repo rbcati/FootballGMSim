@@ -121,23 +121,38 @@
   }
 
   // ============================================
-  // Enhanced Card Interactions
+  // Enhanced Card Interactions (Event Delegation)
   // ============================================
   
   function initCardInteractions() {
-    // Add hover effect to cards with clickable content
+    // Add cursor style only
     document.querySelectorAll('.card').forEach(card => {
       const clickable = card.querySelector('a, button, [onclick]');
       if (clickable) {
         card.style.cursor = 'pointer';
-        card.addEventListener('click', (e) => {
-          if (e.target === card || e.target.closest('.card') === card) {
-            clickable.click();
-          }
-        });
       }
     });
   }
+
+  // Delegated click handler for cards
+  document.addEventListener('click', (e) => {
+      const card = e.target.closest('.card');
+      if (!card) return;
+
+      // Ignore if clicking a button/link directly
+      if (e.target.matches('a, button, input, select, textarea') || e.target.closest('a, button, input, select, textarea')) {
+          return;
+      }
+
+      // Find primary action
+      const clickable = card.querySelector('a, button, [onclick]');
+      if (clickable) {
+          // Prevent recursion if the clickable element is the card itself (unlikely but possible)
+          if (clickable !== card) {
+              clickable.click();
+          }
+      }
+  });
 
   // ============================================
   // Smooth Scroll Behavior
@@ -241,15 +256,8 @@
   // ============================================
   
   function initTableInteractions() {
-    document.querySelectorAll('.table tbody tr').forEach(row => {
-      row.addEventListener('mouseenter', function() {
-        this.style.transform = 'scale(1.01)';
-      });
-      
-      row.addEventListener('mouseleave', function() {
-        this.style.transform = 'scale(1)';
-      });
-    });
+    // Moved to CSS for better performance
+    // .table tbody tr:hover { transform: scale(1.01); transition: transform 0.2s; }
   }
 
   // ============================================

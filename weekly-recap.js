@@ -87,7 +87,7 @@ export function showWeeklyRecap(week, results, news) {
 
         // Playoff Game
         if (week > 18) { // Assuming 18 week season
-             resultText = win ? `PLAYOFF ADVANCE` : `SEASON OVER`;
+             resultText = win ? `SURVIVE & ADVANCE` : `DREAM ENDED`;
              highStakesClass = 'playoff';
         }
 

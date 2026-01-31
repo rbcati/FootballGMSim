@@ -589,6 +589,18 @@ class NewsEngine {
                     null, 'game');
             }
 
+            // Rivalry Check
+            let rivalryScore = 0;
+            if (winner.rivalries && winner.rivalries[loser.id]) {
+                rivalryScore = winner.rivalries[loser.id].score;
+            }
+            if (rivalryScore > 50) {
+                 this.addNewsItem(league,
+                    `RIVALRY: ${winner.name} Defeat ${loser.name}`,
+                    `In a heated battle between bitter rivals, the ${winner.name} came out on top with a score of ${Math.max(game.scoreHome, game.scoreAway)}-${Math.min(game.scoreHome, game.scoreAway)}.`,
+                    null, 'game');
+            }
+
             if (game.scoreHome + game.scoreAway > 70) {
                 this.addNewsItem(league,
                     `Offensive Explosion: ${winner.name} Win Shootout`,

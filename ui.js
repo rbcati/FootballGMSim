@@ -628,6 +628,7 @@ window.renderRoster = function() {
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
             checkbox.name = 'playerSelect';
+            checkbox.className = 'player-select'; // Required for handleReleasePlayers
             checkbox.value = player.id;
             cellCheckbox.appendChild(checkbox);
             

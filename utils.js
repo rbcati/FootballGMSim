@@ -7,8 +7,9 @@ function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
 function id(){ return Math.random().toString(36).slice(2, 10); }
 function avg(a){ return a.length ? a.reduce((s,x)=>s+x,0)/a.length : 0; }
 function pct(rec){ var w=+rec.w||0, l=+rec.l||0, t=+rec.t||0; var g=w+l+t; return g ? (w + 0.5*t)/g : 0; }
+function round(num, decimals = 1) { return Math.round(num * 10 ** decimals) / 10 ** decimals; }
 
-const Utils = { rand, choice, clamp, id, avg, pct };
+const Utils = { rand, choice, clamp, id, avg, pct, round };
 
 // Export Utils
 export { Utils };
