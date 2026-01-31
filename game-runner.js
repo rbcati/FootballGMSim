@@ -116,21 +116,6 @@ class GameRunner {
         if (!league.resultsByWeek) league.resultsByWeek = {};
         league.resultsByWeek[weekNum - 1] = results;
 
-        // [QA-AUDIT] Validate Finalization
-        let finalizationError = false;
-        if (weekData.games) {
-            weekData.games.forEach(g => {
-                if (!g.bye && !g.finalized) {
-                    console.error(`[QA-AUDIT] Critical: Game not finalized after simulation! ${g.home} vs ${g.away}`);
-                    finalizationError = true;
-                }
-            });
-        }
-
-        if (finalizationError && options.throwOnFailure) {
-            throw new Error('Simulation failed to finalize all games.');
-        }
-
         // Update single game records
         if (typeof window.updateSingleGameRecords === 'function') {
             try {

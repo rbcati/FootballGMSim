@@ -32,6 +32,9 @@ import GameRunner from './game-runner.js';
 // Import Coaching System
 import { processStaffPoaching } from './coach-system.js';
 
+// Simulation Lock
+let isSimulating = false;
+
 /**
  * Validates that required global dependencies are available
  * @returns {boolean} True if all dependencies are available
@@ -62,15 +65,11 @@ function validateDependencies() {
 function accumulateCareerStats(league) {
   if (!league || !league.teams) return;
 
-  console.log(`[QA-AUDIT] accumulateCareerStats: Processing stats for ${league.teams.length} teams`);
-  
   const year = league.year || new Date().getFullYear();
   
   league.teams.forEach(team => {
     if (!team.roster || !Array.isArray(team.roster)) return;
     
-    console.log(`[QA-AUDIT] accumulateCareerStats: Snapshotting ${team.abbr}`);
-
     team.roster.forEach(player => {
       // 1. Snapshot Season Stats
       if (!player.stats || !player.stats.season) return;
@@ -164,7 +163,6 @@ function startOffseason() {
     }
 
     console.log('Starting offseason...');
-    console.log('[QA-AUDIT] startOffseason: Starting offseason processing...');
     
     // Set offseason flag IMMEDIATELY to prevent multiple calls
     window.state.offseason = true;
@@ -186,7 +184,6 @@ function startOffseason() {
 
     // Accumulate season stats into career stats for all players
     accumulateCareerStats(L);
-    console.log('[QA-AUDIT] startOffseason: Career stats accumulated.');
     
     // Process salary cap rollover for each team
     if (typeof window.processCapRollover === 'function') {
@@ -518,8 +515,6 @@ function startNewSeason() {
     L.week = 1;
     L.resultsByWeek = [];
 
-    console.log(`[QA-AUDIT] startNewSeason: Transitioning to Year ${nextYear}`);
-
     // Reset Owner Mode Seasonal Data
     if (window.state.ownerMode && window.state.ownerMode.revenue) {
         window.state.ownerMode.revenue.playoffs = 0;
@@ -547,8 +542,6 @@ function startNewSeason() {
         });
       }
     });
-
-    console.log(`[QA-AUDIT] startNewSeason: Resetting records and stats for ${L.teams.length} teams`);
 
     // Reset team records completely
     L.teams.forEach(team => {
@@ -610,7 +603,15 @@ function startNewSeason() {
  * Simulates all games for the current week in the league.
  */
 function simulateWeek(options = {}) {
+  // Prevent re-entrancy
+  if (isSimulating) {
+    console.warn('Simulation already in progress.');
+    return;
+  }
+
   try {
+    isSimulating = true;
+
     // Validate all dependencies first
     if (!validateDependencies()) {
       return;
@@ -661,7 +662,6 @@ function simulateWeek(options = {}) {
     if (validateLeagueState) {
         const validation = validateLeagueState(L);
         if (!validation.valid) {
-            console.error('[SIM-AUDIT] League state invalid after sim:', validation.errors);
             if (window.setStatus) window.setStatus('Warning: Simulation produced inconsistent data.', 'error');
         }
     }
@@ -739,6 +739,8 @@ function simulateWeek(options = {}) {
   } catch (error) {
     console.error('Error in simulateWeek:', error);
     window.setStatus(`Simulation error: ${error.message}`);
+  } finally {
+    isSimulating = false;
   }
 }
 

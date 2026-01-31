@@ -905,3 +905,31 @@
 #menu-overlay.active {
     display: block;
 }
+
+/* --- Live Game Viewer Improvements --- */
+.live-game-log-card {
+    height: 600px;
+    display: flex;
+    flex-direction: column;
+}
+
+.live-game-dashboard {
+    margin-bottom: 15px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
+    background: rgba(0,0,0,0.2);
+    margin-top: 10px;
+    border-radius: 8px;
+}
+
+@media (max-width: 768px) {
+    .live-game-log-card {
+        height: 400px;
+    }
+
+    .live-game-dashboard {
+        grid-template-columns: 1fr; /* Stack on mobile */
+    }
+}
