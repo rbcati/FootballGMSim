@@ -863,6 +863,10 @@ export function getTeamsByDivision(conference, division) {
 // Export utility functions
 export { getActiveSaveSlot, setActiveSaveSlot, saveKeyFor };
 
+if (typeof window !== 'undefined') {
+    window.currentTeam = currentTeam;
+}
+
 // --- Backward Compatibility & Initialization ---
 
 /**

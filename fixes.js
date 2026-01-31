@@ -649,7 +649,7 @@ function releaseSelected(selectedIds) {
   let releasedCount = 0;
   
   selectedIds.forEach(playerId => {
-    const playerIndex = team.roster.findIndex(p => p.id === playerId);
+    const playerIndex = team.roster.findIndex(p => String(p.id) === String(playerId));
     if (playerIndex >= 0) {
       const player = team.roster[playerIndex];
       
