@@ -1027,10 +1027,13 @@ class LiveGameViewer {
     playElement.className = 'play-item';
 
     // Add specific classes based on result
+    playElement.classList.add('slide-in'); // Animation entry
+
     if (play.result === 'touchdown') playElement.classList.add('play-touchdown');
     else if (play.result === 'turnover' || play.result === 'turnover_downs') playElement.classList.add('play-turnover');
     else if (play.result === 'sack') playElement.classList.add('play-sack');
     else if (play.result === 'big_play') playElement.classList.add('play-big-play');
+    else if (play.result === 'field_goal') playElement.classList.add('play-field-goal');
 
     if (play.type === 'play') {
       const offense = this.gameState[this.gameState.ballPossession === 'home' ? 'home' : 'away'];
@@ -1106,7 +1109,7 @@ class LiveGameViewer {
     this.lastAwayScore = away.score;
 
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''} ${awayScoreClass}">
         <div class="team-name">${away.team.abbr}</div>
         <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
       </div>
@@ -1116,11 +1119,14 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''} ${homeScoreClass}">
         <div class="team-name">${home.team.abbr}</div>
         <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
       </div>
     `;
+
+    // Remove flash classes after animation completes (if using pure CSS animation, this might not be strictly necessary if we re-render often, but good practice)
+    // Actually, since we re-render scoreboard on every play/tick, the class will be removed on next render if score doesn't change again.
   }
 
   /**
@@ -1169,7 +1175,14 @@ class LiveGameViewer {
             // Attach events
             pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    this.callPlay(e.target.dataset.play);
+                    // Visual feedback
+                    pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+                    e.target.classList.add('selected');
+
+                    // Small delay to show feedback before hiding
+                    setTimeout(() => {
+                        this.callPlay(e.target.dataset.play);
+                    }, 150);
                 });
             });
         }
@@ -1500,7 +1513,13 @@ class LiveGameViewer {
     modal.querySelector('.skip-btn').addEventListener('click', () => this.skipToEnd());
     modal.querySelectorAll('.play-call-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        this.callPlay(e.target.dataset.play);
+        // Visual feedback
+        modal.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+
+        setTimeout(() => {
+             this.callPlay(e.target.dataset.play);
+        }, 150);
       });
     });
     modal.querySelector('.close-game-btn')?.addEventListener('click', () => this.hideModal());
