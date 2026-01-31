@@ -1,5 +1,7 @@
 // live-game-viewer.js - Live game simulation with play-by-play and play calling
 import { commitGameResult } from './game-simulator.js';
+import soundManager from './sound-manager.js';
+import { launchConfetti } from './confetti.js';
 
 'use strict';
 
@@ -34,6 +36,34 @@ class LiveGameViewer {
       return this.container && document.body.contains(this.container);
     }
     return this.modal && document.body.contains(this.modal);
+  }
+
+  triggerShake() {
+      const target = this.viewMode ? this.container : this.modal;
+      if (target) {
+          target.classList.remove('shake');
+          void target.offsetWidth; // Force reflow
+          target.classList.add('shake');
+          setTimeout(() => target.classList.remove('shake'), 500);
+      }
+  }
+
+  triggerFlash() {
+      const flash = document.createElement('div');
+      flash.className = 'flash-overlay';
+      document.body.appendChild(flash);
+      setTimeout(() => flash.remove(), 600);
+  }
+
+  triggerFloatText(text, type = '') {
+      const el = document.createElement('div');
+      el.className = `float-text ${type}`;
+      el.textContent = text;
+      el.style.left = '50%';
+      el.style.top = '40%';
+      el.style.marginLeft = `-${text.length * 10}px`; // Rough centering
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1500);
   }
 
   /**
@@ -276,7 +306,7 @@ class LiveGameViewer {
    * @param {Object} awayTeam - Away team object
    * @param {number} userTeamId - ID of user's team (for play calling)
    */
-  startGame(homeTeam, awayTeam, userTeamId) {
+  initGame(homeTeam, awayTeam, userTeamId) {
     if (!homeTeam || !awayTeam) {
       console.error('Invalid teams for live game');
       return;
@@ -339,12 +369,13 @@ class LiveGameViewer {
     this.isSkipping = false;
     this.playCallQueue = null;
     this.hasAppliedResult = false;
+  }
 
-    // Initial field update
-    this.updateFieldState(25, true);
-
-    // Start game simulation
-    this.simulateGame();
+  /**
+   * Start simulation loop
+   */
+  startSim() {
+      this.simulateGame();
   }
 
   /**
@@ -1105,6 +1136,45 @@ class LiveGameViewer {
    */
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
+
+    // Sound & Juice Triggers
+    if (play.result === 'touchdown') {
+        soundManager.playScore();
+        soundManager.playCheer();
+        this.triggerFlash();
+        this.triggerFloatText('TOUCHDOWN!');
+    } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+        soundManager.playFailure();
+        this.triggerShake();
+        this.triggerFloatText('TURNOVER!', 'bad');
+    } else if (play.result === 'field_goal_miss') {
+        soundManager.playFailure();
+        this.triggerShake();
+        this.triggerFloatText('NO GOOD!', 'bad');
+    } else if (play.result === 'sack') {
+        soundManager.playHit();
+        this.triggerShake();
+        this.triggerFloatText('SACKED!', 'bad');
+    } else if (play.result === 'big_play') {
+        soundManager.playCheer();
+        this.triggerFloatText('BIG PLAY!');
+    } else if (play.result === 'field_goal') {
+        soundManager.playScore();
+        soundManager.playKick();
+        this.triggerFloatText('GOOD!');
+    } else if (play.type === 'game_end') {
+        // Check winner
+        const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
+        if (userWon) {
+            soundManager.playCheer();
+            launchConfetti();
+        } else {
+            soundManager.playWhistle();
+        }
+    } else if (play.type === 'quarter_end') {
+        soundManager.playWhistle();
+    }
+
     const parent = this.viewMode ? this.container : this.modal;
 
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
@@ -1115,10 +1185,13 @@ class LiveGameViewer {
     playElement.className = 'play-item';
 
     // Add specific classes based on result
+    playElement.classList.add('slide-in'); // Animation entry
+
     if (play.result === 'touchdown') playElement.classList.add('play-touchdown');
     else if (play.result === 'turnover' || play.result === 'turnover_downs') playElement.classList.add('play-turnover');
     else if (play.result === 'sack') playElement.classList.add('play-sack');
     else if (play.result === 'big_play') playElement.classList.add('play-big-play');
+    else if (play.result === 'field_goal') playElement.classList.add('play-field-goal');
 
     if (play.type === 'play') {
       const offense = this.gameState[this.gameState.ballPossession === 'home' ? 'home' : 'away'];
@@ -1187,10 +1260,16 @@ class LiveGameViewer {
     const away = this.gameState.away;
     const state = this.gameState;
 
+    // Detect score change
+    const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
+    const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
+    this.lastHomeScore = home.score;
+    this.lastAwayScore = away.score;
+
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''} ${awayScoreClass}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score">${away.score}</div>
+        <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
       </div>
       <div class="score-info">
         <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
@@ -1198,11 +1277,14 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''} ${homeScoreClass}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score">${home.score}</div>
+        <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
       </div>
     `;
+
+    // Remove flash classes after animation completes (if using pure CSS animation, this might not be strictly necessary if we re-render often, but good practice)
+    // Actually, since we re-render scoreboard on every play/tick, the class will be removed on next render if score doesn't change again.
   }
 
   /**
@@ -1251,7 +1333,14 @@ class LiveGameViewer {
             // Attach events
             pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    this.callPlay(e.target.dataset.play);
+                    // Visual feedback
+                    pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+                    e.target.classList.add('selected');
+
+                    // Small delay to show feedback before hiding
+                    setTimeout(() => {
+                        this.callPlay(e.target.dataset.play);
+                    }, 150);
                 });
             });
         }
@@ -1586,7 +1675,13 @@ class LiveGameViewer {
     modal.querySelector('.skip-btn').addEventListener('click', () => this.skipToEnd());
     modal.querySelectorAll('.play-call-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        this.callPlay(e.target.dataset.play);
+        // Visual feedback
+        modal.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+
+        setTimeout(() => {
+             this.callPlay(e.target.dataset.play);
+        }, 150);
       });
     });
     modal.querySelector('.close-game-btn')?.addEventListener('click', () => this.hideModal());
@@ -1662,7 +1757,7 @@ class LiveGameViewer {
 
       container.innerHTML = `
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
-        <div style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
+        <div class="${Math.abs(m) > 75 ? 'momentum-surge' : ''}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
             <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
         </div>
@@ -1903,12 +1998,14 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
         location.hash = '#/game-sim';
     }
 
-    // 2. Initialize UI immediately
-    // Wait a tick for router to potentially show the section
+    // 2. Initialize State immediately (so router sees active game)
+    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
+
+    // 3. Wait a tick for router to render view, then start sim
     setTimeout(() => {
+        // Double check render if router missed it
         window.liveGameViewer.renderToView('#game-sim');
-        // 3. Start Game
-        window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+        window.liveGameViewer.startSim();
     }, 50);
 
   } catch (error) {
