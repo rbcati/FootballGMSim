@@ -360,8 +360,21 @@ function renderLeagueTeamRatings(league, containerId) {
     // Ensure ratings are up to date
     // updateAllTeamRatings(league); // Don't force update here to avoid loops, rely on state
     
-    // Sort teams by overall rating
-    const sortedTeams = [...league.teams].sort((a, b) => (b.overallRating || 0) - (a.overallRating || 0));
+    // Sort teams by Power Rating (Performance based)
+    const sortedTeams = [...league.teams].sort((a, b) => {
+        // Helper to calc power rating inline
+        const getPower = (t) => {
+            const ovr = t.overallRating || t.ratings?.overall || 50;
+            const wins = t.wins || (t.record?.w) || 0;
+            const losses = t.losses || (t.record?.l) || 0;
+            const pf = t.pointsFor || t.ptsFor || (t.record?.pf) || 0;
+            const pa = t.pointsAgainst || t.ptsAgainst || (t.record?.pa) || 0;
+
+            return ovr + (wins * 2) - (losses * 1.5) + ((pf - pa) / 10);
+        };
+        return getPower(b) - getPower(a);
+    });
+
     const topTeams = sortedTeams.slice(0, 5); // Show top 5
     
     const html = `
@@ -370,6 +383,8 @@ function renderLeagueTeamRatings(league, containerId) {
             <div class="league-ratings-list">
                 ${topTeams.map((team, index) => {
                     const ratings = team.ratings || calculateTeamRating(team);
+                    // Use actual index from the full sorted list if we want true rank, but this is top 5 list
+                    // So 1-5 is appropriate for this widget
                     return `
                         <div class="rating-row">
                             <div class="rank">${index + 1}</div>

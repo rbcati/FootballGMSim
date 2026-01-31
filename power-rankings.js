@@ -25,13 +25,35 @@ function calculatePowerRankingsData(league) {
         };
     });
 
-    // 2. Define categories to rank
+    // 2. Calculate Power Rating (Performance based)
+    teamsData.forEach(item => {
+        const t = item.team;
+        const ovr = item.ratings.overall || 50;
+
+        // Stats might be on team object directly or in stats object depending on state version
+        // Standardize access
+        const wins = t.wins || (t.record?.w) || 0;
+        const losses = t.losses || (t.record?.l) || 0;
+        const pf = t.pointsFor || t.ptsFor || (t.record?.pf) || 0;
+        const pa = t.pointsAgainst || t.ptsAgainst || (t.record?.pa) || 0;
+
+        const winBonus = wins * 2;
+        const lossPenalty = losses * 1.5;
+        const pointDiff = (pf - pa) / 10;
+
+        // Power Rating Formula
+        // Base = Team Overall Rating + Win Bonus + Point Diff Factor - Loss Penalty
+        item.powerRating = ovr + winBonus - lossPenalty + pointDiff;
+    });
+
+    // 3. Define categories to rank
     // Note: Paths depend on the structure returned by calculateTeamRating
     const categories = [
-        { key: 'overall', path: t => t.ratings.overall || 0 },
-        { key: 'offense', path: t => t.ratings.offense?.overall || 0 },
-        { key: 'defense', path: t => t.ratings.defense?.overall || 0 },
-        { key: 'specialTeams', path: t => t.ratings.specialTeams || 0 },
+        { key: 'power', path: item => item.powerRating }, // New Power Rank
+        { key: 'overall', path: item => item.ratings.overall || 0 },
+        { key: 'offense', path: item => item.ratings.offense?.overall || 0 },
+        { key: 'defense', path: item => item.ratings.defense?.overall || 0 },
+        { key: 'specialTeams', path: item => item.ratings.specialTeams || 0 },
         // Positional Breakdowns
         // Offense: QB, RB, WR, TE, OL
         { key: 'QB', path: t => t.ratings.offense?.breakdown?.QB || 0 },
@@ -46,10 +68,11 @@ function calculatePowerRankingsData(league) {
         { key: 'S', path: t => t.ratings.defense?.breakdown?.S || 0 }
     ];
 
-    // 3. Calculate ranks for each category
+    // 4. Calculate ranks for each category
     categories.forEach(cat => {
         // Sort teams by this category's value (descending: higher rating is better)
         teamsData.sort((a, b) => {
+            // Note: cat.path now takes the 'item' wrapper, not just 'team'
             const valA = cat.path(a);
             const valB = cat.path(b);
             return valB - valA;
@@ -61,8 +84,8 @@ function calculatePowerRankingsData(league) {
         });
     });
 
-    // 4. Default sort by Overall Rank (Ascending: #1 is best)
-    teamsData.sort((a, b) => a.ranks.overall - b.ranks.overall);
+    // 5. Default sort by Power Rank (Ascending: #1 is best)
+    teamsData.sort((a, b) => a.ranks.power - b.ranks.power);
 
     return teamsData;
 }
@@ -116,9 +139,10 @@ function renderPowerRankingsPage() {
                     <table class="table table-striped power-rankings-table">
                         <thead>
                             <tr>
-                                <th onclick="window.sortPowerRankings('overall')" style="cursor: pointer;">Rank</th>
+                                <th onclick="window.sortPowerRankings('power')" style="cursor: pointer;">Rank</th>
                                 <th>Team</th>
-                                <th onclick="window.sortPowerRankings('overall')" style="cursor: pointer;" title="Overall Rating">OVR</th>
+                                <th onclick="window.sortPowerRankings('power')" style="cursor: pointer;" title="Power Rating (Performance)">PWR</th>
+                                <th onclick="window.sortPowerRankings('overall')" style="cursor: pointer;" title="Roster Overall">OVR</th>
                                 <th onclick="window.sortPowerRankings('offense')" style="cursor: pointer;" title="Offense Rank">OFF</th>
                                 <th onclick="window.sortPowerRankings('defense')" style="cursor: pointer;" title="Defense Rank">DEF</th>
                                 <th onclick="window.sortPowerRankings('QB')" style="cursor: pointer;" title="Quarterback Rank">QB</th>
@@ -173,14 +197,16 @@ function renderPowerRankingsRows(data) {
 
         return `
             <tr class="${isUser ? 'user-team' : ''}">
-                <td class="rank-cell">#${ranks.overall}</td>
+                <td class="rank-cell">#${ranks.power}</td>
                 <td>
                     <div class="team-name-cell">
                         <span class="team-abbr" style="font-weight:bold;">${team.abbr}</span>
                         <span class="team-name-full" style="display:none;"> ${team.name}</span>
+                        <div class="small muted" style="font-size: 0.8em;">${team.wins||0}-${team.losses||0}</div>
                     </div>
                 </td>
-                <td class="rating-val" style="font-weight:bold;">${ratings.overall}</td>
+                <td class="rating-val" style="font-weight:bold;">${item.powerRating.toFixed(1)}</td>
+                <td class="rating-val">${ratings.overall}</td>
 
                 <!-- Display Ranks with Colors -->
                 <td class="rank-val ${getRankClass(ranks.offense)}">#${ranks.offense}</td>
