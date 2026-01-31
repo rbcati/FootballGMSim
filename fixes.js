@@ -903,7 +903,7 @@ console.log('[LeagueCreationFix] Loaded');
     }
     
     function applyFixToMakeLeague(originalMakeLeague) {
-        window.makeLeague = function patchedMakeLeague(teams, options = {}) {
+        window.makeLeague = function patchedMakeLeague(teams, options = {}, dependencies = {}) {
         const namesMode = window.state?.namesMode || 'fictional';
         const canonicalTeams = getCanonicalTeams(namesMode);
         const lookup = buildLookup(canonicalTeams);
@@ -926,7 +926,7 @@ console.log('[LeagueCreationFix] Loaded');
             warn('No teams provided to makeLeague; falling back to original input.');
         }
 
-        const league = originalMakeLeague(orderedTeams.length ? orderedTeams : teams, options);
+        const league = originalMakeLeague(orderedTeams.length ? orderedTeams : teams, options, dependencies);
 
         if (league?.teams?.length) {
             league.teams.forEach((team, index) => {

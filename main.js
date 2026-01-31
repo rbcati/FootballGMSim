@@ -1767,7 +1767,7 @@ class GameController {
             if (!options || typeof options !== 'object') {
                 throw new Error('Invalid game options');
             }
-            const { chosenMode, teamIdx } = options;
+            const { chosenMode, teamIdx, startPoint } = options;
             if (!chosenMode || teamIdx === undefined) {
                 throw new Error('Missing required game options');
             }
@@ -1783,18 +1783,56 @@ class GameController {
             }
             window.state.player = { teamId: window.state.userTeamId };
             this.applyTheme(window.state.theme || 'dark');
+
+            // Get and validate teams
             const teams = this.listByMode(window.state.namesMode);
             if (teams.length === 0) {
                 throw new Error('No teams available for selected mode');
             }
+            if (!teams[window.state.userTeamId]) {
+                 throw new Error(`Invalid team index: ${window.state.userTeamId} (Teams available: ${teams.length})`);
+            }
+
             if (!window.makeLeague) {
                 throw new Error('League creation system not available');
             }
-            window.state.league = window.makeLeague(teams, options);
 
-            // [Fix] Post-Creation Validation
-            if (!window.state.league || !window.state.league.teams || window.state.league.teams.length === 0) {
+            // Prepare dependencies for league creation
+            const dependencies = {
+                 Constants: window.Constants,
+                 Utils: window.Utils,
+                 makePlayer: window.makePlayer,
+                 makeSchedule: window.makeSchedule,
+                 recalcCap: window.recalcCap,
+                 generateInitialStaff: window.generateInitialStaff
+            };
+
+            // Atomic League Creation
+            // 1. Create League (in memory)
+            const league = window.makeLeague(teams, options, dependencies);
+
+            // 2. Validate League
+            if (!league || !league.teams || league.teams.length === 0) {
                 throw new Error('League generation failed: League object incomplete');
+            }
+            if (!league.teams[window.state.userTeamId]) {
+                 // Check if user team got re-indexed or is missing
+                 // This handles potential reordering by fixes.js or league.js
+                 // We trust window.state.userTeamId is the intended index, but verify if it exists.
+                 // Note: fixes.js wrapper might update window.state.userTeamId if reordering happens.
+                 if (!league.teams[window.state.userTeamId]) {
+                     throw new Error('User team not found in generated league');
+                 }
+            }
+
+            // 3. Update State
+            window.state.league = league;
+
+            // Ensure phase consistency
+            if (startPoint === 'offseason') {
+                window.state.league.offseason = true;
+                // Ensure week is set reasonably if not already
+                if (!window.state.league.week) window.state.league.week = 1;
             }
 
             if (window.ensureFA) {

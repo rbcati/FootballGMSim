@@ -220,6 +220,7 @@ async function handleOnboardStart(e) {
 
     const { teamSelect, startButton } = getOnboardingElements();
     const chosenMode = document.querySelector('input[name="namesMode"]:checked')?.value || 'fictional';
+    const startPoint = document.querySelector('input[name="startPoint"]:checked')?.value || 'regular';
 
     if (startButton) {
         startButton.disabled = true;
@@ -255,7 +256,7 @@ async function handleOnboardStart(e) {
 
             try {
                 await Promise.race([
-                    window.initNewGame({ chosenMode, teamIdx }),
+                    window.initNewGame({ chosenMode, teamIdx, startPoint }),
                     timeoutPromise
                 ]);
             } finally {
