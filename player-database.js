@@ -64,6 +64,10 @@
     const pagePlayers = players.slice(start, end);
 
     tbody.innerHTML = pagePlayers.map((player, index) => {
+      // Lazy Calculation for View
+      if (window.initializePlayerLegacy && !player.legacy) window.initializePlayerLegacy(player);
+      if (window.calculateLegacyScore && (!player.legacy?.metrics?.legacyScore)) window.calculateLegacyScore(player);
+
       const legacy = player.legacy || {};
       const metrics = legacy.metrics || {};
       const awards = legacy.awards || {};
@@ -158,37 +162,8 @@
     // Get best player
     const bestPlayer = getBestPlayer();
 
-    // Initialize legacy for all players
-    allPlayers.forEach(player => {
-      if (window.initializePlayerLegacy) {
-        window.initializePlayerLegacy(player);
-      }
-      if (window.calculateLegacyScore) {
-        window.calculateLegacyScore(player);
-      }
-    });
-
-    // Pre-calculate view data for performance
-    const enhancedPlayers = allPlayers.map(player => {
-      const legacy = player.legacy || {};
-      const metrics = legacy.metrics || {};
-      const awards = legacy.awards || {};
-      const legacyScore = metrics.legacyScore || 0;
-      const hofThreshold = window.getHOFThreshold ? window.getHOFThreshold(player.pos) : 70;
-      const hofProgress = Math.min(100, (legacyScore / hofThreshold) * 100);
-      const totalAwards = (awards.playerOfYear || 0) + (awards.allPro || 0) + (awards.proBowl || 0) + (awards.rookie || 0);
-
-      return {
-        ...player,
-        _legacyScore: legacyScore,
-        _hofThreshold: hofThreshold,
-        _hofProgress: hofProgress,
-        _totalAwards: totalAwards
-      };
-    });
-
-    // Sort players by OVR (descending)
-    const sortedPlayers = enhancedPlayers.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    // OPTIMIZATION: Do not pre-calculate legacy for all players.
+    // Calculations are deferred until rendering (page view) or sorting (if needed).
 
     // Filter options
     let html = `
@@ -335,7 +310,8 @@
       const tbody = document.querySelector('#playerDatabaseTable tbody');
       if (!tbody) return;
 
-      let filtered = [...sortedPlayers];
+      // Use raw allPlayers as base
+      let filtered = [...allPlayers];
       
       if (position) {
         filtered = filtered.filter(p => p.pos === position);
@@ -345,7 +321,14 @@
       filtered.sort((a, b) => {
         switch(sortBy) {
           case 'legacy':
-            return (b._legacyScore || 0) - (a._legacyScore || 0);
+            // Calculate on demand if needed for sorting
+            const getScore = (p) => {
+                if (p.legacy?.metrics?.legacyScore !== undefined) return p.legacy.metrics.legacyScore;
+                if (window.initializePlayerLegacy) window.initializePlayerLegacy(p);
+                if (window.calculateLegacyScore) window.calculateLegacyScore(p);
+                return p.legacy?.metrics?.legacyScore || 0;
+            };
+            return getScore(b) - getScore(a);
           case 'age':
             return (b.age || 0) - (a.age || 0);
           case 'name':
