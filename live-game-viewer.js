@@ -15,6 +15,7 @@ class LiveGameViewer {
     this.currentPlayIndex = 0;
     this.isPlaying = false;
     this.isPaused = false;
+    this.isSkipping = false; // Added flag for skipping animations
     this.tempo = 'normal'; // 'hurry-up', 'normal', 'slow'
     this.playCallQueue = null; // User's play call
     this.intervalId = null;
@@ -79,8 +80,9 @@ class LiveGameViewer {
     container.innerHTML = `
       <div class="card">
         <div class="scoreboard"></div>
+        <div class="field-wrapper" style="margin: 10px 0;"></div> <!-- Field Container -->
         <div class="control-bar">
-            <button class="control-btn" id="btnPrevPlay">⏮ Prev</button>
+            <button class="control-btn" id="btnPrevPlay" disabled>⏮ Prev</button>
             <div class="control-divider"></div>
             <button class="control-btn" id="btnPlayPause">⏯ Pause</button>
             <button class="control-btn" id="btnNextPlay">Next Play ⏭</button>
@@ -117,6 +119,9 @@ class LiveGameViewer {
       </div>
     `;
 
+    // Render Field
+    this.renderField(container.querySelector('.field-wrapper'));
+
     // Attach listeners
     container.querySelector('#btnPlayPause').addEventListener('click', () => this.togglePause());
     container.querySelector('#btnNextPlay').addEventListener('click', () => {
@@ -137,19 +142,162 @@ class LiveGameViewer {
     // Restore play history if available
     if (this.playByPlay && this.playByPlay.length > 0) {
         console.log('Restoring play history:', this.playByPlay.length, 'plays');
-        // Render all past plays
         this.playByPlay.forEach(play => {
             this.renderPlay(play);
         });
 
-        // Scroll to bottom
         const playLog = container.querySelector('.play-log-enhanced');
         if (playLog) {
             playLog.scrollTop = playLog.scrollHeight;
         }
+
+        // Update field to last known state
+        if (this.gameState) {
+             const ballPos = this.gameState.ballPossession;
+             const yardLine = this.gameState[ballPos].yardLine;
+             this.updateFieldState(yardLine, ballPos === 'home');
+        }
     }
 
     this.renderGame();
+  }
+
+  /**
+   * Render the visual field
+   */
+  renderField(container) {
+      if (!container) return;
+
+      const homeName = this.gameState?.home?.team?.abbr || 'HOME';
+      const awayName = this.gameState?.away?.team?.abbr || 'AWAY';
+      const homeColor = this.gameState?.home?.team?.color || '#003366';
+      const awayColor = this.gameState?.away?.team?.color || '#990000';
+
+      container.innerHTML = `
+        <div class="football-field-container">
+           <div class="endzone left" style="background-color: ${homeColor}; opacity: 0.8;">${homeName}</div>
+           <div class="field-background"></div>
+
+           <!-- Yard Numbers (Every 10 yards) -->
+           ${[10, 20, 30, 40, 50, 40, 30, 20, 10].map((num, i) =>
+               `<div class="yard-marker" style="left: ${(10 + (i+1)*10) / 1.2}%">${num}</div>`
+           ).join('')}
+
+           <div class="marker-los" style="left: 50%;"></div>
+           <div class="marker-first-down" style="left: 58.33%;"></div>
+           <div class="football-ball" style="left: 50%;"></div>
+
+           <div class="endzone right" style="background-color: ${awayColor}; opacity: 0.8;">${awayName}</div>
+        </div>
+      `;
+  }
+
+  /**
+   * Update field markers instantly (no animation)
+   */
+  updateFieldState(yardLine, isHomePossession) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      const ballEl = parent.querySelector('.football-ball');
+      const losEl = parent.querySelector('.marker-los');
+      const fdEl = parent.querySelector('.marker-first-down');
+
+      if (!ballEl) return;
+
+      // Calculate Visual Percentage (0-100% of container)
+      // Total units = 120 (10 left EZ + 100 field + 10 right EZ)
+      // Home drives Left -> Right (0 -> 100)
+      // Away drives Right -> Left (100 -> 0)
+
+      let visualYard = isHomePossession ? yardLine : (100 - yardLine);
+      let pct = (10 + visualYard) / 1.2;
+
+      ballEl.style.left = `${pct}%`;
+      ballEl.style.transition = 'none';
+      losEl.style.left = `${pct}%`;
+
+      // First Down Marker
+      const state = this.gameState;
+      if (state) {
+          const dist = state[isHomePossession ? 'home' : 'away'].distance;
+          // Target yard line for 1st down
+          let targetYard = yardLine + dist;
+          if (targetYard > 100) targetYard = 100; // Goal line
+
+          let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
+          let fdPct = (10 + visualTarget) / 1.2;
+          fdEl.style.left = `${fdPct}%`;
+          fdEl.style.display = 'block';
+      }
+
+      // Force reflow
+      void ballEl.offsetWidth;
+      ballEl.style.transition = ''; // Restore transition from CSS
+  }
+
+  /**
+   * Animate the play on the field
+   * @param {Object} play
+   * @returns {Promise}
+   */
+  animatePlay(play) {
+      if (this.isSkipping || !this.checkUI()) {
+          return Promise.resolve();
+      }
+
+      const parent = this.viewMode ? this.container : this.modal;
+      const ballEl = parent.querySelector('.football-ball');
+      if (!ballEl) return Promise.resolve();
+
+      return new Promise(resolve => {
+          const isHome = this.gameState.ballPossession === 'home';
+
+          // Start Position (Current YardLine)
+          const startYard = play.yardLine;
+          // End Position
+          let endYard = startYard + play.yards;
+
+          // Cap at endzones for visual sanity
+          if (endYard > 100) endYard = 105; // Into EZ
+          if (endYard < 0) endYard = -5; // Safety
+
+          let startVisual = isHome ? startYard : (100 - startYard);
+          let endVisual = isHome ? endYard : (100 - endYard);
+
+          const startPct = (10 + startVisual) / 1.2;
+          const endPct = (10 + endVisual) / 1.2;
+
+          // 1. Set Start Position (Instant)
+          ballEl.style.transition = 'none';
+          ballEl.style.left = `${startPct}%`;
+
+          // Force Reflow
+          void ballEl.offsetWidth;
+
+          // 2. Animate to End
+          let duration = 0.8; // default
+          if (play.playType.startsWith('pass')) duration = 1.2;
+          if (play.playType === 'punt' || play.playType === 'field_goal') duration = 1.5;
+          if (this.tempo === 'hurry-up') duration *= 0.5;
+
+          ballEl.style.transition = `left ${duration}s ease-in-out`;
+          ballEl.style.left = `${endPct}%`;
+
+          // Special Visuals
+          if (play.result === 'touchdown' || play.result === 'field_goal') {
+               ballEl.classList.add('animate-pulse');
+          } else {
+               ballEl.classList.remove('animate-pulse');
+          }
+
+          setTimeout(() => {
+              // Cleanup pulse
+              if (play.result === 'touchdown' || play.result === 'field_goal') {
+                   setTimeout(() => ballEl.classList.remove('animate-pulse'), 1000);
+              }
+              resolve();
+          }, duration * 1000);
+      });
   }
 
   /**
@@ -217,7 +365,8 @@ class LiveGameViewer {
     this.playByPlay = [];
     this.currentPlayIndex = 0;
     this.isPlaying = false;
-    this.isPaused = false; // Start paused for better UX? No, auto-play.
+    this.isPaused = false;
+    this.isSkipping = false;
     this.playCallQueue = null;
     this.hasAppliedResult = false;
   }
@@ -783,6 +932,10 @@ class LiveGameViewer {
    */
   updateGameState(play, gameState) {
     // State is updated within generatePlay
+    // But we need to update the visual field markers for the NEXT play
+    const ballPos = gameState.ballPossession;
+    const yardLine = gameState[ballPos].yardLine;
+    this.updateFieldState(yardLine, ballPos === 'home');
   }
 
   /**
@@ -904,7 +1057,7 @@ class LiveGameViewer {
   /**
    * Display next play
    */
-  displayNextPlay() {
+  async displayNextPlay() {
     if (this.isGameEnded) return;
 
     if (this.gameState?.gameComplete) {
@@ -944,6 +1097,10 @@ class LiveGameViewer {
 
     this.playByPlay.push(play);
     this.currentPlayIndex = this.playByPlay.length;
+
+    // ANIMATE!
+    await this.animatePlay(play);
+
     this.renderPlay(play);
     this.updateGameState(play, state);
     this.handleEndOfQuarter(state);
@@ -966,10 +1123,11 @@ class LiveGameViewer {
    * Get delay between plays based on tempo
    */
   getPlayDelay() {
+    // Reduce delays slightly since animation takes time now
     switch (this.tempo) {
-      case 'hurry-up': return 800; // 0.8 seconds
-      case 'slow': return 3000; // 3 seconds
-      default: return 1500; // 1.5 seconds
+      case 'hurry-up': return 200; // was 800
+      case 'slow': return 2000; // was 3000
+      default: return 800; // was 1500
     }
   }
 
@@ -1447,6 +1605,7 @@ class LiveGameViewer {
         </div>
         
         <div class="scoreboard"></div>
+        <div class="field-wrapper" style="margin: 10px; padding: 0 10px;"></div> <!-- Field -->
         
         <div class="game-controls">
           <button class="tempo-btn active" data-tempo="normal">Normal</button>
@@ -1501,6 +1660,9 @@ class LiveGameViewer {
 
     document.body.appendChild(modal);
     this.modal = modal;
+
+    // Render Field
+    this.renderField(modal.querySelector('.field-wrapper'));
 
     // Event listeners
     modal.querySelector('.close').addEventListener('click', () => this.hideModal());
