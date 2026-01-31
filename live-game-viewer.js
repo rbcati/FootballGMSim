@@ -26,6 +26,9 @@ class LiveGameViewer {
     this.viewMode = false;
     this.hasAppliedResult = false;
     this.isGameEnded = false;
+
+    // Streak / Momentum state
+    this.streak = 0; // Positive for user success, negative for failure (approx)
   }
 
   /**
@@ -1230,6 +1233,33 @@ class LiveGameViewer {
     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
     if (!playLog) return;
 
+    // Game Juice & Sounds
+    if (!this.isSkipping) {
+        if (play.result === 'touchdown') {
+            soundManager.playCheer();
+            launchConfetti();
+            this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
+        } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+            soundManager.playTackle();
+            this.triggerVisualFeedback('negative', 'TURNOVER');
+            // Screen shake
+            if (this.container) this.container.classList.add('shake');
+            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
+            setTimeout(() => {
+                if (this.container) this.container.classList.remove('shake');
+                else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake');
+            }, 500);
+        } else if (play.result === 'sack') {
+             soundManager.playTackle();
+             this.triggerVisualFeedback('negative', 'SACK!');
+        } else if (play.result === 'field_goal') {
+             soundManager.playPing();
+             this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+        } else if (play.type === 'quarter_end') {
+             soundManager.playWhistle();
+        }
+    }
+
     const playElement = document.createElement('div');
     playElement.className = 'play-item';
 
@@ -1296,6 +1326,28 @@ class LiveGameViewer {
   }
 
   /**
+   * Trigger visual feedback overlay
+   */
+  triggerVisualFeedback(type, text) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+
+      const overlay = document.createElement('div');
+      overlay.className = `score-overlay ${type}`;
+      overlay.textContent = text;
+
+      // Append to relative parent
+      const container = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      container.style.position = 'relative'; // Ensure positioning context
+      container.appendChild(overlay);
+
+      // Remove after animation
+      setTimeout(() => {
+          overlay.remove();
+      }, 1500);
+  }
+
+  /**
    * Update scoreboard display
    */
   updateScoreboard() {
@@ -1355,7 +1407,8 @@ class LiveGameViewer {
     // Check if we need to inject the buttons for view mode
     if (this.viewMode) {
         const pcContainer = parent.querySelector('.play-calling');
-        if (pcContainer && pcContainer.innerHTML.trim() === '') {
+        // Check if buttons exist, ignoring whitespace/comments
+        if (pcContainer && !pcContainer.querySelector('.play-call-buttons')) {
             pcContainer.innerHTML = `
                 <div class="play-call-prompt" style="margin-bottom: 10px; font-weight: bold; color: var(--accent);">Call Your Play:</div>
                 <div class="play-call-buttons" style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -1567,6 +1620,29 @@ class LiveGameViewer {
       this.intervalId = null;
     }
 
+    // Enhanced Game Over Screen
+    if (this.checkUI() && !this.isSkipping) {
+        const userTeam = this.userTeamId ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
+
+        // Only show overlay if user is playing
+        if (userTeam) {
+             const isHome = this.gameState.home.team.id === this.userTeamId;
+             const userScore = isHome ? this.gameState.home.score : this.gameState.away.score;
+             const oppScore = isHome ? this.gameState.away.score : this.gameState.home.score;
+
+             if (userScore > oppScore) {
+                 soundManager.playCheer();
+                 if (soundManager.playHorns) soundManager.playHorns();
+                 launchConfetti();
+                 this.showGameOverOverlay('VICTORY', userScore, oppScore, 'positive');
+             } else if (userScore < oppScore) {
+                  this.showGameOverOverlay('DEFEAT', userScore, oppScore, 'negative');
+             } else {
+                  this.showGameOverOverlay('DRAW', userScore, oppScore, 'neutral');
+             }
+        }
+    }
+
     // Show final stats safely
     if (this.checkUI()) {
         const parent = this.viewMode ? this.container : this.modal;
@@ -1582,6 +1658,31 @@ class LiveGameViewer {
 
     // ENSURE SAVE
     this.finalizeGame();
+  }
+
+  showGameOverOverlay(title, scoreA, scoreB, type) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      if (!parent) return;
+
+      const overlay = document.createElement('div');
+      overlay.className = 'game-over-overlay';
+      overlay.innerHTML = `
+        <div class="game-over-title" style="color: ${type === 'positive' ? '#4cd964' : type === 'negative' ? '#ff3b30' : '#fff'}">${title}</div>
+        <div class="game-over-score">${scoreA} - ${scoreB}</div>
+        <button class="btn primary" id="dismissOverlay">Continue</button>
+      `;
+
+      // Ensure positioning
+      if (getComputedStyle(parent).position === 'static') {
+          parent.style.position = 'relative';
+      }
+
+      parent.appendChild(overlay);
+
+      overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
+          overlay.remove();
+      });
   }
 
   /**
@@ -1804,6 +1905,12 @@ class LiveGameViewer {
       const m = this.gameState.momentum;
       const pct = (m + 100) / 2;
 
+      // Streak indicator
+      let streakHtml = '';
+      if (this.streak >= 3) {
+          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 0.8em; margin-top: 4px;">🔥 ON FIRE! 🔥</div>`;
+      }
+
       container.innerHTML = `
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
         <div class="${Math.abs(m) > 75 ? 'momentum-surge' : ''}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
@@ -1814,6 +1921,7 @@ class LiveGameViewer {
             <span>${this.gameState.away.team.abbr}</span>
             <span>${this.gameState.home.team.abbr}</span>
         </div>
+        ${streakHtml}
       `;
   }
 
