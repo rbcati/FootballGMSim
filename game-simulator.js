@@ -1514,7 +1514,7 @@ export function simulateBatch(games, options = {}) {
                             playerStats[player.id] = {
                                 name: player.name,
                                 pos: player.pos,
-                                stats: { ...player.stats.game }
+                                ...player.stats.game
                             };
                         }
                     });
