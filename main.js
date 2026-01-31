@@ -481,21 +481,66 @@ class GameController {
                     return 'inherit';
                 };
 
-                // --- HTML CONSTRUCTION (IMPROVED) ---
+                // --- HTML CONSTRUCTION (IMPROVED - COMPACT LAYOUT) ---
                 headerDashboardHTML = `
-                    <div class="team-header">
+                    <div class="team-header compact-header" style="padding: 15px; margin-bottom: 15px; flex-wrap: nowrap;">
                         <div class="team-primary-info">
-                            <h1 class="team-name">${userTeam.name}</h1>
-                            <div class="team-record">
+                            <h1 class="team-name" style="font-size: 24px; margin-bottom: 4px;">${userTeam.name}</h1>
+                            <div class="team-record" style="font-size: 20px;">
                                 ${wins}-${losses}-${ties} <span style="font-size: 0.8em; opacity: 0.7;">(${streakStr})</span>
                             </div>
-                            <div style="font-size: 0.9rem; opacity: 0.9; margin-top: 4px;">
-                                <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span> • #${confRank} Conf
-                                <div style="font-size: 0.8rem; color: ${playoffColor}; font-weight: 600;">${playoffStatus}</div>
+                             <div style="font-size: 0.8rem; opacity: 0.9;">
+                                <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span>
                             </div>
                         </div>
 
-                        <div class="team-stats-grid">
+                        <!-- ADVANCE WEEK BUTTON (MOVED HERE) -->
+                         <div class="week-summary" style="text-align: right; min-width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                            <div class="week-label" style="color: #ccc; margin-bottom: 8px; font-size: 14px;">Week ${currentWeek}</div>
+                            ${!isOffseason ? `
+                                <button id="btnAdvanceWeekTop" class="btn primary" style="width: 100%; padding: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3); white-space: nowrap;">
+                                    Advance Week >
+                                </button>
+                            ` : `<div class="tag is-info">Offseason</div>`}
+                        </div>
+                    </div>
+
+                    <!-- FEATURED GAME CARD (MOVED HERE) -->
+                    ${(opponent && !isOffseason) ? `
+                        <div class="user-game-card featured" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3 style="margin:0; color: var(--accent); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Your Game This Week</h3>
+                                ${nextGame && (nextGame.played || nextGame.finalized) ? '<span class="tag is-success">Final</span>' : '<span class="tag is-warning">Upcoming</span>'}
+                            </div>
+
+                            <div class="matchup" style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 20px; font-size: 1.5rem; font-weight: bold;">
+                                <div class="team away" style="text-align: center;">
+                                    <div style="font-size: 2rem;">${isHome ? opponent.abbr : userTeam.abbr}</div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">${isHome ? (opponent.wins ?? opponent.record?.w ?? 0) : userTeam.wins}-${isHome ? (opponent.losses ?? opponent.record?.l ?? 0) : userTeam.losses}</div>
+                                </div>
+                                <div class="vs" style="font-size: 1rem; color: #666; font-weight: normal;">@</div>
+                                <div class="team home" style="text-align: center;">
+                                    <div style="font-size: 2rem;">${isHome ? userTeam.abbr : opponent.abbr}</div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">${isHome ? userTeam.wins : (opponent.wins ?? opponent.record?.w ?? 0)}-${isHome ? userTeam.losses : (opponent.losses ?? opponent.record?.l ?? 0)}</div>
+                                </div>
+                            </div>
+
+                            ${nextGame && !nextGame.played && !nextGame.finalized ? `
+                            <button
+                                onclick="window.watchLiveGame(${nextGame.home.id || nextGame.home}, ${nextGame.away.id || nextGame.away})"
+                                class="btn btn-watch"
+                                style="width: 100%; background: var(--success); color: white; padding: 12px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s;"
+                            >
+                                📺 Watch Game
+                            </button>
+                            ` : `
+                             <button class="btn" style="width: 100%; opacity: 0.5; cursor: default;">Game Finished</button>
+                            `}
+                        </div>
+                    ` : ''}
+
+                    <!-- STATS GRID (KEPT BUT MOVED DOWN) -->
+                    <div class="team-stats-grid" style="margin-bottom: 20px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;">
                             <div class="stat-card">
                                 <div class="stat-label">Overall</div>
                                 <div class="stat-value">${ovr}</div>
@@ -515,19 +560,6 @@ class GameController {
                                 <div class="stat-label">Cap Space</div>
                                 <div class="stat-value" style="color: ${capColor}; font-size: 1.2rem;">$${capSpace}M</div>
                             </div>
-
-                            <div class="stat-card" style="border: 1px solid rgba(255, 255, 255, 0.2);">
-                                <div class="stat-label">Next Game</div>
-                                ${opponent ? `
-                                    <div style="font-weight: bold; font-size: 1.1rem; color: white;">
-                                        ${isHome ? 'vs' : '@'} ${opponent.abbr}
-                                    </div>
-                                    <div style="font-size: 0.8rem; color: #aaa;">Week ${currentWeek}</div>
-                                ` : `
-                                    <div style="font-weight: bold; font-size: 1.1rem; color: white;">BYE</div>
-                                `}
-                            </div>
-                        </div>
                     </div>
 
                     <style>
@@ -1192,6 +1224,13 @@ class GameController {
             const btnSimWeekHQ = hubContainer.querySelector('#btnSimWeekHQ');
             if (btnSimWeekHQ) {
                 btnSimWeekHQ.addEventListener('click', () => {
+                    this.handleGlobalAdvance();
+                });
+            }
+
+            const btnAdvanceWeekTop = hubContainer.querySelector('#btnAdvanceWeekTop');
+            if (btnAdvanceWeekTop) {
+                btnAdvanceWeekTop.addEventListener('click', () => {
                     this.handleGlobalAdvance();
                 });
             }

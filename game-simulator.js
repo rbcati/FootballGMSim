@@ -1511,11 +1511,7 @@ export function simulateBatch(games, options = {}) {
                     const playerStats = {};
                     roster.forEach(player => {
                         if (player && player.stats && player.stats.game) {
-                            playerStats[player.id] = {
-                                name: player.name,
-                                pos: player.pos,
-                                stats: { ...player.stats.game }
-                            };
+                            playerStats[player.id] = { ...player.stats.game };
                         }
                     });
                     return playerStats;
