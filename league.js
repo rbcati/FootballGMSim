@@ -135,10 +135,11 @@ function getZeroTeamStats() {
 /**
  * Main function to generate the league.
  * @param {Array} teams - Array of team objects.
+ * @param {Object} options - Configuration options (startPoint, year, etc.).
  * @param {Object} dependencies - Optional dependencies (Constants, Utils, etc.).
  * @returns {Object} The generated league object.
  */
-function makeLeague(teams, dependencies = {}) {
+function makeLeague(teams, options = {}, dependencies = {}) {
     // Destructure dependencies with fallbacks to window
     const {
         Constants = (typeof window !== 'undefined' ? window.Constants : null),
@@ -161,15 +162,15 @@ function makeLeague(teams, dependencies = {}) {
     }
 
     try {
-        const leagueYear = (typeof window !== 'undefined' && window.state?.year) || 2025;
-
-        const { startPoint } = dependencies;
+        // Configuration
+        const leagueYear = options.year || (typeof window !== 'undefined' && window.state?.year) || 2025;
+        const startPoint = options.startPoint || 'regular';
 
         const league = {
             teams: [],
             year: leagueYear,
             season: 1,
-            week: startPoint === 'offseason' ? 0 : 1,
+            week: 1, // Default to week 1; offseason flag handles phase logic
             offseason: startPoint === 'offseason',
             schedule: null,
             resultsByWeek: [],
@@ -249,14 +250,10 @@ function makeLeague(teams, dependencies = {}) {
             console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
         }
 
-        // Update state only once at the end
-        if (typeof window !== 'undefined') {
-            if (!window.state) window.state = {};
-            window.state.league = league;
-            window.state.year = league.year;
-            window.state.season = league.season;
-            window.state.week = league.week;
+        // --- SIDE EFFECT REMOVAL ---
+        // Instead of setting window.state directly, we perform updates on the league object if helpers are available
 
+        if (typeof window !== 'undefined') {
             // Update ratings if function exists
             if (window.updateLeaguePlayers) {
                 window.updateLeaguePlayers(league);
