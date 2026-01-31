@@ -1843,6 +1843,15 @@ class GameController {
                 }
             }
 
+            // Validation Check: Ensure League Assets are Fully Loaded
+            if (!window.state.league || !Array.isArray(window.state.league.teams) || window.state.league.teams.length === 0) {
+                throw new Error("League validation failed: Roster assets not fully loaded.");
+            }
+            if (!window.state.league.schedule) {
+                // Schedule might be empty if not generated yet, but object should exist
+                throw new Error("League validation failed: Schedule assets missing.");
+            }
+
             // [Fix] Storage Health Check
             try {
                 localStorage.setItem('__storage_test__', '1');
@@ -1999,7 +2008,7 @@ class GameController {
 
                 // 1. Try last played
                 if (lastLeague && window.loadLeague) {
-                    loaded = window.loadLeague(lastLeague);
+                    loaded = await window.loadLeague(lastLeague);
                 }
 
                 // 2. If failed, try to find ANY saved league
@@ -2012,7 +2021,7 @@ class GameController {
                         if (key && key.startsWith(DB_KEY_PREFIX)) {
                             const name = key.replace(DB_KEY_PREFIX, '');
                             console.log("Found backup save:", name);
-                            loaded = window.loadLeague(name);
+                            loaded = await window.loadLeague(name);
                             if (loaded) break;
                         }
                     }
@@ -2294,13 +2303,13 @@ class GameController {
         try {
             // Use new Dashboard Save System if available
             if (window.saveGame) {
-                window.saveGame(stateToSave);
+                await window.saveGame(stateToSave);
                 return { success: true };
             }
 
             // Fallback to legacy
             if (saveState) {
-                const ok = saveState(stateToSave);
+                const ok = await saveState(stateToSave);
                 if (ok) {
                     if (typeof window.renderSaveSlotInfo === 'function') window.renderSaveSlotInfo();
                     if (typeof window.renderSaveDataManager === 'function') window.renderSaveDataManager();
@@ -2322,8 +2331,13 @@ class GameController {
                 const lastLeague = window.getLastPlayedLeague();
                 if (lastLeague) {
                     console.log("Loading last played league:", lastLeague);
-                    const loadedState = window.loadLeague(lastLeague);
+                    const loadedState = await window.loadLeague(lastLeague);
                     if (loadedState) {
+                        // Validation Check
+                        if (!loadedState.league || !Array.isArray(loadedState.league.teams)) {
+                            console.error("Loaded state invalid:", loadedState);
+                            throw new Error("Invalid league state loaded");
+                        }
                         return { success: true, gameData: loadedState };
                     }
                 }
@@ -2331,7 +2345,7 @@ class GameController {
 
             // Fallback: Legacy State System
             if (loadState) {
-                const gameData = loadState();
+                const gameData = await loadState();
                 if (gameData) {
                     return { success: true, gameData };
                 } else {

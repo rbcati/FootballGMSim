@@ -548,7 +548,7 @@ export const State = {
  * Load game state from localStorage, validate, and migrate if necessary.
  * @returns {Object|null} Loaded state or null
  */
-export function loadState() {
+export async function loadState() {
   try {
     console.log('Loading state...');
     
@@ -688,7 +688,7 @@ function prepareStateForSave(stateObj, { keepBoxScoreWeeks = 1 } = {}) {
   };
 }
 
-export function saveState(stateToSave = null, options = {}) {
+export async function saveState(stateToSave = null, options = {}) {
   try {
     const stateObj = stateToSave || window.state;
 
@@ -720,7 +720,7 @@ export function saveState(stateToSave = null, options = {}) {
     // --- INTEGRATION FIX: Use Dashboard Save System if available ---
     // This ensures auto-saves via beforeunload go to the same DB as manual saves
     if (typeof window !== 'undefined' && window.saveGame && !options.legacyOnly) {
-        window.saveGame(stateForSave);
+        await window.saveGame(stateForSave);
         return true;
     }
     const serialized = JSON.stringify(stateForSave);
@@ -873,12 +873,18 @@ if (typeof window !== 'undefined') {
  * Initialize the global state object if it doesn't exist.
  * Attempt to load a saved game first.
  */
-function initializeGlobalState() {
+async function initializeGlobalState() {
   if (!window.state) {
-    // Try to load state first
-    const loaded = loadState(); 
-    if (!loaded) {
-        console.log('Creating initial global state (no save found)...');
+    // Try to load state first (async)
+    // NOTE: GameController also handles init, so this is a backup/fallback.
+    try {
+        const loaded = await loadState();
+        if (!loaded) {
+            console.log('Creating initial global state (no save found)...');
+            window.state = State.init();
+        }
+    } catch (e) {
+        console.warn('Auto-init failed load:', e);
         window.state = State.init();
     }
   } else {
@@ -887,9 +893,12 @@ function initializeGlobalState() {
   state = window.state;
 }
 
-// Initialize state immediately (attempts load first)
+// Initialize state immediately (Basic init only, load is deferred to GameController)
 if (typeof window !== 'undefined') {
-  initializeGlobalState();
+  if (!window.state) {
+      window.state = State.init();
+  }
+  state = window.state;
 
   // Install autosave hook
   hookAutoSave();

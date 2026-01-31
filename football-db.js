@@ -13,7 +13,8 @@ export class FootballDB {
    */
   connect() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(this.dbName, 1);
+      // Version 2: Added saved_leagues store
+      const request = indexedDB.open(this.dbName, 2);
 
       request.onupgradeneeded = (event) => {
         const db = event.target.result;
@@ -42,6 +43,12 @@ export class FootballDB {
             const logsStore = db.createObjectStore('play_logs', { keyPath: 'play_id', autoIncrement: true });
             logsStore.createIndex('game_id', 'game_id', { unique: false });
         }
+
+        // 5. Saved Leagues (Full Game State)
+        if (!db.objectStoreNames.contains('saved_leagues')) {
+            // keyPath is 'name' (league name)
+            db.createObjectStore('saved_leagues', { keyPath: 'name' });
+        }
       };
 
       request.onsuccess = (event) => {
@@ -55,6 +62,94 @@ export class FootballDB {
         reject(event.target.error);
       };
     });
+  }
+
+  /**
+   * Save a full league state (IndexedDB)
+   * @param {Object} leagueData - The full game state object
+   */
+  async saveLeague(leagueData) {
+    await this.initPromise;
+    return new Promise((resolve, reject) => {
+        const transaction = this.db.transaction(["saved_leagues"], "readwrite");
+        const store = transaction.objectStore("saved_leagues");
+
+        // Ensure we save properly with the key. leagueData should have 'name' property matching the key.
+        // If leagueData is the wrapper { name: "League X", data: {...} }, we use that.
+        // The league-dashboard.js logic wraps it.
+
+        if (!leagueData || !leagueData.name) {
+            reject(new Error("Invalid league data: missing name"));
+            return;
+        }
+
+        const request = store.put(leagueData);
+
+        request.onsuccess = () => {
+            console.log(`✅ League "${leagueData.name}" saved to IndexedDB.`);
+            resolve(true);
+        };
+
+        request.onerror = (event) => {
+            console.error("Error saving league to IndexedDB:", event.target.error);
+            if (event.target.error.name === 'QuotaExceededError') {
+                reject(new Error("QuotaExceededError"));
+            } else {
+                reject(event.target.error);
+            }
+        };
+    });
+  }
+
+  /**
+   * Load a full league state by name
+   * @param {string} name - League name
+   */
+  async loadLeague(name) {
+      await this.initPromise;
+      return new Promise((resolve, reject) => {
+          const transaction = this.db.transaction(["saved_leagues"], "readonly");
+          const store = transaction.objectStore("saved_leagues");
+          const request = store.get(name);
+
+          request.onsuccess = () => {
+              if (request.result) {
+                  console.log(`✅ League "${name}" loaded from IndexedDB.`);
+                  resolve(request.result);
+              } else {
+                  console.warn(`League "${name}" not found in IndexedDB.`);
+                  resolve(null);
+              }
+          };
+
+          request.onerror = (event) => {
+              console.error("Error loading league:", event.target.error);
+              reject(event.target.error);
+          };
+      });
+  }
+
+  /**
+   * Delete a league by name
+   * @param {string} name
+   */
+  async deleteLeague(name) {
+      await this.initPromise;
+      return new Promise((resolve, reject) => {
+          const transaction = this.db.transaction(["saved_leagues"], "readwrite");
+          const store = transaction.objectStore("saved_leagues");
+          const request = store.delete(name);
+
+          request.onsuccess = () => {
+              console.log(`🗑️ League "${name}" deleted from IndexedDB.`);
+              resolve(true);
+          };
+
+          request.onerror = (event) => {
+              console.error("Error deleting league:", event.target.error);
+              reject(event.target.error);
+          };
+      });
   }
 
   /**

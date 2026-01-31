@@ -80,6 +80,11 @@ export function setLastPlayedLeague(name) {
 }
 
 export function hasSavedLeagues() {
+    // Check metadata first
+    const meta = getLeagueMetadata();
+    if (Object.keys(meta).length > 0) return true;
+
+    // Legacy check
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.startsWith(DB_KEY_PREFIX)) {
@@ -90,7 +95,7 @@ export function hasSavedLeagues() {
 }
 
 // 1. Function to Save Current Game
-export function saveGame(stateToSave) {
+export async function saveGame(stateToSave) {
     const gameState = stateToSave || window.state;
     if (!gameState || !gameState.league) {
         console.warn("No league to save.");
@@ -123,10 +128,25 @@ export function saveGame(stateToSave) {
     };
 
     try {
-        localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+        // Try IndexedDB first (Primary Storage)
+        let savedToIDB = false;
+        if (window.footballDB) {
+            try {
+                await window.footballDB.saveLeague(saveData);
+                savedToIDB = true;
+            } catch (idbErr) {
+                console.error("IndexedDB save failed, attempting localStorage fallback...", idbErr);
+            }
+        }
+
+        if (!savedToIDB) {
+            // Fallback to localStorage
+            localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+        }
+
         setLastPlayedLeague(leagueName); // Update last played
 
-        // Update metadata index for performance
+        // Update metadata index for performance (kept in localStorage for sync access)
         updateLeagueMetadata(saveData);
 
         if (window.setStatus) window.setStatus("League saved: " + leagueName, "success");
@@ -217,15 +237,8 @@ export function renderDashboard() {
 
     let dirty = false;
     for (const league of sortedLeagues) {
-        // Verify existence cheaply (O(1)) without parsing full file
-        if (!localStorage.getItem(DB_KEY_PREFIX + league.name)) {
-            // Self-healing: remove from metadata if file is gone
-            if (metadata[league.name]) {
-                delete metadata[league.name];
-                dirty = true;
-            }
-            continue;
-        }
+        // We trust metadata now since IDB check is async.
+        // If load fails later, we can handle it then.
 
         hasLeagues = true;
         leagueCount++;
@@ -284,12 +297,39 @@ export function renderDashboard() {
 }
 
 // 3. Load Specific League
-export function loadLeague(leagueName) {
-    const raw = localStorage.getItem(DB_KEY_PREFIX + leagueName);
-    if (!raw) return null;
-
+export async function loadLeague(leagueName) {
     try {
-        const saveObj = JSON.parse(raw);
+        let saveObj = null;
+
+        // Try IndexedDB first
+        if (window.footballDB) {
+            try {
+                saveObj = await window.footballDB.loadLeague(leagueName);
+            } catch (idbErr) {
+                console.warn("IDB load failed, checking localStorage backup...", idbErr);
+            }
+        }
+
+        // Fallback to localStorage (Migration / Backup)
+        if (!saveObj) {
+            const raw = localStorage.getItem(DB_KEY_PREFIX + leagueName);
+            if (raw) {
+                saveObj = JSON.parse(raw);
+                console.log("Loaded from localStorage (Legacy)");
+
+                // Optional: Migrate to IDB automatically?
+                if (window.footballDB && saveObj) {
+                    window.footballDB.saveLeague(saveObj).then(() => console.log("Migrated to IDB"));
+                }
+            }
+        }
+
+        if (!saveObj) {
+            console.error("League not found in any storage:", leagueName);
+            if (window.setStatus) window.setStatus("Failed to load league: Not Found", "error");
+            return null;
+        }
+
         window.state = saveObj.data;
         window.state.leagueName = leagueName; // Ensure name is preserved
 
@@ -352,9 +392,15 @@ export function loadLeague(leagueName) {
 }
 
 // 4. Delete League
-export function deleteLeague(leagueName) {
+export async function deleteLeague(leagueName) {
     if (confirm(`Delete league "${leagueName}"? This cannot be undone.`)) {
+        // Delete from IDB
+        if (window.footballDB) {
+            await window.footballDB.deleteLeague(leagueName);
+        }
+        // Delete from LocalStorage (Legacy cleanup)
         localStorage.removeItem(DB_KEY_PREFIX + leagueName);
+
         removeLeagueMetadata(leagueName);
 
         if (getLastPlayedLeague() === leagueName) {
@@ -370,8 +416,9 @@ export function createNewLeague(name) {
         alert("Please enter a league name.");
         return;
     }
-    // Check if name exists
-    if (localStorage.getItem(DB_KEY_PREFIX + name)) {
+    // Check if name exists (check metadata)
+    const meta = getLeagueMetadata();
+    if (meta[name]) {
         alert("League name already exists. Please choose another.");
         return;
     }
