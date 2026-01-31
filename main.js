@@ -531,9 +531,9 @@ class GameController {
                     </div>
 
                     <style>
-                    /* Improve top header spacing and sizing */
+                    /* Improve top header spacing and sizing (Bug #5 Fix) */
                     .team-header {
-                        padding: 20px;
+                        padding: 24px;
                         background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
                         border-radius: 12px;
                         margin-bottom: 20px;
@@ -550,9 +550,9 @@ class GameController {
                     }
 
                     .team-name {
-                        font-size: 28px;
+                        font-size: 32px;
                         font-weight: bold;
-                        margin-bottom: 8px;
+                        margin-bottom: 12px;
                         margin-top: 0;
                         color: white;
                     }
@@ -561,29 +561,28 @@ class GameController {
                         font-size: 24px;
                         color: #00d4ff;
                         font-weight: 600;
-                        margin-bottom: 8px;
+                        margin-bottom: 16px;
                     }
 
                     .team-stats-grid {
-                        display: flex;
-                        gap: 15px;
-                        flex-wrap: wrap;
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                        gap: 16px;
                         flex: 2;
                         justify-content: flex-end;
                     }
 
                     .stat-card {
                         background: rgba(255, 255, 255, 0.05);
-                        padding: 12px 15px;
+                        padding: 12px;
                         border-radius: 8px;
                         text-align: center;
                         border: 1px solid rgba(255, 255, 255, 0.1);
                         min-width: 90px;
-                        flex: 1;
                     }
 
                     .stat-card .stat-label {
-                        font-size: 11px;
+                        font-size: 12px;
                         color: #999;
                         text-transform: uppercase;
                         letter-spacing: 0.5px;
@@ -591,7 +590,7 @@ class GameController {
                     }
 
                     .stat-card .stat-value {
-                        font-size: 22px;
+                        font-size: 24px;
                         font-weight: bold;
                         color: white;
                     }
@@ -607,7 +606,7 @@ class GameController {
                         .team-stats-grid {
                             width: 100%;
                             display: grid;
-                            grid-template-columns: repeat(3, 1fr);
+                            grid-template-columns: repeat(2, 1fr);
                         }
 
                         .team-name {
@@ -619,7 +618,7 @@ class GameController {
                         }
 
                         .stat-value {
-                            font-size: 18px;
+                            font-size: 20px;
                         }
                     }
                     </style>
@@ -1914,32 +1913,96 @@ class GameController {
 
             if (hasSaves) {
                 // Check if we can resume the last played league
-                const lastLeague = window.getLastPlayedLeague ? window.getLastPlayedLeague() : null;
-                if (lastLeague && window.loadLeague) {
-                    const loaded = window.loadLeague(lastLeague); // This updates window.state
+                let lastLeague = window.getLastPlayedLeague ? window.getLastPlayedLeague() : null;
+                let loaded = null;
 
-                    // STRICT CHECK: Ensure league object exists
-                    if (loaded && window.state && window.state.league) {
-                        console.log("Resuming last played league:", lastLeague);
-                        this.initialized = true;
-                        this.setupEventListeners();
-                        this.setupAutoSave();
-                        // Route to hub (or current view if saved)
-                        const savedView = window.state.currentView || 'hub';
-                        location.hash = `#/${savedView}`;
-                        this.router(savedView);
-                        return; // Skip dashboard
-                    } else {
-                        console.error("Resume failed: Loaded state is invalid or league missing.", { loaded: !!loaded, state: !!window.state, league: !!window.state?.league });
+                // 1. Try last played
+                if (lastLeague && window.loadLeague) {
+                    loaded = window.loadLeague(lastLeague);
+                }
+
+                // 2. If failed, try to find ANY saved league
+                if ((!loaded || !window.state || !window.state.league) && window.loadLeague) {
+                    console.warn("Last played league load failed, searching for any save...");
+                    // Standard prefix
+                    const DB_KEY_PREFIX = 'football_gm_league_';
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key && key.startsWith(DB_KEY_PREFIX)) {
+                            const name = key.replace(DB_KEY_PREFIX, '');
+                            console.log("Found backup save:", name);
+                            loaded = window.loadLeague(name);
+                            if (loaded) break;
+                        }
                     }
                 }
 
+                // 3. Fallback: User requested 'football-gm-league' key support
+                if (!loaded || !window.state || !window.state.league) {
+                     try {
+                        const simpleSave = localStorage.getItem('football-gm-league');
+                        if (simpleSave) {
+                            console.log("Found legacy/simple save 'football-gm-league'");
+                            const parsed = JSON.parse(simpleSave);
+                            if (parsed && (parsed.league || parsed.teams)) { // Heuristic check
+                                window.state = parsed;
+                                // Ensure state integrity
+                                if (!window.state.league && window.state.teams) {
+                                    // Old format where league was root? Unlikely but handling
+                                }
+                                loaded = window.state;
+                                // Save it properly for next time
+                                if (window.saveGame) window.saveGame();
+                            }
+                        }
+                     } catch(e) {
+                         console.error("Simple save load error:", e);
+                     }
+                }
+
+                // STRICT CHECK: Ensure league object exists
+                if (loaded && window.state && window.state.league) {
+                    console.log("Resuming league successfully.");
+                    this.initialized = true;
+                    this.setupEventListeners();
+                    this.setupAutoSave();
+                    // Route to hub (or current view if saved)
+                    const savedView = window.state.currentView || 'hub';
+                    location.hash = `#/${savedView}`;
+                    this.router(savedView);
+                    return; // Skip dashboard
+                } else {
+                    console.error("Resume failed: Loaded state is invalid or league missing.", { loaded: !!loaded, state: !!window.state, league: !!window.state?.league });
+                }
+
                 // Saves exist but resume failed or no last played: Go to Dashboard (Entry Screen)
-                console.log('Saves found, routing to dashboard.');
+                console.log('Saves found but could not load automatically, routing to dashboard.');
                 location.hash = '#/leagueDashboard';
                 // Explicitly call router since listeners might not be ready
                 this.router('leagueDashboard');
             } else {
+                // Check for simple save key before onboarding (in case hasSavedLeagues missed it)
+                const simpleSave = localStorage.getItem('football-gm-league');
+                if (simpleSave) {
+                     try {
+                        console.log("Found legacy/simple save 'football-gm-league' (Recov)");
+                        const parsed = JSON.parse(simpleSave);
+                        if (parsed && (parsed.league || parsed.teams)) {
+                            window.state = parsed;
+                            this.initialized = true;
+                            this.setupEventListeners();
+                            this.setupAutoSave();
+                            if (window.saveGame) window.saveGame(); // Upgrade to new format
+                            const savedView = window.state.currentView || 'hub';
+                            location.hash = `#/${savedView}`;
+                            this.router(savedView);
+                            return;
+                        }
+                     } catch(e) {
+                         console.error("Recovery load failed:", e);
+                     }
+                }
+
                 // No saves: Go to Onboarding
                 console.log('No saves found, starting onboarding.');
                 await this.openOnboard();
@@ -2204,21 +2267,22 @@ class GameController {
 
     // --- ROUTER FUNCTION ---
     router(viewName = null) {
-        if (!viewName) {
-            viewName = location.hash.slice(2) || 'hub';
-        }
-        console.log('🔄 Router navigating to:', viewName);
+        try {
+            if (!viewName) {
+                viewName = location.hash.slice(2) || 'hub';
+            }
+            console.log('🔄 Router navigating to:', viewName);
 
-        // Always show the requested view if the UI helper exists
-        if (typeof window.show === 'function') {
-            window.show(viewName);
-        }
+            // Always show the requested view if the UI helper exists
+            if (typeof window.show === 'function') {
+                window.show(viewName);
+            }
 
-        switch(viewName) {
-            case 'hub':
-                if (this.renderHub) this.renderHub();
-                break;
-            case 'leagueDashboard':
+            switch(viewName) {
+                case 'hub':
+                    if (this.renderHub) this.renderHub();
+                    break;
+                case 'leagueDashboard':
                 if (window.renderDashboard) window.renderDashboard();
                 break;
             case 'roster':
@@ -2236,13 +2300,7 @@ class GameController {
             case 'game-results':
                 if (this.renderGameResults) this.renderGameResults();
                 break;
-            case 'standings':
-                if (window.renderStandingsPage) {
-                    window.renderStandingsPage();
-                } else if (window.renderStandings) {
-                    window.renderStandings();
-                }
-                break;
+            // case 'standings': // Removed as per bug fix request (use stats page)
             case 'powerRankings':
                 if (window.renderPowerRankingsPage) {
                     window.renderPowerRankingsPage();
@@ -2331,15 +2389,26 @@ class GameController {
                     }
                 }
                 break;
-            default:
-                // Handle other nested routes (e.g., player/123 might fall here if not caught above)
-                if (viewName.startsWith('player/')) {
-                     const pId = viewName.split('/')[1];
-                     window.show('playerProfile');
-                     if (window.playerStatsViewer) window.playerStatsViewer.renderToView('playerProfile', pId);
-                } else {
-                    console.log('No renderer for view:', viewName);
-                }
+                default:
+                    // Handle other nested routes (e.g., player/123 might fall here if not caught above)
+                    if (viewName.startsWith('player/')) {
+                         const pId = viewName.split('/')[1];
+                         window.show('playerProfile');
+                         if (window.playerStatsViewer) window.playerStatsViewer.renderToView('playerProfile', pId);
+                    } else {
+                        console.log('No renderer for view:', viewName);
+                    }
+            }
+        } catch (error) {
+            console.error("Router Error:", error);
+            this.setStatus('Navigation Error - returning to Hub', 'error');
+            // Prevent infinite loops if hub fails
+            if (viewName !== 'hub') {
+                setTimeout(() => {
+                    location.hash = '#/hub';
+                    this.renderHub();
+                }, 1000);
+            }
         }
     }
 
