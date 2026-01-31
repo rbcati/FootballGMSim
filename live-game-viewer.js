@@ -127,8 +127,9 @@ class LiveGameViewer {
    * @param {Object} homeTeam - Home team object
    * @param {Object} awayTeam - Away team object
    * @param {number} userTeamId - ID of user's team (for play calling)
+   * @param {boolean} autoStart - Whether to start playback immediately
    */
-  startGame(homeTeam, awayTeam, userTeamId) {
+  startGame(homeTeam, awayTeam, userTeamId, autoStart = true) {
     if (!homeTeam || !awayTeam) {
       console.error('Invalid teams for live game');
       return;
@@ -192,7 +193,7 @@ class LiveGameViewer {
     this.hasAppliedResult = false;
 
     // Start game simulation
-    this.simulateGame();
+    this.simulateGame(autoStart);
   }
 
   /**
@@ -269,7 +270,7 @@ class LiveGameViewer {
   /**
    * Simulate the entire game with play-by-play
    */
-  simulateGame() {
+  simulateGame(autoStart = true) {
     const state = this.gameState;
     const C = window.Constants?.SIMULATION || {};
     const U = window.Utils;
@@ -291,8 +292,10 @@ class LiveGameViewer {
       targetAwayScore
     };
 
-    // Start displaying plays
-    this.startPlayback();
+    // Start displaying plays if auto-start is enabled
+    if (autoStart) {
+        this.startPlayback();
+    }
   }
 
   /**
@@ -940,10 +943,57 @@ class LiveGameViewer {
   }
 
   /**
+   * Trigger visual feedback for game events
+   */
+  triggerVisualFeedback(type, text) {
+    if (!this.checkUI()) return;
+    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = `game-event-overlay ${type}`;
+    overlay.innerHTML = `<div class="event-text">${text}</div>`;
+
+    // Append to container (ensure relative positioning for parent if needed, though overlay is absolute)
+    // In view mode, container is .card usually, which is relative?
+    // .card has position: relative in CSS.
+    // In modal mode, .modal-content needs position: relative?
+    // .modal-content usually has no position set, default static.
+    // Let's set position relative on parent if static.
+    if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+    }
+
+    parent.appendChild(overlay);
+
+    // Remove after animation (1.5s)
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.remove();
+        }
+    }, 2000);
+  }
+
+  /**
    * Render a play to the UI
    */
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
+
+    // Trigger visual feedback for major events
+    if (play.result === 'touchdown') {
+        this.triggerVisualFeedback('touchdown', 'TOUCHDOWN!');
+    } else if (play.result === 'field_goal') {
+        this.triggerVisualFeedback('field-goal', 'FIELD GOAL!');
+    } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+        this.triggerVisualFeedback('turnover', 'TURNOVER!');
+    } else if (play.result === 'safety') {
+        this.triggerVisualFeedback('safety', 'SAFETY!');
+    } else if (play.result === 'sack') {
+        this.triggerVisualFeedback('sack', 'SACKED!');
+    } else if (play.result === 'big_play') {
+        this.triggerVisualFeedback('big-play', 'BIG PLAY!');
+    }
     const parent = this.viewMode ? this.container : this.modal;
 
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
@@ -1733,17 +1783,18 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
-    // 1. Ensure we are on the correct view
+    // 1. Initialize Game State FIRST (paused) to pass router checks
+    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+
+    // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {
         location.hash = '#/game-sim';
     }
 
-    // 2. Initialize UI immediately
-    // Wait a tick for router to potentially show the section
+    // 3. Render UI and Start Playback once view is visible
     setTimeout(() => {
         window.liveGameViewer.renderToView('#game-sim');
-        // 3. Start Game
-        window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId);
+        window.liveGameViewer.startPlayback();
     }, 50);
 
   } catch (error) {
