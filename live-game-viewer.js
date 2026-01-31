@@ -319,6 +319,7 @@ class LiveGameViewer {
    * @param {Object} homeTeam - Home team object
    * @param {Object} awayTeam - Away team object
    * @param {number} userTeamId - ID of user's team (for play calling)
+   * @param {boolean} autoStart - Whether to start playback immediately
    */
   initGame(homeTeam, awayTeam, userTeamId) {
     if (!homeTeam || !awayTeam) {
@@ -466,7 +467,7 @@ class LiveGameViewer {
   /**
    * Simulate the entire game with play-by-play
    */
-  simulateGame() {
+  simulateGame(autoStart = true) {
     const state = this.gameState;
     const C = window.Constants?.SIMULATION || {};
     const U = window.Utils;
@@ -488,8 +489,10 @@ class LiveGameViewer {
       targetAwayScore
     };
 
-    // Start displaying plays
-    this.startPlayback();
+    // Start displaying plays if auto-start is enabled
+    if (autoStart) {
+        this.startPlayback();
+    }
   }
 
   /**
@@ -1143,6 +1146,38 @@ class LiveGameViewer {
       case 'slow': return 2000; // was 3000
       default: return 800; // was 1500
     }
+  }
+
+  /**
+   * Trigger visual feedback for game events
+   */
+  triggerVisualFeedback(type, text) {
+    if (!this.checkUI()) return;
+    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = `game-event-overlay ${type}`;
+    overlay.innerHTML = `<div class="event-text">${text}</div>`;
+
+    // Append to container (ensure relative positioning for parent if needed, though overlay is absolute)
+    // In view mode, container is .card usually, which is relative?
+    // .card has position: relative in CSS.
+    // In modal mode, .modal-content needs position: relative?
+    // .modal-content usually has no position set, default static.
+    // Let's set position relative on parent if static.
+    if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+    }
+
+    parent.appendChild(overlay);
+
+    // Remove after animation (1.5s)
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.remove();
+        }
+    }, 2000);
   }
 
   /**
@@ -2007,7 +2042,10 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
-    // 1. Ensure we are on the correct view
+    // 1. Initialize Game State FIRST (paused) to pass router checks
+    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+
+    // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {
         location.hash = '#/game-sim';
     }

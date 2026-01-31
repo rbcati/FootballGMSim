@@ -156,11 +156,17 @@ window.show = function(viewId) {
   document.querySelectorAll('.view').forEach(view => {
     view.hidden = true;
     view.style.display = 'none';
+    view.classList.remove('fade-in'); // Reset animation
   });
   const targetView = document.getElementById(viewId);
   if (targetView) {
     targetView.hidden = false;
     targetView.style.display = 'block';
+
+    // Trigger reflow to restart animation
+    void targetView.offsetWidth;
+    targetView.classList.add('fade-in');
+
     document.querySelectorAll('.nav-pill').forEach(pill => {
       const href = pill.getAttribute('href');
       const isActive = href === `#/${viewId}`;
