@@ -987,3 +987,116 @@ select {
 .justify-between { justify-content: space-between; }
 .gap-2 { gap: var(--space-2); }
 .gap-4 { gap: var(--space-4); }
+
+/* ============================================
+   Game Juice & Feedback Animations
+   ============================================ */
+
+/* Screen Shake */
+@keyframes shake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  70% { transform: translate(3px, 1px) rotate(-1deg); }
+  80% { transform: translate(-1px, -1px) rotate(1deg); }
+  90% { transform: translate(1px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -2px) rotate(-1deg); }
+}
+
+.shake {
+  animation: shake 0.5s;
+  animation-iteration-count: 1;
+}
+
+/* Score/Notification Overlay */
+@keyframes popIn {
+  0% { transform: scale(0.1); opacity: 0; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.score-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 3rem;
+  font-weight: 900;
+  color: #fff;
+  text-shadow: 0 0 20px rgba(0,0,0,0.8), 0 0 10px var(--accent);
+  z-index: 2000;
+  pointer-events: none;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  white-space: nowrap;
+}
+
+.score-overlay.positive {
+    color: #4cd964; /* iOS Green */
+    text-shadow: 0 0 20px rgba(0,0,0,0.8), 0 0 10px #4cd964;
+}
+
+.score-overlay.negative {
+    color: #ff3b30; /* iOS Red */
+    text-shadow: 0 0 20px rgba(0,0,0,0.8), 0 0 10px #ff3b30;
+}
+
+/* Score Flash */
+@keyframes flash-score {
+    0% { transform: scale(1); color: inherit; }
+    50% { transform: scale(1.5); color: var(--accent); }
+    100% { transform: scale(1); color: inherit; }
+}
+
+.pulse-score {
+    animation: flash-score 0.5s ease-out;
+}
+
+/* Momentum Pulse */
+@keyframes pulse-glow {
+    0% { box-shadow: 0 0 5px rgba(255, 69, 58, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(255, 69, 58, 0.8); }
+    100% { box-shadow: 0 0 5px rgba(255, 69, 58, 0.5); }
+}
+
+.momentum-pulse {
+    animation: pulse-glow 1s infinite;
+}
+
+/* Streak / On Fire */
+.streak-fire {
+    color: #ff9500;
+    text-shadow: 0 0 5px #ff3b30;
+    animation: pulse-glow 0.5s infinite;
+}
+
+/* Game Over Overlay */
+.game-over-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1500;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.5s ease-out;
+}
+
+.game-over-title {
+    font-size: 3rem;
+    font-weight: 900;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.game-over-score {
+    font-size: 2rem;
+    margin-bottom: 30px;
+    font-family: var(--font-mono);
+}
