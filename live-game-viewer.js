@@ -29,6 +29,20 @@ class LiveGameViewer {
   }
 
   /**
+   * Stop the current game loop and cleanup
+   */
+  stopGame() {
+    this.isPlaying = false;
+    this.isPaused = true;
+    if (this.intervalId) {
+        clearTimeout(this.intervalId);
+        this.intervalId = null;
+    }
+    this.gameState = null;
+    this.isGameEnded = true; // Prevent any pending callbacks
+  }
+
+  /**
    * Helper to check if UI is available
    */
   checkUI() {
@@ -78,7 +92,7 @@ class LiveGameViewer {
 
     // Create layout
     container.innerHTML = `
-      <div class="card">
+      <div class="card live-game-header">
         <div class="scoreboard"></div>
         <div class="field-wrapper" style="margin: 10px 0;"></div> <!-- Field Container -->
         <div class="control-bar">
@@ -99,14 +113,14 @@ class LiveGameViewer {
       </div>
 
       <div class="grid two">
-        <div class="card" style="height: 600px; display: flex; flex-direction: column;">
+        <div class="card live-game-log-card">
             <h3>Play-by-Play</h3>
             <div class="play-log-enhanced"></div>
         </div>
         <div>
             <div class="card">
                 <h3>Game Stats</h3>
-                <div class="game-dashboard" style="margin-bottom: 15px;">
+                <div class="game-dashboard live-game-dashboard">
                     <div class="box-score-panel"></div>
                     <div class="momentum-panel" style="margin-top: 10px;"></div>
                 </div>
