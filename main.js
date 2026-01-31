@@ -1387,6 +1387,9 @@ class GameController {
     }
 
     async handleSimulateSeason() {
+        if (this.isSimulatingSeason) return;
+        this.isSimulatingSeason = true;
+
         try {
             console.log('Simulating season...');
             showLoading('Simulating Season...');
@@ -1444,6 +1447,7 @@ class GameController {
             console.error('Error simulating season:', error);
             this.setStatus('Failed to simulate season', 'error');
         } finally {
+            this.isSimulatingSeason = false;
             hideLoading();
         }
     }
