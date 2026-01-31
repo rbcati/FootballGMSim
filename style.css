@@ -7184,140 +7184,74 @@ input:focus, select:focus, textarea:focus {
   outline-offset: -2px;
 }
 
-/* ============================================================================
-   LIVE GAME VISUAL POLISH
-   ============================================================================ */
-
-/* Animations */
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes pulse {
-  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--success-rgb), 0.7); }
-  70% { transform: scale(1.02); box-shadow: 0 0 0 10px rgba(var(--success-rgb), 0); }
-  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(var(--success-rgb), 0); }
-}
+/* ========================================
+   GAME JUICE ANIMATIONS
+   ======================================== */
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
-  20%, 40%, 60%, 80% { transform: translateX(2px); }
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
 }
 
-@keyframes flash {
-  0%, 100% { background-color: transparent; }
-  50% { background-color: rgba(255, 255, 255, 0.2); }
+.shake {
+  animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
 }
 
-@keyframes scorePop {
+@keyframes flash-white {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+.flash-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: white;
+  z-index: 10000;
+  pointer-events: none;
+  animation: flash-white 0.5s ease-out forwards;
+}
+
+@keyframes pulse-score {
   0% { transform: scale(1); }
-  50% { transform: scale(1.5); color: var(--accent); }
+  50% { transform: scale(1.2); }
   100% { transform: scale(1); }
 }
 
-/* Play Item Enhancements */
-.play-item {
-  transition: all 0.3s ease;
-  border-left-width: 4px;
+.pulse-score {
+  animation: pulse-score 0.3s ease-in-out;
+  color: var(--accent) !important;
+  text-shadow: 0 0 10px var(--accent);
 }
 
-.play-item.slide-in {
-  animation: slideIn 0.3s ease-out forwards;
+.momentum-surge {
+  box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.5);
+  transition: box-shadow 0.3s ease;
+  border: 1px solid white !important;
 }
 
-/* Specific Event Styles */
-.play-item.play-touchdown {
-  background: rgba(var(--success-rgb), 0.15);
-  border-left-color: var(--success);
-  animation: slideIn 0.3s ease-out, pulse 1.5s infinite;
+/* Floating Text for big plays */
+@keyframes float-up {
+  0% { transform: translateY(0) scale(0.5); opacity: 0; }
+  20% { transform: translateY(-20px) scale(1.2); opacity: 1; }
+  100% { transform: translateY(-50px) scale(1); opacity: 0; }
 }
 
-.play-item.play-field-goal {
-  background: rgba(var(--accent-rgb), 0.1);
-  border-left-color: var(--accent);
-}
-
-.play-item.play-turnover,
-.play-item.play-turnover_downs {
-  background: rgba(var(--error-rgb), 0.15);
-  border-left-color: var(--danger);
-  animation: slideIn 0.3s ease-out, shake 0.5s ease-in-out;
-}
-
-.play-item.play-sack {
-  background: rgba(var(--warning-rgb), 0.15);
-  border-left-color: var(--warning);
-}
-
-.play-item.play-big-play {
-  background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.05), rgba(var(--accent-rgb), 0.15));
-  border-left-color: var(--accent);
-  font-weight: 500;
-}
-
-/* Scoreboard Enhancements */
-.score-team {
-  transition: all 0.3s ease;
-}
-
-.score-team.score-flash .team-score {
-  animation: scorePop 0.6s ease-out;
-}
-
-.score-team.has-possession {
-  background: var(--surface-elevated);
-  border: 1px solid var(--accent);
-  box-shadow: 0 0 15px rgba(var(--accent-rgb), 0.15);
-}
-
-/* Play Calling Button Enhancements */
-.play-call-btn {
-  position: relative;
-  overflow: hidden;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.play-call-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  border-color: var(--accent);
-}
-
-.play-call-btn:active,
-.play-call-btn.selected {
-  transform: scale(0.96);
-  background: var(--accent);
-  color: white;
-  border-color: var(--accent);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-/* Ripple effect for buttons */
-.play-call-btn::after {
-  content: '';
+.float-text {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 100%;
-  height: 100%;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  transform: translate(-50%, -50%) scale(0);
-  opacity: 0;
-  transition: transform 0.5s, opacity 0.5s;
+  color: var(--accent);
+  font-weight: 900;
+  font-size: 2rem;
+  text-shadow: 2px 2px 0 #000;
   pointer-events: none;
+  animation: float-up 1.5s ease-out forwards;
+  z-index: 5000;
 }
 
-.play-call-btn:active::after {
-  transform: translate(-50%, -50%) scale(2);
-  opacity: 1;
-  transition: 0s;
+.float-text.bad {
+  color: var(--danger);
 }
