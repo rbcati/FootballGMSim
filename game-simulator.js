@@ -749,6 +749,17 @@ function generatePunterStats(punter, teamScore, U) {
  * @param {object} away - The away team object.
  * @returns {object|null} An object with homeScore and awayScore, or null if error.
  */
+/**
+ * Simulates game statistics for a single game between two teams.
+ * Alias: simulateMatchup
+ * @param {object} home - The home team object.
+ * @param {object} away - The away team object.
+ * @returns {object|null} An object with homeScore and awayScore, or null if error.
+ */
+export function simulateMatchup(home, away, options = {}) {
+  return simGameStats(home, away, options);
+}
+
 export function simGameStats(home, away, options = {}) {
   const verbose = options.verbose === true;
   try {
@@ -922,6 +933,12 @@ export function simGameStats(home, away, options = {}) {
         } else if (intensity > 25) {
              SCORE_VARIANCE += 5;
         }
+    }
+
+    // High Stakes Variance Boost
+    if (options.stakes && options.stakes > 75) {
+        SCORE_VARIANCE += 15;
+        if (verbose) console.log(`[SIM-DEBUG] High Stakes Game! Stakes: ${options.stakes}, Variance boosted significantly.`);
     }
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
@@ -1473,13 +1490,15 @@ export function simulateBatch(games, options = {}) {
                 // 0-0 Prevention Loop
                 let gameScores;
                 let attempts = 0;
+                const stakes = pair.preGameContext?.stakes || 0;
                 do {
-                    gameScores = simGameStats(home, away, { verbose });
+                    // Use simulateMatchup (unified function)
+                    gameScores = simulateMatchup(home, away, { verbose, stakes });
                     attempts++;
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 
                 if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
-                    if (verbose) console.warn(`SimGameStats failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
+                    if (verbose) console.warn(`simulateMatchup failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
                     const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
                     gameScores = { homeScore: r(10, 42), awayScore: r(7, 35) };
                 }
@@ -1562,6 +1581,7 @@ export function simulateBatch(games, options = {}) {
 // Default export if needed, or just named exports
 export default {
     simGameStats,
+    simulateMatchup, // Unified function alias
     applyResult,
     initializePlayerStats,
     groupPlayersByPosition,
