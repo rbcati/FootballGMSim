@@ -2,9 +2,13 @@ class SoundManager {
     constructor() {
         this.ctx = null;
         this.muted = false;
+        this.enabled = true; // Default enabled
         // Try to init immediately, but it might be suspended until interaction
         try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                this.ctx = new AudioContext();
+            }
         } catch (e) {
             console.warn('AudioContext not supported');
         }
@@ -19,12 +23,6 @@ class SoundManager {
     // Generic tone generator
     playTone(freq, type, duration, vol = 0.1, slideTo = null) {
         if (!this.enabled || this.muted || !this.ctx) return;
-            this.ctx.resume();
-        }
-    }
-
-    playWhistle() {
-        if (this.muted || !this.ctx) return;
         this.resume();
 
         const osc = this.ctx.createOscillator();
@@ -52,26 +50,6 @@ class SoundManager {
         this.resume();
 
         const bufferSize = this.ctx.sampleRate * duration;
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(2500, this.ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(1500, this.ctx.currentTime + 0.1);
-
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.3);
-    }
-
-    playCheer() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
-
-        // Simple noise approximation
-        const bufferSize = this.ctx.sampleRate * 2; // 2 seconds
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
 
@@ -90,10 +68,6 @@ class SoundManager {
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
         filter.frequency.value = 1000;
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
 
         noise.connect(filter);
         filter.connect(gain);
@@ -133,7 +107,8 @@ class SoundManager {
 
     playHorns() {
         // Victory Horns
-         if (!this.enabled || this.muted) return;
+         if (!this.enabled || this.muted || !this.ctx) return;
+         this.resume();
          const now = this.ctx.currentTime;
 
          // Helper for brassy sound
@@ -163,8 +138,10 @@ class SoundManager {
          playBrass(261.63, now, 0.4); // C4
          playBrass(329.63, now + 0.4, 0.4); // E4
          playBrass(392.00, now + 0.8, 0.8); // G4
+    }
+
     playHit() {
-        if (this.muted || !this.ctx) return;
+        if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
         const osc = this.ctx.createOscillator();
@@ -185,7 +162,7 @@ class SoundManager {
     }
 
     playKick() {
-        if (this.muted || !this.ctx) return;
+        if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
         const osc = this.ctx.createOscillator();
@@ -206,7 +183,7 @@ class SoundManager {
     }
 
     playScore() {
-        if (this.muted || !this.ctx) return;
+        if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
         const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major
@@ -231,7 +208,7 @@ class SoundManager {
     }
 
     playFailure() {
-        if (this.muted || !this.ctx) return;
+        if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
         const osc1 = this.ctx.createOscillator();
@@ -265,6 +242,5 @@ class SoundManager {
     }
 }
 
-export const soundManager = new SoundManager();
 const soundManager = new SoundManager();
 export default soundManager;

@@ -2468,6 +2468,18 @@ class GameController {
                     window.renderStatsPage();
                 }
                 break;
+            case 'game-sim':
+                if (window.liveGameViewer && typeof window.liveGameViewer.restoreTempState === 'function') {
+                     const restored = window.liveGameViewer.restoreTempState();
+                     if (restored) {
+                         window.liveGameViewer.renderToView('#game-sim');
+                         window.liveGameViewer.isPaused = true;
+                     } else {
+                         window.setStatus('No active game found.', 'warning');
+                         location.hash = '#/hub';
+                     }
+                }
+                break;
             case 'player':
                 // Handle player profile route: player/123
                 const parts = viewName.split('/');
