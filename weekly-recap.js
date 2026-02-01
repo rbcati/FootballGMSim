@@ -85,6 +85,15 @@ export function showWeeklyRecap(week, results, news) {
             }
         }
 
+        // Coach Hot Seat Implications
+        if (window.state.ownerMode && window.state.ownerMode.enabled && !win) {
+             const satisfaction = window.state.ownerMode.fanSatisfaction;
+             if (satisfaction < 40) {
+                 resultText = `JOB IN JEOPARDY`;
+                 highStakesClass = 'high-stakes';
+             }
+        }
+
         // Playoff Game
         if (week > 18) { // Assuming 18 week season
              resultText = win ? `SURVIVE & ADVANCE` : `DREAM ENDED`;
