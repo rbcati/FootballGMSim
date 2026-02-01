@@ -26,6 +26,7 @@ class LiveGameViewer {
     this.viewMode = false;
     this.hasAppliedResult = false;
     this.isGameEnded = false;
+    this.isProcessingTurn = false;
 
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
@@ -44,6 +45,7 @@ class LiveGameViewer {
     }
     this.gameState = null;
     this.isGameEnded = true; // Prevent any pending callbacks
+    this.clearTempState();
   }
 
   /**
@@ -208,6 +210,12 @@ class LiveGameViewer {
 
            <div class="marker-los" style="left: 50%;"></div>
            <div class="marker-first-down" style="left: 58.33%;"></div>
+
+           <div class="player-markers">
+               <div class="player-marker marker-qb"></div>
+               <div class="player-marker marker-skill"></div>
+           </div>
+
            <div class="football-ball" style="left: 50%;"></div>
 
            <div class="endzone right" style="background-color: ${awayColor}; opacity: 0.8;">${awayName}</div>
@@ -221,9 +229,9 @@ class LiveGameViewer {
   updateFieldState(yardLine, isHomePossession) {
       if (!this.checkUI()) return;
       const parent = this.viewMode ? this.container : this.modal;
-      const ballEl = parent.querySelector('.football-ball');
-      const losEl = parent.querySelector('.marker-los');
-      const fdEl = parent.querySelector('.marker-first-down');
+      const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const losEl = parent.querySelector('.marker-los') || parent.querySelector('.field-marker.marker-los');
+      const fdEl = parent.querySelector('.marker-first-down') || parent.querySelector('.field-marker.marker-first-down');
 
       if (!ballEl) return;
 
@@ -237,7 +245,7 @@ class LiveGameViewer {
 
       ballEl.style.left = `${pct}%`;
       ballEl.style.transition = 'none';
-      losEl.style.left = `${pct}%`;
+      if (losEl) losEl.style.left = `${pct}%`;
 
       // First Down Marker
       const state = this.gameState;
@@ -249,9 +257,17 @@ class LiveGameViewer {
 
           let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
           let fdPct = (10 + visualTarget) / 1.2;
-          fdEl.style.left = `${fdPct}%`;
-          fdEl.style.display = 'block';
+          if (fdEl) {
+              fdEl.style.left = `${fdPct}%`;
+              fdEl.style.display = 'block';
+          }
       }
+
+      // Hide players during instant update
+      const qbMarker = parent.querySelector('.marker-qb');
+      const skillMarker = parent.querySelector('.marker-skill');
+      if (qbMarker) qbMarker.style.opacity = 0;
+      if (skillMarker) skillMarker.style.opacity = 0;
 
       // Force reflow
       void ballEl.offsetWidth;
@@ -259,68 +275,263 @@ class LiveGameViewer {
   }
 
   /**
+   * Helper to map yardline to visual percentage (0-100)
+   */
+  getVisualPercentage(yardLine, isHomePossession) {
+      let visualYard = isHomePossession ? yardLine : (100 - yardLine);
+      return (10 + visualYard) / 1.2;
+  }
+
+  /**
+   * Physics-based animation helper
+   */
+  animateTrajectory(element, options) {
+      return new Promise(resolve => {
+          if (!element) return resolve();
+          if (this.isSkipping) {
+               element.style.left = `${options.endX}%`;
+               if (options.arcHeight) element.style.transform = `translate(-50%, -50%)`;
+               return resolve();
+          }
+
+          const startX = options.startX;
+          const endX = options.endX;
+          const duration = options.duration || 1000;
+          const arcHeight = options.arcHeight || 0;
+
+          const startTime = performance.now();
+
+          // Easing functions
+          const easeLinear = t => t;
+          const easeOutQuad = t => t * (2 - t);
+          const easeInOutQuad = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+          const easing = options.easing === 'linear' ? easeLinear :
+                         options.easing === 'easeOut' ? easeOutQuad : easeInOutQuad;
+
+          const animate = (currentTime) => {
+              if (this.isSkipping) {
+                   element.style.left = `${endX}%`;
+                   if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                   return resolve();
+              }
+
+              const elapsed = currentTime - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              const easeProgress = easing(progress);
+
+              // X Position
+              const currentX = startX + (endX - startX) * easeProgress;
+              element.style.left = `${currentX}%`;
+
+              // Y Position (Arc)
+              if (arcHeight) {
+                  // Parabola: y = 4 * h * x * (1 - x)
+                  // We want negative Y (up)
+                  const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
+                  element.style.transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+              }
+
+              if (progress < 1) {
+                  requestAnimationFrame(animate);
+              } else {
+                  element.style.left = `${endX}%`;
+                  if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                  resolve();
+              }
+          };
+
+          requestAnimationFrame(animate);
+      });
+  }
+
+  /**
    * Animate the play on the field
    * @param {Object} play
+   * @param {Object} startState
    * @returns {Promise}
    */
-  animatePlay(play) {
+  async animatePlay(play, startState) {
       if (this.isSkipping || !this.checkUI()) {
           return Promise.resolve();
       }
 
       const parent = this.viewMode ? this.container : this.modal;
-      const ballEl = parent.querySelector('.football-ball');
+      const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const qbMarker = parent.querySelector('.marker-qb');
+      const skillMarker = parent.querySelector('.marker-skill');
+
       if (!ballEl) return Promise.resolve();
 
-      return new Promise(resolve => {
-          const isHome = this.gameState.ballPossession === 'home';
+      // Duration Scaling
+      let durationScale = 1;
+      if (this.tempo === 'hurry-up') durationScale = 0.5;
+      if (this.tempo === 'slow') durationScale = 2.0;
 
-          // Start Position (Current YardLine)
-          const startYard = play.yardLine;
-          // End Position
-          let endYard = startYard + play.yards;
+      const isHome = this.gameState.ballPossession === 'home';
+      const startYard = startState ? startState.yardLine : play.yardLine;
+      const endYard = startYard + play.yards; // Simplified end point
 
-          // Cap at endzones for visual sanity
-          if (endYard > 100) endYard = 105; // Into EZ
-          if (endYard < 0) endYard = -5; // Safety
+      // Visual Points
+      const startPct = this.getVisualPercentage(startYard, isHome);
+      let endPct = this.getVisualPercentage(Math.max(-5, Math.min(105, endYard)), isHome);
 
-          let startVisual = isHome ? startYard : (100 - startYard);
-          let endVisual = isHome ? endYard : (100 - endYard);
+      // Reset Ball
+      ballEl.style.transition = 'none';
+      ballEl.style.left = `${startPct}%`;
+      ballEl.style.transform = 'translate(-50%, -50%)';
 
-          const startPct = (10 + startVisual) / 1.2;
-          const endPct = (10 + endVisual) / 1.2;
+      // Setup Markers (initially hidden or at start)
+      if (qbMarker) {
+          qbMarker.style.transition = 'none';
+          qbMarker.style.left = `${startPct}%`;
+          qbMarker.style.opacity = '1';
+          qbMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+      }
+      if (skillMarker) {
+          skillMarker.style.transition = 'none';
+          skillMarker.style.left = `${startPct}%`;
+          skillMarker.style.opacity = '0'; // Hide initially
+          skillMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+      }
 
-          // 1. Set Start Position (Instant)
-          ballEl.style.transition = 'none';
-          ballEl.style.left = `${startPct}%`;
+      void ballEl.offsetWidth; // Reflow
 
-          // Force Reflow
-          void ballEl.offsetWidth;
+      // --- PLAY TYPES ---
 
-          // 2. Animate to End
-          let duration = 0.8; // default
-          if (play.playType.startsWith('pass')) duration = 1.2;
-          if (play.playType === 'punt' || play.playType === 'field_goal') duration = 1.5;
-          if (this.tempo === 'hurry-up') duration *= 0.5;
+      if (play.playType.startsWith('pass')) {
+          // PASS PLAY: Dropback -> Pass -> Catch/Run
 
-          ballEl.style.transition = `left ${duration}s ease-in-out`;
-          ballEl.style.left = `${endPct}%`;
+          // 1. Dropback (QB moves back ~5 yards)
+          // So Dropback is always yardLine - 5.
+          const dropbackPct = this.getVisualPercentage(Math.max(0, startYard - 5), isHome);
 
-          // Special Visuals
-          if (play.result === 'touchdown' || play.result === 'field_goal') {
-               ballEl.classList.add('animate-pulse');
-          } else {
-               ballEl.classList.remove('animate-pulse');
+          // Animate QB Dropback
+          const dropbackDuration = 600 * durationScale;
+
+          // Show Skill Player (Receiver) running route
+          if (skillMarker) {
+              skillMarker.style.opacity = '1';
+              // Receiver starts at LOS, runs to catch point
+              // Assume catch is at full yardage for simplicity
           }
 
-          setTimeout(() => {
-              // Cleanup pulse
-              if (play.result === 'touchdown' || play.result === 'field_goal') {
-                   setTimeout(() => ballEl.classList.remove('animate-pulse'), 1000);
-              }
-              resolve();
-          }, duration * 1000);
-      });
+          const p1 = this.animateTrajectory(qbMarker, {
+              startX: startPct,
+              endX: dropbackPct,
+              duration: dropbackDuration,
+              easing: 'easeOut'
+          });
+
+          const p2 = this.animateTrajectory(skillMarker, {
+              startX: startPct,
+              endX: endPct,
+              duration: dropbackDuration + 400 * durationScale, // Route takes longer
+              easing: 'easeInOut' // Run
+          });
+
+          // Ball tracks QB during dropback? Or just waits?
+          // Let's snap ball to QB for dropback.
+          const p3 = this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: dropbackPct,
+              duration: dropbackDuration,
+              easing: 'easeOut'
+          });
+
+          await Promise.all([p1, p3]); // Wait for dropback
+
+          // 2. Throw (Ball Arcs to Receiver)
+          // QB stays, Receiver might still be moving slightly or arrived
+          const throwDuration = 700 * durationScale; // Air time
+
+          await this.animateTrajectory(ballEl, {
+              startX: dropbackPct,
+              endX: endPct,
+              duration: throwDuration,
+              arcHeight: 25, // Nice arc
+              easing: 'linear' // Projectile X motion is linear-ish
+          });
+
+          // Pulse if TD
+          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+
+      } else if (play.playType.startsWith('run')) {
+          // RUN PLAY: Handoff -> Run
+
+          // 1. Handoff (Quick merge)
+          const handoffDuration = 400 * durationScale;
+
+          if (skillMarker) {
+              skillMarker.style.opacity = '1';
+              skillMarker.style.left = `${startPct}%`; // Starts at LOS
+          }
+
+          // QB hands off (small movement?)
+          await new Promise(r => setTimeout(r, handoffDuration));
+
+          // 2. Run
+          const runDuration = 800 * durationScale;
+
+          // QB fades
+          if (qbMarker) qbMarker.style.opacity = '0.5';
+
+          // Ball moves with Runner
+          const pRun = this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: runDuration,
+              easing: 'easeInOut'
+          });
+
+          const pSkill = this.animateTrajectory(skillMarker, {
+              startX: startPct,
+              endX: endPct,
+              duration: runDuration,
+              easing: 'easeInOut'
+          });
+
+          await Promise.all([pRun, pSkill]);
+
+          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+
+      } else if (play.playType === 'punt' || play.playType === 'field_goal') {
+          // KICK
+          const kickDuration = 1200 * durationScale;
+          const arc = play.playType === 'punt' ? 40 : 30;
+
+          // Hide markers
+          if (qbMarker) qbMarker.style.opacity = 0;
+          if (skillMarker) skillMarker.style.opacity = 0;
+
+          await this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: kickDuration,
+              arcHeight: arc,
+              easing: 'linear'
+          });
+
+           if (play.result === 'touchdown' || play.result === 'field_goal') ballEl.classList.add('animate-pulse');
+
+      } else {
+          // Fallback (Penalty, etc)
+          await this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: 1000 * durationScale
+          });
+      }
+
+      // Cleanup
+      setTimeout(() => {
+          ballEl.classList.remove('animate-pulse');
+          // Fade out markers
+          if (qbMarker) qbMarker.style.opacity = 0;
+          if (skillMarker) skillMarker.style.opacity = 0;
+      }, 1000);
+
+      return Promise.resolve();
   }
 
   /**
@@ -337,6 +548,11 @@ class LiveGameViewer {
     }
 
     this.userTeamId = userTeamId;
+
+    // Attempt to restore session
+    if (this.restoreTempState(homeTeam.id, awayTeam.id)) {
+        return;
+    }
 
     // Capture Pre-Game Context
     if (userTeamId) {
@@ -401,6 +617,7 @@ class LiveGameViewer {
     this.isSkipping = false;
     this.playCallQueue = null;
     this.hasAppliedResult = false;
+    this.saveTempState();
   }
 
   /**
@@ -1093,6 +1310,7 @@ class LiveGameViewer {
    */
   async displayNextPlay() {
     if (this.isGameEnded) return;
+    if (this.isProcessingTurn) return;
 
     if (this.gameState?.gameComplete) {
       this.endGame();
@@ -1105,6 +1323,9 @@ class LiveGameViewer {
         this.skipToEnd();
         return;
     }
+
+    this.isProcessingTurn = true;
+    this.updateControls();
 
     // Check if user needs to call a play
     const state = this.gameState;
@@ -1154,6 +1375,8 @@ class LiveGameViewer {
 
     this.handleEndOfQuarter(state);
 
+    this.saveTempState();
+
     if (this.gameState.gameComplete) {
       this.endGame();
       return;
@@ -1163,11 +1386,25 @@ class LiveGameViewer {
     // Reduce delay slightly since animation took time
     const delay = Math.max(500, this.getPlayDelay() - 1000);
 
+    this.isProcessingTurn = false;
+    this.updateControls();
+
     this.intervalId = setTimeout(() => {
       if (!this.isPaused) {
         this.displayNextPlay();
       }
     }, delay);
+  }
+
+  updateControls() {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      const btn = parent.querySelector('#btnNextPlay');
+      if (btn) {
+          btn.disabled = this.isProcessingTurn;
+          btn.style.opacity = this.isProcessingTurn ? '0.5' : '1';
+          btn.style.cursor = this.isProcessingTurn ? 'not-allowed' : 'pointer';
+      }
   }
 
   /**
@@ -1256,6 +1493,11 @@ class LiveGameViewer {
             // Intense shake
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
+            soundManager.playTackle();
+            this.triggerVisualFeedback('turnover', 'TURNOVER');
+            // Screen shake
+            if (this.container) this.container.classList.add('shake');
+            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
             setTimeout(() => {
                 if (this.container) this.container.classList.remove('shake-hard');
                 else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake-hard');
@@ -1290,6 +1532,14 @@ class LiveGameViewer {
             } else {
                 soundManager.playWhistle();
             }
+             soundManager.playPing();
+             this.triggerVisualFeedback('field-goal', 'IT IS GOOD!');
+        } else if (play.result === 'field_goal_miss') {
+             soundManager.playFailure();
+             this.triggerVisualFeedback('negative', 'NO GOOD!');
+        } else if (play.result === 'safety') {
+             soundManager.playFailure();
+             this.triggerVisualFeedback('safety', 'SAFETY!');
         } else if (play.type === 'quarter_end') {
             soundManager.playWhistle();
         }
@@ -1406,8 +1656,6 @@ class LiveGameViewer {
     const oldHomeScore = parseInt(scoreboard.querySelector('.score-team:last-child .team-score')?.textContent || 0);
     const oldAwayScore = parseInt(scoreboard.querySelector('.score-team:first-child .team-score')?.textContent || 0);
 
-    const homeScoreChanged = home.score !== oldHomeScore;
-    const awayScoreChanged = away.score !== oldAwayScore;
     // Detect score change
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
@@ -1415,9 +1663,8 @@ class LiveGameViewer {
     this.lastAwayScore = away.score;
 
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''} ${awayScoreClass}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score ${awayScoreChanged ? 'pulse-score' : ''}">${away.score}</div>
         <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
       </div>
       <div class="score-info">
@@ -1426,9 +1673,8 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''} ${homeScoreClass}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score ${homeScoreChanged ? 'pulse-score' : ''}">${home.score}</div>
         <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
       </div>
     `;
@@ -1452,6 +1698,14 @@ class LiveGameViewer {
       if (this.tempo === 'hurry-up') duration = 500;
       if (this.tempo === 'slow') duration = 2000;
 
+      // Special animations for play types
+      if (play.playType === 'field_goal' || play.playType === 'punt') {
+          ball.classList.add('animate-kick');
+          duration = 1500; // Match CSS animation duration
+      } else if (play.playType.startsWith('pass')) {
+          ball.classList.add('animate-pass');
+      }
+
       // Current State (Start)
       const startYard = startState ? startState.yardLine : this.gameState[this.gameState.ballPossession].yardLine;
       const endYard = startYard + play.yards;
@@ -1468,7 +1722,14 @@ class LiveGameViewer {
       ball.style.left = `${Math.max(0, Math.min(100, endYard))}%`;
 
       // Wait for animation to finish
-      return new Promise(resolve => setTimeout(resolve, duration));
+      return new Promise(resolve => {
+          setTimeout(() => {
+              // Cleanup animation classes
+              ball.classList.remove('animate-kick');
+              ball.classList.remove('animate-pass');
+              resolve();
+          }, duration);
+      });
   }
 
   /**
@@ -1493,8 +1754,8 @@ class LiveGameViewer {
         // Check if buttons exist, ignoring whitespace/comments
         if (pcContainer && !pcContainer.querySelector('.play-call-buttons')) {
             pcContainer.innerHTML = `
-                <div class="play-call-prompt" style="margin-bottom: 10px; font-weight: bold; color: var(--accent);">Call Your Play:</div>
-                <div class="play-call-buttons" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div class="play-call-prompt">Call Your Play:</div>
+                <div class="play-call-buttons">
                     <div class="play-row">
                         <button class="play-call-btn" data-play="run_inside">Run Inside</button>
                         <button class="play-call-btn" data-play="run_outside">Run Outside</button>
@@ -1741,6 +2002,7 @@ class LiveGameViewer {
 
     // ENSURE SAVE
     this.finalizeGame();
+    this.clearTempState();
   }
 
   showGameOverOverlay(title, scoreA, scoreB, type) {
@@ -1903,25 +2165,25 @@ class LiveGameViewer {
 
         <div class="play-calling" style="display: none;">
           <div class="play-call-prompt">Call Your Play:</div>
-          <div class="play-call-buttons" style="flex-direction: column; gap: 8px;">
+          <div class="play-call-buttons">
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">RUN</span>
+                <span>RUN</span>
                 <button class="play-call-btn" data-play="run_inside">Inside</button>
                 <button class="play-call-btn" data-play="run_outside">Outside</button>
             </div>
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">PASS</span>
+                <span>PASS</span>
                 <button class="play-call-btn" data-play="pass_short">Short</button>
                 <button class="play-call-btn" data-play="pass_medium">Med</button>
                 <button class="play-call-btn" data-play="pass_long">Long</button>
             </div>
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">ST</span>
+                <span>ST</span>
                 <button class="play-call-btn" data-play="field_goal">FG</button>
                 <button class="play-call-btn" data-play="punt">Punt</button>
             </div>
-            <div class="play-row defense-row" style="border-top: 1px solid #333; padding-top: 8px;">
-                <span style="font-size: 10px; color: #888;">DEF</span>
+            <div class="play-row defense-row">
+                <span>DEF</span>
                 <button class="play-call-btn" data-play="defense_blitz">Blitz</button>
                 <button class="play-call-btn" data-play="defense_man">Man</button>
                 <button class="play-call-btn" data-play="defense_zone">Zone</button>
@@ -1988,6 +2250,12 @@ class LiveGameViewer {
           <div class="end-zone" style="right: 0; background: rgba(0,0,100,0.3); border-left: 2px solid white; display: none;"></div>
           <div class="field-marker marker-los" style="left: 50%;"></div>
           <div class="field-marker marker-first-down" style="left: 60%;"></div>
+
+          <div class="player-markers">
+              <div class="player-marker marker-qb"></div>
+              <div class="player-marker marker-skill"></div>
+          </div>
+
           <div class="ball" style="left: 50%;"></div>
       `;
   }
@@ -2002,6 +2270,7 @@ class LiveGameViewer {
       const losMarker = parent.querySelector('.marker-los');
       const fdMarker = parent.querySelector('.marker-first-down');
       const ball = parent.querySelector('.ball');
+      const fieldContainer = parent.querySelector('.field-container');
 
       if (!losMarker || !fdMarker || !ball || !state) return;
 
@@ -2024,6 +2293,16 @@ class LiveGameViewer {
           fdMarker.style.display = 'none';
       } else {
           fdMarker.style.display = 'block';
+      }
+
+      // Red Zone Visualization
+      // Home drives 0->100 (RZ > 80), Away drives 100->0 (RZ < 20)
+      const isRedZone = (state.ballPossession === 'home' && yardLine >= 80) ||
+                        (state.ballPossession === 'away' && yardLine <= 20);
+
+      if (fieldContainer) {
+          if (isRedZone) fieldContainer.classList.add('red-zone');
+          else fieldContainer.classList.remove('red-zone');
       }
   }
 
@@ -2275,6 +2554,65 @@ class LiveGameViewer {
 
     this.gameState = null;
   }
+
+  // --- PERSISTENCE ---
+  saveTempState() {
+      if (!this.gameState || this.isGameEnded) return;
+      // Sanitize: remove circular team refs if any (usually not in sim)
+      // Actually gameState has team objects which might be large but usually serializable
+      const data = {
+          gameState: this.gameState,
+          playByPlay: this.playByPlay,
+          userTeamId: this.userTeamId,
+          preGameContext: this.preGameContext,
+          simulationMeta: this.simulationMeta,
+          timestamp: Date.now()
+      };
+      try {
+          localStorage.setItem('live_game_temp', JSON.stringify(data));
+      } catch (e) { console.warn('Temp save failed', e); }
+  }
+
+  clearTempState() {
+      localStorage.removeItem('live_game_temp');
+  }
+
+  restoreTempState(homeId = null, awayId = null) {
+      try {
+          const raw = localStorage.getItem('live_game_temp');
+          if (!raw) return false;
+          const data = JSON.parse(raw);
+
+          // Verify expiry (1 hour)
+          if (Date.now() - data.timestamp > 3600000) {
+              this.clearTempState();
+              return false;
+          }
+
+          // Verify teams match if provided
+          if (homeId !== null && awayId !== null) {
+              const savedHome = data.gameState.home.team.id;
+              const savedAway = data.gameState.away.team.id;
+
+              if (savedHome != homeId || savedAway != awayId) {
+                  return false;
+              }
+          }
+
+          this.gameState = data.gameState;
+          this.playByPlay = data.playByPlay;
+          this.userTeamId = data.userTeamId;
+          this.preGameContext = data.preGameContext;
+          this.simulationMeta = data.simulationMeta;
+          this.currentPlayIndex = this.playByPlay.length;
+
+          console.log('Restored live game state from local storage');
+          return true;
+      } catch (e) {
+          console.error('Failed to restore state', e);
+          return false;
+      }
+  }
 }
 
 // Initialize global instance
@@ -2347,15 +2685,12 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
     // 1. Initialize Game State FIRST (paused) to pass router checks
-    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
 
     // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {
         location.hash = '#/game-sim';
     }
-
-    // 2. Initialize State immediately (so router sees active game)
-    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
 
     // 3. Wait a tick for router to render view, then start sim
     setTimeout(() => {

@@ -284,6 +284,86 @@ class GameController {
         }
     }
 
+    // --- CONTEXTUAL DRAMA LOGIC ---
+    calculateGameStakes(league, userTeamId) {
+        if (!league || userTeamId === undefined) return { score: 0, type: 'Normal', description: '' };
+
+        const team = league.teams[userTeamId];
+        const week = league.week;
+        if (!team) return { score: 0, type: 'Normal', description: '' };
+
+        // Determine opponent
+        let opponent = null;
+        const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
+        let weekData = null;
+
+        if (Array.isArray(scheduleWeeks)) {
+             weekData = scheduleWeeks.find(w => w && (w.weekNumber === week || w.week === week)) || scheduleWeeks[week - 1];
+        } else if (typeof scheduleWeeks === 'object') {
+             weekData = scheduleWeeks[week];
+        }
+
+        // Normalize games array from week data
+        const games = Array.isArray(weekData) ? weekData : (weekData ? weekData.games : []);
+
+        if (games) {
+            const game = games.find(g => (g.home === userTeamId || (typeof g.home === 'object' && g.home.id === userTeamId)) || (g.away === userTeamId || (typeof g.away === 'object' && g.away.id === userTeamId)));
+            if (game) {
+                const homeId = typeof game.home === 'object' ? game.home.id : game.home;
+                const awayId = typeof game.away === 'object' ? game.away.id : game.away;
+                const oppId = homeId === userTeamId ? awayId : homeId;
+                opponent = league.teams[oppId];
+            }
+        }
+
+        // 1. Division Clinch Scenario
+        // Simple heuristic: If leading division late in season
+        const divTeams = league.teams.filter(t => t.conf === team.conf && t.div === team.div);
+        divTeams.sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
+        const rank = divTeams.findIndex(t => t.id === team.id);
+        const gamesRemaining = 18 - week;
+
+        if (rank === 0 && week >= 14) {
+            const secondPlace = divTeams[1];
+            if (secondPlace) {
+                const winsA = team.wins || team.record?.w || 0;
+                const winsB = secondPlace.wins || secondPlace.record?.w || 0;
+                const lead = winsA - winsB;
+                // If lead is large enough relative to games remaining
+                if (lead >= gamesRemaining && lead <= gamesRemaining + 1) {
+                     return { score: 95, type: 'Division Clinch', description: 'Win and Clinch Division Title' };
+                }
+            }
+        }
+
+        // 2. Playoff Bubble
+        // Conference Rank 7-9
+        const confTeams = league.teams.filter(t => t.conf === team.conf).sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
+        const confRank = confTeams.findIndex(t => t.id === team.id) + 1;
+
+        if (week >= 13 && confRank >= 6 && confRank <= 9) {
+            return { score: 85, type: 'Playoff Bubble', description: 'Must-Win for Playoff Hopes' };
+        }
+
+        // 3. Coach Hot Seat
+        if (window.state.ownerMode && window.state.ownerMode.enabled) {
+            const satisfaction = window.state.ownerMode.fanSatisfaction;
+            if (satisfaction < 35) {
+                return { score: 90, type: 'Hot Seat', description: 'Job Security at Critical Level' };
+            }
+        }
+
+        // 4. Rivalry
+        if (opponent && team.rivalries && team.rivalries[opponent.id]) {
+            const rivScore = team.rivalries[opponent.id].score;
+            if (rivScore > 60) {
+                return { score: 70 + (rivScore/5), type: 'Rivalry', description: `Bitter Rivals: ${opponent.name}` };
+            }
+        }
+
+        return { score: 0, type: 'Normal', description: '' };
+    }
+
     // --- HUB RENDERING ---
     async renderHub() {
         try {
@@ -360,12 +440,16 @@ class GameController {
                     currentWeekGames = Array.isArray(weekData) ? weekData : (weekData.games || []);
 
                     if (currentWeekGames.length > 0) {
-                        nextGame = currentWeekGames.find(g => (g.home === userTeamId || g.home.id === userTeamId) || (g.away === userTeamId || g.away.id === userTeamId));
+                        nextGame = currentWeekGames.find(g => {
+                            const hId = (g.home && typeof g.home === 'object') ? g.home.id : g.home;
+                            const aId = (g.away && typeof g.away === 'object') ? g.away.id : g.away;
+                            return hId === userTeamId || aId === userTeamId;
+                        });
 
                         if (nextGame) {
                             // Ensure IDs are extracted correctly (handle object vs ID)
-                            const homeId = typeof nextGame.home === 'object' ? nextGame.home.id : nextGame.home;
-                            const awayId = typeof nextGame.away === 'object' ? nextGame.away.id : nextGame.away;
+                            const homeId = (nextGame.home && typeof nextGame.home === 'object') ? nextGame.home.id : nextGame.home;
+                            const awayId = (nextGame.away && typeof nextGame.away === 'object') ? nextGame.away.id : nextGame.away;
 
                             isHome = homeId === userTeamId;
                             const oppId = isHome ? awayId : homeId;
@@ -374,6 +458,26 @@ class GameController {
                     }
                 } else {
                     console.warn(`[HUB-DEBUG] No week data found for week ${currentWeek}`);
+                }
+            }
+
+            // --- CONTEXTUAL DRAMA BANNER (NEW) ---
+            let dramaBannerHTML = '';
+            if (userTeam && !isOffseason) {
+                const stakes = this.calculateGameStakes(L, userTeamId);
+                if (stakes && stakes.score > 75) {
+                    let bannerColor = 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)';
+                    if (stakes.type === 'Hot Seat') bannerColor = 'linear-gradient(135deg, #742a2a 0%, #e53e3e 100%)'; // Red
+                    else if (stakes.type === 'Division Clinch') bannerColor = 'linear-gradient(135deg, #276749 0%, #48bb78 100%)'; // Green
+                    else if (stakes.type === 'Playoff Bubble') bannerColor = 'linear-gradient(135deg, #744210 0%, #d69e2e 100%)'; // Gold
+                    else if (stakes.type === 'Rivalry') bannerColor = 'linear-gradient(135deg, #553c9a 0%, #805ad5 100%)'; // Purple
+
+                    dramaBannerHTML = `
+                        <div class="drama-banner" style="background: ${bannerColor}; border-radius: 12px; padding: 20px; margin-bottom: 20px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.2);">
+                            <h2 style="margin: 0; font-size: 1.8rem; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">${stakes.type}</h2>
+                            <p style="margin: 5px 0 0 0; font-size: 1.1rem; opacity: 0.9;">${stakes.description}</p>
+                        </div>
+                    `;
                 }
             }
 
@@ -1033,6 +1137,7 @@ class GameController {
             }
             
             hubContainer.innerHTML = `
+                ${dramaBannerHTML}
                 ${actionItemsHTML}
                 ${playerTrackingHTML}
                 ${headerDashboardHTML}
@@ -2466,6 +2571,18 @@ class GameController {
                     window.renderLeagueStats();
                 } else if (window.renderStatsPage) {
                     window.renderStatsPage();
+                }
+                break;
+            case 'game-sim':
+                if (window.liveGameViewer && typeof window.liveGameViewer.restoreTempState === 'function') {
+                     const restored = window.liveGameViewer.restoreTempState();
+                     if (restored) {
+                         window.liveGameViewer.renderToView('#game-sim');
+                         window.liveGameViewer.isPaused = true;
+                     } else {
+                         window.setStatus('No active game found.', 'warning');
+                         location.hash = '#/hub';
+                     }
                 }
                 break;
             case 'player':

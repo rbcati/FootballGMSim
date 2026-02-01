@@ -1091,7 +1091,9 @@ select:disabled {
 
 .pulse-score {
   animation: scorePulse 0.5s ease-out;
-   Game Juice & Feedback Animations
+}
+
+   /* Game Juice & Feedback Animations
    ============================================ */
 
 /* Screen Shake */
@@ -1201,6 +1203,7 @@ select:disabled {
     font-size: 2rem;
     margin-bottom: 30px;
     font-family: monospace; /* Fallback */
+    font-family: var(--font-mono);
 }
 
 /* Ensure fade-in is available globally */
@@ -1295,4 +1298,196 @@ select:disabled {
 .game-over-mvp .player-stats {
     font-size: 1rem;
     color: #ddd;
+/* Player Markers and Advanced Animation Support */
+.player-markers {
+    position: absolute;
+    top: 0; bottom: 0; left: 0; right: 0;
+    pointer-events: none;
+    z-index: 8;
+}
+
+.player-marker {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.2s, background-color 0.3s;
+    border: 2px solid white;
+    z-index: 9;
+}
+
+.marker-qb {
+    background: #007bff;
+    z-index: 10;
+}
+
+.marker-skill {
+    background: #28a745;
+    z-index: 10;
+    width: 10px;
+    height: 10px;
+}
+
+/* Ensure ball is above markers */
+.ball, .football-ball {
+    z-index: 15;
+}
+
+/* Trajectory Helper Class (if needed for debugging) */
+.trajectory-path {
+    position: absolute;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    transform-origin: left center;
+    pointer-events: none;
+/* ============================================
+   Game Juice & Feedback Animations - Enhanced
+   ============================================ */
+
+/* Ball Animations */
+@keyframes kickArc {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -600%) scale(1.8); z-index: 20; } /* High arc */
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes passArc {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -300%) scale(1.4); z-index: 20; } /* Lower arc */
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.ball.animate-kick {
+  animation: kickArc 1.5s ease-in-out forwards; /* Match JS duration */
+}
+
+.ball.animate-pass {
+  animation: passArc 1.0s ease-in-out forwards; /* Match JS duration */
+}
+
+/* Red Zone Visualization */
+.field-container.red-zone {
+  background-image:
+    repeating-linear-gradient(90deg, transparent, transparent 9.5%, rgba(255,200,200,0.3) 10%),
+    linear-gradient(to bottom, transparent 10%, rgba(139,0,0,0.1) 10%, rgba(139,0,0,0.1) 90%, transparent 90%);
+  border-color: #ff4444;
+  box-shadow: inset 0 0 30px rgba(139, 0, 0, 0.3);
+  transition: all 0.5s ease;
+}
+
+/* Specific Event Overlays */
+.score-overlay.field-goal {
+  color: #FFD700; /* Gold */
+  text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
+  font-family: 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+}
+
+.score-overlay.turnover {
+  color: #FFFFFF;
+  background: #FF453A;
+  text-shadow: 2px 2px 0px #8B0000;
+  font-family: 'Courier New', monospace;
+  font-weight: 900;
+  border: 4px solid #fff;
+  padding: 15px 30px;
+  transform: translate(-50%, -50%) rotate(-5deg);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.score-overlay.safety {
+  color: #FF9F0A;
+  text-shadow: 0 0 15px #FF4500;
+  border: 2px dashed #FF9F0A;
+  padding: 10px 20px;
+}
+
+/* Enhanced Button Tactile Feedback */
+.btn:active, button:active {
+  transform: scale(0.96) translateY(1px) !important;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2) !important;
+  filter: brightness(0.95);
+}
+
+/* Smooth Transitions for Field */
+.football-field-container, .field-container {
+  transition: background-color 0.5s ease, box-shadow 0.5s ease;
+/* --- Live Game Play Calling UI --- */
+.play-call-prompt {
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: var(--accent);
+}
+
+.play-call-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.live-game-modal .play-call-buttons {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.play-row {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.play-row span {
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 35px;
+    display: inline-block;
+}
+
+.play-call-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    flex: 1;
+    transition: all 0.2s ease;
+}
+
+.play-call-btn:hover {
+    background: var(--surface-strong);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.play-call-btn:active {
+    transform: scale(0.98);
+}
+
+.play-call-btn.selected {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.defense-row {
+    border-top: 1px solid var(--hairline);
+    padding-top: 8px;
+    margin-top: 4px;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .play-call-buttons {
+        flex-direction: column;
+    }
+
+    .play-row {
+        width: 100%;
+    }
 }

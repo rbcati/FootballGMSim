@@ -89,10 +89,7 @@ class GameRunner {
                      matchupStr = "Tough matchup for Offense";
                 }
 
-                let stakesVal = 0;
-                if (userTeam.rivalries && userTeam.rivalries[oppTeam.id]) {
-                    stakesVal = userTeam.rivalries[oppTeam.id].score;
-                }
+                const stakesVal = GameRunner.calculateContextualStakes(league, userTeam, oppTeam);
 
                 gameObj.preGameContext = {
                     matchup: matchupStr,
@@ -190,6 +187,64 @@ class GameRunner {
         }
 
         return { gamesSimulated, results };
+    }
+
+    /**
+     * Calculates the stakes of a matchup for simulation context.
+     * @param {Object} league - League object
+     * @param {Object} team - Team object (User team)
+     * @param {Object} opponent - Opponent team object
+     * @returns {number} Stakes score (0-100)
+     */
+    static calculateContextualStakes(league, team, opponent) {
+        if (!league || !team || !opponent) return 0;
+        const week = league.week;
+        let stakes = 0;
+
+        // 1. Division Clinch Scenario
+        if (week >= 14 && team.conf === opponent.conf && team.div === opponent.div) {
+            const divTeams = league.teams.filter(t => t.conf === team.conf && t.div === team.div);
+            divTeams.sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
+            const rank = divTeams.findIndex(t => t.id === team.id);
+            const gamesRemaining = 18 - week;
+
+            if (rank === 0) {
+                const secondPlace = divTeams[1];
+                if (secondPlace) {
+                    const lead = (team.wins || team.record?.w || 0) - (secondPlace.wins || secondPlace.record?.w || 0);
+                    if (lead >= gamesRemaining && lead <= gamesRemaining + 1) {
+                         stakes = 95;
+                    }
+                }
+            }
+        }
+
+        // 2. Playoff Bubble
+        if (stakes === 0 && week >= 13) {
+            const confTeams = league.teams.filter(t => t.conf === team.conf).sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
+            const confRank = confTeams.findIndex(t => t.id === team.id) + 1;
+            if (confRank >= 6 && confRank <= 9) {
+                stakes = 85;
+            }
+        }
+
+        // 3. Coach Hot Seat (Requires window.state access)
+        if (stakes === 0 && window.state?.ownerMode?.enabled) {
+            const satisfaction = window.state.ownerMode.fanSatisfaction;
+            if (satisfaction < 35) {
+                stakes = 90;
+            }
+        }
+
+        // 4. Rivalry
+        if (stakes === 0 && team.rivalries && team.rivalries[opponent.id]) {
+            const rivScore = team.rivalries[opponent.id].score;
+            if (rivScore > 60) {
+                stakes = 70 + (rivScore/5);
+            }
+        }
+
+        return stakes;
     }
 
     /**
