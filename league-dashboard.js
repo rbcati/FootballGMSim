@@ -94,6 +94,29 @@ export function hasSavedLeagues() {
     return false;
 }
 
+// Schema Migration Helper
+export function migrateSchema(league) {
+    if (!league || !league.teams) return;
+    console.log("Running schema migration...");
+
+    league.teams.forEach(team => {
+        if (team.roster) {
+            team.roster.forEach(p => {
+                // Fix Fog of War / Scouted Attributes
+                if (!p.scoutedAttributes) {
+                    p.scoutedAttributes = { ...p.ratings }; // Default to visible
+                    p.fogOfWar = false; // Default to fully revealed
+                }
+
+                // Fix Negotiation Status
+                if (!p.negotiationStatus) {
+                    p.negotiationStatus = 'OPEN'; // Default for Contract Heat feature
+                }
+            });
+        }
+    });
+}
+
 // 1. Function to Save Current Game
 export async function saveGame(stateToSave) {
     const gameState = stateToSave || window.state;
@@ -153,8 +176,15 @@ export async function saveGame(stateToSave) {
         console.log("Game saved successfully to " + leagueName);
         renderDashboard();
     } catch (e) {
-        if (window.setStatus) window.setStatus("Save failed: Storage full or error.", "error");
         console.error("Save error:", e);
+
+        // iOS Safe Mode / Storage Quota Handling
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+            alert("Storage Error: Private Browsing mode may block saving. Please disable Private Mode for this game.");
+            if (window.setStatus) window.setStatus("Storage Error: Save failed (Private Mode?)", "error");
+        } else {
+            if (window.setStatus) window.setStatus("Save failed: " + e.message, "error");
+        }
     }
 }
 
@@ -332,6 +362,11 @@ export async function loadLeague(leagueName) {
 
         window.state = saveObj.data;
         window.state.leagueName = leagueName; // Ensure name is preserved
+
+        // Fix 1: Schema Migration
+        if (window.state.league) {
+            migrateSchema(window.state.league);
+        }
 
         // Update last played on load
         setLastPlayedLeague(leagueName);

@@ -3,7 +3,7 @@ import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { renderMatchupComparison } from './matchup-comparison.js';
 import { renderDiagnostics } from './diagnostics.js';
 import { init as initState, loadState, saveState, hookAutoSave, clearSavedState, setActiveSaveSlot } from './state.js';
-import { hasSavedLeagues } from './league-dashboard.js';
+import { hasSavedLeagues, migrateSchema, getLastPlayedLeague, loadLeague } from './league-dashboard.js';
 import { getActionItems } from './action-items.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS, RISK_PROFILES, updateWeeklyStrategy } from './strategy.js';
@@ -1932,6 +1932,11 @@ class GameController {
 
             // 3. Update State
             window.state.league = league;
+
+            // Fix 1: Schema Migration (Fresh Init)
+            if (migrateSchema) {
+                migrateSchema(window.state.league);
+            }
 
             // Ensure phase consistency
             if (startPoint === 'offseason') {

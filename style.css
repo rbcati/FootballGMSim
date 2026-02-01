@@ -7255,3 +7255,43 @@ input:focus, select:focus, textarea:focus {
 .float-text.bad {
   color: var(--danger);
 }
+
+/* ========================================
+   CRITICAL UI FIXES (Mobile & Accessibility)
+   ======================================== */
+
+/* Fix: Small Touch Targets for Radio Buttons */
+input[type="radio"] {
+    width: 24px;
+    height: 24px;
+    vertical-align: middle;
+    margin-right: 8px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Fix: Low Contrast on Inputs */
+select, input[type="text"], input[type="number"] {
+    background-color: rgba(0, 0, 0, 0.4) !important; /* Darker background for legibility */
+    border-color: rgba(255, 255, 255, 0.25) !important; /* Lighter border for contrast */
+    color: #fff !important;
+}
+
+select:focus, input[type="text"]:focus, input[type="number"]:focus {
+    background-color: rgba(0, 0, 0, 0.6) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25) !important;
+}
+
+/* Fix: Modal Close Button Visibility */
+.close {
+    font-size: 32px;
+    line-height: 1;
+    padding: 10px;
+    margin: -10px; /* Expand hit area */
+    opacity: 0.8;
+}
+
+.close:hover {
+    opacity: 1;
+}
