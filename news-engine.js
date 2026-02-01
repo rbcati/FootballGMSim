@@ -112,7 +112,7 @@ const MULTI_WEEK_STORYLINES = {
         },
         stages: {
             1: {
-                title: 'QB Controversy Brewing',
+                title: 'QB Controversy',
                 description: (data) => `Fans are calling for ${data.backupName} to start after recent struggles by ${data.starterName}. The media is asking who will be under center next week.`,
                 choices: [
                     {
@@ -170,12 +170,10 @@ const MULTI_WEEK_STORYLINES = {
             }
         }
     },
-    'rookie_watch': {
+    'rookie_phenom': { // Renamed from rookie_watch per request
         trigger: (league) => {
             const team = league.teams[window.state.userTeamId];
             if (!team) return null;
-            // Find a rookie with good dev trait
-            // Rookie definition: 0 years played? Or age? Let's use age <= 23 + developmentStatus
             const rookie = team.roster.find(p => p.age <= 23 && p.developmentStatus === 'BREAKOUT');
             if (rookie && Math.random() < 0.3) {
                 return { playerId: rookie.id, name: rookie.name };
@@ -184,8 +182,8 @@ const MULTI_WEEK_STORYLINES = {
         },
         stages: {
             1: {
-                title: 'Rookie Turning Heads',
-                description: (data) => `Rookie ${data.name} is looking impressive in practice. Coaches are suggesting he get more playing time.`,
+                title: 'Rookie Phenom',
+                description: (data) => `Rookie sensation ${data.name} is looking impressive in practice. Coaches are suggesting he get more playing time.`,
                 choices: [
                     {
                         text: 'Increase Workload',
@@ -211,10 +209,150 @@ const MULTI_WEEK_STORYLINES = {
                 ]
             }
         }
+    },
+    'locker_room_mutiny': { // New Storyline
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return null;
+            // Trigger if team is losing heavily and morale is critically low
+            const wins = team.record?.w || 0;
+            const losses = team.record?.l || 0;
+            const winPct = (wins + losses) > 0 ? wins / (wins + losses) : 0;
+
+            // Calculate avg morale
+            let totalMorale = 0;
+            if (team.roster) team.roster.forEach(p => totalMorale += (p.morale || 50));
+            const avgMorale = team.roster.length > 0 ? totalMorale / team.roster.length : 50;
+
+            if (losses > 4 && winPct < 0.3 && avgMorale < 40 && Math.random() < 0.2) {
+                return { avgMorale: Math.round(avgMorale) };
+            }
+            return null;
+        },
+        stages: {
+            1: {
+                title: 'Locker Room Mutiny',
+                description: (data) => `With the season spiraling and morale at an all-time low (${data.avgMorale}%), key veterans are threatening a mutiny against the coaching staff.`,
+                choices: [
+                    {
+                        text: 'Back the Coach',
+                        effect: (ctx, story) => {
+                            const team = ctx.team;
+                            team.roster.forEach(p => { if (p.age > 28) p.morale = Math.max(0, p.morale - 20); });
+                            story.stage = 2;
+                            story.nextUpdate = ctx.week + 1;
+                            return "You publicly supported the coach. The veterans are furious.";
+                        }
+                    },
+                    {
+                        text: 'Fire Coordinators',
+                        effect: (ctx, story) => {
+                            const team = ctx.team;
+                            // Simulate firing by resetting coordinator morale/performance or just flavor text
+                            if (team.staff) {
+                                delete team.staff.offCoordinator; // Drastic measure
+                                delete team.staff.defCoordinator;
+                            }
+                            team.roster.forEach(p => p.morale = Math.min(100, p.morale + 10));
+                            story.resolved = true;
+                            return "You fired both coordinators to appease the locker room. Players seem relieved.";
+                        }
+                    }
+                ]
+            },
+            2: {
+                title: 'Veteran Revolt',
+                description: (data) => `The veterans have gone to the media demanding changes. The locker room is divided.`,
+                choices: [
+                    {
+                        text: 'Trade RingLeader',
+                        effect: (ctx, story) => {
+                            const team = ctx.team;
+                            // Find a vocal vet
+                            const leader = team.roster.find(p => p.age > 30 && p.ovr > 80);
+                            if (leader) {
+                                leader.morale = 0; // Effectively demand trade
+                                story.resolved = true;
+                                return `You placed ${leader.name} on the trade block. The message has been sent.`;
+                            }
+                            return "No suitable leader found to trade.";
+                        }
+                    },
+                    {
+                        text: 'Team Meeting',
+                        effect: (ctx, story) => {
+                            story.resolved = true;
+                            return "You held a clearing-the-air meeting. It helped slightly.";
+                        }
+                    }
+                ]
+            }
+        }
     }
 };
 
 const INTERACTIVE_EVENTS = [
+    {
+        id: 'locker_room_disputes', // New Event
+        title: 'Locker Room Disputes',
+        description: 'Two of your starting players got into a heated argument during practice. It almost turned physical.',
+        trigger: (league) => {
+            const team = league.teams[window.state.userTeamId];
+            if (!team) return false;
+            // Random check, slightly higher if morale is average/low
+            return Math.random() < 0.05;
+        },
+        choices: [
+            {
+                text: 'Punish Both',
+                description: 'Suspend them for a game.',
+                effect: (ctx) => {
+                    return "You suspended both players. Discipline is restored, but the team is weaker for next week.";
+                }
+            },
+            {
+                text: 'Mediate',
+                description: 'Sit them down and talk it out.',
+                effect: (ctx) => {
+                    const success = Math.random() > 0.3;
+                    if (success) return "You successfully mediated the dispute. They shook hands.";
+                    return "The mediation failed. They are still not talking.";
+                }
+            }
+        ]
+    },
+    {
+        id: 'media_requests', // New Event (mapped to Media Controversy/Requests)
+        title: 'Media Requests',
+        description: 'A major sports network wants to do an all-access feature on your team this week. It means distractions but higher visibility.',
+        trigger: (league) => {
+             const team = league.teams[window.state.userTeamId];
+             // Trigger if team is doing well
+             const wins = team.record?.w || 0;
+             return wins > 3 && Math.random() < 0.1;
+        },
+        choices: [
+            {
+                text: 'Grant Access',
+                description: 'Allow the cameras in.',
+                effect: (ctx) => {
+                    if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction += 5;
+                    // Risk of distraction
+                    if (Math.random() > 0.5) {
+                        return "The media coverage was great for the brand, but practice quality suffered (-2 Prep).";
+                    }
+                    return "The team handled the spotlight well. Fan interest is up!";
+                }
+            },
+            {
+                text: 'Decline',
+                description: 'Keep the locker room private.',
+                effect: (ctx) => {
+                    return "You declined the request to keep the team focused.";
+                }
+            }
+        ]
+    },
     {
         id: 'team_meeting_low_morale',
         title: 'Locker Room Tension',
