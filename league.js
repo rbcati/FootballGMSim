@@ -174,7 +174,8 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             offseason: startPoint === 'offseason',
             schedule: null,
             resultsByWeek: [],
-            transactions: []
+            transactions: [],
+            ownerChallenge: null
         };
 
         // Main Orchestration Loop

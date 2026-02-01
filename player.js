@@ -351,6 +351,8 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         guaranteedPct: 0.5,
         injuryWeeks: 0,
         fatigue: 0,
+        negotiationStatus: 'OPEN',
+        lockoutWeeks: 0,
         abilities: [],
         personality: { traits: ['Loyal'] },
         isFollowed: false,
@@ -1094,6 +1096,10 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
         injuryWeeks: 0,
         fatigue: 0,
         morale: U.rand(70, 95),
+
+        // Contract Negotiation Heat
+        negotiationStatus: 'OPEN',
+        lockoutWeeks: 0,
 
         // Progression: Use DEV TRAITS and POTENTIAL
         devTrait: U.choice(['Normal', 'Star', 'Superstar', 'X-Factor']),

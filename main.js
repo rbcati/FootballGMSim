@@ -461,6 +461,16 @@ class GameController {
                 }
             }
 
+            // --- OWNER'S GAMBLE (Trigger Week 1) ---
+            if (userTeam && !isOffseason && L.week === 1 && !L.ownerChallenge) {
+                // Trigger Owner's Gamble Modal
+                setTimeout(() => {
+                    if (window.triggerOwnerGamble) {
+                        window.triggerOwnerGamble(L, userTeam);
+                    }
+                }, 500);
+            }
+
             // --- CONTEXTUAL DRAMA BANNER (NEW) ---
             let dramaBannerHTML = '';
             if (userTeam && !isOffseason) {
@@ -2806,6 +2816,74 @@ window.initDashboard = function() {
     if (window.renderDashboard) {
         window.renderDashboard();
     }
+};
+
+/**
+ * Triggers the "Owner's Gamble" modal in Week 1
+ */
+window.triggerOwnerGamble = function(league, team) {
+    if (document.getElementById('ownerGambleModal')) return; // Already open
+
+    const modal = document.createElement('div');
+    modal.id = 'ownerGambleModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 600px; text-align: center; border: 2px solid #ffd700; background: linear-gradient(145deg, #1a1a1a, #2a2a2a);">
+            <h2 style="color: #ffd700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">The Owner's Gamble</h2>
+            <p style="color: #ddd; margin-bottom: 20px;">The owner wants to place a wager on this season's outcome. Choose wisely.</p>
+
+            <div class="gamble-options" style="display: grid; gap: 15px; text-align: left;">
+                <div class="gamble-card" onclick="selectGamble('SAFE')" style="padding: 15px; border: 1px solid #555; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.05);">
+                    <h3 style="color: #fff; margin: 0 0 5px 0;">Option A: The Safe Bet</h3>
+                    <div style="font-size: 0.9rem; color: #aaa;">Win 6 Games</div>
+                    <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">Reward: None | Penalty: None</div>
+                </div>
+
+                <div class="gamble-card" onclick="selectGamble('AGGRESSIVE')" style="padding: 15px; border: 1px solid #ffd700; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255, 215, 0, 0.1);">
+                    <h3 style="color: #ffd700; margin: 0 0 5px 0;">Option B: Aggressive</h3>
+                    <div style="font-size: 0.9rem; color: #eee;">Make Playoffs</div>
+                    <div style="font-size: 0.8rem; color: #ccc; margin-top: 5px;">Reward: +$5M Cap Room | Penalty: -$2M Cap Room</div>
+                </div>
+
+                <div class="gamble-card" onclick="selectGamble('ALL_IN')" style="padding: 15px; border: 1px solid #ff4444; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255, 68, 68, 0.1);">
+                    <h3 style="color: #ff4444; margin: 0 0 5px 0;">Option C: All In</h3>
+                    <div style="font-size: 0.9rem; color: #eee;">Win Conference Championship</div>
+                    <div style="font-size: 0.8rem; color: #ccc; margin-top: 5px;">Reward: +$15M Cap Room | Penalty: -$10M Cap (or Fired)</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    window.selectGamble = function(type) {
+        const modalContent = modal.querySelector('.modal-content');
+        modalContent.classList.add('modal-gamble-accept');
+
+        // Define challenge object
+        const challenges = {
+            'SAFE': { target: 'WINS_6', reward: 0, penalty: 0, description: 'Win 6 Games' },
+            'AGGRESSIVE': { target: 'PLAYOFFS', reward: 5, penalty: -2, description: 'Make Playoffs' },
+            'ALL_IN': { target: 'CONF_CHAMP', reward: 15, penalty: -10, description: 'Win Conference Championship' }
+        };
+
+        league.ownerChallenge = {
+            type: type,
+            ...challenges[type],
+            status: 'PENDING'
+        };
+
+        // Save immediately
+        if (window.saveGame) window.saveGame();
+
+        // Remove after animation
+        setTimeout(() => {
+            modal.remove();
+            window.setStatus(`Owner's Gamble Accepted: ${challenges[type].description}`, 'success');
+            // Clean up global function
+            delete window.selectGamble;
+        }, 600); // Match animation duration
+    };
 };
 
 window.addEventListener('load', () => {

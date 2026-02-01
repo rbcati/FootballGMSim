@@ -184,17 +184,65 @@ function startOffseason() {
 
     // Accumulate season stats into career stats for all players
     accumulateCareerStats(L);
-    
-    // Process salary cap rollover for each team
-    if (typeof window.processCapRollover === 'function') {
-      L.teams.forEach(team => {
-        try {
-          window.processCapRollover(L, team);
-        } catch (error) {
-          console.error('Error processing cap rollover for team', team?.abbr || team?.name, error);
+
+    // --- OWNER'S GAMBLE RESOLUTION ---
+    if (L.ownerChallenge && L.ownerChallenge.status === 'PENDING') {
+        const challenge = L.ownerChallenge;
+        const userTeam = L.teams[window.state.userTeamId];
+        let success = false;
+
+        // Evaluate Challenge
+        if (challenge.target === 'WINS_6') {
+            const wins = userTeam.wins || userTeam.record.w || 0;
+            success = wins >= 6;
+        } else if (challenge.target === 'PLAYOFFS') {
+            // Check if made playoffs
+            success = window.state.playoffs && window.state.playoffs.teams.some(t => t.id === userTeam.id);
+        } else if (challenge.target === 'CONF_CHAMP') {
+            // Check if won conference (made it to Super Bowl)
+            // Simplified: Check if in Super Bowl game
+            const sb = window.state.playoffs?.results?.find(r => r.name === 'Super Bowl')?.games?.[0];
+            if (sb) {
+                const inSB = (sb.home.id === userTeam.id || sb.away.id === userTeam.id);
+                // "Win Conference Championship" usually means winning the CCG, so making the SB is enough.
+                // If it meant winning the SB, it would be "Win Super Bowl".
+                success = inSB;
+            }
         }
-      });
+
+        const adjustment = success ? challenge.reward : challenge.penalty;
+        userTeam.pendingCapAdjustment = adjustment;
+        challenge.status = 'COMPLETED';
+        challenge.result = success ? 'SUCCESS' : 'FAILURE';
+
+        console.log(`[GAMBLE] Result: ${success ? 'SUCCESS' : 'FAILURE'}, Cap Adjustment: ${adjustment}M`);
+
+        if (window.setStatus) {
+            window.setStatus(`Owner's Gamble ${success ? 'WON' : 'LOST'}: Cap adjustment ${adjustment > 0 ? '+' : ''}${adjustment}M for next season.`, success ? 'success' : 'error', 8000);
+        }
     }
+    
+    // Process salary cap rollover for each team (Enhanced with Gamble Logic)
+    L.teams.forEach(team => {
+        try {
+            // 1. Standard Rollover Calculation
+            if (typeof window.processCapRollover === 'function') {
+                window.processCapRollover(L, team);
+            } else if (window.calculateRollover) {
+                // Fallback: Use calculated rollover
+                team.capRollover = window.calculateRollover(team, L);
+            }
+
+            // 2. Apply Owner's Gamble Adjustment (if any)
+            if (team.pendingCapAdjustment) {
+                console.log(`[CAP] Applying Owner's Gamble Adjustment for ${team.name}: ${team.pendingCapAdjustment}M`);
+                team.capRollover = (team.capRollover || 0) + team.pendingCapAdjustment;
+                delete team.pendingCapAdjustment; // Clear after applying
+            }
+        } catch (error) {
+            console.error('Error processing cap rollover for team', team?.abbr || team?.name, error);
+        }
+    });
     
     // Recalculate cap for all teams after rollover
     if (typeof window.recalcAllTeamCaps === 'function') {
@@ -653,6 +701,20 @@ function simulateWeek(options = {}) {
     }
 
     console.log(`[SIM-DEBUG] Advance Week: Season ${L.year}, Week ${L.week} - Starting Simulation`);
+
+    // Decrement Negotiation Lockouts (User Team)
+    const userTeam = L.teams[window.state.userTeamId];
+    if (userTeam && userTeam.roster) {
+        userTeam.roster.forEach(p => {
+            if (p.negotiationStatus === 'LOCKED' && p.lockoutWeeks > 0) {
+                p.lockoutWeeks--;
+                if (p.lockoutWeeks <= 0) {
+                    p.negotiationStatus = 'OPEN';
+                    if (window.setStatus) window.setStatus(`Negotiations re-opened with ${p.name}.`, 'info');
+                }
+            }
+        });
+    }
 
     // Delegate to GameRunner
     const result = GameRunner.simulateRegularSeasonWeek(L, options);
