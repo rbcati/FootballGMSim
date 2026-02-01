@@ -152,6 +152,31 @@ function calculatePerformanceBonus(player) {
 }
 
 /**
+ * Get Weighted Breakout Attribute (70/20/10 Split)
+ */
+function getBreakoutAttribute(position) {
+    const weights = window.Constants?.POSITION_TRAINING_WEIGHTS?.[position];
+    if (!weights) return null; // Fallback
+
+    const roll = Math.random();
+    let targetGroup;
+
+    // 70% Chance -> Primary
+    // 20% Chance -> Secondary
+    // 10% Chance -> Tertiary
+    if (roll < 0.70) {
+        targetGroup = weights.primary;
+    } else if (roll < 0.90) {
+        targetGroup = weights.secondary;
+    } else {
+        targetGroup = weights.tertiary;
+    }
+
+    // Pick a random attribute from the selected group
+    return targetGroup[Math.floor(Math.random() * targetGroup.length)];
+}
+
+/**
  * Handle age-related regression
  */
 function handleRegression(player) {
@@ -189,7 +214,7 @@ function handleDevelopmentEvents(player, league, team) {
     // 1. BREAKOUT (Young players)
     // Chance increases if playing well (checked via game stats presence)
     if (age <= 25 && ovr < potential && player.developmentStatus !== 'BREAKOUT') {
-        let breakoutChance = 0.005; // 0.5% base
+        let breakoutChance = 0.01; // 1% base chance (Increased from 0.5%)
 
         // Performance bonus check (simplified)
         if (player.stats?.game && Object.keys(player.stats.game).length > 0) {
@@ -197,22 +222,39 @@ function handleDevelopmentEvents(player, league, team) {
         }
 
         // HIDDEN FACTOR: Boom Factor (Hidden Gems)
-        // Players with high boomFactor have significantly higher breakout odds
         if (player.boomFactor && player.boomFactor > 5) {
-            breakoutChance += (player.boomFactor / 100); // Up to +20% chance if maxed (rare)
+            breakoutChance += (player.boomFactor / 100);
         }
 
         if (Math.random() < breakoutChance) {
             player.developmentStatus = 'BREAKOUT';
-            const boostXP = (Math.floor(Math.random() * 2) + 2) * 1000; // 2000-3000 XP
+
+            // Standard XP Boost
+            const boostXP = (Math.floor(Math.random() * 2) + 2) * 1000;
             addXP(player, boostXP);
+
+            // NEW: Targeted Attribute Boost
+            const targetAttr = getBreakoutAttribute(player.pos);
+            let story = `${player.pos} ${player.name} is showing rapid improvement!`;
+
+            if (targetAttr && player.ratings[targetAttr]) {
+                const oldValue = player.ratings[targetAttr];
+                const newValue = Math.min(99, oldValue + 5);
+                player.ratings[targetAttr] = newValue;
+                story = `Coaches report a massive improvement in ${targetAttr} (+5)!`;
+
+                // Recalculate OVR if possible
+                if (window.calculateOvr) {
+                    player.ovr = window.calculateOvr(player.pos, player.ratings);
+                }
+            }
 
             // Add News
             if (league.news) {
                 league.news.push({
                     type: 'development',
-                    headline: `Breakout: ${player.name} (${team.abbr})`,
-                    story: `${player.pos} ${player.name} is showing rapid improvement in practice and games!`,
+                    headline: `BREAKOUT: ${player.name} (${team.abbr})`,
+                    story: story,
                     week: league.week,
                     team: team.id
                 });
@@ -221,7 +263,7 @@ function handleDevelopmentEvents(player, league, team) {
             if (!player.seasonNews) player.seasonNews = [];
             player.seasonNews.push({
                 headline: 'Breakout Player',
-                story: 'Coaches report exceptional progress.',
+                story: story,
                 week: league.week,
                 year: league.year
             });

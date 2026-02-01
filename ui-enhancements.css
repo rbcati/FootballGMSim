@@ -1298,6 +1298,8 @@ select:disabled {
 .game-over-mvp .player-stats {
     font-size: 1rem;
     color: #ddd;
+}
+
 /* Player Markers and Advanced Animation Support */
 .player-markers {
     position: absolute;
@@ -1344,6 +1346,8 @@ select:disabled {
     background: rgba(255, 255, 255, 0.2);
     transform-origin: left center;
     pointer-events: none;
+}
+
 /* ============================================
    Game Juice & Feedback Animations - Enhanced
    ============================================ */
@@ -1416,6 +1420,8 @@ select:disabled {
 /* Smooth Transitions for Field */
 .football-field-container, .field-container {
   transition: background-color 0.5s ease, box-shadow 0.5s ease;
+}
+
 /* --- Live Game Play Calling UI --- */
 .play-call-prompt {
     margin-bottom: 10px;
@@ -1490,4 +1496,144 @@ select:disabled {
     .play-row {
         width: 100%;
     }
+}
+
+/* ============================================
+   Draft Reveal & Gem Modal Styles
+   ============================================ */
+
+.gem-reveal-modal {
+    background: rgba(10, 12, 16, 0.98);
+    backdrop-filter: blur(16px);
+    z-index: 5000;
+}
+
+.reveal-card {
+    background: linear-gradient(145deg, #1a1f2e, #11151f);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 40px rgba(0,0,0,0.6);
+    border-radius: 16px;
+    padding: 30px;
+    width: 90%;
+    max-width: 500px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    animation: popIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.reveal-card.gem-status {
+    border-color: #34C759;
+    box-shadow: 0 0 50px rgba(52, 199, 89, 0.3);
+}
+
+.reveal-card.bust-status {
+    border-color: #FF453A;
+    box-shadow: 0 0 50px rgba(255, 69, 58, 0.3);
+}
+
+.reveal-header h2 {
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+}
+
+.player-reveal-info h1 {
+    font-size: 2.5rem;
+    margin-bottom: 5px;
+    background: linear-gradient(to right, #fff, #bbb);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.player-reveal-info p {
+    font-size: 1.2rem;
+    color: var(--accent);
+    margin-bottom: 30px;
+}
+
+.reveal-badge {
+    display: inline-block;
+    padding: 10px 20px;
+    border-radius: 50px;
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 30px;
+    animation: popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s backwards;
+}
+
+.reveal-badge.gem {
+    background: rgba(52, 199, 89, 0.2);
+    color: #34C759;
+    border: 2px solid #34C759;
+    box-shadow: 0 0 20px rgba(52, 199, 89, 0.4);
+}
+
+.reveal-badge.bust {
+    background: rgba(255, 69, 58, 0.2);
+    color: #FF453A;
+    border: 2px solid #FF453A;
+    box-shadow: 0 0 20px rgba(255, 69, 58, 0.4);
+}
+
+.reveal-badge.normal {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.rating-reveal {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 30px;
+}
+
+.rating-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.rating-box .label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+}
+
+.rating-box .value {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+.rating-box .value.boosted {
+    color: #34C759;
+}
+
+.rating-box .value.nerfed {
+    color: #FF453A;
+}
+
+/* Sparkle Effect for Gems */
+.reveal-card.gem-status::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+    animation: rotate 10s linear infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
