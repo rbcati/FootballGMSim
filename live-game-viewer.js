@@ -203,6 +203,12 @@ class LiveGameViewer {
 
            <div class="marker-los" style="left: 50%;"></div>
            <div class="marker-first-down" style="left: 58.33%;"></div>
+
+           <div class="player-markers">
+               <div class="player-marker marker-qb"></div>
+               <div class="player-marker marker-skill"></div>
+           </div>
+
            <div class="football-ball" style="left: 50%;"></div>
 
            <div class="endzone right" style="background-color: ${awayColor}; opacity: 0.8;">${awayName}</div>
@@ -216,9 +222,9 @@ class LiveGameViewer {
   updateFieldState(yardLine, isHomePossession) {
       if (!this.checkUI()) return;
       const parent = this.viewMode ? this.container : this.modal;
-      const ballEl = parent.querySelector('.football-ball');
-      const losEl = parent.querySelector('.marker-los');
-      const fdEl = parent.querySelector('.marker-first-down');
+      const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const losEl = parent.querySelector('.marker-los') || parent.querySelector('.field-marker.marker-los');
+      const fdEl = parent.querySelector('.marker-first-down') || parent.querySelector('.field-marker.marker-first-down');
 
       if (!ballEl) return;
 
@@ -232,7 +238,7 @@ class LiveGameViewer {
 
       ballEl.style.left = `${pct}%`;
       ballEl.style.transition = 'none';
-      losEl.style.left = `${pct}%`;
+      if (losEl) losEl.style.left = `${pct}%`;
 
       // First Down Marker
       const state = this.gameState;
@@ -244,9 +250,17 @@ class LiveGameViewer {
 
           let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
           let fdPct = (10 + visualTarget) / 1.2;
-          fdEl.style.left = `${fdPct}%`;
-          fdEl.style.display = 'block';
+          if (fdEl) {
+              fdEl.style.left = `${fdPct}%`;
+              fdEl.style.display = 'block';
+          }
       }
+
+      // Hide players during instant update
+      const qbMarker = parent.querySelector('.marker-qb');
+      const skillMarker = parent.querySelector('.marker-skill');
+      if (qbMarker) qbMarker.style.opacity = 0;
+      if (skillMarker) skillMarker.style.opacity = 0;
 
       // Force reflow
       void ballEl.offsetWidth;
@@ -254,68 +268,263 @@ class LiveGameViewer {
   }
 
   /**
+   * Helper to map yardline to visual percentage (0-100)
+   */
+  getVisualPercentage(yardLine, isHomePossession) {
+      let visualYard = isHomePossession ? yardLine : (100 - yardLine);
+      return (10 + visualYard) / 1.2;
+  }
+
+  /**
+   * Physics-based animation helper
+   */
+  animateTrajectory(element, options) {
+      return new Promise(resolve => {
+          if (!element) return resolve();
+          if (this.isSkipping) {
+               element.style.left = `${options.endX}%`;
+               if (options.arcHeight) element.style.transform = `translate(-50%, -50%)`;
+               return resolve();
+          }
+
+          const startX = options.startX;
+          const endX = options.endX;
+          const duration = options.duration || 1000;
+          const arcHeight = options.arcHeight || 0;
+
+          const startTime = performance.now();
+
+          // Easing functions
+          const easeLinear = t => t;
+          const easeOutQuad = t => t * (2 - t);
+          const easeInOutQuad = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+          const easing = options.easing === 'linear' ? easeLinear :
+                         options.easing === 'easeOut' ? easeOutQuad : easeInOutQuad;
+
+          const animate = (currentTime) => {
+              if (this.isSkipping) {
+                   element.style.left = `${endX}%`;
+                   if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                   return resolve();
+              }
+
+              const elapsed = currentTime - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              const easeProgress = easing(progress);
+
+              // X Position
+              const currentX = startX + (endX - startX) * easeProgress;
+              element.style.left = `${currentX}%`;
+
+              // Y Position (Arc)
+              if (arcHeight) {
+                  // Parabola: y = 4 * h * x * (1 - x)
+                  // We want negative Y (up)
+                  const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
+                  element.style.transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+              }
+
+              if (progress < 1) {
+                  requestAnimationFrame(animate);
+              } else {
+                  element.style.left = `${endX}%`;
+                  if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                  resolve();
+              }
+          };
+
+          requestAnimationFrame(animate);
+      });
+  }
+
+  /**
    * Animate the play on the field
    * @param {Object} play
+   * @param {Object} startState
    * @returns {Promise}
    */
-  animatePlay(play) {
+  async animatePlay(play, startState) {
       if (this.isSkipping || !this.checkUI()) {
           return Promise.resolve();
       }
 
       const parent = this.viewMode ? this.container : this.modal;
-      const ballEl = parent.querySelector('.football-ball');
+      const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const qbMarker = parent.querySelector('.marker-qb');
+      const skillMarker = parent.querySelector('.marker-skill');
+
       if (!ballEl) return Promise.resolve();
 
-      return new Promise(resolve => {
-          const isHome = this.gameState.ballPossession === 'home';
+      // Duration Scaling
+      let durationScale = 1;
+      if (this.tempo === 'hurry-up') durationScale = 0.5;
+      if (this.tempo === 'slow') durationScale = 2.0;
 
-          // Start Position (Current YardLine)
-          const startYard = play.yardLine;
-          // End Position
-          let endYard = startYard + play.yards;
+      const isHome = this.gameState.ballPossession === 'home';
+      const startYard = startState ? startState.yardLine : play.yardLine;
+      const endYard = startYard + play.yards; // Simplified end point
 
-          // Cap at endzones for visual sanity
-          if (endYard > 100) endYard = 105; // Into EZ
-          if (endYard < 0) endYard = -5; // Safety
+      // Visual Points
+      const startPct = this.getVisualPercentage(startYard, isHome);
+      let endPct = this.getVisualPercentage(Math.max(-5, Math.min(105, endYard)), isHome);
 
-          let startVisual = isHome ? startYard : (100 - startYard);
-          let endVisual = isHome ? endYard : (100 - endYard);
+      // Reset Ball
+      ballEl.style.transition = 'none';
+      ballEl.style.left = `${startPct}%`;
+      ballEl.style.transform = 'translate(-50%, -50%)';
 
-          const startPct = (10 + startVisual) / 1.2;
-          const endPct = (10 + endVisual) / 1.2;
+      // Setup Markers (initially hidden or at start)
+      if (qbMarker) {
+          qbMarker.style.transition = 'none';
+          qbMarker.style.left = `${startPct}%`;
+          qbMarker.style.opacity = '1';
+          qbMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+      }
+      if (skillMarker) {
+          skillMarker.style.transition = 'none';
+          skillMarker.style.left = `${startPct}%`;
+          skillMarker.style.opacity = '0'; // Hide initially
+          skillMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+      }
 
-          // 1. Set Start Position (Instant)
-          ballEl.style.transition = 'none';
-          ballEl.style.left = `${startPct}%`;
+      void ballEl.offsetWidth; // Reflow
 
-          // Force Reflow
-          void ballEl.offsetWidth;
+      // --- PLAY TYPES ---
 
-          // 2. Animate to End
-          let duration = 0.8; // default
-          if (play.playType.startsWith('pass')) duration = 1.2;
-          if (play.playType === 'punt' || play.playType === 'field_goal') duration = 1.5;
-          if (this.tempo === 'hurry-up') duration *= 0.5;
+      if (play.playType.startsWith('pass')) {
+          // PASS PLAY: Dropback -> Pass -> Catch/Run
 
-          ballEl.style.transition = `left ${duration}s ease-in-out`;
-          ballEl.style.left = `${endPct}%`;
+          // 1. Dropback (QB moves back ~5 yards)
+          // So Dropback is always yardLine - 5.
+          const dropbackPct = this.getVisualPercentage(Math.max(0, startYard - 5), isHome);
 
-          // Special Visuals
-          if (play.result === 'touchdown' || play.result === 'field_goal') {
-               ballEl.classList.add('animate-pulse');
-          } else {
-               ballEl.classList.remove('animate-pulse');
+          // Animate QB Dropback
+          const dropbackDuration = 600 * durationScale;
+
+          // Show Skill Player (Receiver) running route
+          if (skillMarker) {
+              skillMarker.style.opacity = '1';
+              // Receiver starts at LOS, runs to catch point
+              // Assume catch is at full yardage for simplicity
           }
 
-          setTimeout(() => {
-              // Cleanup pulse
-              if (play.result === 'touchdown' || play.result === 'field_goal') {
-                   setTimeout(() => ballEl.classList.remove('animate-pulse'), 1000);
-              }
-              resolve();
-          }, duration * 1000);
-      });
+          const p1 = this.animateTrajectory(qbMarker, {
+              startX: startPct,
+              endX: dropbackPct,
+              duration: dropbackDuration,
+              easing: 'easeOut'
+          });
+
+          const p2 = this.animateTrajectory(skillMarker, {
+              startX: startPct,
+              endX: endPct,
+              duration: dropbackDuration + 400 * durationScale, // Route takes longer
+              easing: 'easeInOut' // Run
+          });
+
+          // Ball tracks QB during dropback? Or just waits?
+          // Let's snap ball to QB for dropback.
+          const p3 = this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: dropbackPct,
+              duration: dropbackDuration,
+              easing: 'easeOut'
+          });
+
+          await Promise.all([p1, p3]); // Wait for dropback
+
+          // 2. Throw (Ball Arcs to Receiver)
+          // QB stays, Receiver might still be moving slightly or arrived
+          const throwDuration = 700 * durationScale; // Air time
+
+          await this.animateTrajectory(ballEl, {
+              startX: dropbackPct,
+              endX: endPct,
+              duration: throwDuration,
+              arcHeight: 25, // Nice arc
+              easing: 'linear' // Projectile X motion is linear-ish
+          });
+
+          // Pulse if TD
+          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+
+      } else if (play.playType.startsWith('run')) {
+          // RUN PLAY: Handoff -> Run
+
+          // 1. Handoff (Quick merge)
+          const handoffDuration = 400 * durationScale;
+
+          if (skillMarker) {
+              skillMarker.style.opacity = '1';
+              skillMarker.style.left = `${startPct}%`; // Starts at LOS
+          }
+
+          // QB hands off (small movement?)
+          await new Promise(r => setTimeout(r, handoffDuration));
+
+          // 2. Run
+          const runDuration = 800 * durationScale;
+
+          // QB fades
+          if (qbMarker) qbMarker.style.opacity = '0.5';
+
+          // Ball moves with Runner
+          const pRun = this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: runDuration,
+              easing: 'easeInOut'
+          });
+
+          const pSkill = this.animateTrajectory(skillMarker, {
+              startX: startPct,
+              endX: endPct,
+              duration: runDuration,
+              easing: 'easeInOut'
+          });
+
+          await Promise.all([pRun, pSkill]);
+
+          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+
+      } else if (play.playType === 'punt' || play.playType === 'field_goal') {
+          // KICK
+          const kickDuration = 1200 * durationScale;
+          const arc = play.playType === 'punt' ? 40 : 30;
+
+          // Hide markers
+          if (qbMarker) qbMarker.style.opacity = 0;
+          if (skillMarker) skillMarker.style.opacity = 0;
+
+          await this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: kickDuration,
+              arcHeight: arc,
+              easing: 'linear'
+          });
+
+           if (play.result === 'touchdown' || play.result === 'field_goal') ballEl.classList.add('animate-pulse');
+
+      } else {
+          // Fallback (Penalty, etc)
+          await this.animateTrajectory(ballEl, {
+              startX: startPct,
+              endX: endPct,
+              duration: 1000 * durationScale
+          });
+      }
+
+      // Cleanup
+      setTimeout(() => {
+          ballEl.classList.remove('animate-pulse');
+          // Fade out markers
+          if (qbMarker) qbMarker.style.opacity = 0;
+          if (skillMarker) skillMarker.style.opacity = 0;
+      }, 1000);
+
+      return Promise.resolve();
   }
 
   /**
@@ -1920,6 +2129,12 @@ class LiveGameViewer {
           <div class="end-zone" style="right: 0; background: rgba(0,0,100,0.3); border-left: 2px solid white; display: none;"></div>
           <div class="field-marker marker-los" style="left: 50%;"></div>
           <div class="field-marker marker-first-down" style="left: 60%;"></div>
+
+          <div class="player-markers">
+              <div class="player-marker marker-qb"></div>
+              <div class="player-marker marker-skill"></div>
+          </div>
+
           <div class="ball" style="left: 50%;"></div>
       `;
   }
@@ -2275,7 +2490,7 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
     // 1. Initialize Game State FIRST (paused) to pass router checks
-    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
 
     // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {

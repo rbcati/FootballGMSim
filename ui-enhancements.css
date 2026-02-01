@@ -1205,3 +1205,51 @@ select:disabled {
 .fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* Player Markers and Advanced Animation Support */
+.player-markers {
+    position: absolute;
+    top: 0; bottom: 0; left: 0; right: 0;
+    pointer-events: none;
+    z-index: 8;
+}
+
+.player-marker {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.2s, background-color 0.3s;
+    border: 2px solid white;
+    z-index: 9;
+}
+
+.marker-qb {
+    background: #007bff;
+    z-index: 10;
+}
+
+.marker-skill {
+    background: #28a745;
+    z-index: 10;
+    width: 10px;
+    height: 10px;
+}
+
+/* Ensure ball is above markers */
+.ball, .football-ball {
+    z-index: 15;
+}
+
+/* Trajectory Helper Class (if needed for debugging) */
+.trajectory-path {
+    position: absolute;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    transform-origin: left center;
+    pointer-events: none;
+}
