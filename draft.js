@@ -103,6 +103,14 @@ function makeProspect(year, index, weightedPositions) {
     
     // Generate detailed ratings
     const ratings = window.generatePlayerRatings ? window.generatePlayerRatings(pos) : generateBasicRatings(pos, baseOvr);
+
+    // Generate Fog of War Attributes (Scouted Ratings)
+    const scoutedAttributes = {};
+    Object.keys(ratings).forEach(key => {
+        // Base variance is +/- 10 for unscouted players
+        const variance = U.rand(-10, 10);
+        scoutedAttributes[key] = intToGrade(U.clamp(ratings[key] + variance, 40, 99));
+    });
     
     const prospect = {
       id: U.id(),
@@ -113,6 +121,7 @@ function makeProspect(year, index, weightedPositions) {
       
       // Ratings and overall
       ratings: ratings,
+      scoutedAttributes: scoutedAttributes, // Visible in draft
       ovr: baseOvr,
       
       // Draft info
@@ -278,6 +287,38 @@ let draftState = {
   availableProspects: [],
   completedPicks: []
 };
+
+/**
+ * Convert integer rating to Letter Grade
+ */
+function intToGrade(rating) {
+  if (rating >= 95) return 'A+';
+  if (rating >= 90) return 'A';
+  if (rating >= 85) return 'A-';
+  if (rating >= 80) return 'B+';
+  if (rating >= 75) return 'B';
+  if (rating >= 70) return 'B-';
+  if (rating >= 65) return 'C+';
+  if (rating >= 60) return 'C';
+  if (rating >= 55) return 'C-';
+  if (rating >= 50) return 'D+';
+  if (rating >= 45) return 'D';
+  if (rating >= 40) return 'D-';
+  return 'F';
+}
+
+/**
+ * Generate fuzzy OVR range string
+ */
+function intToGradeRange(ovr, variance) {
+  const min = Math.max(40, ovr - variance);
+  const max = Math.min(99, ovr + variance);
+  const minGrade = intToGrade(min);
+  const maxGrade = intToGrade(max);
+
+  if (minGrade === maxGrade) return minGrade;
+  return `${minGrade} to ${maxGrade}`;
+}
 
 /**
  * Initialize enhanced draft state
@@ -503,6 +544,54 @@ function makeDraftPickEnhanced(teamId, prospectId) {
     // Auto-pick for CPU teams
     if (teamId !== window.state.userTeamId && draftState.currentPick < draftState.draftBoard.length) {
       setTimeout(() => autoPickForCPU(), 500);
+    }
+
+    // --- GEM / BUST REVEAL LOGIC ---
+    if (teamId === window.state.userTeamId) {
+        // RNG Roll
+        const roll = Math.random();
+        let status = 'NORMAL';
+        let originalOvr = prospect.ovr;
+        let newOvr = prospect.ovr;
+        let title = "Draft Selection";
+        let message = `You selected ${prospect.name}`;
+
+        // 10% Gem, 10% Bust
+        if (roll < 0.10) {
+            status = 'GEM';
+            title = "💎 HIDDEN GEM!";
+            message = "This player is better than the scouts thought!";
+            newOvr += 5;
+
+            // Boost Primary Attributes
+            const weights = window.Constants?.POSITION_TRAINING_WEIGHTS?.[prospect.pos] || { primary: ['awareness'] };
+            weights.primary.forEach(attr => {
+                if (prospect.ratings[attr]) prospect.ratings[attr] = Math.min(99, prospect.ratings[attr] + 5);
+            });
+
+        } else if (roll < 0.20) {
+            status = 'BUST';
+            title = "💔 DRAFT BUST";
+            message = "The scouts were wrong... he's struggling.";
+            newOvr -= 5;
+
+            // Nerf Random Attributes (Mental/Physical)
+            const attrKeys = Object.keys(prospect.ratings);
+            for(let i=0; i<3; i++) {
+                const key = window.Utils.choice(attrKeys);
+                if (prospect.ratings[key]) prospect.ratings[key] = Math.max(40, prospect.ratings[key] - 5);
+            }
+        }
+
+        // Update OVR if changed
+        if (status !== 'NORMAL') {
+            prospect.ovr = newOvr;
+            // Recalculate if possible, otherwise trust the flat mod
+            if (window.calculateOvr) prospect.ovr = window.calculateOvr(prospect.pos, prospect.ratings);
+        }
+
+        // Show Reveal Modal
+        showDraftRevealModal(prospect, status, title, message);
     }
 
     // Re-render
@@ -734,7 +823,7 @@ function renderAvailableProspects() {
             <option value="P">P</option>
           </select>
           <select id="prospectSortFilter">
-            <option value="ovr">Overall</option>
+            <option value="ovr">Overall (Est)</option>
             <option value="name">Name</option>
             <option value="pos">Position</option>
           </select>
@@ -742,7 +831,11 @@ function renderAvailableProspects() {
       </div>
 
       <div class="prospects-grid">
-        ${(prospects || []).map(prospect => `
+        ${(prospects || []).map(prospect => {
+          // Fog of War Display
+          const ovrDisplay = intToGradeRange((prospect.scoutedOvr.min + prospect.scoutedOvr.max)/2, (prospect.scoutedOvr.max - prospect.scoutedOvr.min)/2);
+
+          return `
           <div class="prospect-card-draft ${isUserTurn ? 'selectable' : ''}" 
                data-prospect-id="${prospect.id}"
                ${isUserTurn ? `onclick="window.selectDraftProspect('${prospect.id}')"` : ''}>
@@ -750,7 +843,7 @@ function renderAvailableProspects() {
               <h4>${prospect.name}</h4>
               <div class="prospect-meta">
                 <span class="pos-badge">${prospect.pos}</span>
-                <span class="ovr-badge">OVR ${prospect.ovr}</span>
+                <span class="ovr-badge" title="Estimated Range">${ovrDisplay}</span>
               </div>
             </div>
             <div class="prospect-details-draft">
@@ -766,6 +859,15 @@ function renderAvailableProspects() {
                 <span>Projected:</span>
                 <span>Round ${prospect.projectedRound || 'UDFA'}</span>
               </div>
+              <!-- Fog of War Attributes -->
+              <div class="detail-item" style="margin-top: 5px; border-top: 1px solid var(--hairline); padding-top: 5px;">
+                 <span style="font-size: 0.8em; color: var(--text-muted);">Scouted Traits:</span>
+                 <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px;">
+                    ${Object.entries(prospect.scoutedAttributes || {}).slice(0, 3).map(([key, grade]) =>
+                        `<span class="badge badge-subtle">${key.substring(0,3)}: ${grade}</span>`
+                    ).join('')}
+                 </div>
+              </div>
             </div>
             ${isUserTurn ? `
               <button class="btn btn-primary btn-sm draft-select-btn" 
@@ -774,7 +876,7 @@ function renderAvailableProspects() {
               </button>
             ` : ''}
           </div>
-        `).join('')}
+        `}).join('')}
       </div>
     </div>
   `;
@@ -816,13 +918,6 @@ function renderDraft() {
     // Check if enhanced draft is active
     if (draftState.active) {
       // Render enhanced draft board
-      const scoutingContainer = document.getElementById('scoutingList');
-      if (scoutingContainer) {
-        scoutingContainer.innerHTML = `
-          <div id="draftBoard"></div>
-          <div id="availableProspects"></div>
-        `;
-      }
       renderDraftBoard();
       renderAvailableProspects();
       console.log('✅ Enhanced draft rendered');
@@ -836,10 +931,10 @@ function renderDraft() {
       console.log('Generated draft class for', draftYear);
     }
     
-    // Show pre-draft view with start button
-    const scoutingContainer = document.getElementById('scoutingList');
-    if (scoutingContainer) {
-      scoutingContainer.innerHTML = `
+    // Show pre-draft view with start button IN DRAFT VIEW
+    const draftBoardContainer = document.getElementById('draftBoard');
+    if (draftBoardContainer) {
+      draftBoardContainer.innerHTML = `
         <div class="card">
           <h2>${draftYear} NFL Draft</h2>
           <p>The draft will begin during the offseason.</p>
@@ -1209,6 +1304,55 @@ window.proposeDraftPickTrade = function(pickNumber) {
   }
 };
 
+/**
+ * Show the Draft Reveal Modal (Gem/Bust)
+ */
+function showDraftRevealModal(player, status, title, message) {
+    // Create modal element
+    const modal = document.createElement('div');
+    modal.className = 'modal gem-reveal-modal';
+
+    // Status class for styling (gem-status, bust-status, normal-status)
+    const statusClass = status.toLowerCase() + '-status';
+
+    modal.innerHTML = `
+        <div class="reveal-card ${statusClass}">
+            <div class="reveal-header">
+                <h2>Draft Result</h2>
+            </div>
+
+            <div class="player-reveal-info">
+                <h1>${player.name}</h1>
+                <p>${player.pos} | ${player.college}</p>
+
+                ${status === 'GEM' ? '<div class="reveal-badge gem">💎 HIDDEN GEM</div>' : ''}
+                ${status === 'BUST' ? '<div class="reveal-badge bust">💔 BUST</div>' : ''}
+                ${status === 'NORMAL' ? '<div class="reveal-badge normal">SOLID PICK</div>' : ''}
+
+                <div class="rating-reveal">
+                    <div class="rating-box">
+                        <span class="label">True OVR</span>
+                        <span class="value ${status === 'GEM' ? 'boosted' : (status === 'BUST' ? 'nerfed' : '')}">${player.ovr}</span>
+                    </div>
+                    <div class="rating-box">
+                        <span class="label">Potential</span>
+                        <span class="value">${player.potential || player.ovr}</span>
+                    </div>
+                </div>
+
+                <p class="reveal-message">${message}</p>
+
+                <button class="btn btn-primary btn-lg" onclick="this.closest('.modal').remove()">Continue</button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Auto-dismiss after 5 seconds if not clicked (optional, but good for flow)
+    // setTimeout(() => { if(document.body.contains(modal)) modal.remove(); }, 5000);
+}
+
 // Make functions globally available
 window.generateProspects = generateProspects;
 window.makeProspect = makeProspect;
@@ -1226,7 +1370,7 @@ window.makeDraftPickEnhanced = makeDraftPickEnhanced;
 window.tradeDraftPick = tradeDraftPick;
 window.getCurrentPick = getCurrentPick;
 window.getUpcomingPicks = getUpcomingPicks;
-window.renderDraftBoard = renderDraftBoard;
+// window.renderDraftBoard = renderDraftBoard; // Removed to ensure renderDraft is called by router
 window.renderAvailableProspects = renderAvailableProspects;
 
 // Add draft CSS

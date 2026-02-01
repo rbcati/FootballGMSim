@@ -191,6 +191,64 @@
     'Aggressive': { keyStats: ['passRushPower', 'passRushSpeed', 'tackling', 'speed'], description: 'Attack the quarterback and force turnovers.' },
     'Conservative': { keyStats: ['coverage', 'awareness', 'tackling', 'intelligence'], description: 'Bend but don\'t break, prevent big plays.' }
   };
+
+  const POSITION_TRAINING_WEIGHTS = {
+    "QB": {
+      "primary": ["throwPower", "throwAccuracy", "awareness"],
+      "secondary": ["speed", "agility", "stamina"],
+      "tertiary": ["strength", "toughness"]
+    },
+    "RB": {
+      "primary": ["speed", "agility", "carrying"],
+      "secondary": ["catching", "strength", "awareness"],
+      "tertiary": ["passBlock", "toughness"]
+    },
+    "WR": {
+      "primary": ["catching", "speed", "routeRunning"],
+      "secondary": ["agility", "jumping", "stamina"],
+      "tertiary": ["awareness", "runBlock"]
+    },
+    "TE": {
+      "primary": ["catching", "runBlock", "strength"],
+      "secondary": ["speed", "routeRunning", "awareness"],
+      "tertiary": ["agility", "passBlock"]
+    },
+    "OL": {
+      "primary": ["runBlock", "passBlock", "strength"],
+      "secondary": ["awareness", "stamina", "toughness"],
+      "tertiary": ["agility", "speed"]
+    },
+    "DL": {
+      "primary": ["tackle", "strength", "blockShedding"],
+      "secondary": ["speed", "agility", "awareness"],
+      "tertiary": ["stamina", "toughness"]
+    },
+    "LB": {
+      "primary": ["tackle", "awareness", "zoneCoverage"],
+      "secondary": ["speed", "strength", "blockShedding"],
+      "tertiary": ["manCoverage", "agility"]
+    },
+    "CB": {
+      "primary": ["manCoverage", "zoneCoverage", "speed"],
+      "secondary": ["agility", "catching", "awareness"],
+      "tertiary": ["tackle", "strength"]
+    },
+    "S": {
+      "primary": ["manCoverage", "zoneCoverage", "speed"],
+      "secondary": ["agility", "catching", "awareness"],
+      "tertiary": ["tackle", "strength"]
+    },
+    "K": {
+      "primary": ["kickPower", "kickAccuracy"],
+      "secondary": ["awareness", "stamina"],
+      "tertiary": ["speed", "strength"]
+    },
+    "P": {
+      "primary": ["kickPower", "kickAccuracy"],
+      "secondary": ["awareness", "stamina"],
+      "tertiary": ["speed", "strength"]
+    }
+  };
   
   // --- VIII. EXPORT EVERYTHING ---
   const Constants = {
@@ -208,6 +266,7 @@
     POSITIONS, OFFENSIVE_POSITIONS, DEFENSIVE_POSITIONS, DEPTH_NEEDS,
     OVR_WEIGHTS, POS_RATING_RANGES,
     OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
+    POSITION_TRAINING_WEIGHTS,
 
     // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
     get FIRST_NAMES() { return getFirstNames(); },
