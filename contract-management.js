@@ -804,6 +804,12 @@ window.openContractExtensionModal = function(playerId) {
     return;
   }
 
+  // Check Negotiation Lockout
+  if (player.negotiationStatus === 'LOCKED') {
+    setStatus(`Negotiations locked for ${player.lockoutWeeks} weeks (Insulted).`, 'error');
+    return;
+  }
+
   const currentCapHit = capHitFor(player, 0);
   const franchiseSalary = calculateFranchiseTagSalary(player.pos, league);
   const transitionSalary = calculateTransitionTagSalary(player.pos, league);
@@ -1034,14 +1040,70 @@ window.submitContractExtension = function(playerId) {
     return;
   }
 
+  // --- Negotiation Heat Logic ---
+  // 1. Determine Market Value (Ask)
+  let marketValue = player.baseAnnual;
+  if (window.generateContract) {
+      // Generate what a new contract would look like today
+      const newContract = window.generateContract(player.ovr, player.pos);
+      marketValue = newContract.baseAnnual + (newContract.signingBonus / newContract.years);
+  } else {
+      // Fallback estimate
+      marketValue = Math.max(player.baseAnnual, 1.0);
+  }
+
+  // 2. Calculate Offer Ratio (AAV / Market)
+  const offerAAV = baseSalary + (signingBonus / years);
+  const ratio = offerAAV / Math.max(0.1, marketValue);
+
+  // 3. Lowball Logic (< 0.75)
+  if (ratio < 0.75) {
+      // 30% Chance of Insult
+      if (Math.random() < 0.30) {
+          player.negotiationStatus = 'LOCKED';
+          player.lockoutWeeks = 4;
+
+          // Trigger "Insulted" Animation
+          const modalContent = document.querySelector('#contractExtensionModal .modal-content');
+          if (modalContent) {
+              modalContent.classList.add('modal-insult');
+              // Remove class after animation to clean up
+              setTimeout(() => {
+                  modalContent.classList.remove('modal-insult');
+                  // Close modal after shake
+                  setTimeout(() => {
+                      document.getElementById('contractExtensionModal')?.remove();
+                  }, 200);
+              }, 400);
+          } else {
+              document.getElementById('contractExtensionModal')?.remove();
+          }
+
+          setStatus(`Offer Rejected: "This is disrespectful. Talk to my agent next month."`, 'error');
+          return; // Stop execution
+      }
+  }
+
+  // 4. Overpay Logic (> 1.10)
+  if (ratio > 1.10) {
+      player.morale = Math.min(100, (player.morale || 50) + 5);
+      // Visual feedback handled by success message
+  }
+
   const result = extendContract(league, team, player, years, baseSalary, signingBonus);
-  setStatus(result.message, result.success ? 'success' : 'error');
   
   if (result.success) {
+    if (ratio > 1.10) {
+        setStatus(`ECSTATIC! Player accepted immediately. (+5 Morale)`, 'success');
+    } else {
+        setStatus(result.message, 'success');
+    }
     document.getElementById('contractExtensionModal')?.remove();
     if (window.renderContractManagement) {
       window.renderContractManagement(league, window.state.userTeamId);
     }
+  } else {
+    setStatus(result.message, 'error');
   }
 };
 
