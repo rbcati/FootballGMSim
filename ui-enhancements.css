@@ -1202,6 +1202,7 @@ select:disabled {
 .game-over-score {
     font-size: 2rem;
     margin-bottom: 30px;
+    font-family: monospace; /* Fallback */
     font-family: var(--font-mono);
 }
 
@@ -1210,6 +1211,93 @@ select:disabled {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* Hard Shake */
+@keyframes shake-hard {
+  0% { transform: translate(2px, 2px) rotate(0deg); }
+  10% { transform: translate(-2px, -4px) rotate(-3deg); }
+  20% { transform: translate(-6px, 0px) rotate(3deg); }
+  30% { transform: translate(6px, 4px) rotate(0deg); }
+  40% { transform: translate(2px, -2px) rotate(3deg); }
+  50% { transform: translate(-2px, 4px) rotate(-3deg); }
+  60% { transform: translate(-6px, 2px) rotate(0deg); }
+  70% { transform: translate(6px, 2px) rotate(-3deg); }
+  80% { transform: translate(-2px, -2px) rotate(3deg); }
+  90% { transform: translate(2px, 4px) rotate(0deg); }
+  100% { transform: translate(2px, -4px) rotate(-3deg); }
+}
+
+.shake-hard {
+  animation: shake-hard 0.5s;
+  animation-iteration-count: 1;
+}
+
+/* Streak Text */
+.streak-text {
+    font-weight: bold;
+    font-size: 0.9em;
+    color: #ff9500;
+    text-shadow: 0 0 8px rgba(255, 59, 48, 0.6);
+    animation: pulse-glow 0.8s infinite alternate;
+}
+
+/* Game Over Banner */
+.game-over-banner {
+    background: rgba(0,0,0,0.9);
+    padding: 20px 40px;
+    border-radius: 12px;
+    text-align: center;
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 50px rgba(0,0,0,0.5);
+    animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    max-width: 90%;
+    width: 600px;
+}
+
+.game-over-banner h2 {
+    font-size: 4rem;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    line-height: 1;
+}
+
+.game-over-banner.victory h2 {
+    background: linear-gradient(to bottom, #4cd964, #28a745);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(40, 167, 69, 0.5));
+}
+
+.game-over-banner.defeat h2 {
+    background: linear-gradient(to bottom, #ff3b30, #dc3545);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(220, 53, 69, 0.5));
+}
+
+.game-over-mvp {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.game-over-mvp .label {
+    font-size: 0.8rem;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.game-over-mvp .player-name {
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #fff;
+    margin: 5px 0;
+}
+
+.game-over-mvp .player-stats {
+    font-size: 1rem;
+    color: #ddd;
 /* Player Markers and Advanced Animation Support */
 .player-markers {
     position: absolute;

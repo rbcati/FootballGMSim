@@ -2,6 +2,7 @@ class SoundManager {
     constructor() {
         this.ctx = null;
         this.muted = false;
+        this.enabled = true;
         this.enabled = true; // Default enabled
         // Try to init immediately, but it might be suspended until interaction
         try {
@@ -20,7 +21,6 @@ class SoundManager {
         }
     }
 
-    // Generic tone generator
     playTone(freq, type, duration, vol = 0.1, slideTo = null) {
         if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
@@ -44,7 +44,6 @@ class SoundManager {
         osc.stop(this.ctx.currentTime + duration);
     }
 
-    // Generic noise generator (for tackles, crowd)
     playNoise(duration, vol = 0.1) {
         if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
@@ -64,6 +63,7 @@ class SoundManager {
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
 
+        noise.connect(gain);
         // Lowpass filter to make it sound more like a thud/rumble
         const filter = this.ctx.createBiquadFilter();
         filter.type = 'lowpass';
@@ -77,34 +77,26 @@ class SoundManager {
     }
 
     playWhistle() {
-        // High pitched sine, short burst
         if (!this.enabled || this.muted) return;
-        // Trill effect
+        // Double beep pattern
         this.playTone(2000, 'sine', 0.1, 0.1);
-        setTimeout(() => this.playTone(2200, 'sine', 0.1, 0.1), 50);
-        setTimeout(() => this.playTone(2000, 'sine', 0.2, 0.05), 100);
+        setTimeout(() => this.playTone(2000, 'sine', 0.2, 0.1), 150);
     }
 
     playCheer() {
-        // Simulated crowd cheer (pink noise fade out)
         if (!this.enabled || this.muted) return;
-        this.playNoise(1.5, 0.15); // Long noise
-        // Add some melodic major triad for "success"
-        this.playTone(440, 'triangle', 0.4, 0.05); // A4
-        setTimeout(() => this.playTone(554, 'triangle', 0.4, 0.05), 100); // C#5
-        setTimeout(() => this.playTone(659, 'triangle', 0.6, 0.05), 200); // E5
+        // Longer swell
+        this.playNoise(2.5, 0.2);
+        // Melodic swell
+        this.playTone(440, 'triangle', 0.4, 0.05);
+        setTimeout(() => this.playTone(554, 'triangle', 0.5, 0.05), 150);
+        setTimeout(() => this.playTone(659, 'triangle', 0.8, 0.05), 300);
     }
 
-    playTackle() {
-        // Short low frequency noise
-        this.playNoise(0.3, 0.2);
-    }
-
-    playPing() {
-        // High ping for kicks
-        this.playTone(800, 'sine', 0.5, 0.05);
-    }
-
+    playTouchdown() {
+        if (!this.enabled || this.muted) return;
+        // C Major Triad + Octave
+        const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
     playHorns() {
         // Victory Horns
          if (!this.enabled || this.muted || !this.ctx) return;
@@ -154,13 +146,19 @@ class SoundManager {
         osc.frequency.setValueAtTime(150, this.ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.2);
 
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
+        notes.forEach((freq, i) => {
+            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
+        });
 
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.2);
+        // Final fanfare
+        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
     }
 
+    playDefenseStop() {
+        if (!this.enabled || this.muted) return;
+        // Low Thud
+        this.playTone(100, 'sawtooth', 0.3, 0.2, 50);
+    }
     playKick() {
         if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
@@ -168,42 +166,45 @@ class SoundManager {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.1);
-
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.1);
+    playBigHit() {
+        if (!this.enabled || this.muted) return;
+        // Sharp noise burst + low freq impact
+        this.playNoise(0.2, 0.3);
+        this.playTone(60, 'square', 0.3, 0.2, 20);
     }
 
+    // Compatibility aliases
+    playTackle() { this.playBigHit(); }
+    playHit() { this.playBigHit(); }
+
+    playKick() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(200, 'square', 0.1, 0.2, 50);
+    }
+
+    playPing() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(800, 'sine', 0.5, 0.05);
+    }
+
+    playScore() { this.playTouchdown(); }
     playScore() {
         if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
-        const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major
-        const now = this.ctx.currentTime;
+    playFailure() {
+        if (!this.enabled || this.muted) return;
+        // Dissonant tones
+        this.playTone(300, 'sawtooth', 0.5, 0.1, 100);
+        this.playTone(290, 'sawtooth', 0.5, 0.1, 95);
+    }
 
+    playHorns() {
+        if (!this.enabled || this.muted) return;
+        // Victory Horns
+        const notes = [261.63, 329.63, 392.00]; // C, E, G
         notes.forEach((freq, i) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-
-            osc.type = 'triangle';
-            osc.frequency.value = freq;
-
-            gain.gain.setValueAtTime(0.1, now + i * 0.1);
-            gain.gain.linearRampToValueAtTime(0, now + i * 0.1 + 0.3);
-
-            osc.start(now + i * 0.1);
-            osc.stop(now + i * 0.1 + 0.3);
+            setTimeout(() => this.playTone(freq, 'sawtooth', 0.6, 0.15), i * 200);
         });
     }
 
@@ -242,5 +243,10 @@ class SoundManager {
     }
 }
 
+export const soundManager = new SoundManager();
+// Ensure global availability for debugging/scripts
+if (typeof window !== 'undefined') {
+    window.soundManager = soundManager;
+}
 const soundManager = new SoundManager();
 export default soundManager;
