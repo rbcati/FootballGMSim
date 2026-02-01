@@ -26,6 +26,7 @@ class LiveGameViewer {
     this.viewMode = false;
     this.hasAppliedResult = false;
     this.isGameEnded = false;
+    this.isProcessingTurn = false;
 
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
@@ -43,6 +44,7 @@ class LiveGameViewer {
     }
     this.gameState = null;
     this.isGameEnded = true; // Prevent any pending callbacks
+    this.clearTempState();
   }
 
   /**
@@ -333,6 +335,11 @@ class LiveGameViewer {
 
     this.userTeamId = userTeamId;
 
+    // Attempt to restore session
+    if (this.restoreTempState(homeTeam.id, awayTeam.id)) {
+        return;
+    }
+
     // Capture Pre-Game Context
     if (userTeamId) {
         const league = window.state?.league;
@@ -388,6 +395,7 @@ class LiveGameViewer {
     this.isSkipping = false;
     this.playCallQueue = null;
     this.hasAppliedResult = false;
+    this.saveTempState();
   }
 
   /**
@@ -1080,6 +1088,7 @@ class LiveGameViewer {
    */
   async displayNextPlay() {
     if (this.isGameEnded) return;
+    if (this.isProcessingTurn) return;
 
     if (this.gameState?.gameComplete) {
       this.endGame();
@@ -1092,6 +1101,9 @@ class LiveGameViewer {
         this.skipToEnd();
         return;
     }
+
+    this.isProcessingTurn = true;
+    this.updateControls();
 
     // Check if user needs to call a play
     const state = this.gameState;
@@ -1141,6 +1153,8 @@ class LiveGameViewer {
 
     this.handleEndOfQuarter(state);
 
+    this.saveTempState();
+
     if (this.gameState.gameComplete) {
       this.endGame();
       return;
@@ -1150,11 +1164,25 @@ class LiveGameViewer {
     // Reduce delay slightly since animation took time
     const delay = Math.max(500, this.getPlayDelay() - 1000);
 
+    this.isProcessingTurn = false;
+    this.updateControls();
+
     this.intervalId = setTimeout(() => {
       if (!this.isPaused) {
         this.displayNextPlay();
       }
     }, delay);
+  }
+
+  updateControls() {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      const btn = parent.querySelector('#btnNextPlay');
+      if (btn) {
+          btn.disabled = this.isProcessingTurn;
+          btn.style.opacity = this.isProcessingTurn ? '0.5' : '1';
+          btn.style.cursor = this.isProcessingTurn ? 'not-allowed' : 'pointer';
+      }
   }
 
   /**
@@ -1383,8 +1411,6 @@ class LiveGameViewer {
     const oldHomeScore = parseInt(scoreboard.querySelector('.score-team:last-child .team-score')?.textContent || 0);
     const oldAwayScore = parseInt(scoreboard.querySelector('.score-team:first-child .team-score')?.textContent || 0);
 
-    const homeScoreChanged = home.score !== oldHomeScore;
-    const awayScoreChanged = away.score !== oldAwayScore;
     // Detect score change
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
@@ -1392,9 +1418,8 @@ class LiveGameViewer {
     this.lastAwayScore = away.score;
 
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''} ${awayScoreClass}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score ${awayScoreChanged ? 'pulse-score' : ''}">${away.score}</div>
         <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
       </div>
       <div class="score-info">
@@ -1403,9 +1428,8 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''} ${homeScoreClass}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score ${homeScoreChanged ? 'pulse-score' : ''}">${home.score}</div>
         <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
       </div>
     `;
@@ -1470,8 +1494,8 @@ class LiveGameViewer {
         // Check if buttons exist, ignoring whitespace/comments
         if (pcContainer && !pcContainer.querySelector('.play-call-buttons')) {
             pcContainer.innerHTML = `
-                <div class="play-call-prompt" style="margin-bottom: 10px; font-weight: bold; color: var(--accent);">Call Your Play:</div>
-                <div class="play-call-buttons" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div class="play-call-prompt">Call Your Play:</div>
+                <div class="play-call-buttons">
                     <div class="play-row">
                         <button class="play-call-btn" data-play="run_inside">Run Inside</button>
                         <button class="play-call-btn" data-play="run_outside">Run Outside</button>
@@ -1718,6 +1742,7 @@ class LiveGameViewer {
 
     // ENSURE SAVE
     this.finalizeGame();
+    this.clearTempState();
   }
 
   showGameOverOverlay(title, scoreA, scoreB, type) {
@@ -1835,25 +1860,25 @@ class LiveGameViewer {
 
         <div class="play-calling" style="display: none;">
           <div class="play-call-prompt">Call Your Play:</div>
-          <div class="play-call-buttons" style="flex-direction: column; gap: 8px;">
+          <div class="play-call-buttons">
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">RUN</span>
+                <span>RUN</span>
                 <button class="play-call-btn" data-play="run_inside">Inside</button>
                 <button class="play-call-btn" data-play="run_outside">Outside</button>
             </div>
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">PASS</span>
+                <span>PASS</span>
                 <button class="play-call-btn" data-play="pass_short">Short</button>
                 <button class="play-call-btn" data-play="pass_medium">Med</button>
                 <button class="play-call-btn" data-play="pass_long">Long</button>
             </div>
             <div class="play-row">
-                <span style="font-size: 10px; color: #888;">ST</span>
+                <span>ST</span>
                 <button class="play-call-btn" data-play="field_goal">FG</button>
                 <button class="play-call-btn" data-play="punt">Punt</button>
             </div>
-            <div class="play-row defense-row" style="border-top: 1px solid #333; padding-top: 8px;">
-                <span style="font-size: 10px; color: #888;">DEF</span>
+            <div class="play-row defense-row">
+                <span>DEF</span>
                 <button class="play-call-btn" data-play="defense_blitz">Blitz</button>
                 <button class="play-call-btn" data-play="defense_man">Man</button>
                 <button class="play-call-btn" data-play="defense_zone">Zone</button>
@@ -2203,6 +2228,65 @@ class LiveGameViewer {
 
     this.gameState = null;
   }
+
+  // --- PERSISTENCE ---
+  saveTempState() {
+      if (!this.gameState || this.isGameEnded) return;
+      // Sanitize: remove circular team refs if any (usually not in sim)
+      // Actually gameState has team objects which might be large but usually serializable
+      const data = {
+          gameState: this.gameState,
+          playByPlay: this.playByPlay,
+          userTeamId: this.userTeamId,
+          preGameContext: this.preGameContext,
+          simulationMeta: this.simulationMeta,
+          timestamp: Date.now()
+      };
+      try {
+          localStorage.setItem('live_game_temp', JSON.stringify(data));
+      } catch (e) { console.warn('Temp save failed', e); }
+  }
+
+  clearTempState() {
+      localStorage.removeItem('live_game_temp');
+  }
+
+  restoreTempState(homeId = null, awayId = null) {
+      try {
+          const raw = localStorage.getItem('live_game_temp');
+          if (!raw) return false;
+          const data = JSON.parse(raw);
+
+          // Verify expiry (1 hour)
+          if (Date.now() - data.timestamp > 3600000) {
+              this.clearTempState();
+              return false;
+          }
+
+          // Verify teams match if provided
+          if (homeId !== null && awayId !== null) {
+              const savedHome = data.gameState.home.team.id;
+              const savedAway = data.gameState.away.team.id;
+
+              if (savedHome != homeId || savedAway != awayId) {
+                  return false;
+              }
+          }
+
+          this.gameState = data.gameState;
+          this.playByPlay = data.playByPlay;
+          this.userTeamId = data.userTeamId;
+          this.preGameContext = data.preGameContext;
+          this.simulationMeta = data.simulationMeta;
+          this.currentPlayIndex = this.playByPlay.length;
+
+          console.log('Restored live game state from local storage');
+          return true;
+      } catch (e) {
+          console.error('Failed to restore state', e);
+          return false;
+      }
+  }
 }
 
 // Initialize global instance
@@ -2275,15 +2359,12 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     window.setStatus(`Starting live game: ${awayTeam.name} @ ${homeTeam.name}${isUserGame ? ' (You can call plays!)' : ''}`, 'success');
 
     // 1. Initialize Game State FIRST (paused) to pass router checks
-    window.liveGameViewer.startGame(homeTeam, awayTeam, userTeamId, false);
+    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
 
     // 2. Switch View (triggers router)
     if (location.hash !== '#/game-sim') {
         location.hash = '#/game-sim';
     }
-
-    // 2. Initialize State immediately (so router sees active game)
-    window.liveGameViewer.initGame(homeTeam, awayTeam, userTeamId);
 
     // 3. Wait a tick for router to render view, then start sim
     setTimeout(() => {

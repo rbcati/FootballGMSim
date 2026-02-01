@@ -1205,3 +1205,79 @@ select:disabled {
 .fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* --- Live Game Play Calling UI --- */
+.play-call-prompt {
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: var(--accent);
+}
+
+.play-call-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.live-game-modal .play-call-buttons {
+    flex-direction: column;
+    gap: 8px;
+}
+
+.play-row {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.play-row span {
+    font-size: 10px;
+    color: var(--text-muted);
+    min-width: 35px;
+    display: inline-block;
+}
+
+.play-call-btn {
+    padding: 8px 12px;
+    border: 1px solid var(--hairline);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    flex: 1;
+    transition: all 0.2s ease;
+}
+
+.play-call-btn:hover {
+    background: var(--surface-strong);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.play-call-btn:active {
+    transform: scale(0.98);
+}
+
+.play-call-btn.selected {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+}
+
+.defense-row {
+    border-top: 1px solid var(--hairline);
+    padding-top: 8px;
+    margin-top: 4px;
+    width: 100%;
+}
+
+@media (max-width: 768px) {
+    .play-call-buttons {
+        flex-direction: column;
+    }
+
+    .play-row {
+        width: 100%;
+    }
+}
