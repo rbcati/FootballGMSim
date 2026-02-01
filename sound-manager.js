@@ -2,9 +2,12 @@ class SoundManager {
     constructor() {
         this.ctx = null;
         this.muted = false;
-        // Try to init immediately, but it might be suspended until interaction
+        this.enabled = true;
         try {
-            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (AudioContext) {
+                this.ctx = new AudioContext();
+            }
         } catch (e) {
             console.warn('AudioContext not supported');
         }
@@ -16,15 +19,8 @@ class SoundManager {
         }
     }
 
-    // Generic tone generator
     playTone(freq, type, duration, vol = 0.1, slideTo = null) {
         if (!this.enabled || this.muted || !this.ctx) return;
-            this.ctx.resume();
-        }
-    }
-
-    playWhistle() {
-        if (this.muted || !this.ctx) return;
         this.resume();
 
         const osc = this.ctx.createOscillator();
@@ -46,32 +42,11 @@ class SoundManager {
         osc.stop(this.ctx.currentTime + duration);
     }
 
-    // Generic noise generator (for tackles, crowd)
     playNoise(duration, vol = 0.1) {
         if (!this.enabled || this.muted || !this.ctx) return;
         this.resume();
 
         const bufferSize = this.ctx.sampleRate * duration;
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(2500, this.ctx.currentTime);
-        osc.frequency.linearRampToValueAtTime(1500, this.ctx.currentTime + 0.1);
-
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.3);
-    }
-
-    playCheer() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
-
-        // Simple noise approximation
-        const bufferSize = this.ctx.sampleRate * 2; // 2 seconds
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
 
@@ -86,177 +61,85 @@ class SoundManager {
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
 
-        // Lowpass filter to make it sound more like a thud/rumble
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 1000;
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 2);
-
-        noise.connect(filter);
-        filter.connect(gain);
+        noise.connect(gain);
         gain.connect(this.ctx.destination);
 
         noise.start();
     }
 
     playWhistle() {
-        // High pitched sine, short burst
         if (!this.enabled || this.muted) return;
-        // Trill effect
+        // Double beep pattern
         this.playTone(2000, 'sine', 0.1, 0.1);
-        setTimeout(() => this.playTone(2200, 'sine', 0.1, 0.1), 50);
-        setTimeout(() => this.playTone(2000, 'sine', 0.2, 0.05), 100);
+        setTimeout(() => this.playTone(2000, 'sine', 0.2, 0.1), 150);
     }
 
     playCheer() {
-        // Simulated crowd cheer (pink noise fade out)
         if (!this.enabled || this.muted) return;
-        this.playNoise(1.5, 0.15); // Long noise
-        // Add some melodic major triad for "success"
-        this.playTone(440, 'triangle', 0.4, 0.05); // A4
-        setTimeout(() => this.playTone(554, 'triangle', 0.4, 0.05), 100); // C#5
-        setTimeout(() => this.playTone(659, 'triangle', 0.6, 0.05), 200); // E5
+        // Longer swell
+        this.playNoise(2.5, 0.2);
+        // Melodic swell
+        this.playTone(440, 'triangle', 0.4, 0.05);
+        setTimeout(() => this.playTone(554, 'triangle', 0.5, 0.05), 150);
+        setTimeout(() => this.playTone(659, 'triangle', 0.8, 0.05), 300);
     }
 
-    playTackle() {
-        // Short low frequency noise
-        this.playNoise(0.3, 0.2);
+    playTouchdown() {
+        if (!this.enabled || this.muted) return;
+        // C Major Triad + Octave
+        const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+
+        notes.forEach((freq, i) => {
+            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
+        });
+
+        // Final fanfare
+        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+    }
+
+    playDefenseStop() {
+        if (!this.enabled || this.muted) return;
+        // Low Thud
+        this.playTone(100, 'sawtooth', 0.3, 0.2, 50);
+    }
+
+    playBigHit() {
+        if (!this.enabled || this.muted) return;
+        // Sharp noise burst + low freq impact
+        this.playNoise(0.2, 0.3);
+        this.playTone(60, 'square', 0.3, 0.2, 20);
+    }
+
+    // Compatibility aliases
+    playTackle() { this.playBigHit(); }
+    playHit() { this.playBigHit(); }
+
+    playKick() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(200, 'square', 0.1, 0.2, 50);
     }
 
     playPing() {
-        // High ping for kicks
+        if (!this.enabled || this.muted) return;
         this.playTone(800, 'sine', 0.5, 0.05);
     }
 
-    playHorns() {
-        // Victory Horns
-         if (!this.enabled || this.muted) return;
-         const now = this.ctx.currentTime;
-
-         // Helper for brassy sound
-         const playBrass = (freq, start, dur) => {
-             const osc = this.ctx.createOscillator();
-             const gain = this.ctx.createGain();
-             osc.type = 'sawtooth';
-             osc.frequency.value = freq;
-             gain.gain.setValueAtTime(0, start);
-             gain.gain.linearRampToValueAtTime(0.1, start + 0.1);
-             gain.gain.linearRampToValueAtTime(0, start + dur);
-
-             // Lowpass filter envelope
-             const filter = this.ctx.createBiquadFilter();
-             filter.type = 'lowpass';
-             filter.frequency.setValueAtTime(500, start);
-             filter.frequency.linearRampToValueAtTime(3000, start + 0.1);
-             filter.frequency.linearRampToValueAtTime(500, start + dur);
-
-             osc.connect(filter);
-             filter.connect(gain);
-             gain.connect(this.ctx.destination);
-             osc.start(start);
-             osc.stop(start + dur);
-         };
-
-         playBrass(261.63, now, 0.4); // C4
-         playBrass(329.63, now + 0.4, 0.4); // E4
-         playBrass(392.00, now + 0.8, 0.8); // G4
-    playHit() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.2);
-
-        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.2);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.2);
-    }
-
-    playKick() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.1);
-
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
-
-        osc.start();
-        osc.stop(this.ctx.currentTime + 0.1);
-    }
-
-    playScore() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
-
-        const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major
-        const now = this.ctx.currentTime;
-
-        notes.forEach((freq, i) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-
-            osc.type = 'triangle';
-            osc.frequency.value = freq;
-
-            gain.gain.setValueAtTime(0.1, now + i * 0.1);
-            gain.gain.linearRampToValueAtTime(0, now + i * 0.1 + 0.3);
-
-            osc.start(now + i * 0.1);
-            osc.stop(now + i * 0.1 + 0.3);
-        });
-    }
+    playScore() { this.playTouchdown(); }
 
     playFailure() {
-        if (this.muted || !this.ctx) return;
-        this.resume();
+        if (!this.enabled || this.muted) return;
+        // Dissonant tones
+        this.playTone(300, 'sawtooth', 0.5, 0.1, 100);
+        this.playTone(290, 'sawtooth', 0.5, 0.1, 95);
+    }
 
-        const osc1 = this.ctx.createOscillator();
-        const osc2 = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc1.connect(gain);
-        osc2.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc1.type = 'sawtooth';
-        osc1.frequency.setValueAtTime(300, this.ctx.currentTime);
-        osc1.frequency.linearRampToValueAtTime(100, this.ctx.currentTime + 0.5);
-
-        osc2.type = 'sawtooth';
-        osc2.frequency.setValueAtTime(290, this.ctx.currentTime); // Dissonance
-        osc2.frequency.linearRampToValueAtTime(95, this.ctx.currentTime + 0.5);
-
-        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.5);
-
-        osc1.start();
-        osc2.start();
-        osc1.stop(this.ctx.currentTime + 0.5);
-        osc2.stop(this.ctx.currentTime + 0.5);
+    playHorns() {
+        if (!this.enabled || this.muted) return;
+        // Victory Horns
+        const notes = [261.63, 329.63, 392.00]; // C, E, G
+        notes.forEach((freq, i) => {
+            setTimeout(() => this.playTone(freq, 'sawtooth', 0.6, 0.15), i * 200);
+        });
     }
 
     toggleMute() {
@@ -266,5 +149,8 @@ class SoundManager {
 }
 
 export const soundManager = new SoundManager();
-const soundManager = new SoundManager();
+// Ensure global availability for debugging/scripts
+if (typeof window !== 'undefined') {
+    window.soundManager = soundManager;
+}
 export default soundManager;

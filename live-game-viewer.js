@@ -29,6 +29,7 @@ class LiveGameViewer {
 
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
+    this.combo = 0; // Combo counter for consecutive successes
   }
 
   /**
@@ -94,8 +95,12 @@ class LiveGameViewer {
     this.container = container;
 
     // Create layout
+    const difficultyHtml = this.preGameContext?.difficulty ?
+        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.8em; color: var(--text-muted);">${this.preGameContext.difficulty}</div>` : '';
+
     container.innerHTML = `
       <div class="card live-game-header">
+        ${difficultyHtml}
         <div class="scoreboard"></div>
         <div class="field-container"></div>
         <div class="field-wrapper" style="margin: 10px 0;"></div> <!-- Field Container -->
@@ -368,8 +373,16 @@ class LiveGameViewer {
             stakesVal = userTeam.rivalries[oppTeam.id].score;
         }
 
+        // Calculate Difficulty Label
+        const ovrDiff = (userTeam.ovr || 50) - (oppTeam.ovr || 50);
+        let difficultyLabel = "Balanced Matchup";
+        if (ovrDiff > 5) difficultyLabel = "Favorable Matchup (Easy)";
+        else if (ovrDiff < -5) difficultyLabel = "Tough Matchup (Hard)";
+        else if (ovrDiff < -10) difficultyLabel = "Nightmare Matchup (Very Hard)";
+
         this.preGameContext = {
             matchup: matchupStr,
+            difficulty: difficultyLabel,
             offPlanId: plan.offPlanId,
             defPlanId: plan.defPlanId,
             riskId: plan.riskId,
@@ -1207,42 +1220,79 @@ class LiveGameViewer {
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
 
+    // Update Combo State
+    if (this.userTeamId) {
+        // Only track combo if it relates to user
+        const isUserOffense = play.offense === this.userTeamId;
+        const isUserDefense = play.defense === this.userTeamId;
+
+        if (isUserOffense) {
+            if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || (play.yards >= 10 && !play.result)) {
+                this.combo++;
+            } else if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards < 0) {
+                this.combo = 0;
+            }
+        } else if (isUserDefense) {
+            if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards <= 0) {
+                this.combo++;
+            } else if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || play.yards >= 10) {
+                this.combo = 0;
+            }
+        }
+    }
+
     // Sound & Juice Triggers
-    if (play.result === 'touchdown') {
-        soundManager.playScore();
-        soundManager.playCheer();
-        this.triggerFlash();
-        this.triggerFloatText('TOUCHDOWN!');
-    } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-        soundManager.playFailure();
-        this.triggerShake();
-        this.triggerFloatText('TURNOVER!', 'bad');
-    } else if (play.result === 'field_goal_miss') {
-        soundManager.playFailure();
-        this.triggerShake();
-        this.triggerFloatText('NO GOOD!', 'bad');
-    } else if (play.result === 'sack') {
-        soundManager.playHit();
-        this.triggerShake();
-        this.triggerFloatText('SACKED!', 'bad');
-    } else if (play.result === 'big_play') {
-        soundManager.playCheer();
-        this.triggerFloatText('BIG PLAY!');
-    } else if (play.result === 'field_goal') {
-        soundManager.playScore();
-        soundManager.playKick();
-        this.triggerFloatText('GOOD!');
-    } else if (play.type === 'game_end') {
-        // Check winner
-        const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
-        if (userWon) {
+    if (!this.isSkipping) {
+        if (play.result === 'touchdown') {
+            soundManager.playTouchdown();
             soundManager.playCheer();
+            this.triggerFlash();
+            this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
-        } else {
+            this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
+        } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+            soundManager.playDefenseStop();
+            soundManager.playFailure();
+            // Intense shake
+            if (this.container) this.container.classList.add('shake-hard');
+            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
+            setTimeout(() => {
+                if (this.container) this.container.classList.remove('shake-hard');
+                else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake-hard');
+            }, 500);
+
+            this.triggerFloatText('TURNOVER!', 'bad');
+            this.triggerVisualFeedback('negative', 'TURNOVER');
+        } else if (play.result === 'field_goal_miss') {
+            soundManager.playFailure();
+            this.triggerShake();
+            this.triggerFloatText('NO GOOD!', 'bad');
+        } else if (play.result === 'sack') {
+            soundManager.playBigHit();
+            this.triggerShake();
+            this.triggerFloatText('SACKED!', 'bad');
+            this.triggerVisualFeedback('negative', 'SACK!');
+        } else if (play.result === 'big_play') {
+            soundManager.playCheer();
+            this.triggerFloatText('BIG PLAY!');
+        } else if (play.result === 'field_goal') {
+            soundManager.playScore();
+            soundManager.playKick();
+            this.triggerFloatText('GOOD!');
+            this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+        } else if (play.type === 'game_end') {
+            // Check winner
+            const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
+            if (userWon) {
+                soundManager.playCheer();
+                soundManager.playHorns();
+                launchConfetti();
+            } else {
+                soundManager.playWhistle();
+            }
+        } else if (play.type === 'quarter_end') {
             soundManager.playWhistle();
         }
-    } else if (play.type === 'quarter_end') {
-        soundManager.playWhistle();
     }
 
     const parent = this.viewMode ? this.container : this.modal;
@@ -1250,33 +1300,6 @@ class LiveGameViewer {
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
     if (!playLog) return;
-
-    // Game Juice & Sounds
-    if (!this.isSkipping) {
-        if (play.result === 'touchdown') {
-            soundManager.playCheer();
-            launchConfetti();
-            this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
-        } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-            soundManager.playTackle();
-            this.triggerVisualFeedback('negative', 'TURNOVER');
-            // Screen shake
-            if (this.container) this.container.classList.add('shake');
-            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
-            setTimeout(() => {
-                if (this.container) this.container.classList.remove('shake');
-                else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake');
-            }, 500);
-        } else if (play.result === 'sack') {
-             soundManager.playTackle();
-             this.triggerVisualFeedback('negative', 'SACK!');
-        } else if (play.result === 'field_goal') {
-             soundManager.playPing();
-             this.triggerVisualFeedback('positive', 'IT IS GOOD!');
-        } else if (play.type === 'quarter_end') {
-             soundManager.playWhistle();
-        }
-    }
 
     const playElement = document.createElement('div');
     playElement.className = 'play-item';
@@ -1725,12 +1748,57 @@ class LiveGameViewer {
       const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
       if (!parent) return;
 
+      // Calculate MVP (Player with most yards or TDs)
+      let mvp = null;
+      let mvpScore = -1;
+      const stats = this.gameState.stats;
+      const allPlayers = { ...stats.home.players, ...stats.away.players };
+
+      Object.values(allPlayers).forEach(p => {
+          let score = 0;
+          score += (p.passYds || 0) * 0.04;
+          score += (p.rushYds || 0) * 0.1;
+          score += (p.recYds || 0) * 0.1;
+          score += (p.passTD || 0) * 4;
+          score += (p.rushTD || 0) * 6;
+          score += (p.recTD || 0) * 6;
+
+          if (score > mvpScore) {
+              mvpScore = score;
+              mvp = p;
+          }
+      });
+
       const overlay = document.createElement('div');
       overlay.className = 'game-over-overlay';
+
+      let bannerClass = 'game-over-banner';
+      if (type === 'positive') bannerClass += ' victory';
+      if (type === 'negative') bannerClass += ' defeat';
+
       overlay.innerHTML = `
-        <div class="game-over-title" style="color: ${type === 'positive' ? '#4cd964' : type === 'negative' ? '#ff3b30' : '#fff'}">${title}</div>
-        <div class="game-over-score">${scoreA} - ${scoreB}</div>
-        <button class="btn primary" id="dismissOverlay">Continue</button>
+        <div class="${bannerClass}">
+            <h2>${title}</h2>
+            <div class="game-over-score">${scoreA} - ${scoreB}</div>
+
+            ${mvp ? `
+            <div class="game-over-mvp">
+                <div class="label">Player of the Game</div>
+                <div class="player-name">${mvp.name}</div>
+                <div class="player-stats">
+                    ${mvp.pos} •
+                    ${mvp.passYds ? mvp.passYds + ' Pass Yds, ' : ''}
+                    ${mvp.rushYds ? mvp.rushYds + ' Rush Yds, ' : ''}
+                    ${mvp.recYds ? mvp.recYds + ' Rec Yds, ' : ''}
+                    ${(mvp.passTD || mvp.rushTD || mvp.recTD) ? (mvp.passTD||0)+(mvp.rushTD||0)+(mvp.recTD||0) + ' TDs' : ''}
+                </div>
+            </div>
+            ` : ''}
+
+            <div style="margin-top: 30px;">
+                <button class="btn primary" id="dismissOverlay" style="font-size: 1.2rem; padding: 10px 30px;">Continue</button>
+            </div>
+        </div>
       `;
 
       // Ensure positioning
@@ -2033,6 +2101,10 @@ class LiveGameViewer {
       let streakHtml = '';
       if (this.streak >= 3) {
           streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 0.8em; margin-top: 4px;">🔥 ON FIRE! 🔥</div>`;
+      }
+      // Combo indicator
+      if (this.combo >= 2) {
+          streakHtml += `<div class="streak-text" style="text-align:center; margin-top: 2px;">COMBO x${this.combo}</div>`;
       }
 
       container.innerHTML = `
