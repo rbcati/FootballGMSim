@@ -1287,7 +1287,7 @@ class LiveGameViewer {
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
             soundManager.playTackle();
-            this.triggerVisualFeedback('negative', 'TURNOVER');
+            this.triggerVisualFeedback('turnover', 'TURNOVER');
             // Screen shake
             if (this.container) this.container.classList.add('shake');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
@@ -1300,7 +1300,13 @@ class LiveGameViewer {
              this.triggerVisualFeedback('negative', 'SACK!');
         } else if (play.result === 'field_goal') {
              soundManager.playPing();
-             this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+             this.triggerVisualFeedback('field-goal', 'IT IS GOOD!');
+        } else if (play.result === 'field_goal_miss') {
+             soundManager.playFailure();
+             this.triggerVisualFeedback('negative', 'NO GOOD!');
+        } else if (play.result === 'safety') {
+             soundManager.playFailure();
+             this.triggerVisualFeedback('safety', 'SAFETY!');
         } else if (play.type === 'quarter_end') {
              soundManager.playWhistle();
         }
@@ -1453,6 +1459,14 @@ class LiveGameViewer {
       if (this.tempo === 'hurry-up') duration = 500;
       if (this.tempo === 'slow') duration = 2000;
 
+      // Special animations for play types
+      if (play.playType === 'field_goal' || play.playType === 'punt') {
+          ball.classList.add('animate-kick');
+          duration = 1500; // Match CSS animation duration
+      } else if (play.playType.startsWith('pass')) {
+          ball.classList.add('animate-pass');
+      }
+
       // Current State (Start)
       const startYard = startState ? startState.yardLine : this.gameState[this.gameState.ballPossession].yardLine;
       const endYard = startYard + play.yards;
@@ -1469,7 +1483,14 @@ class LiveGameViewer {
       ball.style.left = `${Math.max(0, Math.min(100, endYard))}%`;
 
       // Wait for animation to finish
-      return new Promise(resolve => setTimeout(resolve, duration));
+      return new Promise(resolve => {
+          setTimeout(() => {
+              // Cleanup animation classes
+              ball.classList.remove('animate-kick');
+              ball.classList.remove('animate-pass');
+              resolve();
+          }, duration);
+      });
   }
 
   /**
@@ -1959,6 +1980,7 @@ class LiveGameViewer {
       const losMarker = parent.querySelector('.marker-los');
       const fdMarker = parent.querySelector('.marker-first-down');
       const ball = parent.querySelector('.ball');
+      const fieldContainer = parent.querySelector('.field-container');
 
       if (!losMarker || !fdMarker || !ball || !state) return;
 
@@ -1981,6 +2003,16 @@ class LiveGameViewer {
           fdMarker.style.display = 'none';
       } else {
           fdMarker.style.display = 'block';
+      }
+
+      // Red Zone Visualization
+      // Home drives 0->100 (RZ > 80), Away drives 100->0 (RZ < 20)
+      const isRedZone = (state.ballPossession === 'home' && yardLine >= 80) ||
+                        (state.ballPossession === 'away' && yardLine <= 20);
+
+      if (fieldContainer) {
+          if (isRedZone) fieldContainer.classList.add('red-zone');
+          else fieldContainer.classList.remove('red-zone');
       }
   }
 
