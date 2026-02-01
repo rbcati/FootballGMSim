@@ -438,7 +438,10 @@
 
     <div id="onboardModal" class="modal" hidden>
       <div class="modal-card">
-        <h3>Start New League</h3>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Start New League</h3>
+            <span class="close" onclick="this.closest('.modal').hidden=true; this.closest('.modal').style.display='none';" style="font-size: 24px; cursor: pointer;">&times;</span>
+        </div>
         <div class="section">
           <label>Team Names</label>
           <div class="row">
@@ -477,6 +480,7 @@
         </div>
         <div class="section">
           <button id="onboardStart" class="btn primary">Start Season</button>
+          <button id="onboardResume" class="btn secondary" hidden style="margin-top: 10px; width: 100%;">Resume League</button>
         </div>
       </div>
     </div>
