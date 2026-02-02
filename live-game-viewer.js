@@ -1419,31 +1419,6 @@ class LiveGameViewer {
     }
   }
 
-  /**
-   * Trigger visual feedback for game events
-   */
-  triggerVisualFeedback(type, text) {
-    if (!this.checkUI()) return;
-    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
-
-    // Create overlay element
-    const overlay = document.createElement('div');
-    overlay.className = `game-event-overlay ${type} pop-in`;
-    overlay.innerHTML = `<div class="event-text">${text}</div>`;
-
-    if (getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative';
-    }
-
-    parent.appendChild(overlay);
-
-    // Remove after animation
-    setTimeout(() => {
-        if (overlay && overlay.parentNode) {
-            overlay.remove();
-        }
-    }, 2000);
-  }
 
   /**
    * Render a play to the UI
@@ -1610,7 +1585,31 @@ class LiveGameViewer {
     this.updateScoreboard();
   }
 
-  // triggerVisualFeedback removed (duplicate)
+  /**
+   * Trigger visual feedback for game events
+   */
+  triggerVisualFeedback(type, text) {
+    if (!this.checkUI()) return;
+    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = `game-event-overlay ${type} pop-in`;
+    overlay.innerHTML = `<div class="event-text">${text}</div>`;
+
+    if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+    }
+
+    parent.appendChild(overlay);
+
+    // Remove after animation
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.remove();
+        }
+    }, 2000);
+  }
 
   /**
    * Update scoreboard display

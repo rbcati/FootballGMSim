@@ -477,7 +477,7 @@ html, body {
   font-weight: 500;
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--dur) var(--ease);
   position: relative;
   overflow: hidden;
   text-decoration: none;
@@ -493,10 +493,9 @@ html, body {
 }
 
 .btn:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   box-shadow: var(--shadow-md);
   border-color: var(--hairline-strong);
-  filter: brightness(1.1);
 }
 
 .btn:hover::before {
@@ -504,9 +503,8 @@ html, body {
 }
 
 .btn:active {
-  transform: scale(0.97) translateY(0) !important;
-  box-shadow: inset 0 2px 5px rgba(0,0,0,0.2) !important;
-  filter: brightness(0.95);
+  transform: translateY(0) scale(0.98);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .btn.primary {
@@ -543,7 +541,7 @@ select, input[type="text"], input[type="number"] {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  transition: all 0.2s ease;
+  transition: all var(--dur) var(--ease);
 }
 
 select:focus, input:focus {
@@ -930,22 +928,6 @@ select:disabled {
   }
 }
 
-/* Ensure fade-in is available globally */
-.fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
-}
-
-/* Generic Pop-In Animation */
-.pop-in {
-  animation: popInGeneric 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-}
-
-@keyframes popInGeneric {
-  0% { opacity: 0; transform: scale(0.5); }
-  70% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
 /* Game Event Overlays */
 .game-event-overlay {
   position: absolute;
@@ -1224,6 +1206,11 @@ select:disabled {
     font-family: var(--font-mono);
 }
 
+/* Ensure fade-in is available globally */
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
 /* Hard Shake */
 @keyframes shake-hard {
   0% { transform: translate(2px, 2px) rotate(0deg); }
@@ -1424,17 +1411,8 @@ select:disabled {
 }
 
 /* Enhanced Button Tactile Feedback */
-.btn {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn:hover, button:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.1);
-}
-
 .btn:active, button:active {
-  transform: scale(0.97) translateY(0) !important;
+  transform: scale(0.96) translateY(1px) !important;
   box-shadow: inset 0 2px 5px rgba(0,0,0,0.2) !important;
   filter: brightness(0.95);
 }
@@ -1705,20 +1683,33 @@ select:disabled {
   }
 }
 
-/* Fix: Low Contrast on Inputs */
+/* --- Added by Visual Polish --- */
+
+/* Generic Pop-In Animation */
+.pop-in {
+  animation: popInGeneric 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes popInGeneric {
+  0% { opacity: 0; transform: scale(0.5); }
+  70% { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Enhanced Input Contrast */
 select, input[type="text"], input[type="number"] {
-    background-color: rgba(0, 0, 0, 0.4) !important; /* Darker background for legibility */
-    border-color: rgba(255, 255, 255, 0.25) !important; /* Lighter border for contrast */
+    background-color: rgba(0, 0, 0, 0.4) !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
     color: #fff !important;
-    border-radius: var(--radius-md);
-    padding: var(--space-3) var(--space-4);
-    font-size: var(--text-sm);
-    transition: all 0.2s ease;
 }
 
 select:focus, input[type="text"]:focus, input[type="number"]:focus {
     background-color: rgba(0, 0, 0, 0.6) !important;
     border-color: var(--accent) !important;
     box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25) !important;
-    outline: none;
+}
+
+/* Ensure fade-in is available globally */
+.fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
 }
