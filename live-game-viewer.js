@@ -174,7 +174,26 @@ class LiveGameViewer {
     // Restore play history if available
     if (this.playByPlay && this.playByPlay.length > 0) {
         console.log('Restoring play history:', this.playByPlay.length, 'plays');
-        this.playByPlay.forEach(play => {
+
+        // Optimize: Only render last 50 plays
+        const startIdx = Math.max(0, this.playByPlay.length - 50);
+        const playsToRender = this.playByPlay.slice(startIdx);
+
+        // Add indicator if plays are hidden
+        if (startIdx > 0) {
+             const playLog = container.querySelector('.play-log-enhanced');
+             if (playLog) {
+                 const indicator = document.createElement('div');
+                 indicator.className = 'play-item';
+                 indicator.style.textAlign = 'center';
+                 indicator.style.fontStyle = 'italic';
+                 indicator.style.color = '#888';
+                 indicator.textContent = `... ${startIdx} previous plays hidden ...`;
+                 playLog.appendChild(indicator);
+             }
+        }
+
+        playsToRender.forEach(play => {
             this.renderPlay(play);
         });
 
@@ -295,9 +314,20 @@ class LiveGameViewer {
   animateTrajectory(element, options) {
       return new Promise(resolve => {
           if (!element) return resolve();
+
+          // Shadow selection
+          const shadowEl = (element.classList.contains('ball') || element.classList.contains('football-ball'))
+              ? element.parentElement.querySelector('.ball-shadow')
+              : null;
+
           if (this.isSkipping) {
                element.style.left = `${options.endX}%`;
                if (options.arcHeight) element.style.transform = `translate(-50%, -50%)`;
+               if (shadowEl) {
+                   shadowEl.style.left = `${options.endX}%`;
+                   shadowEl.style.transform = `translate(-50%, -50%)`;
+                   shadowEl.style.opacity = 1;
+               }
                return resolve();
           }
 
@@ -320,6 +350,11 @@ class LiveGameViewer {
               if (this.isSkipping) {
                    element.style.left = `${endX}%`;
                    if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                   if (shadowEl) {
+                       shadowEl.style.left = `${endX}%`;
+                       shadowEl.style.transform = `translate(-50%, -50%)`;
+                       shadowEl.style.opacity = 1;
+                   }
                    return resolve();
               }
 
@@ -330,6 +365,7 @@ class LiveGameViewer {
               // X Position
               const currentX = startX + (endX - startX) * easeProgress;
               element.style.left = `${currentX}%`;
+              if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
               // Y Position (Arc)
               if (arcHeight) {
@@ -337,6 +373,15 @@ class LiveGameViewer {
                   // We want negative Y (up)
                   const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
                   element.style.transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+
+                  if (shadowEl) {
+                       // Shadow Effect
+                       const peakFactor = 4 * easeProgress * (1 - easeProgress);
+                       const scale = 1 - (peakFactor * 0.3);
+                       const opacity = 1 - (peakFactor * 0.4);
+                       shadowEl.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                       shadowEl.style.opacity = opacity;
+                  }
               }
 
               if (progress < 1) {
@@ -344,6 +389,11 @@ class LiveGameViewer {
               } else {
                   element.style.left = `${endX}%`;
                   if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                  if (shadowEl) {
+                      shadowEl.style.left = `${endX}%`;
+                      shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
+                      shadowEl.style.opacity = 1;
+                  }
                   resolve();
               }
           };
@@ -365,6 +415,7 @@ class LiveGameViewer {
 
       const parent = this.viewMode ? this.container : this.modal;
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const ballShadow = parent.querySelector('.ball-shadow');
       const qbMarker = parent.querySelector('.marker-qb');
       const skillMarker = parent.querySelector('.marker-skill');
 
@@ -387,6 +438,14 @@ class LiveGameViewer {
       ballEl.style.transition = 'none';
       ballEl.style.left = `${startPct}%`;
       ballEl.style.transform = 'translate(-50%, -50%)';
+
+      // Reset Shadow
+      if (ballShadow) {
+          ballShadow.style.transition = 'none';
+          ballShadow.style.left = `${startPct}%`;
+          ballShadow.style.transform = 'translate(-50%, -50%)';
+          ballShadow.style.opacity = 1;
+      }
 
       // Setup Markers (initially hidden or at start)
       if (qbMarker) {
@@ -1364,8 +1423,13 @@ class LiveGameViewer {
     );
 
     // 1. Animate Play (Async)
-    if (play.type === 'play' && (play.playType.startsWith('run') || play.playType.startsWith('pass') || play.playType === 'punt' || play.playType === 'field_goal')) {
+    if (play.type === 'play') {
         await this.animatePlay(play, startState);
+        // RACE CHECK: If skipping or ended during animation, abort
+        if (this.isGameEnded || this.isSkipping) {
+            this.isProcessingTurn = false;
+            return;
+        }
     }
 
     this.playByPlay.push(play);
@@ -1373,6 +1437,11 @@ class LiveGameViewer {
 
     // ANIMATE!
     await this.animatePlay(play);
+    // RACE CHECK
+    if (this.isGameEnded || this.isSkipping) {
+        this.isProcessingTurn = false;
+        return;
+    }
 
     this.renderPlay(play);
     this.updateGameState(play, state);
@@ -1676,85 +1745,77 @@ class LiveGameViewer {
     const away = this.gameState.away;
     const state = this.gameState;
 
-    // Check for score changes for animation
-    const oldHomeScore = parseInt(scoreboard.querySelector('.score-team:last-child .team-score')?.textContent || 0);
-    const oldAwayScore = parseInt(scoreboard.querySelector('.score-team:first-child .team-score')?.textContent || 0);
-
     // Detect score change
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
     this.lastHomeScore = home.score;
     this.lastAwayScore = away.score;
 
-    scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
-        <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
-      </div>
-      <div class="score-info">
-        <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
-        <div class="down-distance">
-          ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
-        </div>
-      </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
-        <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
-      </div>
-    `;
+    // Check if initialized
+    if (!scoreboard.innerHTML.trim() || !scoreboard.querySelector('.score-team')) {
+         scoreboard.innerHTML = `
+          <div class="score-team team-away ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+            <div class="team-name">${away.team.abbr}</div>
+            <div class="team-score">${away.score}</div>
+          </div>
+          <div class="score-info">
+            <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
+            <div class="down-distance">
+              ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
+            </div>
+          </div>
+          <div class="score-team team-home ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+            <div class="team-name">${home.team.abbr}</div>
+            <div class="team-score">${home.score}</div>
+          </div>
+        `;
+        return;
+    }
 
-    // Remove flash classes after animation completes (if using pure CSS animation, this might not be strictly necessary if we re-render often, but good practice)
-    // Actually, since we re-render scoreboard on every play/tick, the class will be removed on next render if score doesn't change again.
+    // Update existing elements
+    const awayContainer = scoreboard.querySelector('.score-team.team-away') || scoreboard.querySelector('.score-team:first-child');
+    const homeContainer = scoreboard.querySelector('.score-team.team-home') || scoreboard.querySelector('.score-team:last-child');
+    const clockEl = scoreboard.querySelector('.game-clock');
+    const downEl = scoreboard.querySelector('.down-distance');
+    const awayScoreEl = awayContainer.querySelector('.team-score');
+    const homeScoreEl = homeContainer.querySelector('.team-score');
+
+    // Possession
+    if (state.ballPossession === 'away') {
+        awayContainer.classList.add('has-possession');
+        homeContainer.classList.remove('has-possession');
+    } else {
+        homeContainer.classList.add('has-possession');
+        awayContainer.classList.remove('has-possession');
+    }
+
+    // Scores
+    if (awayScoreEl.textContent != away.score) {
+        awayScoreEl.textContent = away.score;
+        if (awayChanged) {
+            awayScoreEl.classList.remove('pulse-score');
+            void awayScoreEl.offsetWidth;
+            awayScoreEl.classList.add('pulse-score');
+        }
+    }
+
+    if (homeScoreEl.textContent != home.score) {
+        homeScoreEl.textContent = home.score;
+        if (homeChanged) {
+            homeScoreEl.classList.remove('pulse-score');
+            void homeScoreEl.offsetWidth;
+            homeScoreEl.classList.add('pulse-score');
+        }
+    }
+
+    // Info
+    const newClockText = `Q${state.quarter} ${this.formatTime(state.time)}`;
+    if (clockEl.textContent !== newClockText) clockEl.textContent = newClockText;
+
+    const newDownText = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
+    if (downEl.textContent !== newDownText) downEl.textContent = newDownText;
   }
 
-  /**
-   * Animate the play
-   */
-  async animatePlay(play, startState) {
-      if (this.isSkipping || !this.checkUI()) return Promise.resolve();
-
-      const parent = this.viewMode ? this.container : this.modal;
-      const ball = parent.querySelector('.ball');
-      if (!ball) return Promise.resolve();
-
-      // Determine duration based on tempo
-      let duration = 1000;
-      if (this.tempo === 'hurry-up') duration = 500;
-      if (this.tempo === 'slow') duration = 2000;
-
-      // Special animations for play types
-      if (play.playType === 'field_goal' || play.playType === 'punt') {
-          ball.classList.add('animate-kick');
-          duration = 1500; // Match CSS animation duration
-      } else if (play.playType.startsWith('pass')) {
-          ball.classList.add('animate-pass');
-      }
-
-      // Current State (Start)
-      const startYard = startState ? startState.yardLine : this.gameState[this.gameState.ballPossession].yardLine;
-      const endYard = startYard + play.yards;
-
-      // Apply Start Position immediately (no transition)
-      ball.style.transition = 'none';
-      ball.style.left = `${startYard}%`;
-
-      // Force Reflow
-      void ball.offsetWidth;
-
-      // Apply End Position with transition
-      ball.style.transition = `left ${duration}ms ease-in-out`;
-      ball.style.left = `${Math.max(0, Math.min(100, endYard))}%`;
-
-      // Wait for animation to finish
-      return new Promise(resolve => {
-          setTimeout(() => {
-              // Cleanup animation classes
-              ball.classList.remove('animate-kick');
-              ball.classList.remove('animate-pass');
-              resolve();
-          }, duration);
-      });
-  }
 
   /**
    * Format time in MM:SS
@@ -1820,6 +1881,9 @@ class LiveGameViewer {
     if (!playCalling) return;
 
     playCalling.style.display = 'flex';
+    void playCalling.offsetWidth; // Force reflow for transition
+    playCalling.classList.add('visible');
+
     this.isPaused = true;
 
     // Toggle buttons based on possession
@@ -1857,7 +1921,12 @@ class LiveGameViewer {
 
     const playCalling = parent.querySelector('.play-calling');
     if (playCalling) {
-      playCalling.style.display = 'none';
+      playCalling.classList.remove('visible');
+      setTimeout(() => {
+          if (!playCalling.classList.contains('visible')) {
+              playCalling.style.display = 'none';
+          }
+      }, 300);
     }
     this.isPaused = false;
   }
@@ -1880,6 +1949,9 @@ class LiveGameViewer {
    * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
    */
   skipToEnd() {
+      // Set skipping flag IMMEDIATELY to short-circuit any running animations
+      this.isSkipping = true;
+
       if (this.intervalId) {
           clearTimeout(this.intervalId);
           this.intervalId = null;
@@ -1888,7 +1960,6 @@ class LiveGameViewer {
 
       this.isPaused = false;
       this.isPlaying = true;
-      this.isSkipping = true;
 
       // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
       let playsSimulated = 0;
@@ -2280,6 +2351,7 @@ class LiveGameViewer {
               <div class="player-marker marker-skill"></div>
           </div>
 
+          <div class="ball-shadow" style="left: 50%;"></div>
           <div class="ball" style="left: 50%;"></div>
       `;
   }
@@ -2294,6 +2366,7 @@ class LiveGameViewer {
       const losMarker = parent.querySelector('.marker-los');
       const fdMarker = parent.querySelector('.marker-first-down');
       const ball = parent.querySelector('.ball');
+      const ballShadow = parent.querySelector('.ball-shadow');
       const fieldContainer = parent.querySelector('.field-container');
 
       if (!losMarker || !fdMarker || !ball || !state) return;
@@ -2311,6 +2384,7 @@ class LiveGameViewer {
       losMarker.style.left = `${losPct}%`;
       fdMarker.style.left = `${fdPct}%`;
       ball.style.left = `${losPct}%`;
+      if (ballShadow) ballShadow.style.left = `${losPct}%`;
 
       // Hide First Down marker if Goal to Go
       if (yardLine + distance >= 100) {

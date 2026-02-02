@@ -1692,4 +1692,28 @@ select:disabled {
 
 .combo-text-pop {
     animation: comboPop 0.3s ease-out;
+/* Ball Shadow */
+.ball-shadow {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9;
+  transition: left 1s ease-in-out, transform 0.2s ease;
+  filter: blur(1px);
+}
+
+/* Play Calling Transitions */
+.play-calling {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.play-calling.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
