@@ -107,14 +107,23 @@ export function migrateSchema(league) {
                     p.scoutedAttributes = { ...p.ratings }; // Default to visible
                     p.fogOfWar = false; // Default to fully revealed
                 }
+                if (typeof p.fogOfWar === 'undefined') p.fogOfWar = false;
 
                 // Fix Negotiation Status
                 if (!p.negotiationStatus) {
                     p.negotiationStatus = 'OPEN'; // Default for Contract Heat feature
                 }
+
+                // Fix Breakout Training: If missing, default to 0
+                if (typeof p.breakoutChance === 'undefined') p.breakoutChance = 0;
             });
         }
     });
+
+    // 2. Fix Owner Challenge (Batch 2)
+    if (!league.ownerChallenge) {
+        league.ownerChallenge = { active: false, type: null, status: 'NONE' };
+    }
 }
 
 // 1. Function to Save Current Game
@@ -123,6 +132,11 @@ export async function saveGame(stateToSave) {
     if (!gameState || !gameState.league) {
         console.warn("No league to save.");
         return;
+    }
+
+    // Compress data if possible (remove history logs if too large)
+    if (gameState.history && gameState.history.length > 50) {
+        gameState.history = gameState.history.slice(0, 50);
     }
 
     // Update save status
@@ -180,7 +194,7 @@ export async function saveGame(stateToSave) {
 
         // iOS Safe Mode / Storage Quota Handling
         if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-            alert("Storage Error: Private Browsing mode may block saving. Please disable Private Mode for this game.");
+            alert("Storage Full: Your iPhone cannot save this league. Try deleting old history or using a non-private tab.");
             if (window.setStatus) window.setStatus("Storage Error: Save failed (Private Mode?)", "error");
         } else {
             if (window.setStatus) window.setStatus("Save failed: " + e.message, "error");
@@ -201,8 +215,20 @@ export function renderDashboard() {
     if (existingResume) existingResume.remove();
 
     if (lastPlayed) {
-        // Verify the league actually exists in storage
-        if (localStorage.getItem(DB_KEY_PREFIX + lastPlayed)) {
+        // Verify the league actually exists in storage and is valid
+        let isValidSave = false;
+        try {
+            const raw = localStorage.getItem(DB_KEY_PREFIX + lastPlayed);
+            if (raw) {
+                // Peek to ensure it's valid JSON
+                JSON.parse(raw);
+                isValidSave = true;
+            }
+        } catch (e) {
+            console.warn("Invalid resume save:", e);
+        }
+
+        if (isValidSave) {
             const resumeSection = document.createElement('div');
             resumeSection.id = 'resume-league-section';
             resumeSection.className = 'dashboard-section mb-4';
@@ -363,7 +389,7 @@ export async function loadLeague(leagueName) {
         window.state = saveObj.data;
         window.state.leagueName = leagueName; // Ensure name is preserved
 
-        // Fix 1: Schema Migration
+        // Fix 1: Schema Migration (Sanitization Layer)
         if (window.state.league) {
             migrateSchema(window.state.league);
         }
@@ -419,9 +445,10 @@ export async function loadLeague(leagueName) {
 
         if (window.setStatus) window.setStatus("Loaded " + leagueName, "success");
         return window.state;
+
     } catch (e) {
-        console.error("Error loading league:", e);
-        if (window.setStatus) window.setStatus("Failed to load league.", "error");
+        console.error("Save File Corrupted:", e);
+        alert("Error: Your previous save file was from an older version and could not be loaded. Please start a new league.");
         return null;
     }
 }
