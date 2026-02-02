@@ -24,7 +24,7 @@ class GameRunner {
 
         // Use helper to get schedule data
         let weekData;
-        if (window.Scheduler && window.Scheduler.getWeekGames) {
+        if (typeof window !== 'undefined' && window.Scheduler && window.Scheduler.getWeekGames) {
             weekData = window.Scheduler.getWeekGames(league.schedule, weekNum);
         } else {
             // Fallback
@@ -114,7 +114,7 @@ class GameRunner {
         league.resultsByWeek[weekNum - 1] = results;
 
         // Update single game records
-        if (typeof window.updateSingleGameRecords === 'function') {
+        if (typeof window !== 'undefined' && typeof window.updateSingleGameRecords === 'function') {
             try {
                 window.updateSingleGameRecords(league, league.year, weekNum);
             } catch (e) {
@@ -130,7 +130,7 @@ class GameRunner {
         try {
             if (typeof runWeeklyTraining === 'function') {
                 runWeeklyTraining(league);
-            } else if (typeof window.runWeeklyTraining === 'function') {
+            } else if (typeof window !== 'undefined' && typeof window.runWeeklyTraining === 'function') {
                 window.runWeeklyTraining(league);
             }
         } catch (e) {
@@ -138,7 +138,7 @@ class GameRunner {
         }
 
         // Depth Chart Updates
-        if (typeof window.processWeeklyDepthChartUpdates === 'function') {
+        if (typeof window !== 'undefined' && typeof window.processWeeklyDepthChartUpdates === 'function') {
             try {
                 league.teams.forEach(team => {
                     if (team && team.roster) window.processWeeklyDepthChartUpdates(team);
@@ -149,7 +149,7 @@ class GameRunner {
         }
 
         // Owner Mode
-        if (window.state?.ownerMode?.enabled && typeof window.calculateRevenue === 'function') {
+        if (typeof window !== 'undefined' && window.state?.ownerMode?.enabled && typeof window.calculateRevenue === 'function') {
             try {
                 window.updateFanSatisfaction();
                 window.calculateRevenue();
@@ -164,20 +164,25 @@ class GameRunner {
                 newsEngine.generateWeeklyNews(league);
             }
             if (newsEngine && newsEngine.generateInteractiveEvent) {
-                const event = newsEngine.generateInteractiveEvent(league);
-                if (event) window.state.pendingEvent = event;
+                // Interactive events usually require UI state, skip in worker if necessary
+                // But for now, generate it. We will send it back in the payload.
+                // NOTE: window.state is likely undefined in worker.
+                if (typeof window !== 'undefined' && window.state) {
+                    const event = newsEngine.generateInteractiveEvent(league);
+                    if (event) window.state.pendingEvent = event;
+                }
             }
         } catch (e) {
             console.error('Error generating news:', e);
         }
 
         // Achievements
-        if (checkAchievements) {
+        if (typeof window !== 'undefined' && checkAchievements && window.state) {
             checkAchievements(window.state);
         }
 
         // Recap
-        if (options.render !== false && showWeeklyRecap) {
+        if (typeof window !== 'undefined' && options.render !== false && showWeeklyRecap) {
             showWeeklyRecap(previousWeek, results, league.news);
         }
 
@@ -283,7 +288,7 @@ class GameRunner {
                 winners.push(res.homeWin ? gameHome : gameAway);
 
                 // Playoff Revenue
-                if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
+                if (typeof window !== 'undefined' && window.state && gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
                     window.processPlayoffRevenue(gameHome);
                 }
             }

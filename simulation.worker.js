@@ -4,18 +4,15 @@
  */
 
 // Import Core Simulation Logic
-// Note: These modules must be refactored to be pure (no DOM/window dependencies)
-// import GameRunner from './game-runner.js';
-// import { validateLeagueState } from './simulation.js';
+import GameRunner from './game-runner.js';
+import GameSimulator from './game-simulator.js';
+import newsEngine from './news-engine.js';
+import { runWeeklyTraining } from './training.js';
 
-// Mock dependencies if necessary during migration
-const GameRunner = {
-  simulateRegularSeasonWeek: (league, options) => {
-    // Placeholder for actual logic import
-    console.log('Worker: Simulating week...');
-    return { gamesSimulated: 0, results: [] };
-  }
-};
+// Polyfill minimal window/self if needed by imports (though we patched GameRunner)
+if (typeof self !== 'undefined' && typeof window === 'undefined') {
+    // self.window = self; // Some libraries might check window
+}
 
 self.onmessage = async (e) => {
   const { type, payload } = e.data;
@@ -31,39 +28,63 @@ self.onmessage = async (e) => {
       console.log(`[Worker] Starting simulation for Week ${league.week}`);
 
       // 1. Run Simulation
-      // The GameRunner modifies the 'league' object in-place (mutations)
-      const simResult = GameRunner.simulateRegularSeasonWeek(league, options);
+      // GameRunner.simulateRegularSeasonWeek modifies the 'league' object in-place.
+      // We pass { render: false } to skip UI updates (which we patched out anyway, but good practice).
+      const simResult = GameRunner.simulateRegularSeasonWeek(league, { render: false, ...options });
 
       // 2. Identify Changes (Delta Calculation)
-      // Since we modified 'league' in place, we extract the changed parts.
-      // Optimization: In a real implementation, we might track dirty flags.
-      // For now, we return the specific objects we know change during a week.
 
       // A. Teams that played (and thus have stat/record updates)
-      // We can filter this by checking which teams were in the results.
       const teamsInvolvedIds = new Set();
       simResult.results.forEach(res => {
         teamsInvolvedIds.add(res.home); // ID
         teamsInvolvedIds.add(res.away); // ID
       });
 
+      // Filter updated teams from the mutated league object
       const updatedTeams = league.teams.filter(t => teamsInvolvedIds.has(t.id));
 
       // B. Schedule Updates (Game IDs that are now 'played')
-      const scheduleUpdates = simResult.results.map(r => r.id); // Assuming game objects have unique IDs
+      const scheduleUpdates = simResult.results.map(r => r.id);
+
+      // C. News (GameRunner runs newsEngine which appends to league.news)
+      // We return the FULL news array for simplicity/safety, or just the new items if we tracked length.
+      // Since news array grows, sending the whole array (usually small-ish per season) is safer than complex diffing for now.
+      const news = league.news || [];
+
+      // D. Interactive Events?
+      // GameRunner might generate pendingEvent but it relies on window.state.pendingEvent.
+      // In our patched GameRunner, we skipped assigning to window.state inside worker.
+      // But newsEngine.generateInteractiveEvent returns the event.
+      // We can try to generate it here if GameRunner didn't catch it.
+      let pendingEvent = null;
+      if (newsEngine && newsEngine.generateInteractiveEvent) {
+          // We need to re-run this logic or capture it?
+          // GameRunner logic:
+          // if (event) window.state.pendingEvent = event;
+          // Since we patched GameRunner to check for window.state, it skipped assignment.
+          // So we should run it here and send it back.
+          try {
+             const event = newsEngine.generateInteractiveEvent(league);
+             if (event) pendingEvent = event;
+          } catch(err) {
+              console.warn("Worker: Error generating interactive event", err);
+          }
+      }
 
       // 3. Construct Payload
       const response = {
         success: true,
-        week: league.week,
+        week: league.week, // GameRunner increments league.week
         gamesSimulated: simResult.gamesSimulated,
-        results: simResult.results,
+        results: simResult.results, // These go into resultsByWeek
         updatedTeams: updatedTeams, // The "Delta"
-        scheduleUpdates: scheduleUpdates
+        scheduleUpdates: scheduleUpdates,
+        news: news,
+        pendingEvent: pendingEvent
       };
 
       // 4. Send back to Main Thread
-      // postMessage uses Structured Clone (Deep Copy)
       self.postMessage({ type: 'SIM_COMPLETE', payload: response });
 
     } catch (error) {

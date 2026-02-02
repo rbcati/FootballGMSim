@@ -2,6 +2,7 @@
  * Updated Simulation Module with Season Progression Fix and optimizations
  *
  * ES Module version - migrated from global exports
+ * HYBRID ARCHITECTURE: Now uses Web Worker for simulation logic
  */
 
 // Import dependencies
@@ -14,7 +15,7 @@ import { runWeeklyTraining } from './training.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
-// Import GameSimulator
+// Import GameSimulator for Main Thread helpers (applyResult, etc)
 import GameSimulator from './game-simulator.js';
 const {
   simGameStats,
@@ -34,6 +35,213 @@ import { processStaffPoaching } from './coach-system.js';
 
 // Simulation Lock
 let isSimulating = false;
+
+// Worker Instance
+let simWorker = null;
+
+// Initialize Worker
+function initWorker() {
+    if (!simWorker) {
+        try {
+            simWorker = new Worker(new URL('./simulation.worker.js', import.meta.url), { type: 'module' });
+            console.log('[Simulation] Worker initialized');
+
+            simWorker.onmessage = handleWorkerMessage;
+            simWorker.onerror = (e) => {
+                console.error('[Simulation] Worker Error:', e);
+                window.setStatus('Simulation Worker Error: ' + e.message, 'error');
+                isSimulating = false;
+            };
+        } catch (e) {
+            console.error('[Simulation] Failed to initialize worker:', e);
+        }
+    }
+    return simWorker;
+}
+
+// Global resolve/reject for the current simulation promise
+let currentSimResolve = null;
+let currentSimReject = null;
+let currentSimOptions = {};
+
+// Handle Worker Messages
+function handleWorkerMessage(e) {
+    const { type, payload } = e.data;
+
+    if (type === 'SIM_COMPLETE') {
+        processWorkerResult(payload);
+    } else if (type === 'SIM_ERROR') {
+        console.error('[Simulation] Worker reported error:', payload);
+        if (window.setStatus) window.setStatus(`Simulation failed: ${payload.message}`, 'error');
+        isSimulating = false;
+        if (currentSimReject) currentSimReject(new Error(payload.message));
+        cleanupSimPromise();
+    }
+}
+
+function cleanupSimPromise() {
+    currentSimResolve = null;
+    currentSimReject = null;
+    currentSimOptions = {};
+}
+
+// Process results from worker (Main Thread Merge)
+function processWorkerResult(data) {
+    try {
+        console.log('[Simulation] Worker completed. Merging Delta...');
+        const L = window.state.league;
+        const { week, results, updatedTeams, scheduleUpdates, news, pendingEvent } = data;
+
+        // 1. Update League Globals
+        L.week = week; // Should be incremented
+
+        // 2. Merge Results
+        if (!L.resultsByWeek) L.resultsByWeek = {};
+        // Find correct index (week - 2 because week was incremented?)
+        // GameRunner increments week AFTER sim. So if we sent week 1, it comes back as week 2.
+        // The results correspond to week 1.
+        // GameRunner logic: results stored in `weekNum - 1`. Then `league.week++`.
+        // So results are for `week - 2` (if 1-based and incremented).
+        // Let's rely on GameRunner behavior inside worker.
+        // Worker returns `results` which is the array of game results.
+        // We can place it at `week - 2`.
+        // Better: results contains `week` property in each game result? Yes usually.
+        // But let's use the same logic as GameRunner main thread: `league.resultsByWeek[previousWeek - 1] = results`
+        // `previousWeek` is `week - 1`. So index is `week - 2`.
+        const previousWeek = week - 1;
+        L.resultsByWeek[previousWeek - 1] = results;
+
+        // 3. Merge Team Updates (Delta)
+        // We use Object.assign to update the existing objects in memory, preventing reference breaks
+        if (updatedTeams) {
+            updatedTeams.forEach(workerTeam => {
+                const localTeam = L.teams.find(t => t.id === workerTeam.id);
+                if (localTeam) {
+                    // Update simple properties
+                    localTeam.wins = workerTeam.wins;
+                    localTeam.losses = workerTeam.losses;
+                    localTeam.ties = workerTeam.ties;
+                    localTeam.ptsFor = workerTeam.ptsFor;
+                    localTeam.ptsAgainst = workerTeam.ptsAgainst;
+                    localTeam.record = workerTeam.record;
+                    localTeam.rivalries = workerTeam.rivalries;
+
+                    // Update Roster (Deep Merge or Replacement?)
+                    // Worker sent back the whole roster with updated stats/attributes.
+                    // We can replace the roster array, but we should be careful if UI holds refs to players.
+                    // However, standard React/Frameworks usually handle array replacement fine.
+                    // Vanilla JS UI usually re-renders from state.
+                    localTeam.roster = workerTeam.roster;
+
+                    // Update History/Stats
+                    if (workerTeam.stats) localTeam.stats = workerTeam.stats;
+                }
+            });
+        }
+
+        // 4. Merge Schedule Updates
+        if (scheduleUpdates && L.schedule) {
+            // Mark games as played
+            const updateGame = (game) => {
+                if (game && scheduleUpdates.includes(game.id)) {
+                    game.played = true;
+                    // Find result to update score?
+                    const res = results.find(r => r.id === game.id);
+                    if (res) {
+                        game.homeScore = res.scoreHome;
+                        game.awayScore = res.scoreAway;
+                    }
+                }
+            };
+
+            // Iterate schedule (support nested weeks or flat)
+            const weeks = L.schedule.weeks || L.schedule;
+            if (Array.isArray(weeks)) {
+                weeks.forEach(w => {
+                    if (w.games) w.games.forEach(updateGame);
+                    else updateGame(w); // Flat schedule
+                });
+            }
+        }
+
+        // 5. Merge News
+        if (news) {
+            L.news = news;
+        }
+
+        // 6. Pending Event
+        if (pendingEvent && window.state) {
+            window.state.pendingEvent = pendingEvent;
+        }
+
+        // --- MAIN THREAD POST-SIM HOOKS ---
+
+        // Depth Chart Updates (if window function exists)
+        if (typeof window.processWeeklyDepthChartUpdates === 'function') {
+            L.teams.forEach(team => {
+                if (team && team.roster) window.processWeeklyDepthChartUpdates(team);
+            });
+        }
+
+        // Owner Mode
+        if (window.state?.ownerMode?.enabled) {
+            if (typeof window.updateFanSatisfaction === 'function') window.updateFanSatisfaction();
+            if (typeof window.calculateRevenue === 'function') window.calculateRevenue();
+        }
+
+        // Achievements
+        if (checkAchievements) {
+            checkAchievements(window.state);
+        }
+
+        // Show Weekly Recap (UI)
+        if (currentSimOptions.render !== false && showWeeklyRecap) {
+             showWeeklyRecap(previousWeek, results, L.news);
+        }
+
+        // Save State
+        if (saveState) saveState();
+
+        // Update UI
+        if (currentSimOptions.render !== false) {
+            if (typeof window.renderStandings === 'function') window.renderStandings();
+            if (typeof window.renderHub === 'function') window.renderHub();
+            if (typeof window.updateCapSidebar === 'function') window.updateCapSidebar();
+
+            if (window.setStatus) window.setStatus(`Week ${previousWeek} simulated - ${results.length} games completed`);
+        }
+
+        // Check for Season Over logic (from original GameRunner return)
+        // GameRunner in worker doesn't return `seasonOver` explicitly in our skeleton?
+        // Wait, GameRunner.simulateRegularSeasonWeek returns { seasonOver: ... }
+        // We didn't pass it back in worker payload explicitly!
+        // CHECK worker code: `const simResult = ...` then `const response = { ... }`.
+        // We missed `seasonOver` in worker response!
+        // FIX: We can deduce it. If `week > schedule.length`.
+        // OR rely on `simulateWeek` checks.
+
+        const scheduleWeeks = L.schedule.weeks || L.schedule;
+        if (L.week > scheduleWeeks.length) {
+            console.log('Season complete, checking playoffs...');
+             if (window.state.playoffs && !window.state.playoffs.winner) {
+                  if (typeof window.renderPlayoffs === 'function') window.renderPlayoffs();
+             } else {
+                  if (typeof window.startPlayoffs === 'function') window.startPlayoffs();
+                  else if (window.location) window.location.hash = '#/standings';
+             }
+        }
+
+        if (currentSimResolve) currentSimResolve();
+
+    } catch (e) {
+        console.error('[Simulation] Error processing worker result:', e);
+        if (window.setStatus) window.setStatus('Error merging simulation results', 'error');
+        if (currentSimReject) currentSimReject(e);
+    } finally {
+        isSimulating = false;
+        cleanupSimPromise();
+    }
+}
 
 /**
  * Validates that required global dependencies are available
@@ -649,161 +857,106 @@ function startNewSeason() {
 
 /**
  * Simulates all games for the current week in the league.
+ * HYBRID: Uses Web Worker for processing
+ * @returns {Promise} Resolves when simulation completes
  */
-function simulateWeek(options = {}) {
+async function simulateWeek(options = {}) {
   // Prevent re-entrancy
   if (isSimulating) {
     console.warn('Simulation already in progress.');
     return;
   }
 
-  try {
-    isSimulating = true;
+  return new Promise((resolve, reject) => {
+      currentSimResolve = resolve;
+      currentSimReject = reject;
+      currentSimOptions = options;
 
-    // Validate all dependencies first
-    if (!validateDependencies()) {
-      return;
-    }
-    
-    const L = window.state.league;
+      try {
+        isSimulating = true;
+        if (window.setStatus) window.setStatus('Simulating week...', 'loading');
 
-    // Enhanced validation
-    if (!L) {
-      console.error('No league available for simulation');
-      window.setStatus('Error: No league loaded');
-      return;
-    }
+        // Validate all dependencies first
+        if (!validateDependencies()) {
+          throw new Error("Missing dependencies");
+        }
 
-    if (!L.schedule) {
-      console.error('No schedule available for simulation');
-      window.setStatus('Error: No schedule found');
-      return;
-    }
+        const L = window.state.league;
 
-    // NEW SEASON PROGRESSION CHECK (Pre-Simulation)
-    const scheduleWeeks = L.schedule.weeks || L.schedule;
-    if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
-      // Check if already in offseason
-      if (window.state.offseason === true) {
-        console.log('Already in offseason, skipping transition');
-        return;
-      }
-      
-      console.log('Season complete, transitioning to offseason');
-      window.setStatus('Season complete! Entering offseason...');
-      
-      if (startOffseason) {
-        startOffseason();
-      } else if (startNewSeason) {
-        startNewSeason();
-      }
-      return;
-    }
+        // Enhanced validation
+        if (!L) {
+          throw new Error('No league available for simulation');
+        }
 
-    console.log(`[SIM-DEBUG] Advance Week: Season ${L.year}, Week ${L.week} - Starting Simulation`);
+        if (!L.schedule) {
+          throw new Error('No schedule available for simulation');
+        }
 
-    // Decrement Negotiation Lockouts (User Team)
-    const userTeam = L.teams[window.state.userTeamId];
-    if (userTeam && userTeam.roster) {
-        userTeam.roster.forEach(p => {
-            if (p.negotiationStatus === 'LOCKED' && p.lockoutWeeks > 0) {
-                p.lockoutWeeks--;
-                if (p.lockoutWeeks <= 0) {
-                    p.negotiationStatus = 'OPEN';
-                    if (window.setStatus) window.setStatus(`Negotiations re-opened with ${p.name}.`, 'info');
+        // NEW SEASON PROGRESSION CHECK (Pre-Simulation)
+        const scheduleWeeks = L.schedule.weeks || L.schedule;
+        if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
+          // Check if already in offseason
+          if (window.state.offseason === true) {
+            console.log('Already in offseason, skipping transition');
+            isSimulating = false;
+            resolve();
+            return;
+          }
+
+          console.log('Season complete, transitioning to offseason');
+          window.setStatus('Season complete! Entering offseason...');
+
+          if (startOffseason) {
+            startOffseason();
+          } else if (startNewSeason) {
+            startNewSeason();
+          }
+          isSimulating = false;
+          resolve();
+          return;
+        }
+
+        console.log(`[SIM-DEBUG] Advance Week: Season ${L.year}, Week ${L.week} - Starting Simulation (Worker)`);
+
+        // Decrement Negotiation Lockouts (User Team) - Run on Main Thread for safety
+        const userTeam = L.teams[window.state.userTeamId];
+        if (userTeam && userTeam.roster) {
+            userTeam.roster.forEach(p => {
+                if (p.negotiationStatus === 'LOCKED' && p.lockoutWeeks > 0) {
+                    p.lockoutWeeks--;
+                    if (p.lockoutWeeks <= 0) {
+                        p.negotiationStatus = 'OPEN';
+                        if (window.setStatus) window.setStatus(`Negotiations re-opened with ${p.name}.`, 'info');
+                    }
                 }
+            });
+        }
+
+        // Initialize Worker
+        const worker = initWorker();
+        if (!worker) {
+            throw new Error("Worker initialization failed");
+        }
+
+        // Post Message
+        // Inject global context required by GameRunner
+        if (L.userTeamId === undefined) L.userTeamId = window.state.userTeamId;
+
+        worker.postMessage({
+            type: 'SIM_WEEK',
+            payload: {
+                league: L, // Structured Clone handles deep copy
+                options: options
             }
         });
-    }
 
-    // Delegate to GameRunner
-    const result = GameRunner.simulateRegularSeasonWeek(L, options);
-    const { gamesSimulated } = result;
-
-    // VALIDATION
-    if (validateLeagueState) {
-        const validation = validateLeagueState(L);
-        if (!validation.valid) {
-            if (window.setStatus) window.setStatus('Warning: Simulation produced inconsistent data.', 'error');
-        }
-    }
-
-    // Check for Season Over
-    if (result && result.seasonOver) {
-      console.log('Regular season complete, checking playoffs...');
-
-      // FIXED: If playoffs are already active, don't restart them
-      if (window.state.playoffs && !window.state.playoffs.winner) {
-          console.log('Playoffs active, navigating to bracket');
-          if (window.location && window.location.hash !== '#/playoffs') {
-              window.location.hash = '#/playoffs';
-          }
-          if (typeof window.renderPlayoffs === 'function') {
-              window.renderPlayoffs();
-          }
-          return;
+      } catch (error) {
+        console.error('Error in simulateWeek:', error);
+        if (window.setStatus) window.setStatus(`Simulation error: ${error.message}`);
+        isSimulating = false;
+        reject(error);
       }
-
-      console.log('Starting playoffs');
-      window.setStatus('Regular season complete!');
-
-      if (typeof window.startPlayoffs === 'function') {
-        window.startPlayoffs();
-      } else {
-        // Fallback if playoffs not implemented
-        window.setStatus('Season complete! Check standings.');
-        if (window.location) {
-          window.location.hash = '#/standings';
-        }
-      }
-      return;
-    }
-
-    const previousWeek = L.week - 1; // Since GameRunner incremented it
-
-    console.log(`[SIM-DEBUG] Week ${previousWeek} simulation complete - ${gamesSimulated} games simulated`);
-
-    // DB COMMIT: Save state immediately to persist W/L updates
-    // This satisfies the requirement to commit changes after results are written.
-    // Moved outside render check to ensure persistence even in background sims
-    if (saveState) saveState();
-    else if (window.saveState) window.saveState();
-
-    // Update UI to show results (if render option is true, default to true)
-    try {
-      if (options.render !== false) {
-        // UI REFRESH: Force re-fetch of table data (equivalent to useEffect)
-        if (typeof window.renderStandings === 'function') window.renderStandings();
-
-        if (typeof window.renderHub === 'function') {
-          window.renderHub();
-        }
-        if (typeof window.updateCapSidebar === 'function') {
-          window.updateCapSidebar();
-        }
-
-        // Note: showWeeklyRecap is handled inside GameRunner
-
-        // Show success message
-        window.setStatus(`Week ${previousWeek} simulated - ${gamesSimulated} games completed`);
-
-        // Auto-show results on hub
-        if (window.location && window.location.hash !== '#/hub') {
-          window.location.hash = '#/hub';
-        }
-      }
-
-    } catch (uiError) {
-      console.error('Error updating UI after simulation:', uiError);
-      window.setStatus(`Week simulated but UI update failed`);
-    }
-
-  } catch (error) {
-    console.error('Error in simulateWeek:', error);
-    window.setStatus(`Simulation error: ${error.message}`);
-  } finally {
-    isSimulating = false;
-  }
+  });
 }
 
 // ============================================================================
@@ -820,4 +973,3 @@ export {
   accumulateCareerStats,
   commitGameResult
 };
-
