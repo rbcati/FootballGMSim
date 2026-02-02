@@ -3,12 +3,13 @@
  * Core game simulation logic extracted from simulation.js
  */
 
-import { Utils } from './utils.js';
-import { Constants } from './constants.js';
+import { Utils as U } from './utils.js';
+import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
-import { saveState } from './state.js';
+import { getEffectiveRating, canPlayerPlay } from './injury-core.js';
+import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -67,21 +68,20 @@ function calculateWeeksWithTeam(player, team) {
 }
 
 /**
- * Helper to update team standings in the global state (Setter Pattern).
- * Ensures we are modifying the persistent source of truth.
+ * Helper to update team standings in the league object.
+ * @param {Object} league - The league object.
  * @param {number} teamId - The team ID to update.
  * @param {object} stats - The stats to add/update { wins: 0, losses: 0, ties: 0, pf: 0, pa: 0 }.
  */
-export function updateTeamStandings(teamId, stats) {
+export function updateTeamStandings(league, teamId, stats) {
     // 1. Resolve Team Object
     let team = null;
 
-    // Primary Source: Global State
-    if (typeof window !== 'undefined' && window.state?.league?.teams) {
-        team = window.state.league.teams.find(t => t.id === teamId);
+    if (league && league.teams) {
+        team = league.teams.find(t => t.id === teamId);
     }
 
-    // Return null if we can't find the persistent record
+    // Return null if we can't find the team
     if (!team) {
         return null;
     }
@@ -121,11 +121,12 @@ export function updateTeamStandings(teamId, stats) {
 
 /**
  * Applies the result of a simulated game to the teams' records.
+ * @param {Object} league - The league object.
  * @param {object} game - An object containing the home and away team objects.
  * @param {number} homeScore - The final score for the home team.
  * @param {number} awayScore - The final score for the away team.
  */
-export function applyResult(game, homeScore, awayScore, options = {}) {
+export function applyResult(league, game, homeScore, awayScore, options = {}) {
   const verbose = options.verbose === true;
   if (verbose) console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
 
@@ -187,11 +188,11 @@ export function applyResult(game, homeScore, awayScore, options = {}) {
   updateHeadToHead(home, away.id, homeStats, homeStats.wins > 0, homeStats.losses > 0, homeStats.ties > 0);
   updateHeadToHead(away, home.id, awayStats, awayStats.wins > 0, awayStats.losses > 0, awayStats.ties > 0);
 
-  // UPDATE STATE via Setter
+  // UPDATE LEAGUE via Setter
   if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
 
-  const updatedHome = updateTeamStandings(home.id, homeStats);
-  const updatedAway = updateTeamStandings(away.id, awayStats);
+  const updatedHome = updateTeamStandings(league, home.id, homeStats);
+  const updatedAway = updateTeamStandings(league, away.id, awayStats);
 
   if (verbose && updatedHome) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
   if (verbose && updatedAway) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
@@ -745,12 +746,6 @@ function generatePunterStats(punter, teamScore, U) {
 
 /**
  * Simulates game statistics for a single game between two teams.
- * @param {object} home - The home team object.
- * @param {object} away - The away team object.
- * @returns {object|null} An object with homeScore and awayScore, or null if error.
- */
-/**
- * Simulates game statistics for a single game between two teams.
  * Alias: simulateMatchup
  * @param {object} home - The home team object.
  * @param {object} away - The away team object.
@@ -765,20 +760,8 @@ export function simGameStats(home, away, options = {}) {
   try {
     if (verbose) console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
 
-    // Enhanced dependency resolution with fallbacks
-    const C_OBJ = Constants || (typeof window !== 'undefined' ? window.Constants : null);
-    const U = Utils || (typeof window !== 'undefined' ? window.Utils : null);
-
-    if (!C_OBJ?.SIMULATION || !U) {
-      console.error('[SIM-DEBUG] Missing simulation dependencies:', {
-          ConstantsLoaded: !!C_OBJ,
-          SimulationConfig: !!C_OBJ?.SIMULATION,
-          Utils: !!U
-      });
-      return null;
-    }
-
-    const C = C_OBJ.SIMULATION;
+    // Dependencies (Inject or Import)
+    // U and C are imported.
 
     if (!home?.roster || !away?.roster || !Array.isArray(home.roster) || !Array.isArray(away.roster)) {
       console.error('[SIM-DEBUG] Invalid team roster data');
@@ -788,10 +771,8 @@ export function simGameStats(home, away, options = {}) {
     // --- OPTIMIZATION & INJURY INTEGRATION ---
     const getActiveRoster = (team) => {
       if (!team.roster) return [];
-      if (typeof window.canPlayerPlay === 'function') {
-        return team.roster.filter(p => window.canPlayerPlay(p));
-      }
-      return team.roster;
+      // Use imported canPlayerPlay
+      return team.roster.filter(p => canPlayerPlay(p));
     };
 
     const homeActive = getActiveRoster(home);
@@ -807,11 +788,11 @@ export function simGameStats(home, away, options = {}) {
         const tenureYears = calculateWeeksWithTeam(p, team) / 17;
 
         let rating = p.ovr || 50;
-        if (typeof window.getEffectiveRating === 'function') {
-          rating = window.getEffectiveRating(p);
-        }
+        // Use imported getEffectiveRating
+        rating = getEffectiveRating(p);
 
-        const proxyPlayer = { ...p, ovr: rating, ratings: { overall: rating } };
+        // Create proxy player to avoid mutating original
+        const proxyPlayer = { ...p, ovr: rating, ratings: { ...(p.ratings || {}), overall: rating } };
         const effectivePerf = calculateGamePerformance(proxyPlayer, tenureYears);
 
         return acc + effectivePerf;
@@ -831,7 +812,7 @@ export function simGameStats(home, away, options = {}) {
       defensivePositions.forEach(pos => {
         const players = groups[pos] || [];
         players.forEach(p => {
-            const r = typeof window.getEffectiveRating === 'function' ? window.getEffectiveRating(p) : (p.ovr || 50);
+            const r = getEffectiveRating(p);
             totalRating += r;
             count++;
         });
@@ -848,15 +829,20 @@ export function simGameStats(home, away, options = {}) {
     const homeMods = getCoachingMods(home.staff);
     const awayMods = getCoachingMods(away.staff);
 
-    if (typeof window !== 'undefined' && window.state?.userTeamId !== undefined && window.state?.league?.weeklyGamePlan) {
-        const history = window.state.league.strategyHistory || {};
-        if (home.id === window.state.userTeamId) {
-             const { offPlanId, defPlanId, riskId } = window.state.league.weeklyGamePlan;
+    // Determine strategy modifiers (Assumes userTeamId or strategies are passed in context or present in team object)
+    // Note: options.league is passed by GameRunner
+    const league = options.league;
+    const userTeamId = league?.userTeamId;
+
+    if (userTeamId !== undefined && league?.weeklyGamePlan) {
+        const history = league.strategyHistory || {};
+        if (home.id === userTeamId) {
+             const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
              const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
              if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Home):`, stratMods);
              Object.assign(homeMods, stratMods);
-        } else if (away.id === window.state.userTeamId) {
-             const { offPlanId, defPlanId, riskId } = window.state.league.weeklyGamePlan;
+        } else if (away.id === userTeamId) {
+             const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
              const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
              if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Away):`, stratMods);
              Object.assign(awayMods, stratMods);
@@ -867,10 +853,9 @@ export function simGameStats(home, away, options = {}) {
     // --- SCHEME FIT IMPACT ---
     let schemeNote = null;
 
-    // Check if scheme management is loaded
-    if (typeof window !== 'undefined' && window.calculateTeamRatingWithSchemeFit) {
-        const homeFit = window.calculateTeamRatingWithSchemeFit(home);
-        const awayFit = window.calculateTeamRatingWithSchemeFit(away);
+    if (calculateTeamRatingWithSchemeFit) {
+        const homeFit = calculateTeamRatingWithSchemeFit(home);
+        const awayFit = calculateTeamRatingWithSchemeFit(away);
 
         // Get fit percentages (50 = neutral, 100 = perfect, 0 = terrible)
         const hOffFit = homeFit.offensiveSchemeFit || 50;
@@ -961,35 +946,26 @@ export function simGameStats(home, away, options = {}) {
     if (homeScore === awayScore) {
         if (verbose) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
         const isPlayoff = options.isPlayoff === true;
-        const allowTies = !isPlayoff && (typeof window !== 'undefined' ? window.state?.settings?.allowTies !== false : true); // Default allow ties in Reg Season
+        const allowTies = !isPlayoff && (options.allowTies !== false);
 
-        let otPeriod = 1;
         let gameOver = false;
-        // Simple possession loop model for OT
-        // Coin toss: 0 = Home, 1 = Away
         let possession = Math.random() < 0.5 ? 'home' : 'away';
-
-        // Track first possession score for modified sudden death
         let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
         let possessions = 0;
 
-        const maxPossessions = allowTies ? 4 : 20; // Limit for reg season to avoid infinite loops, higher for playoffs
+        const maxPossessions = allowTies ? 4 : 20;
 
         while (!gameOver && possessions < maxPossessions) {
             possessions++;
             // Simulate a drive
-            // Chance to score based on strength diff
             const offStrength = possession === 'home' ? homeStrength : awayStrength;
             const defStrength = possession === 'home' ? awayStrength : homeStrength;
 
-            // Base score chance ~35% per drive
             const diff = offStrength - defStrength;
             const scoreChance = 0.35 + (diff / 200);
 
             let drivePoints = 0;
             if (U.rand(0, 100) / 100 < scoreChance) {
-                // Scored! TD or FG?
-                // TD Chance ~60% of scores
                 if (U.rand(0, 100) < 60) {
                     drivePoints = 6 + (U.rand(0,100) < 95 ? 1 : 0); // TD + XP
                 } else {
@@ -1002,34 +978,26 @@ export function simGameStats(home, away, options = {}) {
             // Apply NFL OT Rules
             if (possessions === 1) {
                 if (drivePoints >= 6) {
-                    // TD on first possession = Game Over
                     if (possession === 'home') homeScore += drivePoints;
                     else awayScore += drivePoints;
                     gameOver = true;
                 } else if (drivePoints === 3) {
-                    // FG on first possession = Other team gets a chance
                     if (possession === 'home') homeScore += drivePoints;
                     else awayScore += drivePoints;
                     firstPossessionScore = 3;
                 }
             } else if (possessions === 2 && firstPossessionScore === 3) {
-                // Second possession after a FG
                 if (drivePoints >= 6) {
-                    // TD beats FG -> Win
                     if (possession === 'home') homeScore += drivePoints;
                     else awayScore += drivePoints;
                     gameOver = true;
                 } else if (drivePoints === 3) {
-                    // FG ties FG -> Sudden Death continues
                     if (possession === 'home') homeScore += drivePoints;
                     else awayScore += drivePoints;
-                    // Game continues to next possession as sudden death
                 } else {
-                    // No score -> Loss (First team wins)
                     gameOver = true;
                 }
             } else {
-                // Sudden Death (Possession 3+ OR Possession 2 if 1st was 0)
                 if (drivePoints > 0) {
                     if (possession === 'home') homeScore += drivePoints;
                     else awayScore += drivePoints;
@@ -1037,7 +1005,6 @@ export function simGameStats(home, away, options = {}) {
                 }
             }
 
-            // Switch possession
             possession = possession === 'home' ? 'away' : 'home';
         }
 
@@ -1057,7 +1024,6 @@ export function simGameStats(home, away, options = {}) {
       let totalPassAttempts = 30;
 
       if (qb) {
-        // console.log(`[SIM-DEBUG] Generating stats for QB ${qb.name}`);
         const qbStats = generateQBStats(qb, score, oppScore, oppDefenseStrength, U, mods);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
@@ -1068,7 +1034,6 @@ export function simGameStats(home, away, options = {}) {
       const rbs = (groups['RB'] || []).slice(0, 2);
       rbs.forEach((rb, index) => {
         const share = index === 0 ? 0.7 : 0.3;
-        // Pass full scores for context, and explicit share parameter
         const rbStats = generateRBStats(rb, score, oppScore, oppDefenseStrength, U, mods, share);
         Object.assign(rb.stats.game, rbStats);
       });
@@ -1167,31 +1132,6 @@ export function accumulateStats(source, target) {
 }
 
 /**
- * Validates the league state after simulation.
- * @param {Object} league - The league object.
- * @returns {Object} { valid: boolean, errors: Array }
- */
-export function validateLeagueState(league) {
-    const errors = [];
-    if (!league) return { valid: false, errors: ['No league object provided'] };
-
-    // Check for finalized games with invalid scores
-    if (league.resultsByWeek) {
-        Object.entries(league.resultsByWeek).forEach(([week, results]) => {
-            if (Array.isArray(results)) {
-                results.forEach(game => {
-                    if (game.scoreHome === 0 && game.scoreAway === 0 && !game.bye) {
-                        // Warning only for now as tie logic exists, but ideally shouldn't happen often
-                    }
-                });
-            }
-        });
-    }
-
-    return { valid: errors.length === 0, errors };
-}
-
-/**
  * Commits a game result to the authoritative league state.
  * REPLACES finalizeGameResult.
  * @param {object} league - The league object (must be the authoritative one).
@@ -1200,14 +1140,6 @@ export function validateLeagueState(league) {
  * @returns {object} The created result object or throws error on failure.
  */
 export function commitGameResult(league, gameData, options = { persist: true }) {
-    // 0. strict Check Authority
-    if (typeof window !== 'undefined' && window.state && window.state.league) {
-        if (league !== window.state.league) {
-            console.warn("[commitGameResult] League object passed is not strict equal to window.state.league. Using global authoritative state.");
-            league = window.state.league;
-        }
-    }
-
     if (!league || !gameData) {
         throw new Error("Invalid arguments: league or gameData missing");
     }
@@ -1276,17 +1208,13 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scheduledGame.finalized = true;
         scheduledGame.homeScore = homeScore;
         scheduledGame.awayScore = awayScore;
-        console.log(`[SIM-DEBUG] Scheduled game updated: ${home.abbr} vs ${away.abbr}`);
-    } else {
-        if (!gameData.isPlayoff) {
-             console.error(`[commitGameResult] Scheduled game NOT FOUND for ${home.abbr} vs ${away.abbr} (Week ${league.week})`);
-        }
+        // console.log(`[SIM-DEBUG] Scheduled game updated: ${home.abbr} vs ${away.abbr}`);
     }
 
     // 2. Update Standings / Team Records
     const isPlayoff = gameData.isPlayoff || false;
     if (!isPlayoff) {
-        applyResult({ home, away }, homeScore, awayScore);
+        applyResult(league, { home, away }, homeScore, awayScore);
     }
 
     // 3. Update Player Stats (mutates roster objects)
@@ -1390,18 +1318,6 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         league.resultsByWeek[weekIndex].push(resultObj);
     }
 
-    // 7. SAVE STATE (The Fix)
-    if (options.persist !== false && saveState) {
-        console.log('[commitGameResult] Persisting state...');
-        const saved = saveState();
-        if (!saved) {
-             console.error('[commitGameResult] CRITICAL: Save failed!');
-             if (typeof window !== 'undefined' && window.setStatus) {
-                 window.setStatus("CRITICAL ERROR: Game result NOT saved. Check console.", "error");
-             }
-        }
-    }
-
     return resultObj;
 }
 
@@ -1427,7 +1343,7 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
 /**
  * Simulates a batch of games.
  * @param {Array} games - Array of game objects {home, away, ...}
- * @param {Object} options - Simulation options {verbose: boolean, overrideResults: Array}
+ * @param {Object} options - Simulation options {verbose: boolean, overrideResults: Array, league: Object}
  * @returns {Array} Array of result objects
  */
 export function simulateBatch(games, options = {}) {
@@ -1441,6 +1357,13 @@ export function simulateBatch(games, options = {}) {
     );
 
     if (!games || !Array.isArray(games)) return [];
+
+    // Use passed league object or fail
+    const league = options.league;
+    if (!league) {
+        console.error('No league provided to simulateBatch');
+        return [];
+    }
 
     games.forEach((pair, index) => {
         try {
@@ -1464,16 +1387,13 @@ export function simulateBatch(games, options = {}) {
             }
 
             // CHECK IF GAME IS ALREADY FINALIZED
-            if (pair.week && window.state && window.state.league) {
-                 const L = window.state.league;
-                 const weekIndex = pair.week - 1;
-                 if (L.resultsByWeek && L.resultsByWeek[weekIndex]) {
-                     const existing = L.resultsByWeek[weekIndex].find(r => r.home === home.id && r.away === away.id);
-                     if (existing) {
-                         console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
-                         results.push(existing);
-                         return;
-                     }
+            const weekIndex = (pair.week || 1) - 1;
+            if (league.resultsByWeek && league.resultsByWeek[weekIndex]) {
+                 const existing = league.resultsByWeek[weekIndex].find(r => r.home === home.id && r.away === away.id);
+                 if (existing) {
+                     console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
+                     results.push(existing);
+                     return;
                  }
             }
 
@@ -1497,7 +1417,8 @@ export function simulateBatch(games, options = {}) {
                 const stakes = pair.preGameContext?.stakes || 0;
                 do {
                     // Use simulateMatchup (unified function)
-                    gameScores = simulateMatchup(home, away, { verbose, stakes });
+                    // Pass league for scheme fit calculations
+                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff });
                     attempts++;
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 
@@ -1528,50 +1449,29 @@ export function simulateBatch(games, options = {}) {
 
                 homePlayerStats = capturePlayerStats(home.roster);
                 awayPlayerStats = capturePlayerStats(away.roster);
-
-                // Update Accumulators (via commitGameResult normally, but here we prep for it)
-                // Actually, commitGameResult handles accumulation now. We just need to gather the data.
             }
 
             // Finalize Game Result via Commit
-            const league = window.state?.league;
-            if (league) {
-                const gameData = {
-                    homeTeamId: (home.id !== undefined) ? home.id : pair.home,
-                    awayTeamId: (away.id !== undefined) ? away.id : pair.away,
-                    homeScore: sH,
-                    awayScore: sA,
-                    isPlayoff: options.isPlayoff || false,
-                    preGameContext: pair.preGameContext, // PASS CONTEXT
-                    stats: {
-                        home: { players: homePlayerStats },
-                        away: { players: awayPlayerStats }
-                    }
-                };
-
-                // Disable auto-save for batch efficiency; handled by caller (GameRunner/Simulation)
-                const resultObj = commitGameResult(league, gameData, { persist: false });
-                if (schemeNote && resultObj) {
-                    resultObj.schemeNote = schemeNote;
+            const gameData = {
+                homeTeamId: (home.id !== undefined) ? home.id : pair.home,
+                awayTeamId: (away.id !== undefined) ? away.id : pair.away,
+                homeScore: sH,
+                awayScore: sA,
+                isPlayoff: options.isPlayoff || false,
+                preGameContext: pair.preGameContext, // PASS CONTEXT
+                stats: {
+                    home: { players: homePlayerStats },
+                    away: { players: awayPlayerStats }
                 }
+            };
 
-                if (resultObj) {
-                    results.push(resultObj);
-                }
-            } else {
-                console.error('League not found for commitGameResult in simulateBatch');
-                results.push({
-                    id: `g${index}`,
-                    home: home.id || pair.home,
-                    away: away.id || pair.away,
-                    scoreHome: sH,
-                    scoreAway: sA,
-                    homeWin: sH > sA,
-                    boxScore: { home: homePlayerStats, away: awayPlayerStats },
-                    week: pair.week,
-                    year: pair.year,
-                    finalized: true
-                });
+            const resultObj = commitGameResult(league, gameData, { persist: false });
+            if (schemeNote && resultObj) {
+                resultObj.schemeNote = schemeNote;
+            }
+
+            if (resultObj) {
+                results.push(resultObj);
             }
 
         } catch (error) {
@@ -1582,7 +1482,32 @@ export function simulateBatch(games, options = {}) {
     return results;
 }
 
-// Default export if needed, or just named exports
+/**
+ * Validates the league state after simulation.
+ * @param {Object} league - The league object.
+ * @returns {Object} { valid: boolean, errors: Array }
+ */
+export function validateLeagueState(league) {
+    const errors = [];
+    if (!league) return { valid: false, errors: ['No league object provided'] };
+
+    // Check for finalized games with invalid scores
+    if (league.resultsByWeek) {
+        Object.entries(league.resultsByWeek).forEach(([week, results]) => {
+            if (Array.isArray(results)) {
+                results.forEach(game => {
+                    if (game.scoreHome === 0 && game.scoreAway === 0 && !game.bye) {
+                        // Warning only for now as tie logic exists, but ideally shouldn't happen often
+                    }
+                });
+            }
+        });
+    }
+
+    return { valid: errors.length === 0, errors };
+}
+
+// Default export
 export default {
     simGameStats,
     simulateMatchup, // Unified function alias
@@ -1592,5 +1517,6 @@ export default {
     accumulateStats,
     simulateBatch,
     commitGameResult,
+    updateTeamStandings,
     validateLeagueState
 };

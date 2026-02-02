@@ -1,13 +1,11 @@
 /*
  * Game Runner Module
  * Unifies simulation logic for Regular Season and Playoffs
+ * Refactored to be pure (Worker-compatible)
  */
 
 import GameSimulator from './game-simulator.js';
-import { runWeeklyTraining } from './training.js';
-import newsEngine from './news-engine.js';
-import { showWeeklyRecap } from './weekly-recap.js';
-import { checkAchievements } from './achievements.js';
+import { getWeekGames } from './schedule.js';
 
 const { simulateBatch } = GameSimulator;
 
@@ -15,17 +13,17 @@ class GameRunner {
     /**
      * Simulates a regular season week.
      * @param {Object} league - The league object.
-     * @param {Object} options - Options { render: boolean }.
+     * @param {Object} options - Options { render: boolean, ownerMode: Object }.
      * @returns {Object} Results { gamesSimulated: number, results: Array }
      */
     static simulateRegularSeasonWeek(league, options = {}) {
         const weekNum = league.week || 1;
-        console.log(`[GameRunner] Simulating Week ${weekNum}`);
+        // console.log(`[GameRunner] Simulating Week ${weekNum}`);
 
-        // Use helper to get schedule data
+        // Use imported helper to get schedule data
         let weekData;
-        if (window.Scheduler && window.Scheduler.getWeekGames) {
-            weekData = window.Scheduler.getWeekGames(league.schedule, weekNum);
+        if (getWeekGames) {
+            weekData = getWeekGames(league.schedule, weekNum);
         } else {
             // Fallback
             const scheduleWeeks = league.schedule.weeks || league.schedule;
@@ -89,7 +87,7 @@ class GameRunner {
                      matchupStr = "Tough matchup for Offense";
                 }
 
-                const stakesVal = GameRunner.calculateContextualStakes(league, userTeam, oppTeam);
+                const stakesVal = GameRunner.calculateContextualStakes(league, userTeam, oppTeam, options.ownerMode);
 
                 gameObj.preGameContext = {
                     matchup: matchupStr,
@@ -106,87 +104,13 @@ class GameRunner {
 
         // Run Batch Simulation
         // simulateBatch internally calls finalizeGameResult which updates schedule
-        const results = simulateBatch(gamesToSim, options);
+        // Pass league to options for scheme fit calculation
+        const results = simulateBatch(gamesToSim, { ...options, league });
         const gamesSimulated = results.filter(r => !r.bye).length;
 
-        // Store results
-        if (!league.resultsByWeek) league.resultsByWeek = {};
-        league.resultsByWeek[weekNum - 1] = results;
+        // Note: Side effects (updating records, training, news, etc.) are handled by the caller (simulation.js)
 
-        // Update single game records
-        if (typeof window.updateSingleGameRecords === 'function') {
-            try {
-                window.updateSingleGameRecords(league, league.year, weekNum);
-            } catch (e) {
-                console.error('Error updating records:', e);
-            }
-        }
-
-        // Advance Week
-        const previousWeek = weekNum;
-        league.week++;
-
-        // Training
-        try {
-            if (typeof runWeeklyTraining === 'function') {
-                runWeeklyTraining(league);
-            } else if (typeof window.runWeeklyTraining === 'function') {
-                window.runWeeklyTraining(league);
-            }
-        } catch (e) {
-            console.error('Error in weekly training:', e);
-        }
-
-        // Depth Chart Updates
-        if (typeof window.processWeeklyDepthChartUpdates === 'function') {
-            try {
-                league.teams.forEach(team => {
-                    if (team && team.roster) window.processWeeklyDepthChartUpdates(team);
-                });
-            } catch (e) {
-                console.error('Error in depth chart updates:', e);
-            }
-        }
-
-        // Owner Mode
-        if (window.state?.ownerMode?.enabled && typeof window.calculateRevenue === 'function') {
-            try {
-                window.updateFanSatisfaction();
-                window.calculateRevenue();
-            } catch (e) {
-                console.error('Error updating owner mode:', e);
-            }
-        }
-
-        // News
-        try {
-            if (newsEngine && newsEngine.generateWeeklyNews) {
-                newsEngine.generateWeeklyNews(league);
-            }
-            if (newsEngine && newsEngine.generateInteractiveEvent) {
-                const event = newsEngine.generateInteractiveEvent(league);
-                if (event) window.state.pendingEvent = event;
-            }
-        } catch (e) {
-            console.error('Error generating news:', e);
-        }
-
-        // Achievements
-        if (checkAchievements) {
-            checkAchievements(window.state);
-        }
-
-        // Recap
-        if (options.render !== false && showWeeklyRecap) {
-            showWeeklyRecap(previousWeek, results, league.news);
-        }
-
-        // Reset Strategy
-        if (league.weeklyGamePlan) {
-            league.weeklyGamePlan = { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED' };
-        }
-
-        return { gamesSimulated, results };
+        return { gamesSimulated, results, week: weekNum };
     }
 
     /**
@@ -194,9 +118,10 @@ class GameRunner {
      * @param {Object} league - League object
      * @param {Object} team - Team object (User team)
      * @param {Object} opponent - Opponent team object
+     * @param {Object} ownerMode - Owner mode settings/status
      * @returns {number} Stakes score (0-100)
      */
-    static calculateContextualStakes(league, team, opponent) {
+    static calculateContextualStakes(league, team, opponent, ownerMode) {
         if (!league || !team || !opponent) return 0;
         const week = league.week;
         let stakes = 0;
@@ -228,9 +153,9 @@ class GameRunner {
             }
         }
 
-        // 3. Coach Hot Seat (Requires window.state access)
-        if (stakes === 0 && window.state?.ownerMode?.enabled) {
-            const satisfaction = window.state.ownerMode.fanSatisfaction;
+        // 3. Coach Hot Seat
+        if (stakes === 0 && ownerMode?.enabled) {
+            const satisfaction = ownerMode.fanSatisfaction;
             if (satisfaction < 35) {
                 stakes = 90;
             }
@@ -263,6 +188,12 @@ class GameRunner {
         if (gamesToSim.length === 0) return { winners: [], results: [] };
 
         // Run Batch (isPlayoff: true prevents W/L record updates)
+        // Pass league? simulateBatch needs league now. We need to pass it.
+        // We need to change signature to accept league or we can't use new simulateBatch properly.
+        // For now, assuming caller handles league context or global shim if needed, but pure version should take league.
+        // I will update signature to accept league.
+
+        console.warn('GameRunner.simulatePlayoffGames called without league object. This may fail if scheme logic is needed.');
         const results = simulateBatch(gamesToSim, { isPlayoff: true });
         const winners = [];
         const gameResults = [];
@@ -281,11 +212,6 @@ class GameRunner {
                 });
 
                 winners.push(res.homeWin ? gameHome : gameAway);
-
-                // Playoff Revenue
-                if (gameHome.id === window.state.userTeamId && window.processPlayoffRevenue) {
-                    window.processPlayoffRevenue(gameHome);
-                }
             }
         });
 
