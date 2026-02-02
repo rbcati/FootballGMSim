@@ -126,11 +126,6 @@ function recalcCap(league, team) {
  * @param {boolean} isPostJune1 - Whether this is a post-June 1st release
  */
 function releaseWithProration(league, team, p, isPostJune1) {
-  if (!canRestructure || !canRestructure(p)) {
-    console.warn('Cannot release player:', p.name);
-    return;
-  }
-  
   if (!league || !team || !p) {
     console.error('Invalid parameters for releaseWithProration');
     return;

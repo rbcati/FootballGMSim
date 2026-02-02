@@ -1229,17 +1229,19 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     const weekSchedule = scheduleWeeks[weekIndex];
     if (weekSchedule && weekSchedule.games) {
         scheduledGame = weekSchedule.games.find(g =>
-            (g.home === homeTeamId || g.home.id === homeTeamId) &&
-            (g.away === awayTeamId || g.away.id === awayTeamId)
+            g && g.home !== undefined && g.away !== undefined &&
+            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
         );
     }
 
     // Strategy 2: Look in flat array (if schedule is flat array of games)
     if (!scheduledGame && Array.isArray(scheduleWeeks)) {
         scheduledGame = scheduleWeeks.find(g =>
+            g && g.home !== undefined && g.away !== undefined &&
             (g.week === league.week) &&
-            (g.home === homeTeamId || g.home.id === homeTeamId) &&
-            (g.away === awayTeamId || g.away.id === awayTeamId)
+            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
         );
     }
 
@@ -1250,8 +1252,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             for (const w of league.schedule.weeks) {
                 if (w.games) {
                     const g = w.games.find(g =>
-                        (g.home === homeTeamId || g.home.id === homeTeamId) &&
-                        (g.away === awayTeamId || g.away.id === awayTeamId)
+                        g && g.home !== undefined && g.away !== undefined &&
+                        (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+                        (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
                     );
                     if (g) {
                         scheduledGame = g;
@@ -1261,6 +1264,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             }
         } else if (Array.isArray(league.schedule)) {
              scheduledGame = league.schedule.find(g =>
+                g && g.home !== undefined && g.away !== undefined &&
                 (g.home === homeTeamId || (g.home && g.home.id === homeTeamId)) &&
                 (g.away === awayTeamId || (g.away && g.away.id === awayTeamId))
             );
