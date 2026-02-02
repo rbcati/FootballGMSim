@@ -3,7 +3,6 @@ class SoundManager {
         this.ctx = null;
         this.muted = false;
         this.enabled = true;
-        this.enabled = true; // Default enabled
         // Try to init immediately, but it might be suspended until interaction
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -97,6 +96,14 @@ class SoundManager {
         if (!this.enabled || this.muted) return;
         // C Major Triad + Octave
         const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+        notes.forEach((freq, i) => {
+            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
+        });
+
+        // Final fanfare
+        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+    }
+
     playHorns() {
         // Victory Horns
          if (!this.enabled || this.muted || !this.ctx) return;
@@ -133,25 +140,7 @@ class SoundManager {
     }
 
     playHit() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.2);
-
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
-        });
-
-        // Final fanfare
-        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+        this.playBigHit();
     }
 
     playDefenseStop() {
@@ -159,12 +148,11 @@ class SoundManager {
         // Low Thud
         this.playTone(100, 'sawtooth', 0.3, 0.2, 50);
     }
-    playKick() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
 
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+    playKick() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(200, 'square', 0.1, 0.2, 50);
+    }
 
     playBigHit() {
         if (!this.enabled || this.muted) return;
@@ -175,12 +163,6 @@ class SoundManager {
 
     // Compatibility aliases
     playTackle() { this.playBigHit(); }
-    playHit() { this.playBigHit(); }
-
-    playKick() {
-        if (!this.enabled || this.muted) return;
-        this.playTone(200, 'square', 0.1, 0.2, 50);
-    }
 
     playPing() {
         if (!this.enabled || this.muted) return;
@@ -188,25 +170,6 @@ class SoundManager {
     }
 
     playScore() { this.playTouchdown(); }
-    playScore() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
-
-    playFailure() {
-        if (!this.enabled || this.muted) return;
-        // Dissonant tones
-        this.playTone(300, 'sawtooth', 0.5, 0.1, 100);
-        this.playTone(290, 'sawtooth', 0.5, 0.1, 95);
-    }
-
-    playHorns() {
-        if (!this.enabled || this.muted) return;
-        // Victory Horns
-        const notes = [261.63, 329.63, 392.00]; // C, E, G
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playTone(freq, 'sawtooth', 0.6, 0.15), i * 200);
-        });
-    }
 
     playFailure() {
         if (!this.enabled || this.muted || !this.ctx) return;
@@ -248,5 +211,4 @@ export const soundManager = new SoundManager();
 if (typeof window !== 'undefined') {
     window.soundManager = soundManager;
 }
-const soundManager = new SoundManager();
 export default soundManager;
