@@ -167,7 +167,26 @@ class LiveGameViewer {
     // Restore play history if available
     if (this.playByPlay && this.playByPlay.length > 0) {
         console.log('Restoring play history:', this.playByPlay.length, 'plays');
-        this.playByPlay.forEach(play => {
+
+        // Optimize: Only render last 50 plays
+        const startIdx = Math.max(0, this.playByPlay.length - 50);
+        const playsToRender = this.playByPlay.slice(startIdx);
+
+        // Add indicator if plays are hidden
+        if (startIdx > 0) {
+             const playLog = container.querySelector('.play-log-enhanced');
+             if (playLog) {
+                 const indicator = document.createElement('div');
+                 indicator.className = 'play-item';
+                 indicator.style.textAlign = 'center';
+                 indicator.style.fontStyle = 'italic';
+                 indicator.style.color = '#888';
+                 indicator.textContent = `... ${startIdx} previous plays hidden ...`;
+                 playLog.appendChild(indicator);
+             }
+        }
+
+        playsToRender.forEach(play => {
             this.renderPlay(play);
         });
 
@@ -1359,6 +1378,11 @@ class LiveGameViewer {
     // 1. Animate Play (Async)
     if (play.type === 'play' && (play.playType.startsWith('run') || play.playType.startsWith('pass') || play.playType === 'punt' || play.playType === 'field_goal')) {
         await this.animatePlay(play, startState);
+        // RACE CHECK: If skipping or ended during animation, abort
+        if (this.isGameEnded || this.isSkipping) {
+            this.isProcessingTurn = false;
+            return;
+        }
     }
 
     this.playByPlay.push(play);
@@ -1366,6 +1390,11 @@ class LiveGameViewer {
 
     // ANIMATE!
     await this.animatePlay(play);
+    // RACE CHECK
+    if (this.isGameEnded || this.isSkipping) {
+        this.isProcessingTurn = false;
+        return;
+    }
 
     this.renderPlay(play);
     this.updateGameState(play, state);
@@ -1856,6 +1885,9 @@ class LiveGameViewer {
    * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
    */
   skipToEnd() {
+      // Set skipping flag IMMEDIATELY to short-circuit any running animations
+      this.isSkipping = true;
+
       if (this.intervalId) {
           clearTimeout(this.intervalId);
           this.intervalId = null;
@@ -1864,7 +1896,6 @@ class LiveGameViewer {
 
       this.isPaused = false;
       this.isPlaying = true;
-      this.isSkipping = true;
 
       // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
       let playsSimulated = 0;
