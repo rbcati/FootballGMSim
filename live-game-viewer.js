@@ -1495,37 +1495,6 @@ class LiveGameViewer {
     }
   }
 
-  /**
-   * Trigger visual feedback for game events
-   */
-  triggerVisualFeedback(type, text) {
-    if (!this.checkUI()) return;
-    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
-
-    // Create overlay element
-    const overlay = document.createElement('div');
-    overlay.className = `game-event-overlay ${type}`;
-    overlay.innerHTML = `<div class="event-text">${text}</div>`;
-
-    // Append to container (ensure relative positioning for parent if needed, though overlay is absolute)
-    // In view mode, container is .card usually, which is relative?
-    // .card has position: relative in CSS.
-    // In modal mode, .modal-content needs position: relative?
-    // .modal-content usually has no position set, default static.
-    // Let's set position relative on parent if static.
-    if (getComputedStyle(parent).position === 'static') {
-        parent.style.position = 'relative';
-    }
-
-    parent.appendChild(overlay);
-
-    // Remove after animation (1.5s)
-    setTimeout(() => {
-        if (overlay && overlay.parentNode) {
-            overlay.remove();
-        }
-    }, 2000);
-  }
 
   /**
    * Render a play to the UI
@@ -1710,25 +1679,29 @@ class LiveGameViewer {
   }
 
   /**
-   * Trigger visual feedback overlay
+   * Trigger visual feedback for game events
    */
   triggerVisualFeedback(type, text) {
-      if (!this.checkUI()) return;
-      const parent = this.viewMode ? this.container : this.modal;
+    if (!this.checkUI()) return;
+    const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
 
-      const overlay = document.createElement('div');
-      overlay.className = `score-overlay ${type}`;
-      overlay.textContent = text;
+    // Create overlay element
+    const overlay = document.createElement('div');
+    overlay.className = `game-event-overlay ${type} pop-in`;
+    overlay.innerHTML = `<div class="event-text">${text}</div>`;
 
-      // Append to relative parent
-      const container = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
-      container.style.position = 'relative'; // Ensure positioning context
-      container.appendChild(overlay);
+    if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+    }
 
-      // Remove after animation
-      setTimeout(() => {
-          overlay.remove();
-      }, 1500);
+    parent.appendChild(overlay);
+
+    // Remove after animation
+    setTimeout(() => {
+        if (overlay && overlay.parentNode) {
+            overlay.remove();
+        }
+    }, 2000);
   }
 
   /**
@@ -1751,6 +1724,64 @@ class LiveGameViewer {
     this.lastHomeScore = home.score;
     this.lastAwayScore = away.score;
 
+    scoreboard.innerHTML = `
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+        <div class="team-name">${away.team.abbr}</div>
+        <div class="team-score" id="scoreAway">${away.score}</div>
+      </div>
+      <div class="score-info">
+        <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
+        <div class="down-distance">
+          ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
+        </div>
+      </div>
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+        <div class="team-name">${home.team.abbr}</div>
+        <div class="team-score" id="scoreHome">${home.score}</div>
+      </div>
+    `;
+
+    // Trigger animations explicitly
+    if (homeChanged) {
+        const el = scoreboard.querySelector('#scoreHome');
+        if (el) {
+            el.classList.remove('pulse-score');
+            void el.offsetWidth; // Force reflow
+            el.classList.add('pulse-score');
+        }
+    }
+    if (awayChanged) {
+        const el = scoreboard.querySelector('#scoreAway');
+        if (el) {
+            el.classList.remove('pulse-score');
+            void el.offsetWidth; // Force reflow
+            el.classList.add('pulse-score');
+        }
+    }
+  }
+
+  /**
+   * Animate the play
+   */
+  async animatePlay(play, startState) {
+      if (this.isSkipping || !this.checkUI()) return Promise.resolve();
+
+      const parent = this.viewMode ? this.container : this.modal;
+      const ball = parent.querySelector('.ball');
+      if (!ball) return Promise.resolve();
+
+      // Determine duration based on tempo
+      let duration = 1000;
+      if (this.tempo === 'hurry-up') duration = 500;
+      if (this.tempo === 'slow') duration = 2000;
+
+      // Special animations for play types
+      if (play.playType === 'field_goal' || play.playType === 'punt') {
+          ball.classList.add('animate-kick');
+          duration = 1500; // Match CSS animation duration
+      } else if (play.playType.startsWith('pass')) {
+          ball.classList.add('animate-pass');
+      }
     // Check if initialized
     if (!scoreboard.innerHTML.trim() || !scoreboard.querySelector('.score-team')) {
          scoreboard.innerHTML = `
