@@ -97,8 +97,15 @@ class LiveGameViewer {
     this.container = container;
 
     // Create layout
+    let diffColor = 'var(--text-muted)';
+    if (this.preGameContext?.difficulty) {
+        if (this.preGameContext.difficulty.includes('Easy')) diffColor = 'var(--success)';
+        else if (this.preGameContext.difficulty.includes('Hard') || this.preGameContext.difficulty.includes('Nightmare')) diffColor = 'var(--danger)';
+        else diffColor = 'var(--accent)';
+    }
+
     const difficultyHtml = this.preGameContext?.difficulty ?
-        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.8em; color: var(--text-muted);">${this.preGameContext.difficulty}</div>` : '';
+        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${this.preGameContext.difficulty}</div>` : '';
 
     container.innerHTML = `
       <div class="card live-game-header">
@@ -1527,6 +1534,8 @@ class LiveGameViewer {
     if (!this.checkUI()) return; // Safety guard
 
     // Update Combo State
+    let comboIncreased = false;
+    let comboBroken = false;
     if (this.userTeamId) {
         // Only track combo if it relates to user
         const isUserOffense = play.offense === this.userTeamId;
@@ -1535,13 +1544,17 @@ class LiveGameViewer {
         if (isUserOffense) {
             if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || (play.yards >= 10 && !play.result)) {
                 this.combo++;
+                comboIncreased = true;
             } else if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards < 0) {
+                if (this.combo > 1) comboBroken = true;
                 this.combo = 0;
             }
         } else if (isUserDefense) {
             if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards <= 0) {
                 this.combo++;
+                comboIncreased = true;
             } else if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || play.yards >= 10) {
+                if (this.combo > 1) comboBroken = true;
                 this.combo = 0;
             }
         }
@@ -1549,8 +1562,19 @@ class LiveGameViewer {
 
     // Sound & Juice Triggers
     if (!this.isSkipping) {
+        // Combo Feedback
+        if (comboIncreased && this.combo > 1) {
+             this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
+             soundManager.playPing();
+        }
+        if (comboBroken) {
+             this.triggerFloatText('COMBO BROKEN', 'negative');
+             soundManager.playFailure();
+        }
+
         if (play.result === 'touchdown') {
             soundManager.playTouchdown();
+            setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
             this.triggerFloatText('TOUCHDOWN!');
@@ -2453,11 +2477,16 @@ class LiveGameViewer {
       // Streak indicator
       let streakHtml = '';
       if (this.streak >= 3) {
-          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 0.8em; margin-top: 4px;">🔥 ON FIRE! 🔥</div>`;
+          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
       if (this.combo >= 2) {
-          streakHtml += `<div class="streak-text" style="text-align:center; margin-top: 2px;">COMBO x${this.combo}</div>`;
+          streakHtml += `
+            <div class="streak-text" style="text-align:center; margin-top: 5px;">
+                <span style="font-size: 1.2em; font-weight: 900; color: #ffeb3b; text-shadow: 0 0 10px #ffc107;">COMBO</span>
+                <span style="font-size: 1.5em; font-weight: 900; color: #fff;">x${this.combo}</span>
+            </div>
+          `;
       }
 
       container.innerHTML = `
