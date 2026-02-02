@@ -7308,3 +7308,67 @@ select:focus, input[type="text"]:focus, input[type="number"]:focus {
 [hidden] {
     display: none !important;
 }
+
+/* Navigation Dropdowns */
+.nav-group {
+    width: 100%;
+}
+
+.nav-summary {
+    list-style: none;
+    position: relative;
+}
+
+.nav-summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-summary::after {
+    content: '›';
+    position: absolute;
+    right: 12px;
+    transition: transform 0.2s;
+    font-size: 16px;
+    line-height: 1;
+}
+
+details[open] .nav-summary::after {
+    transform: rotate(90deg);
+}
+
+.nav-group-content {
+    padding-left: 12px; /* Indent sub-items */
+    overflow: hidden;
+    animation: slideDownNav 0.2s ease-out;
+}
+
+@keyframes slideDownNav {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Ensure nested links look good */
+.nav-group-content .nav-item {
+    font-size: 12px; /* Slightly smaller */
+    padding: var(--space-2) var(--space-3);
+}
+
+/* Smooth Transitions for Views */
+.view {
+    transition: opacity 0.2s ease-in-out;
+}
+
+.view[hidden] {
+    display: none !important;
+    opacity: 0;
+}
+
+.view:not([hidden]) {
+    opacity: 1;
+    animation: fadeInView 0.3s ease-out;
+}
+
+@keyframes fadeInView {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}

@@ -348,7 +348,21 @@ export function renderDashboard() {
     }
 
     const noLeaguesMsg = document.getElementById('no-leagues-msg');
-    if (noLeaguesMsg) noLeaguesMsg.style.display = hasLeagues ? 'none' : 'block';
+    if (noLeaguesMsg) {
+        if (!hasLeagues) {
+            noLeaguesMsg.style.display = 'block';
+            noLeaguesMsg.innerHTML = `
+                <div class="empty-state-card" style="text-align: center; padding: 40px; background: var(--surface-strong); border-radius: var(--radius-lg); border: 1px solid var(--hairline);">
+                    <div style="font-size: 48px; margin-bottom: 20px;">🏈</div>
+                    <h3 style="margin-bottom: 10px; color: var(--text);">No Leagues Found</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 20px;">Start your career as a General Manager today.</p>
+                    <button class="btn primary large" onclick="document.getElementById('new-league-name').focus()">Create New League</button>
+                </div>
+            `;
+        } else {
+            noLeaguesMsg.style.display = 'none';
+        }
+    }
     console.log(`Dashboard rendered with ${leagueCount} leagues.`);
 }
 

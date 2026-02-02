@@ -100,7 +100,8 @@
     "./ui-interactions.js": "./ui-interactions.js?v=1.0.1",
     "./ui.js": "./ui.js?v=1.0.1",
     "./utils.js": "./utils.js?v=1.0.1",
-    "./war-calculator.js": "./war-calculator.js?v=1.0.1"
+    "./war-calculator.js": "./war-calculator.js?v=1.0.1",
+    "./news-viewer.js": "./news-viewer.js?v=1.0.1"
   }
 }
 </script>
@@ -120,22 +121,46 @@
             <div class="glass-bg"></div>
             <nav id="site-nav" class="nav-menu menu-items">
                 <a href="#/hub" class="nav-item" data-view="hub">Home</a>
-                <a href="#/roster" class="nav-item" data-view="roster">Roster</a>
-                <a href="#/contracts" class="nav-item" data-view="contracts">Contracts</a>
-                <a href="#/trade" class="nav-item" data-view="trade">Trades</a>
-                <a href="#/leagueStats" class="nav-item" data-view="leagueStats">Standings</a>
-                <a href="#/powerRankings" class="nav-item" data-view="powerRankings">Power Rankings</a>
-                <a href="#/freeagency" class="nav-item" data-view="freeagency">Free Agency</a>
-                <a href="#/draft" class="nav-item" data-view="draft">Draft</a>
-                <a href="#/scouting" class="nav-item" data-view="scouting">Scouting</a>
-                <a href="#/coaching" class="nav-item" data-view="coaching">Coaching</a>
-                <a href="#/playerDatabase" class="nav-item" data-view="playerDatabase">Players</a>
-                <a href="#/history" class="nav-item" data-view="history">History</a>
-                <a href="#/records" class="nav-item" data-view="records">Records</a>
-                <a href="#/leagueStats" class="nav-item" data-view="leagueStats">League Stats</a>
-                <a href="#/awards" class="nav-item" data-view="awards">Award Races</a>
-                <a href="#/injuries" class="nav-item" data-view="injuries">Injuries</a>
-                <a href="#/hallOfFame" class="nav-item" data-view="hallOfFame">Hall of Fame</a>
+
+                <details class="nav-group" open>
+                    <summary class="nav-item nav-summary">Team</summary>
+                    <div class="nav-group-content">
+                        <a href="#/roster" class="nav-item" data-view="roster">Roster</a>
+                        <a href="#/contracts" class="nav-item" data-view="contracts">Contracts</a>
+                        <a href="#/trade" class="nav-item" data-view="trade">Trades</a>
+                        <a href="#/freeagency" class="nav-item" data-view="freeagency">Free Agency</a>
+                        <a href="#/draft" class="nav-item" data-view="draft">Draft</a>
+                        <a href="#/scouting" class="nav-item" data-view="scouting">Scouting</a>
+                        <a href="#/coaching" class="nav-item" data-view="coaching">Coaching</a>
+                        <!-- New Owner Mode Link -->
+                        <a href="#/owner" class="nav-item" data-view="owner">Owner Mode</a>
+                    </div>
+                </details>
+
+                <details class="nav-group">
+                    <summary class="nav-item nav-summary">League</summary>
+                    <div class="nav-group-content">
+                        <a href="#/leagueStats" class="nav-item" data-view="leagueStats">Standings</a>
+                        <a href="#/schedule" class="nav-item" data-view="schedule">Schedule</a>
+                        <a href="#/powerRankings" class="nav-item" data-view="powerRankings">Power Rankings</a>
+                        <a href="#/leagueStats" class="nav-item" data-view="leagueStats">Stats</a>
+                        <a href="#/awards" class="nav-item" data-view="awards">Award Races</a>
+                        <a href="#/injuries" class="nav-item" data-view="injuries">Injuries</a>
+                        <!-- New Newsroom Link -->
+                        <a href="#/news" class="nav-item" data-view="news">Newsroom</a>
+                    </div>
+                </details>
+
+                <details class="nav-group">
+                    <summary class="nav-item nav-summary">History</summary>
+                    <div class="nav-group-content">
+                        <a href="#/playerDatabase" class="nav-item" data-view="playerDatabase">Player DB</a>
+                        <a href="#/history" class="nav-item" data-view="history">History</a>
+                        <a href="#/records" class="nav-item" data-view="records">Records</a>
+                        <a href="#/hallOfFame" class="nav-item" data-view="hallOfFame">Hall of Fame</a>
+                    </div>
+                </details>
+
                 <a href="#/settings" class="nav-item" data-view="settings">Settings</a>
             </nav>
         </aside>
@@ -195,6 +220,14 @@
 
             <section id="relocation" class="view" hidden>
                 <!-- Relocation Wizard will be rendered here -->
+            </section>
+
+            <section id="news" class="view" hidden>
+                <!-- Newsroom View -->
+            </section>
+
+            <section id="owner" class="view" hidden>
+                <!-- Owner Mode View -->
             </section>
 
             <section id="hub" class="view">
@@ -580,6 +613,7 @@
 <script type="module" src="achievements.js?v=1.0.1"></script>
 <script type="module" src="weekly-recap.js?v=1.0.1"></script>
 <script type="module" src="action-items.js?v=1.0.1"></script>
+<script type="module" src="news-viewer.js?v=1.0.1"></script>
 
 <!-- Main Game Controller -->
 <script type="module" src="main.js?v=1.0.1"></script>
@@ -589,4 +623,3 @@
 <div id="menu-overlay"></div>
 </body>
 </html>
-        
