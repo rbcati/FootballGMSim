@@ -11,6 +11,7 @@ import { simulateWeek, startNewSeason } from './simulation.js';
 import { initErrorBoundary } from './error-boundary.js';
 import { showLoading, hideLoading } from './loading-spinner.js';
 import { getTrackedPlayerUpdates, getFollowedPlayers } from './player-tracking.js';
+import { renderNewsroom } from './news-viewer.js';
 
 // Update Checker System
 async function checkForUpdates() {
@@ -2560,6 +2561,23 @@ class GameController {
             case 'injuries':
                 if (window.renderInjuriesPage) {
                     window.renderInjuriesPage();
+                }
+                break;
+            case 'news':
+                if (renderNewsroom) {
+                    renderNewsroom();
+                }
+                break;
+            case 'owner':
+                if (window.renderOwnerModeInterface) {
+                    window.renderOwnerModeInterface();
+                    // Move interface to owner view container if it was appended to hub
+                    const ownerView = document.getElementById('owner');
+                    const ownerInterface = document.getElementById('ownerModeInterface');
+                    if (ownerView && ownerInterface && ownerInterface.parentElement !== ownerView) {
+                        ownerView.innerHTML = '';
+                        ownerView.appendChild(ownerInterface);
+                    }
                 }
                 break;
             case 'relocation':
