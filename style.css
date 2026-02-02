@@ -6013,6 +6013,10 @@ input:focus, select:focus, textarea:focus {
     width: 100%;
   }
 
+  .play-row {
+    flex-wrap: wrap;
+  }
+
   .game-controls {
     flex-direction: column;
   }

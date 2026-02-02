@@ -97,8 +97,15 @@ class LiveGameViewer {
     this.container = container;
 
     // Create layout
+    let diffColor = 'var(--text-muted)';
+    if (this.preGameContext?.difficulty) {
+        if (this.preGameContext.difficulty.includes('Easy')) diffColor = 'var(--success)';
+        else if (this.preGameContext.difficulty.includes('Hard') || this.preGameContext.difficulty.includes('Nightmare')) diffColor = 'var(--danger)';
+        else diffColor = 'var(--accent)';
+    }
+
     const difficultyHtml = this.preGameContext?.difficulty ?
-        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.8em; color: var(--text-muted);">${this.preGameContext.difficulty}</div>` : '';
+        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${this.preGameContext.difficulty}</div>` : '';
 
     container.innerHTML = `
       <div class="card live-game-header">
@@ -167,7 +174,26 @@ class LiveGameViewer {
     // Restore play history if available
     if (this.playByPlay && this.playByPlay.length > 0) {
         console.log('Restoring play history:', this.playByPlay.length, 'plays');
-        this.playByPlay.forEach(play => {
+
+        // Optimize: Only render last 50 plays
+        const startIdx = Math.max(0, this.playByPlay.length - 50);
+        const playsToRender = this.playByPlay.slice(startIdx);
+
+        // Add indicator if plays are hidden
+        if (startIdx > 0) {
+             const playLog = container.querySelector('.play-log-enhanced');
+             if (playLog) {
+                 const indicator = document.createElement('div');
+                 indicator.className = 'play-item';
+                 indicator.style.textAlign = 'center';
+                 indicator.style.fontStyle = 'italic';
+                 indicator.style.color = '#888';
+                 indicator.textContent = `... ${startIdx} previous plays hidden ...`;
+                 playLog.appendChild(indicator);
+             }
+        }
+
+        playsToRender.forEach(play => {
             this.renderPlay(play);
         });
 
@@ -288,9 +314,20 @@ class LiveGameViewer {
   animateTrajectory(element, options) {
       return new Promise(resolve => {
           if (!element) return resolve();
+
+          // Shadow selection
+          const shadowEl = (element.classList.contains('ball') || element.classList.contains('football-ball'))
+              ? element.parentElement.querySelector('.ball-shadow')
+              : null;
+
           if (this.isSkipping) {
                element.style.left = `${options.endX}%`;
                if (options.arcHeight) element.style.transform = `translate(-50%, -50%)`;
+               if (shadowEl) {
+                   shadowEl.style.left = `${options.endX}%`;
+                   shadowEl.style.transform = `translate(-50%, -50%)`;
+                   shadowEl.style.opacity = 1;
+               }
                return resolve();
           }
 
@@ -313,6 +350,11 @@ class LiveGameViewer {
               if (this.isSkipping) {
                    element.style.left = `${endX}%`;
                    if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                   if (shadowEl) {
+                       shadowEl.style.left = `${endX}%`;
+                       shadowEl.style.transform = `translate(-50%, -50%)`;
+                       shadowEl.style.opacity = 1;
+                   }
                    return resolve();
               }
 
@@ -323,6 +365,7 @@ class LiveGameViewer {
               // X Position
               const currentX = startX + (endX - startX) * easeProgress;
               element.style.left = `${currentX}%`;
+              if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
               // Y Position (Arc)
               if (arcHeight) {
@@ -330,6 +373,15 @@ class LiveGameViewer {
                   // We want negative Y (up)
                   const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
                   element.style.transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+
+                  if (shadowEl) {
+                       // Shadow Effect
+                       const peakFactor = 4 * easeProgress * (1 - easeProgress);
+                       const scale = 1 - (peakFactor * 0.3);
+                       const opacity = 1 - (peakFactor * 0.4);
+                       shadowEl.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                       shadowEl.style.opacity = opacity;
+                  }
               }
 
               if (progress < 1) {
@@ -337,6 +389,11 @@ class LiveGameViewer {
               } else {
                   element.style.left = `${endX}%`;
                   if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                  if (shadowEl) {
+                      shadowEl.style.left = `${endX}%`;
+                      shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
+                      shadowEl.style.opacity = 1;
+                  }
                   resolve();
               }
           };
@@ -358,6 +415,7 @@ class LiveGameViewer {
 
       const parent = this.viewMode ? this.container : this.modal;
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
+      const ballShadow = parent.querySelector('.ball-shadow');
       const qbMarker = parent.querySelector('.marker-qb');
       const skillMarker = parent.querySelector('.marker-skill');
 
@@ -380,6 +438,14 @@ class LiveGameViewer {
       ballEl.style.transition = 'none';
       ballEl.style.left = `${startPct}%`;
       ballEl.style.transform = 'translate(-50%, -50%)';
+
+      // Reset Shadow
+      if (ballShadow) {
+          ballShadow.style.transition = 'none';
+          ballShadow.style.left = `${startPct}%`;
+          ballShadow.style.transform = 'translate(-50%, -50%)';
+          ballShadow.style.opacity = 1;
+      }
 
       // Setup Markers (initially hidden or at start)
       if (qbMarker) {
@@ -1357,8 +1423,13 @@ class LiveGameViewer {
     );
 
     // 1. Animate Play (Async)
-    if (play.type === 'play' && (play.playType.startsWith('run') || play.playType.startsWith('pass') || play.playType === 'punt' || play.playType === 'field_goal')) {
+    if (play.type === 'play') {
         await this.animatePlay(play, startState);
+        // RACE CHECK: If skipping or ended during animation, abort
+        if (this.isGameEnded || this.isSkipping) {
+            this.isProcessingTurn = false;
+            return;
+        }
     }
 
     this.playByPlay.push(play);
@@ -1366,6 +1437,11 @@ class LiveGameViewer {
 
     // ANIMATE!
     await this.animatePlay(play);
+    // RACE CHECK
+    if (this.isGameEnded || this.isSkipping) {
+        this.isProcessingTurn = false;
+        return;
+    }
 
     this.renderPlay(play);
     this.updateGameState(play, state);
@@ -1427,6 +1503,8 @@ class LiveGameViewer {
     if (!this.checkUI()) return; // Safety guard
 
     // Update Combo State
+    let comboIncreased = false;
+    let comboBroken = false;
     if (this.userTeamId) {
         // Only track combo if it relates to user
         const isUserOffense = play.offense === this.userTeamId;
@@ -1435,13 +1513,17 @@ class LiveGameViewer {
         if (isUserOffense) {
             if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || (play.yards >= 10 && !play.result)) {
                 this.combo++;
+                comboIncreased = true;
             } else if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards < 0) {
+                if (this.combo > 1) comboBroken = true;
                 this.combo = 0;
             }
         } else if (isUserDefense) {
             if (play.result === 'turnover' || play.result === 'turnover_downs' || play.result === 'sack' || play.yards <= 0) {
                 this.combo++;
+                comboIncreased = true;
             } else if (play.result === 'touchdown' || play.result === 'field_goal' || play.result === 'big_play' || play.yards >= 10) {
+                if (this.combo > 1) comboBroken = true;
                 this.combo = 0;
             }
         }
@@ -1449,8 +1531,19 @@ class LiveGameViewer {
 
     // Sound & Juice Triggers
     if (!this.isSkipping) {
+        // Combo Feedback
+        if (comboIncreased && this.combo > 1) {
+             this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
+             soundManager.playPing();
+        }
+        if (comboBroken) {
+             this.triggerFloatText('COMBO BROKEN', 'negative');
+             soundManager.playFailure();
+        }
+
         if (play.result === 'touchdown') {
             soundManager.playTouchdown();
+            setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
             this.triggerFloatText('TOUCHDOWN!');
@@ -1689,32 +1782,71 @@ class LiveGameViewer {
       } else if (play.playType.startsWith('pass')) {
           ball.classList.add('animate-pass');
       }
+    // Check if initialized
+    if (!scoreboard.innerHTML.trim() || !scoreboard.querySelector('.score-team')) {
+         scoreboard.innerHTML = `
+          <div class="score-team team-away ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+            <div class="team-name">${away.team.abbr}</div>
+            <div class="team-score">${away.score}</div>
+          </div>
+          <div class="score-info">
+            <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
+            <div class="down-distance">
+              ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
+            </div>
+          </div>
+          <div class="score-team team-home ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+            <div class="team-name">${home.team.abbr}</div>
+            <div class="team-score">${home.score}</div>
+          </div>
+        `;
+        return;
+    }
 
-      // Current State (Start)
-      const startYard = startState ? startState.yardLine : this.gameState[this.gameState.ballPossession].yardLine;
-      const endYard = startYard + play.yards;
+    // Update existing elements
+    const awayContainer = scoreboard.querySelector('.score-team.team-away') || scoreboard.querySelector('.score-team:first-child');
+    const homeContainer = scoreboard.querySelector('.score-team.team-home') || scoreboard.querySelector('.score-team:last-child');
+    const clockEl = scoreboard.querySelector('.game-clock');
+    const downEl = scoreboard.querySelector('.down-distance');
+    const awayScoreEl = awayContainer.querySelector('.team-score');
+    const homeScoreEl = homeContainer.querySelector('.team-score');
 
-      // Apply Start Position immediately (no transition)
-      ball.style.transition = 'none';
-      ball.style.left = `${startYard}%`;
+    // Possession
+    if (state.ballPossession === 'away') {
+        awayContainer.classList.add('has-possession');
+        homeContainer.classList.remove('has-possession');
+    } else {
+        homeContainer.classList.add('has-possession');
+        awayContainer.classList.remove('has-possession');
+    }
 
-      // Force Reflow
-      void ball.offsetWidth;
+    // Scores
+    if (awayScoreEl.textContent != away.score) {
+        awayScoreEl.textContent = away.score;
+        if (awayChanged) {
+            awayScoreEl.classList.remove('pulse-score');
+            void awayScoreEl.offsetWidth;
+            awayScoreEl.classList.add('pulse-score');
+        }
+    }
 
-      // Apply End Position with transition
-      ball.style.transition = `left ${duration}ms ease-in-out`;
-      ball.style.left = `${Math.max(0, Math.min(100, endYard))}%`;
+    if (homeScoreEl.textContent != home.score) {
+        homeScoreEl.textContent = home.score;
+        if (homeChanged) {
+            homeScoreEl.classList.remove('pulse-score');
+            void homeScoreEl.offsetWidth;
+            homeScoreEl.classList.add('pulse-score');
+        }
+    }
 
-      // Wait for animation to finish
-      return new Promise(resolve => {
-          setTimeout(() => {
-              // Cleanup animation classes
-              ball.classList.remove('animate-kick');
-              ball.classList.remove('animate-pass');
-              resolve();
-          }, duration);
-      });
+    // Info
+    const newClockText = `Q${state.quarter} ${this.formatTime(state.time)}`;
+    if (clockEl.textContent !== newClockText) clockEl.textContent = newClockText;
+
+    const newDownText = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
+    if (downEl.textContent !== newDownText) downEl.textContent = newDownText;
   }
+
 
   /**
    * Format time in MM:SS
@@ -1780,6 +1912,9 @@ class LiveGameViewer {
     if (!playCalling) return;
 
     playCalling.style.display = 'flex';
+    void playCalling.offsetWidth; // Force reflow for transition
+    playCalling.classList.add('visible');
+
     this.isPaused = true;
 
     // Toggle buttons based on possession
@@ -1817,7 +1952,12 @@ class LiveGameViewer {
 
     const playCalling = parent.querySelector('.play-calling');
     if (playCalling) {
-      playCalling.style.display = 'none';
+      playCalling.classList.remove('visible');
+      setTimeout(() => {
+          if (!playCalling.classList.contains('visible')) {
+              playCalling.style.display = 'none';
+          }
+      }, 300);
     }
     this.isPaused = false;
   }
@@ -1840,6 +1980,9 @@ class LiveGameViewer {
    * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
    */
   skipToEnd() {
+      // Set skipping flag IMMEDIATELY to short-circuit any running animations
+      this.isSkipping = true;
+
       if (this.intervalId) {
           clearTimeout(this.intervalId);
           this.intervalId = null;
@@ -1848,7 +1991,6 @@ class LiveGameViewer {
 
       this.isPaused = false;
       this.isPlaying = true;
-      this.isSkipping = true;
 
       // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
       let playsSimulated = 0;
@@ -2240,6 +2382,7 @@ class LiveGameViewer {
               <div class="player-marker marker-skill"></div>
           </div>
 
+          <div class="ball-shadow" style="left: 50%;"></div>
           <div class="ball" style="left: 50%;"></div>
       `;
   }
@@ -2254,6 +2397,7 @@ class LiveGameViewer {
       const losMarker = parent.querySelector('.marker-los');
       const fdMarker = parent.querySelector('.marker-first-down');
       const ball = parent.querySelector('.ball');
+      const ballShadow = parent.querySelector('.ball-shadow');
       const fieldContainer = parent.querySelector('.field-container');
 
       if (!losMarker || !fdMarker || !ball || !state) return;
@@ -2271,6 +2415,7 @@ class LiveGameViewer {
       losMarker.style.left = `${losPct}%`;
       fdMarker.style.left = `${fdPct}%`;
       ball.style.left = `${losPct}%`;
+      if (ballShadow) ballShadow.style.left = `${losPct}%`;
 
       // Hide First Down marker if Goal to Go
       if (yardLine + distance >= 100) {
@@ -2363,11 +2508,16 @@ class LiveGameViewer {
       // Streak indicator
       let streakHtml = '';
       if (this.streak >= 3) {
-          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 0.8em; margin-top: 4px;">🔥 ON FIRE! 🔥</div>`;
+          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
       if (this.combo >= 2) {
-          streakHtml += `<div class="streak-text" style="text-align:center; margin-top: 2px;">COMBO x${this.combo}</div>`;
+          streakHtml += `
+            <div class="streak-text" style="text-align:center; margin-top: 5px;">
+                <span style="font-size: 1.2em; font-weight: 900; color: #ffeb3b; text-shadow: 0 0 10px #ffc107;">COMBO</span>
+                <span style="font-size: 1.5em; font-weight: 900; color: #fff;">x${this.combo}</span>
+            </div>
+          `;
       }
 
       container.innerHTML = `

@@ -1683,33 +1683,37 @@ select:disabled {
   }
 }
 
-/* --- Added by Visual Polish --- */
-
-/* Generic Pop-In Animation */
-.pop-in {
-  animation: popInGeneric 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+/* Combo Pop Animation */
+@keyframes comboPop {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.3); text-shadow: 0 0 15px currentColor; }
+    100% { transform: scale(1); }
 }
 
-@keyframes popInGeneric {
-  0% { opacity: 0; transform: scale(0.5); }
-  70% { opacity: 1; transform: scale(1.1); }
-  100% { opacity: 1; transform: scale(1); }
+.combo-text-pop {
+    animation: comboPop 0.3s ease-out;
+/* Ball Shadow */
+.ball-shadow {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9;
+  transition: left 1s ease-in-out, transform 0.2s ease;
+  filter: blur(1px);
 }
 
-/* Enhanced Input Contrast */
-select, input[type="text"], input[type="number"] {
-    background-color: rgba(0, 0, 0, 0.4) !important;
-    border-color: rgba(255, 255, 255, 0.25) !important;
-    color: #fff !important;
+/* Play Calling Transitions */
+.play-calling {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
-select:focus, input[type="text"]:focus, input[type="number"]:focus {
-    background-color: rgba(0, 0, 0, 0.6) !important;
-    border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.25) !important;
-}
-
-/* Ensure fade-in is available globally */
-.fade-in {
-  animation: fadeIn 0.3s ease-out forwards;
+.play-calling.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
