@@ -3,7 +3,7 @@ class SoundManager {
         this.ctx = null;
         this.muted = false;
         this.enabled = true;
-        this.enabled = true; // Default enabled
+
         // Try to init immediately, but it might be suspended until interaction
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -12,6 +12,7 @@ class SoundManager {
             }
         } catch (e) {
             console.warn('AudioContext not supported');
+            this.enabled = false;
         }
     }
 
@@ -95,10 +96,18 @@ class SoundManager {
 
     playTouchdown() {
         if (!this.enabled || this.muted) return;
-        // C Major Triad + Octave
-        const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
+        // C Major Triad + Octave: C4, E4, G4, C5
+        const notes = [261.63, 329.63, 392.00, 523.25];
+
+        notes.forEach((freq, i) => {
+            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
+        });
+
+        // Final fanfare
+        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+    }
+
     playHorns() {
-        // Victory Horns
          if (!this.enabled || this.muted || !this.ctx) return;
          this.resume();
          const now = this.ctx.currentTime;
@@ -110,14 +119,14 @@ class SoundManager {
              osc.type = 'sawtooth';
              osc.frequency.value = freq;
              gain.gain.setValueAtTime(0, start);
-             gain.gain.linearRampToValueAtTime(0.1, start + 0.1);
-             gain.gain.linearRampToValueAtTime(0, start + dur);
+             gain.gain.linearRampToValueAtTime(0.1, start + 0.05); // Attack
+             gain.gain.linearRampToValueAtTime(0, start + dur); // Decay
 
-             // Lowpass filter envelope
+             // Lowpass filter envelope for brass timbre
              const filter = this.ctx.createBiquadFilter();
              filter.type = 'lowpass';
              filter.frequency.setValueAtTime(500, start);
-             filter.frequency.linearRampToValueAtTime(3000, start + 0.1);
+             filter.frequency.linearRampToValueAtTime(3000, start + 0.1); // Brighten
              filter.frequency.linearRampToValueAtTime(500, start + dur);
 
              osc.connect(filter);
@@ -127,31 +136,11 @@ class SoundManager {
              osc.stop(start + dur);
          };
 
-         playBrass(261.63, now, 0.4); // C4
-         playBrass(329.63, now + 0.4, 0.4); // E4
-         playBrass(392.00, now + 0.8, 0.8); // G4
-    }
-
-    playHit() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(150, this.ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.2);
-
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playTone(freq, 'triangle', 0.4, 0.15), i * 100);
-        });
-
-        // Final fanfare
-        setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+         // Victory motif
+         playBrass(392.00, now, 0.2); // G4
+         playBrass(523.25, now + 0.2, 0.2); // C5
+         playBrass(659.25, now + 0.4, 0.2); // E5
+         playBrass(783.99, now + 0.6, 0.6); // G5 (Long)
     }
 
     playDefenseStop() {
@@ -159,12 +148,6 @@ class SoundManager {
         // Low Thud
         this.playTone(100, 'sawtooth', 0.3, 0.2, 50);
     }
-    playKick() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
 
     playBigHit() {
         if (!this.enabled || this.muted) return;
@@ -179,7 +162,8 @@ class SoundManager {
 
     playKick() {
         if (!this.enabled || this.muted) return;
-        this.playTone(200, 'square', 0.1, 0.2, 50);
+        this.playTone(200, 'square', 0.15, 0.2, 50);
+        this.playNoise(0.1, 0.1); // Whoosh
     }
 
     playPing() {
@@ -188,25 +172,6 @@ class SoundManager {
     }
 
     playScore() { this.playTouchdown(); }
-    playScore() {
-        if (!this.enabled || this.muted || !this.ctx) return;
-        this.resume();
-
-    playFailure() {
-        if (!this.enabled || this.muted) return;
-        // Dissonant tones
-        this.playTone(300, 'sawtooth', 0.5, 0.1, 100);
-        this.playTone(290, 'sawtooth', 0.5, 0.1, 95);
-    }
-
-    playHorns() {
-        if (!this.enabled || this.muted) return;
-        // Victory Horns
-        const notes = [261.63, 329.63, 392.00]; // C, E, G
-        notes.forEach((freq, i) => {
-            setTimeout(() => this.playTone(freq, 'sawtooth', 0.6, 0.15), i * 200);
-        });
-    }
 
     playFailure() {
         if (!this.enabled || this.muted || !this.ctx) return;
@@ -248,5 +213,4 @@ export const soundManager = new SoundManager();
 if (typeof window !== 'undefined') {
     window.soundManager = soundManager;
 }
-const soundManager = new SoundManager();
 export default soundManager;
