@@ -1428,22 +1428,16 @@ class LiveGameViewer {
 
     // Create overlay element
     const overlay = document.createElement('div');
-    overlay.className = `game-event-overlay ${type}`;
+    overlay.className = `game-event-overlay ${type} pop-in`;
     overlay.innerHTML = `<div class="event-text">${text}</div>`;
 
-    // Append to container (ensure relative positioning for parent if needed, though overlay is absolute)
-    // In view mode, container is .card usually, which is relative?
-    // .card has position: relative in CSS.
-    // In modal mode, .modal-content needs position: relative?
-    // .modal-content usually has no position set, default static.
-    // Let's set position relative on parent if static.
     if (getComputedStyle(parent).position === 'static') {
         parent.style.position = 'relative';
     }
 
     parent.appendChild(overlay);
 
-    // Remove after animation (1.5s)
+    // Remove after animation
     setTimeout(() => {
         if (overlay && overlay.parentNode) {
             overlay.remove();
@@ -1616,27 +1610,7 @@ class LiveGameViewer {
     this.updateScoreboard();
   }
 
-  /**
-   * Trigger visual feedback overlay
-   */
-  triggerVisualFeedback(type, text) {
-      if (!this.checkUI()) return;
-      const parent = this.viewMode ? this.container : this.modal;
-
-      const overlay = document.createElement('div');
-      overlay.className = `score-overlay ${type}`;
-      overlay.textContent = text;
-
-      // Append to relative parent
-      const container = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
-      container.style.position = 'relative'; // Ensure positioning context
-      container.appendChild(overlay);
-
-      // Remove after animation
-      setTimeout(() => {
-          overlay.remove();
-      }, 1500);
-  }
+  // triggerVisualFeedback removed (duplicate)
 
   /**
    * Update scoreboard display
@@ -1652,10 +1626,6 @@ class LiveGameViewer {
     const away = this.gameState.away;
     const state = this.gameState;
 
-    // Check for score changes for animation
-    const oldHomeScore = parseInt(scoreboard.querySelector('.score-team:last-child .team-score')?.textContent || 0);
-    const oldAwayScore = parseInt(scoreboard.querySelector('.score-team:first-child .team-score')?.textContent || 0);
-
     // Detect score change
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
@@ -1665,7 +1635,7 @@ class LiveGameViewer {
     scoreboard.innerHTML = `
       <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score ${awayChanged ? 'pulse-score' : ''}">${away.score}</div>
+        <div class="team-score" id="scoreAway">${away.score}</div>
       </div>
       <div class="score-info">
         <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
@@ -1675,12 +1645,27 @@ class LiveGameViewer {
       </div>
       <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score ${homeChanged ? 'pulse-score' : ''}">${home.score}</div>
+        <div class="team-score" id="scoreHome">${home.score}</div>
       </div>
     `;
 
-    // Remove flash classes after animation completes (if using pure CSS animation, this might not be strictly necessary if we re-render often, but good practice)
-    // Actually, since we re-render scoreboard on every play/tick, the class will be removed on next render if score doesn't change again.
+    // Trigger animations explicitly
+    if (homeChanged) {
+        const el = scoreboard.querySelector('#scoreHome');
+        if (el) {
+            el.classList.remove('pulse-score');
+            void el.offsetWidth; // Force reflow
+            el.classList.add('pulse-score');
+        }
+    }
+    if (awayChanged) {
+        const el = scoreboard.querySelector('#scoreAway');
+        if (el) {
+            el.classList.remove('pulse-score');
+            void el.offsetWidth; // Force reflow
+            el.classList.add('pulse-score');
+        }
+    }
   }
 
   /**
