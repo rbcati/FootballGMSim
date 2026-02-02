@@ -3,6 +3,9 @@ const { test, expect } = require('@playwright/test');
 test.describe('Daily Regression Pass', () => {
 
     test('Playability Smoke Test & State Audit', async ({ page }) => {
+        page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
+        page.on('pageerror', err => console.log('BROWSER ERROR:', err));
+
         // 1. Start a new league
         await page.goto('http://localhost:8000');
 
