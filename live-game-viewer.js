@@ -1229,6 +1229,14 @@ class LiveGameViewer {
         message: summary
     });
 
+    // Visual Feedback for Possession Change
+    if (!this.isSkipping) {
+        // Delay slightly to not overlap with previous play feedback
+        setTimeout(() => {
+             this.triggerVisualFeedback('drive-summary', 'CHANGE OF POSSESSION');
+        }, 1500);
+    }
+
     // Reset Drive Stats
     gameState.drive = {
         plays: 0,
@@ -1556,7 +1564,13 @@ class LiveGameViewer {
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
             soundManager.playTackle();
-            this.triggerVisualFeedback('turnover', 'TURNOVER');
+
+            if (play.result === 'turnover_downs') {
+                this.triggerVisualFeedback('defense-stop', 'STOPPED!');
+            } else {
+                this.triggerVisualFeedback('turnover', 'TURNOVER');
+            }
+
             // Screen shake
             if (this.container) this.container.classList.add('shake');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
@@ -1566,7 +1580,6 @@ class LiveGameViewer {
             }, 500);
 
             this.triggerFloatText('TURNOVER!', 'bad');
-            this.triggerVisualFeedback('negative', 'TURNOVER');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFailure();
             this.triggerShake();
@@ -1583,7 +1596,10 @@ class LiveGameViewer {
             soundManager.playScore();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
-            this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+            this.triggerVisualFeedback('field-goal-made', 'IT IS GOOD!');
+        } else if (play.playType === 'punt') {
+            soundManager.playKick();
+            this.triggerVisualFeedback('punt', 'PUNT');
         } else if (play.type === 'game_end') {
             // Check winner
             const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
