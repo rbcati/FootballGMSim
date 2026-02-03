@@ -238,4 +238,121 @@ test.describe('Daily Regression Pass', () => {
         console.log(`Persisted Week: ${persistedWeek}`);
         expect(persistedWeek).toBe(weekAfterSim);
     });
+
+    test('Strategy Persistence', async ({ page }) => {
+        await page.goto('http://localhost:8000');
+        await page.waitForTimeout(1000);
+
+        // Ensure league
+        await page.evaluate(async () => {
+             if (!window.state || !window.state.league) {
+                 await window.gameController.startNewLeague();
+                 document.getElementById('onboardStart').click();
+             }
+        });
+        await page.waitForSelector('#hub', { state: 'visible' });
+
+        // Change Strategy
+        // 1. Offensive Plan
+        const offSelect = page.locator('#managerOffPlan');
+        if (await offSelect.isVisible()) {
+            await offSelect.selectOption('AGGRESSIVE_PASSING');
+        } else {
+            console.log('Manager panel not visible, attempting to inject/find');
+            // If panel only appears when there is an opponent, we might need to skip or mock
+            // But usually it's there during season
+        }
+
+        // 2. Risk Profile
+        const riskBtn = page.locator('.risk-btn[data-id="AGGRESSIVE"]');
+        if (await riskBtn.isVisible()) {
+            await riskBtn.click();
+        }
+
+        // Wait for save (debounced or immediate)
+        await page.waitForTimeout(1000);
+
+        // Reload
+        await page.reload();
+        await page.waitForTimeout(2000);
+
+        // Verify
+        const strategy = await page.evaluate(() => window.state.league.weeklyGamePlan);
+        console.log('Persisted Strategy:', strategy);
+
+        expect(strategy.offPlanId).toBe('AGGRESSIVE_PASSING');
+        expect(strategy.riskId).toBe('AGGRESSIVE');
+    });
+
+    test('Replay Exploit Prevention', async ({ page }) => {
+        await page.goto('http://localhost:8000');
+        await page.waitForTimeout(1000);
+
+        // Ensure league and advance a week to have a played game
+        await page.evaluate(async () => {
+             if (!window.state || !window.state.league) {
+                 await window.gameController.startNewLeague();
+                 document.getElementById('onboardStart').click();
+             }
+        });
+        await page.waitForSelector('#hub', { state: 'visible' });
+
+        // Advance Week to ensure we have a completed game
+        await page.evaluate(() => window.handleGlobalAdvance());
+        await page.waitForTimeout(5000); // Wait for sim (worker might be slow)
+
+        // Get a finalized game involving user
+        const gameInfo = await page.evaluate(() => {
+            const L = window.state.league;
+            const weekIdx = (L.week || 2) - 2; // Previous week (0-indexed)
+            if (weekIdx < 0) return null;
+            const results = L.resultsByWeek[weekIdx];
+            if (!results) return null;
+            const userGame = results.find(g => g.home === L.userTeamId || g.away === L.userTeamId);
+            return userGame;
+        });
+
+        if (gameInfo) {
+            console.log('Testing replay exploit on game:', gameInfo.id);
+            // Attempt to watch
+            await page.evaluate((g) => {
+                window.watchLiveGame(g.home, g.away);
+            }, gameInfo);
+
+            // Expect to NOT switch to game-sim view
+            await page.waitForTimeout(500);
+            const hash = await page.evaluate(() => location.hash);
+            console.log('Current Hash:', hash);
+            expect(hash).not.toContain('game-sim');
+        } else {
+            console.log('No user game found to test replay exploit');
+        }
+    });
+
+    test('High Stakes Visuals', async ({ page }) => {
+        await page.goto('http://localhost:8000');
+        await page.waitForTimeout(1000);
+
+        // Inject LiveGameViewer logic if needed or just use existing
+        await page.evaluate(() => {
+            if (!window.liveGameViewer) window.liveGameViewer = new window.LiveGameViewer();
+            window.liveGameViewer.preGameContext = {
+                stakes: 85, // High Stakes
+                difficulty: 'Hard'
+            };
+            // Create a dummy container
+            const d = document.createElement('div');
+            d.id = 'test-sim-container';
+            document.body.appendChild(d);
+            window.liveGameViewer.renderToView('#test-sim-container');
+        });
+
+        // Check for badge
+        // Note: The class name 'stakes-badge' depends on my implementation in the next step
+        // So this test expects the implementation to exist.
+        const badge = page.locator('.stakes-badge');
+        await expect(badge).toBeVisible({ timeout: 5000 });
+        const text = await badge.innerText();
+        expect(text).toContain('HIGH STAKES');
+    });
 });

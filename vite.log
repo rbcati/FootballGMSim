@@ -1,8 +1,0 @@
-8:24:54 PM [vite] (client) Forced re-optimization of dependencies
-
-  VITE v7.3.1  ready in 298 ms
-
-  ➜  Local:   http://localhost:8000/
-  ➜  Network: use --host to expose
-8:27:04 PM [vite] (client) page reload simulation.js
-8:28:19 PM [vite] (client) page reload game-simulator.js
