@@ -108,8 +108,23 @@ class LiveGameViewer {
     const difficultyHtml = this.preGameContext?.difficulty ?
         `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${this.preGameContext.difficulty}</div>` : '';
 
+    let stakesHtml = '';
+    if (this.preGameContext?.stakes > 60) {
+         const isExtreme = this.preGameContext.stakes > 80;
+         const color = isExtreme ? '#ef4444' : '#fbbf24';
+         const text = isExtreme ? '🔥 HIGH STAKES 🔥' : '⚠️ KEY MATCHUP';
+         const animation = isExtreme ? 'pulse-text-glow 1.5s infinite alternate' : '';
+
+         stakesHtml = `
+            <div class="stakes-badge" style="text-align: center; margin-bottom: 8px; font-size: ${isExtreme ? '1.1em' : '0.9em'}; font-weight: 800; color: ${color}; text-shadow: 0 0 15px ${color}60; animation: ${animation}; letter-spacing: 1px;">
+                ${text}
+            </div>
+         `;
+    }
+
     container.innerHTML = `
       <div class="card live-game-header">
+        ${stakesHtml}
         ${difficultyHtml}
         <div class="scoreboard"></div>
         <div class="field-container"></div>

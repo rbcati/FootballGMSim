@@ -1730,6 +1730,11 @@ select:disabled {
   transform: translateY(0);
 }
 
+/* Pulse Text Glow */
+@keyframes pulse-text-glow {
+    0% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
+    50% { text-shadow: 0 0 20px currentColor, 0 0 10px currentColor; transform: scale(1.05); }
+    100% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
 /* Player Marker Animations */
 @keyframes pulse-marker {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
