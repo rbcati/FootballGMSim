@@ -176,9 +176,10 @@ class GameRunner {
      * Simulates a batch of playoff games.
      * @param {Array} games - Array of game objects { home, away }.
      * @param {number} year - Current year.
+     * @param {Object} league - The league object.
      * @returns {Array} List of winner team objects.
      */
-    static simulatePlayoffGames(games, year) {
+    static simulatePlayoffGames(games, year, league) {
         const gamesToSim = games.map(g => ({
             home: g.home,
             away: g.away,
@@ -187,14 +188,12 @@ class GameRunner {
 
         if (gamesToSim.length === 0) return { winners: [], results: [] };
 
-        // Run Batch (isPlayoff: true prevents W/L record updates)
-        // Pass league? simulateBatch needs league now. We need to pass it.
-        // We need to change signature to accept league or we can't use new simulateBatch properly.
-        // For now, assuming caller handles league context or global shim if needed, but pure version should take league.
-        // I will update signature to accept league.
+        if (!league) {
+            console.warn('GameRunner.simulatePlayoffGames called without league object. This may fail if scheme logic is needed.');
+        }
 
-        console.warn('GameRunner.simulatePlayoffGames called without league object. This may fail if scheme logic is needed.');
-        const results = simulateBatch(gamesToSim, { isPlayoff: true });
+        // Run Batch (isPlayoff: true prevents W/L record updates)
+        const results = simulateBatch(gamesToSim, { isPlayoff: true, league: league });
         const winners = [];
         const gameResults = [];
 

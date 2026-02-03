@@ -66,9 +66,9 @@ function simPlayoffWeek() {
 
     const roundResults = { round: P.currentRound, games: [] };
 
-    const simRound = (games) => {
+    const processRound = (games) => {
         if (!games || games.length === 0) return [];
-        const { winners, results } = GameRunner.simulatePlayoffGames(games, P.year);
+        const { winners, results } = GameRunner.simulatePlayoffGames(games, P.year, window.state.league);
         roundResults.games.push(...results);
         return winners;
     };
