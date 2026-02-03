@@ -2,6 +2,7 @@
 import { commitGameResult } from './game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
+import { FieldEffects } from './field-effects.js';
 
 'use strict';
 
@@ -218,6 +219,13 @@ class LiveGameViewer {
    */
   renderField(container) {
       if (!container) return;
+
+      // Initialize Field Effects overlay
+      if (!this.fieldEffects || this.fieldEffects.container !== container) {
+          this.fieldEffects = new FieldEffects(container);
+      } else {
+          this.fieldEffects.resize();
+      }
 
       const homeName = this.gameState?.home?.team?.abbr || 'HOME';
       const awayName = this.gameState?.away?.team?.abbr || 'AWAY';
@@ -648,6 +656,19 @@ class LiveGameViewer {
               endX: endPct,
               duration: 1000 * durationScale
           });
+      }
+
+      // Trigger Effects based on result at end position
+      if (this.fieldEffects) {
+          if (play.result === 'sack') {
+              this.fieldEffects.spawnParticles(endPct, 'sack');
+          } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+              this.fieldEffects.spawnParticles(endPct, 'tackle');
+          } else if (play.result === 'touchdown') {
+              this.fieldEffects.spawnParticles(endPct, 'touchdown');
+          } else if (play.message && play.message.includes('First down')) {
+              this.fieldEffects.spawnParticles(endPct, 'first_down');
+          }
       }
 
       // Cleanup
@@ -1290,6 +1311,14 @@ class LiveGameViewer {
         message: summary
     });
 
+    // Visual Feedback for Possession Change
+    if (!this.isSkipping) {
+        // Delay slightly to not overlap with previous play feedback
+        setTimeout(() => {
+             this.triggerVisualFeedback('drive-summary', 'CHANGE OF POSSESSION');
+        }, 1500);
+    }
+
     // Reset Drive Stats
     gameState.drive = {
         plays: 0,
@@ -1602,6 +1631,10 @@ class LiveGameViewer {
              soundManager.playFailure();
         }
 
+        if (play.message && play.message.includes('First down!')) {
+             soundManager.playFirstDown();
+        }
+
         if (play.result === 'touchdown') {
             soundManager.playTouchdown();
             setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
@@ -1610,6 +1643,13 @@ class LiveGameViewer {
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
+            // Ensure particles trigger even if animation skipped slightly
+            if (this.fieldEffects) {
+                 const isHome = this.gameState.ballPossession === 'home';
+                 const yardLine = this.gameState[this.gameState.ballPossession].yardLine;
+                 const pct = this.getVisualPercentage(yardLine, isHome);
+                 this.fieldEffects.spawnParticles(pct, 'touchdown');
+            }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
             soundManager.playDefenseStop();
             soundManager.playFailure();
@@ -1617,7 +1657,13 @@ class LiveGameViewer {
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
             soundManager.playTackle();
-            this.triggerVisualFeedback('turnover', 'TURNOVER');
+
+            if (play.result === 'turnover_downs') {
+                this.triggerVisualFeedback('defense-stop', 'STOPPED!');
+            } else {
+                this.triggerVisualFeedback('turnover', 'TURNOVER');
+            }
+
             // Screen shake
             if (this.container) this.container.classList.add('shake');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
@@ -1627,7 +1673,6 @@ class LiveGameViewer {
             }, 500);
 
             this.triggerFloatText('TURNOVER!', 'bad');
-            this.triggerVisualFeedback('negative', 'TURNOVER');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFailure();
             this.triggerShake();
@@ -1644,7 +1689,10 @@ class LiveGameViewer {
             soundManager.playScore();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
-            this.triggerVisualFeedback('positive', 'IT IS GOOD!');
+            this.triggerVisualFeedback('field-goal-made', 'IT IS GOOD!');
+        } else if (play.playType === 'punt') {
+            soundManager.playKick();
+            this.triggerVisualFeedback('punt', 'PUNT');
         } else if (play.type === 'game_end') {
             // Check winner
             const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
@@ -1952,7 +2000,7 @@ class LiveGameViewer {
 
   /**
    * Skip to end of game
-   * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
+   * Uses async chunking to prevent UI freeze
    */
   skipToEnd() {
       // Set skipping flag IMMEDIATELY to short-circuit any running animations
@@ -1967,44 +2015,59 @@ class LiveGameViewer {
       this.isPaused = false;
       this.isPlaying = true;
 
-      // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
-      let playsSimulated = 0;
+      let totalPlays = 0;
+      const MAX_PLAYS = 1000; // Safety break for infinite loops
 
-      while (!this.gameState.gameComplete && playsSimulated < 500) {
-          playsSimulated++;
-          const state = this.gameState;
-          const offense = state.ballPossession === 'home' ? state.home : state.away;
-          const defense = state.ballPossession === 'home' ? state.away : state.home;
-          const isUserOffense = offense.team.id === this.userTeamId;
+      const processChunk = () => {
+          let playsInChunk = 0;
+          const CHUNK_SIZE = 20; // Process 20 plays per frame
 
-          // Auto-pick for user (AI)
-          const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+          while (!this.gameState.gameComplete && playsInChunk < CHUNK_SIZE && totalPlays < MAX_PLAYS) {
+              playsInChunk++;
+              totalPlays++;
 
-          this.playByPlay.push(play);
-          // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
-          // However, we DO update the state
-          this.updateGameState(play, state);
-          this.handleEndOfQuarter(state);
-      }
+              const state = this.gameState;
+              const offense = state.ballPossession === 'home' ? state.home : state.away;
+              const defense = state.ballPossession === 'home' ? state.away : state.home;
+              const isUserOffense = offense.team.id === this.userTeamId;
 
-      this.isSkipping = false;
+              // Auto-pick for user (AI)
+              const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
 
-      // 1. SAVE FIRST (Persistence)
-      this.finalizeGame();
-
-      // 2. Update UI if it exists (Safe DOM Access)
-      if (this.checkUI()) {
-          this.renderGame();
-          // Scroll log to bottom safely
-          const parent = this.viewMode ? this.container : this.modal;
-          if (parent) {
-             const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
-             if (playLog) playLog.scrollTop = playLog.scrollHeight;
+              this.playByPlay.push(play);
+              // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
+              // However, we DO update the state
+              this.updateGameState(play, state);
+              this.handleEndOfQuarter(state);
           }
-      }
 
-      // 3. Cleanup
-      this.endGame();
+          if (this.gameState.gameComplete || totalPlays >= MAX_PLAYS) {
+              this.isSkipping = false;
+
+              // 1. SAVE FIRST (Persistence)
+              this.finalizeGame();
+
+              // 2. Update UI if it exists (Safe DOM Access)
+              if (this.checkUI()) {
+                  this.renderGame();
+                  // Scroll log to bottom safely
+                  const parent = this.viewMode ? this.container : this.modal;
+                  if (parent) {
+                     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
+                     if (playLog) playLog.scrollTop = playLog.scrollHeight;
+                  }
+              }
+
+              // 3. Cleanup
+              this.endGame();
+          } else {
+              // Schedule next chunk
+              requestAnimationFrame(processChunk);
+          }
+      };
+
+      // Start processing
+      requestAnimationFrame(processChunk);
   }
 
   /**
@@ -2139,9 +2202,18 @@ class LiveGameViewer {
       if (type === 'positive') bannerClass += ' victory';
       if (type === 'negative') bannerClass += ' defeat';
 
+      // Determine colors for dynamic styling
+      const isHome = this.gameState.home.team.id === this.userTeamId;
+      const userTeam = isHome ? this.gameState.home.team : this.gameState.away.team;
+      const oppTeam = isHome ? this.gameState.away.team : this.gameState.home.team;
+
+      let mainColor = '#fff';
+      if (type === 'positive') mainColor = userTeam.color || '#34C759';
+      else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
+
       overlay.innerHTML = `
-        <div class="${bannerClass}">
-            <h2>${title}</h2>
+        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60;">
+            <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
             <div class="game-over-score">${scoreA} - ${scoreB}</div>
 
             ${mvp ? `
@@ -2210,7 +2282,14 @@ class LiveGameViewer {
 
         if (result) {
             console.log("Game finalized successfully:", result);
-            // saveState is now called within commitGameResult
+
+            // Explicitly save state since commitGameResult is pure
+            if (window.saveGame) {
+                window.saveGame();
+            } else if (window.saveState) {
+                window.saveState();
+            }
+
             if (window.setStatus) window.setStatus("Game Saved!", "success");
         } else {
             console.error("Failed to finalize game: Result was null");
