@@ -250,7 +250,7 @@ class LiveGameViewer {
   }
 
   /**
-   * Update field markers instantly (no animation)
+   * Update field markers with smooth transitions or fading
    */
   updateFieldState(yardLine, isHomePossession) {
       if (!this.checkUI()) return;
@@ -261,43 +261,73 @@ class LiveGameViewer {
 
       if (!ballEl) return;
 
-      // Calculate Visual Percentage (0-100% of container)
-      // Total units = 120 (10 left EZ + 100 field + 10 right EZ)
-      // Home drives Left -> Right (0 -> 100)
-      // Away drives Right -> Left (100 -> 0)
-
       let visualYard = isHomePossession ? yardLine : (100 - yardLine);
       let pct = (10 + visualYard) / 1.2;
 
-      ballEl.style.left = `${pct}%`;
-      ballEl.style.transition = 'none';
-      if (losEl) losEl.style.left = `${pct}%`;
+      const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // First Down Marker
-      const state = this.gameState;
-      if (state) {
-          const dist = state[isHomePossession ? 'home' : 'away'].distance;
-          // Target yard line for 1st down
-          let targetYard = yardLine + dist;
-          if (targetYard > 100) targetYard = 100; // Goal line
+      // Detect Jump (> 25% difference implies teleportation/turnover)
+      const dist = Math.abs(pct - currentLeft);
+      const isTeleport = currentLeft > 0 && dist > 25;
 
-          let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
-          let fdPct = (10 + visualTarget) / 1.2;
-          if (fdEl) {
+      if (isTeleport) {
+          // Fade Out Sequence
+          const elements = [ballEl, losEl, fdEl].filter(e => e);
+          elements.forEach(e => e.classList.add('fade-out'));
+
+          setTimeout(() => {
+              elements.forEach(e => {
+                  e.style.transition = 'none';
+                  e.style.left = `${pct}%`;
+              });
+
+              // First Down update inside timeout
+              const state = this.gameState;
+              if (state && fdEl) {
+                  const d = state[isHomePossession ? 'home' : 'away'].distance;
+                  let targetYard = yardLine + d;
+                  if (targetYard > 100) targetYard = 100;
+                  let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
+                  let fdPct = (10 + visualTarget) / 1.2;
+                  fdEl.style.left = `${fdPct}%`;
+                  fdEl.style.display = (yardLine + d >= 100) ? 'none' : 'block';
+              }
+
+              void ballEl.offsetWidth; // Reflow
+
+              elements.forEach(e => {
+                  e.style.transition = '';
+                  e.classList.remove('fade-out');
+                  e.classList.add('fade-in');
+              });
+
+              setTimeout(() => {
+                  elements.forEach(e => e.classList.remove('fade-in'));
+              }, 300);
+          }, 300);
+      } else {
+          // Normal Smooth Update (CSS transition handles it)
+          ballEl.style.left = `${pct}%`;
+          if (losEl) losEl.style.left = `${pct}%`;
+
+          // FD Logic
+          const state = this.gameState;
+          if (state && fdEl) {
+              const d = state[isHomePossession ? 'home' : 'away'].distance;
+              let targetYard = yardLine + d;
+              if (targetYard > 100) targetYard = 100;
+              let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
+              let fdPct = (10 + visualTarget) / 1.2;
               fdEl.style.left = `${fdPct}%`;
-              fdEl.style.display = 'block';
+              fdEl.style.display = (yardLine + d >= 100) ? 'none' : 'block';
           }
       }
 
-      // Hide players during instant update
+      // Hide players regardless (reset state)
       const qbMarker = parent.querySelector('.marker-qb');
       const skillMarker = parent.querySelector('.marker-skill');
       if (qbMarker) qbMarker.style.opacity = 0;
       if (skillMarker) skillMarker.style.opacity = 0;
-
-      // Force reflow
-      void ballEl.offsetWidth;
-      ballEl.style.transition = ''; // Restore transition from CSS
   }
 
   /**
@@ -338,13 +368,36 @@ class LiveGameViewer {
 
           const startTime = performance.now();
 
+          // Apply animation class
+          if (options.animationClass) element.classList.add(options.animationClass);
+
           // Easing functions
           const easeLinear = t => t;
           const easeOutQuad = t => t * (2 - t);
           const easeInOutQuad = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+          const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+          const easeOutQuart = t => 1 - Math.pow(1 - t, 4);
+          // Bounce easing for landings
+          const easeBounce = t => {
+              const n1 = 7.5625;
+              const d1 = 2.75;
+              if (t < 1 / d1) {
+                  return n1 * t * t;
+              } else if (t < 2 / d1) {
+                  return n1 * (t -= 1.5 / d1) * t + 0.75;
+              } else if (t < 2.5 / d1) {
+                  return n1 * (t -= 2.25 / d1) * t + 0.9375;
+              } else {
+                  return n1 * (t -= 2.625 / d1) * t + 0.984375;
+              }
+          };
 
-          const easing = options.easing === 'linear' ? easeLinear :
-                         options.easing === 'easeOut' ? easeOutQuad : easeInOutQuad;
+          let easing = easeInOutQuad;
+          if (options.easing === 'linear') easing = easeLinear;
+          else if (options.easing === 'easeOut') easing = easeOutQuad;
+          else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
+          else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
+          else if (options.easing === 'bounce') easing = easeBounce;
 
           const animate = (currentTime) => {
               if (this.isSkipping) {
@@ -394,6 +447,7 @@ class LiveGameViewer {
                       shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
                       shadowEl.style.opacity = 1;
                   }
+                  if (options.animationClass) element.classList.remove(options.animationClass);
                   resolve();
               }
           };
@@ -453,12 +507,14 @@ class LiveGameViewer {
           qbMarker.style.left = `${startPct}%`;
           qbMarker.style.opacity = '1';
           qbMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+          qbMarker.classList.add('pulse-marker');
       }
       if (skillMarker) {
           skillMarker.style.transition = 'none';
           skillMarker.style.left = `${startPct}%`;
           skillMarker.style.opacity = '0'; // Hide initially
           skillMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+          skillMarker.classList.remove('pulse-marker');
       }
 
       void ballEl.offsetWidth; // Reflow
@@ -482,18 +538,22 @@ class LiveGameViewer {
               // Assume catch is at full yardage for simplicity
           }
 
+          if (qbMarker) qbMarker.classList.remove('pulse-marker');
+
           const p1 = this.animateTrajectory(qbMarker, {
               startX: startPct,
               endX: dropbackPct,
               duration: dropbackDuration,
-              easing: 'easeOut'
+              easing: 'easeOut',
+              animationClass: 'bob'
           });
 
           const p2 = this.animateTrajectory(skillMarker, {
               startX: startPct,
               endX: endPct,
               duration: dropbackDuration + 400 * durationScale, // Route takes longer
-              easing: 'easeInOut' // Run
+              easing: 'easeInOut', // Run
+              animationClass: 'bob'
           });
 
           // Ball tracks QB during dropback? Or just waits?
@@ -516,7 +576,7 @@ class LiveGameViewer {
               endX: endPct,
               duration: throwDuration,
               arcHeight: 25, // Nice arc
-              easing: 'linear' // Projectile X motion is linear-ish
+              easing: 'easeOutQuad' // Slight drag
           });
 
           // Pulse if TD
@@ -547,7 +607,8 @@ class LiveGameViewer {
               startX: startPct,
               endX: endPct,
               duration: runDuration,
-              easing: 'easeInOut'
+              easing: 'easeInOut',
+              animationClass: 'bob'
           });
 
           const pSkill = this.animateTrajectory(skillMarker, {
@@ -575,7 +636,7 @@ class LiveGameViewer {
               endX: endPct,
               duration: kickDuration,
               arcHeight: arc,
-              easing: 'linear'
+              easing: 'easeOutQuad' // Realistic drag
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') ballEl.classList.add('animate-pulse');
@@ -1760,92 +1821,6 @@ class LiveGameViewer {
     }
   }
 
-  /**
-   * Animate the play
-   */
-  async animatePlay(play, startState) {
-      if (this.isSkipping || !this.checkUI()) return Promise.resolve();
-
-      const parent = this.viewMode ? this.container : this.modal;
-      const ball = parent.querySelector('.ball');
-      if (!ball) return Promise.resolve();
-
-      // Determine duration based on tempo
-      let duration = 1000;
-      if (this.tempo === 'hurry-up') duration = 500;
-      if (this.tempo === 'slow') duration = 2000;
-
-      // Special animations for play types
-      if (play.playType === 'field_goal' || play.playType === 'punt') {
-          ball.classList.add('animate-kick');
-          duration = 1500; // Match CSS animation duration
-      } else if (play.playType.startsWith('pass')) {
-          ball.classList.add('animate-pass');
-      }
-    // Check if initialized
-    if (!scoreboard.innerHTML.trim() || !scoreboard.querySelector('.score-team')) {
-         scoreboard.innerHTML = `
-          <div class="score-team team-away ${state.ballPossession === 'away' ? 'has-possession' : ''}">
-            <div class="team-name">${away.team.abbr}</div>
-            <div class="team-score">${away.score}</div>
-          </div>
-          <div class="score-info">
-            <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
-            <div class="down-distance">
-              ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
-            </div>
-          </div>
-          <div class="score-team team-home ${state.ballPossession === 'home' ? 'has-possession' : ''}">
-            <div class="team-name">${home.team.abbr}</div>
-            <div class="team-score">${home.score}</div>
-          </div>
-        `;
-        return;
-    }
-
-    // Update existing elements
-    const awayContainer = scoreboard.querySelector('.score-team.team-away') || scoreboard.querySelector('.score-team:first-child');
-    const homeContainer = scoreboard.querySelector('.score-team.team-home') || scoreboard.querySelector('.score-team:last-child');
-    const clockEl = scoreboard.querySelector('.game-clock');
-    const downEl = scoreboard.querySelector('.down-distance');
-    const awayScoreEl = awayContainer.querySelector('.team-score');
-    const homeScoreEl = homeContainer.querySelector('.team-score');
-
-    // Possession
-    if (state.ballPossession === 'away') {
-        awayContainer.classList.add('has-possession');
-        homeContainer.classList.remove('has-possession');
-    } else {
-        homeContainer.classList.add('has-possession');
-        awayContainer.classList.remove('has-possession');
-    }
-
-    // Scores
-    if (awayScoreEl.textContent != away.score) {
-        awayScoreEl.textContent = away.score;
-        if (awayChanged) {
-            awayScoreEl.classList.remove('pulse-score');
-            void awayScoreEl.offsetWidth;
-            awayScoreEl.classList.add('pulse-score');
-        }
-    }
-
-    if (homeScoreEl.textContent != home.score) {
-        homeScoreEl.textContent = home.score;
-        if (homeChanged) {
-            homeScoreEl.classList.remove('pulse-score');
-            void homeScoreEl.offsetWidth;
-            homeScoreEl.classList.add('pulse-score');
-        }
-    }
-
-    // Info
-    const newClockText = `Q${state.quarter} ${this.formatTime(state.time)}`;
-    if (clockEl.textContent !== newClockText) clockEl.textContent = newClockText;
-
-    const newDownText = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
-    if (downEl.textContent !== newDownText) downEl.textContent = newDownText;
-  }
 
 
   /**
@@ -2394,42 +2369,19 @@ class LiveGameViewer {
       if (!this.checkUI()) return;
       const parent = this.viewMode ? this.container : this.modal;
 
-      const losMarker = parent.querySelector('.marker-los');
-      const fdMarker = parent.querySelector('.marker-first-down');
-      const ball = parent.querySelector('.ball');
-      const ballShadow = parent.querySelector('.ball-shadow');
-      const fieldContainer = parent.querySelector('.field-container');
-
-      if (!losMarker || !fdMarker || !ball || !state) return;
-
-      const currentPossession = state[state.ballPossession];
-      const yardLine = currentPossession.yardLine;
-      const distance = currentPossession.distance;
-
-      // 0 = Goal Line (Own), 100 = Goal Line (Opponent)
-      // Map 0-100 yards to 0-100% width
-
-      const losPct = yardLine;
-      const fdPct = Math.min(100, yardLine + distance);
-
-      losMarker.style.left = `${losPct}%`;
-      fdMarker.style.left = `${fdPct}%`;
-      ball.style.left = `${losPct}%`;
-      if (ballShadow) ballShadow.style.left = `${losPct}%`;
-
-      // Hide First Down marker if Goal to Go
-      if (yardLine + distance >= 100) {
-          fdMarker.style.display = 'none';
-      } else {
-          fdMarker.style.display = 'block';
+      // Use the robust updateFieldState logic for markers/ball
+      if (state) {
+          const currentPossession = state[state.ballPossession];
+          this.updateFieldState(currentPossession.yardLine, state.ballPossession === 'home');
       }
 
-      // Red Zone Visualization
-      // Home drives 0->100 (RZ > 80), Away drives 100->0 (RZ < 20)
-      const isRedZone = (state.ballPossession === 'home' && yardLine >= 80) ||
-                        (state.ballPossession === 'away' && yardLine <= 20);
+      // Handle Red Zone (extra visual)
+      const fieldContainer = parent.querySelector('.field-container');
+      if (state && fieldContainer) {
+          const currentPossession = state[state.ballPossession];
+          const isRedZone = (state.ballPossession === 'home' && currentPossession.yardLine >= 80) ||
+                            (state.ballPossession === 'away' && currentPossession.yardLine <= 20);
 
-      if (fieldContainer) {
           if (isRedZone) fieldContainer.classList.add('red-zone');
           else fieldContainer.classList.remove('red-zone');
       }
