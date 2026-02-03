@@ -3,19 +3,7 @@
  * Handles heavy simulation logic in a background thread.
  */
 
-// Import Core Simulation Logic
-// Note: These modules must be refactored to be pure (no DOM/window dependencies)
-// import GameRunner from './game-runner.js';
-// import { validateLeagueState } from './simulation.js';
-
-// Mock dependencies if necessary during migration
-const GameRunner = {
-  simulateRegularSeasonWeek: (league, options) => {
-    // Placeholder for actual logic import
-    console.log('Worker: Simulating week...');
-    return { gamesSimulated: 0, results: [] };
-  }
-};
+import GameRunner from './game-runner.js';
 
 self.onmessage = async (e) => {
   const { type, payload } = e.data;
@@ -35,35 +23,38 @@ self.onmessage = async (e) => {
       const simResult = GameRunner.simulateRegularSeasonWeek(league, options);
 
       // 2. Identify Changes (Delta Calculation)
-      // Since we modified 'league' in place, we extract the changed parts.
-      // Optimization: In a real implementation, we might track dirty flags.
-      // For now, we return the specific objects we know change during a week.
 
-      // A. Teams that played (and thus have stat/record updates)
-      // We can filter this by checking which teams were in the results.
+      // A. Teams that played (and thus have stat/record/rivalry updates)
       const teamsInvolvedIds = new Set();
-      simResult.results.forEach(res => {
-        teamsInvolvedIds.add(res.home); // ID
-        teamsInvolvedIds.add(res.away); // ID
-      });
+      if (simResult.results) {
+          simResult.results.forEach(res => {
+            if (res.home) teamsInvolvedIds.add(res.home);
+            if (res.away) teamsInvolvedIds.add(res.away);
+          });
+      }
 
+      // Filter updated teams from the mutated league object
       const updatedTeams = league.teams.filter(t => teamsInvolvedIds.has(t.id));
 
       // B. Schedule Updates (Game IDs that are now 'played')
-      const scheduleUpdates = simResult.results.map(r => r.id); // Assuming game objects have unique IDs
+      // Note: We might want to just return the results and let main thread mark them,
+      // but simResult.results contains the finalized game objects.
+      // We'll return the results array which serves as the schedule update manifest.
 
       // 3. Construct Payload
       const response = {
         success: true,
-        week: league.week,
+        week: simResult.week,
         gamesSimulated: simResult.gamesSimulated,
         results: simResult.results,
         updatedTeams: updatedTeams, // The "Delta"
-        scheduleUpdates: scheduleUpdates
+        // Also pass back weekly game plan if it was modified (GameRunner resets it)
+        weeklyGamePlan: league.weeklyGamePlan,
+        // Pass back strategy history if modified
+        strategyHistory: league.strategyHistory
       };
 
       // 4. Send back to Main Thread
-      // postMessage uses Structured Clone (Deep Copy)
       self.postMessage({ type: 'SIM_COMPLETE', payload: response });
 
     } catch (error) {

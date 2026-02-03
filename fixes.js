@@ -2013,6 +2013,14 @@ window.on = on;
     
     // Use event delegation with capture phase to ensure clicks are caught
     document.addEventListener('click', function(e) {
+      // Check simulation lock
+      if (window.isGameSimulating && window.isGameSimulating()) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🚫 Action blocked: Simulation in progress');
+        return false;
+      }
+
       const target = e.target;
       const targetId = target.id;
       const targetClass = target.className;
