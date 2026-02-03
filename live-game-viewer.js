@@ -2,6 +2,7 @@
 import { commitGameResult } from './game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
+import { FieldEffects } from './field-effects.js';
 
 'use strict';
 
@@ -218,6 +219,13 @@ class LiveGameViewer {
    */
   renderField(container) {
       if (!container) return;
+
+      // Initialize Field Effects overlay
+      if (!this.fieldEffects || this.fieldEffects.container !== container) {
+          this.fieldEffects = new FieldEffects(container);
+      } else {
+          this.fieldEffects.resize();
+      }
 
       const homeName = this.gameState?.home?.team?.abbr || 'HOME';
       const awayName = this.gameState?.away?.team?.abbr || 'AWAY';
@@ -587,6 +595,19 @@ class LiveGameViewer {
               endX: endPct,
               duration: 1000 * durationScale
           });
+      }
+
+      // Trigger Effects based on result at end position
+      if (this.fieldEffects) {
+          if (play.result === 'sack') {
+              this.fieldEffects.spawnParticles(endPct, 'sack');
+          } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+              this.fieldEffects.spawnParticles(endPct, 'tackle');
+          } else if (play.result === 'touchdown') {
+              this.fieldEffects.spawnParticles(endPct, 'touchdown');
+          } else if (play.message && play.message.includes('First down')) {
+              this.fieldEffects.spawnParticles(endPct, 'first_down');
+          }
       }
 
       // Cleanup
@@ -1549,6 +1570,10 @@ class LiveGameViewer {
              soundManager.playFailure();
         }
 
+        if (play.message && play.message.includes('First down!')) {
+             soundManager.playFirstDown();
+        }
+
         if (play.result === 'touchdown') {
             soundManager.playTouchdown();
             setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
@@ -1557,6 +1582,13 @@ class LiveGameViewer {
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
+            // Ensure particles trigger even if animation skipped slightly
+            if (this.fieldEffects) {
+                 const isHome = this.gameState.ballPossession === 'home';
+                 const yardLine = this.gameState[this.gameState.ballPossession].yardLine;
+                 const pct = this.getVisualPercentage(yardLine, isHome);
+                 this.fieldEffects.spawnParticles(pct, 'touchdown');
+            }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
             soundManager.playDefenseStop();
             soundManager.playFailure();
@@ -2195,9 +2227,18 @@ class LiveGameViewer {
       if (type === 'positive') bannerClass += ' victory';
       if (type === 'negative') bannerClass += ' defeat';
 
+      // Determine colors for dynamic styling
+      const isHome = this.gameState.home.team.id === this.userTeamId;
+      const userTeam = isHome ? this.gameState.home.team : this.gameState.away.team;
+      const oppTeam = isHome ? this.gameState.away.team : this.gameState.home.team;
+
+      let mainColor = '#fff';
+      if (type === 'positive') mainColor = userTeam.color || '#34C759';
+      else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
+
       overlay.innerHTML = `
-        <div class="${bannerClass}">
-            <h2>${title}</h2>
+        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60;">
+            <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
             <div class="game-over-score">${scoreA} - ${scoreB}</div>
 
             ${mvp ? `

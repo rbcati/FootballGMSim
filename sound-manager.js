@@ -97,12 +97,18 @@ class SoundManager {
 
     playBigHit() {
         if (!this.enabled || this.muted) return;
-        this.playNoise(0.2, 0.3);
-        this.playTone(60, 'square', 0.3, 0.2, 20);
+        this.playNoise(0.3, 0.4);
+        this.playTone(50, 'sawtooth', 0.3, 0.3, 10);
     }
 
     playTackle() { this.playBigHit(); }
     playHit() { this.playBigHit(); }
+
+    playFirstDown() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(600, 'sine', 0.1, 0.1);
+        setTimeout(() => this.playTone(800, 'sine', 0.4, 0.1), 100);
+    }
 
     playKick() {
         if (!this.enabled || this.muted) return;
