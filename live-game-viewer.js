@@ -1977,7 +1977,7 @@ class LiveGameViewer {
 
   /**
    * Skip to end of game
-   * CRITICAL FIX: Ensure simulation completes and SAVES first, then update UI if available.
+   * Uses async chunking to prevent UI freeze
    */
   skipToEnd() {
       // Set skipping flag IMMEDIATELY to short-circuit any running animations
@@ -1992,44 +1992,59 @@ class LiveGameViewer {
       this.isPaused = false;
       this.isPlaying = true;
 
-      // SAFETY BREAK: Max 500 loops to prevent freeze, but usually enough for a game
-      let playsSimulated = 0;
+      let totalPlays = 0;
+      const MAX_PLAYS = 1000; // Safety break for infinite loops
 
-      while (!this.gameState.gameComplete && playsSimulated < 500) {
-          playsSimulated++;
-          const state = this.gameState;
-          const offense = state.ballPossession === 'home' ? state.home : state.away;
-          const defense = state.ballPossession === 'home' ? state.away : state.home;
-          const isUserOffense = offense.team.id === this.userTeamId;
+      const processChunk = () => {
+          let playsInChunk = 0;
+          const CHUNK_SIZE = 20; // Process 20 plays per frame
 
-          // Auto-pick for user (AI)
-          const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+          while (!this.gameState.gameComplete && playsInChunk < CHUNK_SIZE && totalPlays < MAX_PLAYS) {
+              playsInChunk++;
+              totalPlays++;
 
-          this.playByPlay.push(play);
-          // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
-          // However, we DO update the state
-          this.updateGameState(play, state);
-          this.handleEndOfQuarter(state);
-      }
+              const state = this.gameState;
+              const offense = state.ballPossession === 'home' ? state.home : state.away;
+              const defense = state.ballPossession === 'home' ? state.away : state.home;
+              const isUserOffense = offense.team.id === this.userTeamId;
 
-      this.isSkipping = false;
+              // Auto-pick for user (AI)
+              const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
 
-      // 1. SAVE FIRST (Persistence)
-      this.finalizeGame();
-
-      // 2. Update UI if it exists (Safe DOM Access)
-      if (this.checkUI()) {
-          this.renderGame();
-          // Scroll log to bottom safely
-          const parent = this.viewMode ? this.container : this.modal;
-          if (parent) {
-             const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
-             if (playLog) playLog.scrollTop = playLog.scrollHeight;
+              this.playByPlay.push(play);
+              // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
+              // However, we DO update the state
+              this.updateGameState(play, state);
+              this.handleEndOfQuarter(state);
           }
-      }
 
-      // 3. Cleanup
-      this.endGame();
+          if (this.gameState.gameComplete || totalPlays >= MAX_PLAYS) {
+              this.isSkipping = false;
+
+              // 1. SAVE FIRST (Persistence)
+              this.finalizeGame();
+
+              // 2. Update UI if it exists (Safe DOM Access)
+              if (this.checkUI()) {
+                  this.renderGame();
+                  // Scroll log to bottom safely
+                  const parent = this.viewMode ? this.container : this.modal;
+                  if (parent) {
+                     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
+                     if (playLog) playLog.scrollTop = playLog.scrollHeight;
+                  }
+              }
+
+              // 3. Cleanup
+              this.endGame();
+          } else {
+              // Schedule next chunk
+              requestAnimationFrame(processChunk);
+          }
+      };
+
+      // Start processing
+      requestAnimationFrame(processChunk);
   }
 
   /**
@@ -2235,7 +2250,14 @@ class LiveGameViewer {
 
         if (result) {
             console.log("Game finalized successfully:", result);
-            // saveState is now called within commitGameResult
+
+            // Explicitly save state since commitGameResult is pure
+            if (window.saveGame) {
+                window.saveGame();
+            } else if (window.saveState) {
+                window.saveState();
+            }
+
             if (window.setStatus) window.setStatus("Game Saved!", "success");
         } else {
             console.error("Failed to finalize game: Result was null");
