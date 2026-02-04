@@ -165,20 +165,30 @@ export async function saveGame(stateToSave) {
     };
 
     try {
-        // Try IndexedDB first (Primary Storage)
+        // 1. Synchronous Backup to LocalStorage (Crucial for beforeunload reliability)
+        // We do this BEFORE await so it completes even if browser unloads
+        let savedToLS = false;
+        try {
+            localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+            savedToLS = true;
+        } catch (e) {
+            // Quota exceeded or other error. We'll rely on IDB.
+            // Don't log error yet, as IDB is primary.
+        }
+
+        // 2. Try IndexedDB (Primary Storage)
         let savedToIDB = false;
         if (window.footballDB) {
             try {
                 await window.footballDB.saveLeague(saveData);
                 savedToIDB = true;
             } catch (idbErr) {
-                console.error("IndexedDB save failed, attempting localStorage fallback...", idbErr);
+                console.error("IndexedDB save failed...", idbErr);
             }
         }
 
-        if (!savedToIDB) {
-            // Fallback to localStorage
-            localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+        if (!savedToIDB && !savedToLS) {
+             throw new Error("Failed to save to both LocalStorage (Quota?) and IndexedDB");
         }
 
         setLastPlayedLeague(leagueName); // Update last played
