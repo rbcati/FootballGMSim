@@ -1,4 +1,5 @@
 import './logger.js';
+import './football-db.js';
 import { renderCoachingStats, renderCoaching } from './coaching.js';
 import { renderMatchupComparison } from './matchup-comparison.js';
 import { renderDiagnostics } from './diagnostics.js';

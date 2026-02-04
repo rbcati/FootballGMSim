@@ -790,7 +790,8 @@ export function hookAutoSave() {
   if (!window.state || window.state.settings?.autoSave !== false) {
     window.addEventListener('beforeunload', function () {
       try {
-        saveState();
+        // Attempt save, but don't await (browser may kill it if async)
+        saveState().catch(e => console.warn('Auto-save interrupted:', e));
       } catch (err) {
         // swallow; user is leaving anyway
       }
