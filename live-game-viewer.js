@@ -680,7 +680,12 @@ class LiveGameViewer {
            if (play.result === 'touchdown' || play.result === 'field_goal') {
                ballEl.classList.add('animate-pulse');
                if (play.result === 'field_goal' && this.fieldEffects) {
-                   this.fieldEffects.spawnParticles(endPct, 'touchdown'); // Reuse gold sparkles
+                   this.fieldEffects.spawnParticles(endPct, 'field_goal');
+               }
+               if (play.result === 'touchdown') {
+                   // Celebration
+                   if (skillMarker) skillMarker.classList.add('celebrate-jump');
+                   if (qbMarker) qbMarker.classList.add('celebrate-spin');
                }
            }
 
@@ -1678,6 +1683,7 @@ class LiveGameViewer {
             setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
+            this.triggerShake(); // Added Juice
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
@@ -1724,7 +1730,7 @@ class LiveGameViewer {
             soundManager.playCheer();
             this.triggerFloatText('BIG PLAY!');
         } else if (play.result === 'field_goal') {
-            soundManager.playScore();
+            soundManager.playFieldGoal();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
             this.triggerVisualFeedback('field-goal-made', 'FIELD GOAL! IT IS GOOD!');
@@ -1737,6 +1743,7 @@ class LiveGameViewer {
             if (userWon) {
                 soundManager.playCheer();
                 soundManager.playHorns();
+                soundManager.playVictory();
                 launchConfetti();
             } else {
                 soundManager.playWhistle();
