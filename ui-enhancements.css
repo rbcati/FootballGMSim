@@ -1906,3 +1906,24 @@ select:disabled {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
+
+/* Player Marker Interactions */
+@keyframes marker-bump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(0.8); } /* Impact compression */
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.marker-collision {
+  animation: marker-bump 0.2s ease-out;
+}
+
+@keyframes marker-jump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  50% { transform: translate(-50%, -50%) scale(1.5); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.marker-catch {
+  animation: marker-jump 0.4s ease-out;
+}
