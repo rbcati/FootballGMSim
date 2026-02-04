@@ -355,4 +355,97 @@ test.describe('Daily Regression Pass', () => {
         const text = await badge.innerText();
         expect(text).toContain('HIGH STAKES');
     });
+
+    test('Legacy & Retirement Verification', async ({ page }) => {
+        // 1. Setup
+        await page.goto('http://localhost:8000');
+        await page.waitForTimeout(1000);
+
+        // Ensure league exists
+        await page.evaluate(async () => {
+             if (!window.state || !window.state.league) {
+                 await window.gameController.startNewLeague();
+                 document.getElementById('onboardStart').click();
+             }
+        });
+        await page.waitForSelector('#hub', { state: 'visible', timeout: 20000 });
+
+        // 2. Verify Retirement System Availability
+        const systemAvailable = await page.evaluate(() => {
+            return typeof window.processRetirements === 'function' &&
+                   typeof window.getRetiredPlayers === 'function';
+        });
+        expect(systemAvailable).toBe(true);
+
+        // 3. Test Retirement Logic & News Generation
+        const newsItemFound = await page.evaluate(() => {
+            const L = window.state.league;
+
+            // Ensure news array exists
+            if (!L.news) L.news = [];
+
+            // Inject a legend who is very old
+            const oldLegend = {
+                id: 'legend_99',
+                name: "Test Legend",
+                pos: "QB",
+                age: 50, // Force retirement
+                ovr: 90,
+                years: 1, // Contract expiring
+                stats: {
+                    career: {
+                        passYd: 60000,
+                        passTD: 500
+                    },
+                    season: {}
+                },
+                legacy: {
+                    superBowls: [2020, 2024]
+                }
+            };
+
+            // Add to user team
+            const userTeam = L.teams[window.state.userTeamId];
+            userTeam.roster.push(oldLegend);
+
+            // Capture initial news count
+            const initialNewsCount = L.news.length;
+
+            // Run retirement processing
+            const result = window.processRetirements(L, L.year);
+
+            // Check if our player retired
+            const retired = result.retired.find(r => r.player.name === "Test Legend");
+
+            if (!retired) return { success: false, message: "Player did not retire" };
+
+            // Check if news was added
+            const newNewsCount = L.news.length;
+            const addedNews = L.news.slice(initialNewsCount);
+            const announcement = addedNews.find(n => typeof n === 'string' && n.includes("Test Legend"));
+
+            return {
+                success: !!announcement,
+                announcement: announcement || null,
+                newsAdded: newNewsCount > initialNewsCount
+            };
+        });
+
+        console.log("Retirement Result:", newsItemFound);
+        expect(newsItemFound.success).toBe(true);
+        expect(newsItemFound.announcement).toContain("Test Legend");
+        expect(newsItemFound.announcement).toContain("60,000 passing yards");
+
+        // 4. Verify Retired Players Retrieval
+        const retrieved = await page.evaluate(() => {
+            const L = window.state.league;
+            if (!L.teams[0].retiredPlayers) L.teams[0].retiredPlayers = [];
+            L.teams[0].retiredPlayers.push({ name: "Manual Retiree", id: 999 });
+            const allRetired = window.getRetiredPlayers(L);
+            return allRetired.find(p => p.name === "Manual Retiree");
+        });
+
+        expect(retrieved).not.toBeUndefined();
+        expect(retrieved.name).toBe("Manual Retiree");
+    });
 });
