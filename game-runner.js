@@ -41,6 +41,9 @@ class GameRunner {
         const gamesToSim = pairings.map(pair => {
             if (pair.bye !== undefined) return { bye: pair.bye };
 
+            // Check if game is already played (fixes duplicate simulation bug)
+            if (pair.played || pair.finalized) return null;
+
             // Ensure we use IDs to find teams if pair.home/away are IDs
             const homeId = typeof pair.home === 'object' ? pair.home.id : pair.home;
             const awayId = typeof pair.away === 'object' ? pair.away.id : pair.away;
