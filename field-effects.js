@@ -34,6 +34,8 @@ export class FieldEffects {
 
         const count = type === 'touchdown' ? 50 :
                       type === 'sack' ? 30 :
+                      type === 'kick' ? 15 :
+                      type === 'catch' ? 10 :
                       type === 'first_down' ? 20 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -72,6 +74,18 @@ export class FieldEffects {
         } else if (type === 'tackle') {
             p.color = '#fff';
             p.decay = 0.03;
+        } else if (type === 'kick') {
+            p.vx = (Math.random() - 0.5) * 8; // Fast burst
+            p.vy = (Math.random() - 0.5) * 8;
+            p.color = '#fff';
+            p.decay = 0.08; // Very fast fade
+            p.size = Math.random() * 4 + 2;
+        } else if (type === 'catch') {
+            p.vx = (Math.random() - 0.5) * 3;
+            p.vy = (Math.random() - 0.5) * 3;
+            p.color = '#87CEEB'; // Sky Blue
+            p.decay = 0.1;
+            p.size = Math.random() * 2 + 1;
         } else if (type === 'first_down') {
             p.x = x + (Math.random() - 0.5) * 5; // Vertical stripish
             p.y = Math.random() * this.canvas.height;

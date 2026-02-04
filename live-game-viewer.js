@@ -257,6 +257,11 @@ class LiveGameViewer {
                `<div class="yard-marker" style="left: ${(10 + (i+1)*10) / 1.2}%">${num}</div>`
            ).join('')}
 
+           <!-- Hash Marks (Every 5 yards) -->
+           ${Array.from({length: 19}, (_, i) => (i + 1) * 5).filter(y => y % 10 !== 0).map(y =>
+               `<div class="field-hash" style="left: ${(10 + y) / 1.2}%"></div>`
+           ).join('')}
+
            <div class="marker-los" style="left: 50%;"></div>
            <div class="marker-first-down" style="left: 58.33%;"></div>
 
@@ -605,6 +610,11 @@ class LiveGameViewer {
           // Pulse if TD
           if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
 
+          // Catch Effect
+          if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover' && this.fieldEffects) {
+               this.fieldEffects.spawnParticles(endPct, 'catch');
+          }
+
       } else if (play.playType.startsWith('run')) {
           // RUN PLAY: Handoff -> Run
 
@@ -654,6 +664,11 @@ class LiveGameViewer {
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
 
+          // Visual Kick Effect
+          if (this.fieldEffects) {
+              this.fieldEffects.spawnParticles(startPct, 'kick');
+          }
+
           await this.animateTrajectory(ballEl, {
               startX: startPct,
               endX: endPct,
@@ -662,7 +677,12 @@ class LiveGameViewer {
               easing: 'easeOutQuad' // Realistic drag
           });
 
-           if (play.result === 'touchdown' || play.result === 'field_goal') ballEl.classList.add('animate-pulse');
+           if (play.result === 'touchdown' || play.result === 'field_goal') {
+               ballEl.classList.add('animate-pulse');
+               if (play.result === 'field_goal' && this.fieldEffects) {
+                   this.fieldEffects.spawnParticles(endPct, 'touchdown'); // Reuse gold sparkles
+               }
+           }
 
       } else {
           // Fallback (Penalty, etc)
@@ -683,6 +703,9 @@ class LiveGameViewer {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
           } else if (play.message && play.message.includes('First down')) {
               this.fieldEffects.spawnParticles(endPct, 'first_down');
+          } else if (!['field_goal', 'punt', 'field_goal_miss', 'incomplete'].includes(play.result) && !play.playType.includes('kick') && !play.playType.includes('punt')) {
+              // Standard Tackle
+              this.fieldEffects.spawnParticles(endPct, 'tackle');
           }
       }
 
@@ -1704,7 +1727,7 @@ class LiveGameViewer {
             soundManager.playScore();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
-            this.triggerVisualFeedback('field-goal-made', 'IT IS GOOD!');
+            this.triggerVisualFeedback('field-goal-made', 'FIELD GOAL! IT IS GOOD!');
         } else if (play.playType === 'punt') {
             soundManager.playKick();
             this.triggerVisualFeedback('punt', 'PUNT');
