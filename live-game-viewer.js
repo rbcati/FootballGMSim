@@ -393,6 +393,7 @@ class LiveGameViewer {
           const endX = options.endX;
           const duration = options.duration || 1000;
           const arcHeight = options.arcHeight || 0;
+          const shouldRotate = options.rotate || false;
 
           const startTime = performance.now();
 
@@ -448,15 +449,26 @@ class LiveGameViewer {
               element.style.left = `${currentX}%`;
               if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
-              // Y Position (Arc)
-              if (arcHeight) {
-                  // Parabola: y = 4 * h * x * (1 - x)
-                  // We want negative Y (up)
-                  const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
-                  element.style.transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+              // Y Position (Arc) & Rotation
+              if (arcHeight || shouldRotate) {
+                  let transform = 'translate(-50%, -50%)';
 
-                  if (shadowEl) {
-                       // Shadow Effect
+                  // Arc logic
+                  if (arcHeight) {
+                      // Parabola: y = 4 * h * x * (1 - x)
+                      const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
+                      transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+                  }
+
+                  // Rotation logic
+                  if (shouldRotate) {
+                      transform += ` rotate(${easeProgress * 720}deg)`;
+                  }
+
+                  element.style.transform = transform;
+
+                  // Shadow Effect (only if arc)
+                  if (arcHeight && shadowEl) {
                        const peakFactor = 4 * easeProgress * (1 - easeProgress);
                        const scale = 1 - (peakFactor * 0.3);
                        const opacity = 1 - (peakFactor * 0.4);
@@ -469,7 +481,7 @@ class LiveGameViewer {
                   requestAnimationFrame(animate);
               } else {
                   element.style.left = `${endX}%`;
-                  if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
+                  if (arcHeight || shouldRotate) element.style.transform = `translate(-50%, -50%)`;
                   if (shadowEl) {
                       shadowEl.style.left = `${endX}%`;
                       shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
@@ -604,15 +616,21 @@ class LiveGameViewer {
               endX: endPct,
               duration: throwDuration,
               arcHeight: 25, // Nice arc
-              easing: 'easeOutQuad' // Slight drag
+              easing: 'easeOutQuad', // Slight drag
+              rotate: true
           });
 
           // Pulse if TD
           if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
 
           // Catch Effect
-          if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover' && this.fieldEffects) {
-               this.fieldEffects.spawnParticles(endPct, 'catch');
+          if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
+               if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
+               // Marker Animation
+               if (skillMarker) {
+                   skillMarker.classList.add('marker-catch');
+                   setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
+               }
           }
 
       } else if (play.playType.startsWith('run')) {
@@ -654,6 +672,11 @@ class LiveGameViewer {
           await Promise.all([pRun, pSkill]);
 
           if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+          else if (skillMarker) {
+              // Collision/Tackle
+              skillMarker.classList.add('marker-collision');
+              setTimeout(() => skillMarker.classList.remove('marker-collision'), 300);
+          }
 
       } else if (play.playType === 'punt' || play.playType === 'field_goal') {
           // KICK
@@ -674,7 +697,8 @@ class LiveGameViewer {
               endX: endPct,
               duration: kickDuration,
               arcHeight: arc,
-              easing: 'easeOutQuad' // Realistic drag
+              easing: 'easeOutQuad', // Realistic drag
+              rotate: true
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {
@@ -1852,6 +1876,33 @@ class LiveGameViewer {
   }
 
   /**
+   * Animate a number from start to end
+   */
+  animateNumber(element, start, end, duration = 1000) {
+      if (start === end || !element) return;
+      const range = end - start;
+      const startTime = performance.now();
+
+      const step = (currentTime) => {
+          const elapsed = currentTime - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          // EaseOutCubic
+          const ease = 1 - Math.pow(1 - progress, 3);
+
+          const current = Math.floor(start + (range * ease));
+          element.textContent = current;
+
+          if (progress < 1) {
+              requestAnimationFrame(step);
+          } else {
+              element.textContent = end;
+          }
+      };
+
+      requestAnimationFrame(step);
+  }
+
+  /**
    * Update scoreboard display
    */
   updateScoreboard() {
@@ -1868,13 +1919,15 @@ class LiveGameViewer {
     // Detect score change
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
-    this.lastHomeScore = home.score;
-    this.lastAwayScore = away.score;
+
+    // Use old score as starting point for animation
+    const displayHome = homeChanged ? this.lastHomeScore : home.score;
+    const displayAway = awayChanged ? this.lastAwayScore : away.score;
 
     scoreboard.innerHTML = `
       <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score" id="scoreAway">${away.score}</div>
+        <div class="team-score" id="scoreAway">${displayAway}</div>
       </div>
       <div class="score-info">
         <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
@@ -1884,7 +1937,7 @@ class LiveGameViewer {
       </div>
       <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score" id="scoreHome">${home.score}</div>
+        <div class="team-score" id="scoreHome">${displayHome}</div>
       </div>
     `;
 
@@ -1895,6 +1948,7 @@ class LiveGameViewer {
             el.classList.remove('pulse-score');
             void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score');
+            this.animateNumber(el, this.lastHomeScore, home.score, 1500);
         }
     }
     if (awayChanged) {
@@ -1903,8 +1957,12 @@ class LiveGameViewer {
             el.classList.remove('pulse-score');
             void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score');
+            this.animateNumber(el, this.lastAwayScore, away.score, 1500);
         }
     }
+
+    this.lastHomeScore = home.score;
+    this.lastAwayScore = away.score;
   }
 
 
