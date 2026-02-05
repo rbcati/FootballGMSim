@@ -22,8 +22,8 @@ export function validateLeagueData(league) {
 
 export function validateGame(game) {
   if (!game) return false;
-  if (!game.homeTeam && !game.home) return false;
-  if (!game.awayTeam && !game.away) return false;
+  if (game.homeTeam == null && game.home == null) return false;
+  if (game.awayTeam == null && game.away == null) return false;
   if (typeof game.week !== 'number') return false;
   return true;
 }
