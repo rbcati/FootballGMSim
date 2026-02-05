@@ -234,7 +234,7 @@ export function processStaffPoaching(league) {
             const tenure = team.staff.headCoach.tenure || 1;
 
             // Fire logic: < 4 wins?
-            if (wins < 4 && Math.random() < 0.3) {
+            if (wins < 4 && Utils.random() < 0.3) {
                 console.log(`🔥 ${team.name} has fired HC ${team.staff.headCoach.name} after a ${wins}-win season.`);
                 if (league.news) league.news.push(`${team.name} has fired Head Coach ${team.staff.headCoach.name}.`);
                 team.staff.headCoach = null; // Create vacancy
@@ -330,7 +330,7 @@ function getSecureRandom() {
     window.crypto.getRandomValues(array);
     return array[0] / (0xFFFFFFFF + 1);
   } else {
-    return Math.random();
+    return Utils.random();
   }
 }
 

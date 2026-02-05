@@ -124,7 +124,7 @@
     retirementChance = Math.max(0, Math.min(1, retirementChance));
 
     // Roll for retirement
-    return U && U.rand ? (U.rand(1, 100) / 100) <= retirementChance : Math.random() <= retirementChance;
+    return U && U.rand ? (U.rand(1, 100) / 100) <= retirementChance : (window.Utils?.random || Math.random)() <= retirementChance;
   }
 
   /**

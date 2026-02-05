@@ -59,7 +59,8 @@ function tp_teamLabel(team, L) {
 }
 function tp_randomChoice(arr) {
   if (!Array.isArray(arr) || arr.length === 0) return null;
-  return arr[Math.floor(Math.random() * arr.length)];
+  const rng = window.Utils?.random || Math.random;
+  return arr[Math.floor(rng() * arr.length)];
 }
 function tp_buildPlayerAsset(player) {
   return { kind: 'player', playerId: player.id };
@@ -113,19 +114,20 @@ function tp_generateProposalForPair(L, cpuId, userId) {
   const userRoster = (userTeam.roster || []).filter(p => p.ovr >= 60);
   if (cpuRoster.length === 0 || userRoster.length === 0) return null;
   // CPU offers 1–2 players
+  const rng = window.Utils?.random || Math.random;
   const cpuOfferCount = Math.min(
     MAX_PLAYERS_PER_SIDE,
-    1 + Math.floor(Math.random() * 2),
+    1 + Math.floor(rng() * 2),
     cpuRoster.length
   );
-  const cpuPlayers = [...cpuRoster].sort(() => Math.random() - 0.5).slice(0, cpuOfferCount);
+  const cpuPlayers = [...cpuRoster].sort(() => rng() - 0.5).slice(0, cpuOfferCount);
   // User sends back 1–2 players
   const userOfferCount = Math.min(
     MAX_PLAYERS_PER_SIDE,
-    1 + Math.floor(Math.random() * 2),
+    1 + Math.floor(rng() * 2),
     userRoster.length
   );
-  const userPlayers = [...userRoster].sort(() => Math.random() - 0.5).slice(0, userOfferCount);
+  const userPlayers = [...userRoster].sort(() => rng() - 0.5).slice(0, userOfferCount);
   const cpuAssets = cpuPlayers.map(tp_buildPlayerAsset);
   const userAssets = userPlayers.map(tp_buildPlayerAsset);
   if (typeof window.evaluateTrade !== 'function') {
@@ -146,7 +148,7 @@ function tp_generateProposalForPair(L, cpuId, userId) {
   const cpuOvrAfter  = tp_previewTeamAfterTrade(cpuTeam, userAssets, cpuAssets, L);
   const userOvrAfter = tp_previewTeamAfterTrade(userTeam, cpuAssets, userAssets, L);
   return {
-    id: `cpu-${cpuId}-to-${userId}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`,
+    id: `cpu-${cpuId}-to-${userId}-${Date.now()}-${Math.floor((window.Utils?.random || Math.random)() * 1e6)}`,
     fromTeamId: cpuId,
     toTeamId: userId,
     fromAssets: cpuAssets,
@@ -179,7 +181,7 @@ export function generateAITradeProposals() {
     .map((t, idx) => ({ team: t, idx }))
     .filter(t => t.team && t.idx !== userId);
   // shuffle CPU teams
-  candidates.sort(() => Math.random() - 0.5);
+  candidates.sort(() => (window.Utils?.random || Math.random)() - 0.5);
   for (const { idx: cpuId } of candidates) {
     if (proposals.length >= MAX_TRADE_PROPOSALS) break;
     const proposal = tp_generateProposalForPair(L, cpuId, userId);

@@ -1050,7 +1050,7 @@ class LiveGameViewer {
     };
 
     // Simulate play result
-    const success = Math.random() < successChance;
+    const success = U.random() < successChance;
     let yards = 0;
     let momentumChange = 0;
 
@@ -1076,7 +1076,7 @@ class LiveGameViewer {
 
       if (success) {
         yards = Math.round(U.rand(2, 8) + runBonus + defModRun);
-        if (Math.random() < (0.1 * variance + defModBigPlay)) {
+        if (U.random() < (0.1 * variance + defModBigPlay)) {
             yards = U.rand(10, 25); // Big play
             momentumChange += 5;
             play.result = 'big_play';
@@ -1084,7 +1084,7 @@ class LiveGameViewer {
       } else {
         yards = U.rand(-2, 3);
         // Blitz TFL chance
-        if (Math.random() < defModSack * 0.5) {
+        if (U.random() < defModSack * 0.5) {
             yards -= 2;
             momentumChange -= 2;
         }
@@ -1100,7 +1100,7 @@ class LiveGameViewer {
     } else if (baseType === 'pass') {
       // Pick Target
       const targets = [...offense.players.wrs, ...offense.players.tes];
-      const target = targets.length > 0 ? targets[Math.floor(Math.random() * targets.length)] : null;
+      const target = targets.length > 0 ? targets[Math.floor(U.random() * targets.length)] : null;
       player = target;
       const qb = offense.qb;
 
@@ -1124,7 +1124,7 @@ class LiveGameViewer {
       }
 
       // Check for Sack
-      if (Math.random() < (0.05 + defModSack)) {
+      if (U.random() < (0.05 + defModSack)) {
           yards = -U.rand(5, 10);
           play.result = 'sack';
           play.message = 'SACKED!';
@@ -1134,19 +1134,19 @@ class LiveGameViewer {
              const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
              qbStats.rushAtt++;
           }
-      } else if (Math.random() < (successChance + completeBonus)) {
+      } else if (U.random() < (successChance + completeBonus)) {
         // Completion
         yards = Math.max(1, Math.round(U.rand(5, 15) + yardBonus + defModPass));
 
         // Big play
-        if (Math.random() < (bigPlayChance + defModBigPlay)) {
+        if (U.random() < (bigPlayChance + defModBigPlay)) {
             yards = U.rand(20, 50);
             momentumChange += 10;
             play.result = 'big_play';
         }
 
         // Interception
-        if (Math.random() < (intChance + defModInt)) {
+        if (U.random() < (intChance + defModInt)) {
           play.result = 'turnover'; // Standardize to turnover
           yards = 0;
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
@@ -1185,7 +1185,7 @@ class LiveGameViewer {
       const distance = 100 - gameState[gameState.ballPossession].yardLine;
       const successChance = Math.max(0.3, Math.min(0.95, 0.9 - (distance - 20) / 30));
       
-      if (Math.random() < successChance * (kickStrength / 100)) {
+      if (U.random() < successChance * (kickStrength / 100)) {
         play.result = 'field_goal';
         play.message = `Field goal is GOOD! (${distance} yards)`;
         offense.score += 3;
@@ -1377,24 +1377,24 @@ class LiveGameViewer {
         return 'punt';
       } else {
         // Go for it on 4th and short
-        return distance <= 3 ? (Math.random() < 0.5 ? 'run' : 'pass') : 'punt';
+        return distance <= 3 ? ((window.Utils?.random || Math.random)() < 0.5 ? 'run' : 'pass') : 'punt';
       }
     }
 
     // Normal play selection
     let type = 'run';
     if (down === 1 || down === 2) {
-      type = Math.random() < 0.6 ? 'pass' : 'run';
+      type = (window.Utils?.random || Math.random)() < 0.6 ? 'pass' : 'run';
     } else {
       // 3rd down - more likely to pass
-      type = Math.random() < 0.7 ? 'pass' : 'run';
+      type = (window.Utils?.random || Math.random)() < 0.7 ? 'pass' : 'run';
     }
 
     // Add subtypes
     if (type === 'run') {
-        return Math.random() < 0.6 ? 'run_inside' : 'run_outside';
+        return (window.Utils?.random || Math.random)() < 0.6 ? 'run_inside' : 'run_outside';
     } else {
-        const r = Math.random();
+        const r = (window.Utils?.random || Math.random)();
         if (r < 0.3) return 'pass_short';
         if (r < 0.7) return 'pass_medium';
         return 'pass_long';
@@ -1494,7 +1494,7 @@ class LiveGameViewer {
           gameState.isOvertime = true;
 
           // Coin Toss
-          const winner = Math.random() < 0.5 ? 'home' : 'away';
+          const winner = (window.Utils?.random || Math.random)() < 0.5 ? 'home' : 'away';
           gameState.ballPossession = winner;
           gameState.otFirstPossession = true;
 

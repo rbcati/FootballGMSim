@@ -900,44 +900,84 @@ export function simGameStats(home, away, options = {}) {
         if (verbose) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
     }
 
-    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
-    const BASE_SCORE_MIN = C.BASE_SCORE_MIN || 10;
-    const BASE_SCORE_MAX = C.BASE_SCORE_MAX || 35;
-    let SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+    // =================================================================
+    // REALISTIC NFL SCORING ENGINE
+    // Uses drive-based simulation to produce authentic football scores.
+    // Average NFL game: ~22 points per team, range 3-45 typical.
+    // Scores naturally land on football numbers (3,6,7,10,13,14,17,20,21,24,27,28,31...)
+    // =================================================================
 
-    // Check Rivalry Context for Variance
-    // Higher rivalry score = higher variance (more upsets, crazier games)
+    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
+
+    // Rivalry variance boost
+    let varianceBoost = 0;
     if (home.rivalries && away.rivalries) {
         const homeRiv = home.rivalries[away.id]?.score || 0;
         const awayRiv = away.rivalries[home.id]?.score || 0;
         const intensity = Math.max(homeRiv, awayRiv);
-
-        if (intensity > 50) {
-             SCORE_VARIANCE += 10;
-             if (verbose) console.log(`[SIM-DEBUG] Rivalry Game! Intensity: ${intensity}, Variance boosted.`);
-        } else if (intensity > 25) {
-             SCORE_VARIANCE += 5;
-        }
+        if (intensity > 50) varianceBoost = 3;
+        else if (intensity > 25) varianceBoost = 1.5;
     }
-
-    // High Stakes Variance Boost
-    if (options.stakes && options.stakes > 75) {
-        SCORE_VARIANCE += 15;
-        if (verbose) console.log(`[SIM-DEBUG] High Stakes Game! Stakes: ${options.stakes}, Variance boosted significantly.`);
-    }
+    if (options.stakes && options.stakes > 75) varianceBoost += 2;
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
 
-    let homeScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) + Math.round(strengthDiff / 5);
-    let awayScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) - Math.round(strengthDiff / 5);
+    /**
+     * Simulate drives for one team to generate a realistic score.
+     * @param {number} offStr - Offensive strength (team's overall)
+     * @param {number} defStr - Opposing defense strength
+     * @param {number} advantage - Net strength advantage (positive = favored)
+     * @param {Object} mods - Coaching/strategy modifiers
+     * @returns {number} Final score
+     */
+    const simulateDrives = (offStr, defStr, advantage, mods) => {
+        // NFL teams average ~12 possessions per game
+        const numDrives = U.rand(10, 14);
+        let score = 0;
 
-    // Apply Variance from Mods
-    const homeVar = SCORE_VARIANCE * (homeMods.variance || 1.0);
-    const awayVar = SCORE_VARIANCE * (awayMods.variance || 1.0);
+        // Base scoring probability calibrated to ~22 pts/game avg
+        // offStr/defStr are roughly 50-90 range
+        const offFactor = (offStr - 50) / 40; // 0.0 for 50 OVR, 1.0 for 90 OVR
+        const defFactor = (defStr - 50) / 40;
+        const netQuality = offFactor - defFactor * 0.7 + (advantage / 80);
 
-    homeScore += U.rand(0, homeVar);
-    awayScore += U.rand(0, awayVar);
+        for (let d = 0; d < numDrives; d++) {
+            // Drive outcome probabilities (NFL averages: ~35% score, ~21% TD, ~14% FG)
+            const driveRoll = U.random();
 
+            // Apply variance boost and modifier
+            const varianceMod = (mods.variance || 1.0);
+            const upsetChance = varianceBoost * 0.015;
+
+            // Base TD probability: 15-30% depending on quality
+            let tdProb = U.clamp(0.18 + netQuality * 0.12 + upsetChance, 0.08, 0.35);
+            // Base FG probability: 10-18%
+            let fgProb = U.clamp(0.14 + netQuality * 0.04, 0.08, 0.22);
+
+            // Strategy mods
+            if (mods.passVolume && mods.passVolume > 1.1) tdProb += 0.03; // Aggressive passing = more TDs but riskier
+            if (mods.runVolume && mods.runVolume > 1.1) { fgProb += 0.02; tdProb -= 0.01; } // Ball control = more FGs
+            if (mods.variance && mods.variance > 1.0) { tdProb += 0.02; } // Aggressive risk = more boom
+
+            if (driveRoll < tdProb) {
+                // Touchdown (6 pts + XP attempt)
+                const xpRoll = U.random();
+                if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
+                else if (xpRoll < 0.97) score += 6; // Missed XP
+                else score += 8;                     // 2-point conversion
+            } else if (driveRoll < tdProb + fgProb) {
+                score += 3; // Field goal
+            }
+            // Otherwise: punt, turnover, turnover on downs (no points)
+        }
+
+        return score;
+    };
+
+    let homeScore = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
+    let awayScore = simulateDrives(awayStrength, homeStrength, -strengthDiff, awayMods);
+
+    // Ensure scores don't go negative (shouldn't happen with drive sim, but safety)
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
@@ -949,7 +989,7 @@ export function simGameStats(home, away, options = {}) {
         const allowTies = !isPlayoff && (options.allowTies !== false);
 
         let gameOver = false;
-        let possession = Math.random() < 0.5 ? 'home' : 'away';
+        let possession = U.random() < 0.5 ? 'home' : 'away';
         let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
         let possessions = 0;
 
@@ -1280,7 +1320,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 
     // 5. Create Result Object
     const resultObj = {
-        id: `g_final_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `g_final_${Date.now()}_${U.id()}`,
         home: homeTeamId,
         away: awayTeamId,
         scoreHome: homeScore,
@@ -1424,8 +1464,7 @@ export function simulateBatch(games, options = {}) {
 
                 if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
                     if (verbose) console.warn(`simulateMatchup failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
-                    const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-                    gameScores = { homeScore: r(10, 42), awayScore: r(7, 35) };
+                    gameScores = { homeScore: U.rand(10, 35), awayScore: U.rand(7, 28) };
                 }
 
                 sH = gameScores.homeScore;
