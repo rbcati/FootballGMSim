@@ -1700,7 +1700,7 @@ class LiveGameViewer {
     // Update Combo State
     let comboIncreased = false;
     let comboBroken = false;
-    if (this.userTeamId) {
+    if (this.userTeamId != null) {
         // Only track combo if it relates to user
         const isUserOffense = play.offense === this.userTeamId;
         const isUserDefense = play.defense === this.userTeamId;
@@ -2273,7 +2273,7 @@ class LiveGameViewer {
 
     // Enhanced Game Over Screen
     if (this.checkUI() && !this.isSkipping) {
-        const userTeam = this.userTeamId ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
+        const userTeam = this.userTeamId != null ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
 
         // Only show overlay if user is playing
         if (userTeam) {

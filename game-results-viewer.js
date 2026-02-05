@@ -320,7 +320,7 @@ class GameResultsViewer {
         for (const weekResults of Object.values(league.resultsByWeek)) {
             if (Array.isArray(weekResults)) {
                 for (const result of weekResults) {
-                    if (result.home && result.away) {
+                    if (result.home != null && result.away != null) {
                         const homeTeamName = this.getTeamNameById(league, result.home);
                         const awayTeamName = this.getTeamNameById(league, result.away);
                         

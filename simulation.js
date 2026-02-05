@@ -680,6 +680,53 @@ function handleSimulationComplete(payload) {
         });
     }
 
+    // 1b. Safety Net: Reconstruct records for any teams the delta missed
+    // This protects against bugs (e.g., team ID 0 being falsy-skipped in worker)
+    if (results && results.length > 0) {
+        const teamsInDelta = new Set(updatedTeams ? updatedTeams.map(t => t.id) : []);
+        const teamsInResults = new Set();
+        results.forEach(res => {
+            if (res.home !== undefined && res.home !== null) teamsInResults.add(res.home);
+            if (res.away !== undefined && res.away !== null) teamsInResults.add(res.away);
+        });
+
+        teamsInResults.forEach(teamId => {
+            if (!teamsInDelta.has(teamId)) {
+                console.warn(`[SIM-SAFETY] Team ${teamId} played but was missing from worker delta. Reconstructing record from results.`);
+                const team = L.teams.find(t => t.id === teamId);
+                if (team) {
+                    results.forEach(res => {
+                        let isHome = res.home === teamId;
+                        let isAway = res.away === teamId;
+                        if (!isHome && !isAway) return;
+
+                        const teamScore = isHome ? res.scoreHome : res.scoreAway;
+                        const oppScore = isHome ? res.scoreAway : res.scoreHome;
+
+                        if (teamScore > oppScore) {
+                            team.wins = (team.wins || 0) + 1;
+                            if (team.record) team.record.w = (team.record.w || 0) + 1;
+                        } else if (teamScore < oppScore) {
+                            team.losses = (team.losses || 0) + 1;
+                            if (team.record) team.record.l = (team.record.l || 0) + 1;
+                        } else {
+                            team.ties = (team.ties || 0) + 1;
+                            if (team.record) team.record.t = (team.record.t || 0) + 1;
+                        }
+                        team.ptsFor = (team.ptsFor || 0) + teamScore;
+                        team.ptsAgainst = (team.ptsAgainst || 0) + oppScore;
+                        team.pointsFor = (team.pointsFor || 0) + teamScore;
+                        team.pointsAgainst = (team.pointsAgainst || 0) + oppScore;
+                        if (team.record) {
+                            team.record.pf = (team.record.pf || 0) + teamScore;
+                            team.record.pa = (team.record.pa || 0) + oppScore;
+                        }
+                    });
+                }
+            }
+        });
+    }
+
     // 2. Merge Results
     const weekIndex = (L.week || 1) - 1;
     if (!L.resultsByWeek) L.resultsByWeek = {};
