@@ -673,10 +673,44 @@ function handleSimulationComplete(payload) {
         updatedTeams.forEach(updatedTeam => {
             const index = L.teams.findIndex(t => t.id === updatedTeam.id);
             if (index !== -1) {
-                // Merge properties carefully or replace?
-                // Replacing is safer for deeply nested stats that changed
                 L.teams[index] = updatedTeam;
             }
+        });
+    }
+
+    // 1b. Safety net: if delta missed teams, apply W/L from results directly
+    if (results && results.length > 0) {
+        const mergedIds = new Set((updatedTeams || []).map(t => t.id));
+        results.forEach(res => {
+            if (res.bye) return;
+            const homeId = res.home;
+            const awayId = res.away;
+            if (homeId === undefined || awayId === undefined) return;
+
+            const applyIfMissing = (teamId, won, lost, pf, pa) => {
+                if (mergedIds.has(teamId)) return; // already merged from worker
+                const team = L.teams.find(t => t.id === teamId);
+                if (!team) return;
+                team.wins = (team.wins || 0) + (won ? 1 : 0);
+                team.losses = (team.losses || 0) + (lost ? 1 : 0);
+                team.ties = (team.ties || 0) + ((!won && !lost) ? 1 : 0);
+                team.ptsFor = (team.ptsFor || 0) + pf;
+                team.ptsAgainst = (team.ptsAgainst || 0) + pa;
+                team.pointsFor = team.ptsFor;
+                team.pointsAgainst = team.ptsAgainst;
+                if (!team.record) team.record = { w: 0, l: 0, t: 0, pf: 0, pa: 0 };
+                team.record.w = team.wins;
+                team.record.l = team.losses;
+                team.record.t = team.ties;
+                team.record.pf = team.ptsFor;
+                team.record.pa = team.ptsAgainst;
+                mergedIds.add(teamId);
+            };
+
+            const homeWon = res.scoreHome > res.scoreAway;
+            const awayWon = res.scoreAway > res.scoreHome;
+            applyIfMissing(homeId, homeWon, awayWon, res.scoreHome, res.scoreAway);
+            applyIfMissing(awayId, awayWon, homeWon, res.scoreAway, res.scoreHome);
         });
     }
 
