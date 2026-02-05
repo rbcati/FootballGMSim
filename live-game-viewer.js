@@ -236,7 +236,12 @@ class LiveGameViewer {
       if (!container) return;
 
       // Initialize Field Effects overlay
-      if (!this.fieldEffects || this.fieldEffects.container !== container) {
+      if (this.fieldEffects && this.fieldEffects.container !== container) {
+          this.fieldEffects.destroy();
+          this.fieldEffects = null;
+      }
+
+      if (!this.fieldEffects) {
           this.fieldEffects = new FieldEffects(container);
       } else {
           this.fieldEffects.resize();
@@ -1927,7 +1932,7 @@ class LiveGameViewer {
     scoreboard.innerHTML = `
       <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
         <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score" id="scoreAway">${displayAway}</div>
+        <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
       </div>
       <div class="score-info">
         <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
@@ -1937,7 +1942,7 @@ class LiveGameViewer {
       </div>
       <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
         <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score" id="scoreHome">${displayHome}</div>
+        <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
       </div>
     `;
 
@@ -1946,6 +1951,7 @@ class LiveGameViewer {
         const el = scoreboard.querySelector('#scoreHome');
         if (el) {
             el.classList.remove('pulse-score');
+            if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
             void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score');
             this.animateNumber(el, this.lastHomeScore, home.score, 1500);
@@ -1955,6 +1961,7 @@ class LiveGameViewer {
         const el = scoreboard.querySelector('#scoreAway');
         if (el) {
             el.classList.remove('pulse-score');
+            if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
             void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score');
             this.animateNumber(el, this.lastAwayScore, away.score, 1500);
@@ -2811,6 +2818,11 @@ class LiveGameViewer {
     if (this.container) {
         this.container.innerHTML = '';
         this.container = null;
+    }
+
+    if (this.fieldEffects) {
+        this.fieldEffects.destroy();
+        this.fieldEffects = null;
     }
 
     this.gameState = null;
