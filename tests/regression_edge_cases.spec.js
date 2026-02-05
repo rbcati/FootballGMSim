@@ -4,7 +4,7 @@ test.describe('Edge Cases & Performance', () => {
 
     test('Rapid Click on Advance Week (Debounce Check)', async ({ page }) => {
         // 1. Setup
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league exists
@@ -46,7 +46,7 @@ test.describe('Edge Cases & Performance', () => {
     });
 
     test('Refresh During Live Game', async ({ page }) => {
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league
@@ -92,7 +92,7 @@ test.describe('Edge Cases & Performance', () => {
 
     test('Mobile Interactions', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
          // Ensure league
@@ -137,7 +137,7 @@ test.describe('Edge Cases & Performance', () => {
     });
 
     test('Large Score UI Check', async ({ page }) => {
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league
