@@ -67,13 +67,13 @@
     }
     
     // Check if injury occurs
-    if (Math.random() > injuryChance) {
+    if (U.random() > injuryChance) {
       return null;
     }
     
     // Determine severity
     let severity = 'minor';
-    const roll = Math.random();
+    const roll = U.random();
     if (roll < 0.05) { // 5% major
       severity = 'major';
     } else if (roll < 0.25) { // 20% moderate

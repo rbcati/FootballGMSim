@@ -61,8 +61,8 @@ function ensureFA() {
     // Create realistic overall rating distribution
     // Most players should be in the 60-75 range, fewer in 75-85, very few 85+
     let overall;
-    const rand = Math.random();
-    
+    const rand = (window.Utils?.random || Math.random)();
+
     if (rand < 0.60) {
       // 60% of players: 60-75 overall (depth players)
       overall = U.rand(60, 75);
@@ -145,8 +145,8 @@ function generateBasicName() {
     return U.choice(firstNames) + ' ' + U.choice(lastNames);
   }
   
-  return firstNames[Math.floor(Math.random() * firstNames.length)] + ' ' + 
-         lastNames[Math.floor(Math.random() * lastNames.length)];
+  return firstNames[Math.floor((window.Utils?.random || Math.random)() * firstNames.length)] + ' ' +
+         lastNames[Math.floor((window.Utils?.random || Math.random)() * lastNames.length)];
 }
 
 /**
@@ -895,7 +895,7 @@ function simulatePlayerDecision(player, offeredYears, offeredBaseSalary, offered
   // Clamp between 0 and 1
   acceptanceRate = Math.max(0, Math.min(1, acceptanceRate));
   
-  return Math.random() < acceptanceRate;
+  return (window.Utils?.random || Math.random)() < acceptanceRate;
 }
 
 function signFreeAgentWithContract(playerIndex, years, baseSalary, signingBonus) {
@@ -1067,6 +1067,138 @@ function updateCapSidebar() {
   if (seasonEl) seasonEl.textContent = L.season || '1';
 }
 
+// =============================================================================
+// AI FREE AGENCY - CPU teams compete for free agents
+// Creates bidding wars and market dynamics for replayability
+// =============================================================================
+
+/**
+ * Simulate CPU free agency signings each week during offseason.
+ * Called during offseason progression to create a dynamic FA market.
+ * Top free agents get snatched up by other teams, creating urgency for the user.
+ */
+function simulateCpuFreeAgencyRound(league) {
+    if (!league || !league.teams) return;
+    const U = window.Utils;
+    if (!U) return;
+
+    const freeAgents = window.state?.freeAgents || [];
+    if (freeAgents.length === 0) return;
+
+    const userTeamId = window.state?.userTeamId ?? 0;
+    const signings = [];
+
+    // Each CPU team has a chance to sign a free agent each round
+    league.teams.forEach((team, teamId) => {
+        if (teamId === userTeamId) return; // Skip user team
+        if (!team || !team.roster) return;
+        if (team.roster.length >= 53) return; // Roster full
+
+        // 25% chance per team per round to be active in FA
+        if (U.random() > 0.25) return;
+
+        // Analyze team needs
+        const positionCounts = {};
+        team.roster.forEach(p => {
+            positionCounts[p.pos] = (positionCounts[p.pos] || 0) + 1;
+        });
+
+        const idealCounts = {
+            QB: 3, RB: 4, WR: 6, TE: 3, OL: 8,
+            DL: 6, LB: 6, CB: 5, S: 4, K: 1, P: 1
+        };
+
+        const needs = [];
+        Object.keys(idealCounts).forEach(pos => {
+            if ((positionCounts[pos] || 0) < idealCounts[pos]) {
+                needs.push(pos);
+            }
+        });
+
+        if (needs.length === 0) return;
+
+        // Find best available player at a needed position
+        const capRoom = team.capRoom || 20;
+        const candidates = freeAgents.filter(p => {
+            if (!needs.includes(p.pos)) return false;
+            const capHit = (p.baseAnnual || 0);
+            return capHit <= capRoom * 0.5; // Don't spend more than 50% of cap on one player
+        });
+
+        if (candidates.length === 0) return;
+
+        // Sort by OVR and pick from top 3 (with some randomness)
+        candidates.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+        const pickIndex = U.rand(0, Math.min(2, candidates.length - 1));
+        const target = candidates[pickIndex];
+
+        if (!target) return;
+
+        // Sign the player
+        const faIndex = freeAgents.indexOf(target);
+        if (faIndex === -1) return;
+
+        target.teamId = teamId;
+        target.team = team.abbr || team.name;
+        target.years = target.yearsTotal || 2;
+        team.roster.push(target);
+        freeAgents.splice(faIndex, 1);
+
+        // Recalculate cap
+        if (window.recalcCap) window.recalcCap(league, team);
+
+        signings.push({
+            teamName: team.name || team.abbr,
+            playerName: target.name,
+            pos: target.pos,
+            ovr: target.ovr
+        });
+    });
+
+    // Generate news for significant signings
+    if (signings.length > 0 && league.news) {
+        signings.forEach(signing => {
+            if (signing.ovr >= 78) {
+                league.news.push({
+                    type: 'freeagency',
+                    headline: `${signing.teamName} signs ${signing.playerName} (${signing.pos})`,
+                    story: `The ${signing.teamName} have signed ${signing.pos} ${signing.playerName} (${signing.ovr} OVR) in free agency.`,
+                    week: league.week,
+                    year: league.year
+                });
+            }
+        });
+    }
+
+    return signings;
+}
+
+/**
+ * Get market interest for a free agent (how many teams want them).
+ * Higher interest = harder to negotiate discounts.
+ */
+function getMarketInterest(player) {
+    if (!player) return 0;
+    const ovr = player.ovr || 60;
+    const age = player.age || 28;
+
+    let interest = 0;
+    if (ovr >= 85) interest = 8;
+    else if (ovr >= 80) interest = 5;
+    else if (ovr >= 75) interest = 3;
+    else if (ovr >= 70) interest = 2;
+    else interest = 1;
+
+    // Young players have more interest
+    if (age <= 26) interest += 2;
+    else if (age >= 30) interest -= 1;
+
+    // Premium positions have more interest
+    if (['QB', 'CB', 'DL'].includes(player.pos)) interest += 1;
+
+    return Math.max(1, interest);
+}
+
 // Make functions globally available
 window.ensureFA = ensureFA;
 window.updateCapSidebar = updateCapSidebar;
@@ -1081,3 +1213,5 @@ window.submitContractOffer = submitContractOffer;
 window.updateCapSidebar = updateCapSidebar;
 window.signFreeAgentWithContract = signFreeAgentWithContract;
 window.signPlayer = signFreeAgent;
+window.simulateCpuFreeAgencyRound = simulateCpuFreeAgencyRound;
+window.getMarketInterest = getMarketInterest;

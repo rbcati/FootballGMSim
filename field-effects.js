@@ -67,66 +67,66 @@ export class FieldEffects {
         const p = {
             x: x,
             y: y,
-            vx: (Math.random() - 0.5) * 4,
-            vy: (Math.random() - 0.5) * 4,
+            vx: ((window.Utils?.random || Math.random)() - 0.5) * 4,
+            vy: ((window.Utils?.random || Math.random)() - 0.5) * 4,
             life: 1.0,
-            decay: Math.random() * 0.02 + 0.01,
-            size: Math.random() * 3 + 1,
+            decay: (window.Utils?.random || Math.random)() * 0.02 + 0.01,
+            size: (window.Utils?.random || Math.random)() * 3 + 1,
             color: '#fff',
             type: type
         };
 
         if (type === 'touchdown') {
-            p.vx = (Math.random() - 0.5) * 12; // Increased spread
-            p.vy = (Math.random() * -8) - 4; // Higher burst upwards
-            p.color = Math.random() > 0.3 ? '#FFD700' : (Math.random() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 12; // Increased spread
+            p.vy = ((window.Utils?.random || Math.random)() * -8) - 4; // Higher burst upwards
+            p.color = (window.Utils?.random || Math.random)() > 0.3 ? '#FFD700' : ((window.Utils?.random || Math.random)() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
             p.gravity = 0.2;
             p.life = 1.5;
-            p.size = Math.random() * 5 + 2;
+            p.size = (window.Utils?.random || Math.random)() * 5 + 2;
         } else if (type === 'field_goal') {
             // Rising sparkles
-            p.vx = (Math.random() - 0.5) * 5;
-            p.vy = (Math.random() * -6) - 2; // Up
-            p.color = Math.random() > 0.5 ? '#FFD700' : '#FFFFE0'; // Gold / Light Yellow
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 5;
+            p.vy = ((window.Utils?.random || Math.random)() * -6) - 2; // Up
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FFD700' : '#FFFFE0'; // Gold / Light Yellow
             p.life = 1.5;
             p.decay = 0.015;
-            p.size = Math.random() * 3 + 1;
+            p.size = (window.Utils?.random || Math.random)() * 3 + 1;
             p.gravity = -0.05; // Slight float up
         } else if (type === 'sack') {
-            p.vx = (Math.random() - 0.5) * 6;
-            p.vy = (Math.random() - 0.5) * 6;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
             p.color = '#888'; // Dust
             p.decay = 0.05; // Fast fade
         } else if (type === 'tackle') {
             p.color = '#fff';
             p.decay = 0.03;
         } else if (type === 'kick') {
-            p.vx = (Math.random() - 0.5) * 8; // Fast burst
-            p.vy = (Math.random() - 0.5) * 8;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8; // Fast burst
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 8;
             p.color = '#fff';
             p.decay = 0.08; // Very fast fade
-            p.size = Math.random() * 4 + 2;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
         } else if (type === 'catch') {
-            p.vx = (Math.random() - 0.5) * 3;
-            p.vy = (Math.random() - 0.5) * 3;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 3;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 3;
             p.color = '#87CEEB'; // Sky Blue
             p.decay = 0.1;
-            p.size = Math.random() * 2 + 1;
+            p.size = (window.Utils?.random || Math.random)() * 2 + 1;
         } else if (type === 'first_down') {
-            p.x = x + (Math.random() - 0.5) * 5; // Vertical stripish
-            p.y = Math.random() * this.canvas.height;
+            p.x = x + ((window.Utils?.random || Math.random)() - 0.5) * 5; // Vertical stripish
+            p.y = (window.Utils?.random || Math.random)() * this.canvas.height;
             p.vx = 0;
-            p.vy = (Math.random() - 0.5) * 2;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 2;
             p.color = '#FFD700'; // Yellow
             p.life = 0.8;
             p.decay = 0.02;
-            p.size = Math.random() * 2 + 1;
+            p.size = (window.Utils?.random || Math.random)() * 2 + 1;
         } else if (type === 'defense_stop') {
-            p.vx = (Math.random() - 0.5) * 15; // Fast explosion
-            p.vy = (Math.random() - 0.5) * 15;
-            p.color = Math.random() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15; // Fast explosion
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 15;
+            p.color = (window.Utils?.random || Math.random)() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
             p.decay = 0.05; // Fast fade
-            p.size = Math.random() * 4 + 2;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
             p.gravity = 0.05;
         }
 

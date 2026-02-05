@@ -14,7 +14,7 @@ import { makePlayer as makePlayerImport } from './player.js';
 const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
     const picks = [];
     // Fallback ID generator if Utils is missing or doesn't have id()
-    const genId = Utils?.id || (() => Math.random().toString(36).slice(2, 10));
+    const genId = Utils?.id || (() => (window.Utils?.random || Math.random)().toString(36).slice(2, 10));
 
     for (let y = 0; y < years; y++) {
         for (let r = 1; r <= 7; r++) {

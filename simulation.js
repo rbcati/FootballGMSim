@@ -20,6 +20,116 @@ import { processStaffPoaching } from './coach-system.js';
 // Simulation Lock
 let isSimulating = false;
 
+// =============================================================================
+// COMPETITIVE BALANCE - Prevents super-dynasties, keeps league fresh
+// =============================================================================
+
+/**
+ * Apply competitive balance adjustments at season start.
+ * - Top teams face slight regression (players age, key departures)
+ * - Bottom teams get development boosts (lottery picks already help, this adds more)
+ * - Middle teams stay relatively stable
+ *
+ * This creates realistic parity: dynasties are possible but require
+ * excellent management, not just accumulating talent.
+ */
+function applyCompetitiveBalance(league) {
+    if (!league || !league.teams) return;
+    const U = Utils;
+
+    // Sort teams by wins from last season
+    const teamsByRecord = league.teams
+        .map((team, idx) => ({
+            team,
+            idx,
+            wins: team.wins || 0,
+            losses: team.losses || 0
+        }))
+        .sort((a, b) => b.wins - a.wins);
+
+    const totalTeams = teamsByRecord.length;
+
+    teamsByRecord.forEach((entry, rank) => {
+        const team = entry.team;
+        if (!team.roster) return;
+
+        const tierPct = rank / totalTeams; // 0.0 = best, 1.0 = worst
+
+        if (tierPct <= 0.25) {
+            // TOP QUARTER: Slight regression
+            // Simulate the difficulty of staying on top (key FAs leave, coaching turnover, etc.)
+            team.roster.forEach(p => {
+                if (!p || !p.ratings) return;
+
+                // Veteran fatigue: players on winning teams age slightly faster
+                if (p.age >= 28 && U.random() < 0.15) {
+                    const stat = U.choice(['speed', 'acceleration', 'agility', 'stamina']);
+                    if (p.ratings[stat] && p.ratings[stat] > 50) {
+                        p.ratings[stat] = Math.max(50, p.ratings[stat] - 1);
+                    }
+                }
+            });
+
+            // Salary cap pressure: top teams have less room (more expensive roster)
+            if (team.capTotal && team.capRoom) {
+                team.capRoom = Math.max(0, team.capRoom - U.rand(1, 3));
+            }
+
+        } else if (tierPct >= 0.75) {
+            // BOTTOM QUARTER: Development boost
+            // High draft picks help, plus young players develop faster on bad teams
+            // (more playing time for rookies)
+            team.roster.forEach(p => {
+                if (!p || !p.ratings) return;
+
+                // Young player development boost (more playing time on bad teams)
+                if (p.age <= 25 && U.random() < 0.20) {
+                    const stat = U.choice(['awareness', 'intelligence']);
+                    if (p.ratings[stat]) {
+                        p.ratings[stat] = Math.min(99, p.ratings[stat] + U.rand(1, 2));
+                    }
+                }
+            });
+        }
+
+        // ALL TEAMS: Age all players by 1 year
+        team.roster.forEach(p => {
+            if (p) p.age = (p.age || 22) + 1;
+        });
+
+        // Process retirements for all teams
+        if (typeof window.processRetirements === 'function') {
+            try {
+                window.processRetirements(team, league);
+            } catch (e) {
+                // Fallback: manual retirement check
+                if (team.roster) {
+                    const retirees = team.roster.filter(p =>
+                        p && p.age >= 38 && U.random() < 0.5 + (p.age - 38) * 0.15
+                    );
+                    retirees.forEach(p => {
+                        const idx = team.roster.indexOf(p);
+                        if (idx !== -1) {
+                            team.roster.splice(idx, 1);
+                            if (league.news) {
+                                league.news.push({
+                                    type: 'retirement',
+                                    headline: `${p.name} (${p.pos}) retires after ${(p.age || 22) - 21} seasons`,
+                                    story: `${p.name} has announced their retirement from professional football.`,
+                                    week: league.week,
+                                    year: league.year
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+        }
+    });
+
+    console.log('[BALANCE] Competitive balance adjustments applied');
+}
+
 export function getIsSimulating() { return isSimulating; }
 if (typeof window !== 'undefined') window.isGameSimulating = getIsSimulating;
 
@@ -562,6 +672,28 @@ function startNewSeason() {
     if (typeof window.makeSchedule === 'function') L.schedule = window.makeSchedule(L.teams);
     if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
 
+    // CPU Free Agency - simulate other teams signing free agents
+    try {
+        if (typeof window.simulateCpuFreeAgencyRound === 'function') {
+            // Run 3 rounds of CPU FA to simulate offseason activity
+            for (let round = 0; round < 3; round++) {
+                window.simulateCpuFreeAgencyRound(L);
+            }
+            console.log(`[OFFSEASON] CPU free agency complete. ${window.state?.freeAgents?.length || 0} free agents remaining.`);
+        }
+    } catch (e) {
+        console.error('Error in CPU free agency:', e);
+    }
+
+    // COMPETITIVE BALANCE - regression to mean
+    // Top teams lose some edge, bottom teams get a boost
+    // This prevents super-dynasties and keeps the game fresh
+    try {
+        applyCompetitiveBalance(L);
+    } catch (e) {
+        console.error('Error applying competitive balance:', e);
+    }
+
     if (typeof window.updateLeaguePlayers === 'function') {
         window.updateLeaguePlayers(L);
     }
@@ -842,6 +974,19 @@ function handleSimulationComplete(payload) {
         }
     } catch (e) {
         console.error('Error generating news:', e);
+    }
+
+    // CPU Trade Activity (league feels alive)
+    try {
+        if (typeof window.simulateCpuTrades === 'function' && L.week >= 4 && L.week <= 12) {
+            // Trade deadline window: weeks 4-12
+            const cpuTrades = window.simulateCpuTrades(1);
+            if (cpuTrades && cpuTrades.length > 0) {
+                console.log(`[SIM] ${cpuTrades.length} CPU-to-CPU trades completed`);
+            }
+        }
+    } catch (e) {
+        console.error('Error in CPU trade simulation:', e);
     }
 
     // Achievements

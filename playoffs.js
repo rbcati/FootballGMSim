@@ -5,6 +5,7 @@ import { launchConfetti } from './confetti.js';
 import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
+import { startOffseason } from './simulation.js';
 
 /**
  * Playoff Management System
@@ -111,7 +112,7 @@ function simPlayoffWeek() {
         // Trigger confetti for the championship win
         if (launchConfetti) launchConfetti();
     }
-    
+
     P.results.push(roundResults);
 
     if (!P.winner) {
@@ -136,6 +137,30 @@ function simPlayoffWeek() {
         // Use a special week number for playoffs (19+) to indicate post-season in recap
         const playoffWeek = 19 + P.currentRound;
         showWeeklyRecap(playoffWeek, roundResults.games, window.state.league.news);
+    }
+
+    // AUTO-TRANSITION: After Super Bowl, automatically start offseason
+    if (P.winner) {
+        console.log('Super Bowl complete - transitioning to offseason...');
+        // Small delay to let the user see the Super Bowl results and confetti
+        setTimeout(() => {
+            try {
+                if (startOffseason) {
+                    startOffseason();
+                } else if (window.startOffseason) {
+                    window.startOffseason();
+                }
+                console.log('Offseason started after Super Bowl');
+            } catch (err) {
+                console.error('Error auto-starting offseason after Super Bowl:', err);
+                // Fallback: set offseason flag manually so hub shows offseason UI
+                if (window.state) {
+                    window.state.offseason = true;
+                    window.state.offseasonYear = window.state.league?.year;
+                }
+                if (window.renderHub) window.renderHub();
+            }
+        }, 2000);
     }
 }
 

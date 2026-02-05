@@ -130,7 +130,7 @@ function performScouting(prospect, thoroughness) {
   const actualOvr = prospect.ovr;
   
   // Calculate scouting accuracy with some randomness
-  const accuracyRoll = Math.random() * 100;
+  const accuracyRoll = (window.Utils?.random || Math.random)() * 100;
   const effectiveAccuracy = Math.min(99, accuracy + (accuracyRoll - 50) * 0.1); // ±5% variation
   
   // Determine how close the scouting gets to actual rating
@@ -150,7 +150,7 @@ function performScouting(prospect, thoroughness) {
   // Gem Discovery Chance
   if (scout && scout.discovery) {
       const discoveryChance = scout.discovery / 200; // e.g., 90/200 = 45%
-      if (Math.random() < discoveryChance && prospect.ovr > 80 && prospect.projectedRound > 3) {
+      if ((window.Utils?.random || Math.random)() < discoveryChance && prospect.ovr > 80 && prospect.projectedRound > 3) {
           prospect.isGem = true; // Flag for UI
       }
   }

@@ -438,7 +438,7 @@ export const State = {
         // Ensure player has required properties
         const migratedPlayer = { ...player };
         if (!migratedPlayer.id) {
-          migratedPlayer.id = `migrated_${Date.now()}_${Math.random()}`;
+          migratedPlayer.id = `migrated_${Date.now()}_${(window.Utils?.random || Math.random)()}`;
         }
 
         // Initialize or fix player stats

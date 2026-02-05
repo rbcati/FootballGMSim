@@ -9,7 +9,7 @@ const MULTI_WEEK_STORYLINES = {
             if (!team) return null;
             // Trigger for star player with low morale
             const star = team.roster.find(p => p.ovr > 85 && p.morale < 70);
-            if (star && Math.random() < 0.3) return { playerId: star.id, name: star.name };
+            if (star && Utils.random() < 0.3) return { playerId: star.id, name: star.name };
             return null;
         },
         stages: {
@@ -105,7 +105,7 @@ const MULTI_WEEK_STORYLINES = {
             const starter = qbs[0];
             const backup = qbs[1];
 
-            if (starter.morale < 60 && backup.ovr > 70 && Math.random() < 0.2) {
+            if (starter.morale < 60 && backup.ovr > 70 && Utils.random() < 0.2) {
                 return { starterId: starter.id, starterName: starter.name, backupId: backup.id, backupName: backup.name };
             }
             return null;
@@ -175,7 +175,7 @@ const MULTI_WEEK_STORYLINES = {
             const team = league.teams[window.state.userTeamId];
             if (!team) return null;
             const rookie = team.roster.find(p => p.age <= 23 && p.developmentStatus === 'BREAKOUT');
-            if (rookie && Math.random() < 0.3) {
+            if (rookie && Utils.random() < 0.3) {
                 return { playerId: rookie.id, name: rookie.name };
             }
             return null;
@@ -224,7 +224,7 @@ const MULTI_WEEK_STORYLINES = {
             if (team.roster) team.roster.forEach(p => totalMorale += (p.morale || 50));
             const avgMorale = team.roster.length > 0 ? totalMorale / team.roster.length : 50;
 
-            if (losses > 4 && winPct < 0.3 && avgMorale < 40 && Math.random() < 0.2) {
+            if (losses > 4 && winPct < 0.3 && avgMorale < 40 && Utils.random() < 0.2) {
                 return { avgMorale: Math.round(avgMorale) };
             }
             return null;
@@ -300,7 +300,7 @@ const INTERACTIVE_EVENTS = [
             const team = league.teams[window.state.userTeamId];
             if (!team) return false;
             // Random check, slightly higher if morale is average/low
-            return Math.random() < 0.05;
+            return Utils.random() < 0.05;
         },
         choices: [
             {
@@ -314,7 +314,7 @@ const INTERACTIVE_EVENTS = [
                 text: 'Mediate',
                 description: 'Sit them down and talk it out.',
                 effect: (ctx) => {
-                    const success = Math.random() > 0.3;
+                    const success = Utils.random() > 0.3;
                     if (success) return "You successfully mediated the dispute. They shook hands.";
                     return "The mediation failed. They are still not talking.";
                 }
@@ -329,7 +329,7 @@ const INTERACTIVE_EVENTS = [
              const team = league.teams[window.state.userTeamId];
              // Trigger if team is doing well
              const wins = team.record?.w || 0;
-             return wins > 3 && Math.random() < 0.1;
+             return wins > 3 && Utils.random() < 0.1;
         },
         choices: [
             {
@@ -338,7 +338,7 @@ const INTERACTIVE_EVENTS = [
                 effect: (ctx) => {
                     if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction += 5;
                     // Risk of distraction
-                    if (Math.random() > 0.5) {
+                    if (Utils.random() > 0.5) {
                         return "The media coverage was great for the brand, but practice quality suffered (-2 Prep).";
                     }
                     return "The team handled the spotlight well. Fan interest is up!";
@@ -374,7 +374,7 @@ const INTERACTIVE_EVENTS = [
             }
             const avgMorale = count > 0 ? totalMorale / count : 50;
 
-            if (avgMorale < 60 && Math.random() < 0.3) return true;
+            if (avgMorale < 60 && Utils.random() < 0.3) return true;
 
             return false;
         },
@@ -401,7 +401,7 @@ const INTERACTIVE_EVENTS = [
                 effect: (ctx) => {
                      const league = ctx.league;
                      const team = league.teams[window.state.userTeamId];
-                     const success = Math.random() > 0.4; // 60% chance of success
+                     const success = Utils.random() > 0.4; // 60% chance of success
                      if (success) {
                          team.roster.forEach(p => p.morale = Math.min(100, p.morale + 15));
                          return "The team responded to your challenge! Morale skyrocketed.";
@@ -433,7 +433,7 @@ const INTERACTIVE_EVENTS = [
             const total = wins + (team.losses || (team.record?.l || 0));
             const pct = total > 0 ? wins/total : 0;
 
-            if (pct > 0.6 && Math.random() < 0.1) return true;
+            if (pct > 0.6 && Utils.random() < 0.1) return true;
 
             return false;
         },
@@ -473,7 +473,7 @@ const INTERACTIVE_EVENTS = [
         title: 'Media Controversy',
         description: 'A reporter has written a scathing article criticizing your star player\'s recent performance.',
         trigger: (league) => {
-             return Math.random() < 0.05;
+             return Utils.random() < 0.05;
         },
         choices: [
             {
@@ -506,7 +506,7 @@ const INTERACTIVE_EVENTS = [
                     const team = league.teams[window.state.userTeamId];
                     const star = team.roster.reduce((prev, current) => (prev.ovr > current.ovr) ? prev : current);
 
-                    if (Math.random() > 0.5) {
+                    if (Utils.random() > 0.5) {
                         star.morale = Math.max(0, star.morale - 15);
                         return `${star.name} felt betrayed by your comments. Morale dropped.`;
                     } else {
@@ -526,7 +526,7 @@ const INTERACTIVE_EVENTS = [
             const sat = window.state.ownerMode.fanSatisfaction;
             const record = team.record;
             const winPct = (record.w + record.l) > 0 ? record.w / (record.w + record.l) : 0;
-            return sat < 40 && winPct < 0.4 && Math.random() < 0.2;
+            return sat < 40 && winPct < 0.4 && Utils.random() < 0.2;
         },
         choices: [
             {
@@ -545,7 +545,7 @@ const INTERACTIVE_EVENTS = [
                 text: 'Address the Crowd',
                 description: 'Promise better results on the field.',
                 effect: (ctx) => {
-                    if (Math.random() > 0.5) {
+                    if (Utils.random() > 0.5) {
                         if (window.state.ownerMode) window.state.ownerMode.fanSatisfaction += 5;
                         return "The crowd seemed to buy your promises for now.";
                     } else {
@@ -628,7 +628,7 @@ class NewsEngine {
 
         if (league.week - this.lastEventWeek < 3) return null;
 
-        const events = [...INTERACTIVE_EVENTS].sort(() => 0.5 - Math.random());
+        const events = [...INTERACTIVE_EVENTS].sort(() => 0.5 - Utils.random());
 
         for (const event of events) {
             if (event.trigger(league)) {
@@ -644,7 +644,7 @@ class NewsEngine {
         if (!league.news) league.news = [];
 
         league.news.unshift({
-            id: Date.now() + Math.random(),
+            id: Date.now() + Utils.random(),
             week: league.week,
             year: league.year,
             headline: headline,
@@ -858,7 +858,7 @@ class NewsEngine {
                     const data = template.trigger(league);
                     if (data) {
                         league.storylines.push({
-                            id: Date.now() + Math.random(),
+                            id: Date.now() + Utils.random(),
                             type: type,
                             teamId: window.state.userTeamId,
                             stage: 1,

@@ -167,7 +167,7 @@ async function handleOnboardRandom(e) {
     const options = teamSelect.querySelectorAll('option');
     if (!options.length) return;
 
-    const randomIndex = Math.floor(Math.random() * options.length);
+    const randomIndex = Math.floor((window.Utils?.random || Math.random)() * options.length);
     options[randomIndex].selected = true;
 }
 
