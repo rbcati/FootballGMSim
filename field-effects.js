@@ -19,7 +19,20 @@ export class FieldEffects {
         this.animating = false;
 
         this.resize();
-        window.addEventListener('resize', () => this.resize());
+        this._resizeHandler = () => this.resize();
+        window.addEventListener('resize', this._resizeHandler);
+    }
+
+    destroy() {
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+            this._resizeHandler = null;
+        }
+        if (this.canvas && this.canvas.parentNode) {
+            this.canvas.parentNode.removeChild(this.canvas);
+        }
+        this.animating = false;
+        this.particles = [];
     }
 
     resize() {

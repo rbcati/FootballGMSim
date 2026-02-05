@@ -1381,6 +1381,13 @@ select:disabled {
     height: 10px;
 }
 
+.marker-def {
+    background: #dc3545; /* Red */
+    z-index: 10;
+    width: 11px;
+    height: 11px;
+}
+
 /* Ensure ball is above markers */
 .ball, .football-ball {
     z-index: 15;
@@ -1932,4 +1939,23 @@ select:disabled {
 
 .marker-catch {
   animation: marker-jump 0.4s ease-out;
+}
+
+@keyframes celebrate-jump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  40% { transform: translate(-50%, -150%) scale(1.2) rotate(10deg); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.celebrate-jump {
+  animation: celebrate-jump 0.8s ease-out;
+}
+
+@keyframes celebrate-spin {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.celebrate-spin {
+    animation: celebrate-spin 0.8s ease-in-out;
 }
