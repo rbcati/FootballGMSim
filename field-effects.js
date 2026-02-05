@@ -19,7 +19,20 @@ export class FieldEffects {
         this.animating = false;
 
         this.resize();
-        window.addEventListener('resize', () => this.resize());
+        this._resizeHandler = () => this.resize();
+        window.addEventListener('resize', this._resizeHandler);
+    }
+
+    destroy() {
+        if (this._resizeHandler) {
+            window.removeEventListener('resize', this._resizeHandler);
+            this._resizeHandler = null;
+        }
+        if (this.canvas && this.canvas.parentNode) {
+            this.canvas.parentNode.removeChild(this.canvas);
+        }
+        this.animating = false;
+        this.particles = [];
     }
 
     resize() {
@@ -38,6 +51,7 @@ export class FieldEffects {
                       type === 'catch' ? 10 :
                       type === 'first_down' ? 20 :
                       type === 'field_goal' ? 40 : 25;
+                      type === 'defense_stop' ? 45 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -107,6 +121,13 @@ export class FieldEffects {
             p.life = 0.8;
             p.decay = 0.02;
             p.size = Math.random() * 2 + 1;
+        } else if (type === 'defense_stop') {
+            p.vx = (Math.random() - 0.5) * 15; // Fast explosion
+            p.vy = (Math.random() - 0.5) * 15;
+            p.color = Math.random() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
+            p.decay = 0.05; // Fast fade
+            p.size = Math.random() * 4 + 2;
+            p.gravity = 0.05;
         }
 
         return p;
