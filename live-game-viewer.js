@@ -626,6 +626,7 @@ class LiveGameViewer {
           // Catch Effect
           if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
                if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
+               soundManager.playCatch(); // Sync sound with visual
                // Marker Animation
                if (skillMarker) {
                    skillMarker.classList.add('marker-catch');
@@ -671,8 +672,9 @@ class LiveGameViewer {
 
           await Promise.all([pRun, pSkill]);
 
-          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
-          else if (skillMarker) {
+          if (play.result === 'touchdown') {
+              ballEl.classList.add('animate-pulse');
+          } else if (skillMarker) {
               // Collision/Tackle
               skillMarker.classList.add('marker-collision');
               setTimeout(() => skillMarker.classList.remove('marker-collision'), 300);
@@ -704,7 +706,7 @@ class LiveGameViewer {
            if (play.result === 'touchdown' || play.result === 'field_goal') {
                ballEl.classList.add('animate-pulse');
                if (play.result === 'field_goal' && this.fieldEffects) {
-                   this.fieldEffects.spawnParticles(endPct, 'touchdown'); // Reuse gold sparkles
+                   this.fieldEffects.spawnParticles(endPct, 'field_goal'); // Use new gold sparkles
                }
            }
 
@@ -722,9 +724,19 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              this.fieldEffects.spawnParticles(endPct, 'tackle');
+              if (play.playType.includes('pass')) {
+                  this.fieldEffects.spawnParticles(endPct, 'interception');
+              } else {
+                  this.fieldEffects.spawnParticles(endPct, 'fumble');
+              }
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
+              if (skillMarker) {
+                  // Ensure visible for celebration
+                  skillMarker.style.opacity = 1;
+                  const celeb = Math.random() > 0.5 ? 'celebrate-spike' : 'celebrate-dance';
+                  skillMarker.classList.add(celeb);
+              }
           } else if (play.message && play.message.includes('First down')) {
               this.fieldEffects.spawnParticles(endPct, 'first_down');
           } else if (!['field_goal', 'punt', 'field_goal_miss', 'incomplete'].includes(play.result) && !play.playType.includes('kick') && !play.playType.includes('punt')) {
@@ -1702,6 +1714,7 @@ class LiveGameViewer {
             setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
+            this.triggerShake(); // Add shake!
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
@@ -1713,12 +1726,14 @@ class LiveGameViewer {
                  this.fieldEffects.spawnParticles(pct, 'touchdown');
             }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
+            if (play.playType.includes('pass')) soundManager.playIntercept();
+            else soundManager.playFumble();
+
             soundManager.playDefenseStop();
-            soundManager.playFailure();
+
             // Intense shake
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
-            soundManager.playTackle();
 
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('defense-stop', 'STOPPED!');
@@ -2307,10 +2322,15 @@ class LiveGameViewer {
       if (type === 'positive') mainColor = userTeam.color || '#34C759';
       else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
 
+      // Play End Game Sound
+      if (type === 'positive') soundManager.playTouchdown(); // Victory fanfare
+      else if (type === 'negative') soundManager.playFailure();
+
       overlay.innerHTML = `
-        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60;">
+        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60; background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);">
+            <div style="font-size: 5rem; margin-bottom: 10px;">${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}</div>
             <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
-            <div class="game-over-score">${scoreA} - ${scoreB}</div>
+            <div class="game-over-score" style="color: #fff; font-weight: 900; font-size: 3rem;">${scoreA} - ${scoreB}</div>
 
             ${mvp ? `
             <div class="game-over-mvp">
@@ -2649,7 +2669,7 @@ class LiveGameViewer {
 
       container.innerHTML = `
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
-        <div class="${Math.abs(m) > 75 ? 'momentum-surge' : ''}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
+        <div class="${Math.abs(m) > 80 ? 'momentum-max' : (Math.abs(m) > 75 ? 'momentum-surge' : '')}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden; transition: all 0.3s;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
             <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
         </div>

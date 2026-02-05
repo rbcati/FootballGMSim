@@ -80,6 +80,9 @@ class SoundManager {
 
     playTouchdown() {
         if (!this.enabled || this.muted) return;
+        // Crowd Roar
+        this.playNoise(3.0, 0.3);
+
         // C Major Triad + Octave: C4, E4, G4, C5
         const notes = [261.63, 329.63, 392.00, 523.25];
         notes.forEach((freq, i) => {
@@ -88,6 +91,28 @@ class SoundManager {
 
         // Final fanfare
         setTimeout(() => this.playTone(523.25, 'square', 0.8, 0.1), 400);
+    }
+
+    playCatch() {
+        if (!this.enabled || this.muted) return;
+        // Sharp snap
+        this.playTone(800, 'square', 0.05, 0.05);
+        this.playNoise(0.05, 0.1);
+    }
+
+    playIntercept() {
+        if (!this.enabled || this.muted) return;
+        // Alert Siren
+        this.playTone(880, 'sawtooth', 0.1, 0.1);
+        setTimeout(() => this.playTone(1100, 'sawtooth', 0.1, 0.1), 100);
+        setTimeout(() => this.playTone(880, 'sawtooth', 0.3, 0.1), 200);
+    }
+
+    playFumble() {
+        if (!this.enabled || this.muted) return;
+        // Chaotic low rumble
+        this.playNoise(0.5, 0.3);
+        this.playTone(80, 'sawtooth', 0.4, 0.2, 40);
     }
 
     playDefenseStop() {
@@ -113,6 +138,7 @@ class SoundManager {
     playKick() {
         if (!this.enabled || this.muted) return;
         this.playTone(200, 'square', 0.15, 0.2, 50);
+        this.playTone(60, 'sine', 0.2, 0.3); // Low Thud
         this.playNoise(0.1, 0.1); // Whoosh
     }
 

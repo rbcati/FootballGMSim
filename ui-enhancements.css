@@ -1927,3 +1927,37 @@ select:disabled {
 .marker-catch {
   animation: marker-jump 0.4s ease-out;
 }
+
+@keyframes celebrate-dance {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -60%) rotate(-15deg); }
+  50% { transform: translate(-50%, -50%) rotate(0deg); }
+  75% { transform: translate(-50%, -60%) rotate(15deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.celebrate-dance {
+  animation: celebrate-dance 0.8s ease-in-out infinite;
+}
+
+@keyframes celebrate-spike {
+  0% { transform: translate(-50%, -50%); }
+  40% { transform: translate(-50%, -100%); } /* Jump High */
+  60% { transform: translate(-50%, -100%) rotate(360deg); } /* Spin */
+  100% { transform: translate(-50%, -50%); } /* Slam */
+}
+
+.celebrate-spike {
+  animation: celebrate-spike 0.6s ease-in;
+}
+
+@keyframes momentum-max {
+  0% { box-shadow: 0 0 10px #ff3b30, inset 0 0 10px #ff3b30; border-color: #fff; }
+  50% { box-shadow: 0 0 30px #ff9500, inset 0 0 20px #ff9500; border-color: #ff9500; }
+  100% { box-shadow: 0 0 10px #ff3b30, inset 0 0 10px #ff3b30; border-color: #fff; }
+}
+
+.momentum-max {
+  animation: momentum-max 0.5s infinite;
+  border: 2px solid white !important;
+}

@@ -58,6 +58,7 @@ export class FieldEffects {
             decay: Math.random() * 0.02 + 0.01,
             size: Math.random() * 3 + 1,
             color: '#fff',
+            gravity: 0,
             type: type
         };
 
@@ -95,6 +96,26 @@ export class FieldEffects {
             p.life = 0.8;
             p.decay = 0.02;
             p.size = Math.random() * 2 + 1;
+        } else if (type === 'field_goal') {
+            p.vx = (Math.random() - 0.5) * 4;
+            p.vy = (Math.random() * -8) - 4; // Fast Upwards
+            p.color = Math.random() > 0.3 ? '#FFD700' : '#FFFFFF'; // Gold dominant
+            p.gravity = 0.2;
+            p.size = Math.random() * 3 + 2;
+            p.decay = 0.015;
+        } else if (type === 'interception') {
+            p.vx = (Math.random() - 0.5) * 12; // Fast Burst
+            p.vy = (Math.random() - 0.5) * 12;
+            p.color = '#FF453A'; // Red
+            p.decay = 0.06;
+            p.size = Math.random() * 4 + 2;
+        } else if (type === 'fumble') {
+            p.vx = (Math.random() - 0.5) * 8;
+            p.vy = (Math.random() - 0.5) * 8;
+            p.color = '#8B4513'; // Brown (Ball color)
+            p.decay = 0.05;
+            p.gravity = 0.3; // Drops to ground
+            p.size = Math.random() * 3 + 1;
         }
 
         return p;
