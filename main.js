@@ -1419,6 +1419,13 @@ class GameController {
 
     // --- GLOBAL ADVANCE (New) ---
     handleGlobalAdvance() {
+        const btn = document.getElementById('btnGlobalAdvance');
+        const btnTop = document.getElementById('btnAdvanceWeekTop');
+        const btnHQ = document.getElementById('btnSimWeekHQ');
+
+        // Prevent double clicks if already simulating
+        if (this.isSimulating) return;
+
         const L = window.state?.league;
         const userTeam = L?.teams?.[window.state?.userTeamId];
 
@@ -1451,7 +1458,20 @@ class GameController {
 
         // Proceed
         console.log('[GameController] Global Advance triggered');
-        this.handleSimulateWeek();
+
+        // Disable buttons
+        if (btn) btn.disabled = true;
+        if (btnTop) btnTop.disabled = true;
+        if (btnHQ) btnHQ.disabled = true;
+
+        this.isSimulating = true;
+
+        this.handleSimulateWeek().finally(() => {
+            this.isSimulating = false;
+            if (btn) btn.disabled = false;
+            if (btnTop) btnTop.disabled = false;
+            if (btnHQ) btnHQ.disabled = false;
+        });
     }
 
     // --- SIMULATION FUNCTIONS ---
