@@ -50,7 +50,7 @@ export class FieldEffects {
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
                       type === 'first_down' ? 20 :
-                      type === 'field_goal' ? 40 : 25;
+                      type === 'field_goal' ? 40 :
                       type === 'defense_stop' ? 45 : 25;
 
         for (let i = 0; i < count; i++) {

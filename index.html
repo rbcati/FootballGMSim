@@ -57,9 +57,12 @@
     "./fixes.js": "./fixes.js?v=1.0.1",
     "./football-db.js": "./football-db.js?v=1.0.1",
     "./freeagency.js": "./freeagency.js?v=1.0.1",
+    "./field-effects.js": "./field-effects.js?v=1.0.1",
     "./game-results-viewer.js": "./game-results-viewer.js?v=1.0.1",
     "./game-runner.js": "./game-runner.js?v=1.0.1",
+    "./game-simulator.js": "./game-simulator.js?v=1.0.1",
     "./history.js": "./history.js?v=1.0.1",
+    "./injury-core.js": "./injury-core.js?v=1.0.1",
     "./injury-system.js": "./injury-system.js?v=1.0.1",
     "./league-stats.js": "./league-stats.js?v=1.0.1",
     "./league.js": "./league.js?v=1.0.1",
@@ -80,6 +83,7 @@
     "./schedule-factory.js": "./schedule-factory.js?v=1.0.1",
     "./schedule-viewer.js": "./schedule-viewer.js?v=1.0.1",
     "./schedule.js": "./schedule.js?v=1.0.1",
+    "./scheme-core.js": "./scheme-core.js?v=1.0.1",
     "./scheme-management.js": "./scheme-management.js?v=1.0.1",
     "./scouting-system.js": "./scouting-system.js?v=1.0.1",
     "./sound-manager.js": "./sound-manager.js?v=1.0.1",
@@ -90,6 +94,7 @@
     "./state.js": "./state.js?v=1.0.1",
     "./stats-viewer.js": "./stats-viewer.js?v=1.0.1",
     "./story-events.js": "./story-events.js?v=1.0.1",
+    "./strategy.js": "./strategy.js?v=1.0.1",
     "./team-ratings.js": "./team-ratings.js?v=1.0.1",
     "./team-statistics.js": "./team-statistics.js?v=1.0.1",
     "./teams.js": "./teams.js?v=1.0.1",
@@ -517,6 +522,15 @@
         </div>
       </div>
     </div>
+
+<!-- Stub for window.watchLiveGame - ensures graceful fallback if live-game-viewer module fails to load -->
+<script>
+window.watchLiveGame = function() {
+    var msg = 'Game viewer is still loading. Please wait a moment and try again.';
+    if (window.setStatus) { window.setStatus(msg, 'warning'); }
+    else { alert(msg); }
+};
+</script>
 
 <script type="module" src="fixes.js?v=1.0.1"></script>
 <!-- Note: fixes.js now includes error-overlay.js, missing-functions.js, league-creation-fix.js, team-selection-fix.js, navbar-fix.js, dom-helpers-fix.js, and critical-fixes.js -->
