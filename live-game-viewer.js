@@ -553,20 +553,6 @@ class LiveGameViewer {
           }
       }
 
-      // Setup Markers (initially hidden or at start)
-      if (qbMarker) {
-          qbMarker.style.transition = 'none';
-          qbMarker.style.left = `${startPct}%`;
-          qbMarker.style.opacity = '1';
-          qbMarker.style.backgroundColor = isHome ? 'var(--accent, #007bff)' : 'var(--danger, #dc3545)';
-          qbMarker.classList.add('pulse-marker');
-      }
-      if (skillMarker) {
-          skillMarker.style.transition = 'none';
-          skillMarker.style.left = `${startPct}%`;
-          skillMarker.style.opacity = '0'; // Hide initially
-          skillMarker.style.backgroundColor = isHome ? 'var(--accent, #007bff)' : 'var(--danger, #dc3545)';
-          skillMarker.classList.remove('pulse-marker');
       // Setup Markers
       const setupMarker = (el, color, show = true) => {
           if (el) {
@@ -578,14 +564,18 @@ class LiveGameViewer {
           }
       };
 
-      setupMarker(qbMarker, isHome ? '#007bff' : '#dc3545', true);
+      const homeColor = 'var(--accent, #007bff)';
+      const awayColor = 'var(--danger, #dc3545)';
+      const offenseColor = isHome ? homeColor : awayColor;
+      const defenseColor = isHome ? awayColor : homeColor;
+
+      setupMarker(qbMarker, offenseColor, true);
       if (qbMarker) qbMarker.classList.add('pulse-marker');
-      setupMarker(skillMarker, isHome ? '#007bff' : '#dc3545', false);
+      setupMarker(skillMarker, offenseColor, false);
 
       // Initialize Defense
       if (defMarker) {
-          const defColor = isHome ? '#dc3545' : '#007bff';
-          setupMarker(defMarker, defColor, true);
+          setupMarker(defMarker, defenseColor, true);
           // Defense starts slightly off LOS
           const defStartPct = this.getVisualPercentage(startYard + (isHome ? 5 : -5), isHome);
           defMarker.style.left = `${defStartPct}%`;
