@@ -546,14 +546,14 @@ class LiveGameViewer {
           qbMarker.style.transition = 'none';
           qbMarker.style.left = `${startPct}%`;
           qbMarker.style.opacity = '1';
-          qbMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+          qbMarker.style.backgroundColor = isHome ? 'var(--accent, #007bff)' : 'var(--danger, #dc3545)';
           qbMarker.classList.add('pulse-marker');
       }
       if (skillMarker) {
           skillMarker.style.transition = 'none';
           skillMarker.style.left = `${startPct}%`;
           skillMarker.style.opacity = '0'; // Hide initially
-          skillMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
+          skillMarker.style.backgroundColor = isHome ? 'var(--accent, #007bff)' : 'var(--danger, #dc3545)';
           skillMarker.classList.remove('pulse-marker');
       }
 
@@ -722,7 +722,7 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              this.fieldEffects.spawnParticles(endPct, 'tackle');
+              this.fieldEffects.spawnParticles(endPct, 'defense_stop');
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
           } else if (play.message && play.message.includes('First down')) {
@@ -1723,7 +1723,7 @@ class LiveGameViewer {
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('defense-stop', 'STOPPED!');
             } else {
-                this.triggerVisualFeedback('turnover', 'TURNOVER');
+                this.triggerVisualFeedback('defense-stop', 'TURNOVER!');
             }
 
             // Screen shake

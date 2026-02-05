@@ -1772,6 +1772,8 @@ select:disabled {
     0% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
     50% { text-shadow: 0 0 20px currentColor, 0 0 10px currentColor; transform: scale(1.05); }
     100% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
+}
+
 /* Player Marker Animations */
 @keyframes pulse-marker {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
@@ -1843,15 +1845,19 @@ select:disabled {
 
 .game-event-overlay.defense-stop .event-text {
   color: #FF453A;
-  border: 4px solid #fff;
-  padding: 10px 20px;
+  border: 4px solid #FF453A;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 15px 30px;
   transform: rotate(-5deg);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255, 69, 58, 0.4);
 }
 .game-event-overlay.defense-stop::before {
   content: '🛡️';
   display: block;
-  font-size: 4rem;
+  font-size: 5rem;
   margin-bottom: 10px;
+  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
 }
 
 .game-event-overlay.punt .event-text {
@@ -1889,15 +1895,15 @@ select:disabled {
 }
 
 .btn:hover, .play-call-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
   filter: brightness(1.05);
 }
 
 .btn:active, .play-call-btn:active {
-  transform: scale(0.96) translateY(0) !important;
-  filter: brightness(0.9);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+  transform: scale(0.98) translateY(1px) !important;
+  filter: brightness(0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
 }
 
 .play-call-btn.selected {

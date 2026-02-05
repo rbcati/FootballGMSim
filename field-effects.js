@@ -36,7 +36,8 @@ export class FieldEffects {
                       type === 'sack' ? 30 :
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
-                      type === 'first_down' ? 20 : 25;
+                      type === 'first_down' ? 20 :
+                      type === 'defense_stop' ? 45 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -95,6 +96,13 @@ export class FieldEffects {
             p.life = 0.8;
             p.decay = 0.02;
             p.size = Math.random() * 2 + 1;
+        } else if (type === 'defense_stop') {
+            p.vx = (Math.random() - 0.5) * 15; // Fast explosion
+            p.vy = (Math.random() - 0.5) * 15;
+            p.color = Math.random() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
+            p.decay = 0.05; // Fast fade
+            p.size = Math.random() * 4 + 2;
+            p.gravity = 0.05;
         }
 
         return p;
