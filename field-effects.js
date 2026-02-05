@@ -45,11 +45,12 @@ export class FieldEffects {
         const x = (xPct / 100) * this.canvas.width;
         const y = this.canvas.height / 2; // Middle of field mostly
 
-        const count = type === 'touchdown' ? 50 :
+        const count = type === 'touchdown' ? 80 : // Increased from 50
                       type === 'sack' ? 30 :
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
                       type === 'first_down' ? 20 :
+                      type === 'field_goal' ? 40 : 25;
                       type === 'defense_stop' ? 45 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -76,10 +77,21 @@ export class FieldEffects {
         };
 
         if (type === 'touchdown') {
-            p.vx = (Math.random() - 0.5) * 10;
-            p.vy = (Math.random() * -5) - 2; // Upwards
-            p.color = Math.random() > 0.5 ? '#FFD700' : '#FFFFFF'; // Gold/White
-            p.gravity = 0.1;
+            p.vx = (Math.random() - 0.5) * 12; // Increased spread
+            p.vy = (Math.random() * -8) - 4; // Higher burst upwards
+            p.color = Math.random() > 0.3 ? '#FFD700' : (Math.random() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
+            p.gravity = 0.2;
+            p.life = 1.5;
+            p.size = Math.random() * 5 + 2;
+        } else if (type === 'field_goal') {
+            // Rising sparkles
+            p.vx = (Math.random() - 0.5) * 5;
+            p.vy = (Math.random() * -6) - 2; // Up
+            p.color = Math.random() > 0.5 ? '#FFD700' : '#FFFFE0'; // Gold / Light Yellow
+            p.life = 1.5;
+            p.decay = 0.015;
+            p.size = Math.random() * 3 + 1;
+            p.gravity = -0.05; // Slight float up
         } else if (type === 'sack') {
             p.vx = (Math.random() - 0.5) * 6;
             p.vy = (Math.random() - 0.5) * 6;
