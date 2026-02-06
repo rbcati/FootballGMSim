@@ -137,13 +137,25 @@ export function deepClone(obj) {
 }
 
 export function throttle(func, delay) {
-    let timeoutId;
     let lastExecTime = 0;
+    let timeoutId = null;
     return function (...args) {
         const currentTime = Date.now();
-        if (currentTime - lastExecTime > delay) {
+        const remaining = delay - (currentTime - lastExecTime);
+        if (remaining <= 0) {
+            if (timeoutId) {
+                clearTimeout(timeoutId);
+                timeoutId = null;
+            }
             func.apply(this, args);
             lastExecTime = currentTime;
+        } else if (!timeoutId) {
+            // Schedule trailing call so the last invocation isn't lost
+            timeoutId = setTimeout(() => {
+                func.apply(this, args);
+                lastExecTime = Date.now();
+                timeoutId = null;
+            }, remaining);
         }
     };
 }
