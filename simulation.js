@@ -97,34 +97,9 @@ function applyCompetitiveBalance(league) {
             if (p) p.age = (p.age || 22) + 1;
         });
 
-        // Process retirements for all teams
-        if (typeof window.processRetirements === 'function') {
-            try {
-                window.processRetirements(team, league);
-            } catch (e) {
-                // Fallback: manual retirement check
-                if (team.roster) {
-                    const retirees = team.roster.filter(p =>
-                        p && p.age >= 38 && U.random() < 0.5 + (p.age - 38) * 0.15
-                    );
-                    retirees.forEach(p => {
-                        const idx = team.roster.indexOf(p);
-                        if (idx !== -1) {
-                            team.roster.splice(idx, 1);
-                            if (league.news) {
-                                league.news.push({
-                                    type: 'retirement',
-                                    headline: `${p.name} (${p.pos}) retires after ${(p.age || 22) - 21} seasons`,
-                                    story: `${p.name} has announced their retirement from professional football.`,
-                                    week: league.week,
-                                    year: league.year
-                                });
-                            }
-                        }
-                    });
-                }
-            }
-        }
+        // Note: Retirements are processed in startOffseason(), not here.
+        // Processing them here caused double-retirement bugs where players
+        // were retired both during competitive balance AND during offseason.
     });
 
     console.log('[BALANCE] Competitive balance adjustments applied');

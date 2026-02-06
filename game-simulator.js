@@ -38,33 +38,29 @@ export function groupPlayersByPosition(roster) {
 export function initializePlayerStats(player) {
   if (!player.stats) {
     player.stats = {
-      game: getZeroStats ? getZeroStats() : {},
-      season: getZeroStats ? getZeroStats() : {},
-      career: getZeroStats ? getZeroStats() : {}
+      game: getZeroStats(),
+      season: getZeroStats(),
+      career: getZeroStats()
     };
+    return; // All fields just initialized, no need to check individually
   }
-  if (!player.stats.game) player.stats.game = getZeroStats ? getZeroStats() : {};
-
-  // Initialize season stats if missing or empty
+  if (!player.stats.game) player.stats.game = getZeroStats();
   if (!player.stats.season || Object.keys(player.stats.season).length === 0) {
-    player.stats.season = getZeroStats ? getZeroStats() : {};
+    player.stats.season = getZeroStats();
   }
-
-  // Initialize career stats if missing
-  if (!player.stats.career) {
-    player.stats.career = getZeroStats ? getZeroStats() : {};
-  }
+  if (!player.stats.career) player.stats.career = getZeroStats();
 }
 
 /**
- * Calculate how many weeks a player has been with the team
+ * Calculate how many seasons a player has been with the team.
+ * Used as a tenure proxy for coaching mods (returns years, not weeks).
  */
-function calculateWeeksWithTeam(player, team) {
+function calculateSeasonsWithTeam(player, team) {
   if (player.history && player.history.length > 0) {
     const teamHistory = player.history.filter(h => h.team === team.abbr);
-    return teamHistory.length * 17;
+    return teamHistory.length || 1;
   }
-  return 17;
+  return 1;
 }
 
 /**
@@ -87,16 +83,17 @@ export function updateTeamStandings(league, teamId, stats) {
     }
 
     // 2. Apply Updates (incrementing existing values)
-    if (stats.wins) team.wins = (team.wins || 0) + stats.wins;
-    if (stats.losses) team.losses = (team.losses || 0) + stats.losses;
-    if (stats.ties) team.ties = (team.ties || 0) + stats.ties;
+    // Use explicit !== undefined checks instead of truthy to handle 0 correctly
+    if (stats.wins !== undefined) team.wins = (team.wins || 0) + stats.wins;
+    if (stats.losses !== undefined) team.losses = (team.losses || 0) + stats.losses;
+    if (stats.ties !== undefined) team.ties = (team.ties || 0) + stats.ties;
 
-    // Points are cumulative
-    if (stats.pf) {
+    // Points are cumulative (pf/pa can legitimately be 0)
+    if (stats.pf !== undefined) {
         team.ptsFor = (team.ptsFor || 0) + stats.pf;
         team.pointsFor = team.ptsFor; // Alias
     }
-    if (stats.pa) {
+    if (stats.pa !== undefined) {
         team.ptsAgainst = (team.ptsAgainst || 0) + stats.pa;
         team.pointsAgainst = team.ptsAgainst; // Alias
     }
@@ -785,7 +782,7 @@ export function simGameStats(home, away, options = {}) {
       if (!activeRoster || !activeRoster.length) return 50;
 
       return activeRoster.reduce((acc, p) => {
-        const tenureYears = calculateWeeksWithTeam(p, team) / 17;
+        const tenureYears = calculateSeasonsWithTeam(p, team);
 
         let rating = p.ovr || 50;
         // Use imported getEffectiveRating
@@ -907,7 +904,7 @@ export function simGameStats(home, away, options = {}) {
     // Scores naturally land on football numbers (3,6,7,10,13,14,17,20,21,24,27,28,31...)
     // =================================================================
 
-    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
+    const HOME_ADVANTAGE = C.SIMULATION?.HOME_ADVANTAGE || C.HOME_ADVANTAGE || 3;
 
     // Rivalry variance boost
     let varianceBoost = 0;
@@ -995,6 +992,9 @@ export function simGameStats(home, away, options = {}) {
 
         const maxPossessions = allowTies ? 4 : 20;
 
+        // Track which team kicked off (received 2nd) so we know possession order
+        const firstTeam = possession; // Team with first possession
+
         while (!gameOver && possessions < maxPossessions) {
             possessions++;
             // Simulate a drive
@@ -1015,32 +1015,33 @@ export function simGameStats(home, away, options = {}) {
 
             if (verbose) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
 
-            // Apply NFL OT Rules
+            // Apply score
+            if (drivePoints > 0) {
+                if (possession === 'home') homeScore += drivePoints;
+                else awayScore += drivePoints;
+            }
+
+            // Apply NFL OT Rules (2024+: both teams guaranteed a possession)
             if (possessions === 1) {
+                // First possession TD: other team still gets a chance
                 if (drivePoints >= 6) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                    gameOver = true;
+                    firstPossessionScore = 7;
                 } else if (drivePoints === 3) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
                     firstPossessionScore = 3;
                 }
-            } else if (possessions === 2 && firstPossessionScore === 3) {
-                if (drivePoints >= 6) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                    gameOver = true;
-                } else if (drivePoints === 3) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                } else {
+                // First possession: no immediate game-over, other team gets the ball
+            } else if (possessions === 2) {
+                // Second team's response
+                // If scores are no longer tied after both teams had a possession, game over
+                if (homeScore !== awayScore) {
                     gameOver = true;
                 }
+                // If still tied, continue to sudden death
             } else {
-                if (drivePoints > 0) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
+                // Sudden death after both teams have had at least one possession
+                // Game ends when score is different after the team that received 2nd has had their turn
+                // (i.e., check after each pair of possessions, or if a score creates a lead)
+                if (homeScore !== awayScore) {
                     gameOver = true;
                 }
             }
@@ -1154,21 +1155,27 @@ export function simGameStats(home, away, options = {}) {
  * @param {Object} source - Source stats (e.g., game stats).
  * @param {Object} target - Target stats (e.g., season stats).
  */
+// Set of stat keys that are derived/calculated and should NOT be accumulated
+const DERIVED_STAT_KEYS = new Set([
+    'completionPct', 'yardsPerCarry', 'yardsPerReception', 'avgPuntYards',
+    'avgKickYards', 'successPct', 'passerRating', 'sackPct',
+    'dropRate', 'separationRate', 'pressureRate',
+    'coverageRating', 'pressureRating', 'protectionGrade',
+    'ratingWhenTargeted'
+]);
+
 export function accumulateStats(source, target) {
     if (!source || !target) return;
 
-    Object.keys(source).forEach(key => {
+    const keys = Object.keys(source);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
         const value = source[key];
-        if (typeof value === 'number') {
-            // Ignore calculated fields
-            if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
-                key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                key === 'avgKickYards' || key === 'completionPct') {
-                return;
-            }
-            target[key] = (target[key] || 0) + value;
-        }
-    });
+        if (typeof value !== 'number') continue;
+        // Skip derived/calculated fields
+        if (DERIVED_STAT_KEYS.has(key)) continue;
+        target[key] = (target[key] || 0) + value;
+    }
 }
 
 /**
@@ -1368,7 +1375,7 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
     if (!playerStatsMap) return {};
     const box = {};
     Object.keys(playerStatsMap).forEach(pid => {
-        const p = roster.find(pl => pl.id == pid);
+        const p = roster.find(pl => String(pl.id) === String(pid));
         if (p) {
             box[pid] = {
                 name: p.name,
@@ -1530,13 +1537,26 @@ export function validateLeagueState(league) {
     const errors = [];
     if (!league) return { valid: false, errors: ['No league object provided'] };
 
+    if (!league.teams || !Array.isArray(league.teams)) {
+        errors.push('Missing or invalid teams array');
+    } else {
+        // Check teams have required fields
+        league.teams.forEach((team, i) => {
+            if (!team) {
+                errors.push(`Team at index ${i} is null`);
+            } else if (!team.roster || !Array.isArray(team.roster)) {
+                errors.push(`Team ${team.abbr || i} has missing or invalid roster`);
+            }
+        });
+    }
+
     // Check for finalized games with invalid scores
     if (league.resultsByWeek) {
         Object.entries(league.resultsByWeek).forEach(([week, results]) => {
             if (Array.isArray(results)) {
                 results.forEach(game => {
                     if (game.scoreHome === 0 && game.scoreAway === 0 && !game.bye) {
-                        // Warning only for now as tie logic exists, but ideally shouldn't happen often
+                        errors.push(`0-0 game found in week ${week}: ${game.homeTeamAbbr} vs ${game.awayTeamAbbr}`);
                     }
                 });
             }

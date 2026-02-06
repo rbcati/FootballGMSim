@@ -278,7 +278,7 @@ export const State = {
       errors.push('Invalid league.year');
     }
     
-    if (league.week !== undefined && (typeof league.week !== 'number' || league.week < 1 || league.week > 18)) {
+    if (league.week !== undefined && (typeof league.week !== 'number' || league.week < 1 || league.week > 25)) {
       errors.push('Invalid league.week');
     }
     

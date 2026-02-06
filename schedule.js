@@ -348,45 +348,45 @@ function validateSchedule(schedule, teams) {
 
     schedule.weeks.forEach((week, weekIndex) => {
         const weekNumber = week.weekNumber || (weekIndex + 1);
-        
-        // Count bye weeks from teamsWithBye array
+
+        // Use a Set to avoid double-counting byes from both teamsWithBye and games[].bye
+        const byeTeamsThisWeek = new Set();
+
+        // Collect bye teams from teamsWithBye array
         if (week.teamsWithBye) {
             week.teamsWithBye.forEach(teamId => {
                 if (teamId !== undefined && teamId !== null) {
-                    teamByeCount[teamId]++;
-                    
-                    // Check if bye is in weeks 1-4 (should not be)
-                    if (weekNumber <= 4) {
-                        result.valid = false;
-                        result.errors.push(`Team ${teams.find(t => t.id === teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
-                    }
+                    byeTeamsThisWeek.add(teamId);
                 }
             });
         }
-        
-        // Count games and bye weeks from games array
+
+        // Count games and collect bye teams from games array
         week.games.forEach(game => {
             if (game.bye) {
-                // Count bye teams from game.bye array
                 if (Array.isArray(game.bye)) {
                     game.bye.forEach(teamId => {
                         if (teamId !== undefined && teamId !== null) {
-                            teamByeCount[teamId]++;
-
-                            // Check if bye is in weeks 1-4 (should not be)
-                            if (weekNumber <= 4) {
-                                result.valid = false;
-                                result.errors.push(`Team ${teams.find(t => t.id === teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
-                            }
+                            byeTeamsThisWeek.add(teamId);
                         }
                     });
                 }
                 return;
             }
-            
+
             if (game.home !== undefined && game.away !== undefined) {
                 teamGameCount[game.home]++;
                 teamGameCount[game.away]++;
+            }
+        });
+
+        // Apply bye counts (deduplicated)
+        byeTeamsThisWeek.forEach(teamId => {
+            teamByeCount[teamId] = (teamByeCount[teamId] || 0) + 1;
+
+            if (weekNumber <= 4) {
+                result.valid = false;
+                result.errors.push(`Team ${teams.find(t => t.id === teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
             }
         });
     });

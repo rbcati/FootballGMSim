@@ -952,7 +952,7 @@ class LiveGameViewer {
     const awayDefense = this.calculateDefenseStrength(state.away.team);
 
     // Generate target scores (for pacing)
-    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 2.5;
+    const HOME_ADVANTAGE = C.SIMULATION?.HOME_ADVANTAGE || C.HOME_ADVANTAGE || 2.5;
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
     const targetHomeScore = Math.max(0, 20 + Math.round(strengthDiff / 3) + U.rand(-7, 7));
     const targetAwayScore = Math.max(0, 20 - Math.round(strengthDiff / 3) + U.rand(-7, 7));
