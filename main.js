@@ -2303,31 +2303,8 @@ class GameController {
             });
         }
 
-        // FIX: Menu Toggle (ZenGM Style)
-        const menuBtn = document.getElementById('navToggle');
-        const sidebar = document.getElementById('nav-sidebar');
-        const overlay = document.getElementById('menu-overlay');
-
-        // Note: ui-interactions.js also handles mobile menu toggle.
-        // We ensure this handler cooperates or delegates.
-
-        if (menuBtn) {
-            this.addEventListener(menuBtn, 'click', (e) => {
-                e.preventDefault();
-                // Simple toggle using class expected by CSS
-                document.body.classList.toggle('nav-open');
-                if (sidebar) sidebar.classList.toggle('nav-open');
-                if (overlay) overlay.classList.toggle('active');
-            });
-        }
-
-        if (overlay) {
-             this.addEventListener(overlay, 'click', () => {
-                document.body.classList.remove('nav-open');
-                if (sidebar) sidebar.classList.remove('nav-open');
-                if (overlay) overlay.classList.remove('active');
-             });
-        }
+        // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
+        // ui-interactions.js handles mobile menu toggle via .nav-toggle
 
         // FIX: Dashboard Button
         const btnDashboard = document.getElementById('btnDashboard');

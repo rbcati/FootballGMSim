@@ -26,14 +26,12 @@ test.describe('Edge Cases & Performance', () => {
 
         console.log("Rapid clicking advance button...");
 
-        try {
-            await btn.click(); // 1st click
-            // Try 2nd click immediately, ignoring errors
-            await btn.click({ timeout: 500 }).catch(() => {});
-            await btn.click({ timeout: 500 }).catch(() => {});
-        } catch (e) {
-            console.log("Subsequent clicks blocked (expected):", e.message);
-        }
+        // Spam clicks using evaluate to bypass Playwright's auto-wait
+        await btn.evaluate(node => {
+            for (let i = 0; i < 5; i++) {
+                node.click();
+            }
+        });
 
         // Wait for processing
         await page.waitForTimeout(5000);
