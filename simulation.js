@@ -21,6 +21,76 @@ import { processStaffPoaching } from './coach-system.js';
 let isSimulating = false;
 let simResolve = null;
 let simReject = null;
+let simWatchdogTimer = null;
+
+// Watchdog: Maximum time (ms) to wait for the worker before forcibly aborting
+const SIM_WATCHDOG_TIMEOUT_MS = 5000;
+
+/**
+ * Saves a debug snapshot of the current simulation state so that hangs
+ * or crashes can be reproduced later with the same seed / conditions.
+ */
+function saveDebugSnapshot(reason) {
+  try {
+    const L = window.state?.league;
+    const snapshot = {
+      reason,
+      timestamp: new Date().toISOString(),
+      week: L?.week,
+      year: L?.year,
+      seed: L?.seed ?? null,
+      teamCount: L?.teams?.length ?? 0,
+      stateVersion: window.state?.version
+    };
+    const key = 'nflGM4.debugSnapshot';
+    window.localStorage.setItem(key, JSON.stringify(snapshot));
+    console.warn('[WATCHDOG] Debug snapshot saved:', snapshot);
+  } catch (e) {
+    console.error('[WATCHDOG] Failed to save debug snapshot:', e);
+  }
+}
+
+/**
+ * Clears the watchdog timer if one is active.
+ */
+function clearSimWatchdog() {
+  if (simWatchdogTimer !== null) {
+    clearTimeout(simWatchdogTimer);
+    simWatchdogTimer = null;
+  }
+}
+
+/**
+ * Starts a watchdog timer that will forcibly abort the simulation
+ * if the worker doesn't respond within SIM_WATCHDOG_TIMEOUT_MS.
+ */
+function startSimWatchdog() {
+  clearSimWatchdog();
+  simWatchdogTimer = setTimeout(() => {
+    if (!isSimulating) return; // Already resolved
+
+    console.error(`[WATCHDOG] Simulation timed out after ${SIM_WATCHDOG_TIMEOUT_MS}ms`);
+    saveDebugSnapshot('WATCHDOG_TIMEOUT');
+
+    // Force-release the simulation lock
+    isSimulating = false;
+    if (document.body) document.body.style.cursor = 'default';
+
+    if (window.setStatus) {
+      window.setStatus(
+        'Simulation timed out. Your save has been preserved. Try advancing again or reload.',
+        'error',
+        10000
+      );
+    }
+
+    if (simReject) {
+      simReject(new Error('SIM_WATCHDOG_TIMEOUT'));
+      simResolve = null;
+      simReject = null;
+    }
+  }, SIM_WATCHDOG_TIMEOUT_MS);
+}
 
 // =============================================================================
 // COMPETITIVE BALANCE - Prevents super-dynasties, keeps league fresh
@@ -579,6 +649,102 @@ function startOffseason() {
   }
 }
 
+/**
+ * Prune active memory to prevent the game state from growing unbounded.
+ * - Strips box scores from resultsByWeek older than the most recent season
+ * - Caps retiredPlayers to the top 50 by legacy score (rest are archived)
+ * - Limits per-player statsHistory to last 5 seasons in active memory
+ *
+ * Archived data is serialized to a separate localStorage key so users
+ * can view it via "View History" without it bloating active state.
+ */
+function pruneActiveMemory(league) {
+    if (!league) return;
+
+    const MAX_RETIRED_IN_MEMORY = 50;
+    const MAX_STATS_HISTORY_SEASONS = 5;
+    const archiveKey = 'nflGM4.archive.' + (window.state?.leagueName || 'default');
+
+    // 1. Strip box scores from all resultsByWeek (keep only scores/summary)
+    if (league.resultsByWeek) {
+        const strip = (weekResults) => {
+            if (!Array.isArray(weekResults)) return weekResults;
+            return weekResults.map(result => {
+                if (!result || typeof result !== 'object') return result;
+                const { boxScore, playerStats, ...summary } = result;
+                return summary;
+            });
+        };
+
+        if (Array.isArray(league.resultsByWeek)) {
+            league.resultsByWeek = league.resultsByWeek.map(strip);
+        } else if (typeof league.resultsByWeek === 'object') {
+            Object.keys(league.resultsByWeek).forEach(key => {
+                league.resultsByWeek[key] = strip(league.resultsByWeek[key]);
+            });
+        }
+    }
+
+    // 2. Cap retired players in active memory
+    if (league.retiredPlayers && league.retiredPlayers.length > MAX_RETIRED_IN_MEMORY) {
+        // Sort by legacy score descending, keep top entries
+        league.retiredPlayers.sort((a, b) => {
+            const scoreA = a.legacy?.metrics?.legacyScore || 0;
+            const scoreB = b.legacy?.metrics?.legacyScore || 0;
+            return scoreB - scoreA;
+        });
+
+        // Archive overflow to separate storage
+        const overflow = league.retiredPlayers.slice(MAX_RETIRED_IN_MEMORY);
+        league.retiredPlayers = league.retiredPlayers.slice(0, MAX_RETIRED_IN_MEMORY);
+
+        try {
+            const existing = JSON.parse(window.localStorage.getItem(archiveKey) || '{}');
+            if (!existing.retiredPlayers) existing.retiredPlayers = [];
+            // Append overflow with minimal data
+            overflow.forEach(p => {
+                existing.retiredPlayers.push({
+                    name: p.name, pos: p.pos,
+                    legacyScore: p.legacy?.metrics?.legacyScore || 0,
+                    hallOfFame: !!p.legacy?.hallOfFame?.inducted,
+                    archivedYear: league.year
+                });
+            });
+            window.localStorage.setItem(archiveKey, JSON.stringify(existing));
+        } catch (e) {
+            console.warn('[MEMORY] Failed to archive retired players:', e);
+        }
+    }
+
+    // 3. Trim per-player statsHistory to last N seasons
+    if (league.teams) {
+        league.teams.forEach(team => {
+            if (!team.roster) return;
+            team.roster.forEach(player => {
+                if (player.statsHistory && player.statsHistory.length > MAX_STATS_HISTORY_SEASONS) {
+                    player.statsHistory = player.statsHistory.slice(-MAX_STATS_HISTORY_SEASONS);
+                }
+            });
+        });
+    }
+
+    console.log('[MEMORY] Active memory pruned for season transition');
+}
+
+// Expose archive loader globally so the UI can load archived history on demand
+if (typeof window !== 'undefined') {
+    window.loadArchivedHistory = function() {
+        const archiveKey = 'nflGM4.archive.' + (window.state?.leagueName || 'default');
+        try {
+            const data = JSON.parse(window.localStorage.getItem(archiveKey) || '{}');
+            return data;
+        } catch (e) {
+            console.error('Failed to load archive:', e);
+            return {};
+        }
+    };
+}
+
 function startNewSeason() {
   try {
     const L = window.state?.league;
@@ -660,6 +826,15 @@ function startNewSeason() {
         }
     } catch (e) {
         console.error('Error in CPU free agency:', e);
+    }
+
+    // MEMORY MANAGEMENT - Archive old season data to prevent memory bloat
+    // Only keep current + last season results in active memory.
+    // Full history is archived to a separate localStorage key on demand.
+    try {
+        pruneActiveMemory(L);
+    } catch (e) {
+        console.error('Error pruning active memory:', e);
     }
 
     // COMPETITIVE BALANCE - regression to mean
@@ -778,6 +953,9 @@ function simulateWeek(options = {}) {
           }
       };
 
+      // Start watchdog timer before posting to worker
+      startSimWatchdog();
+
       // Post message to worker
       worker.postMessage({ type: 'SIM_WEEK', payload });
 
@@ -797,7 +975,10 @@ function simulateWeek(options = {}) {
  * Handles successful simulation response from worker
  */
 function handleSimulationComplete(payload) {
+    clearSimWatchdog();
     console.log(`[SIM-DEBUG] Worker completed simulation for Week ${payload.week}`);
+
+  try {
     const L = window.state.league;
     const { results, updatedTeams, weeklyGamePlan, strategyHistory, scheduleUpdates } = payload;
 
@@ -1028,10 +1209,35 @@ function handleSimulationComplete(payload) {
         simResolve = null;
         simReject = null;
     }
+
+  } catch (stateUpdateError) {
+    // Save debug snapshot with seed so this crash can be reproduced
+    console.error('[SIM] State update crashed:', stateUpdateError);
+    saveDebugSnapshot('STATE_UPDATE_CRASH: ' + stateUpdateError.message);
+
+    isSimulating = false;
+    if (document.body) document.body.style.cursor = 'default';
+
+    if (window.setStatus) {
+      window.setStatus(
+        'Simulation completed but failed to update state. Debug snapshot saved. Try reloading.',
+        'error',
+        10000
+      );
+    }
+
+    if (simReject) {
+      simReject(stateUpdateError);
+      simResolve = null;
+      simReject = null;
+    }
+  }
 }
 
 function handleSimulationError(payload) {
+    clearSimWatchdog();
     console.error('[Worker] Simulation Error:', payload);
+    saveDebugSnapshot('WORKER_ERROR: ' + payload.message);
     window.setStatus(`Simulation failed: ${payload.message}`, 'error');
     isSimulating = false;
     if (document.body) document.body.style.cursor = 'default';

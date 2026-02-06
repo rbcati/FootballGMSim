@@ -2172,6 +2172,12 @@ class GameController {
                 // STRICT CHECK: Ensure league object exists
                 if (loaded && window.state && window.state.league) {
                     console.log("Resuming league successfully.");
+                    // Persist critical IDs for rehydration on refresh
+                    try {
+                        if (window.state.userTeamId !== undefined) {
+                            localStorage.setItem('nflGM4.userTeamId', String(window.state.userTeamId));
+                        }
+                    } catch (e) { /* non-critical */ }
                     this.initialized = true;
                     this.setupEventListeners();
                     this.setupAutoSave();
@@ -2380,6 +2386,16 @@ class GameController {
     handleHashChange() {
         try {
             const hash = location.hash.slice(2) || 'hub';
+
+            // REHYDRATION MIDDLEWARE: If state is empty on a hash change
+            // (e.g. user refreshed), attempt to reload from storage before
+            // redirecting to the login/onboarding screen.
+            if (!window.state?.league && hash !== 'leagueDashboard') {
+                console.warn('[ROUTER] State empty on navigation to', hash, '- attempting rehydration');
+                this._rehydrateAndRoute(hash);
+                return;
+            }
+
             // Save current view to state for persistence
             if (window.state) {
                 window.state.currentView = hash;
@@ -2389,6 +2405,55 @@ class GameController {
             }
         } catch (error) {
             console.error('Error handling hash change:', error);
+        }
+    }
+
+    /**
+     * Attempts to rehydrate state from localStorage/IndexedDB before routing.
+     * If rehydration fails, redirects to the league dashboard instead of
+     * showing a white screen.
+     */
+    async _rehydrateAndRoute(targetHash) {
+        try {
+            // Check for persisted league identity
+            const savedLeagueName = localStorage.getItem('football_gm_last_played');
+            const savedUserTeamId = localStorage.getItem('nflGM4.userTeamId');
+
+            if (savedLeagueName && window.loadLeague) {
+                console.log('[ROUTER] Rehydrating from saved league:', savedLeagueName);
+                const loaded = await window.loadLeague(savedLeagueName);
+                if (loaded && window.state?.league) {
+                    // Restore userTeamId if it was persisted separately
+                    if (savedUserTeamId !== null && window.state.userTeamId === undefined) {
+                        window.state.userTeamId = parseInt(savedUserTeamId, 10) || 0;
+                    }
+                    window.state.currentView = targetHash;
+                    this.router(targetHash);
+                    return;
+                }
+            }
+
+            // Fallback: try legacy state loader
+            if (loadState) {
+                const gameData = await loadState();
+                if (gameData && window.state?.league) {
+                    if (savedUserTeamId !== null && window.state.userTeamId === undefined) {
+                        window.state.userTeamId = parseInt(savedUserTeamId, 10) || 0;
+                    }
+                    window.state.currentView = targetHash;
+                    this.router(targetHash);
+                    return;
+                }
+            }
+
+            // Rehydration failed - go to dashboard gracefully
+            console.warn('[ROUTER] Rehydration failed, redirecting to dashboard');
+            location.hash = '#/leagueDashboard';
+            if (window.renderDashboard) window.renderDashboard();
+        } catch (error) {
+            console.error('[ROUTER] Rehydration error:', error);
+            location.hash = '#/leagueDashboard';
+            if (window.renderDashboard) window.renderDashboard();
         }
     }
 
@@ -2420,6 +2485,17 @@ class GameController {
         }
 
         try {
+            // Persist critical identifiers independently so refresh can rehydrate
+            try {
+                const st = stateToSave || window.state;
+                if (st?.userTeamId !== undefined) {
+                    localStorage.setItem('nflGM4.userTeamId', String(st.userTeamId));
+                }
+                if (st?.leagueName) {
+                    localStorage.setItem('football_gm_last_played', st.leagueName);
+                }
+            } catch (e) { /* non-critical */ }
+
             // Use new Dashboard Save System if available
             if (window.saveGame) {
                 await window.saveGame(stateToSave);
@@ -2486,6 +2562,18 @@ class GameController {
                 viewName = location.hash.slice(2) || 'hub';
             }
             console.log('🔄 Router navigating to:', viewName);
+
+            // Guard: If league data is missing and we're trying to render
+            // a game view, redirect to dashboard instead of crashing
+            const gameViews = ['hub', 'roster', 'contracts', 'cap', 'schedule',
+                'game-results', 'powerRankings', 'trade', 'freeagency', 'scouting',
+                'coaching', 'draft', 'awards', 'injuries', 'news', 'owner',
+                'relocation', 'playoffs', 'stats', 'leagueStats', 'game-sim', 'player'];
+            if (!window.state?.league && gameViews.includes(viewName.split('/')[0])) {
+                console.warn('[ROUTER] No league data for view:', viewName, '- redirecting to dashboard');
+                viewName = 'leagueDashboard';
+                location.hash = '#/leagueDashboard';
+            }
 
             // Always show the requested view if the UI helper exists
             if (typeof window.show === 'function') {
