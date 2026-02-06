@@ -307,7 +307,9 @@ class LiveGameViewer {
       if (isTeleport) {
           // Fade Out Sequence
           const elements = [ballEl, losEl, fdEl].filter(e => e);
-          elements.forEach(e => e.classList.add('fade-out'));
+          elements.forEach(e => {
+              if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
+          });
 
           setTimeout(() => {
               elements.forEach(e => {
@@ -709,6 +711,11 @@ class LiveGameViewer {
           const kickDuration = 1200 * durationScale;
           const arc = play.playType === 'punt' ? 40 : 30;
 
+          if (ballEl) {
+              ballEl.classList.add('kick-flash');
+              setTimeout(() => ballEl.classList.remove('kick-flash'), 300);
+          }
+
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
           if (defMarker) defMarker.style.opacity = 0; // Hide defense for kicks for simplicity
@@ -735,6 +742,13 @@ class LiveGameViewer {
                    // Celebration
                    if (skillMarker) skillMarker.classList.add('celebrate-jump');
                    if (qbMarker) qbMarker.classList.add('celebrate-spin');
+
+                   const endzone = isHome ? parent.querySelector('.endzone.right') : parent.querySelector('.endzone.left');
+                   if (endzone) {
+                       endzone.classList.add('endzone-pulse');
+                       setTimeout(() => endzone.classList.remove('endzone-pulse'), 2000);
+                   }
+
                    this.fieldEffects.spawnParticles(endPct, 'touchdown');
                }
            }
