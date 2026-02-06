@@ -1484,33 +1484,10 @@ class GameController {
             // Allow UI to update
             await new Promise(resolve => requestAnimationFrame(resolve));
 
-            // Capture week before sim
-            const currentWeek = window.state?.league?.week || 1;
-
             if (simulateWeek) {
                 console.log('[GameController] Calling simulateWeek()');
-                simulateWeek();
-
-                // Save is handled inside simulateWeek (via saveState), but redundancy is fine
-                this.saveGameState();
-
-                this.setStatus('Week simulated successfully', 'success');
-
-                // Force UI Refresh
-                this.renderHub();
-                if (window.renderSchedule) window.renderSchedule();
-
-                // Show Recap
-                const L = window.state.league;
-                const results = L.resultsByWeek[currentWeek - 1]; // Results are 0-indexed
-
-                // Ensure results exist before showing recap
-                if (results) {
-                    setTimeout(() => {
-                        showWeeklyRecap(currentWeek, results, L.news);
-                    }, 500);
-                }
-
+                await simulateWeek();
+                // Simulation complete, UI updated by worker callback
             } else {
                 console.error('[GameController] simulateWeek function missing');
                 this.setStatus('Simulation function not available', 'error');

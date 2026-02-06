@@ -19,6 +19,8 @@ import { processStaffPoaching } from './coach-system.js';
 
 // Simulation Lock
 let isSimulating = false;
+let simResolve = null;
+let simReject = null;
 
 // =============================================================================
 // COMPETITIVE BALANCE - Prevents super-dynasties, keeps league fresh
@@ -711,85 +713,109 @@ function startNewSeason() {
 
 /**
  * Simulates all games for the current week via Web Worker.
+ * @returns {Promise} Resolves when simulation completes
  */
 function simulateWeek(options = {}) {
-  // Prevent re-entrancy
-  if (isSimulating) {
-    console.warn('Simulation already in progress.');
-    return;
-  }
-
-  try {
-    isSimulating = true;
-
-    // UI Lock (if applicable)
-    if (document.body) document.body.style.cursor = 'wait';
-
-    // Validate dependencies
-    if (!validateDependencies()) {
-      isSimulating = false;
-      return;
-    }
-    
-    const L = window.state.league;
-
-    if (!L) {
-      console.error('No league available');
-      window.setStatus('Error: No league loaded');
-      isSimulating = false;
+  return new Promise((resolve, reject) => {
+    // Prevent re-entrancy
+    if (isSimulating) {
+      console.warn('Simulation already in progress.');
+      reject(new Error('Simulation already in progress'));
       return;
     }
 
-    if (!L.schedule) {
-      console.error('No schedule available');
-      window.setStatus('Error: No schedule found');
-      isSimulating = false;
-      return;
-    }
+    try {
+      isSimulating = true;
+      simResolve = resolve;
+      simReject = reject;
 
-    // Check Season Progression BEFORE calling worker
-    const scheduleWeeks = L.schedule.weeks || L.schedule;
-    if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
-      if (window.state.offseason === true) {
-        console.log('Already in offseason');
+      // UI Lock (if applicable)
+      if (document.body) document.body.style.cursor = 'wait';
+
+      // Validate dependencies
+      if (!validateDependencies()) {
         isSimulating = false;
+        simResolve = null;
+        simReject = null;
+        reject(new Error('Missing dependencies'));
         return;
       }
       
-      console.log('Season complete, transitioning to offseason');
-      window.setStatus('Season complete! Entering offseason...');
-      
-      if (startOffseason) {
-        startOffseason();
-      } else if (startNewSeason) {
-        startNewSeason();
+      const L = window.state.league;
+
+      if (!L) {
+        console.error('No league available');
+        window.setStatus('Error: No league loaded');
+        isSimulating = false;
+        simResolve = null;
+        simReject = null;
+        reject(new Error('No league loaded'));
+        return;
       }
 
-      isSimulating = false;
-      if (document.body) document.body.style.cursor = 'default';
-      return;
-    }
+      if (!L.schedule) {
+        console.error('No schedule available');
+        window.setStatus('Error: No schedule found');
+        isSimulating = false;
+        simResolve = null;
+        simReject = null;
+        reject(new Error('No schedule found'));
+        return;
+      }
 
-    console.log(`[SIM-DEBUG] Requesting Week ${L.week} Simulation from Worker`);
-
-    // Prepare payload
-    const payload = {
-        league: L, // Structured Clone handles deep copy
-        options: {
-            ...options,
-            ownerMode: window.state.ownerMode // Pass owner mode settings
+      // Check Season Progression BEFORE calling worker
+      const scheduleWeeks = L.schedule.weeks || L.schedule;
+      if (window.state && window.state.playoffs && window.state.playoffs.winner && L.week > scheduleWeeks.length) {
+        if (window.state.offseason === true) {
+          console.log('Already in offseason');
+          isSimulating = false;
+          simResolve = null;
+          simReject = null;
+          resolve({ status: 'OFFSEASON_ALREADY' });
+          return;
         }
-    };
 
-    // Post message to worker
-    worker.postMessage({ type: 'SIM_WEEK', payload });
+        console.log('Season complete, transitioning to offseason');
+        window.setStatus('Season complete! Entering offseason...');
 
-  } catch (error) {
-    console.error('Error initiating simulation:', error);
-    window.setStatus(`Simulation start error: ${error.message}`);
-    isSimulating = false;
-    if (document.body) document.body.style.cursor = 'default';
-  }
+        if (startOffseason) {
+          startOffseason();
+        } else if (startNewSeason) {
+          startNewSeason();
+        }
+
+        isSimulating = false;
+        simResolve = null;
+        simReject = null;
+        if (document.body) document.body.style.cursor = 'default';
+        resolve({ status: 'SEASON_COMPLETE' });
+        return;
+      }
+
+      console.log(`[SIM-DEBUG] Requesting Week ${L.week} Simulation from Worker`);
+
+      // Prepare payload
+      const payload = {
+          league: L, // Structured Clone handles deep copy
+          options: {
+              ...options,
+              ownerMode: window.state.ownerMode // Pass owner mode settings
+          }
+      };
+
+      // Post message to worker
+      worker.postMessage({ type: 'SIM_WEEK', payload });
+
+    } catch (error) {
+      console.error('Error initiating simulation:', error);
+      window.setStatus(`Simulation start error: ${error.message}`);
+      isSimulating = false;
+      simResolve = null;
+      simReject = null;
+      if (document.body) document.body.style.cursor = 'default';
+      reject(error);
+    }
+  });
 }
 
 /**
@@ -1020,6 +1046,13 @@ function handleSimulationComplete(payload) {
     // Cleanup
     isSimulating = false;
     if (document.body) document.body.style.cursor = 'default';
+
+    // Resolve Promise
+    if (simResolve) {
+        simResolve(payload);
+        simResolve = null;
+        simReject = null;
+    }
 }
 
 function handleSimulationError(payload) {
@@ -1027,6 +1060,13 @@ function handleSimulationError(payload) {
     window.setStatus(`Simulation failed: ${payload.message}`, 'error');
     isSimulating = false;
     if (document.body) document.body.style.cursor = 'default';
+
+    // Reject Promise
+    if (simReject) {
+        simReject(new Error(payload.message));
+        simResolve = null;
+        simReject = null;
+    }
 }
 
 // ============================================================================
