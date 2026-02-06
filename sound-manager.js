@@ -107,14 +107,45 @@ class SoundManager {
         this.playNoise(0.2, 0.3);
     }
 
+    playInterception() {
+        if (!this.enabled || this.muted) return;
+        // Whoosh + Alarm
+        this.playNoise(0.3, 0.2);
+        this.playTone(800, 'sawtooth', 0.3, 0.2, 300);
+        this.playTone(600, 'sawtooth', 0.3, 0.2, 300, 150);
+    }
+
+    playFumble() {
+        if (!this.enabled || this.muted) return;
+        // Chaotic low rumbles
+        this.playTone(100, 'sawtooth', 0.1, 0.3);
+        this.playTone(120, 'square', 0.1, 0.3, null, 50);
+        this.playTone(80, 'sawtooth', 0.1, 0.3, null, 100);
+        this.playNoise(0.3, 0.2);
+    }
+
     playBigHit() {
         if (!this.enabled || this.muted) return;
         this.playNoise(0.3, 0.4);
         this.playTone(60, 'sawtooth', 0.3, 0.3, 20); // Deep crunch
     }
 
+    playSack() {
+        if (!this.enabled || this.muted) return;
+        this.playNoise(0.4, 0.5); // Louder noise
+        this.playTone(50, 'sawtooth', 0.4, 0.5, 20); // Deep crunch
+        this.playTone(40, 'square', 0.2, 0.3, 10, 50); // Sub-bass
+    }
+
     playTackle() { this.playBigHit(); }
     playHit() { this.playBigHit(); }
+
+    playCatch() {
+        if (!this.enabled || this.muted) return;
+        // Thwack / Pop
+        this.playTone(200, 'square', 0.05, 0.1);
+        this.playNoise(0.05, 0.2);
+    }
 
     playFirstDown() {
         if (!this.enabled || this.muted) return;
@@ -133,6 +164,14 @@ class SoundManager {
     playPing() {
         if (!this.enabled || this.muted) return;
         this.playTone(800, 'sine', 0.5, 0.05);
+    }
+
+    playFieldGoalMiss() {
+        if (!this.enabled || this.muted) return;
+        // Clank
+        this.playTone(800, 'square', 0.2, 0.2);
+        this.playTone(810, 'square', 0.1, 0.1, null, 10); // Metallic dissonance
+        this.playTone(300, 'sawtooth', 0.5, 0.1, 150, 200); // Sad slide down
     }
 
     playFieldGoal() {

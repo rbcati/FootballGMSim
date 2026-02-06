@@ -51,7 +51,9 @@ export class FieldEffects {
                       type === 'catch' ? 10 :
                       type === 'first_down' ? 20 :
                       type === 'field_goal' ? 40 :
-                      type === 'defense_stop' ? 45 : 25;
+                      type === 'defense_stop' ? 45 :
+                      type === 'interception' ? 50 :
+                      type === 'fumble' ? 35 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -128,6 +130,19 @@ export class FieldEffects {
             p.decay = 0.05; // Fast fade
             p.size = (window.Utils?.random || Math.random)() * 4 + 2;
             p.gravity = 0.05;
+        } else if (type === 'interception') {
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FF453A' : '#FFFFFF'; // Red/White Alert
+            p.decay = 0.04;
+            p.size = (window.Utils?.random || Math.random)() * 3 + 2;
+        } else if (type === 'fumble') {
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+            p.vy = ((window.Utils?.random || Math.random)() * -4) - 2; // Up and chaotic
+            p.color = '#D2691E'; // Chocolate / Brown
+            p.decay = 0.03;
+            p.gravity = 0.3; // Heavy
+            p.size = (window.Utils?.random || Math.random)() * 4 + 1;
         }
 
         return p;
