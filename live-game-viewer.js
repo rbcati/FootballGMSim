@@ -54,9 +54,11 @@ class LiveGameViewer {
    */
   checkUI() {
     if (this.viewMode) {
-      return this.container && document.body.contains(this.container);
+      // Ensure container is in DOM AND visible (not hidden by router)
+      return this.container && document.body.contains(this.container) && this.container.offsetParent !== null;
     }
-    return this.modal && document.body.contains(this.modal);
+    // Modal check
+    return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
   }
 
   triggerShake() {
