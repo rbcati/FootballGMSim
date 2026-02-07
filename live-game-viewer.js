@@ -660,6 +660,7 @@ class LiveGameViewer {
           // Catch Effect
           if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
                if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
+               soundManager.playCatch();
                if (skillMarker) {
                    skillMarker.classList.add('marker-catch');
                    setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
@@ -740,7 +741,11 @@ class LiveGameViewer {
                }
                if (play.result === 'touchdown') {
                    // Celebration
-                   if (skillMarker) skillMarker.classList.add('celebrate-jump');
+                   if (skillMarker) {
+                       const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance'];
+                       const anim = anims[Math.floor(Math.random() * anims.length)];
+                       skillMarker.classList.add(anim);
+                   }
                    if (qbMarker) qbMarker.classList.add('celebrate-spin');
 
                    const endzone = isHome ? parent.querySelector('.endzone.right') : parent.querySelector('.endzone.left');
@@ -766,7 +771,13 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              this.fieldEffects.spawnParticles(endPct, 'defense_stop');
+              if (play.message && play.message.toLowerCase().includes('intercept')) {
+                   this.fieldEffects.spawnParticles(endPct, 'interception');
+              } else if (play.message && play.message.toLowerCase().includes('fumble')) {
+                   this.fieldEffects.spawnParticles(endPct, 'fumble');
+              } else {
+                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
+              }
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
           } else if (play.message && play.message.includes('First down')) {
@@ -1771,7 +1782,13 @@ class LiveGameViewer {
                  this.fieldEffects.spawnParticles(pct, 'touchdown');
             }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-            soundManager.playDefenseStop();
+            if (play.message && play.message.toLowerCase().includes('intercept')) {
+                 soundManager.playInterception();
+            } else if (play.message && play.message.toLowerCase().includes('fumble')) {
+                 soundManager.playFumble();
+            } else {
+                 soundManager.playDefenseStop();
+            }
             soundManager.playFailure();
             // Intense shake
             if (this.container) this.container.classList.add('shake-hard');
@@ -1794,11 +1811,11 @@ class LiveGameViewer {
 
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
-            soundManager.playFailure();
+            soundManager.playFieldGoalMiss();
             this.triggerShake();
             this.triggerFloatText('NO GOOD!', 'bad');
         } else if (play.result === 'sack') {
-            soundManager.playBigHit();
+            soundManager.playSack();
             this.triggerShake();
             this.triggerFloatText('SACKED!', 'bad');
             this.triggerVisualFeedback('negative', 'SACK!');
@@ -2369,9 +2386,18 @@ class LiveGameViewer {
       else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
 
       overlay.innerHTML = `
-        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60;">
-            <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
-            <div class="game-over-score">${scoreA} - ${scoreB}</div>
+        <div class="${bannerClass}" style="
+            border-color: ${mainColor};
+            box-shadow: 0 0 60px ${mainColor}60;
+            background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);
+        ">
+            <h2 style="
+                color: ${mainColor};
+                text-shadow: 0 0 30px ${mainColor}80;
+                font-size: 4.5rem;
+                margin-bottom: 20px;
+            ">${title}</h2>
+            <div class="game-over-score" style="font-size: 3rem;">${scoreA} - ${scoreB}</div>
 
             ${mvp ? `
             <div class="game-over-mvp">
@@ -2700,11 +2726,16 @@ class LiveGameViewer {
           streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
-      if (this.combo >= 2) {
+      if (this.combo > 0) {
           streakHtml += `
             <div class="streak-text" style="text-align:center; margin-top: 5px;">
                 <span style="font-size: 1.2em; font-weight: 900; color: #ffeb3b; text-shadow: 0 0 10px #ffc107;">COMBO</span>
                 <span style="font-size: 1.5em; font-weight: 900; color: #fff;">x${this.combo}</span>
+            </div>
+            <div class="combo-bar-container">
+                ${Array.from({length: 5}, (_, i) =>
+                    `<div class="combo-bar-segment ${i < this.combo ? (this.combo >= 5 ? 'max' : 'active') : ''}"></div>`
+                ).join('')}
             </div>
           `;
       }
