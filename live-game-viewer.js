@@ -55,7 +55,7 @@ class LiveGameViewer {
   checkUI() {
     if (this.viewMode) {
       // Ensure container is in DOM AND visible (not hidden by router)
-      return this.container && document.body.contains(this.container) && this.container.offsetParent !== null;
+      return this.container && document.body.contains(this.container);
     }
     // Modal check
     return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
@@ -517,6 +517,16 @@ class LiveGameViewer {
           return Promise.resolve();
       }
 
+      // Safety check for FieldEffects
+      if (!this.fieldEffects) {
+          // Try to recover or just proceed without effects
+          const parent = this.viewMode ? this.container : this.modal;
+          if (parent && parent.querySelector('.field-wrapper')) {
+              this.renderField(parent.querySelector('.field-wrapper'));
+          }
+          if (!this.fieldEffects) return Promise.resolve();
+      }
+
       const parent = this.viewMode ? this.container : this.modal;
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
       const ballShadow = parent.querySelector('.ball-shadow');
@@ -791,7 +801,7 @@ class LiveGameViewer {
 
       // Cleanup
       setTimeout(() => {
-          ballEl.classList.remove('animate-pulse');
+          if (ballEl) ballEl.classList.remove('animate-pulse');
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
           if (defMarker) defMarker.style.opacity = 0;
@@ -2002,43 +2012,68 @@ class LiveGameViewer {
     const displayHome = homeChanged ? this.lastHomeScore : home.score;
     const displayAway = awayChanged ? this.lastAwayScore : away.score;
 
-    scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
-        <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
-      </div>
-      <div class="score-info">
-        <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
-        <div class="down-distance">
-          ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
-        </div>
-      </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
-        <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
-      </div>
-    `;
-
-    // Trigger animations explicitly
-    if (homeChanged) {
-        const el = scoreboard.querySelector('#scoreHome');
-        if (el) {
-            el.classList.remove('pulse-score');
-            if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
-            void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
-            this.animateNumber(el, this.lastHomeScore, home.score, 1500);
-        }
+    // Initialize scoreboard structure if missing
+    if (!scoreboard.querySelector('#scoreHome')) {
+        scoreboard.innerHTML = `
+          <div class="score-team" id="awayTeamBox">
+            <div class="team-name">${away.team.abbr}</div>
+            <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
+          </div>
+          <div class="score-info">
+            <div class="game-clock"></div>
+            <div class="down-distance"></div>
+          </div>
+          <div class="score-team" id="homeTeamBox">
+            <div class="team-name">${home.team.abbr}</div>
+            <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
+          </div>
+        `;
     }
-    if (awayChanged) {
-        const el = scoreboard.querySelector('#scoreAway');
-        if (el) {
-            el.classList.remove('pulse-score');
-            if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
-            void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
-            this.animateNumber(el, this.lastAwayScore, away.score, 1500);
-        }
+
+    // Update Possession Classes
+    const awayBox = scoreboard.querySelector('#awayTeamBox');
+    const homeBox = scoreboard.querySelector('#homeTeamBox');
+    if (awayBox) awayBox.className = `score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}`;
+    if (homeBox) homeBox.className = `score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}`;
+
+    // Update Info
+    const clockEl = scoreboard.querySelector('.game-clock');
+    if (clockEl) clockEl.textContent = `Q${state.quarter} ${this.formatTime(state.time)}`;
+
+    const ddEl = scoreboard.querySelector('.down-distance');
+    if (ddEl) ddEl.textContent = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
+
+    // Update Scores with Animation
+    const homeEl = scoreboard.querySelector('#scoreHome');
+    const awayEl = scoreboard.querySelector('#scoreAway');
+
+    if (homeChanged && homeEl) {
+        homeEl.classList.remove('pulse-score');
+        if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
+        void homeEl.offsetWidth; // Force reflow
+        homeEl.classList.add('pulse-score');
+        this.animateNumber(homeEl, this.lastHomeScore, home.score, 1500);
+    } else if (homeEl) {
+         // Ensure accurate if not animating
+         // Only update if not currently animating (hacky check: assume animating if class present?)
+         // Ideally animateNumber handles final state. But if page refreshed, we need to set it.
+         if (homeEl.textContent != home.score && !homeEl.classList.contains('pulse-score')) {
+             homeEl.textContent = home.score;
+             if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
+         }
+    }
+
+    if (awayChanged && awayEl) {
+        awayEl.classList.remove('pulse-score');
+        if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
+        void awayEl.offsetWidth; // Force reflow
+        awayEl.classList.add('pulse-score');
+        this.animateNumber(awayEl, this.lastAwayScore, away.score, 1500);
+    } else if (awayEl) {
+         if (awayEl.textContent != away.score && !awayEl.classList.contains('pulse-score')) {
+             awayEl.textContent = away.score;
+             if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
+         }
     }
 
     this.lastHomeScore = home.score;
@@ -2912,6 +2947,8 @@ class LiveGameViewer {
         this.fieldEffects.destroy();
         this.fieldEffects = null;
     }
+
+    // Clear resize listener if it was attached globally (though FieldEffects handles its own)
 
     this.gameState = null;
   }

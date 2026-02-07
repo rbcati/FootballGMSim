@@ -17,6 +17,7 @@ export class FieldEffects {
         this.ctx = this.canvas.getContext('2d');
         this.particles = [];
         this.animating = false;
+        this.animationId = null;
 
         this.resize();
         this._resizeHandler = () => this.resize();
@@ -24,6 +25,10 @@ export class FieldEffects {
     }
 
     destroy() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
         if (this._resizeHandler) {
             window.removeEventListener('resize', this._resizeHandler);
             this._resizeHandler = null;
@@ -179,6 +184,6 @@ export class FieldEffects {
         }
 
         this.ctx.globalAlpha = 1;
-        requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(() => this.animate());
     }
 }

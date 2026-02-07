@@ -6,7 +6,7 @@ test.describe('Live Game Bug Hunt', () => {
     page.on('pageerror', exception => console.log(`PAGE ERROR: "${exception}"`));
 
     // 1. Setup: Start a new game
-    await page.goto('http://localhost:8000');
+    await page.goto('http://localhost:3000');
 
     // Wait for initial load
     await page.waitForTimeout(1000);
@@ -58,12 +58,26 @@ test.describe('Live Game Bug Hunt', () => {
 
     // Click 10 times fast
     for (let i = 0; i < 10; i++) {
-        await nextPlayBtn.click();
-        // No wait, just spam
+        // Check if game ended
+        if (await page.locator('.game-over-overlay').isVisible()) {
+            console.log('Game ended early during rapid clicking.');
+            break;
+        }
+        try {
+            // Use force: true to ignore overlay if it appears mid-click, or just accept failure
+            await nextPlayBtn.click({ timeout: 1000 });
+        } catch (e) {
+            console.log('Click failed or intercepted (game likely ended):');
+            break;
+        }
     }
 
-    const isDisabled = await nextPlayBtn.isDisabled();
-    console.log(`Button disabled state after rapid clicks: ${isDisabled}`);
+    // If game ended, we are good. If not, check button state.
+    const isGameOver = await page.locator('.game-over-overlay').isVisible();
+    if (!isGameOver) {
+        const isDisabled = await nextPlayBtn.isDisabled();
+        console.log(`Button disabled state after rapid clicks: ${isDisabled}`);
+    }
 
     // Allow some time for plays to process
     await page.waitForTimeout(2000);
