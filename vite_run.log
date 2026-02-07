@@ -3,6 +3,15 @@
 > vite
 
 
+  VITE v7.3.1  ready in 250 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.0.2:3000/
+5:11:32 PM [vite] vite.config.js changed, restarting server...
+5:11:32 PM [vite] server restarted.
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
   VITE v7.3.1  ready in 342 ms
 
   ➜  Local:   http://localhost:3000/

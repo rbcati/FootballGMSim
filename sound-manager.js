@@ -246,6 +246,30 @@ class SoundManager {
         this.playNoise(3.0, 0.2, 1000);
     }
 
+    playComboBreaker() {
+        if (!this.enabled || this.muted) return;
+        // Dissonant, descending sound
+        this.playTone(400, 'sawtooth', 0.3, 0.15);
+        this.playTone(380, 'sawtooth', 0.3, 0.15, null, 50);
+        this.playTone(350, 'sawtooth', 0.5, 0.1, null, 150);
+        this.playNoise(0.5, 0.2); // Crash
+    }
+
+    playMomentumShift() {
+        if (!this.enabled || this.muted) return;
+        // Whoosh / Rising sound
+        this.playTone(200, 'sine', 0.5, 0.05, 800); // Slide from 200 to 800
+        this.playNoise(0.5, 0.1, 0); // Whoosh
+    }
+
+    playBigPlay() {
+        if (!this.enabled || this.muted) return;
+        // Intense cheer + rising tone
+        this.playNoise(1.5, 0.2);
+        this.playTone(400, 'triangle', 0.5, 0.1, 800); // Rise
+        this.playTone(500, 'triangle', 0.5, 0.1, 1000, 100); // Rise higher
+    }
+
     toggleMute() {
         this.muted = !this.muted;
         return this.muted;

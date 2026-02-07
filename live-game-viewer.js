@@ -1165,6 +1165,10 @@ class LiveGameViewer {
     const offenseStrength = this.calculateOffenseStrength(offense.team);
     const defenseStrength = this.calculateDefenseStrength(defense.team);
 
+    // Momentum Modifier
+    const momentumMod = (gameState.momentum || 0) / 2000;
+    const momentumEffect = gameState.ballPossession === 'home' ? momentumMod : -momentumMod;
+
     // Defense Modifiers
     let defModSack = 0;
     let defModRun = 0;
@@ -1184,7 +1188,7 @@ class LiveGameViewer {
         defModInt = 0.02;
     }
 
-    const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100));
+    const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100 + momentumEffect));
 
     // Update Drive Info
     gameState.drive.plays++;
@@ -1906,8 +1910,17 @@ class LiveGameViewer {
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
-             soundManager.playFailure();
+             if (soundManager.playComboBreaker) soundManager.playComboBreaker();
+             else soundManager.playFailure();
         }
+
+        // Momentum Shift Logic
+        const currentMomentum = this.gameState.momentum;
+        const prevMomentum = this.lastMomentum !== undefined ? this.lastMomentum : 0;
+        if (Math.abs(currentMomentum - prevMomentum) > 30 || (prevMomentum < 0 && currentMomentum > 0) || (prevMomentum > 0 && currentMomentum < 0)) {
+            if (soundManager.playMomentumShift) soundManager.playMomentumShift();
+        }
+        this.lastMomentum = currentMomentum;
 
         if (play.message && play.message.includes('First down!')) {
              soundManager.playFirstDown();
@@ -1973,8 +1986,16 @@ class LiveGameViewer {
             this.triggerFloatText('SACKED!', 'bad');
             this.triggerVisualFeedback('negative', 'SACK!');
         } else if (play.result === 'big_play') {
-            soundManager.playCheer();
+            if (soundManager.playBigPlay) soundManager.playBigPlay();
+            else soundManager.playCheer();
             this.triggerFloatText('BIG PLAY!');
+
+            if (this.fieldEffects) {
+                const isHome = this.gameState.ballPossession === 'home';
+                const yardLine = play.yardLine; // Start
+                const endPct = this.getVisualPercentage(Math.min(100, Math.max(0, yardLine + play.yards)), isHome);
+                this.fieldEffects.spawnParticles(endPct, 'big_play');
+            }
         } else if (play.result === 'field_goal') {
             soundManager.playFieldGoal();
             soundManager.playKick();
