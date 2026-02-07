@@ -991,11 +991,12 @@ export function simGameStats(home, away, options = {}) {
         let possessions = 0;
 
         const maxPossessions = allowTies ? 4 : 20;
+        const HARD_ITERATION_CAP = 50; // Absolute safety cap to prevent infinite loops
 
         // Track which team kicked off (received 2nd) so we know possession order
         const firstTeam = possession; // Team with first possession
 
-        while (!gameOver && possessions < maxPossessions) {
+        while (!gameOver && possessions < maxPossessions && possessions < HARD_ITERATION_CAP) {
             possessions++;
             // Simulate a drive
             const offStrength = possession === 'home' ? homeStrength : awayStrength;
@@ -1047,6 +1048,15 @@ export function simGameStats(home, away, options = {}) {
             }
 
             possession = possession === 'home' ? 'away' : 'home';
+        }
+
+        if (possessions >= HARD_ITERATION_CAP) {
+            console.warn(`[SIM-DEBUG] OT hit hard iteration cap (${HARD_ITERATION_CAP}). Forcing end.`);
+            // Force a winner if still tied after safety cap
+            if (homeScore === awayScore) {
+                if (U.random() < 0.5) homeScore += 3;
+                else awayScore += 3;
+            }
         }
 
         if (verbose) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
