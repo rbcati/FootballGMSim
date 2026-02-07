@@ -24,6 +24,16 @@ export class FieldEffects {
         window.addEventListener('resize', this._resizeHandler);
     }
 
+    getThemeColor(varName, fallback) {
+        if (typeof window === 'undefined') return fallback;
+        try {
+            const val = getComputedStyle(document.body).getPropertyValue(varName).trim();
+            return val || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
     destroy() {
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
@@ -116,7 +126,7 @@ export class FieldEffects {
         } else if (type === 'catch') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 3;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 3;
-            p.color = '#87CEEB'; // Sky Blue
+            p.color = this.getThemeColor('--accent', '#87CEEB'); // Sky Blue
             p.decay = 0.1;
             p.size = (window.Utils?.random || Math.random)() * 2 + 1;
         } else if (type === 'first_down') {
@@ -131,14 +141,14 @@ export class FieldEffects {
         } else if (type === 'defense_stop') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15; // Fast explosion
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 15;
-            p.color = (window.Utils?.random || Math.random)() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
+            p.color = (window.Utils?.random || Math.random)() > 0.6 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White
             p.decay = 0.05; // Fast fade
             p.size = (window.Utils?.random || Math.random)() * 4 + 2;
             p.gravity = 0.05;
         } else if (type === 'interception') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
-            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FF453A' : '#FFFFFF'; // Red/White Alert
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White Alert
             p.decay = 0.04;
             p.size = (window.Utils?.random || Math.random)() * 3 + 2;
         } else if (type === 'fumble') {

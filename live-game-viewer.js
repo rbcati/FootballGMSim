@@ -90,6 +90,67 @@ class LiveGameViewer {
   }
 
   /**
+   * Helper to resolve CSS variables to hex/rgb
+   */
+  getColor(varName, fallback) {
+      if (typeof window === 'undefined') return fallback || '#fff';
+      if (!varName) return fallback || '#fff';
+      if (!varName.startsWith('--') && !varName.startsWith('var(')) return varName;
+
+      try {
+          let name = varName;
+          if (varName.startsWith('var(')) {
+              const match = varName.match(/var\(([^,)]+)/);
+              if (match) name = match[1];
+          }
+          const val = getComputedStyle(document.body).getPropertyValue(name).trim();
+          return val || fallback || '#fff';
+      } catch (e) {
+          return fallback || '#fff';
+      }
+  }
+
+  /**
+   * Show quarter end overlay
+   */
+  showQuarterOverlay(quarter) {
+      if (!this.checkUI()) return;
+      const text = `END OF Q${quarter}`;
+      this.triggerVisualFeedback('quarter-end', text);
+
+      // Also show a banner if possible
+      const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      const banner = document.createElement('div');
+      banner.style.position = 'absolute';
+      banner.style.top = '50%';
+      banner.style.left = '0';
+      banner.style.width = '100%';
+      banner.style.transform = 'translateY(-50%)';
+      banner.style.background = 'rgba(0,0,0,0.85)';
+      banner.style.color = '#fff';
+      banner.style.padding = '20px';
+      banner.style.textAlign = 'center';
+      banner.style.fontSize = '3rem';
+      banner.style.fontWeight = '900';
+      banner.style.zIndex = '2000';
+      banner.style.textShadow = '0 0 20px var(--accent)';
+      banner.style.borderTop = '2px solid var(--accent)';
+      banner.style.borderBottom = '2px solid var(--accent)';
+      banner.textContent = text;
+      banner.classList.add('pop-in');
+
+      if (getComputedStyle(parent).position === 'static') {
+          parent.style.position = 'relative';
+      }
+      parent.appendChild(banner);
+
+      setTimeout(() => {
+          banner.classList.add('fade-out');
+          setTimeout(() => banner.remove(), 500);
+      }, 2000);
+  }
+
+  /**
    * Render to a specific view container instead of modal
    */
   renderToView(containerId) {
@@ -312,6 +373,8 @@ class LiveGameViewer {
           elements.forEach(e => {
               if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
           });
+
+          this.triggerShake();
 
           setTimeout(() => {
               elements.forEach(e => {
@@ -1505,6 +1568,7 @@ class LiveGameViewer {
       };
       this.playByPlay.push(quarterPlay);
       this.renderPlay(quarterPlay);
+      this.showQuarterOverlay(gameState.quarter - 1);
     } else {
       // CHECK FOR TIE (OVERTIME)
       if (gameState.home.score === gameState.away.score && !gameState.gameComplete) {
@@ -2132,6 +2196,7 @@ class LiveGameViewer {
                     // Visual feedback
                     pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
                     e.target.classList.add('selected');
+                    if (soundManager && soundManager.playPing) soundManager.playPing();
 
                     // Small delay to show feedback before hiding
                     setTimeout(() => {
@@ -2554,7 +2619,7 @@ class LiveGameViewer {
           <button class="tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
           <button class="tempo-btn" data-tempo="slow">Slow</button>
           <button class="pause-btn">⏸ Pause</button>
-          <button class="skip-btn" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
+          <button class="skip-btn" style="background: var(--danger, #dc3545); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
         </div>
 
         <div class="game-dashboard" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); margin-top: 10px; border-radius: 8px;">
@@ -2781,7 +2846,7 @@ class LiveGameViewer {
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
         <div class="${Math.abs(m) > 75 ? 'momentum-surge' : ''}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
-            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
+            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--danger, #dc3545) 0%, var(--accent, #007bff) 100%); opacity: 0.8;"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: var(--text-muted);">
             <span>${this.gameState.away.team.abbr}</span>
