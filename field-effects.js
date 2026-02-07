@@ -53,7 +53,8 @@ export class FieldEffects {
                       type === 'field_goal' ? 40 :
                       type === 'defense_stop' ? 45 :
                       type === 'interception' ? 50 :
-                      type === 'fumble' ? 35 : 25;
+                      type === 'fumble' ? 35 :
+                      type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -79,12 +80,23 @@ export class FieldEffects {
         };
 
         if (type === 'touchdown') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 40; // Spread X
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 20; // Spread Y
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 12; // Increased spread
             p.vy = ((window.Utils?.random || Math.random)() * -8) - 4; // Higher burst upwards
             p.color = (window.Utils?.random || Math.random)() > 0.3 ? '#FFD700' : ((window.Utils?.random || Math.random)() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
             p.gravity = 0.2;
             p.life = 1.5;
             p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+        } else if (type === 'big_play') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 30;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 30;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#0A84FF' : '#FFD700'; // Blue/Gold
+            p.life = 1.2;
+            p.decay = 0.03;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
         } else if (type === 'field_goal') {
             // Rising sparkles
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 5;
@@ -95,6 +107,8 @@ export class FieldEffects {
             p.size = (window.Utils?.random || Math.random)() * 3 + 1;
             p.gravity = -0.05; // Slight float up
         } else if (type === 'sack') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 15;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 15;
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
             p.color = '#888'; // Dust
