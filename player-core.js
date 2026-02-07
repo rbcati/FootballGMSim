@@ -290,7 +290,7 @@ export function generateContract(ovr, pos) {
   // REDUCED signing bonus percentage to keep cap hits reasonable
   // Lower bonus = lower prorated cap hit
   const bonusPercent = (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15) +
-                      Math.random() * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
+                      U.random() * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
 
   // Cap signing bonus to prevent excessive prorated amounts
   const maxBonus = baseAnnual * years * 0.4; // Max 40% of total contract

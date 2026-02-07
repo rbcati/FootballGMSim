@@ -1015,7 +1015,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       team.roster.forEach(teammate => {
         if (teammate.id !== player.id) {
           const sameGroup = getPositionGroup(player.pos) === getPositionGroup(teammate.pos);
-          if (sameGroup || Math.random() < 0.1) { // 10% chance to improve chemistry with any teammate
+          if (sameGroup || U.random() < 0.1) { // 10% chance to improve chemistry with any teammate
             updateChemistry(player, teammate, {
               practiceTogether: true,
               gamePlayed: player.stats?.game && Object.keys(player.stats.game).length > 0
@@ -2125,7 +2125,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       
       // Simple weighted selection
       const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
-      let random = Math.random() * totalWeight;
+      let random = U.random() * totalWeight;
       
       for (let i = 0; i < positions.length; i++) {
           random -= weights[i];
@@ -2327,18 +2327,18 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       // Phase 1: Development (Under 25)
       if (this.age < 25) {
         let gap = this.potential - this.ratings.physical;
-        return Math.floor(Math.random() * (gap * 0.25)) + 1;
+        return Math.floor(U.random() * (gap * 0.25)) + 1;
       }
       // Phase 2: The Plateau (25-28)
       else if (this.age <= 28) {
-        return Math.floor(Math.random() * 3) - 1; // Slight fluctuation
+        return Math.floor(U.random() * 3) - 1; // Slight fluctuation
       }
       // Phase 3: The Decline (29+)
       else {
         // Longevity acts as a buffer against physical decay
         const decayBase = (this.age - 28) * 1.8;
         const buffer = this.longevity / 25;
-        return -Math.max(1, Math.floor(Math.random() * decayBase - buffer));
+        return -Math.max(1, Math.floor(U.random() * decayBase - buffer));
       }
     }
 
@@ -2346,15 +2346,15 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       // Mental stats grow slower but stay high longer than physicals
       if (this.age < 30) {
         let gap = this.potential - this.ratings.mental;
-        return Math.floor(Math.random() * (gap * 0.15)) + 1;
+        return Math.floor(U.random() * (gap * 0.15)) + 1;
       }
       // Mental prime lasts much longer
       else if (this.age <= 34) {
-        return Math.floor(Math.random() * 2); // Can still improve slightly in mid-30s
+        return Math.floor(U.random() * 2); // Can still improve slightly in mid-30s
       }
       // Late career decline
       else {
-        return Math.floor(Math.random() * 3) - 2;
+        return Math.floor(U.random() * 3) - 2;
       }
     }
 

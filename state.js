@@ -278,7 +278,7 @@ export const State = {
       errors.push('Invalid league.year');
     }
     
-    if (league.week !== undefined && (typeof league.week !== 'number' || league.week < 1 || league.week > 18)) {
+    if (league.week !== undefined && (typeof league.week !== 'number' || league.week < 1 || league.week > 25)) {
       errors.push('Invalid league.week');
     }
     
@@ -438,7 +438,7 @@ export const State = {
         // Ensure player has required properties
         const migratedPlayer = { ...player };
         if (!migratedPlayer.id) {
-          migratedPlayer.id = `migrated_${Date.now()}_${Math.random()}`;
+          migratedPlayer.id = `migrated_${Date.now()}_${(window.Utils?.random || Math.random)()}`;
         }
 
         // Initialize or fix player stats

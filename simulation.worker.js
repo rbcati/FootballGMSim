@@ -28,8 +28,8 @@ self.onmessage = async (e) => {
       const teamsInvolvedIds = new Set();
       if (simResult.results) {
           simResult.results.forEach(res => {
-            if (res.home) teamsInvolvedIds.add(res.home);
-            if (res.away) teamsInvolvedIds.add(res.away);
+            if (res.home !== undefined && res.home !== null) teamsInvolvedIds.add(res.home);
+            if (res.away !== undefined && res.away !== null) teamsInvolvedIds.add(res.away);
           });
       }
 

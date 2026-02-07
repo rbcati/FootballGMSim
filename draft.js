@@ -112,57 +112,83 @@ function makeProspect(year, index, weightedPositions) {
         scoutedAttributes[key] = intToGrade(U.clamp(ratings[key] + variance, 40, 99));
     });
     
+    // Hidden boom/bust factors - create interesting draft narratives
+    // Higher boomFactor = more likely to exceed expectations
+    // Higher bustFactor = more likely to disappoint
+    const boomFactor = U.rand(0, 10);
+    const bustFactor = U.rand(0, 10);
+
+    // Calculate potential based on OVR + boom/bust tendency
+    // This creates a meaningful gap that drives development stories
+    let potential;
+    if (boomFactor >= 7) {
+      // High boom: potential is significantly above OVR (hidden gem potential)
+      potential = Math.min(99, baseOvr + U.rand(8, 18));
+    } else if (bustFactor >= 7) {
+      // High bust: potential is close to or below OVR (likely to stagnate)
+      potential = Math.max(baseOvr - U.rand(0, 5), Math.min(99, baseOvr + U.rand(0, 3)));
+    } else {
+      // Normal: potential moderately above OVR
+      potential = Math.min(99, baseOvr + U.rand(3, 10));
+    }
+
     const prospect = {
       id: U.id(),
       name: generateProspectName(),
       pos: pos,
       age: age,
       year: year,
-      
+
       // Ratings and overall
       ratings: ratings,
-      scoutedAttributes: scoutedAttributes, // Visible in draft
+      scoutedAttributes: scoutedAttributes,
       ovr: baseOvr,
-      
+      potential: potential,
+
+      // Hidden factors (not visible to user, affect development)
+      boomFactor: boomFactor,
+      bustFactor: bustFactor,
+
       // Draft info
       projectedRound: projectedRound,
-      draftRanking: 0, // Will be set after sorting
-      
+      draftRanking: 0,
+
       // Scouting info (fog of war)
       scouted: false,
       scoutingReports: [],
-      
-      // Potential ranges (what scouts think vs reality)
+
+      // Potential ranges (what scouts think vs reality - intentionally inaccurate)
       scoutedOvr: {
         min: Math.max(40, baseOvr - U.rand(5, 15)),
         max: Math.min(99, baseOvr + U.rand(5, 15)),
         confidence: U.rand(50, 90)
       },
-      
+
       // College info
       college: generateCollege(),
       collegeStats: generateCollegeStats(pos),
-      
+
       // Character/background
       character: {
         workEthic: U.rand(60, 95),
         coachability: U.rand(65, 95),
         leadership: U.rand(50, 90),
-        injury_prone: Math.random() < 0.15,
-        red_flags: Math.random() < 0.05
+        injury_prone: U.random() < 0.15,
+        red_flags: U.random() < 0.05
       },
-      
+
       // Contract info (rookie contracts)
       years: 4,
       yearsTotal: 4,
       baseAnnual: calculateRookieContract(projectedRound, index),
       signingBonus: 0,
-      guaranteedPct: 1.0, // Rookie contracts fully guaranteed
-      
+      guaranteedPct: 1.0,
+
       // Initialize stats
       stats: { game: {}, season: {}, career: {} },
       abilities: [],
-      awards: []
+      awards: [],
+      developmentStatus: 'NORMAL'
     };
     
     // Add abilities
@@ -434,23 +460,97 @@ function getTeamNeeds(team) {
 }
 
 /**
- * Auto-pick for CPU teams
+ * Evaluate roster saturation at a position for a specific team.
+ * Returns a multiplier (0.1 - 1.0) that penalizes picking a position
+ * where the team is already well-stocked with quality players.
+ *
+ * @param {Object} team - Team object with roster
+ * @param {string} pos - Position to evaluate
+ * @returns {number} Multiplier (1.0 = no penalty, 0.1 = heavily penalized)
+ */
+function getPositionSaturationMultiplier(team, pos) {
+  if (!team || !team.roster) return 1.0;
+
+  const QUALITY_THRESHOLD = 75;
+  const playersAtPos = team.roster.filter(p => p.pos === pos);
+  const qualityPlayersAtPos = playersAtPos.filter(p => (p.ovr || 0) > QUALITY_THRESHOLD);
+
+  // If team has 2+ quality players at this position, severely penalize
+  if (qualityPlayersAtPos.length >= 2) {
+    return 0.1;
+  }
+  // If team has 1 quality player, moderate penalty for non-premium positions
+  if (qualityPlayersAtPos.length === 1) {
+    // QB is always worth depth, so less penalty
+    if (pos === 'QB') return 0.7;
+    return 0.5;
+  }
+  return 1.0;
+}
+
+/**
+ * Auto-pick for CPU teams - Realistic AI drafting with team strategy
+ * Teams balance BPA (Best Player Available) vs needs-based drafting.
+ * Early rounds lean BPA, later rounds lean needs.
+ * Rebuilding teams take more risks on high-upside players.
+ *
+ * Key improvement: Teams re-evaluate roster needs before EVERY pick
+ * and apply a saturation multiplier that prevents hoarding positions
+ * where the team already has 2+ quality (>75 OVR) players.
  */
 function autoPickForCPU() {
   if (!draftState.active) return;
   const currentPick = getCurrentPick();
   if (!currentPick) return;
+  const U = window.Utils;
+  if (!U) return;
+
   const team = window.state.league.teams[currentPick.teamId];
   if (!team || currentPick.teamId === window.state.userTeamId) return;
 
-  // Find best available prospect (prefer positions of need)
+  // Re-evaluate needs fresh before every pick (not just start of round)
   const teamNeeds = getTeamNeeds(team);
-  const available = draftState.availableProspects.filter(p => {
-    return teamNeeds.includes(p.pos) || Math.random() > 0.3;
+  const round = currentPick.round;
+  const isRebuilding = (team.wins || 0) < (team.losses || 0);
+
+  // Score each available prospect for this team
+  const scoredProspects = draftState.availableProspects.map(p => {
+    let score = p.ovr || 50;
+
+    // Roster saturation check: penalize positions where team is already stacked
+    const saturationMultiplier = getPositionSaturationMultiplier(team, p.pos);
+    score *= saturationMultiplier;
+
+    // Needs bonus - stronger in later rounds
+    if (teamNeeds.includes(p.pos)) {
+      const needsBonus = round <= 2 ? 3 : round <= 4 ? 6 : 10;
+      score += needsBonus;
+    }
+
+    // Position value premium (QBs and premium positions in early rounds)
+    const positionPremium = { QB: 8, OL: 3, DL: 3, CB: 2, WR: 2, LB: 1, S: 1, TE: 0, RB: -1, K: -5, P: -5 };
+    if (round <= 2) score += (positionPremium[p.pos] || 0);
+
+    // Age bonus (younger is better for development)
+    if (p.age <= 21) score += 2;
+
+    // Rebuilding teams value high-potential players more
+    if (isRebuilding && p.potential && p.potential > p.ovr + 5) {
+      score += 4;
+    }
+
+    // Character concerns reduce score
+    if (p.character?.red_flags) score -= 8;
+    if (p.character?.injury_prone) score -= 3;
+
+    // Add randomness to prevent perfectly predictable drafts
+    score += U.rand(-4, 4);
+
+    return { prospect: p, score };
   });
-  const prospects = available.length > 0 ? available : draftState.availableProspects;
-  prospects.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
-  const selected = prospects[0];
+
+  scoredProspects.sort((a, b) => b.score - a.score);
+  const selected = scoredProspects[0]?.prospect;
 
   if (selected) {
     makeDraftPickEnhanced(currentPick.teamId, selected.id);
@@ -547,50 +647,72 @@ function makeDraftPickEnhanced(teamId, prospectId) {
     }
 
     // --- GEM / BUST REVEAL LOGIC ---
+    // Uses hidden boom/bust factors for more realistic outcomes
     if (teamId === window.state.userTeamId) {
-        // RNG Roll
-        const roll = Math.random();
+        const U = window.Utils;
         let status = 'NORMAL';
-        let originalOvr = prospect.ovr;
-        let newOvr = prospect.ovr;
         let title = "Draft Selection";
         let message = `You selected ${prospect.name}`;
+        const boomFactor = prospect.boomFactor || 0;
+        const bustFactor = prospect.bustFactor || 0;
 
-        // 10% Gem, 10% Bust
-        if (roll < 0.10) {
+        // Gem chance based on boom factor (5-25% chance)
+        const gemChance = 0.05 + (boomFactor / 100) * 2;
+        // Bust chance based on bust factor (5-25% chance)
+        const bustChance = 0.05 + (bustFactor / 100) * 2;
+
+        const roll = U.random();
+
+        if (roll < gemChance) {
+            // GEM - graduated boost based on boom factor
             status = 'GEM';
-            title = "💎 HIDDEN GEM!";
-            message = "This player is better than the scouts thought!";
-            newOvr += 5;
+            const boost = boomFactor >= 8 ? U.rand(6, 10) : U.rand(3, 6);
+            title = boost >= 7 ? "💎 GENERATIONAL TALENT!" : "💎 HIDDEN GEM!";
+            message = boost >= 7
+                ? `${prospect.name} is far better than anyone realized! Elite upside.`
+                : `${prospect.name} is better than the scouts thought!`;
 
-            // Boost Primary Attributes
+            // Boost key attributes
             const weights = window.Constants?.POSITION_TRAINING_WEIGHTS?.[prospect.pos] || { primary: ['awareness'] };
-            weights.primary.forEach(attr => {
-                if (prospect.ratings[attr]) prospect.ratings[attr] = Math.min(99, prospect.ratings[attr] + 5);
+            (weights.primary || ['awareness']).forEach(attr => {
+                if (prospect.ratings[attr]) prospect.ratings[attr] = Math.min(99, prospect.ratings[attr] + boost);
             });
+            prospect.potential = Math.min(99, (prospect.potential || prospect.ovr) + U.rand(3, 8));
 
-        } else if (roll < 0.20) {
+        } else if (roll > (1 - bustChance)) {
+            // BUST - graduated penalty based on bust factor
             status = 'BUST';
-            title = "💔 DRAFT BUST";
-            message = "The scouts were wrong... he's struggling.";
-            newOvr -= 5;
+            const penalty = bustFactor >= 8 ? U.rand(5, 10) : U.rand(2, 5);
+            title = penalty >= 7 ? "💔 MAJOR BUST" : "💔 DRAFT DISAPPOINTMENT";
+            message = penalty >= 7
+                ? `${prospect.name} has major issues that weren't detected. Significant downgrade.`
+                : `${prospect.name} isn't quite what the scouts projected.`;
 
-            // Nerf Random Attributes (Mental/Physical)
             const attrKeys = Object.keys(prospect.ratings);
-            for(let i=0; i<3; i++) {
-                const key = window.Utils.choice(attrKeys);
-                if (prospect.ratings[key]) prospect.ratings[key] = Math.max(40, prospect.ratings[key] - 5);
+            const numStats = penalty >= 7 ? 5 : 3;
+            for (let i = 0; i < numStats; i++) {
+                const key = U.choice(attrKeys);
+                if (prospect.ratings[key]) prospect.ratings[key] = Math.max(40, prospect.ratings[key] - U.rand(2, penalty));
+            }
+            prospect.potential = Math.max(prospect.ovr - 5, (prospect.potential || prospect.ovr) - U.rand(3, 8));
+
+        } else if (boomFactor >= 5 && U.random() < 0.3) {
+            // SLEEPER - player with hidden upside, not immediately apparent
+            status = 'SLEEPER';
+            title = "📈 SLEEPER PICK";
+            message = `${prospect.name} has untapped potential. Development will be key.`;
+            prospect.potential = Math.min(99, (prospect.potential || prospect.ovr) + U.rand(4, 10));
+        }
+
+        // Recalculate OVR
+        if (status !== 'NORMAL' && status !== 'SLEEPER') {
+            if (window.calculateOvr) prospect.ovr = window.calculateOvr(prospect.pos, prospect.ratings);
+            else {
+                const vals = Object.values(prospect.ratings).filter(v => typeof v === 'number');
+                prospect.ovr = vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : prospect.ovr;
             }
         }
 
-        // Update OVR if changed
-        if (status !== 'NORMAL') {
-            prospect.ovr = newOvr;
-            // Recalculate if possible, otherwise trust the flat mod
-            if (window.calculateOvr) prospect.ovr = window.calculateOvr(prospect.pos, prospect.ratings);
-        }
-
-        // Show Reveal Modal
         showDraftRevealModal(prospect, status, title, message);
     }
 

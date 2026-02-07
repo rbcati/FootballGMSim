@@ -7,7 +7,8 @@
  * @returns {number} Effective overall rating
  */
 export function getEffectiveRating(player) {
-    if (!player || !player.injured || !player.injuries) {
+    if (!player) return 0;
+    if (!player.injured || !player.injuries) {
         return player.ovr || 0;
     }
 
@@ -24,7 +25,7 @@ export function getEffectiveRating(player) {
 }
 
 /**
- * Check if player can play (not season-ending injury)
+ * Check if player can play (considers injury severity)
  * @param {Object} player - Player object
  * @returns {boolean} Can play
  */
@@ -34,6 +35,12 @@ export function canPlayerPlay(player) {
     // Can't play with season-ending injury
     if (player.seasonEndingInjury) return false;
 
-    // Can play but at reduced effectiveness
+    // Can't play if any injury has more than 1 week remaining
+    if (player.injuries && player.injuries.length > 0) {
+        const hasActiveInjury = player.injuries.some(inj => inj.weeksRemaining > 1);
+        if (hasActiveInjury) return false;
+    }
+
+    // Can play but at reduced effectiveness (minor injuries in final week)
     return true;
 }

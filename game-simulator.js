@@ -38,33 +38,29 @@ export function groupPlayersByPosition(roster) {
 export function initializePlayerStats(player) {
   if (!player.stats) {
     player.stats = {
-      game: getZeroStats ? getZeroStats() : {},
-      season: getZeroStats ? getZeroStats() : {},
-      career: getZeroStats ? getZeroStats() : {}
+      game: getZeroStats(),
+      season: getZeroStats(),
+      career: getZeroStats()
     };
+    return; // All fields just initialized, no need to check individually
   }
-  if (!player.stats.game) player.stats.game = getZeroStats ? getZeroStats() : {};
-
-  // Initialize season stats if missing or empty
+  if (!player.stats.game) player.stats.game = getZeroStats();
   if (!player.stats.season || Object.keys(player.stats.season).length === 0) {
-    player.stats.season = getZeroStats ? getZeroStats() : {};
+    player.stats.season = getZeroStats();
   }
-
-  // Initialize career stats if missing
-  if (!player.stats.career) {
-    player.stats.career = getZeroStats ? getZeroStats() : {};
-  }
+  if (!player.stats.career) player.stats.career = getZeroStats();
 }
 
 /**
- * Calculate how many weeks a player has been with the team
+ * Calculate how many seasons a player has been with the team.
+ * Used as a tenure proxy for coaching mods (returns years, not weeks).
  */
-function calculateWeeksWithTeam(player, team) {
+function calculateSeasonsWithTeam(player, team) {
   if (player.history && player.history.length > 0) {
     const teamHistory = player.history.filter(h => h.team === team.abbr);
-    return teamHistory.length * 17;
+    return teamHistory.length || 1;
   }
-  return 17;
+  return 1;
 }
 
 /**
@@ -87,16 +83,17 @@ export function updateTeamStandings(league, teamId, stats) {
     }
 
     // 2. Apply Updates (incrementing existing values)
-    if (stats.wins) team.wins = (team.wins || 0) + stats.wins;
-    if (stats.losses) team.losses = (team.losses || 0) + stats.losses;
-    if (stats.ties) team.ties = (team.ties || 0) + stats.ties;
+    // Use explicit !== undefined checks instead of truthy to handle 0 correctly
+    if (stats.wins !== undefined) team.wins = (team.wins || 0) + stats.wins;
+    if (stats.losses !== undefined) team.losses = (team.losses || 0) + stats.losses;
+    if (stats.ties !== undefined) team.ties = (team.ties || 0) + stats.ties;
 
-    // Points are cumulative
-    if (stats.pf) {
+    // Points are cumulative (pf/pa can legitimately be 0)
+    if (stats.pf !== undefined) {
         team.ptsFor = (team.ptsFor || 0) + stats.pf;
         team.pointsFor = team.ptsFor; // Alias
     }
-    if (stats.pa) {
+    if (stats.pa !== undefined) {
         team.ptsAgainst = (team.ptsAgainst || 0) + stats.pa;
         team.pointsAgainst = team.ptsAgainst; // Alias
     }
@@ -785,7 +782,7 @@ export function simGameStats(home, away, options = {}) {
       if (!activeRoster || !activeRoster.length) return 50;
 
       return activeRoster.reduce((acc, p) => {
-        const tenureYears = calculateWeeksWithTeam(p, team) / 17;
+        const tenureYears = calculateSeasonsWithTeam(p, team);
 
         let rating = p.ovr || 50;
         // Use imported getEffectiveRating
@@ -900,44 +897,84 @@ export function simGameStats(home, away, options = {}) {
         if (verbose) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
     }
 
-    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 3;
-    const BASE_SCORE_MIN = C.BASE_SCORE_MIN || 10;
-    const BASE_SCORE_MAX = C.BASE_SCORE_MAX || 35;
-    let SCORE_VARIANCE = C.SCORE_VARIANCE || 10;
+    // =================================================================
+    // REALISTIC NFL SCORING ENGINE
+    // Uses drive-based simulation to produce authentic football scores.
+    // Average NFL game: ~22 points per team, range 3-45 typical.
+    // Scores naturally land on football numbers (3,6,7,10,13,14,17,20,21,24,27,28,31...)
+    // =================================================================
 
-    // Check Rivalry Context for Variance
-    // Higher rivalry score = higher variance (more upsets, crazier games)
+    const HOME_ADVANTAGE = C.SIMULATION?.HOME_ADVANTAGE || C.HOME_ADVANTAGE || 3;
+
+    // Rivalry variance boost
+    let varianceBoost = 0;
     if (home.rivalries && away.rivalries) {
         const homeRiv = home.rivalries[away.id]?.score || 0;
         const awayRiv = away.rivalries[home.id]?.score || 0;
         const intensity = Math.max(homeRiv, awayRiv);
-
-        if (intensity > 50) {
-             SCORE_VARIANCE += 10;
-             if (verbose) console.log(`[SIM-DEBUG] Rivalry Game! Intensity: ${intensity}, Variance boosted.`);
-        } else if (intensity > 25) {
-             SCORE_VARIANCE += 5;
-        }
+        if (intensity > 50) varianceBoost = 3;
+        else if (intensity > 25) varianceBoost = 1.5;
     }
-
-    // High Stakes Variance Boost
-    if (options.stakes && options.stakes > 75) {
-        SCORE_VARIANCE += 15;
-        if (verbose) console.log(`[SIM-DEBUG] High Stakes Game! Stakes: ${options.stakes}, Variance boosted significantly.`);
-    }
+    if (options.stakes && options.stakes > 75) varianceBoost += 2;
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
 
-    let homeScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) + Math.round(strengthDiff / 5);
-    let awayScore = U.rand(BASE_SCORE_MIN, BASE_SCORE_MAX) - Math.round(strengthDiff / 5);
+    /**
+     * Simulate drives for one team to generate a realistic score.
+     * @param {number} offStr - Offensive strength (team's overall)
+     * @param {number} defStr - Opposing defense strength
+     * @param {number} advantage - Net strength advantage (positive = favored)
+     * @param {Object} mods - Coaching/strategy modifiers
+     * @returns {number} Final score
+     */
+    const simulateDrives = (offStr, defStr, advantage, mods) => {
+        // NFL teams average ~12 possessions per game
+        const numDrives = U.rand(10, 14);
+        let score = 0;
 
-    // Apply Variance from Mods
-    const homeVar = SCORE_VARIANCE * (homeMods.variance || 1.0);
-    const awayVar = SCORE_VARIANCE * (awayMods.variance || 1.0);
+        // Base scoring probability calibrated to ~22 pts/game avg
+        // offStr/defStr are roughly 50-90 range
+        const offFactor = (offStr - 50) / 40; // 0.0 for 50 OVR, 1.0 for 90 OVR
+        const defFactor = (defStr - 50) / 40;
+        const netQuality = offFactor - defFactor * 0.7 + (advantage / 80);
 
-    homeScore += U.rand(0, homeVar);
-    awayScore += U.rand(0, awayVar);
+        for (let d = 0; d < numDrives; d++) {
+            // Drive outcome probabilities (NFL averages: ~35% score, ~21% TD, ~14% FG)
+            const driveRoll = U.random();
 
+            // Apply variance boost and modifier
+            const varianceMod = (mods.variance || 1.0);
+            const upsetChance = varianceBoost * 0.015;
+
+            // Base TD probability: 15-30% depending on quality
+            let tdProb = U.clamp(0.18 + netQuality * 0.12 + upsetChance, 0.08, 0.35);
+            // Base FG probability: 10-18%
+            let fgProb = U.clamp(0.14 + netQuality * 0.04, 0.08, 0.22);
+
+            // Strategy mods
+            if (mods.passVolume && mods.passVolume > 1.1) tdProb += 0.03; // Aggressive passing = more TDs but riskier
+            if (mods.runVolume && mods.runVolume > 1.1) { fgProb += 0.02; tdProb -= 0.01; } // Ball control = more FGs
+            if (mods.variance && mods.variance > 1.0) { tdProb += 0.02; } // Aggressive risk = more boom
+
+            if (driveRoll < tdProb) {
+                // Touchdown (6 pts + XP attempt)
+                const xpRoll = U.random();
+                if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
+                else if (xpRoll < 0.97) score += 6; // Missed XP
+                else score += 8;                     // 2-point conversion
+            } else if (driveRoll < tdProb + fgProb) {
+                score += 3; // Field goal
+            }
+            // Otherwise: punt, turnover, turnover on downs (no points)
+        }
+
+        return score;
+    };
+
+    let homeScore = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
+    let awayScore = simulateDrives(awayStrength, homeStrength, -strengthDiff, awayMods);
+
+    // Ensure scores don't go negative (shouldn't happen with drive sim, but safety)
     homeScore = Math.max(0, homeScore);
     awayScore = Math.max(0, awayScore);
 
@@ -949,13 +986,17 @@ export function simGameStats(home, away, options = {}) {
         const allowTies = !isPlayoff && (options.allowTies !== false);
 
         let gameOver = false;
-        let possession = Math.random() < 0.5 ? 'home' : 'away';
+        let possession = U.random() < 0.5 ? 'home' : 'away';
         let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
         let possessions = 0;
 
         const maxPossessions = allowTies ? 4 : 20;
+        const HARD_ITERATION_CAP = 50; // Absolute safety cap to prevent infinite loops
 
-        while (!gameOver && possessions < maxPossessions) {
+        // Track which team kicked off (received 2nd) so we know possession order
+        const firstTeam = possession; // Team with first possession
+
+        while (!gameOver && possessions < maxPossessions && possessions < HARD_ITERATION_CAP) {
             possessions++;
             // Simulate a drive
             const offStrength = possession === 'home' ? homeStrength : awayStrength;
@@ -975,37 +1016,47 @@ export function simGameStats(home, away, options = {}) {
 
             if (verbose) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
 
-            // Apply NFL OT Rules
+            // Apply score
+            if (drivePoints > 0) {
+                if (possession === 'home') homeScore += drivePoints;
+                else awayScore += drivePoints;
+            }
+
+            // Apply NFL OT Rules (2024+: both teams guaranteed a possession)
             if (possessions === 1) {
+                // First possession TD: other team still gets a chance
                 if (drivePoints >= 6) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                    gameOver = true;
+                    firstPossessionScore = 7;
                 } else if (drivePoints === 3) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
                     firstPossessionScore = 3;
                 }
-            } else if (possessions === 2 && firstPossessionScore === 3) {
-                if (drivePoints >= 6) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                    gameOver = true;
-                } else if (drivePoints === 3) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
-                } else {
+                // First possession: no immediate game-over, other team gets the ball
+            } else if (possessions === 2) {
+                // Second team's response
+                // If scores are no longer tied after both teams had a possession, game over
+                if (homeScore !== awayScore) {
                     gameOver = true;
                 }
+                // If still tied, continue to sudden death
             } else {
-                if (drivePoints > 0) {
-                    if (possession === 'home') homeScore += drivePoints;
-                    else awayScore += drivePoints;
+                // Sudden death after both teams have had at least one possession
+                // Game ends when score is different after the team that received 2nd has had their turn
+                // (i.e., check after each pair of possessions, or if a score creates a lead)
+                if (homeScore !== awayScore) {
                     gameOver = true;
                 }
             }
 
             possession = possession === 'home' ? 'away' : 'home';
+        }
+
+        if (possessions >= HARD_ITERATION_CAP) {
+            console.warn(`[SIM-DEBUG] OT hit hard iteration cap (${HARD_ITERATION_CAP}). Forcing end.`);
+            // Force a winner if still tied after safety cap
+            if (homeScore === awayScore) {
+                if (U.random() < 0.5) homeScore += 3;
+                else awayScore += 3;
+            }
         }
 
         if (verbose) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
@@ -1114,21 +1165,27 @@ export function simGameStats(home, away, options = {}) {
  * @param {Object} source - Source stats (e.g., game stats).
  * @param {Object} target - Target stats (e.g., season stats).
  */
+// Set of stat keys that are derived/calculated and should NOT be accumulated
+const DERIVED_STAT_KEYS = new Set([
+    'completionPct', 'yardsPerCarry', 'yardsPerReception', 'avgPuntYards',
+    'avgKickYards', 'successPct', 'passerRating', 'sackPct',
+    'dropRate', 'separationRate', 'pressureRate',
+    'coverageRating', 'pressureRating', 'protectionGrade',
+    'ratingWhenTargeted'
+]);
+
 export function accumulateStats(source, target) {
     if (!source || !target) return;
 
-    Object.keys(source).forEach(key => {
+    const keys = Object.keys(source);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
         const value = source[key];
-        if (typeof value === 'number') {
-            // Ignore calculated fields
-            if (key.includes('Pct') || key.includes('Grade') || key.includes('Rating') ||
-                key === 'yardsPerCarry' || key === 'yardsPerReception' || key === 'avgPuntYards' ||
-                key === 'avgKickYards' || key === 'completionPct') {
-                return;
-            }
-            target[key] = (target[key] || 0) + value;
-        }
-    });
+        if (typeof value !== 'number') continue;
+        // Skip derived/calculated fields
+        if (DERIVED_STAT_KEYS.has(key)) continue;
+        target[key] = (target[key] || 0) + value;
+    }
 }
 
 /**
@@ -1280,7 +1337,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 
     // 5. Create Result Object
     const resultObj = {
-        id: `g_final_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `g_final_${Date.now()}_${U.id()}`,
         home: homeTeamId,
         away: awayTeamId,
         scoreHome: homeScore,
@@ -1328,7 +1385,7 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
     if (!playerStatsMap) return {};
     const box = {};
     Object.keys(playerStatsMap).forEach(pid => {
-        const p = roster.find(pl => pl.id == pid);
+        const p = roster.find(pl => String(pl.id) === String(pid));
         if (p) {
             box[pid] = {
                 name: p.name,
@@ -1424,8 +1481,7 @@ export function simulateBatch(games, options = {}) {
 
                 if (!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) {
                     if (verbose) console.warn(`simulateMatchup failed or 0-0 after ${attempts} attempts for ${away.abbr} @ ${home.abbr}, forcing fallback score.`);
-                    const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
-                    gameScores = { homeScore: r(10, 42), awayScore: r(7, 35) };
+                    gameScores = { homeScore: U.rand(10, 35), awayScore: U.rand(7, 28) };
                 }
 
                 sH = gameScores.homeScore;
@@ -1491,13 +1547,26 @@ export function validateLeagueState(league) {
     const errors = [];
     if (!league) return { valid: false, errors: ['No league object provided'] };
 
+    if (!league.teams || !Array.isArray(league.teams)) {
+        errors.push('Missing or invalid teams array');
+    } else {
+        // Check teams have required fields
+        league.teams.forEach((team, i) => {
+            if (!team) {
+                errors.push(`Team at index ${i} is null`);
+            } else if (!team.roster || !Array.isArray(team.roster)) {
+                errors.push(`Team ${team.abbr || i} has missing or invalid roster`);
+            }
+        });
+    }
+
     // Check for finalized games with invalid scores
     if (league.resultsByWeek) {
         Object.entries(league.resultsByWeek).forEach(([week, results]) => {
             if (Array.isArray(results)) {
                 results.forEach(game => {
                     if (game.scoreHome === 0 && game.scoreAway === 0 && !game.bye) {
-                        // Warning only for now as tie logic exists, but ideally shouldn't happen often
+                        errors.push(`0-0 game found in week ${week}: ${game.homeTeamAbbr} vs ${game.awayTeamAbbr}`);
                     }
                 });
             }

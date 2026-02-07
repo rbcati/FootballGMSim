@@ -54,9 +54,11 @@ class LiveGameViewer {
    */
   checkUI() {
     if (this.viewMode) {
+      // Ensure container is in DOM AND visible (not hidden by router)
       return this.container && document.body.contains(this.container);
     }
-    return this.modal && document.body.contains(this.modal);
+    // Modal check
+    return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
   }
 
   triggerShake() {
@@ -85,6 +87,67 @@ class LiveGameViewer {
       el.style.marginLeft = `-${text.length * 10}px`; // Rough centering
       document.body.appendChild(el);
       setTimeout(() => el.remove(), 1500);
+  }
+
+  /**
+   * Helper to resolve CSS variables to hex/rgb
+   */
+  getColor(varName, fallback) {
+      if (typeof window === 'undefined') return fallback || '#fff';
+      if (!varName) return fallback || '#fff';
+      if (!varName.startsWith('--') && !varName.startsWith('var(')) return varName;
+
+      try {
+          let name = varName;
+          if (varName.startsWith('var(')) {
+              const match = varName.match(/var\(([^,)]+)/);
+              if (match) name = match[1];
+          }
+          const val = getComputedStyle(document.body).getPropertyValue(name).trim();
+          return val || fallback || '#fff';
+      } catch (e) {
+          return fallback || '#fff';
+      }
+  }
+
+  /**
+   * Show quarter end overlay
+   */
+  showQuarterOverlay(quarter) {
+      if (!this.checkUI()) return;
+      const text = `END OF Q${quarter}`;
+      this.triggerVisualFeedback('quarter-end', text);
+
+      // Also show a banner if possible
+      const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
+      const banner = document.createElement('div');
+      banner.style.position = 'absolute';
+      banner.style.top = '50%';
+      banner.style.left = '0';
+      banner.style.width = '100%';
+      banner.style.transform = 'translateY(-50%)';
+      banner.style.background = 'rgba(0,0,0,0.85)';
+      banner.style.color = '#fff';
+      banner.style.padding = '20px';
+      banner.style.textAlign = 'center';
+      banner.style.fontSize = '3rem';
+      banner.style.fontWeight = '900';
+      banner.style.zIndex = '2000';
+      banner.style.textShadow = '0 0 20px var(--accent)';
+      banner.style.borderTop = '2px solid var(--accent)';
+      banner.style.borderBottom = '2px solid var(--accent)';
+      banner.textContent = text;
+      banner.classList.add('pop-in');
+
+      if (getComputedStyle(parent).position === 'static') {
+          parent.style.position = 'relative';
+      }
+      parent.appendChild(banner);
+
+      setTimeout(() => {
+          banner.classList.add('fade-out');
+          setTimeout(() => banner.remove(), 500);
+      }, 2000);
   }
 
   /**
@@ -236,7 +299,12 @@ class LiveGameViewer {
       if (!container) return;
 
       // Initialize Field Effects overlay
-      if (!this.fieldEffects || this.fieldEffects.container !== container) {
+      if (this.fieldEffects && this.fieldEffects.container !== container) {
+          this.fieldEffects.destroy();
+          this.fieldEffects = null;
+      }
+
+      if (!this.fieldEffects) {
           this.fieldEffects = new FieldEffects(container);
       } else {
           this.fieldEffects.resize();
@@ -268,6 +336,7 @@ class LiveGameViewer {
            <div class="player-markers">
                <div class="player-marker marker-qb"></div>
                <div class="player-marker marker-skill"></div>
+               <div class="player-marker marker-def"></div>
            </div>
 
            <div class="football-ball" style="left: 50%;"></div>
@@ -301,7 +370,11 @@ class LiveGameViewer {
       if (isTeleport) {
           // Fade Out Sequence
           const elements = [ballEl, losEl, fdEl].filter(e => e);
-          elements.forEach(e => e.classList.add('fade-out'));
+          elements.forEach(e => {
+              if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
+          });
+
+          this.triggerShake();
 
           setTimeout(() => {
               elements.forEach(e => {
@@ -507,11 +580,22 @@ class LiveGameViewer {
           return Promise.resolve();
       }
 
+      // Safety check for FieldEffects
+      if (!this.fieldEffects) {
+          // Try to recover or just proceed without effects
+          const parent = this.viewMode ? this.container : this.modal;
+          if (parent && parent.querySelector('.field-wrapper')) {
+              this.renderField(parent.querySelector('.field-wrapper'));
+          }
+          if (!this.fieldEffects) return Promise.resolve();
+      }
+
       const parent = this.viewMode ? this.container : this.modal;
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
       const ballShadow = parent.querySelector('.ball-shadow');
       const qbMarker = parent.querySelector('.marker-qb');
       const skillMarker = parent.querySelector('.marker-skill');
+      const defMarker = parent.querySelector('.marker-def');
 
       if (!ballEl) return Promise.resolve();
 
@@ -528,33 +612,50 @@ class LiveGameViewer {
       const startPct = this.getVisualPercentage(startYard, isHome);
       let endPct = this.getVisualPercentage(Math.max(-5, Math.min(105, endYard)), isHome);
 
+      // Check for seamless transition (prevent snap)
+      const currentLeft = parseFloat(ballEl.style.left || '-1');
+      const shouldSnap = Math.abs(currentLeft - startPct) > 1;
+
       // Reset Ball
-      ballEl.style.transition = 'none';
-      ballEl.style.left = `${startPct}%`;
-      ballEl.style.transform = 'translate(-50%, -50%)';
+      if (shouldSnap) {
+          ballEl.style.transition = 'none';
+          ballEl.style.left = `${startPct}%`;
+          ballEl.style.transform = 'translate(-50%, -50%)';
 
-      // Reset Shadow
-      if (ballShadow) {
-          ballShadow.style.transition = 'none';
-          ballShadow.style.left = `${startPct}%`;
-          ballShadow.style.transform = 'translate(-50%, -50%)';
-          ballShadow.style.opacity = 1;
+          if (ballShadow) {
+              ballShadow.style.transition = 'none';
+              ballShadow.style.left = `${startPct}%`;
+              ballShadow.style.transform = 'translate(-50%, -50%)';
+              ballShadow.style.opacity = 1;
+          }
       }
 
-      // Setup Markers (initially hidden or at start)
-      if (qbMarker) {
-          qbMarker.style.transition = 'none';
-          qbMarker.style.left = `${startPct}%`;
-          qbMarker.style.opacity = '1';
-          qbMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
-          qbMarker.classList.add('pulse-marker');
-      }
-      if (skillMarker) {
-          skillMarker.style.transition = 'none';
-          skillMarker.style.left = `${startPct}%`;
-          skillMarker.style.opacity = '0'; // Hide initially
-          skillMarker.style.backgroundColor = isHome ? '#007bff' : '#dc3545';
-          skillMarker.classList.remove('pulse-marker');
+      // Setup Markers
+      const setupMarker = (el, color, show = true) => {
+          if (el) {
+              el.style.transition = 'none';
+              el.style.left = `${startPct}%`;
+              el.style.opacity = show ? '1' : '0';
+              el.style.backgroundColor = color;
+              el.classList.remove('pulse-marker', 'celebrate-jump', 'celebrate-spin', 'marker-catch', 'marker-collision');
+          }
+      };
+
+      const homeColor = 'var(--accent, #007bff)';
+      const awayColor = 'var(--danger, #dc3545)';
+      const offenseColor = isHome ? homeColor : awayColor;
+      const defenseColor = isHome ? awayColor : homeColor;
+
+      setupMarker(qbMarker, offenseColor, true);
+      if (qbMarker) qbMarker.classList.add('pulse-marker');
+      setupMarker(skillMarker, offenseColor, false);
+
+      // Initialize Defense
+      if (defMarker) {
+          setupMarker(defMarker, defenseColor, true);
+          // Defense starts slightly off LOS
+          const defStartPct = this.getVisualPercentage(startYard + (isHome ? 5 : -5), isHome);
+          defMarker.style.left = `${defStartPct}%`;
       }
 
       void ballEl.offsetWidth; // Reflow
@@ -564,70 +665,79 @@ class LiveGameViewer {
       if (play.playType.startsWith('pass')) {
           // PASS PLAY: Dropback -> Pass -> Catch/Run
 
-          // 1. Dropback (QB moves back ~5 yards)
-          // So Dropback is always yardLine - 5.
+          // 1. Dropback
           const dropbackPct = this.getVisualPercentage(Math.max(0, startYard - 5), isHome);
-
-          // Animate QB Dropback
           const dropbackDuration = 600 * durationScale;
 
-          // Show Skill Player (Receiver) running route
-          if (skillMarker) {
-              skillMarker.style.opacity = '1';
-              // Receiver starts at LOS, runs to catch point
-              // Assume catch is at full yardage for simplicity
-          }
-
+          if (skillMarker) skillMarker.style.opacity = '1';
           if (qbMarker) qbMarker.classList.remove('pulse-marker');
 
-          const p1 = this.animateTrajectory(qbMarker, {
-              startX: startPct,
-              endX: dropbackPct,
-              duration: dropbackDuration,
-              easing: 'easeOut',
-              animationClass: 'bob'
-          });
+          const animations = [];
 
-          const p2 = this.animateTrajectory(skillMarker, {
-              startX: startPct,
-              endX: endPct,
-              duration: dropbackDuration + 400 * durationScale, // Route takes longer
-              easing: 'easeInOut', // Run
-              animationClass: 'bob'
-          });
+          // QB Drops back
+          animations.push(this.animateTrajectory(qbMarker, {
+              startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut', animationClass: 'bob'
+          }));
 
-          // Ball tracks QB during dropback? Or just waits?
-          // Let's snap ball to QB for dropback.
-          const p3 = this.animateTrajectory(ballEl, {
-              startX: startPct,
-              endX: dropbackPct,
-              duration: dropbackDuration,
-              easing: 'easeOut'
-          });
+          // Receiver runs route
+          animations.push(this.animateTrajectory(skillMarker, {
+              startX: startPct, endX: endPct, duration: dropbackDuration + 400 * durationScale, easing: 'easeInOut', animationClass: 'bob'
+          }));
 
-          await Promise.all([p1, p3]); // Wait for dropback
+          // Ball snaps to QB
+          if (shouldSnap) {
+             animations.push(this.animateTrajectory(ballEl, {
+                 startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
+             }));
+          } else {
+             // If fluid, maybe just animate from current?
+             animations.push(this.animateTrajectory(ballEl, {
+                 startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
+             }));
+          }
 
-          // 2. Throw (Ball Arcs to Receiver)
-          // QB stays, Receiver might still be moving slightly or arrived
-          const throwDuration = 700 * durationScale; // Air time
+          // Def Logic
+          if (defMarker) {
+             if (play.result === 'sack') {
+                 // Rush QB
+                 animations.push(this.animateTrajectory(defMarker, {
+                     startX: parseFloat(defMarker.style.left), endX: dropbackPct, duration: dropbackDuration, easing: 'easeIn'
+                 }));
+             } else {
+                 // Cover Receiver
+                 animations.push(this.animateTrajectory(defMarker, {
+                     startX: parseFloat(defMarker.style.left), endX: endPct, duration: dropbackDuration + 400 * durationScale, easing: 'easeInOut'
+                 }));
+             }
+          }
 
+          await Promise.all(animations);
+
+          // 2. Throw
+          const throwDuration = 700 * durationScale;
+
+          // Ball Arc - Use Linear for X to simulate projectile
           await this.animateTrajectory(ballEl, {
               startX: dropbackPct,
               endX: endPct,
               duration: throwDuration,
-              arcHeight: 25, // Nice arc
-              easing: 'easeOutQuad', // Slight drag
+              arcHeight: 25,
+              easing: 'linear', // Improved physics
               rotate: true
           });
 
           // Pulse if TD
-          if (play.result === 'touchdown') ballEl.classList.add('animate-pulse');
+          if (play.result === 'touchdown') {
+              ballEl.classList.add('animate-pulse');
+              if (skillMarker) skillMarker.classList.add('celebrate-jump');
+          }
 
           // Catch Effect
           if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
                if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
                soundManager.playCatch(); // Sync sound with visual
                // Marker Animation
+               soundManager.playCatch();
                if (skillMarker) {
                    skillMarker.classList.add('marker-catch');
                    setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
@@ -635,47 +745,44 @@ class LiveGameViewer {
           }
 
       } else if (play.playType.startsWith('run')) {
-          // RUN PLAY: Handoff -> Run
-
-          // 1. Handoff (Quick merge)
+          // RUN PLAY
           const handoffDuration = 400 * durationScale;
-
           if (skillMarker) {
               skillMarker.style.opacity = '1';
-              skillMarker.style.left = `${startPct}%`; // Starts at LOS
+              skillMarker.style.left = `${startPct}%`;
           }
 
-          // QB hands off (small movement?)
           await new Promise(r => setTimeout(r, handoffDuration));
 
-          // 2. Run
           const runDuration = 800 * durationScale;
-
-          // QB fades
           if (qbMarker) qbMarker.style.opacity = '0.5';
 
-          // Ball moves with Runner
-          const pRun = this.animateTrajectory(ballEl, {
-              startX: startPct,
-              endX: endPct,
-              duration: runDuration,
-              easing: 'easeInOut',
-              animationClass: 'bob'
-          });
+          const animations = [];
 
-          const pSkill = this.animateTrajectory(skillMarker, {
-              startX: startPct,
-              endX: endPct,
-              duration: runDuration,
-              easing: 'easeInOut'
-          });
+          animations.push(this.animateTrajectory(ballEl, {
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'bob'
+          }));
 
-          await Promise.all([pRun, pSkill]);
+          animations.push(this.animateTrajectory(skillMarker, {
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut'
+          }));
+
+          // Def Logic: Chase
+          if (defMarker) {
+             animations.push(this.animateTrajectory(defMarker, {
+                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut' // Meet at tackle point
+             }));
+          }
+
+          await Promise.all(animations);
 
           if (play.result === 'touchdown') {
               ballEl.classList.add('animate-pulse');
           } else if (skillMarker) {
               // Collision/Tackle
+               ballEl.classList.add('animate-pulse');
+               if (skillMarker) skillMarker.classList.add('celebrate-spin');
+          } else if (skillMarker) {
               skillMarker.classList.add('marker-collision');
               setTimeout(() => skillMarker.classList.remove('marker-collision'), 300);
           }
@@ -685,11 +792,15 @@ class LiveGameViewer {
           const kickDuration = 1200 * durationScale;
           const arc = play.playType === 'punt' ? 40 : 30;
 
-          // Hide markers
+          if (ballEl) {
+              ballEl.classList.add('kick-flash');
+              setTimeout(() => ballEl.classList.remove('kick-flash'), 300);
+          }
+
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
+          if (defMarker) defMarker.style.opacity = 0; // Hide defense for kicks for simplicity
 
-          // Visual Kick Effect
           if (this.fieldEffects) {
               this.fieldEffects.spawnParticles(startPct, 'kick');
           }
@@ -699,7 +810,7 @@ class LiveGameViewer {
               endX: endPct,
               duration: kickDuration,
               arcHeight: arc,
-              easing: 'easeOutQuad', // Realistic drag
+              easing: 'linear', // Projectile motion
               rotate: true
           });
 
@@ -707,11 +818,28 @@ class LiveGameViewer {
                ballEl.classList.add('animate-pulse');
                if (play.result === 'field_goal' && this.fieldEffects) {
                    this.fieldEffects.spawnParticles(endPct, 'field_goal'); // Use new gold sparkles
+                   this.fieldEffects.spawnParticles(endPct, 'field_goal');
+               }
+               if (play.result === 'touchdown') {
+                   // Celebration
+                   if (skillMarker) {
+                       const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance'];
+                       const anim = anims[Math.floor(Math.random() * anims.length)];
+                       skillMarker.classList.add(anim);
+                   }
+                   if (qbMarker) qbMarker.classList.add('celebrate-spin');
+
+                   const endzone = isHome ? parent.querySelector('.endzone.right') : parent.querySelector('.endzone.left');
+                   if (endzone) {
+                       endzone.classList.add('endzone-pulse');
+                       setTimeout(() => endzone.classList.remove('endzone-pulse'), 2000);
+                   }
+
+                   this.fieldEffects.spawnParticles(endPct, 'touchdown');
                }
            }
-
       } else {
-          // Fallback (Penalty, etc)
+          // Fallback
           await this.animateTrajectory(ballEl, {
               startX: startPct,
               endX: endPct,
@@ -728,6 +856,12 @@ class LiveGameViewer {
                   this.fieldEffects.spawnParticles(endPct, 'interception');
               } else {
                   this.fieldEffects.spawnParticles(endPct, 'fumble');
+              if (play.message && play.message.toLowerCase().includes('intercept')) {
+                   this.fieldEffects.spawnParticles(endPct, 'interception');
+              } else if (play.message && play.message.toLowerCase().includes('fumble')) {
+                   this.fieldEffects.spawnParticles(endPct, 'fumble');
+              } else {
+                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
@@ -740,17 +874,16 @@ class LiveGameViewer {
           } else if (play.message && play.message.includes('First down')) {
               this.fieldEffects.spawnParticles(endPct, 'first_down');
           } else if (!['field_goal', 'punt', 'field_goal_miss', 'incomplete'].includes(play.result) && !play.playType.includes('kick') && !play.playType.includes('punt')) {
-              // Standard Tackle
               this.fieldEffects.spawnParticles(endPct, 'tackle');
           }
       }
 
       // Cleanup
       setTimeout(() => {
-          ballEl.classList.remove('animate-pulse');
-          // Fade out markers
+          if (ballEl) ballEl.classList.remove('animate-pulse');
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
+          if (defMarker) defMarker.style.opacity = 0;
       }, 1000);
 
       return Promise.resolve();
@@ -935,7 +1068,7 @@ class LiveGameViewer {
     const awayDefense = this.calculateDefenseStrength(state.away.team);
 
     // Generate target scores (for pacing)
-    const HOME_ADVANTAGE = C.HOME_ADVANTAGE || 2.5;
+    const HOME_ADVANTAGE = C.SIMULATION?.HOME_ADVANTAGE || C.HOME_ADVANTAGE || 2.5;
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
     const targetHomeScore = Math.max(0, 20 + Math.round(strengthDiff / 3) + U.rand(-7, 7));
     const targetAwayScore = Math.max(0, 20 - Math.round(strengthDiff / 3) + U.rand(-7, 7));
@@ -1033,7 +1166,7 @@ class LiveGameViewer {
     };
 
     // Simulate play result
-    const success = Math.random() < successChance;
+    const success = U.random() < successChance;
     let yards = 0;
     let momentumChange = 0;
 
@@ -1059,7 +1192,7 @@ class LiveGameViewer {
 
       if (success) {
         yards = Math.round(U.rand(2, 8) + runBonus + defModRun);
-        if (Math.random() < (0.1 * variance + defModBigPlay)) {
+        if (U.random() < (0.1 * variance + defModBigPlay)) {
             yards = U.rand(10, 25); // Big play
             momentumChange += 5;
             play.result = 'big_play';
@@ -1067,7 +1200,7 @@ class LiveGameViewer {
       } else {
         yards = U.rand(-2, 3);
         // Blitz TFL chance
-        if (Math.random() < defModSack * 0.5) {
+        if (U.random() < defModSack * 0.5) {
             yards -= 2;
             momentumChange -= 2;
         }
@@ -1083,7 +1216,7 @@ class LiveGameViewer {
     } else if (baseType === 'pass') {
       // Pick Target
       const targets = [...offense.players.wrs, ...offense.players.tes];
-      const target = targets.length > 0 ? targets[Math.floor(Math.random() * targets.length)] : null;
+      const target = targets.length > 0 ? targets[Math.floor(U.random() * targets.length)] : null;
       player = target;
       const qb = offense.qb;
 
@@ -1107,7 +1240,7 @@ class LiveGameViewer {
       }
 
       // Check for Sack
-      if (Math.random() < (0.05 + defModSack)) {
+      if (U.random() < (0.05 + defModSack)) {
           yards = -U.rand(5, 10);
           play.result = 'sack';
           play.message = 'SACKED!';
@@ -1117,19 +1250,19 @@ class LiveGameViewer {
              const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
              qbStats.rushAtt++;
           }
-      } else if (Math.random() < (successChance + completeBonus)) {
+      } else if (U.random() < (successChance + completeBonus)) {
         // Completion
         yards = Math.max(1, Math.round(U.rand(5, 15) + yardBonus + defModPass));
 
         // Big play
-        if (Math.random() < (bigPlayChance + defModBigPlay)) {
+        if (U.random() < (bigPlayChance + defModBigPlay)) {
             yards = U.rand(20, 50);
             momentumChange += 10;
             play.result = 'big_play';
         }
 
         // Interception
-        if (Math.random() < (intChance + defModInt)) {
+        if (U.random() < (intChance + defModInt)) {
           play.result = 'turnover'; // Standardize to turnover
           yards = 0;
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
@@ -1168,7 +1301,7 @@ class LiveGameViewer {
       const distance = 100 - gameState[gameState.ballPossession].yardLine;
       const successChance = Math.max(0.3, Math.min(0.95, 0.9 - (distance - 20) / 30));
       
-      if (Math.random() < successChance * (kickStrength / 100)) {
+      if (U.random() < successChance * (kickStrength / 100)) {
         play.result = 'field_goal';
         play.message = `Field goal is GOOD! (${distance} yards)`;
         offense.score += 3;
@@ -1179,17 +1312,31 @@ class LiveGameViewer {
             gameState.quarterScores[gameState.ballPossession][qIdx] += 3;
         }
         momentumChange += 5;
-        this.switchPossession(gameState);
+        this.switchPossession(gameState); // Kickoff next (assume touchback for now)
       } else {
         play.result = 'field_goal_miss';
         play.message = `Field goal is NO GOOD (${distance} yards)`;
         momentumChange -= 10;
-        this.switchPossession(gameState);
+        // Turnover at spot of kick (approx LOS)
+        const turnoverYard = 100 - gameState[gameState.ballPossession].yardLine;
+        this.switchPossession(gameState, turnoverYard);
       }
     } else if (playType === 'punt') {
       yards = U.rand(35, 50);
       play.message = `Punt ${yards} yards`;
-      this.switchPossession(gameState);
+
+      const currentYard = gameState[gameState.ballPossession].yardLine;
+      const landingYard = currentYard + yards;
+      // Flip for opponent: 100 - landingYard. Cap at 20 for touchback if > 100
+      let nextStart = 100 - landingYard;
+      if (nextStart < 0) {
+          play.message += " (Touchback)";
+          nextStart = 20;
+      } else if (nextStart > 99) {
+          nextStart = 99; // Safety safety? No, punting from own end zone.
+      }
+
+      this.switchPossession(gameState, nextStart);
     }
 
     // Update Momentum
@@ -1346,24 +1493,24 @@ class LiveGameViewer {
         return 'punt';
       } else {
         // Go for it on 4th and short
-        return distance <= 3 ? (Math.random() < 0.5 ? 'run' : 'pass') : 'punt';
+        return distance <= 3 ? ((window.Utils?.random || Math.random)() < 0.5 ? 'run' : 'pass') : 'punt';
       }
     }
 
     // Normal play selection
     let type = 'run';
     if (down === 1 || down === 2) {
-      type = Math.random() < 0.6 ? 'pass' : 'run';
+      type = (window.Utils?.random || Math.random)() < 0.6 ? 'pass' : 'run';
     } else {
       // 3rd down - more likely to pass
-      type = Math.random() < 0.7 ? 'pass' : 'run';
+      type = (window.Utils?.random || Math.random)() < 0.7 ? 'pass' : 'run';
     }
 
     // Add subtypes
     if (type === 'run') {
-        return Math.random() < 0.6 ? 'run_inside' : 'run_outside';
+        return (window.Utils?.random || Math.random)() < 0.6 ? 'run_inside' : 'run_outside';
     } else {
-        const r = Math.random();
+        const r = (window.Utils?.random || Math.random)();
         if (r < 0.3) return 'pass_short';
         if (r < 0.7) return 'pass_medium';
         return 'pass_long';
@@ -1373,7 +1520,7 @@ class LiveGameViewer {
   /**
    * Switch ball possession
    */
-  switchPossession(gameState) {
+  switchPossession(gameState, startYardLine = 25) {
     // Generate Drive Summary
     const drive = gameState.drive;
     const timeElapsed = Math.max(0, drive.startTime - gameState.time);
@@ -1398,14 +1545,14 @@ class LiveGameViewer {
         plays: 0,
         yards: 0,
         startTime: gameState.time,
-        startYardLine: 25
+        startYardLine: startYardLine
     };
 
     gameState.ballPossession = gameState.ballPossession === 'home' ? 'away' : 'home';
     const newOffense = gameState[gameState.ballPossession];
     newOffense.down = 1;
     newOffense.distance = 10;
-    newOffense.yardLine = 25; // Start at own 25 after kickoff/turnover
+    newOffense.yardLine = startYardLine; // Use dynamic start position
   }
 
   /**
@@ -1437,6 +1584,7 @@ class LiveGameViewer {
       };
       this.playByPlay.push(quarterPlay);
       this.renderPlay(quarterPlay);
+      this.showQuarterOverlay(gameState.quarter - 1);
     } else {
       // CHECK FOR TIE (OVERTIME)
       if (gameState.home.score === gameState.away.score && !gameState.gameComplete) {
@@ -1463,7 +1611,7 @@ class LiveGameViewer {
           gameState.isOvertime = true;
 
           // Coin Toss
-          const winner = Math.random() < 0.5 ? 'home' : 'away';
+          const winner = (window.Utils?.random || Math.random)() < 0.5 ? 'home' : 'away';
           gameState.ballPossession = winner;
           gameState.otFirstPossession = true;
 
@@ -1669,7 +1817,7 @@ class LiveGameViewer {
     // Update Combo State
     let comboIncreased = false;
     let comboBroken = false;
-    if (this.userTeamId) {
+    if (this.userTeamId != null) {
         // Only track combo if it relates to user
         const isUserOffense = play.offense === this.userTeamId;
         const isUserDefense = play.defense === this.userTeamId;
@@ -1715,6 +1863,7 @@ class LiveGameViewer {
             soundManager.playCheer();
             this.triggerFlash();
             this.triggerShake(); // Add shake!
+            this.triggerShake(); // Added Juice
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
             this.triggerVisualFeedback('positive', 'TOUCHDOWN!');
@@ -1731,6 +1880,14 @@ class LiveGameViewer {
 
             soundManager.playDefenseStop();
 
+            if (play.message && play.message.toLowerCase().includes('intercept')) {
+                 soundManager.playInterception();
+            } else if (play.message && play.message.toLowerCase().includes('fumble')) {
+                 soundManager.playFumble();
+            } else {
+                 soundManager.playDefenseStop();
+            }
+            soundManager.playFailure();
             // Intense shake
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
@@ -1738,7 +1895,7 @@ class LiveGameViewer {
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('defense-stop', 'STOPPED!');
             } else {
-                this.triggerVisualFeedback('turnover', 'TURNOVER');
+                this.triggerVisualFeedback('defense-stop', 'TURNOVER!');
             }
 
             // Screen shake
@@ -1751,11 +1908,11 @@ class LiveGameViewer {
 
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
-            soundManager.playFailure();
+            soundManager.playFieldGoalMiss();
             this.triggerShake();
             this.triggerFloatText('NO GOOD!', 'bad');
         } else if (play.result === 'sack') {
-            soundManager.playBigHit();
+            soundManager.playSack();
             this.triggerShake();
             this.triggerFloatText('SACKED!', 'bad');
             this.triggerVisualFeedback('negative', 'SACK!');
@@ -1763,7 +1920,7 @@ class LiveGameViewer {
             soundManager.playCheer();
             this.triggerFloatText('BIG PLAY!');
         } else if (play.result === 'field_goal') {
-            soundManager.playScore();
+            soundManager.playFieldGoal();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
             this.triggerVisualFeedback('field-goal-made', 'FIELD GOAL! IT IS GOOD!');
@@ -1776,6 +1933,7 @@ class LiveGameViewer {
             if (userWon) {
                 soundManager.playCheer();
                 soundManager.playHorns();
+                soundManager.playVictory();
                 launchConfetti();
             } else {
                 soundManager.playWhistle();
@@ -1939,41 +2097,68 @@ class LiveGameViewer {
     const displayHome = homeChanged ? this.lastHomeScore : home.score;
     const displayAway = awayChanged ? this.lastAwayScore : away.score;
 
-    scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
-        <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score" id="scoreAway">${displayAway}</div>
-      </div>
-      <div class="score-info">
-        <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
-        <div class="down-distance">
-          ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
-        </div>
-      </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
-        <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score" id="scoreHome">${displayHome}</div>
-      </div>
-    `;
-
-    // Trigger animations explicitly
-    if (homeChanged) {
-        const el = scoreboard.querySelector('#scoreHome');
-        if (el) {
-            el.classList.remove('pulse-score');
-            void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
-            this.animateNumber(el, this.lastHomeScore, home.score, 1500);
-        }
+    // Initialize scoreboard structure if missing
+    if (!scoreboard.querySelector('#scoreHome')) {
+        scoreboard.innerHTML = `
+          <div class="score-team" id="awayTeamBox">
+            <div class="team-name">${away.team.abbr}</div>
+            <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
+          </div>
+          <div class="score-info">
+            <div class="game-clock"></div>
+            <div class="down-distance"></div>
+          </div>
+          <div class="score-team" id="homeTeamBox">
+            <div class="team-name">${home.team.abbr}</div>
+            <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
+          </div>
+        `;
     }
-    if (awayChanged) {
-        const el = scoreboard.querySelector('#scoreAway');
-        if (el) {
-            el.classList.remove('pulse-score');
-            void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
-            this.animateNumber(el, this.lastAwayScore, away.score, 1500);
-        }
+
+    // Update Possession Classes
+    const awayBox = scoreboard.querySelector('#awayTeamBox');
+    const homeBox = scoreboard.querySelector('#homeTeamBox');
+    if (awayBox) awayBox.className = `score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}`;
+    if (homeBox) homeBox.className = `score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}`;
+
+    // Update Info
+    const clockEl = scoreboard.querySelector('.game-clock');
+    if (clockEl) clockEl.textContent = `Q${state.quarter} ${this.formatTime(state.time)}`;
+
+    const ddEl = scoreboard.querySelector('.down-distance');
+    if (ddEl) ddEl.textContent = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
+
+    // Update Scores with Animation
+    const homeEl = scoreboard.querySelector('#scoreHome');
+    const awayEl = scoreboard.querySelector('#scoreAway');
+
+    if (homeChanged && homeEl) {
+        homeEl.classList.remove('pulse-score');
+        if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
+        void homeEl.offsetWidth; // Force reflow
+        homeEl.classList.add('pulse-score');
+        this.animateNumber(homeEl, this.lastHomeScore, home.score, 1500);
+    } else if (homeEl) {
+         // Ensure accurate if not animating
+         // Only update if not currently animating (hacky check: assume animating if class present?)
+         // Ideally animateNumber handles final state. But if page refreshed, we need to set it.
+         if (homeEl.textContent != home.score && !homeEl.classList.contains('pulse-score')) {
+             homeEl.textContent = home.score;
+             if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
+         }
+    }
+
+    if (awayChanged && awayEl) {
+        awayEl.classList.remove('pulse-score');
+        if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
+        void awayEl.offsetWidth; // Force reflow
+        awayEl.classList.add('pulse-score');
+        this.animateNumber(awayEl, this.lastAwayScore, away.score, 1500);
+    } else if (awayEl) {
+         if (awayEl.textContent != away.score && !awayEl.classList.contains('pulse-score')) {
+             awayEl.textContent = away.score;
+             if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
+         }
     }
 
     this.lastHomeScore = home.score;
@@ -2032,6 +2217,7 @@ class LiveGameViewer {
                     // Visual feedback
                     pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
                     e.target.classList.add('selected');
+                    if (soundManager && soundManager.playPing) soundManager.playPing();
 
                     // Small delay to show feedback before hiding
                     setTimeout(() => {
@@ -2241,7 +2427,7 @@ class LiveGameViewer {
 
     // Enhanced Game Over Screen
     if (this.checkUI() && !this.isSkipping) {
-        const userTeam = this.userTeamId ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
+        const userTeam = this.userTeamId != null ? (this.gameState.home.team.id === this.userTeamId ? this.gameState.home : this.gameState.away) : null;
 
         // Only show overlay if user is playing
         if (userTeam) {
@@ -2331,6 +2517,18 @@ class LiveGameViewer {
             <div style="font-size: 5rem; margin-bottom: 10px;">${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}</div>
             <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
             <div class="game-over-score" style="color: #fff; font-weight: 900; font-size: 3rem;">${scoreA} - ${scoreB}</div>
+        <div class="${bannerClass}" style="
+            border-color: ${mainColor};
+            box-shadow: 0 0 60px ${mainColor}60;
+            background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);
+        ">
+            <h2 style="
+                color: ${mainColor};
+                text-shadow: 0 0 30px ${mainColor}80;
+                font-size: 4.5rem;
+                margin-bottom: 20px;
+            ">${title}</h2>
+            <div class="game-over-score" style="font-size: 3rem;">${scoreA} - ${scoreB}</div>
 
             ${mvp ? `
             <div class="game-over-mvp">
@@ -2450,7 +2648,7 @@ class LiveGameViewer {
           <button class="tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
           <button class="tempo-btn" data-tempo="slow">Slow</button>
           <button class="pause-btn">⏸ Pause</button>
-          <button class="skip-btn" style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
+          <button class="skip-btn" style="background: var(--danger, #dc3545); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
         </div>
 
         <div class="game-dashboard" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); margin-top: 10px; border-radius: 8px;">
@@ -2550,6 +2748,7 @@ class LiveGameViewer {
           <div class="player-markers">
               <div class="player-marker marker-qb"></div>
               <div class="player-marker marker-skill"></div>
+              <div class="player-marker marker-def"></div>
           </div>
 
           <div class="ball-shadow" style="left: 50%;"></div>
@@ -2658,11 +2857,16 @@ class LiveGameViewer {
           streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
-      if (this.combo >= 2) {
+      if (this.combo > 0) {
           streakHtml += `
             <div class="streak-text" style="text-align:center; margin-top: 5px;">
                 <span style="font-size: 1.2em; font-weight: 900; color: #ffeb3b; text-shadow: 0 0 10px #ffc107;">COMBO</span>
                 <span style="font-size: 1.5em; font-weight: 900; color: #fff;">x${this.combo}</span>
+            </div>
+            <div class="combo-bar-container">
+                ${Array.from({length: 5}, (_, i) =>
+                    `<div class="combo-bar-segment ${i < this.combo ? (this.combo >= 5 ? 'max' : 'active') : ''}"></div>`
+                ).join('')}
             </div>
           `;
       }
@@ -2671,7 +2875,7 @@ class LiveGameViewer {
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
         <div class="${Math.abs(m) > 80 ? 'momentum-max' : (Math.abs(m) > 75 ? 'momentum-surge' : '')}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden; transition: all 0.3s;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
-            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #dc3545 0%, #007bff 100%); opacity: 0.8;"></div>
+            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--danger, #dc3545) 0%, var(--accent, #007bff) 100%); opacity: 0.8;"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: var(--text-muted);">
             <span>${this.gameState.away.team.abbr}</span>
@@ -2832,6 +3036,13 @@ class LiveGameViewer {
         this.container.innerHTML = '';
         this.container = null;
     }
+
+    if (this.fieldEffects) {
+        this.fieldEffects.destroy();
+        this.fieldEffects = null;
+    }
+
+    // Clear resize listener if it was attached globally (though FieldEffects handles its own)
 
     this.gameState = null;
   }

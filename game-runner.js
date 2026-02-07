@@ -187,7 +187,7 @@ class GameRunner {
             home: g.home,
             away: g.away,
             year: year
-        })).filter(g => g.home && g.away);
+        })).filter(g => g.home != null && g.away != null);
 
         if (gamesToSim.length === 0) return { winners: [], results: [] };
 

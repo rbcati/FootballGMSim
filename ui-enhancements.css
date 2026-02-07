@@ -1381,6 +1381,13 @@ select:disabled {
     height: 10px;
 }
 
+.marker-def {
+    background: #dc3545; /* Red */
+    z-index: 10;
+    width: 11px;
+    height: 11px;
+}
+
 /* Ensure ball is above markers */
 .ball, .football-ball {
     z-index: 15;
@@ -1501,31 +1508,41 @@ select:disabled {
 }
 
 .play-call-btn {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--hairline);
-    background: var(--surface);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-sm);
     color: var(--text);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 0.9em;
+    font-size: 0.95em;
+    font-weight: 500;
     flex: 1;
     transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .play-call-btn:hover {
     background: var(--surface-strong);
     border-color: var(--accent);
     transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
 }
 
 .play-call-btn:active {
     transform: scale(0.98);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .play-call-btn.selected {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-muted);
+    font-weight: 700;
 }
 
 .defense-row {
@@ -1772,6 +1789,8 @@ select:disabled {
     0% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
     50% { text-shadow: 0 0 20px currentColor, 0 0 10px currentColor; transform: scale(1.05); }
     100% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
+}
+
 /* Player Marker Animations */
 @keyframes pulse-marker {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }
@@ -1824,6 +1843,7 @@ select:disabled {
   0% { transform: scale(1); }
   50% { transform: scale(1.4); filter: brightness(1.3); }
   100% { transform: scale(1); }
+}
 /* ============================================
    New UI Polish & Visual Feedback
    ============================================ */
@@ -1843,15 +1863,19 @@ select:disabled {
 
 .game-event-overlay.defense-stop .event-text {
   color: #FF453A;
-  border: 4px solid #fff;
-  padding: 10px 20px;
+  border: 4px solid #FF453A;
+  background: rgba(0, 0, 0, 0.8);
+  padding: 15px 30px;
   transform: rotate(-5deg);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255, 69, 58, 0.4);
 }
 .game-event-overlay.defense-stop::before {
   content: '🛡️';
   display: block;
-  font-size: 4rem;
+  font-size: 5rem;
   margin-bottom: 10px;
+  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
 }
 
 .game-event-overlay.punt .event-text {
@@ -1889,15 +1913,15 @@ select:disabled {
 }
 
 .btn:hover, .play-call-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
   filter: brightness(1.05);
 }
 
 .btn:active, .play-call-btn:active {
-  transform: scale(0.96) translateY(0) !important;
-  filter: brightness(0.9);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+  transform: scale(0.97) translateY(1px) !important;
+  filter: brightness(0.95);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
 }
 
 .play-call-btn.selected {
@@ -1907,6 +1931,12 @@ select:disabled {
   box-shadow: 0 0 0 2px var(--accent-muted);
 }
 
+/* Celebration Animations */
+@keyframes celebrate-jump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  30% { transform: translate(-50%, -150%) scale(1.1); } /* Jump Up */
+  50% { transform: translate(-50%, -50%) scale(0.9); } /* Land Squash */
+  70% { transform: translate(-50%, -100%) scale(1.05); } /* Small Hop */
 /* Player Marker Interactions */
 @keyframes marker-bump {
   0% { transform: translate(-50%, -50%) scale(1); }
@@ -1960,4 +1990,115 @@ select:disabled {
 .momentum-max {
   animation: momentum-max 0.5s infinite;
   border: 2px solid white !important;
+@keyframes celebrate-jump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  40% { transform: translate(-50%, -150%) scale(1.2) rotate(10deg); }
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.celebrate-jump {
+  animation: celebrate-jump 0.8s ease-in-out;
+}
+
+@keyframes celebrate-spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+    50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.2); }
+    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
+}
+
+.celebrate-spin {
+    animation: celebrate-spin 0.8s ease-in-out;
+}
+
+/* --- New Visual Feedback Animations --- */
+
+@keyframes kick-flash {
+  0% { filter: brightness(2) scale(1.5); }
+  100% { filter: brightness(1) scale(1); }
+}
+
+.kick-flash {
+  animation: kick-flash 0.3s ease-out;
+}
+
+@keyframes endzone-pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; box-shadow: inset 0 0 40px currentColor; }
+  100% { opacity: 0.8; }
+}
+
+.endzone-pulse {
+  animation: endzone-pulse 1s infinite;
+  z-index: 5; /* Ensure above field */
+}
+
+@keyframes shield-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Update Defense Stop to use Shield Pop */
+.game-event-overlay.defense-stop::before {
+  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* New Celebration Animations */
+@keyframes celebrate-spike {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    40% { transform: translate(-50%, -150%) scale(1.1); } /* Jump Up */
+    60% { transform: translate(-50%, -150%) scale(1.1) rotate(-15deg); } /* Cock back */
+    70% { transform: translate(-50%, -50%) scale(1.2) rotate(45deg); } /* Spike Down */
+    80% { transform: translate(-50%, -50%) scale(0.9); } /* Land Squash */
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.celebrate-spike {
+    animation: celebrate-spike 1.0s ease-in-out;
+}
+
+@keyframes celebrate-dance {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    25% { transform: translate(-60%, -50%) rotate(-10deg); }
+    50% { transform: translate(-40%, -50%) rotate(10deg); }
+    75% { transform: translate(-60%, -50%) rotate(-10deg); }
+    100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.celebrate-dance {
+    animation: celebrate-dance 1.2s ease-in-out;
+}
+
+/* Combo Meter */
+.combo-bar-container {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    margin-top: 5px;
+    overflow: hidden;
+    display: flex;
+}
+
+.combo-bar-segment {
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border-right: 1px solid rgba(0,0,0,0.5);
+    transition: background 0.3s ease;
+}
+
+.combo-bar-segment:last-child {
+    border-right: none;
+}
+
+.combo-bar-segment.active {
+    background: #FFD700;
+    box-shadow: 0 0 5px #FFD700;
+}
+
+.combo-bar-segment.max {
+    background: #ff4500;
+    box-shadow: 0 0 10px #ff4500;
+    animation: pulse-glow 0.5s infinite;
 }

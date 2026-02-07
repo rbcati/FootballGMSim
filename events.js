@@ -167,7 +167,7 @@ async function handleOnboardRandom(e) {
     const options = teamSelect.querySelectorAll('option');
     if (!options.length) return;
 
-    const randomIndex = Math.floor(Math.random() * options.length);
+    const randomIndex = Math.floor((window.Utils?.random || Math.random)() * options.length);
     options[randomIndex].selected = true;
 }
 
@@ -332,7 +332,7 @@ async function handleSimulateWeek(button) {
             button.textContent = 'Simulating...';
         }
         await new Promise(resolve => setTimeout(resolve, 50));
-        simulateWeek();
+        await simulateWeek();
     } catch (error) {
         console.error('Error in handleSimulateWeek:', error);
         window.setStatus(`Error: ${error.message}`, 'error');

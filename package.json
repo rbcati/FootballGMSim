@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "dev": "vite",
+    "test": "playwright test"
+  },
   "dependencies": {
     "jsdom": "^27.4.0",
     "playwright": "^1.58.1",

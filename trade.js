@@ -488,7 +488,7 @@ export function generateCpuTradeOffers(league, userTeamId, maxOffers) {
     if (!cpuTeam) continue;
 
     // Chance this team is active in trade talks
-    if (Math.random() > 0.3) continue;
+    if (U.random() > 0.3) continue;
 
     for (const playerId of userBlock) {
       const player = findPlayerOnTeam(userTeam, playerId);
@@ -524,7 +524,7 @@ export function generateCpuTradeOffers(league, userTeamId, maxOffers) {
 
       // Rebuilding teams prefer to give picks (future value)
       // Contending teams prefer to give players (win now)
-      const preferPicks = isCpuRebuilding || Math.random() < 0.5;
+      const preferPicks = isCpuRebuilding || U.random() < 0.5;
 
       if (preferPicks) {
         const cpuOfferPick = pickCpuTradeAssetForValue(cpuTeam, playerVal, leagueYear);
@@ -543,7 +543,7 @@ export function generateCpuTradeOffers(league, userTeamId, maxOffers) {
         const cpuNeeds = analyzeTeamNeeds(cpuTeam);
         if (cpuNeeds.includes(playerPos) && !isCpuRebuilding) {
           // CPU needs this position and is contending - less likely to trade
-          if (Math.random() > 0.3) continue;
+          if (U.random() > 0.3) continue;
         }
         
         cpuOfferAssets = [{ kind: 'player', playerId: cpuOfferPlayer.id }];
@@ -953,6 +953,134 @@ if (typeof window !== 'undefined') {
     if (window.renderTradeBlock) {
       window.renderTradeBlock();
     }
+  };
+
+  /**
+   * PROACTIVE CPU TRADE PROPOSALS
+   * CPU teams can now initiate trades even without players on the trade block.
+   * This creates more dynamic trade activity and interesting decisions.
+   */
+  window.generateProactiveCpuOffers = function(maxOffers = 3) {
+    const L = state?.league;
+    if (!L || !L.teams) return [];
+    const userTeamId = state?.userTeamId ?? 0;
+    const userTeam = L.teams[userTeamId];
+    if (!userTeam) return [];
+
+    const leagueYear = getLeagueYear(L);
+    const offers = [];
+    const userRoster = userTeam.roster || [];
+    if (userRoster.length === 0) return [];
+
+    // Count user position depth
+    const userPosCounts = {};
+    userRoster.forEach(p => { userPosCounts[p.pos] = (userPosCounts[p.pos] || 0) + 1; });
+    const idealCounts = C.DEPTH_NEEDS || { QB: 3, RB: 4, WR: 6, TE: 3, OL: 8, DL: 6, LB: 6, CB: 5, S: 4 };
+
+    for (let t = 0; t < L.teams.length && offers.length < maxOffers; t++) {
+      if (t === userTeamId) continue;
+      const cpuTeam = L.teams[t];
+      if (!cpuTeam || !cpuTeam.roster) continue;
+      if (U.random() > 0.15) continue; // 15% chance per team
+
+      const cpuNeeds = analyzeTeamNeeds(cpuTeam);
+      const cpuRebuilding = isTeamRebuilding(cpuTeam);
+
+      for (const needPos of cpuNeeds) {
+        const candidates = userRoster.filter(p =>
+          p.pos === needPos && p.ovr >= 72 &&
+          (userPosCounts[needPos] || 0) > Math.floor((idealCounts[needPos] || 2) * 0.6)
+        );
+        if (candidates.length === 0) continue;
+
+        candidates.sort((a, b) => a.ovr - b.ovr);
+        const target = candidates[0];
+        if (!target) continue;
+
+        const targetValue = calcPlayerTradeValue(target, leagueYear);
+        let cpuOfferAssets = [];
+        const userReturnAssets = [{ kind: 'player', playerId: target.id }];
+
+        const offerPlayer = pickCpuPlayerForValue(cpuTeam, targetValue * 0.6, leagueYear, []);
+        const offerPick = pickCpuTradeAssetForValue(cpuTeam, targetValue * 0.5, leagueYear);
+
+        if (offerPlayer && offerPick) {
+          cpuOfferAssets = [{ kind: 'player', playerId: offerPlayer.id }, offerPick];
+        } else if (offerPick) {
+          cpuOfferAssets = [offerPick];
+        } else if (offerPlayer) {
+          cpuOfferAssets = [{ kind: 'player', playerId: offerPlayer.id }];
+        }
+        if (cpuOfferAssets.length === 0) continue;
+
+        const evalResult = evaluateTrade(L, t, userTeamId, cpuOfferAssets, userReturnAssets);
+        if (!evalResult) continue;
+        const cpuDelta = evalResult.fromValue.delta;
+        if (cpuDelta < (cpuRebuilding ? -8 : -3)) continue;
+
+        offers.push({
+          fromTeamId: t, toTeamId: userTeamId,
+          fromAssets: cpuOfferAssets, toAssets: userReturnAssets,
+          eval: evalResult, proactive: true,
+          reason: `${cpuTeam.name || cpuTeam.abbr} wants ${target.name} to fill their need at ${needPos}`
+        });
+        break;
+      }
+    }
+    return offers;
+  };
+
+  /**
+   * Simulate CPU-to-CPU trades for league-wide activity
+   */
+  window.simulateCpuTrades = function(maxTrades = 2) {
+    const L = state?.league;
+    if (!L || !L.teams) return [];
+    const userTeamId = state?.userTeamId ?? 0;
+    const leagueYear = getLeagueYear(L);
+    const completedTrades = [];
+
+    for (let attempt = 0; attempt < 10 && completedTrades.length < maxTrades; attempt++) {
+      const teamA = U.rand(0, L.teams.length - 1);
+      const teamB = U.rand(0, L.teams.length - 1);
+      if (teamA === teamB || teamA === userTeamId || teamB === userTeamId) continue;
+
+      const teamAObj = L.teams[teamA];
+      const teamBObj = L.teams[teamB];
+      if (!teamAObj || !teamBObj) continue;
+
+      const needsA = analyzeTeamNeeds(teamAObj);
+      const needsB = analyzeTeamNeeds(teamBObj);
+      if (needsA.length === 0 || needsB.length === 0) continue;
+
+      const targetFromB = (teamBObj.roster || []).find(p => needsA.includes(p.pos) && p.ovr >= 68);
+      const targetFromA = (teamAObj.roster || []).find(p => needsB.includes(p.pos) && p.ovr >= 68);
+      if (!targetFromB || !targetFromA) continue;
+
+      const valA = calcPlayerTradeValue(targetFromA, leagueYear);
+      const valB = calcPlayerTradeValue(targetFromB, leagueYear);
+      if (Math.abs(valA - valB) > Math.max(valA, valB) * 0.3) continue;
+
+      const success = applyTrade(L, teamA, teamB,
+        [{ kind: 'player', playerId: targetFromA.id }],
+        [{ kind: 'player', playerId: targetFromB.id }]
+      );
+      if (success) {
+        completedTrades.push({
+          teamA: teamAObj.name, teamB: teamBObj.name,
+          playerA: targetFromA.name, playerB: targetFromB.name
+        });
+        if (L.news) {
+          L.news.push({
+            type: 'trade',
+            headline: `TRADE: ${teamAObj.abbr} and ${teamBObj.abbr} swap players`,
+            story: `${teamAObj.name} traded ${targetFromA.name} (${targetFromA.pos}) to ${teamBObj.name} for ${targetFromB.name} (${targetFromB.pos}).`,
+            week: L.week, year: L.year
+          });
+        }
+      }
+    }
+    return completedTrades;
   };
 
   window.renderTradeHistory = function() {

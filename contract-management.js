@@ -1059,7 +1059,7 @@ window.submitContractExtension = function(playerId) {
   // 3. Lowball Logic (< 0.75)
   if (ratio < 0.75) {
       // 30% Chance of Insult
-      if (Math.random() < 0.30) {
+      if ((window.Utils?.random || Math.random)() < 0.30) {
           player.negotiationStatus = 'LOCKED';
           player.lockoutWeeks = 4;
 

@@ -7,7 +7,7 @@ test.describe('Daily Regression Pass', () => {
         page.on('pageerror', err => console.log('BROWSER ERROR:', err));
 
         // 1. Start a new league
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
 
         // Wait for potential loading
         await page.waitForTimeout(2000);
@@ -83,7 +83,7 @@ test.describe('Daily Regression Pass', () => {
         page.on('dialog', dialog => dialog.accept());
 
         // Navigate to FA and sign player
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league context
@@ -152,7 +152,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('Mobile UI Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league
@@ -195,7 +195,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('Persistence Check', async ({ page }) => {
         // 1. Ensure we have an active game and make a change (Advance Week)
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Force new league
@@ -240,7 +240,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('Strategy Persistence', async ({ page }) => {
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league
@@ -285,7 +285,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league and advance a week to have a played game
@@ -330,7 +330,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('High Stakes Visuals', async ({ page }) => {
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Inject LiveGameViewer logic if needed or just use existing
@@ -358,7 +358,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('Legacy & Retirement Verification', async ({ page }) => {
         // 1. Setup
-        await page.goto('http://localhost:8000');
+        await page.goto('http://localhost:3000');
         await page.waitForTimeout(1000);
 
         // Ensure league exists

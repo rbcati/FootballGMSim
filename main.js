@@ -1419,6 +1419,13 @@ class GameController {
 
     // --- GLOBAL ADVANCE (New) ---
     handleGlobalAdvance() {
+        const btn = document.getElementById('btnGlobalAdvance');
+        const btnTop = document.getElementById('btnAdvanceWeekTop');
+        const btnHQ = document.getElementById('btnSimWeekHQ');
+
+        // Prevent double clicks if already simulating
+        if (this.isSimulating) return;
+
         const L = window.state?.league;
         const userTeam = L?.teams?.[window.state?.userTeamId];
 
@@ -1451,7 +1458,20 @@ class GameController {
 
         // Proceed
         console.log('[GameController] Global Advance triggered');
-        this.handleSimulateWeek();
+
+        // Disable buttons
+        if (btn) btn.disabled = true;
+        if (btnTop) btnTop.disabled = true;
+        if (btnHQ) btnHQ.disabled = true;
+
+        this.isSimulating = true;
+
+        this.handleSimulateWeek().finally(() => {
+            this.isSimulating = false;
+            if (btn) btn.disabled = false;
+            if (btnTop) btnTop.disabled = false;
+            if (btnHQ) btnHQ.disabled = false;
+        });
     }
 
     // --- SIMULATION FUNCTIONS ---
@@ -1464,33 +1484,10 @@ class GameController {
             // Allow UI to update
             await new Promise(resolve => requestAnimationFrame(resolve));
 
-            // Capture week before sim
-            const currentWeek = window.state?.league?.week || 1;
-
             if (simulateWeek) {
                 console.log('[GameController] Calling simulateWeek()');
-                simulateWeek();
-
-                // Save is handled inside simulateWeek (via saveState), but redundancy is fine
-                this.saveGameState();
-
-                this.setStatus('Week simulated successfully', 'success');
-
-                // Force UI Refresh
-                this.renderHub();
-                if (window.renderSchedule) window.renderSchedule();
-
-                // Show Recap
-                const L = window.state.league;
-                const results = L.resultsByWeek[currentWeek - 1]; // Results are 0-indexed
-
-                // Ensure results exist before showing recap
-                if (results) {
-                    setTimeout(() => {
-                        showWeeklyRecap(currentWeek, results, L.news);
-                    }, 500);
-                }
-
+                await simulateWeek();
+                // Simulation complete, UI updated by worker callback
             } else {
                 console.error('[GameController] simulateWeek function missing');
                 this.setStatus('Simulation function not available', 'error');
@@ -2175,6 +2172,12 @@ class GameController {
                 // STRICT CHECK: Ensure league object exists
                 if (loaded && window.state && window.state.league) {
                     console.log("Resuming league successfully.");
+                    // Persist critical IDs for rehydration on refresh
+                    try {
+                        if (window.state.userTeamId !== undefined) {
+                            localStorage.setItem('nflGM4.userTeamId', String(window.state.userTeamId));
+                        }
+                    } catch (e) { /* non-critical */ }
                     this.initialized = true;
                     this.setupEventListeners();
                     this.setupAutoSave();
@@ -2306,31 +2309,8 @@ class GameController {
             });
         }
 
-        // FIX: Menu Toggle (ZenGM Style)
-        const menuBtn = document.getElementById('navToggle');
-        const sidebar = document.getElementById('nav-sidebar');
-        const overlay = document.getElementById('menu-overlay');
-
-        // Note: ui-interactions.js also handles mobile menu toggle.
-        // We ensure this handler cooperates or delegates.
-
-        if (menuBtn) {
-            this.addEventListener(menuBtn, 'click', (e) => {
-                e.preventDefault();
-                // Simple toggle using class expected by CSS
-                document.body.classList.toggle('nav-open');
-                if (sidebar) sidebar.classList.toggle('nav-open');
-                if (overlay) overlay.classList.toggle('active');
-            });
-        }
-
-        if (overlay) {
-             this.addEventListener(overlay, 'click', () => {
-                document.body.classList.remove('nav-open');
-                if (sidebar) sidebar.classList.remove('nav-open');
-                if (overlay) overlay.classList.remove('active');
-             });
-        }
+        // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
+        // ui-interactions.js handles mobile menu toggle via .nav-toggle
 
         // FIX: Dashboard Button
         const btnDashboard = document.getElementById('btnDashboard');
@@ -2383,6 +2363,16 @@ class GameController {
     handleHashChange() {
         try {
             const hash = location.hash.slice(2) || 'hub';
+
+            // REHYDRATION MIDDLEWARE: If state is empty on a hash change
+            // (e.g. user refreshed), attempt to reload from storage before
+            // redirecting to the login/onboarding screen.
+            if (!window.state?.league && hash !== 'leagueDashboard') {
+                console.warn('[ROUTER] State empty on navigation to', hash, '- attempting rehydration');
+                this._rehydrateAndRoute(hash);
+                return;
+            }
+
             // Save current view to state for persistence
             if (window.state) {
                 window.state.currentView = hash;
@@ -2392,6 +2382,55 @@ class GameController {
             }
         } catch (error) {
             console.error('Error handling hash change:', error);
+        }
+    }
+
+    /**
+     * Attempts to rehydrate state from localStorage/IndexedDB before routing.
+     * If rehydration fails, redirects to the league dashboard instead of
+     * showing a white screen.
+     */
+    async _rehydrateAndRoute(targetHash) {
+        try {
+            // Check for persisted league identity
+            const savedLeagueName = localStorage.getItem('football_gm_last_played');
+            const savedUserTeamId = localStorage.getItem('nflGM4.userTeamId');
+
+            if (savedLeagueName && window.loadLeague) {
+                console.log('[ROUTER] Rehydrating from saved league:', savedLeagueName);
+                const loaded = await window.loadLeague(savedLeagueName);
+                if (loaded && window.state?.league) {
+                    // Restore userTeamId if it was persisted separately
+                    if (savedUserTeamId !== null && window.state.userTeamId === undefined) {
+                        window.state.userTeamId = parseInt(savedUserTeamId, 10) || 0;
+                    }
+                    window.state.currentView = targetHash;
+                    this.router(targetHash);
+                    return;
+                }
+            }
+
+            // Fallback: try legacy state loader
+            if (loadState) {
+                const gameData = await loadState();
+                if (gameData && window.state?.league) {
+                    if (savedUserTeamId !== null && window.state.userTeamId === undefined) {
+                        window.state.userTeamId = parseInt(savedUserTeamId, 10) || 0;
+                    }
+                    window.state.currentView = targetHash;
+                    this.router(targetHash);
+                    return;
+                }
+            }
+
+            // Rehydration failed - go to dashboard gracefully
+            console.warn('[ROUTER] Rehydration failed, redirecting to dashboard');
+            location.hash = '#/leagueDashboard';
+            if (window.renderDashboard) window.renderDashboard();
+        } catch (error) {
+            console.error('[ROUTER] Rehydration error:', error);
+            location.hash = '#/leagueDashboard';
+            if (window.renderDashboard) window.renderDashboard();
         }
     }
 
@@ -2423,6 +2462,17 @@ class GameController {
         }
 
         try {
+            // Persist critical identifiers independently so refresh can rehydrate
+            try {
+                const st = stateToSave || window.state;
+                if (st?.userTeamId !== undefined) {
+                    localStorage.setItem('nflGM4.userTeamId', String(st.userTeamId));
+                }
+                if (st?.leagueName) {
+                    localStorage.setItem('football_gm_last_played', st.leagueName);
+                }
+            } catch (e) { /* non-critical */ }
+
             // Use new Dashboard Save System if available
             if (window.saveGame) {
                 await window.saveGame(stateToSave);
@@ -2489,6 +2539,18 @@ class GameController {
                 viewName = location.hash.slice(2) || 'hub';
             }
             console.log('🔄 Router navigating to:', viewName);
+
+            // Guard: If league data is missing and we're trying to render
+            // a game view, redirect to dashboard instead of crashing
+            const gameViews = ['hub', 'roster', 'contracts', 'cap', 'schedule',
+                'game-results', 'powerRankings', 'trade', 'freeagency', 'scouting',
+                'coaching', 'draft', 'awards', 'injuries', 'news', 'owner',
+                'relocation', 'playoffs', 'stats', 'leagueStats', 'game-sim', 'player'];
+            if (!window.state?.league && gameViews.includes(viewName.split('/')[0])) {
+                console.warn('[ROUTER] No league data for view:', viewName, '- redirecting to dashboard');
+                viewName = 'leagueDashboard';
+                location.hash = '#/leagueDashboard';
+            }
 
             // Always show the requested view if the UI helper exists
             if (typeof window.show === 'function') {
