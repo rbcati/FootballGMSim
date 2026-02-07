@@ -17,13 +17,28 @@ export class FieldEffects {
         this.ctx = this.canvas.getContext('2d');
         this.particles = [];
         this.animating = false;
+        this.animationId = null;
 
         this.resize();
         this._resizeHandler = () => this.resize();
         window.addEventListener('resize', this._resizeHandler);
     }
 
+    getThemeColor(varName, fallback) {
+        if (typeof window === 'undefined') return fallback;
+        try {
+            const val = getComputedStyle(document.body).getPropertyValue(varName).trim();
+            return val || fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
     destroy() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
         if (this._resizeHandler) {
             window.removeEventListener('resize', this._resizeHandler);
             this._resizeHandler = null;
@@ -53,7 +68,8 @@ export class FieldEffects {
                       type === 'field_goal' ? 40 :
                       type === 'defense_stop' ? 45 :
                       type === 'interception' ? 50 :
-                      type === 'fumble' ? 35 : 25;
+                      type === 'fumble' ? 35 :
+                      type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -75,16 +91,28 @@ export class FieldEffects {
             decay: (window.Utils?.random || Math.random)() * 0.02 + 0.01,
             size: (window.Utils?.random || Math.random)() * 3 + 1,
             color: '#fff',
+            gravity: 0,
             type: type
         };
 
         if (type === 'touchdown') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 40; // Spread X
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 20; // Spread Y
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 12; // Increased spread
             p.vy = ((window.Utils?.random || Math.random)() * -8) - 4; // Higher burst upwards
             p.color = (window.Utils?.random || Math.random)() > 0.3 ? '#FFD700' : ((window.Utils?.random || Math.random)() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
             p.gravity = 0.2;
             p.life = 1.5;
             p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+        } else if (type === 'big_play') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 30;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 30;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#0A84FF' : '#FFD700'; // Blue/Gold
+            p.life = 1.2;
+            p.decay = 0.03;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
         } else if (type === 'field_goal') {
             // Rising sparkles
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 5;
@@ -95,6 +123,8 @@ export class FieldEffects {
             p.size = (window.Utils?.random || Math.random)() * 3 + 1;
             p.gravity = -0.05; // Slight float up
         } else if (type === 'sack') {
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 15;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 15;
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
             p.color = '#888'; // Dust
@@ -111,7 +141,7 @@ export class FieldEffects {
         } else if (type === 'catch') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 3;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 3;
-            p.color = '#87CEEB'; // Sky Blue
+            p.color = this.getThemeColor('--accent', '#87CEEB'); // Sky Blue
             p.decay = 0.1;
             p.size = (window.Utils?.random || Math.random)() * 2 + 1;
         } else if (type === 'first_down') {
@@ -122,18 +152,39 @@ export class FieldEffects {
             p.color = '#FFD700'; // Yellow
             p.life = 0.8;
             p.decay = 0.02;
+            p.size = Math.random() * 2 + 1;
+        } else if (type === 'field_goal') {
+            p.vx = (Math.random() - 0.5) * 4;
+            p.vy = (Math.random() * -8) - 4; // Fast Upwards
+            p.color = Math.random() > 0.3 ? '#FFD700' : '#FFFFFF'; // Gold dominant
+            p.gravity = 0.2;
+            p.size = Math.random() * 3 + 2;
+            p.decay = 0.015;
+        } else if (type === 'interception') {
+            p.vx = (Math.random() - 0.5) * 12; // Fast Burst
+            p.vy = (Math.random() - 0.5) * 12;
+            p.color = '#FF453A'; // Red
+            p.decay = 0.06;
+            p.size = Math.random() * 4 + 2;
+        } else if (type === 'fumble') {
+            p.vx = (Math.random() - 0.5) * 8;
+            p.vy = (Math.random() - 0.5) * 8;
+            p.color = '#8B4513'; // Brown (Ball color)
+            p.decay = 0.05;
+            p.gravity = 0.3; // Drops to ground
+            p.size = Math.random() * 3 + 1;
             p.size = (window.Utils?.random || Math.random)() * 2 + 1;
         } else if (type === 'defense_stop') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15; // Fast explosion
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 15;
-            p.color = (window.Utils?.random || Math.random)() > 0.6 ? '#FF453A' : '#FFFFFF'; // Red/White
+            p.color = (window.Utils?.random || Math.random)() > 0.6 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White
             p.decay = 0.05; // Fast fade
             p.size = (window.Utils?.random || Math.random)() * 4 + 2;
             p.gravity = 0.05;
         } else if (type === 'interception') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
-            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FF453A' : '#FFFFFF'; // Red/White Alert
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White Alert
             p.decay = 0.04;
             p.size = (window.Utils?.random || Math.random)() * 3 + 2;
         } else if (type === 'fumble') {
@@ -179,6 +230,6 @@ export class FieldEffects {
         }
 
         this.ctx.globalAlpha = 1;
-        requestAnimationFrame(() => this.animate());
+        this.animationId = requestAnimationFrame(() => this.animate());
     }
 }
