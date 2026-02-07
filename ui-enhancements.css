@@ -1508,31 +1508,41 @@ select:disabled {
 }
 
 .play-call-btn {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border: 1px solid var(--hairline);
-    background: var(--surface);
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--shadow-sm);
     color: var(--text);
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
-    font-size: 0.9em;
+    font-size: 0.95em;
+    font-weight: 500;
     flex: 1;
     transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .play-call-btn:hover {
     background: var(--surface-strong);
     border-color: var(--accent);
     transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
 }
 
 .play-call-btn:active {
     transform: scale(0.98);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .play-call-btn.selected {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+    box-shadow: 0 0 12px var(--accent-muted);
+    font-weight: 700;
 }
 
 .defense-row {
@@ -1909,9 +1919,9 @@ select:disabled {
 }
 
 .btn:active, .play-call-btn:active {
-  transform: scale(0.98) translateY(1px) !important;
+  transform: scale(0.97) translateY(1px) !important;
   filter: brightness(0.95);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
 }
 
 .play-call-btn.selected {
@@ -1977,6 +1987,39 @@ select:disabled {
 }
 
 @keyframes sack-shake {
+@keyframes celebrate-dance {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -60%) rotate(-15deg); }
+  50% { transform: translate(-50%, -50%) rotate(0deg); }
+  75% { transform: translate(-50%, -60%) rotate(15deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.celebrate-dance {
+  animation: celebrate-dance 0.8s ease-in-out infinite;
+}
+
+@keyframes celebrate-spike {
+  0% { transform: translate(-50%, -50%); }
+  40% { transform: translate(-50%, -100%); } /* Jump High */
+  60% { transform: translate(-50%, -100%) rotate(360deg); } /* Spin */
+  100% { transform: translate(-50%, -50%); } /* Slam */
+}
+
+.celebrate-spike {
+  animation: celebrate-spike 0.6s ease-in;
+}
+
+@keyframes momentum-max {
+  0% { box-shadow: 0 0 10px #ff3b30, inset 0 0 10px #ff3b30; border-color: #fff; }
+  50% { box-shadow: 0 0 30px #ff9500, inset 0 0 20px #ff9500; border-color: #ff9500; }
+  100% { box-shadow: 0 0 10px #ff3b30, inset 0 0 10px #ff3b30; border-color: #fff; }
+}
+
+.momentum-max {
+  animation: momentum-max 0.5s infinite;
+  border: 2px solid white !important;
+@keyframes celebrate-jump {
   0% { transform: translate(-50%, -50%) scale(1); }
   20% { transform: translate(-55%, -55%) scale(0.9) rotate(-5deg); }
   40% { transform: translate(-45%, -45%) scale(0.8) rotate(5deg); }
@@ -1998,6 +2041,10 @@ select:disabled {
 
 .tackle-collision {
   animation: tackle-collision 0.3s ease-out;
+@keyframes celebrate-spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+    50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.2); }
+    100% { transform: translate(-50%, -50%) rotate(360deg) scale(1); }
 }
 
 @keyframes pre-snap-set {
@@ -2007,4 +2054,97 @@ select:disabled {
 
 .pre-snap-set {
   animation: pre-snap-set 0.4s ease-out forwards;
+}
+
+/* --- New Visual Feedback Animations --- */
+
+@keyframes kick-flash {
+  0% { filter: brightness(2) scale(1.5); }
+  100% { filter: brightness(1) scale(1); }
+}
+
+.kick-flash {
+  animation: kick-flash 0.3s ease-out;
+}
+
+@keyframes endzone-pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; box-shadow: inset 0 0 40px currentColor; }
+  100% { opacity: 0.8; }
+}
+
+.endzone-pulse {
+  animation: endzone-pulse 1s infinite;
+  z-index: 5; /* Ensure above field */
+}
+
+@keyframes shield-pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Update Defense Stop to use Shield Pop */
+.game-event-overlay.defense-stop::before {
+  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* New Celebration Animations */
+@keyframes celebrate-spike {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    40% { transform: translate(-50%, -150%) scale(1.1); } /* Jump Up */
+    60% { transform: translate(-50%, -150%) scale(1.1) rotate(-15deg); } /* Cock back */
+    70% { transform: translate(-50%, -50%) scale(1.2) rotate(45deg); } /* Spike Down */
+    80% { transform: translate(-50%, -50%) scale(0.9); } /* Land Squash */
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.celebrate-spike {
+    animation: celebrate-spike 1.0s ease-in-out;
+}
+
+@keyframes celebrate-dance {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    25% { transform: translate(-60%, -50%) rotate(-10deg); }
+    50% { transform: translate(-40%, -50%) rotate(10deg); }
+    75% { transform: translate(-60%, -50%) rotate(-10deg); }
+    100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.celebrate-dance {
+    animation: celebrate-dance 1.2s ease-in-out;
+}
+
+/* Combo Meter */
+.combo-bar-container {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    margin-top: 5px;
+    overflow: hidden;
+    display: flex;
+}
+
+.combo-bar-segment {
+    flex: 1;
+    height: 100%;
+    background: transparent;
+    border-right: 1px solid rgba(0,0,0,0.5);
+    transition: background 0.3s ease;
+}
+
+.combo-bar-segment:last-child {
+    border-right: none;
+}
+
+.combo-bar-segment.active {
+    background: #FFD700;
+    box-shadow: 0 0 5px #FFD700;
+}
+
+.combo-bar-segment.max {
+    background: #ff4500;
+    box-shadow: 0 0 10px #ff4500;
+    animation: pulse-glow 0.5s infinite;
 }

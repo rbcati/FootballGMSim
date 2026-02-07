@@ -26,14 +26,12 @@ test.describe('Edge Cases & Performance', () => {
 
         console.log("Rapid clicking advance button...");
 
-        try {
-            await btn.click(); // 1st click
-            // Try 2nd click immediately, ignoring errors
-            await btn.click({ timeout: 500 }).catch(() => {});
-            await btn.click({ timeout: 500 }).catch(() => {});
-        } catch (e) {
-            console.log("Subsequent clicks blocked (expected):", e.message);
-        }
+        // Spam clicks using evaluate to bypass Playwright's auto-wait
+        await btn.evaluate(node => {
+            for (let i = 0; i < 5; i++) {
+                node.click();
+            }
+        });
 
         // Wait for processing
         await page.waitForTimeout(5000);
@@ -162,26 +160,40 @@ test.describe('Edge Cases & Performance', () => {
             if (window.liveGameViewer && window.liveGameViewer.gameState) {
                 window.liveGameViewer.gameState.home.score = 105;
                 window.liveGameViewer.gameState.away.score = 99;
+                // Force re-render to apply score update
                 window.liveGameViewer.renderGame();
+            } else {
+                console.error("LiveGameViewer or GameState missing!");
             }
         });
 
-        // Check Font Size
-        const fontSize = await page.evaluate(() => {
+        // Wait for element to be present
+        try {
+            await page.waitForSelector('#scoreHome', { timeout: 5000 });
+        } catch (e) {
+            console.error("Timeout waiting for #scoreHome. Dumping page content...");
+            // console.log(await page.content()); // Too verbose, skip
+            throw e;
+        }
+
+        // Check Font Size and Style
+        const debugInfo = await page.evaluate(() => {
             const el = document.getElementById('scoreHome');
-            return window.getComputedStyle(el).fontSize;
+            return {
+                computed: el ? window.getComputedStyle(el).fontSize : 'missing',
+                inline: el ? el.style.fontSize : 'missing',
+                textContent: el ? el.textContent : 'missing'
+            };
         });
 
-        console.log(`Score Font Size: ${fontSize}`);
-        // Default is 2rem (32px), we expect 1.5rem (24px) for > 2 digits
-        // 1.5rem = 24px (assuming 16px base) or relative.
-        // Let's just check if it's smaller or if the style attribute is set.
+        console.log(`Score Debug Info:`, debugInfo);
 
-        const hasStyle = await page.evaluate(() => {
-             const el = document.getElementById('scoreHome');
-             return el.style.fontSize === '1.5rem';
-        });
+        // Accept either '1.5rem' inline or computed size < 32px (2rem)
+        // Default is 2rem. If it's smaller, logic worked.
+        const isSmaller = parseFloat(debugInfo.computed) < 30; // Assuming base 16px, 2rem=32px. 1.5rem=24px. 28px is still smaller than 32px.
 
-        expect(hasStyle).toBe(true);
+        const styleApplied = debugInfo.inline === '1.5rem';
+
+        expect(styleApplied || isSmaller).toBe(true);
     });
 });

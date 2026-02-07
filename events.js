@@ -332,7 +332,7 @@ async function handleSimulateWeek(button) {
             button.textContent = 'Simulating...';
         }
         await new Promise(resolve => setTimeout(resolve, 50));
-        simulateWeek();
+        await simulateWeek();
     } catch (error) {
         console.error('Error in handleSimulateWeek:', error);
         window.setStatus(`Error: ${error.message}`, 'error');

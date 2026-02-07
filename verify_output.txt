@@ -1,8 +1,0 @@
-Loading game...
-Test failed: page.goto: net::ERR_CONNECTION_REFUSED at http://localhost:3000/
-Call log:
-[2m  - navigating to "http://localhost:3000/", waiting until "load"[22m
-
-    at /app/verify_manager_flow.js:19:16 {
-  name: 'Error'
-}

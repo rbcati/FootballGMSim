@@ -460,10 +460,43 @@ function getTeamNeeds(team) {
 }
 
 /**
+ * Evaluate roster saturation at a position for a specific team.
+ * Returns a multiplier (0.1 - 1.0) that penalizes picking a position
+ * where the team is already well-stocked with quality players.
+ *
+ * @param {Object} team - Team object with roster
+ * @param {string} pos - Position to evaluate
+ * @returns {number} Multiplier (1.0 = no penalty, 0.1 = heavily penalized)
+ */
+function getPositionSaturationMultiplier(team, pos) {
+  if (!team || !team.roster) return 1.0;
+
+  const QUALITY_THRESHOLD = 75;
+  const playersAtPos = team.roster.filter(p => p.pos === pos);
+  const qualityPlayersAtPos = playersAtPos.filter(p => (p.ovr || 0) > QUALITY_THRESHOLD);
+
+  // If team has 2+ quality players at this position, severely penalize
+  if (qualityPlayersAtPos.length >= 2) {
+    return 0.1;
+  }
+  // If team has 1 quality player, moderate penalty for non-premium positions
+  if (qualityPlayersAtPos.length === 1) {
+    // QB is always worth depth, so less penalty
+    if (pos === 'QB') return 0.7;
+    return 0.5;
+  }
+  return 1.0;
+}
+
+/**
  * Auto-pick for CPU teams - Realistic AI drafting with team strategy
  * Teams balance BPA (Best Player Available) vs needs-based drafting.
  * Early rounds lean BPA, later rounds lean needs.
  * Rebuilding teams take more risks on high-upside players.
+ *
+ * Key improvement: Teams re-evaluate roster needs before EVERY pick
+ * and apply a saturation multiplier that prevents hoarding positions
+ * where the team already has 2+ quality (>75 OVR) players.
  */
 function autoPickForCPU() {
   if (!draftState.active) return;
@@ -475,6 +508,7 @@ function autoPickForCPU() {
   const team = window.state.league.teams[currentPick.teamId];
   if (!team || currentPick.teamId === window.state.userTeamId) return;
 
+  // Re-evaluate needs fresh before every pick (not just start of round)
   const teamNeeds = getTeamNeeds(team);
   const round = currentPick.round;
   const isRebuilding = (team.wins || 0) < (team.losses || 0);
@@ -482,6 +516,10 @@ function autoPickForCPU() {
   // Score each available prospect for this team
   const scoredProspects = draftState.availableProspects.map(p => {
     let score = p.ovr || 50;
+
+    // Roster saturation check: penalize positions where team is already stacked
+    const saturationMultiplier = getPositionSaturationMultiplier(team, p.pos);
+    score *= saturationMultiplier;
 
     // Needs bonus - stronger in later rounds
     if (teamNeeds.includes(p.pos)) {
