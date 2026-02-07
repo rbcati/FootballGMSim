@@ -6,7 +6,7 @@ test.describe('Live Game Bug Hunt', () => {
     page.on('pageerror', exception => console.log(`PAGE ERROR: "${exception}"`));
 
     // 1. Setup: Start a new game
-    await page.goto('http://localhost:8000');
+    await page.goto('http://localhost:3000');
 
     // Wait for initial load
     await page.waitForTimeout(1000);

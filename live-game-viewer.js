@@ -404,6 +404,7 @@ class LiveGameViewer {
           const duration = options.duration || 1000;
           const arcHeight = options.arcHeight || 0;
           const shouldRotate = options.rotate || false;
+          const rotateType = options.rotateType || 'spin'; // 'spin' or 'spiral'
 
           const startTime = performance.now();
 
@@ -416,6 +417,11 @@ class LiveGameViewer {
           const easeInOutQuad = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
           const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
           const easeOutQuart = t => 1 - Math.pow(1 - t, 4);
+          const easeOutBack = t => {
+              const c1 = 1.70158;
+              const c3 = c1 + 1;
+              return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+          };
           // Bounce easing for landings
           const easeBounce = t => {
               const n1 = 7.5625;
@@ -436,6 +442,7 @@ class LiveGameViewer {
           else if (options.easing === 'easeOut') easing = easeOutQuad;
           else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
           else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
+          else if (options.easing === 'easeOutBack') easing = easeOutBack;
           else if (options.easing === 'bounce') easing = easeBounce;
 
           const animate = (currentTime) => {
@@ -472,7 +479,12 @@ class LiveGameViewer {
 
                   // Rotation logic
                   if (shouldRotate) {
-                      transform += ` rotate(${easeProgress * 720}deg)`;
+                      const maxRot = rotateType === 'spiral' ? 1440 : 720;
+                      transform += ` rotate(${easeProgress * maxRot}deg)`;
+                      if (rotateType === 'spiral') {
+                          // Add wobble for spiral
+                          // transform += ` rotateX(${Math.sin(easeProgress * 20) * 10}deg)`;
+                      }
                   }
 
                   element.style.transform = transform;
@@ -573,14 +585,39 @@ class LiveGameViewer {
       const offenseColor = isHome ? homeColor : awayColor;
       const defenseColor = isHome ? awayColor : homeColor;
 
-      setupMarker(qbMarker, offenseColor, true);
-      if (qbMarker) qbMarker.classList.add('pulse-marker');
-      setupMarker(skillMarker, offenseColor, false);
+      // --- PRE-SNAP PHASE ---
+      if (!this.isSkipping && durationScale > 0.6) {
+          setupMarker(qbMarker, offenseColor, true);
+          setupMarker(skillMarker, offenseColor, true); // Show skill player at start for set
+          if (defMarker) setupMarker(defMarker, defenseColor, true);
 
-      // Initialize Defense
+          qbMarker.classList.add('pre-snap-set');
+          skillMarker.classList.add('pre-snap-set');
+          if (defMarker) {
+              const defStartPct = this.getVisualPercentage(startYard + (isHome ? 5 : -5), isHome);
+              defMarker.style.left = `${defStartPct}%`;
+              defMarker.classList.add('pre-snap-set');
+          }
+
+          // "Set... Hut!"
+          await new Promise(r => setTimeout(r, 400 * durationScale));
+
+          if (qbMarker) qbMarker.classList.remove('pre-snap-set');
+          if (skillMarker) skillMarker.classList.remove('pre-snap-set');
+          if (defMarker) defMarker.classList.remove('pre-snap-set');
+      } else {
+          // Fast setup
+          setupMarker(qbMarker, offenseColor, true);
+          setupMarker(skillMarker, offenseColor, false); // Hide initially if fast? No, keep logic same as before mostly
+      }
+
+      // Re-apply basic states
+      if (qbMarker) qbMarker.classList.add('pulse-marker');
+      if (skillMarker) skillMarker.style.opacity = 0; // Reset to hidden unless run starts
+
+      // Initialize Defense (if skipped pre-snap)
       if (defMarker) {
           setupMarker(defMarker, defenseColor, true);
-          // Defense starts slightly off LOS
           const defStartPct = this.getVisualPercentage(startYard + (isHome ? 5 : -5), isHome);
           defMarker.style.left = `${defStartPct}%`;
       }
@@ -617,7 +654,6 @@ class LiveGameViewer {
                  startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
              }));
           } else {
-             // If fluid, maybe just animate from current?
              animations.push(this.animateTrajectory(ballEl, {
                  startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
              }));
@@ -640,6 +676,17 @@ class LiveGameViewer {
 
           await Promise.all(animations);
 
+          // Check Sack
+          if (play.result === 'sack') {
+              if (qbMarker) qbMarker.classList.add('sack-shake');
+              if (defMarker) defMarker.classList.add('marker-collision');
+              setTimeout(() => {
+                  if (qbMarker) qbMarker.classList.remove('sack-shake');
+                  if (defMarker) defMarker.classList.remove('marker-collision');
+              }, 500);
+              return Promise.resolve(); // End animation here
+          }
+
           // 2. Throw
           const throwDuration = 700 * durationScale;
 
@@ -650,7 +697,8 @@ class LiveGameViewer {
               duration: throwDuration,
               arcHeight: 25,
               easing: 'linear', // Improved physics
-              rotate: true
+              rotate: true,
+              rotateType: 'spiral'
           });
 
           // Pulse if TD
@@ -667,6 +715,16 @@ class LiveGameViewer {
                    skillMarker.classList.add('marker-catch');
                    setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
                }
+          } else if (play.result === 'interception') {
+               // Flash for INT
+               if (ballEl) {
+                   ballEl.classList.add('kick-flash');
+                   setTimeout(() => ballEl.classList.remove('kick-flash'), 300);
+               }
+               if (defMarker) defMarker.classList.add('celebrate-jump'); // Defender celebrates
+          } else if (play.result === 'incomplete') {
+               // Fade out markers
+               if (skillMarker) skillMarker.style.opacity = 0.5;
           }
 
       } else if (play.playType.startsWith('run')) {
@@ -706,7 +764,13 @@ class LiveGameViewer {
                if (skillMarker) skillMarker.classList.add('celebrate-spin');
           } else if (skillMarker) {
               skillMarker.classList.add('marker-collision');
-              setTimeout(() => skillMarker.classList.remove('marker-collision'), 300);
+              // Add tackle collision to defense too
+              if (defMarker) defMarker.classList.add('marker-collision');
+
+              setTimeout(() => {
+                  if (skillMarker) skillMarker.classList.remove('marker-collision');
+                  if (defMarker) defMarker.classList.remove('marker-collision');
+              }, 300);
           }
 
       } else if (play.playType === 'punt' || play.playType === 'field_goal') {
@@ -733,7 +797,8 @@ class LiveGameViewer {
               duration: kickDuration,
               arcHeight: arc,
               easing: 'linear', // Projectile motion
-              rotate: true
+              rotate: true,
+              rotateType: 'spiral'
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {

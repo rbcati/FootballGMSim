@@ -2060,3 +2060,27 @@ select:disabled {
     box-shadow: 0 0 10px #ff4500;
     animation: pulse-glow 0.5s infinite;
 }
+
+/* --- New Day 2 Animations --- */
+@keyframes spiral {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(720deg); }
+}
+
+@keyframes sack-shake {
+    0%, 100% { transform: translate(-50%, -50%); }
+    25% { transform: translate(-55%, -45%); }
+    50% { transform: translate(-45%, -55%); }
+    75% { transform: translate(-52%, -48%); }
+}
+
+@keyframes tackle-collision {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(0.8); background-color: #fff; }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.pre-snap-set {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(0.9);
+}

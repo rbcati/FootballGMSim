@@ -164,10 +164,13 @@ test.describe('Edge Cases & Performance', () => {
             }
         });
 
+        // Wait for render to settle (animations)
+        await page.waitForTimeout(1000);
+
         // Check Font Size
         const fontSize = await page.evaluate(() => {
             const el = document.getElementById('scoreHome');
-            return window.getComputedStyle(el).fontSize;
+            return el ? window.getComputedStyle(el).fontSize : '0px';
         });
 
         console.log(`Score Font Size: ${fontSize}`);
@@ -177,7 +180,7 @@ test.describe('Edge Cases & Performance', () => {
 
         const hasStyle = await page.evaluate(() => {
              const el = document.getElementById('scoreHome');
-             return el.style.fontSize === '1.5rem';
+             return el && el.style.fontSize === '1.5rem';
         });
 
         expect(hasStyle).toBe(true);

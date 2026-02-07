@@ -45,8 +45,8 @@ export class FieldEffects {
         const x = (xPct / 100) * this.canvas.width;
         const y = this.canvas.height / 2; // Middle of field mostly
 
-        const count = type === 'touchdown' ? 80 : // Increased from 50
-                      type === 'sack' ? 30 :
+        const count = type === 'touchdown' ? 120 : // Massive celebration
+                      type === 'sack' ? 40 :
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
                       type === 'first_down' ? 20 :
@@ -95,10 +95,11 @@ export class FieldEffects {
             p.size = (window.Utils?.random || Math.random)() * 3 + 1;
             p.gravity = -0.05; // Slight float up
         } else if (type === 'sack') {
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 8;
             p.color = '#888'; // Dust
-            p.decay = 0.05; // Fast fade
+            p.decay = 0.04;
+            p.gravity = 0.1; // Dust settles
         } else if (type === 'tackle') {
             p.color = '#fff';
             p.decay = 0.03;
