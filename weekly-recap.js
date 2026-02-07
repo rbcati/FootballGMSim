@@ -52,6 +52,12 @@ export function showWeeklyRecap(week, results, news) {
     let schemeHtml = '';
     let rivalryHtml = '';
 
+    // Calculate Standings Context
+    let standingsData = null;
+    if (typeof window.calculateAllStandings === 'function') {
+        standingsData = window.calculateAllStandings(state.league);
+    }
+
     if (userGame) {
         const isHome = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId;
         const userScore = isHome ? userGame.scoreHome : userGame.scoreAway;
@@ -76,12 +82,34 @@ export function showWeeklyRecap(week, results, news) {
         }
 
         // Playoff Implications (Late Season)
-        if (week > 14 && !state.offseason) {
-            // Simplified check: if margin was close (< 4 points)
+        if (week > 10 && !state.offseason && standingsData) {
+            const confId = userTeam.conf; // 0 or 1
+            const playoffs = confId === 0 ? standingsData.playoffs.afc : standingsData.playoffs.nfc;
+
+            // Check if user is in playoff picture
+            const isSeed = playoffs.playoffs.find(t => t.id === userTeamId);
+            const isBubble = playoffs.bubble.find(t => t.id === userTeamId);
+
+            if (isSeed) {
+                 if (win) {
+                     resultText = "PLAYOFF PUSH";
+                     // If seed 1
+                     if (playoffs.playoffs[0].id === userTeamId) resultText = "TOP SEED PACE";
+                 } else {
+                     resultText = "SETBACK";
+                 }
+                 highStakesClass = 'high-stakes';
+            } else if (isBubble) {
+                 resultText = win ? "HOPE ALIVE" : "SLIPPING AWAY";
+                 highStakesClass = 'high-stakes';
+            }
+
+            // Override with clutch factor if game was super close regardless of standings
             const margin = Math.abs(userScore - oppScore);
             if (margin <= 3 && !tie) {
-                 resultText = win ? `CLUTCH WIN` : `HEARTBREAKER`;
-                 highStakesClass = 'high-stakes';
+                 if (isSeed || isBubble) {
+                      resultText = win ? "CLUTCH WIN" : "HEARTBREAKER";
+                 }
             }
         }
 
@@ -329,14 +357,52 @@ export function showWeeklyRecap(week, results, news) {
         const isWin = resultClass === 'win';
         let narrative = '';
 
+        // Context-aware Stats
+        let statsContext = '';
+        if (userGame.boxScore) {
+            const userSide = (typeof userGame.home === 'object' ? userGame.home.id : userGame.home) === userTeamId ? 'home' : 'away';
+            const box = userGame.boxScore[userSide];
+
+            if (box) {
+                // Sum stats
+                let passYd = 0;
+                let rushYd = 0;
+                let sacks = 0;
+                Object.values(box).forEach(p => {
+                    if (p.stats) {
+                        passYd += p.stats.passYd || 0;
+                        rushYd += p.stats.rushYd || 0;
+                        sacks += p.stats.sacks || 0;
+                    }
+                });
+
+                // Offensive Context
+                if (strategy.offPlanId.includes('PASSING') || strategy.offPlanId.includes('AIR')) {
+                    if (passYd > 280) statsContext += " The aerial attack was unstoppable.";
+                    else if (passYd < 180) statsContext += " The passing game couldn't find a rhythm.";
+                } else if (strategy.offPlanId.includes('GROUND') || strategy.offPlanId.includes('RUSH')) {
+                    if (rushYd > 150) statsContext += " The ground game dominated the trenches.";
+                    else if (rushYd < 80) statsContext += " The run game was stuffed.";
+                }
+
+                // Defensive Context
+                if (strategy.defPlanId.includes('BLITZ')) {
+                    if (sacks > 3) statsContext += " The pressure got home repeatedly.";
+                    else if (sacks < 1) statsContext += " The blitzes were picked up easily.";
+                }
+            }
+        }
+
         if (isWin) {
              narrative = `Your decision to use <strong>${offPlan.name}</strong> and <strong>${defPlan.name}</strong> paid off.`;
              if (strategy.riskId === 'AGGRESSIVE') narrative += ` The aggressive approach overwhelmed them.`;
              else if (strategy.riskId === 'CONSERVATIVE') narrative += ` Playing it safe secured the victory.`;
+             narrative += statsContext;
         } else {
              narrative = `The combination of <strong>${offPlan.name}</strong> and <strong>${defPlan.name}</strong> struggled.`;
              if (strategy.riskId === 'AGGRESSIVE') narrative += ` High risk led to costly mistakes.`;
              else if (strategy.riskId === 'CONSERVATIVE') narrative += ` Too conservative to keep up.`;
+             narrative += statsContext;
         }
 
         strategyHtml = `
