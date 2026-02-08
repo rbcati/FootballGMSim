@@ -484,6 +484,9 @@ class LiveGameViewer {
               const c3 = c1 + 1;
               return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
           };
+          // Custom Projectile Motion (Linear-ish start, slows slightly)
+          const easeProjectile = t => 1 - Math.pow(1 - t, 1.2);
+
           // Bounce easing for landings
           const easeBounce = t => {
               const n1 = 7.5625;
@@ -506,6 +509,7 @@ class LiveGameViewer {
           else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
           else if (options.easing === 'easeOutBack') easing = easeOutBack;
           else if (options.easing === 'bounce') easing = easeBounce;
+          else if (options.easing === 'projectile') easing = easeProjectile;
 
           const animate = (currentTime) => {
               if (this.isSkipping) {
@@ -757,7 +761,7 @@ class LiveGameViewer {
                   endX: endPct,
                   duration: throwDuration,
                   arcHeight: 25,
-                  easing: 'linear', // Improved physics
+                  easing: 'projectile', // Improved physics
                   rotate: true,
                   rotateType: 'spiral'
               });
@@ -813,8 +817,10 @@ class LiveGameViewer {
               startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'bob'
           }));
 
+          // Add juke for long runs
+          const runAnimClass = play.yards > 15 ? 'marker-juke' : null;
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: runAnimClass
           }));
 
           // Def Logic: Chase
@@ -908,14 +914,12 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              if (play.playType.includes('pass')) {
-                  this.fieldEffects.spawnParticles(endPct, 'interception');
-              } else {
-                  this.fieldEffects.spawnParticles(endPct, 'fumble');
               if (play.message && play.message.toLowerCase().includes('intercept')) {
                    this.fieldEffects.spawnParticles(endPct, 'interception');
               } else if (play.message && play.message.toLowerCase().includes('fumble')) {
                    this.fieldEffects.spawnParticles(endPct, 'fumble');
+              } else if (play.playType.includes('pass')) {
+                   this.fieldEffects.spawnParticles(endPct, 'interception');
               } else {
                    this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }

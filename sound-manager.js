@@ -89,8 +89,6 @@ class SoundManager {
 
         // C Major Triad + Octave: C4, E4, G4, C5
         const notes = [261.63, 329.63, 392.00, 523.25];
-        // Major Triad + Octave fanfare
-        const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
 
         // Rapid arpeggio
         notes.forEach((freq, i) => {
@@ -135,20 +133,8 @@ class SoundManager {
     }
 
     playInterception() {
-        if (!this.enabled || this.muted) return;
-        // Whoosh + Alarm
-        this.playNoise(0.3, 0.2);
-        this.playTone(800, 'sawtooth', 0.3, 0.2, 300);
-        this.playTone(600, 'sawtooth', 0.3, 0.2, 300, 150);
-    }
-
-    playFumble() {
-        if (!this.enabled || this.muted) return;
-        // Chaotic low rumbles
-        this.playTone(100, 'sawtooth', 0.1, 0.3);
-        this.playTone(120, 'square', 0.1, 0.3, null, 50);
-        this.playTone(80, 'sawtooth', 0.1, 0.3, null, 100);
-        this.playNoise(0.3, 0.2);
+        // Alias for compatibility
+        this.playIntercept();
     }
 
     playBigHit() {
@@ -166,13 +152,6 @@ class SoundManager {
 
     playTackle() { this.playBigHit(); }
     playHit() { this.playBigHit(); }
-
-    playCatch() {
-        if (!this.enabled || this.muted) return;
-        // Thwack / Pop
-        this.playTone(200, 'square', 0.05, 0.1);
-        this.playNoise(0.05, 0.2);
-    }
 
     playFirstDown() {
         if (!this.enabled || this.muted) return;
