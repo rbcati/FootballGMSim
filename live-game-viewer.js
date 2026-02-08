@@ -1,4 +1,3 @@
-// live-game-viewer.js - Live game simulation with play-by-play and play calling
 import { commitGameResult } from './game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
@@ -55,7 +54,7 @@ class LiveGameViewer {
   checkUI() {
     if (this.viewMode) {
       // Ensure container is in DOM AND visible (not hidden by router)
-      return this.container && document.body.contains(this.container);
+      return this.container && document.body.contains(this.container) && this.container.offsetParent !== null;
     }
     // Modal check
     return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
@@ -770,11 +769,12 @@ class LiveGameViewer {
 
               // Catch Effect
               if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
-                  if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
-                  if (skillMarker) {
-                      skillMarker.classList.add('marker-catch');
-                      setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
-                  }
+                   if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
+                   soundManager.playCatch();
+                   if (skillMarker) {
+                       skillMarker.classList.add('marker-catch');
+                       setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
+                   }
               }
 
               // End of play collision (tackle)
@@ -782,16 +782,6 @@ class LiveGameViewer {
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
               }
-          // Catch Effect
-          if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
-               if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
-               soundManager.playCatch(); // Sync sound with visual
-               // Marker Animation
-               soundManager.playCatch();
-               if (skillMarker) {
-                   skillMarker.classList.add('marker-catch');
-                   setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
-               }
           }
 
       } else if (play.playType.startsWith('run')) {
@@ -908,16 +898,12 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              if (play.playType.includes('pass')) {
+              if (play.playType.includes('pass') || (play.message && play.message.toLowerCase().includes('intercept'))) {
                   this.fieldEffects.spawnParticles(endPct, 'interception');
-              } else {
-                  this.fieldEffects.spawnParticles(endPct, 'fumble');
-              if (play.message && play.message.toLowerCase().includes('intercept')) {
-                   this.fieldEffects.spawnParticles(endPct, 'interception');
               } else if (play.message && play.message.toLowerCase().includes('fumble')) {
-                   this.fieldEffects.spawnParticles(endPct, 'fumble');
+                  this.fieldEffects.spawnParticles(endPct, 'fumble');
               } else {
-                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
+                  this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
@@ -2219,6 +2205,7 @@ class LiveGameViewer {
             el.classList.add('pulse-score');
             this.animateNumber(el, this.lastAwayScore, away.score, 1000);
         }
+    }
     // Initialize scoreboard structure if missing
     if (!scoreboard.querySelector('#scoreHome')) {
         scoreboard.innerHTML = `

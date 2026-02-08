@@ -1,0 +1,503 @@
+
+Running 5 tests using 2 workers
+
+PAGE LOG: Loaded 421 first names and 1349 last names
+PAGE LOG: This provides 567929 possible name combinations
+PAGE LOG: Teams.js loaded - Real teams: 32 Fictional teams: 32
+PAGE LOG: ✅ Offseason System loaded
+PAGE LOG: Enhanced Team Statistics System loaded successfully
+PAGE LOG: ✅ Box Score Viewer loaded
+PAGE LOG: ✅ Player Database system loaded
+PAGE LOG: ✅ History system loaded
+PAGE LOG: ✅ Comprehensive Award System loaded
+PAGE LOG: ✅ All-Time Records System loaded
+PAGE LOG: Stats Viewer Loaded Successfully
+PAGE LOG: ✅ Injury System loaded
+PAGE LOG: ✅ Player Comparison system loaded
+PAGE LOG: ✅ Retirement System loaded
+PAGE LOG: ✅ Data Visualization System loaded
+PAGE LOG: ✅ UI Components System loaded
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: Auto-save hook installed
+PAGE LOG: ✅ State-Save Manager loaded. Full state persistence is active.
+PAGE LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+PAGE LOG: [LeagueCreationFix] Loaded
+PAGE LOG: [TeamSelectionFix] Team selection fix initialized (will apply when makeLeague is available).
+PAGE LOG: 🧭 Loading complete navigation fix...
+PAGE LOG: 💡 Navigation fix loaded. Available commands:
+PAGE LOG: - fixNavigation() - Apply complete navigation fix
+PAGE LOG: - diagnoseNavigation() - Show navigation diagnostic
+PAGE LOG: 🔧 Loading critical fixes...
+PAGE LOG: 🚀 Initializing all critical fixes...
+PAGE LOG: 🔧 Fixing click handlers...
+PAGE LOG: ✅ Click handlers fixed
+PAGE LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+PAGE LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+PAGE LOG: ✅ iOS optimizations added
+PAGE LOG: 🔧 Fixing modal accessibility...
+PAGE LOG: ✅ Modal accessibility fixed
+PAGE LOG: ✅ All critical fixes initialized
+PAGE LOG: ✅ Critical fixes loaded
+PAGE LOG: ✅ Combined fixes.js loaded - includes error-overlay, missing-functions, league-creation-fix, team-selection-fix, navbar-fix, dom-helpers-fix, and critical-fixes
+PAGE LOG: ✅ Trade system (manual + CPU) loaded and optimized for value
+PAGE LOG: ✅ Draft system fixed and loaded
+PAGE LOG: ✅ Scheme Management system loaded
+PAGE LOG: ✅ PlayerStatsViewer initialized and enhanced with Training Potential
+PAGE LOG: ✅ Live Game Viewer loaded
+PAGE LOG: 🎉 UI master file loaded successfully!
+PAGE LOG: GameController: Initializing...
+PAGE LOG: Rebuilding league metadata...
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: No saves found, starting onboarding.
+PAGE LOG: ✅ GameController functions exported globally (patched version)
+PAGE LOG: Setting up core event listeners...
+PAGE LOG: 🎯 Initializing UI...
+PAGE LOG: Navigation enhancement called.
+PAGE LOG: ✅ GameController initialized successfully
+PAGE LOG: 🔒 Hiding game results modal
+PAGE LOG: ✅ Premium UI interactions initialized
+PAGE LOG: Dashboard rendered with 0 leagues.
+PAGE LOG: Dashboard rendered with 0 leagues.
+PAGE LOG: Owner mode system initialized
+PAGE LOG: 🔒 Hiding game results modal
+PAGE LOG: Dashboard rendered with 0 leagues.
+PAGE LOG: 🚀 Initializing complete navigation fix...
+PAGE LOG: 🔧 Checking navigation HTML...
+PAGE LOG: Adding missing nav item: Standings
+PAGE LOG: ✅ Navigation HTML checked and fixed
+PAGE LOG: 🎨 Navigation styles are in style.css
+PAGE LOG: 🔧 Setting up enhanced navigation...
+PAGE LOG: ✅ Navigation toggle setup complete
+PAGE LOG: ✅ Enhanced navigation set up
+PAGE LOG: ✅ Complete navigation fix initialized
+PAGE LOG: ✅ FootballDB connected: football_sim_db
+PAGE LOG: 🎯 Initializing UI...
+PAGE LOG: Navigation enhancement called.
+PAGE LOG: 🎯 Running initial route...
+PAGE LOG: 🧭 Routing to: hub from path: #/hub
+PAGE LOG: ✅ Showing view: hub
+PAGE LOG: ✅ Game ready, rendering view: hub
+PAGE LOG: Rendering hub...
+PAGE LOG: [Hub] Render blocked: League object missing
+PAGE LOG: ✅ Hub rendered
+PAGE LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+PAGE LOG: ✅ Critical fixes already initialized
+Forcing New League...
+PAGE LOG: Saved state cleared for slot 1
+PAGE LOG: Resetting state...
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: [ROUTER] State empty on navigation to hub - attempting rehydration
+PAGE LOG: Loading state...
+PAGE LOG: No saved state found
+PAGE LOG: [ROUTER] Rehydration failed, redirecting to dashboard
+PAGE LOG: Dashboard rendered with 0 leagues.
+PAGE LOG: 🧭 Routing to: leagueDashboard from path: #/leagueDashboard
+PAGE LOG: ✅ Showing view: leagueDashboard
+PAGE LOG: Game not ready, skipping content rendering {hasLeague: false, onboarded: false}
+PAGE LOG: 🧭 Routing to: leagueDashboard from path: #/leagueDashboard
+PAGE LOG: ✅ Showing view: leagueDashboard
+PAGE LOG: Game not ready, skipping content rendering {hasLeague: false, onboarded: false}
+PAGE LOG: 🧭 Routing to: leagueDashboard from path: #/leagueDashboard
+PAGE LOG: ✅ Showing view: leagueDashboard
+PAGE LOG: Game not ready, skipping content rendering {hasLeague: false, onboarded: false}
+PAGE LOG: 🎯 Opening onboarding modal...
+PAGE LOG: ✅ Onboarding modal opened
+PAGE LOG: 🎯 Opening onboarding modal...
+PAGE LOG: ✅ Onboarding modal opened
+PAGE LOG: 🎯 Opening onboarding modal...
+PAGE LOG: ✅ Onboarding modal opened
+Rapid clicking advance button...
+PAGE LOG: ✅ Start Season button clicked
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: [TeamSelectionFix] Selected team BEFORE league creation: Boston Minutemen (index 0)
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Calvin Hahn (Strategist)
+PAGE LOG: Generated OC: Yandel Lamb (Balanced)
+PAGE LOG: Generated DC: Hassan Mcneil (Bend Dont Break)
+PAGE LOG: Generated Scout: Yandel Hancock (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Russell Nguyen (Strategist)
+PAGE LOG: Generated OC: Takumi Freeman (Balanced)
+PAGE LOG: Generated DC: Will Huff (No Fly Zone)
+PAGE LOG: Generated Scout: Walter Vang (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Amir Bennett (Strategist)
+PAGE LOG: Generated OC: Jackson Camacho (Balanced)
+PAGE LOG: Generated DC: Maverick Melton (No Fly Zone)
+PAGE LOG: Generated Scout: Tanner Bailey (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Devin Poole (Strategist)
+PAGE LOG: Generated OC: Forrest Massey (Air Raid)
+PAGE LOG: Generated DC: Jayden Randolph (No Fly Zone)
+PAGE LOG: Generated Scout: Rashid Whitley (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Stephen Mccarthy (Strategist)
+PAGE LOG: Generated OC: Jonathan Schwartz (Air Raid)
+PAGE LOG: Generated DC: Ion Wall (Blitz Happy)
+PAGE LOG: Generated Scout: Jamal Jacobson (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Morgan Patel (Motivator)
+PAGE LOG: Generated OC: Yariel Webster (Air Raid)
+PAGE LOG: Generated DC: Peter Howell (No Fly Zone)
+PAGE LOG: Generated Scout: Colin Mullins (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Adrian Gordon (Motivator)
+PAGE LOG: Generated OC: Nathaniel Patton (Balanced)
+PAGE LOG: Generated DC: Elijah Walter (No Fly Zone)
+PAGE LOG: Generated Scout: Derek Townsend (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Albert Stokes (Disciplinarian)
+PAGE LOG: Generated OC: Jamal Watkins (Balanced)
+PAGE LOG: Generated DC: Alan Beck (Bend Dont Break)
+PAGE LOG: Generated Scout: Tucker Elliott (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Yusuf Leblanc (Motivator)
+PAGE LOG: Generated OC: Liam Dunn (Air Raid)
+PAGE LOG: Generated DC: Cole Rivers (Bend Dont Break)
+PAGE LOG: Generated Scout: Dennis Hunt (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zachary Blair (Disciplinarian)
+PAGE LOG: Generated OC: Charles Manning (Ground & Pound)
+PAGE LOG: Generated DC: Dominic Quinn (Bend Dont Break)
+PAGE LOG: Generated Scout: Avery Oneal (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Thomas Francis (Strategist)
+PAGE LOG: Generated OC: Evan Hunter (Ground & Pound)
+PAGE LOG: Generated DC: Parker Odonnell (No Fly Zone)
+PAGE LOG: Generated Scout: Ahmad Boone (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Elias Petersen (Strategist)
+PAGE LOG: Generated OC: Theodore Jewell (Balanced)
+PAGE LOG: Generated DC: Xavi Olson (Bend Dont Break)
+PAGE LOG: Generated Scout: Taylor Dean (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Preston Walters (Strategist)
+PAGE LOG: Generated OC: Zhenya Nichols (Air Raid)
+PAGE LOG: Generated DC: Zack Herring (Bend Dont Break)
+PAGE LOG: Generated Scout: Vincenzo Church (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Walter Alston (Disciplinarian)
+PAGE LOG: Generated OC: Mitchell Clark (Ground & Pound)
+PAGE LOG: Generated DC: Theodore Armstrong (No Fly Zone)
+PAGE LOG: Generated Scout: Brett Mccormick (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zhenya Skinner (Disciplinarian)
+PAGE LOG: Generated OC: Leonardo Romero (Ground & Pound)
+PAGE LOG: Generated DC: Kaden Moss (Blitz Happy)
+PAGE LOG: Generated Scout: Santiago Mcdaniel (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Rocco Dixon (Strategist)
+PAGE LOG: Generated OC: Brandon Powell (Ground & Pound)
+PAGE LOG: Generated DC: Zhenya Gonzalez (Blitz Happy)
+PAGE LOG: Generated Scout: Michael Austin (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Luca Kirk (Disciplinarian)
+PAGE LOG: Generated OC: Brian Mcmillan (Ground & Pound)
+PAGE LOG: Generated DC: Billy Garcia (No Fly Zone)
+PAGE LOG: Generated Scout: Troy Zamora (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zhenya Payne (Strategist)
+PAGE LOG: Generated OC: Dominic Holland (Balanced)
+PAGE LOG: Generated DC: Matthew Henry (Bend Dont Break)
+PAGE LOG: Generated Scout: Rafael Cortez (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Miguel Cook (Motivator)
+PAGE LOG: Generated OC: Jesse Horne (Balanced)
+PAGE LOG: Generated DC: Zackary Obrien (Blitz Happy)
+PAGE LOG: Generated Scout: Hiroto Richmond (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Wesley Duncan (Strategist)
+PAGE LOG: Generated OC: Devin Mcknight (Ground & Pound)
+PAGE LOG: Generated DC: Kenneth Duffy (No Fly Zone)
+PAGE LOG: Generated Scout: Rafael Koch (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Harper Chapman (Disciplinarian)
+PAGE LOG: Generated OC: Tariq Burns (Air Raid)
+PAGE LOG: Generated DC: Parker Lloyd (No Fly Zone)
+PAGE LOG: Generated Scout: Owen Buckley (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Austin Harvey (Disciplinarian)
+PAGE LOG: Generated OC: Isaiah Blankenship (Ground & Pound)
+PAGE LOG: Generated DC: Jake Lyons (Blitz Happy)
+PAGE LOG: Generated Scout: Samuel Valenzuela (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Jorge Cohen (Strategist)
+PAGE LOG: Generated OC: Javier Greene (Balanced)
+PAGE LOG: Generated DC: Vincenzo Bennett (Bend Dont Break)
+PAGE LOG: Generated Scout: Julian Velez (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Dawson Bright (Motivator)
+PAGE LOG: Generated OC: Zack Parker (Balanced)
+PAGE LOG: Generated DC: Arthur Cunningham (Bend Dont Break)
+PAGE LOG: Generated Scout: Ioan Velasquez (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Gavin Velazquez (Disciplinarian)
+PAGE LOG: Generated OC: Manuel Owens (Ground & Pound)
+PAGE LOG: Generated DC: River Rocha (Bend Dont Break)
+PAGE LOG: Generated Scout: Zion Gallagher (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zaid Rutledge (Motivator)
+PAGE LOG: Generated OC: Parker Gonzalez (Balanced)
+PAGE LOG: Generated DC: Ali Beasley (Bend Dont Break)
+PAGE LOG: Generated Scout: Wyatt Dominguez (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Parker Vargas (Strategist)
+PAGE LOG: Generated OC: Ronald Wood (Balanced)
+PAGE LOG: Generated DC: Dylan Barnes (No Fly Zone)
+PAGE LOG: Generated Scout: Shane Cummings (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zhenya Owens (Strategist)
+PAGE LOG: Generated OC: Calvin Campbell (Air Raid)
+PAGE LOG: Generated DC: Wesley Glenn (Blitz Happy)
+PAGE LOG: Generated Scout: Hassan Riley (Draft Guru)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Travis Reid (Disciplinarian)
+PAGE LOG: Generated OC: Ivan Wells (Balanced)
+PAGE LOG: Generated DC: Ethan Owens (Blitz Happy)
+PAGE LOG: Generated Scout: Waylon Justice (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Larry Wolf (Strategist)
+PAGE LOG: Generated OC: Leonardo Benson (Ground & Pound)
+PAGE LOG: Generated DC: Dragos Welch (No Fly Zone)
+PAGE LOG: Generated Scout: Pablo Abrams (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Calvin Brown (Motivator)
+PAGE LOG: Generated OC: Eduard Woods (Ground & Pound)
+PAGE LOG: Generated DC: Alejandro Wolf (Blitz Happy)
+PAGE LOG: Generated Scout: Carson Castaneda (Talent Spotter)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Generating initial staff...
+PAGE LOG: Generated HC: Zhenya Myrick (Disciplinarian)
+PAGE LOG: Generated OC: Blake Cain (Air Raid)
+PAGE LOG: Generated DC: Igor Harper (No Fly Zone)
+PAGE LOG: Generated Scout: Colton Barton (Analytics Expert)
+PAGE LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+PAGE LOG: Creating NFL-style schedule...
+PAGE LOG: Schedule validation failed, attempting to fix: [Team Atlanta Firebirds has 0 bye weeks instead of 1, Team San Francisco Demons has 0 bye weeks instead of 1]
+PAGE LOG: Fixing schedule completely...
+PAGE LOG: Final validation failed, using simple schedule: [Team Denver Gold has 0 bye weeks instead of 1, Team Seattle Kings has 0 bye weeks instead of 1]
+PAGE LOG: Creating simple fallback schedule...
+PAGE LOG: [Calibration] Starters: 800, Mean: 83.60, StdDev: 5.31
+PAGE LOG: [Calibration] League players updated.
+PAGE LOG: ✨ League creation complete and modularized!
+PAGE LOG: Running schema migration...
+PAGE LOG: Generated 120 free agents
+PAGE LOG: ✅ League "League 1770547204203" saved to IndexedDB.
+PAGE LOG: Game saved successfully to League 1770547204203
+PAGE LOG: Dashboard rendered with 1 leagues.
+PAGE LOG: ✅ League created successfully: {teams: 32, userTeamId: 0, onboarded: true, hasLeague: true}
+PAGE LOG: 🧭 Routing to: hub from path: #/hub
+PAGE LOG: ✅ Showing view: hub
+PAGE LOG: ✅ Game ready, rendering view: hub
+PAGE LOG: 🧭 Routing to: hub from path: #/hub
+PAGE LOG: ✅ Showing view: hub
+PAGE LOG: ✅ Game ready, rendering view: hub
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: ✅ Hub rendered
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: ✅ Hub rendered
+PAGE LOG: Owner mode system initialized
+PAGE LOG: Checking window.watchLiveGame: function
+PAGE LOG: Checking window.liveGameViewer: true
+Starting Live Game...
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: ✅ Game Sim rendered
+PAGE LOG: ✅ Game Sim rendered
+Testing Rapid Clicking...
+PAGE LOG: 🎯 Initializing UI...
+PAGE LOG: Navigation enhancement called.
+PAGE LOG: Showing view: game-sim
+PAGE LOG: ✅ View shown successfully: game-sim
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: Showing view: hub
+PAGE LOG: ✅ View shown successfully: hub
+PAGE LOG: ✅ UI updated after league creation
+PAGE LOG: ✅ Game Sim rendered
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: ✅ Game Sim rendered
+Button disabled state after rapid clicks: false
+Week advanced from 1 to 2
+  ✓  1 tests/regression_edge_cases.spec.js:5:5 › Edge Cases & Performance › Rapid Click on Advance Week (Debounce Check) (8.1s)
+Testing Refresh Persistence...
+Scoreboard before refresh: TOR
+0
+Q1 15:00
+1 & 10 at 25
+BOS
+0
+PAGE LOG: [QA-AUDIT] saveState: Saving state. Week: 1, Teams Count: 32
+PAGE LOG: [QA-AUDIT] saveState: Sample Team 0 Wins: 0
+PAGE LOG: ✅ League "League 1770547204203" saved to IndexedDB.
+PAGE LOG: Game saved successfully to League 1770547204203
+PAGE LOG: Dashboard rendered with 1 leagues.
+PAGE LOG: Loaded 421 first names and 1349 last names
+PAGE LOG: This provides 567929 possible name combinations
+PAGE LOG: Teams.js loaded - Real teams: 32 Fictional teams: 32
+PAGE LOG: ✅ Offseason System loaded
+PAGE LOG: Enhanced Team Statistics System loaded successfully
+PAGE LOG: ✅ Box Score Viewer loaded
+PAGE LOG: ✅ Player Database system loaded
+PAGE LOG: ✅ History system loaded
+PAGE LOG: ✅ Comprehensive Award System loaded
+PAGE LOG: ✅ All-Time Records System loaded
+PAGE LOG: Stats Viewer Loaded Successfully
+PAGE LOG: ✅ Injury System loaded
+PAGE LOG: ✅ Player Comparison system loaded
+PAGE LOG: ✅ Retirement System loaded
+PAGE LOG: ✅ Data Visualization System loaded
+PAGE LOG: ✅ UI Components System loaded
+PAGE LOG: [vite] connecting...
+PAGE LOG: [vite] connected.
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: Auto-save hook installed
+PAGE LOG: ✅ State-Save Manager loaded. Full state persistence is active.
+PAGE LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+PAGE LOG: [LeagueCreationFix] Loaded
+PAGE LOG: [TeamSelectionFix] Team selection fix initialized (will apply when makeLeague is available).
+PAGE LOG: 🧭 Loading complete navigation fix...
+PAGE LOG: 💡 Navigation fix loaded. Available commands:
+PAGE LOG: - fixNavigation() - Apply complete navigation fix
+PAGE LOG: - diagnoseNavigation() - Show navigation diagnostic
+PAGE LOG: 🔧 Loading critical fixes...
+PAGE LOG: 🚀 Initializing all critical fixes...
+PAGE LOG: 🔧 Fixing click handlers...
+PAGE LOG: ✅ Click handlers fixed
+PAGE LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+PAGE LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+PAGE LOG: ✅ iOS optimizations added
+PAGE LOG: 🔧 Fixing modal accessibility...
+PAGE LOG: ✅ Modal accessibility fixed
+PAGE LOG: ✅ All critical fixes initialized
+PAGE LOG: ✅ Critical fixes loaded
+PAGE LOG: ✅ Combined fixes.js loaded - includes error-overlay, missing-functions, league-creation-fix, team-selection-fix, navbar-fix, dom-helpers-fix, and critical-fixes
+PAGE LOG: ✅ Trade system (manual + CPU) loaded and optimized for value
+PAGE LOG: ✅ Draft system fixed and loaded
+PAGE LOG: ✅ Scheme Management system loaded
+PAGE LOG: ✅ PlayerStatsViewer initialized and enhanced with Training Potential
+PAGE LOG: ✅ Live Game Viewer loaded
+PAGE LOG: 🎉 UI master file loaded successfully!
+PAGE LOG: GameController: Initializing...
+PAGE LOG: Initializing fresh state...
+PAGE LOG: Fresh state created
+PAGE LOG: ✅ GameController functions exported globally (patched version)
+PAGE LOG: ✅ Premium UI interactions initialized
+PAGE LOG: Dashboard rendered with 1 leagues.
+PAGE LOG: Dashboard rendered with 1 leagues.
+PAGE LOG: Owner mode system initialized
+PAGE LOG: Dashboard rendered with 1 leagues.
+PAGE LOG: ✅ FootballDB connected: football_sim_db
+PAGE LOG: 🔒 Hiding game results modal
+PAGE LOG: ✅ League "League 1770547204203" loaded from IndexedDB.
+PAGE LOG: Running schema migration...
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: 🔄 Router navigating to: hub
+PAGE LOG: Showing view: hub
+PAGE LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+PAGE LOG: ✅ View shown successfully: hub
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: Rendering hub...
+PAGE LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+PAGE LOG: ✅ Hub rendered successfully
+PAGE LOG: Resuming league successfully.
+PAGE LOG: 🔄 Router navigating to: game-sim
+PAGE LOG: Showing view: game-sim
+PAGE LOG: ✅ View shown successfully: game-sim
+PAGE LOG: Restored live game state from local storage
+PAGE LOG: 🚀 Initializing complete navigation fix...
+PAGE LOG: 🔧 Checking navigation HTML...
+PAGE LOG: Adding missing nav item: Standings
+PAGE LOG: ✅ Navigation HTML checked and fixed
+PAGE LOG: 🎨 Navigation styles are in style.css
+PAGE LOG: 🔧 Setting up enhanced navigation...
+PAGE LOG: ✅ Navigation toggle setup complete
+PAGE LOG: ✅ Enhanced navigation set up
+PAGE LOG: ✅ Complete navigation fix initialized
+PAGE LOG: 🎯 Initializing UI...
+PAGE LOG: Navigation enhancement called.
+PAGE LOG: Showing view: game-sim
+PAGE LOG: ✅ View shown successfully: game-sim
+PAGE LOG: 🎯 Running initial route...
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: 🧭 Routing to: game-sim from path: #/game-sim
+PAGE LOG: ✅ Showing view: game-sim
+PAGE LOG: ✅ Game ready, rendering view: game-sim
+PAGE LOG: ✅ Game Sim rendered
+PAGE LOG: ✅ Game Sim rendered
+PAGE LOG: ✅ Critical fixes already initialized
+Game visible after refresh: true
+Scoreboard after refresh: TOR
+0
+Q1 15:00
+1 & 10 at 25
+BOS
+0
+  ✓  2 tests/bug_hunt_live_game.spec.js:4:3 › Live Game Bug Hunt › Rapid Clicking and Refresh Persistence (11.2s)
+Refreshing page during game...
+After refresh: Hub visible=false, Game visible=true
+  ✓  3 tests/regression_edge_cases.spec.js:46:5 › Edge Cases & Performance › Refresh During Live Game (8.8s)
+  ✓  4 tests/regression_edge_cases.spec.js:91:5 › Edge Cases & Performance › Mobile Interactions (2.7s)
+Score Debug Info: { computed: [32m'21px'[39m, inline: [32m'1.5rem'[39m, textContent: [32m'105'[39m }
+  ✓  5 tests/regression_edge_cases.spec.js:137:5 › Edge Cases & Performance › Large Score UI Check (2.3s)
+
+  5 passed (23.8s)
