@@ -297,64 +297,30 @@ test.describe('Daily Regression Pass', () => {
         });
         await page.waitForSelector('#hub', { state: 'visible' });
 
-        // Iterate until we find a played user game or hit a limit
-        let gameInfo = null;
-        for (let i = 0; i < 5; i++) {
-            // Check for existing game
-            gameInfo = await page.evaluate(() => {
-                const L = window.state.league;
-                // Check all past weeks
-                for (let w = 0; w < L.week; w++) {
-                    const results = L.resultsByWeek[w];
-                    if (results) {
-                         const userGame = results.find(g => g.home === L.userTeamId || g.away === L.userTeamId);
-                         if (userGame) return userGame;
-                    }
-                }
-                return null;
-            });
+        // Force a game to be finalized
+        let gameInfo = await page.evaluate(() => {
+             const L = window.state.league;
+             const week = L.week || 1;
+             const schedule = L.schedule.weeks[week - 1] || L.schedule[week - 1]; // Handle format variance
+             if (!schedule || !schedule.games) return null;
 
-            if (gameInfo) break;
+             const userGame = schedule.games.find(g => (g.home === L.userTeamId || g.home.id === L.userTeamId) || (g.away === L.userTeamId || g.away.id === L.userTeamId));
 
-            // Advance if no game found
-            console.log(`No played user game found, advancing week... (Attempt ${i+1})`);
-
-            // Handle potentially stuck modals (like recap)
-
-            // 1. Check for Decision Modal (intercepting)
-            const decisionModal = page.locator('#decisionModal');
-            if (await decisionModal.isVisible()) {
-                console.log('Decision modal found, dismissing...');
-                // Click the first button (usually "Dismiss" or an option)
-                const btn = decisionModal.locator('button').first();
-                if (await btn.isVisible()) {
-                    await btn.click();
-                    await page.waitForTimeout(500); // Wait for animation
-                }
-            }
-
-            // 2. Look for the "Continue" button specifically (Recap)
-            const continueBtn = page.getByRole('button', { name: /Continue to Week/i });
-            if (await continueBtn.isVisible()) {
-                await continueBtn.click();
-            } else if (await page.locator('.modal.active .btn.primary').isVisible()) {
-                 // Fallback for other blocking modals
-                 await page.locator('.modal.active .btn.primary').first().click();
-            }
-
-            const advanceBtn = page.locator('#btnAdvanceWeekTop');
-            if (await advanceBtn.isVisible()) {
-                await advanceBtn.click();
-            } else {
-                 await page.evaluate(() => window.handleGlobalAdvance());
-            }
-
-            await page.waitForTimeout(4000);
-        }
+             if (userGame) {
+                 userGame.finalized = true;
+                 userGame.scoreHome = 21;
+                 userGame.scoreAway = 17;
+                 return {
+                     home: (typeof userGame.home === 'object' ? userGame.home.id : userGame.home),
+                     away: (typeof userGame.away === 'object' ? userGame.away.id : userGame.away)
+                 };
+             }
+             return null;
+        });
 
         if (gameInfo) {
-            console.log('Testing replay exploit on game:', gameInfo.id);
-            // Attempt to watch via console command which would normally trigger the view
+            console.log('Testing replay exploit on finalized game:', gameInfo);
+            // Attempt to watch via console command
             await page.evaluate((g) => {
                 window.watchLiveGame(g.home, g.away);
             }, gameInfo);
@@ -365,8 +331,7 @@ test.describe('Daily Regression Pass', () => {
             console.log('Current Hash:', hash);
             expect(hash).not.toContain('game-sim');
         } else {
-            console.log('No user game found to test replay exploit after multiple advances.');
-            // This is arguably a failure of the test setup, but we don't want to fail the whole regression if RNG avoids the user
+             console.warn("Could not find a user game to test replay prevention.");
         }
     });
 
@@ -395,6 +360,76 @@ test.describe('Daily Regression Pass', () => {
         await expect(badge).toBeVisible({ timeout: 5000 });
         const text = await badge.innerText();
         expect(text).toContain('HIGH STAKES');
+    });
+
+    test('Tension Verification - Playoff Picture', async ({ page }) => {
+        page.on('console', msg => console.log('TENSION TEST LOG:', msg.text()));
+        await page.goto('http://localhost:3000');
+        await page.waitForTimeout(1000);
+
+        // Ensure league
+        await page.evaluate(async () => {
+             if (!window.state || !window.state.league) {
+                 await window.gameController.startNewLeague();
+                 document.getElementById('onboardStart').click();
+             }
+        });
+        await page.waitForSelector('#hub', { state: 'visible', timeout: 20000 });
+
+        // Mock state to Week 15 and Bubble status
+        await page.evaluate(() => {
+            const L = window.state.league;
+            L.week = 15;
+            L.offseason = false;
+            const userTeam = L.teams[window.state.userTeamId];
+            console.log("DEBUG: Week:", L.week);
+            console.log("DEBUG: User Team ID:", window.state.userTeamId);
+            console.log("DEBUG: User Team Conf:", userTeam.conf);
+
+            // Ensure teams exist and valid structure for standings
+            if (!L.teams) return;
+
+            // Set wins to put user on bubble relative to others
+            // Just force the mock standings function to return user as bubble
+            window.calculateAllStandings = (league) => {
+                 console.log("DEBUG: Mock calculateAllStandings called");
+                 const mockBubble = [{ id: window.state.userTeamId, name: 'User Team', wins: 8, losses: 6 }];
+                 return {
+                     playoffs: {
+                         afc: {
+                             playoffs: Array.from({length: 7}, (_, i) => ({ id: i + 999, name: `Team ${i}`, wins: 10, losses: 4 })),
+                             bubble: mockBubble,
+                             divisionWinners: []
+                         },
+                         nfc: {
+                             playoffs: Array.from({length: 7}, (_, i) => ({ id: i + 2999, name: `Team ${i}`, wins: 10, losses: 4 })),
+                             bubble: mockBubble,
+                             divisionWinners: []
+                         }
+                     }
+                 };
+            };
+
+            // Trigger recap with dummy results
+            const results = [{
+                home: window.state.userTeamId,
+                away: 999,
+                scoreHome: 24,
+                scoreAway: 20
+            }];
+            console.log("DEBUG: Calling showWeeklyRecap");
+            window.showWeeklyRecap(15, results, []);
+        });
+
+        // Check for Playoff Picture section
+        const section = page.locator('h4', { hasText: '🏆 Playoff Picture' });
+        await expect(section).toBeVisible({ timeout: 5000 });
+        const text = await page.locator('.recap-section', { hasText: 'Playoff Picture' }).innerText();
+        expect(text).toContain('In the Hunt');
+
+        // Verify main result label for tension
+        const resultLabel = await page.locator('.recap-result-label').innerText();
+        expect(resultLabel).toContain('HOPE ALIVE');
     });
 
     test('Legacy & Retirement Verification', async ({ page }) => {

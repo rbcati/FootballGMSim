@@ -236,6 +236,45 @@ export function showWeeklyRecap(week, results, news) {
         `;
     }
 
+    // Playoff Picture (Late Season)
+    let playoffPictureHtml = '';
+    if (week > 10 && !state.offseason && standingsData) {
+        const confId = userTeam.conf;
+        const playoffs = confId === 0 ? standingsData.playoffs.afc : standingsData.playoffs.nfc;
+
+        // Check status
+        const isSeed = playoffs.playoffs.find(t => t.id === userTeamId);
+        const isBubble = playoffs.bubble.find(t => t.id === userTeamId);
+
+        if (isSeed || isBubble) {
+            let statusText = '';
+            let statusColor = '';
+
+            if (isSeed) {
+                const seedIndex = playoffs.playoffs.findIndex(t => t.id === userTeamId);
+                const seed = seedIndex + 1;
+                statusText = `Currently the #${seed} Seed`;
+                statusColor = '#10b981'; // Green
+
+                if (seed === 1) statusText += " (Projected Bye)";
+            } else if (isBubble) {
+                const bubbleIndex = playoffs.bubble.findIndex(t => t.id === userTeamId);
+                statusText = `In the Hunt (${bubbleIndex + 1} spots out)`;
+                statusColor = '#f59e0b'; // Amber
+            }
+
+            playoffPictureHtml = `
+                <div class="recap-section" style="border-left: 4px solid ${statusColor};">
+                    <h4 style="color: ${statusColor};">🏆 Playoff Picture</h4>
+                    <div style="font-size: 1.1rem; font-weight: bold; margin-bottom: 5px;">${statusText}</div>
+                    <div style="font-size: 0.9rem; opacity: 0.8;">
+                        ${isSeed ? "Control your destiny." : "Need some help to get in."}
+                    </div>
+                </div>
+            `;
+        }
+    }
+
     // Development Watch
     let devHtml = '';
     const activeDev = userTeam.roster.filter(p => p.seasonNews && p.seasonNews.some(n => n.week === week && (n.headline.includes('Breakout') || n.headline.includes('Stalled') || n.headline.includes('Decline'))));
@@ -422,6 +461,7 @@ export function showWeeklyRecap(week, results, news) {
         <div class="weekly-recap-container">
             ${outcomeHtml}
             <div class="recap-grid">
+                ${playoffPictureHtml}
                 ${strategyHtml}
                 ${trackedUpdatesHtml}
                 ${heroHtml}
