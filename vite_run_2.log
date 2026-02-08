@@ -1,0 +1,18 @@
+
+> dev
+> vite
+
+
+  VITE v7.3.1  ready in 355 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+10:28:12 AM [vite] (client) Pre-transform error: Failed to parse source for import analysis because the content contains invalid JS syntax. If you are using JSX, make sure to name the file with the .jsx or .tsx extension.
+  Plugin: vite:import-analysis
+  File: /app/live-game-viewer.js?v=1.0.1:1:0
+  1  |  // live-game-viewer.js - Live game simulation with play-by-play and play calling
+     |  ^
+  2  |  import { commitGameResult } from './game-simulator.js';
+  3  |  import soundManager from './sound-manager.js';
+10:30:52 AM [vite] (client) page reload live-game-viewer.js
+10:30:59 AM [vite] (client) page reload live-game-viewer.js

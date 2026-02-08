@@ -1,0 +1,202 @@
+
+Running 8 tests using 1 worker
+
+BROWSER LOG: Loaded 421 first names and 1349 last names
+BROWSER LOG: This provides 567929 possible name combinations
+BROWSER LOG: Teams.js loaded - Real teams: 32 Fictional teams: 32
+BROWSER LOG: ✅ Offseason System loaded
+BROWSER LOG: Enhanced Team Statistics System loaded successfully
+BROWSER LOG: ✅ Box Score Viewer loaded
+BROWSER LOG: ✅ Player Database system loaded
+BROWSER LOG: ✅ History system loaded
+BROWSER LOG: ✅ Comprehensive Award System loaded
+BROWSER LOG: ✅ All-Time Records System loaded
+BROWSER LOG: Stats Viewer Loaded Successfully
+BROWSER LOG: ✅ Injury System loaded
+BROWSER LOG: ✅ Player Comparison system loaded
+BROWSER LOG: ✅ Retirement System loaded
+BROWSER LOG: ✅ Data Visualization System loaded
+BROWSER LOG: ✅ UI Components System loaded
+BROWSER LOG: [vite] connecting...
+BROWSER LOG: [vite] connected.
+BROWSER LOG: Initializing fresh state...
+BROWSER LOG: Fresh state created
+BROWSER LOG: Auto-save hook installed
+BROWSER LOG: ✅ State-Save Manager loaded. Full state persistence is active.
+BROWSER LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+BROWSER LOG: [LeagueCreationFix] Loaded
+BROWSER LOG: [TeamSelectionFix] Team selection fix initialized (will apply when makeLeague is available).
+BROWSER LOG: 🧭 Loading complete navigation fix...
+BROWSER LOG: 💡 Navigation fix loaded. Available commands:
+BROWSER LOG: - fixNavigation() - Apply complete navigation fix
+BROWSER LOG: - diagnoseNavigation() - Show navigation diagnostic
+BROWSER LOG: 🔧 Loading critical fixes...
+BROWSER LOG: 🚀 Initializing all critical fixes...
+BROWSER LOG: 🔧 Fixing click handlers...
+BROWSER LOG: ✅ Click handlers fixed
+BROWSER LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+BROWSER LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+BROWSER LOG: ✅ iOS optimizations added
+BROWSER LOG: 🔧 Fixing modal accessibility...
+BROWSER LOG: ✅ Modal accessibility fixed
+BROWSER LOG: ✅ All critical fixes initialized
+BROWSER LOG: ✅ Critical fixes loaded
+BROWSER LOG: ✅ Combined fixes.js loaded - includes error-overlay, missing-functions, league-creation-fix, team-selection-fix, navbar-fix, dom-helpers-fix, and critical-fixes
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER LOG: ✅ Trade system (manual + CPU) loaded and optimized for value
+BROWSER LOG: ✅ Draft system fixed and loaded
+BROWSER LOG: ✅ Scheme Management system loaded
+BROWSER LOG: ✅ PlayerStatsViewer initialized and enhanced with Training Potential
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER ERROR: [Error [SyntaxError]: Identifier 'notes' has already been declared]
+BROWSER LOG: 🔒 Hiding game results modal
+BROWSER LOG: ✅ Premium UI interactions initialized
+BROWSER LOG: Rebuilding league metadata...
+BROWSER LOG: Dashboard rendered with 0 leagues.
+BROWSER LOG: Owner mode system initialized
+BROWSER LOG: 🔒 Hiding game results modal
+BROWSER LOG: ✅ FootballDB connected: football_sim_db
+BROWSER LOG: 🚀 Initializing complete navigation fix...
+BROWSER LOG: 🔧 Checking navigation HTML...
+BROWSER LOG: Adding missing nav item: Standings
+BROWSER LOG: ✅ Navigation HTML checked and fixed
+BROWSER LOG: 🎨 Navigation styles are in style.css
+BROWSER LOG: 🔧 Setting up enhanced navigation...
+BROWSER LOG: ✅ Navigation toggle setup complete
+BROWSER LOG: ✅ Enhanced navigation set up
+BROWSER LOG: ✅ Complete navigation fix initialized
+BROWSER LOG: 🎯 Running initial route...
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+BROWSER LOG: 🎯 Game not ready - ensuring onboarding modal is visible
+BROWSER LOG: ✅ Critical fixes already initialized
+BROWSER LOG: ✅ Start Season button clicked
+BROWSER LOG: initNewGame function not available
+  ✘  1 tests/daily_regression.spec.js:5:5 › Daily Regression Pass › Playability Smoke Test & State Audit (4.5s)
+  ✘  2 tests/daily_regression.spec.js:81:5 › Daily Regression Pass › Contracts & Free Agency (1.8s)
+  ✘  3 tests/daily_regression.spec.js:153:5 › Daily Regression Pass › Mobile UI Check (1.8s)
+  ✘  4 tests/daily_regression.spec.js:196:5 › Daily Regression Pass › Persistence Check (2.0s)
+  ✘  5 tests/daily_regression.spec.js:242:5 › Daily Regression Pass › Strategy Persistence (1.8s)
+  ✘  6 tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention (1.8s)
+  ✘  7 tests/daily_regression.spec.js:373:5 › Daily Regression Pass › High Stakes Visuals (1.7s)
+  ✘  8 tests/daily_regression.spec.js:400:5 › Daily Regression Pass › Legacy & Retirement Verification (1.7s)
+
+
+  1) tests/daily_regression.spec.js:5:5 › Daily Regression Pass › Playability Smoke Test & State Audit
+
+    Error: page.evaluate: TypeError: Cannot read properties of null (reading 'teams')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:40)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:40)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:43:39
+
+    Error Context: test-results/tests-daily_regression-Dai-1e61e-lity-Smoke-Test-State-Audit/error-context.md
+
+  2) tests/daily_regression.spec.js:81:5 › Daily Regression Pass › Contracts & Free Agency ─────────
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:90:20
+
+    Error Context: test-results/tests-daily_regression-Dai-35e27--Pass-Contracts-Free-Agency/error-context.md
+
+  3) tests/daily_regression.spec.js:153:5 › Daily Regression Pass › Mobile UI Check ────────────────
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:159:21
+
+    Error Context: test-results/tests-daily_regression-Daily-Regression-Pass-Mobile-UI-Check/error-context.md
+
+  4) tests/daily_regression.spec.js:196:5 › Daily Regression Pass › Persistence Check ──────────────
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:2:35)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:2:35)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:202:20
+
+    Error Context: test-results/tests-daily_regression-Dai-eea01-sion-Pass-Persistence-Check/error-context.md
+
+  5) tests/daily_regression.spec.js:242:5 › Daily Regression Pass › Strategy Persistence ───────────
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:247:20
+
+    Error Context: test-results/tests-daily_regression-Dai-fe45d-n-Pass-Strategy-Persistence/error-context.md
+
+  6) tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention ──────
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:292:20
+
+    Error Context: test-results/tests-daily_regression-Dai-d26f2-s-Replay-Exploit-Prevention/error-context.md
+
+  7) tests/daily_regression.spec.js:373:5 › Daily Regression Pass › High Stakes Visuals ────────────
+
+    Error: page.evaluate: TypeError: window.LiveGameViewer is not a constructor
+        at eval (eval at evaluate (:290:30), <anonymous>:2:59)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:2:59)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:378:20
+
+    Error Context: test-results/tests-daily_regression-Dai-a1b43-on-Pass-High-Stakes-Visuals/error-context.md
+
+  8) tests/daily_regression.spec.js:400:5 › Daily Regression Pass › Legacy & Retirement Verification
+
+    Error: page.evaluate: TypeError: Cannot read properties of undefined (reading 'startNewLeague')
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at eval (eval at evaluate (:290:30), <anonymous>:3:37)
+        at UtilityScript.evaluate (<anonymous>:292:16)
+        at UtilityScript.<anonymous> (<anonymous>:1:44)
+        at /app/tests/daily_regression.spec.js:406:20
+
+    Error Context: test-results/tests-daily_regression-Dai-60c1d-acy-Retirement-Verification/error-context.md
+
+  8 failed
+    tests/daily_regression.spec.js:5:5 › Daily Regression Pass › Playability Smoke Test & State Audit
+    tests/daily_regression.spec.js:81:5 › Daily Regression Pass › Contracts & Free Agency ──────────
+    tests/daily_regression.spec.js:153:5 › Daily Regression Pass › Mobile UI Check ─────────────────
+    tests/daily_regression.spec.js:196:5 › Daily Regression Pass › Persistence Check ───────────────
+    tests/daily_regression.spec.js:242:5 › Daily Regression Pass › Strategy Persistence ────────────
+    tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention ───────
+    tests/daily_regression.spec.js:373:5 › Daily Regression Pass › High Stakes Visuals ─────────────
+    tests/daily_regression.spec.js:400:5 › Daily Regression Pass › Legacy & Retirement Verification

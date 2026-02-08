@@ -2540,6 +2540,13 @@ class GameController {
             }
             console.log('🔄 Router navigating to:', viewName);
 
+            // Cleanup Live Game if leaving
+            if (window.liveGameViewer && viewName !== 'game-sim') {
+                if (window.liveGameViewer.isPlaying || window.liveGameViewer.isPaused) {
+                    window.liveGameViewer.stopGame();
+                }
+            }
+
             // Guard: If league data is missing and we're trying to render
             // a game view, redirect to dashboard instead of crashing
             const gameViews = ['hub', 'roster', 'contracts', 'cap', 'schedule',
