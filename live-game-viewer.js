@@ -908,16 +908,12 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              if (play.playType.includes('pass')) {
+              if (play.result === 'turnover_downs') {
+                  this.fieldEffects.spawnParticles(endPct, 'defense_stop');
+              } else if (play.playType && play.playType.includes('pass')) {
                   this.fieldEffects.spawnParticles(endPct, 'interception');
               } else {
                   this.fieldEffects.spawnParticles(endPct, 'fumble');
-              if (play.message && play.message.toLowerCase().includes('intercept')) {
-                   this.fieldEffects.spawnParticles(endPct, 'interception');
-              } else if (play.message && play.message.toLowerCase().includes('fumble')) {
-                   this.fieldEffects.spawnParticles(endPct, 'fumble');
-              } else {
-                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
@@ -1944,38 +1940,34 @@ class LiveGameViewer {
                  this.fieldEffects.spawnParticles(pct, 'touchdown');
             }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-            if (play.playType.includes('pass')) soundManager.playIntercept();
-            else soundManager.playFumble();
-
-            soundManager.playDefenseStop();
-
-            if (play.message && play.message.toLowerCase().includes('intercept')) {
-                 soundManager.playInterception();
-            } else if (play.message && play.message.toLowerCase().includes('fumble')) {
-                 soundManager.playFumble();
+            // Sound Logic
+            if (play.result === 'turnover_downs') {
+                soundManager.playDefenseStop();
+            } else if (play.playType && play.playType.includes('pass')) {
+                soundManager.playInterception();
             } else {
-                 soundManager.playDefenseStop();
+                soundManager.playFumble();
             }
-            soundManager.playFailure();
-            // Intense shake
+
+            // Visual Logic
             if (this.container) this.container.classList.add('shake-hard');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
 
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('defense-stop', 'STOPPED!');
+                this.triggerFloatText('TURNOVER ON DOWNS', 'bad');
+            } else if (play.playType && play.playType.includes('pass')) {
+                this.triggerVisualFeedback('turnover', 'INTERCEPTED!');
+                this.triggerFloatText('INTERCEPTION!', 'bad');
             } else {
-                this.triggerVisualFeedback('defense-stop', 'TURNOVER!');
+                this.triggerVisualFeedback('fumble', 'FUMBLE!');
+                this.triggerFloatText('FUMBLE!', 'bad');
             }
 
-            // Screen shake
-            if (this.container) this.container.classList.add('shake');
-            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
             setTimeout(() => {
                 if (this.container) this.container.classList.remove('shake-hard');
                 else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake-hard');
             }, 500);
-
-            this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFieldGoalMiss();
             this.triggerShake();
@@ -1989,6 +1981,7 @@ class LiveGameViewer {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
             this.triggerFloatText('BIG PLAY!');
+            this.triggerVisualFeedback('big-play', 'BIG PLAY!');
 
             if (this.fieldEffects) {
                 const isHome = this.gameState.ballPossession === 'home';

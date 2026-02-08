@@ -2148,3 +2148,21 @@ select:disabled {
     box-shadow: 0 0 10px #ff4500;
     animation: pulse-glow 0.5s infinite;
 }
+
+/* Fumble Overlay */
+.game-event-overlay.fumble .event-text {
+  color: #D2691E; /* Chocolate */
+  text-shadow: 2px 2px 0px #8B4513;
+  animation: shake-hard 0.5s;
+  border: 4px dashed #D2691E;
+  padding: 15px;
+  background: rgba(0,0,0,0.8);
+  border-radius: 12px;
+}
+.game-event-overlay.fumble::before {
+  content: '🏈❓';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: shake 0.5s;
+}

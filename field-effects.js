@@ -60,16 +60,16 @@ export class FieldEffects {
         const x = (xPct / 100) * this.canvas.width;
         const y = this.canvas.height / 2; // Middle of field mostly
 
-        const count = type === 'touchdown' ? 80 : // Increased from 50
-                      type === 'sack' ? 30 :
+        const count = type === 'touchdown' ? 120 : // Increased for impact
+                      type === 'sack' ? 40 :
                       type === 'kick' ? 15 :
-                      type === 'catch' ? 10 :
-                      type === 'first_down' ? 20 :
-                      type === 'field_goal' ? 40 :
-                      type === 'defense_stop' ? 45 :
-                      type === 'interception' ? 50 :
-                      type === 'fumble' ? 35 :
-                      type === 'big_play' ? 60 : 25;
+                      type === 'catch' ? 15 :
+                      type === 'first_down' ? 30 :
+                      type === 'field_goal' ? 60 :
+                      type === 'defense_stop' ? 50 :
+                      type === 'interception' ? 60 :
+                      type === 'fumble' ? 40 :
+                      type === 'big_play' ? 80 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -92,108 +92,92 @@ export class FieldEffects {
             size: (window.Utils?.random || Math.random)() * 3 + 1,
             color: '#fff',
             gravity: 0,
+            friction: 0.96, // Add friction for drag
             type: type
         };
 
         if (type === 'touchdown') {
-            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 40; // Spread X
-            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 20; // Spread Y
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 12; // Increased spread
-            p.vy = ((window.Utils?.random || Math.random)() * -8) - 4; // Higher burst upwards
-            p.color = (window.Utils?.random || Math.random)() > 0.3 ? '#FFD700' : ((window.Utils?.random || Math.random)() > 0.5 ? '#FFFFFF' : '#FFA500'); // Gold, White, Orange
-            p.gravity = 0.2;
-            p.life = 1.5;
-            p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 40;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 20;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15; // Higher velocity
+            p.vy = ((window.Utils?.random || Math.random)() * -10) - 5;
+            p.color = (window.Utils?.random || Math.random)() > 0.3 ? '#FFD700' : ((window.Utils?.random || Math.random)() > 0.5 ? '#FFFFFF' : '#FFA500');
+            p.gravity = 0.25;
+            p.life = 1.8;
+            p.size = (window.Utils?.random || Math.random)() * 6 + 2;
         } else if (type === 'big_play') {
             p.x += ((window.Utils?.random || Math.random)() - 0.5) * 30;
             p.y += ((window.Utils?.random || Math.random)() - 0.5) * 30;
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 12;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 12;
             p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#0A84FF' : '#FFD700'; // Blue/Gold
-            p.life = 1.2;
-            p.decay = 0.03;
-            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
+            p.life = 1.5;
+            p.decay = 0.02;
+            p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+            p.friction = 0.94; // Slows down
         } else if (type === 'field_goal') {
-            // Rising sparkles
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 5;
-            p.vy = ((window.Utils?.random || Math.random)() * -6) - 2; // Up
-            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FFD700' : '#FFFFE0'; // Gold / Light Yellow
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+            p.vy = ((window.Utils?.random || Math.random)() * -8) - 3;
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FFD700' : '#FFFFE0';
             p.life = 1.5;
             p.decay = 0.015;
             p.size = (window.Utils?.random || Math.random)() * 3 + 1;
-            p.gravity = -0.05; // Slight float up
+            p.gravity = 0.05; // Fall slowly
         } else if (type === 'sack') {
-            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 15;
-            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 15;
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
-            p.color = '#888'; // Dust
-            p.decay = 0.05; // Fast fade
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 20;
+            p.y += ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8;
+            p.vy = ((window.Utils?.random || Math.random)() * -5); // Up slightly
+            p.color = '#888';
+            p.decay = 0.04;
+            p.gravity = 0.1;
         } else if (type === 'tackle') {
             p.color = '#fff';
-            p.decay = 0.03;
-        } else if (type === 'kick') {
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8; // Fast burst
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 8;
-            p.color = '#fff';
-            p.decay = 0.08; // Very fast fade
-            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
-        } else if (type === 'catch') {
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 3;
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 3;
-            p.color = this.getThemeColor('--accent', '#87CEEB'); // Sky Blue
-            p.decay = 0.1;
-            p.size = (window.Utils?.random || Math.random)() * 2 + 1;
-        } else if (type === 'first_down') {
-            p.x = x + ((window.Utils?.random || Math.random)() - 0.5) * 5; // Vertical stripish
-            p.y = (window.Utils?.random || Math.random)() * this.canvas.height;
-            p.vx = 0;
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 2;
-            p.color = '#FFD700'; // Yellow
-            p.life = 0.8;
-            p.decay = 0.02;
-            p.size = Math.random() * 2 + 1;
-        } else if (type === 'field_goal') {
-            p.vx = (Math.random() - 0.5) * 4;
-            p.vy = (Math.random() * -8) - 4; // Fast Upwards
-            p.color = Math.random() > 0.3 ? '#FFD700' : '#FFFFFF'; // Gold dominant
-            p.gravity = 0.2;
-            p.size = Math.random() * 3 + 2;
-            p.decay = 0.015;
-        } else if (type === 'interception') {
-            p.vx = (Math.random() - 0.5) * 12; // Fast Burst
-            p.vy = (Math.random() - 0.5) * 12;
-            p.color = '#FF453A'; // Red
-            p.decay = 0.06;
-            p.size = Math.random() * 4 + 2;
-        } else if (type === 'fumble') {
-            p.vx = (Math.random() - 0.5) * 8;
-            p.vy = (Math.random() - 0.5) * 8;
-            p.color = '#8B4513'; // Brown (Ball color)
             p.decay = 0.05;
-            p.gravity = 0.3; // Drops to ground
-            p.size = Math.random() * 3 + 1;
-            p.size = (window.Utils?.random || Math.random)() * 2 + 1;
-        } else if (type === 'defense_stop') {
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15; // Fast explosion
-            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 15;
-            p.color = (window.Utils?.random || Math.random)() > 0.6 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White
-            p.decay = 0.05; // Fast fade
-            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
-            p.gravity = 0.05;
-        } else if (type === 'interception') {
+            p.vx *= 0.5; p.vy *= 0.5; // Small puff
+        } else if (type === 'kick') {
             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 10;
             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 10;
-            p.color = (window.Utils?.random || Math.random)() > 0.5 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF'; // Red/White Alert
+            p.color = '#fff';
+            p.decay = 0.08;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
+        } else if (type === 'catch') {
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 5;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 5;
+            p.color = this.getThemeColor('--accent', '#87CEEB');
+            p.decay = 0.08;
+            p.size = (window.Utils?.random || Math.random)() * 3 + 1;
+        } else if (type === 'first_down') {
+            p.x = x + ((window.Utils?.random || Math.random)() - 0.5) * 10;
+            p.y = (window.Utils?.random || Math.random)() * this.canvas.height;
+            p.vx = 0;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 1; // Float
+            p.color = '#FFD700';
+            p.life = 1.0;
+            p.decay = 0.01;
+            p.size = Math.random() * 3 + 1;
+        } else if (type === 'interception') {
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 15;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 15;
+            p.color = this.getThemeColor('--danger', '#FF453A');
             p.decay = 0.04;
-            p.size = (window.Utils?.random || Math.random)() * 3 + 2;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 2;
+            p.friction = 0.92;
         } else if (type === 'fumble') {
-            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
-            p.vy = ((window.Utils?.random || Math.random)() * -4) - 2; // Up and chaotic
-            p.color = '#D2691E'; // Chocolate / Brown
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8;
+            p.vy = ((window.Utils?.random || Math.random)() * -5) - 2;
+            p.color = '#D2691E'; // Brown
             p.decay = 0.03;
-            p.gravity = 0.3; // Heavy
-            p.size = (window.Utils?.random || Math.random)() * 4 + 1;
+            p.gravity = 0.35; // Heavy
+            p.size = (window.Utils?.random || Math.random)() * 5 + 1;
+            p.friction = 0.98; // Bouncy?
+        } else if (type === 'defense_stop') {
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 20;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 20;
+            p.color = (window.Utils?.random || Math.random)() > 0.6 ? this.getThemeColor('--danger', '#FF453A') : '#FFFFFF';
+            p.decay = 0.06;
+            p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+            p.friction = 0.9; // Fast stop
         }
 
         return p;
@@ -217,10 +201,22 @@ export class FieldEffects {
                 continue;
             }
 
+            // Apply Physics
+            if (p.friction) {
+                p.vx *= p.friction;
+                p.vy *= p.friction;
+            }
+
             p.x += p.vx;
             p.y += p.vy;
 
             if (p.gravity) p.vy += p.gravity;
+
+            // Bounce off bottom (ground)
+            if (p.y > this.canvas.height && p.gravity > 0) {
+                p.y = this.canvas.height;
+                p.vy *= -0.6; // Bounce with dampening
+            }
 
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;
