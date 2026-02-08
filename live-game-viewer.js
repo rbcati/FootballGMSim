@@ -1,4 +1,3 @@
-// live-game-viewer.js - Live game simulation with play-by-play and play calling
 import { commitGameResult } from './game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
@@ -782,18 +781,8 @@ class LiveGameViewer {
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
               }
-          // Catch Effect
-          if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
-               if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
-               soundManager.playCatch(); // Sync sound with visual
-               // Marker Animation
-               soundManager.playCatch();
-               if (skillMarker) {
-                   skillMarker.classList.add('marker-catch');
-                   setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
-               }
-          }
 
+      }
       } else if (play.playType.startsWith('run')) {
           // RUN PLAY
           const handoffDuration = 400 * durationScale;
@@ -908,10 +897,6 @@ class LiveGameViewer {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-              if (play.playType.includes('pass')) {
-                  this.fieldEffects.spawnParticles(endPct, 'interception');
-              } else {
-                  this.fieldEffects.spawnParticles(endPct, 'fumble');
               if (play.message && play.message.toLowerCase().includes('intercept')) {
                    this.fieldEffects.spawnParticles(endPct, 'interception');
               } else if (play.message && play.message.toLowerCase().includes('fumble')) {
@@ -1165,8 +1150,8 @@ class LiveGameViewer {
     const offenseStrength = this.calculateOffenseStrength(offense.team);
     const defenseStrength = this.calculateDefenseStrength(defense.team);
 
-    // Momentum Modifier
-    const momentumMod = (gameState.momentum || 0) / 2000;
+    // Momentum Modifier - Increased Impact (Game Juice)
+    const momentumMod = (gameState.momentum || 0) / 1000; // Double effect (max +/- 10%)
     const momentumEffect = gameState.ballPossession === 'home' ? momentumMod : -momentumMod;
 
     // Defense Modifiers
@@ -1905,11 +1890,27 @@ class LiveGameViewer {
     if (!this.isSkipping) {
         // Combo Feedback
         if (comboIncreased && this.combo > 1) {
+             // Visual Pop
              this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
              soundManager.playPing();
+
+             // Major Combo
+             if (this.combo >= 3) {
+                 this.triggerVisualFeedback('combo', `x${this.combo}`);
+                 if (this.fieldEffects) {
+                     const pct = this.getVisualPercentage(this.gameState[this.gameState.ballPossession].yardLine, this.gameState.ballPossession === 'home');
+                     this.fieldEffects.spawnParticles(pct, 'combo');
+                 }
+             }
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
+             // Red Flash
+             const breaker = document.createElement('div');
+             breaker.className = 'combo-breaker';
+             document.body.appendChild(breaker);
+             setTimeout(() => breaker.remove(), 400);
+
              if (soundManager.playComboBreaker) soundManager.playComboBreaker();
              else soundManager.playFailure();
         }
@@ -1988,7 +1989,17 @@ class LiveGameViewer {
         } else if (play.result === 'big_play') {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
-            this.triggerFloatText('BIG PLAY!');
+
+            // Big Play Overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'big-play-overlay';
+            overlay.innerHTML = '<div class="text">BIG PLAY!</div>';
+            const parent = this.viewMode ? this.container : this.modal;
+            if (parent) {
+                if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+                parent.appendChild(overlay);
+                setTimeout(() => overlay.remove(), 1200);
+            }
 
             if (this.fieldEffects) {
                 const isHome = this.gameState.ballPossession === 'home';
@@ -2111,6 +2122,12 @@ class LiveGameViewer {
     overlay.className = `game-event-overlay ${type} pop-in`;
     overlay.innerHTML = `<div class="event-text">${text}</div>`;
 
+    // Special Combo Style
+    if (type === 'combo') {
+        overlay.classList.add('combo-popup');
+        overlay.innerHTML = `<div class="combo-text-pop">${text}</div>`;
+    }
+
     if (getComputedStyle(parent).position === 'static') {
         parent.style.position = 'relative';
     }
@@ -2219,6 +2236,7 @@ class LiveGameViewer {
             el.classList.add('pulse-score');
             this.animateNumber(el, this.lastAwayScore, away.score, 1000);
         }
+    }
     // Initialize scoreboard structure if missing
     if (!scoreboard.querySelector('#scoreHome')) {
         scoreboard.innerHTML = `
@@ -2557,9 +2575,11 @@ class LiveGameViewer {
              const userScore = isHome ? this.gameState.home.score : this.gameState.away.score;
              const oppScore = isHome ? this.gameState.away.score : this.gameState.home.score;
 
+             // Ensure sounds stop before victory
+             if (this.intervalId) clearTimeout(this.intervalId);
+
              if (userScore > oppScore) {
-                 soundManager.playCheer();
-                 if (soundManager.playHorns) soundManager.playHorns();
+                 soundManager.playVictory(); // Use new victory sound
                  launchConfetti();
                  this.showGameOverOverlay('VICTORY', userScore, oppScore, 'positive');
              } else if (userScore < oppScore) {

@@ -84,23 +84,27 @@ class SoundManager {
 
     playTouchdown() {
         if (!this.enabled || this.muted) return;
-        // Crowd Roar
-        this.playNoise(3.0, 0.3);
+        // Crowd Roar - Extended
+        this.playNoise(4.0, 0.35);
 
         // C Major Triad + Octave: C4, E4, G4, C5
         const notes = [261.63, 329.63, 392.00, 523.25];
-        // Major Triad + Octave fanfare
-        const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
 
-        // Rapid arpeggio
+        // Rapid arpeggio with harmony
         notes.forEach((freq, i) => {
-            this.playTone(freq, 'triangle', 0.4, 0.15, null, i * 80);
+            this.playTone(freq, 'triangle', 0.4, 0.2, null, i * 80);
+            // Harmony (Major 3rd above)
+            this.playTone(freq * 1.25, 'sawtooth', 0.2, 0.2, null, i * 80);
         });
 
-        // Power chord finish
-        this.playTone(261.63, 'sawtooth', 0.8, 0.1, null, 400); // Low C
-        this.playTone(523.25, 'square', 0.8, 0.1, null, 400);   // High C
-        this.playNoise(1.0, 0.1, 400); // Crowd swell
+        // Power chord finish - Richer
+        setTimeout(() => {
+            this.playTone(261.63, 'sawtooth', 0.8, 0.6, null, 0); // Low C
+            this.playTone(329.63, 'sawtooth', 0.6, 0.6, null, 0); // E
+            this.playTone(392.00, 'sawtooth', 0.6, 0.6, null, 0); // G
+            this.playTone(523.25, 'square', 0.8, 0.6, null, 0);   // High C
+            this.playNoise(1.5, 0.2, 0); // Impact swell
+        }, 400);
     }
 
     playCatch() {
@@ -127,11 +131,17 @@ class SoundManager {
 
     playDefenseStop() {
         if (!this.enabled || this.muted) return;
-        // Punchy "Stop" sound
-        this.playTone(150, 'sawtooth', 0.2, 0.2, 50);
-        this.playTone(100, 'square', 0.3, 0.1, 40);
+        // Punchy "Stop" sound - Faster decay for punch
+        this.playTone(150, 'sawtooth', 0.2, 0.1, 40);
+        this.playTone(100, 'square', 0.4, 0.05, 20); // Snappier
         // Resonant hit
-        this.playNoise(0.2, 0.3);
+        this.playNoise(0.15, 0.4);
+    }
+
+    playGameStart() {
+        if (!this.enabled || this.muted) return;
+        this.playWhistle();
+        setTimeout(() => this.playNoise(2.0, 0.2), 200); // Crowd cheer
     }
 
     playInterception() {
@@ -183,12 +193,9 @@ class SoundManager {
 
     playKick() {
         if (!this.enabled || this.muted) return;
-        this.playTone(200, 'square', 0.15, 0.2, 50);
-        this.playTone(60, 'sine', 0.2, 0.3); // Low Thud
-        this.playNoise(0.1, 0.1); // Whoosh
-        // Deep thud
-        this.playTone(150, 'sine', 0.15, 0.3, 40);
-        this.playNoise(0.1, 0.15); // Impact noise
+        // Thud focused
+        this.playTone(60, 'sine', 0.4, 0.15); // Low Thud
+        this.playNoise(0.1, 0.2); // Impact
     }
 
     playPing() {
@@ -206,9 +213,9 @@ class SoundManager {
 
     playFieldGoal() {
         if (!this.enabled || this.muted) return;
-        // Success "Ding"
-        this.playTone(1046.50, 'sine', 1.0, 0.1); // High C
-        this.playTone(1318.51, 'sine', 1.5, 0.05, null, 100); // High E
+        // High-pitched "Ding" - very clean
+        this.playTone(1200, 'sine', 0.1, 0.4);
+        this.playTone(2400, 'sine', 0.05, 0.2); // Harmonic
         // Mini Cheer
         this.playNoise(1.5, 0.15, 200);
     }

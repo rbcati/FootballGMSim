@@ -60,10 +60,11 @@ export class FieldEffects {
         const x = (xPct / 100) * this.canvas.width;
         const y = this.canvas.height / 2; // Middle of field mostly
 
-        const count = type === 'touchdown' ? 80 : // Increased from 50
-                      type === 'sack' ? 30 :
+        const count = type === 'touchdown' ? 120 : // Increased for juice
+                      type === 'sack' ? 40 :
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
+                      type === 'combo' ? 30 : // New Combo type
                       type === 'first_down' ? 20 :
                       type === 'field_goal' ? 40 :
                       type === 'defense_stop' ? 45 :
@@ -104,6 +105,15 @@ export class FieldEffects {
             p.gravity = 0.2;
             p.life = 1.5;
             p.size = (window.Utils?.random || Math.random)() * 5 + 2;
+        } else if (type === 'combo') {
+            // Star burst effect
+            p.x += ((window.Utils?.random || Math.random)() - 0.5) * 20;
+            p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 8;
+            p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 8;
+            p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#FFD700' : '#FFF';
+            p.life = 0.8;
+            p.decay = 0.04;
+            p.size = (window.Utils?.random || Math.random)() * 4 + 1;
         } else if (type === 'big_play') {
             p.x += ((window.Utils?.random || Math.random)() - 0.5) * 30;
             p.y += ((window.Utils?.random || Math.random)() - 0.5) * 30;

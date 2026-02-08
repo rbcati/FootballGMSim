@@ -1289,37 +1289,53 @@ select:disabled {
 
 /* Game Over Banner */
 .game-over-banner {
-    background: rgba(0,0,0,0.9);
-    padding: 20px 40px;
-    border-radius: 12px;
+    background: rgba(0,0,0,0.95);
+    padding: 30px 50px;
+    border-radius: 16px;
     text-align: center;
-    border: 2px solid rgba(255,255,255,0.1);
-    box-shadow: 0 0 50px rgba(0,0,0,0.5);
+    border: 3px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 80px rgba(0,0,0,0.8);
     animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     max-width: 90%;
-    width: 600px;
+    width: 650px;
+    position: relative;
+    overflow: hidden;
 }
 
 .game-over-banner h2 {
-    font-size: 4rem;
-    margin: 0 0 10px 0;
+    font-size: 5rem;
+    font-weight: 900;
+    margin: 0 0 20px 0;
     text-transform: uppercase;
-    letter-spacing: 4px;
+    letter-spacing: 6px;
     line-height: 1;
+    position: relative;
+    z-index: 2;
+}
+
+.game-over-banner.victory {
+    border-color: #FFD700;
+    box-shadow: 0 0 100px rgba(255, 215, 0, 0.3);
 }
 
 .game-over-banner.victory h2 {
-    background: linear-gradient(to bottom, #4cd964, #28a745);
+    background: linear-gradient(to bottom, #FFD700, #FFA500);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 10px rgba(40, 167, 69, 0.5));
+    filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8));
+    animation: pulse-text-glow 2s infinite;
+}
+
+.game-over-banner.defeat {
+    border-color: #FF3B30;
+    box-shadow: 0 0 100px rgba(255, 59, 48, 0.3);
 }
 
 .game-over-banner.defeat h2 {
-    background: linear-gradient(to bottom, #ff3b30, #dc3545);
+    background: linear-gradient(to bottom, #FF3B30, #990000);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    filter: drop-shadow(0 0 10px rgba(220, 53, 69, 0.5));
+    filter: drop-shadow(0 0 20px rgba(255, 59, 48, 0.5));
 }
 
 .game-over-mvp {
@@ -2118,12 +2134,108 @@ select:disabled {
 /* Combo Meter */
 .combo-bar-container {
     width: 100%;
-    height: 6px;
+    height: 8px;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
+    border-radius: 4px;
     margin-top: 5px;
     overflow: hidden;
     display: flex;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
+}
+
+/* Big Play Overlay */
+.big-play-overlay {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 6rem;
+    font-weight: 900;
+    color: #fff;
+    text-transform: uppercase;
+    text-align: center;
+    pointer-events: none;
+    z-index: 2500;
+    animation: bigPlayPop 1.2s ease-out forwards;
+}
+
+.big-play-overlay::before {
+    content: '⚡';
+    display: block;
+    font-size: 8rem;
+    margin-bottom: -20px;
+    filter: drop-shadow(0 0 20px #0A84FF);
+}
+
+.big-play-overlay .text {
+    background: linear-gradient(to bottom, #fff, #0A84FF);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 30px #0A84FF);
+}
+
+@keyframes bigPlayPop {
+    0% { transform: translate(-50%, -50%) scale(0.1); opacity: 0; }
+    40% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+    60% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+}
+
+/* Combo Popup */
+.combo-popup {
+    position: absolute;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 3rem;
+    font-weight: 900;
+    color: #FFD700;
+    text-shadow: 0 0 10px #FFA500, 0 4px 0 #8B4500;
+    z-index: 2500;
+    pointer-events: none;
+    animation: comboPopIn 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes comboPopIn {
+    0% { transform: translateX(-50%) scale(0.5) translateY(50px); opacity: 0; }
+    50% { transform: translateX(-50%) scale(1.2) translateY(0); opacity: 1; }
+    100% { transform: translateX(-50%) scale(1) translateY(-50px); opacity: 0; }
+}
+
+/* Combo Breaker */
+.combo-breaker {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(255, 0, 0, 0.3);
+    z-index: 2400;
+    pointer-events: none;
+    animation: flashRed 0.4s ease-out forwards;
+}
+
+@keyframes flashRed {
+    0% { opacity: 0; }
+    20% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+/* Momentum Shift Visual */
+.momentum-shift-indicator {
+    position: absolute;
+    top: 20%;
+    right: 10%;
+    font-size: 1.5rem;
+    font-weight: bold;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid rgba(255,255,255,0.2);
+    animation: slideInRight 0.5s ease-out forwards, fadeOut 0.5s ease-in 1.5s forwards;
+    z-index: 2000;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(50px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
 }
 
 .combo-bar-segment {
