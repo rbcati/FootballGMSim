@@ -507,6 +507,12 @@ class LiveGameViewer {
           else if (options.easing === 'bounce') easing = easeBounce;
 
           const animate = (currentTime) => {
+              // Safety break for cleanup
+              if (this.isGameEnded || !this.checkUI()) {
+                  if (options.animationClass) element.classList.remove(options.animationClass);
+                  return resolve();
+              }
+
               if (this.isSkipping) {
                    element.style.left = `${endX}%`;
                    if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
@@ -1397,12 +1403,12 @@ class LiveGameViewer {
         // Touchdown!
         play.result = 'touchdown';
         play.message = `TOUCHDOWN! ${offense.team.name || offense.team.abbr}`;
-        offense.score += 7;
+        offense.score += 6;
 
         // Update Quarter Score
         const qIdx = gameState.quarter - 1;
         if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
-            gameState.quarterScores[gameState.ballPossession][qIdx] += 7;
+            gameState.quarterScores[gameState.ballPossession][qIdx] += 6;
         }
 
         // Stats for TD
