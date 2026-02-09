@@ -1811,6 +1811,10 @@ select:disabled {
   animation: bob 0.5s infinite ease-in-out;
 }
 
+.run-bob {
+  animation: bob 0.3s infinite linear; /* Faster, more consistent */
+}
+
 /* Smooth Fade Transitions */
 .fade-out {
   opacity: 0 !important;

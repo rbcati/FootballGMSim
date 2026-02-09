@@ -362,9 +362,9 @@ class LiveGameViewer {
 
       const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // Detect Jump (> 15% difference implies teleportation/turnover)
+      // Detect Jump (> 25% difference implies teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 15;
+      const isTeleport = currentLeft > 0 && dist > 25;
 
       if (isTeleport) {
           // Fade Out Sequence
@@ -527,6 +527,11 @@ class LiveGameViewer {
               element.style.left = `${currentX}%`;
               if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
+              // Trail Particle Effect
+              if (options.trail && this.fieldEffects && progress < 1 && Math.random() > 0.7) {
+                  this.fieldEffects.spawnParticles(currentX, 'kick_trail');
+              }
+
               // Y Position (Arc) & Rotation
               if (arcHeight || shouldRotate) {
                   let transform = 'translate(-50%, -50%)';
@@ -540,13 +545,13 @@ class LiveGameViewer {
 
                   // Rotation logic
                   if (shouldRotate) {
-                      const rotations = options.rotateType === 'spiral' ? 3 : 2;
+                      const rotations = options.rotateType === 'spiral' ? 6 : 3; // Increased rotation speed
                       const rot = easeProgress * (360 * rotations);
                       transform += ` rotate(${rot}deg)`;
 
                       // Scale wobble for spiral
                       if (options.rotateType === 'spiral') {
-                          const wobble = 1 - (Math.sin(easeProgress * Math.PI * 4) * 0.1);
+                          const wobble = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.05);
                           transform += ` scale(${wobble})`;
                       }
                   }
@@ -707,20 +712,13 @@ class LiveGameViewer {
 
           // Receiver runs route
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: dropbackDuration + 400 * durationScale, easing: 'easeInOut', animationClass: 'bob'
+              startX: startPct, endX: endPct, duration: dropbackDuration + 400 * durationScale, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           // Ball snaps to QB
-          if (shouldSnap) {
-             animations.push(this.animateTrajectory(ballEl, {
-                 startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
-             }));
-          } else {
-             // If fluid, maybe just animate from current?
-             animations.push(this.animateTrajectory(ballEl, {
-                 startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
-             }));
-          }
+          animations.push(this.animateTrajectory(ballEl, {
+              startX: shouldSnap ? startPct : currentLeft, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut'
+          }));
 
           // Def Logic
           if (defMarker) {
@@ -758,13 +756,17 @@ class LiveGameViewer {
                   arcHeight: 25,
                   easing: 'linear', // Improved physics
                   rotate: true,
-                  rotateType: 'spiral'
+                  rotateType: 'spiral',
+                  trail: true // Add trail!
               });
 
               // Pulse if TD
               if (play.result === 'touchdown') {
                   ballEl.classList.add('animate-pulse');
-                  if (skillMarker) skillMarker.classList.add('celebrate-jump');
+                  if (skillMarker) {
+                      skillMarker.classList.add('celebrate-jump');
+                      // Detailed celebration handled in generic block
+                  }
               }
 
               // Catch Effect
@@ -779,8 +781,13 @@ class LiveGameViewer {
 
               // End of play collision (tackle)
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
-                  if (skillMarker) skillMarker.classList.add('tackle-collision');
-                  if (defMarker) defMarker.classList.add('tackle-collision');
+                  if (skillMarker) skillMarker.classList.add('marker-collision');
+                  if (defMarker) defMarker.classList.add('marker-collision');
+
+                  // Big hit shockwave
+                  if (play.result === 'sack' || play.result === 'big_play' || play.result === 'turnover') {
+                      if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'shockwave');
+                  }
               }
           }
 
@@ -804,13 +811,13 @@ class LiveGameViewer {
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           // Def Logic: Chase
           if (defMarker) {
              animations.push(this.animateTrajectory(defMarker, {
-                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut' // Meet at tackle point
+                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob' // Meet at tackle point
              }));
           }
 
@@ -824,12 +831,16 @@ class LiveGameViewer {
                if (skillMarker) skillMarker.classList.add('celebrate-spin');
           } else {
               if (skillMarker) {
-                  skillMarker.classList.add('tackle-collision'); // Updated to new class
-                  setTimeout(() => skillMarker.classList.remove('tackle-collision'), 300);
+                  skillMarker.classList.add('marker-collision');
+                  setTimeout(() => skillMarker.classList.remove('marker-collision'), 300);
               }
               if (defMarker) {
-                  defMarker.classList.add('tackle-collision');
-                  setTimeout(() => defMarker.classList.remove('tackle-collision'), 300);
+                  defMarker.classList.add('marker-collision');
+                  setTimeout(() => defMarker.classList.remove('marker-collision'), 300);
+              }
+              // Shockwave for big runs ending in tackle
+              if (play.result === 'big_play' && this.fieldEffects) {
+                  this.fieldEffects.spawnParticles(endPct, 'shockwave');
               }
           }
 
@@ -857,7 +868,8 @@ class LiveGameViewer {
               duration: kickDuration,
               arcHeight: arc,
               easing: 'linear', // Projectile motion
-              rotate: true
+              rotate: true,
+              trail: true
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {
