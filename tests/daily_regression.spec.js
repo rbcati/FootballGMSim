@@ -325,12 +325,24 @@ test.describe('Daily Regression Pass', () => {
             const decisionModal = page.locator('#decisionModal');
             if (await decisionModal.isVisible()) {
                 console.log('Decision modal found, dismissing...');
-                // Click the first button (usually "Dismiss" or an option)
-                const btn = decisionModal.locator('button').first();
-                if (await btn.isVisible()) {
-                    await btn.click();
-                    await page.waitForTimeout(500); // Wait for animation
+
+                // Check if we are in the result phase (Step 2)
+                const closeBtn = decisionModal.locator('#closeDecisionModal');
+                if (await closeBtn.isVisible()) {
+                    await closeBtn.click();
+                } else {
+                    // We are in the choice phase (Step 1)
+                    // Click the first choice
+                    const choiceBtn = decisionModal.locator('.decision-btn').first();
+                    if (await choiceBtn.isVisible()) {
+                        await choiceBtn.click();
+                        // Wait for result to appear
+                        await expect(closeBtn).toBeVisible({ timeout: 2000 });
+                        await closeBtn.click();
+                    }
                 }
+                // Wait for modal to be hidden to ensure it doesn't intercept the next click
+                await expect(decisionModal).toBeHidden();
             }
 
             // 2. Look for the "Continue" button specifically (Recap)

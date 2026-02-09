@@ -2622,15 +2622,12 @@ class LiveGameViewer {
       else if (type === 'negative') soundManager.playFailure();
 
       overlay.innerHTML = `
-        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60; background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);">
-            <div style="font-size: 5rem; margin-bottom: 10px;">${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}</div>
-            <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
-            <div class="game-over-score" style="color: #fff; font-weight: 900; font-size: 3rem;">${scoreA} - ${scoreB}</div>
         <div class="${bannerClass}" style="
             border-color: ${mainColor};
             box-shadow: 0 0 60px ${mainColor}60;
             background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);
         ">
+            <div style="font-size: 5rem; margin-bottom: 10px;">${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}</div>
             <h2 style="
                 color: ${mainColor};
                 text-shadow: 0 0 30px ${mainColor}80;
@@ -2653,8 +2650,9 @@ class LiveGameViewer {
             </div>
             ` : ''}
 
-            <div style="margin-top: 30px;">
-                <button class="btn primary" id="dismissOverlay" style="font-size: 1.2rem; padding: 10px 30px;">Continue</button>
+            <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center;">
+                <button class="btn" id="dismissOverlay" style="font-size: 1rem; padding: 10px 20px;">View Stats</button>
+                <button class="btn primary" id="exitToHub" style="font-size: 1rem; padding: 10px 20px;">Return to Hub</button>
             </div>
         </div>
       `;
@@ -2669,6 +2667,18 @@ class LiveGameViewer {
       overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
           overlay.remove();
       });
+
+      const exitBtn = overlay.querySelector('#exitToHub');
+      if (exitBtn) {
+          exitBtn.addEventListener('click', () => {
+              overlay.remove();
+              if (this.viewMode) {
+                  window.location.hash = '#/hub';
+              } else {
+                  this.hideModal();
+              }
+          });
+      }
   }
 
   /**
