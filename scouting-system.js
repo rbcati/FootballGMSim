@@ -27,6 +27,33 @@ const SCOUTING_CONSTANTS = {
   }
 };
 
+// Cache for prospect lookups
+let _prospectCache = null;
+let _lastDraftClass = null;
+let _lastDraftClassLen = 0;
+
+/**
+ * Get prospect by ID with caching
+ * @param {string} prospectId
+ * @returns {Object|undefined}
+ */
+function getProspectById(prospectId) {
+  const draftClass = window.state.draftClass;
+  if (!draftClass) return undefined;
+
+  // Check if cache needs invalidation
+  if (draftClass !== _lastDraftClass || draftClass.length !== _lastDraftClassLen || !_prospectCache) {
+    _prospectCache = new Map();
+    for (const p of draftClass) {
+      _prospectCache.set(p.id, p);
+    }
+    _lastDraftClass = draftClass;
+    _lastDraftClassLen = draftClass.length;
+  }
+
+  return _prospectCache.get(prospectId);
+}
+
 /**
  * Initialize scouting system
  */
@@ -64,7 +91,7 @@ function initializeScoutingSystem() {
  * @returns {Object} Scouting result
  */
 function scoutProspect(prospectId, thoroughness = 'basic') {
-  const prospect = window.state.draftClass?.find(p => p.id === prospectId);
+  const prospect = getProspectById(prospectId);
   if (!prospect) {
     return { success: false, message: 'Prospect not found' };
   }
@@ -598,7 +625,7 @@ window.scoutProspect = function(prospectId, thoroughness) {
  * @param {string} prospectId - Prospect ID
  */
 window.viewScoutingReport = function(prospectId) {
-  const prospect = window.state.draftClass?.find(p => p.id === prospectId);
+  const prospect = getProspectById(prospectId);
   const report = window.state.scouting.scoutingReports[prospectId];
   
   if (!prospect || !report) {
@@ -716,17 +743,11 @@ window.filterProspects = function() {
   
   const prospects = document.querySelectorAll('.prospect-card');
   
-  // Create map for faster lookups
-  const prospectMap = new Map();
-  if (window.state.draftClass) {
-    for (const p of window.state.draftClass) {
-      prospectMap.set(p.id, p);
-    }
-  }
+  // Use cached lookup via getProspectById
 
   prospects.forEach(card => {
     const prospectId = card.dataset.prospectId;
-    const prospect = prospectMap.get(prospectId);
+    const prospect = getProspectById(prospectId);
     const report = window.state.scouting.scoutingReports[prospectId];
     const isScouted = prospect?.scouted || report;
     
