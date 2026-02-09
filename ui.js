@@ -598,28 +598,26 @@ window.renderRoster = function() {
         }
         
         // Sort roster by position and effective rating (from depth chart)
-        const sortedRoster = [...team.roster].sort((a, b) => {
-            if (a.pos !== b.pos) return a.pos.localeCompare(b.pos);
-            // Use effective rating if available, otherwise use OVR
-            const aEff = calculateEffectiveRating ? calculateEffectiveRating(a, team, a.pos) : (a.ovr || 0);
-            const bEff = calculateEffectiveRating ? calculateEffectiveRating(b, team, b.pos) : (b.ovr || 0);
-            return bEff - aEff;
+        // Optimized: Pre-calculate effective rating for sorting and rendering
+        const sortedRoster = [...team.roster].map(player => {
+            const eff = calculateEffectiveRating ? calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0);
+            return { player, eff };
+        }).sort((a, b) => {
+            if (a.player.pos !== b.player.pos) return a.player.pos.localeCompare(b.player.pos);
+            return b.eff - a.eff;
         });
         
-        sortedRoster.forEach(player => {
-            const tr = tbody.insertRow();
+        const fragment = document.createDocumentFragment();
+        sortedRoster.forEach(({ player, eff }) => {
+            const tr = document.createElement('tr');
+            fragment.appendChild(tr);
             tr.dataset.playerId = player.id;
             tr.style.cursor = 'pointer';
             tr.classList.add('clickable');
             
-            // Initialize depth chart stats if not already done
-            if (initializeDepthChartStats) {
-                initializeDepthChartStats(player, team);
-            }
-            
             // Get depth chart data
             const dc = player.depthChart || {};
-            const effectiveRating = calculateEffectiveRating ? calculateEffectiveRating(player, team, player.pos) : (player.ovr || 0);
+            const effectiveRating = eff;
             const depthPosition = dc.depthPosition || 'N/A';
             const playbookKnowledge = dc.playbookKnowledge || 50;
             const chemistry = dc.chemistry || 50;
@@ -748,6 +746,8 @@ window.renderRoster = function() {
                 }
             });
         });
+
+        tbody.appendChild(fragment);
         
         // Assuming these functions are defined elsewhere or not strictly needed for this file's logic
         if (typeof setupRosterEvents === 'function') {
