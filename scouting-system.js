@@ -57,6 +57,9 @@ function initializeScoutingSystem() {
   console.log('Scouting system initialized');
 }
 
+// Cache for prospect lookups to avoid O(N) scans
+const _scoutingProspectCache = new WeakMap();
+
 /**
  * Scout a prospect with specified thoroughness
  * @param {string} prospectId - ID of prospect to scout
@@ -64,7 +67,26 @@ function initializeScoutingSystem() {
  * @returns {Object} Scouting result
  */
 function scoutProspect(prospectId, thoroughness = 'basic') {
-  const prospect = window.state.draftClass?.find(p => p.id === prospectId);
+  let prospect;
+  const draftClass = window.state.draftClass;
+
+  if (draftClass) {
+    // Check cache first
+    let cacheEntry = _scoutingProspectCache.get(draftClass);
+
+    // Invalidate if length changed (e.g. player drafted/removed)
+    if (!cacheEntry || cacheEntry.length !== draftClass.length) {
+      const map = new Map();
+      for (const p of draftClass) {
+        map.set(p.id, p);
+      }
+      cacheEntry = { map, length: draftClass.length };
+      _scoutingProspectCache.set(draftClass, cacheEntry);
+    }
+
+    prospect = cacheEntry.map.get(prospectId);
+  }
+
   if (!prospect) {
     return { success: false, message: 'Prospect not found' };
   }
