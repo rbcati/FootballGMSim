@@ -197,25 +197,22 @@ export class FootballDB {
         }
 
         // 2. Get all play logs for these games
-        // Since we can't do "WHERE game_id IN (...)" easily without iterating all or many logs,
-        // we'll use the game_id index.
+        // Use batch processing to reduce transaction overhead (N+1 -> 1)
         const playerStats = new Map(); // player_id -> { rush_yards: 0, ... }
 
-        const logsPromises = gameIds.map(gameId => this.getLogsByGameId(gameId));
-        const allLogs = await Promise.all(logsPromises);
+        // Fetch logs in a single transaction
+        const allLogs = await this.getLogsByGameIds(gameIds);
 
-        for (const logs of allLogs) {
-            for (const log of logs) {
-                if (log.play_type === 'run') { // Matches python: WHERE play_type = 'run'
-                    const pid = log.player_id;
-                    if (!playerStats.has(pid)) {
-                        playerStats.set(pid, { rush_yards: 0 });
-                    }
-                    const stats = playerStats.get(pid);
-                    stats.rush_yards += (log.result_yards || 0);
+        for (const log of allLogs) {
+            if (log.play_type === 'run') { // Matches python: WHERE play_type = 'run'
+                const pid = log.player_id;
+                if (!playerStats.has(pid)) {
+                    playerStats.set(pid, { rush_yards: 0 });
                 }
-                // Add more play types here as needed
+                const stats = playerStats.get(pid);
+                stats.rush_yards += (log.result_yards || 0);
             }
+            // Add more play types here as needed
         }
 
         // 3. Insert into season_stats
@@ -314,6 +311,38 @@ export class FootballDB {
           const index = store.index("season");
           const request = index.getAll(season);
           request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+      });
+  }
+
+  // Helper: Get logs by multiple game_ids in a single transaction
+  async getLogsByGameIds(gameIds) {
+      if (!gameIds || gameIds.length === 0) return [];
+
+      await this.initPromise;
+      return new Promise((resolve, reject) => {
+          const transaction = this.db.transaction(["play_logs"], "readonly");
+          const store = transaction.objectStore("play_logs");
+          const index = store.index("game_id");
+
+          // Optimization: Use a range query if possible
+          // We assume gameIds are from the same season and thus mostly contiguous.
+          // Even if sparse, one range query + filtering is faster than N requests.
+
+          const sortedIds = [...gameIds].sort((a, b) => a - b);
+          const min = sortedIds[0];
+          const max = sortedIds[sortedIds.length - 1];
+          const idSet = new Set(gameIds);
+
+          const request = index.getAll(IDBKeyRange.bound(min, max));
+
+          request.onsuccess = () => {
+              const allResults = request.result;
+              // Filter out logs for games not in our list (if any gaps existed with other data)
+              const filteredLogs = allResults.filter(log => idSet.has(log.game_id));
+              resolve(filteredLogs);
+          };
+
           request.onerror = () => reject(request.error);
       });
   }
