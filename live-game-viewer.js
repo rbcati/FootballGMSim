@@ -527,6 +527,14 @@ class LiveGameViewer {
               element.style.left = `${currentX}%`;
               if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
+              // Trail Effect
+              if (options.trail && this.fieldEffects && progress < 1) {
+                  // Spawn periodically
+                  if (Math.random() > 0.6) {
+                      this.fieldEffects.spawnParticles(currentX, 'kick_trail');
+                  }
+              }
+
               // Y Position (Arc) & Rotation
               if (arcHeight || shouldRotate) {
                   let transform = 'translate(-50%, -50%)';
@@ -857,7 +865,8 @@ class LiveGameViewer {
               duration: kickDuration,
               arcHeight: arc,
               easing: 'linear', // Projectile motion
-              rotate: true
+              rotate: true,
+              trail: true // Enable particle trail
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {
@@ -897,6 +906,7 @@ class LiveGameViewer {
       if (this.fieldEffects) {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
+              this.fieldEffects.spawnParticles(endPct, 'shockwave');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
               if (play.playType.includes('pass') || (play.message && play.message.toLowerCase().includes('intercept'))) {
                   this.fieldEffects.spawnParticles(endPct, 'interception');
@@ -905,6 +915,7 @@ class LiveGameViewer {
               } else {
                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }
+              this.fieldEffects.spawnParticles(endPct, 'shockwave');
           } else if (play.result === 'touchdown') {
               this.fieldEffects.spawnParticles(endPct, 'touchdown');
               if (skillMarker) {
@@ -917,6 +928,9 @@ class LiveGameViewer {
               this.fieldEffects.spawnParticles(endPct, 'first_down');
           } else if (!['field_goal', 'punt', 'field_goal_miss', 'incomplete'].includes(play.result) && !play.playType.includes('kick') && !play.playType.includes('punt')) {
               this.fieldEffects.spawnParticles(endPct, 'tackle');
+              if (play.playType.includes('run') || play.result === 'big_play') {
+                  this.fieldEffects.spawnParticles(endPct, 'shockwave');
+              }
           }
       }
 
@@ -2102,6 +2116,16 @@ class LiveGameViewer {
     }
 
     parent.appendChild(overlay);
+
+    // Trigger Visual Flash
+    const flashType = (type === 'positive' || type === 'touchdown' || type === 'field-goal-made') ? 'positive' :
+                      (type === 'negative' || type === 'turnover' || type === 'defense-stop' || type === 'sack') ? 'negative' : 'neutral';
+
+    const flash = document.createElement('div');
+    flash.className = `visual-feedback-overlay ${flashType} active`;
+    parent.appendChild(flash);
+    setTimeout(() => flash.classList.remove('active'), 50);
+    setTimeout(() => flash.remove(), 600);
 
     // Remove after animation
     setTimeout(() => {
