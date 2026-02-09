@@ -148,40 +148,43 @@ function createWeekSchedule(week, teams, teamByeWeek, teamGameCount, teamOpponen
     const weekPairings = [];
 
     // Try to pair teams that haven't played each other yet
-    for (const team1 of shuffledTeams) {
+    for (let i = 0; i < shuffledTeams.length; i++) {
+        const team1 = shuffledTeams[i];
         if (usedThisWeek.has(team1.id) || teamGameCount[team1.id] >= 17) continue;
         
         // Find best opponent for team1
         let bestOpponent = null;
-        for (const team2 of shuffledTeams) {
-            if (team2.id === team1.id || usedThisWeek.has(team2.id)) continue;
-            if (teamGameCount[team2.id] >= 17) continue;
+        let fallbackOpponent = null;
+
+        for (let j = i + 1; j < shuffledTeams.length; j++) {
+            const team2 = shuffledTeams[j];
+            if (usedThisWeek.has(team2.id) || teamGameCount[team2.id] >= 17) continue;
+
+            // Prioritize teams that haven't played each other
             if (!teamOpponents[team1.id].has(team2.id)) {
                 bestOpponent = team2;
                 break;
             }
-        }
-        
-        // If no new opponent found, take any available opponent
-        if (!bestOpponent) {
-            for (const team2 of shuffledTeams) {
-                if (team2.id === team1.id || usedThisWeek.has(team2.id)) continue;
-                if (teamGameCount[team2.id] >= 17) continue;
-                bestOpponent = team2;
-                break;
+
+            // Keep track of the first available opponent as fallback
+            if (!fallbackOpponent) {
+                fallbackOpponent = team2;
             }
         }
         
-        if (bestOpponent) {
-            weekPairings.push([team1, bestOpponent]);
+        // If no new opponent found, take any available opponent
+        const opponent = bestOpponent || fallbackOpponent;
+        
+        if (opponent) {
+            weekPairings.push([team1, opponent]);
             usedThisWeek.add(team1.id);
-            usedThisWeek.add(bestOpponent.id);
+            usedThisWeek.add(opponent.id);
 
             // Update tracking
             teamGameCount[team1.id]++;
-            teamGameCount[bestOpponent.id]++;
-            teamOpponents[team1.id].add(bestOpponent.id);
-            teamOpponents[bestOpponent.id].add(team1.id);
+            teamGameCount[opponent.id]++;
+            teamOpponents[team1.id].add(opponent.id);
+            teamOpponents[opponent.id].add(team1.id);
         }
     }
 
