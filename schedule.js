@@ -341,9 +341,12 @@ function validateSchedule(schedule, teams) {
     const teamGameCount = {};
     const teamByeCount = {};
 
+    // Create a map for O(1) team lookups
+    const teamMap = new Map();
     teams.forEach(team => {
         teamGameCount[team.id] = 0;
         teamByeCount[team.id] = 0;
+        teamMap.set(team.id, team);
     });
 
     schedule.weeks.forEach((week, weekIndex) => {
@@ -386,7 +389,7 @@ function validateSchedule(schedule, teams) {
 
             if (weekNumber <= 4) {
                 result.valid = false;
-                result.errors.push(`Team ${teams.find(t => t.id === teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
+                result.errors.push(`Team ${teamMap.get(teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
             }
         });
     });
