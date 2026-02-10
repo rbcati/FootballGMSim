@@ -184,9 +184,11 @@ export class TradeLogicService {
    * Evaluates a trade proposal.
    * @param {Array} userOffer - List of assets offered by the user
    * @param {Array} aiAssets - List of assets requested from the AI
+   * @param {Object} userTeam - The user's team object
+   * @param {Object} aiTeam - The AI's team object
    * @returns {Object} Evaluation result
    */
-  static evaluateTrade(userOffer, aiAssets) {
+  static evaluateTrade(userOffer, aiAssets, userTeam, aiTeam) {
     let userValue = 0;
     let aiValue = 0;
 
@@ -208,18 +210,87 @@ export class TradeLogicService {
     userValue = sumValue(userOffer);
     aiValue = sumValue(aiAssets);
 
-    // Trade Acceptance Logic
-    // UserOfferTotalValue < AIAssetsTotalValue * 1.05 (5% Human Tax)
-    const requiredValue = aiValue * 1.05;
-    const isAccepted = userValue >= requiredValue;
+    const requiredValue = aiValue * 1.05; // 5% Human Tax
+
+    // 1. Value Check
+    if (userValue < requiredValue) {
+        // Allow tiny tolerance (within 1%)
+        if (userValue < requiredValue * 0.99) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Value Mismatch',
+                rejectionReason: `Offer value (${Math.round(userValue)}) is below required value (${Math.round(requiredValue)}).`
+            };
+        }
+    }
+
+    // 2. Cap Space Check
+    if (window.calculateCapImpact && userTeam && aiTeam) {
+        // Check User Team Cap
+        const userCapCheck = window.calculateCapImpact(userTeam, 'trade', aiAssets, userOffer);
+        if (!userCapCheck.valid) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Cap Space Exceeded',
+                rejectionReason: `You cannot afford this trade. ${userCapCheck.message}`
+            };
+        }
+
+        // Check AI Team Cap
+        const aiCapCheck = window.calculateCapImpact(aiTeam, 'trade', userOffer, aiAssets);
+        if (!aiCapCheck.valid) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Cap Space Exceeded',
+                rejectionReason: `Other team cannot afford this trade. ${aiCapCheck.message}`
+            };
+        }
+    }
+
+    // 3. Positional Surplus Check (AI Side)
+    if (aiTeam && aiTeam.roster) {
+        const surplusPositions = new Set();
+        userOffer.forEach(asset => {
+            if (asset.kind === 'player' || asset.player) {
+                const p = asset.player || asset;
+                const pos = p.pos;
+                // Count quality players at this pos (>80 OVR)
+                const existing = aiTeam.roster.filter(x => x.pos === pos && x.ovr > 80).length;
+                if (existing >= 3) {
+                    surplusPositions.add(pos);
+                }
+            }
+        });
+
+        if (surplusPositions.size > 0) {
+            const positions = Array.from(surplusPositions).join(', ');
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Positional Surplus',
+                rejectionReason: `They don't need more players at: ${positions}.`
+            };
+        }
+    }
 
     return {
-        accepted: isAccepted,
+        accepted: true,
         userValue: Math.round(userValue),
         aiValue: Math.round(aiValue),
         requiredValue: Math.round(requiredValue),
         ratio: aiValue > 0 ? userValue / aiValue : 1.0,
-        message: isAccepted ? 'Trade Accepted' : 'Trade Rejected: Value insufficient.'
+        message: 'Trade Accepted'
     };
   }
 }

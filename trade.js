@@ -275,9 +275,40 @@ export function evaluateTrade(league, fromTeamId, toTeamId, fromAssets, toAssets
   const toGive   = calcAssetsValue(toTeam,   toAssets,   leagueYear);
   const toGet    = calcAssetsValue(fromTeam, fromAssets, leagueYear);
 
+  let validation = { valid: true, reason: '' };
+
+  // 1. Cap Check
+  if (window.calculateCapImpact) {
+      const fromCap = window.calculateCapImpact(fromTeam, 'trade', toAssets, fromAssets);
+      if (!fromCap.valid) {
+          validation = { valid: false, reason: `Your Team Cap: ${fromCap.message}` };
+      } else {
+          const toCap = window.calculateCapImpact(toTeam, 'trade', fromAssets, toAssets);
+          if (!toCap.valid) {
+              validation = { valid: false, reason: `Their Team Cap: ${toCap.message}` };
+          }
+      }
+  }
+
+  // 2. Positional Surplus (AI receives fromAssets)
+  if (validation.valid && toTeam.roster) {
+      fromAssets.forEach(asset => {
+          if (asset.kind === 'player') {
+              const p = findPlayerOnTeam(fromTeam, asset.playerId);
+              if (p) {
+                  const existing = toTeam.roster.filter(x => x.pos === p.pos && (x.ovr || 0) > 80).length;
+                  if (existing >= 3) {
+                      validation = { valid: false, reason: `Positional Surplus: They don't need more ${p.pos}s.` };
+                  }
+              }
+          }
+      });
+  }
+
   return {
     fromValue: { give: fromGive, get: fromGet, delta: fromGet - fromGive },
-    toValue:   { give: toGive,   get: toGet,   delta: toGet - toGive }
+    toValue:   { give: toGive,   get: toGet,   delta: toGet - toGive },
+    validation: validation
   };
 }
 

@@ -16,6 +16,7 @@ import { showWeeklyRecap } from './weekly-recap.js';
 import { checkAchievements } from './achievements.js';
 import { validateLeagueState } from './game-simulator.js'; // Needed for validation
 import { processStaffPoaching } from './coach-system.js';
+import { checkRosterLegality } from './validation.js';
 
 // Simulation Lock
 let isSimulating = false;
@@ -618,8 +619,11 @@ function startOffseason() {
       }
     }
     
-    if (typeof window.saveState === 'function') {
-      window.saveState();
+    // Auto-save on phase change
+    if (window.saveGameState) {
+        window.saveGameState().catch(e => console.error("Auto-save failed:", e));
+    } else if (typeof window.saveState === 'function') {
+        window.saveState();
     }
     
     if (typeof window.setStatus === 'function') {
@@ -853,12 +857,92 @@ function startNewSeason() {
         window.updateAllTeamRatings(L);
     }
 
-    if (typeof window.saveState === 'function') window.saveState();
+    // Auto-save on phase change
+    if (window.saveGameState) {
+        window.saveGameState().catch(e => console.error("Auto-save failed:", e));
+    } else if (typeof window.saveState === 'function') {
+        window.saveState();
+    }
+
     if (typeof window.renderHub === 'function') window.renderHub();
 
   } catch (err) {
     console.error('Error starting new season:', err);
   }
+}
+
+/**
+ * Enforces roster minimums for AI teams before simulation
+ * @param {Object} league - League object
+ */
+function enforceAIRosterMinimums(league) {
+    if (!league || !league.teams) return;
+    const U = window.Utils;
+    const freeAgents = window.state.freeAgents;
+    if (!freeAgents) return;
+
+    // Minimums: QB >= 2, OL >= 4, DL >= 3
+    const MINS = { 'QB': 2, 'OL': 4, 'DL': 3 };
+
+    league.teams.forEach(team => {
+        // Skip user team (handled by blockers)
+        if (team.id === window.state.userTeamId) return;
+
+        // Check each required position
+        Object.keys(MINS).forEach(pos => {
+            // Count players at this position
+            // Handle position grouping (OL = OT, G, C; DL = DE, DT) if needed
+            // Assuming simple POS strings for now as per codebase convention
+            // If the game uses specific pos like 'LT', 'LG', we need a helper.
+            // Based on 'teams.js', positions seem standard.
+            // However, 'OL' usually maps to OT, OG, C. 'DL' to DE, DT.
+            // Let's assume strict checking or group checking.
+            // The prompt asks specifically for "QB, OL, DL".
+            // If the game uses OT/OG/C, we need to map.
+
+            const count = team.roster.filter(p => {
+                if (pos === 'OL') return ['OL', 'OT', 'OG', 'C', 'LT', 'RT', 'LG', 'RG'].includes(p.pos);
+                if (pos === 'DL') return ['DL', 'DE', 'DT', 'LE', 'RE', 'NT'].includes(p.pos);
+                return p.pos === pos;
+            }).length;
+
+            const needed = MINS[pos] - count;
+
+            if (needed > 0) {
+                // Find best FAs
+                const candidates = freeAgents.filter(p => {
+                    if (pos === 'OL') return ['OL', 'OT', 'OG', 'C', 'LT', 'RT', 'LG', 'RG'].includes(p.pos);
+                    if (pos === 'DL') return ['DL', 'DE', 'DT', 'LE', 'RE', 'NT'].includes(p.pos);
+                    return p.pos === pos;
+                }).sort((a, b) => b.ovr - a.ovr);
+
+                // Sign needed amount
+                for (let i = 0; i < needed; i++) {
+                    if (candidates.length > 0) {
+                        const signee = candidates.shift();
+                        // Remove from FA
+                        const faIndex = freeAgents.indexOf(signee);
+                        if (faIndex > -1) freeAgents.splice(faIndex, 1);
+
+                        // Add to Team
+                        signee.teamId = team.id;
+                        // Give minimum contract
+                        signee.baseAnnual = 0.8;
+                        signee.years = 1;
+                        signee.yearsTotal = 1;
+                        signee.signingBonus = 0;
+
+                        team.roster.push(signee);
+                        console.log(`[AI-ROSTER] ${team.name} signed ${signee.name} (${signee.pos}) to meet minimums.`);
+                    }
+                }
+            }
+        });
+
+        // Ensure not over 53?
+        // If over 53, AI should cut lowest rated players not at minimums positions.
+        // For now, we focus on minimums as requested.
+    });
 }
 
 /**
@@ -875,6 +959,24 @@ function simulateWeek(options = {}) {
     }
 
     try {
+      // Check User Roster Legality (Enforce 53-man limit)
+      if (window.state && window.state.userTeamId !== undefined) {
+          const userTeam = window.state.league.teams[window.state.userTeamId];
+          if (userTeam) {
+              const rosterCheck = checkRosterLegality(userTeam);
+              if (!rosterCheck.valid) {
+                  window.setStatus(`Cannot advance: ${rosterCheck.errors.join(' ')}`, 'error');
+                  reject(new Error(rosterCheck.errors[0]));
+                  return;
+              }
+          }
+      }
+
+      // Enforce AI Roster Minimums before simulation
+      if (window.state && window.state.league) {
+          enforceAIRosterMinimums(window.state.league);
+      }
+
       isSimulating = true;
       simResolve = resolve;
       simReject = reject;
