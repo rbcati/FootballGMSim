@@ -387,9 +387,9 @@ class LiveGameViewer {
 
       const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // Detect Jump (> 15% difference implies teleportation/turnover)
+      // Detect Jump (> 16.6% difference implies large teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 15;
+      const isTeleport = currentLeft > 0 && dist > 16.6;
 
       if (isTeleport) {
           // Fade Out Sequence
@@ -431,7 +431,14 @@ class LiveGameViewer {
               }, 300);
           }, 300);
       } else {
-          // Normal Smooth Update (CSS transition handles it)
+          // Smooth Transition for small/medium adjustments
+          if (currentLeft > 0 && dist > 0.5) {
+              // Ensure transition is enabled
+              ballEl.style.transition = 'left 0.5s ease-out';
+              if (losEl) losEl.style.transition = 'left 0.5s ease-out';
+          }
+
+          // Update positions
           ballEl.style.left = `${pct}%`;
           if (losEl) losEl.style.left = `${pct}%`;
 
@@ -443,6 +450,7 @@ class LiveGameViewer {
               if (targetYard > 100) targetYard = 100;
               let visualTarget = isHomePossession ? targetYard : (100 - targetYard);
               let fdPct = (10 + visualTarget) / 1.2;
+              fdEl.style.transition = 'left 0.5s ease-out';
               fdEl.style.left = `${fdPct}%`;
               fdEl.style.display = (yardLine + d >= 100) ? 'none' : 'block';
           }
@@ -489,7 +497,15 @@ class LiveGameViewer {
           const startX = options.startX;
           const endX = options.endX;
           const duration = options.duration || 1000;
-          const arcHeight = options.arcHeight || 0;
+
+          // Dynamic Arc Calculation
+          let arcHeight = options.arcHeight || 0;
+          if (options.rotate && !options.arcHeight) {
+               const dist = Math.abs(endX - startX);
+               // Simple formula: distance * 0.4, capped between 15 and 45
+               arcHeight = Math.min(45, Math.max(15, dist * 0.4));
+          }
+
           const shouldRotate = options.rotate || false;
 
           const startTime = performance.now();
@@ -559,13 +575,15 @@ class LiveGameViewer {
               if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
               // Y Position (Arc) & Rotation
+              let heightFactor = 0;
               if (arcHeight || shouldRotate) {
                   let transform = 'translate(-50%, -50%)';
 
                   // Arc logic
                   if (arcHeight) {
                       // Parabola: y = 4 * h * x * (1 - x)
-                      const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
+                      heightFactor = 4 * easeProgress * (1 - easeProgress);
+                      const parabolicY = -1 * arcHeight * heightFactor;
                       transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
                   }
 
@@ -579,6 +597,11 @@ class LiveGameViewer {
                       if (options.rotateType === 'spiral') {
                           const wobble = 1 - (Math.sin(easeProgress * Math.PI * 4) * 0.1);
                           transform += ` scale(${wobble})`;
+                      } else if (options.rotateType === 'wobble') {
+                           // Chaotic wobble for kicks/punts
+                           const wobbleScale = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.15);
+                           const wobbleRot = Math.sin(easeProgress * Math.PI * 6) * 15;
+                           transform += ` scale(${wobbleScale}) rotate(${wobbleRot}deg)`;
                       }
                   }
 
@@ -586,12 +609,23 @@ class LiveGameViewer {
 
                   // Shadow Effect (only if arc)
                   if (arcHeight && shadowEl) {
-                       const peakFactor = 4 * easeProgress * (1 - easeProgress);
-                       const scale = 1 - (peakFactor * 0.3);
-                       const opacity = 1 - (peakFactor * 0.4);
+                       const scale = 1 - (heightFactor * 0.3);
+                       const opacity = 1 - (heightFactor * 0.4);
                        shadowEl.style.transform = `translate(-50%, -50%) scale(${scale})`;
                        shadowEl.style.opacity = opacity;
                   }
+              }
+
+              // Trail integration (if available)
+              if (options.trail && this.fieldEffects && progress < 1) {
+                   if (Math.random() < 0.4) {
+                       const yOffset = arcHeight ? (-1 * arcHeight * heightFactor) : 0;
+                       // We must manually add particle, as spawnTrail will be added later
+                       // For now we assume the hook exists or we just rely on later implementation
+                       if (this.fieldEffects.spawnTrail) {
+                           this.fieldEffects.spawnTrail(currentX, yOffset);
+                       }
+                   }
               }
 
               if (progress < 1) {
@@ -789,13 +823,18 @@ class LiveGameViewer {
                   arcHeight: 25,
                   easing: 'linear', // Improved physics
                   rotate: true,
-                  rotateType: 'spiral'
+                  rotateType: 'spiral',
+                  trail: true
               });
 
               // Pulse if TD
               if (play.result === 'touchdown') {
                   ballEl.classList.add('animate-pulse');
-                  if (skillMarker) skillMarker.classList.add('celebrate-jump');
+                  if (skillMarker) {
+                      const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance'];
+                      const anim = anims[Math.floor(Math.random() * anims.length)];
+                      skillMarker.classList.add(anim);
+                  }
               }
 
               // Catch Effect
@@ -810,8 +849,14 @@ class LiveGameViewer {
 
               // End of play collision (tackle)
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
-                  if (skillMarker) skillMarker.classList.add('tackle-collision');
-                  if (defMarker) defMarker.classList.add('tackle-collision');
+                  if (skillMarker) {
+                      skillMarker.classList.add('tackle-collision');
+                      this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
+                  }
+                  if (defMarker) {
+                      defMarker.classList.add('tackle-collision');
+                      this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
+                  }
               }
           }
 
@@ -831,11 +876,11 @@ class LiveGameViewer {
           const animations = [];
 
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           // Def Logic: Chase
@@ -849,13 +894,16 @@ class LiveGameViewer {
 
           if (play.result === 'touchdown') {
               ballEl.classList.add('animate-pulse');
-          } else if (skillMarker) {
-              // Collision/Tackle
-               ballEl.classList.add('animate-pulse');
-               if (skillMarker) skillMarker.classList.add('celebrate-spin');
-          } else {
               if (skillMarker) {
-                  skillMarker.classList.add('tackle-collision'); // Updated to new class
+                  const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance'];
+                  const anim = anims[Math.floor(Math.random() * anims.length)];
+                  skillMarker.classList.add(anim);
+              }
+          } else {
+              // Collision/Tackle
+              ballEl.classList.add('animate-pulse');
+              if (skillMarker) {
+                  skillMarker.classList.add('tackle-collision');
                   this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
               }
               if (defMarker) {
@@ -888,7 +936,9 @@ class LiveGameViewer {
               duration: kickDuration,
               arcHeight: arc,
               easing: 'linear', // Projectile motion
-              rotate: true
+              rotate: true,
+              rotateType: 'wobble',
+              trail: true
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {
@@ -1848,8 +1898,7 @@ class LiveGameViewer {
     }
 
     // Auto-advance
-    // Reduce delay slightly since animation took time
-    const delay = Math.max(500, this.getPlayDelay() - 1000);
+    const delay = this.getPlayDelay(play.result);
 
     this.isProcessingTurn = false;
     this.updateControls();
@@ -1873,15 +1922,20 @@ class LiveGameViewer {
   }
 
   /**
-   * Get delay between plays based on tempo
+   * Get delay between plays based on tempo and result
    */
-  getPlayDelay() {
-    // Reduce delays slightly since animation takes time now
-    switch (this.tempo) {
-      case 'hurry-up': return 200; // was 800
-      case 'slow': return 2000; // was 3000
-      default: return 800; // was 1500
-    }
+  getPlayDelay(lastResult) {
+    let pause = 1000; // Default pause after play
+    if (this.tempo === 'hurry-up') pause = 300;
+    else if (this.tempo === 'slow') pause = 2500;
+
+    // Dynamic adjustment based on result
+    if (lastResult === 'touchdown') pause += 2000;
+    else if (lastResult === 'turnover' || lastResult === 'turnover_downs') pause += 1500;
+    else if (lastResult === 'incomplete') pause = Math.max(200, pause - 500);
+    else if (lastResult === 'sack') pause += 800;
+
+    return pause;
   }
 
 

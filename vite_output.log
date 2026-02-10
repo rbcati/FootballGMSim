@@ -3,11 +3,7 @@
 > vite
 
 
-  VITE v7.3.1  ready in 354 ms
+  VITE v7.3.1  ready in 353 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: use --host to expose
-7:55:48 PM [vite] (client) page reload ui.js
-7:56:03 PM [vite] (client) page reload ui.js
-7:57:59 PM [vite] (client) page reload ui.js
-Killed

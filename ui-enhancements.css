@@ -2159,3 +2159,33 @@ select:disabled {
     box-shadow: 0 0 10px #ff4500;
     animation: pulse-glow 0.5s infinite;
 }
+
+/* --- New Animations for Game Fluidity --- */
+
+/* Run Bob (Subtle up/down) */
+@keyframes run-bob {
+  0%, 100% { transform: translate(-50%, -50%); }
+  50% { transform: translate(-50%, -55%); }
+}
+
+.run-bob {
+  animation: run-bob 0.4s infinite ease-in-out;
+}
+
+/* Wobble Rotation */
+@keyframes wobble {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -50%) rotate(-5deg); }
+  75% { transform: translate(-50%, -50%) rotate(5deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+/* Slide Tackle */
+@keyframes slide-tackle {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  100% { transform: translate(-50%, -50%) rotate(-90deg) scale(0.8); }
+}
+
+.slide-tackle {
+  animation: slide-tackle 0.4s ease-out forwards;
+}

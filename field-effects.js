@@ -81,6 +81,28 @@ export class FieldEffects {
         }
     }
 
+    spawnTrail(xPct, yOffset = 0) {
+        const x = (xPct / 100) * this.canvas.width;
+        const y = this.canvas.height / 2 + yOffset;
+
+        this.particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 0.5, // Slight drift
+            vy: (Math.random() - 0.5) * 0.5,
+            life: 0.4,
+            decay: 0.08,
+            size: Math.random() * 2 + 1,
+            color: 'rgba(255, 255, 255, 0.4)',
+            gravity: 0
+        });
+
+        if (!this.animating) {
+            this.animating = true;
+            this.animate();
+        }
+    }
+
     createParticle(x, y, type) {
         const p = {
             x: x,
