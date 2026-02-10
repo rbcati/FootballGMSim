@@ -77,7 +77,11 @@ export function showWeeklyRecap(week, results, news) {
         // Rivalry Check
         const rivalry = userTeam.rivalries ? userTeam.rivalries[oppId] : null;
         if (rivalry && rivalry.score > 50) {
-            resultText = win ? `RIVALRY VICTORY` : `BITTER DEFEAT`;
+            if (win) {
+                 resultText = rivalry.score > 80 ? "DOMINATED RIVAL" : "RIVALRY VICTORY";
+            } else {
+                 resultText = rivalry.score > 80 ? "CRUSHING LOSS" : "BITTER DEFEAT";
+            }
             highStakesClass = 'high-stakes';
         }
 
