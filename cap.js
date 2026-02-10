@@ -56,7 +56,28 @@ function calculateRollover(team, league) {
 }
 
 /**
- * Recalculates and updates a team's salary cap situation
+ * Generates a simple hash of the roster for memoization
+ */
+function getRosterHash(team) {
+    if (!team || !team.roster) return '';
+    // Combine roster length and sum of player IDs (or contract values)
+    // Using length + first/last ID + total salary is a quick proxy
+    const len = team.roster.length;
+    let sum = 0;
+    // Sample a few properties to detect changes (IDs, salary, years)
+    for (let i = 0; i < len; i++) {
+        const p = team.roster[i];
+        if (p) {
+            // Use baseAnnual and years as part of hash to detect contract edits
+            sum += (p.baseAnnual || 0) + (p.years || 0);
+        }
+    }
+    const dead = JSON.stringify(team.deadCapBook || {});
+    return `${len}-${sum.toFixed(2)}-${dead}`;
+}
+
+/**
+ * Recalculates and updates a team's salary cap situation (Memoized)
  * @param {Object} league - League object
  * @param {Object} team - Team object to recalculate
  */
@@ -64,6 +85,17 @@ function recalcCap(league, team) {
   if (!league || !team || !team.roster) {
     console.error('Invalid parameters for recalcCap');
     return;
+  }
+
+  // Memoization Check
+  const currentHash = getRosterHash(team);
+  if (team._capCache && team._rosterHash === currentHash) {
+      // Restore from cache
+      team.capTotal = team._capCache.capTotal;
+      team.capUsed = team._capCache.capUsed;
+      team.deadCap = team._capCache.deadCap;
+      team.capRoom = team._capCache.capRoom;
+      return;
   }
   
   const C = window.Constants;
@@ -108,6 +140,15 @@ function recalcCap(league, team) {
     team.deadCap = Math.round(dead * 10) / 10;
     team.capRoom = capEnabled ? Math.round((team.capTotal - team.capUsed) * 10) / 10 : 9999;
     
+    // Update Cache
+    team._rosterHash = currentHash;
+    team._capCache = {
+        capTotal: team.capTotal,
+        capUsed: team.capUsed,
+        deadCap: team.deadCap,
+        capRoom: team.capRoom
+    };
+
     // Sanity check: if capUsed is way over capTotal, log warning
     if (capEnabled && team.capUsed > team.capTotal * 1.5) {
       console.warn(`Team ${team.name || team.abbr} has excessive cap usage: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
