@@ -824,7 +824,7 @@ select:disabled {
     border-radius: var(--radius-lg);
   }
   
-  .results-grid, .scouting-grid, .hof-grid {
+  .results-grid, .scouting-grid, .hof-grid, .grid.two {
     grid-template-columns: 1fr;
   }
   

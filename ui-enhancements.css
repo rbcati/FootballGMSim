@@ -1987,6 +1987,13 @@ select:disabled {
 }
 
 @keyframes sack-shake {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-55%, -55%) rotate(-5deg); }
+  50% { transform: translate(-45%, -45%) rotate(5deg); }
+  75% { transform: translate(-55%, -55%) rotate(-5deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
 @keyframes celebrate-dance {
   0% { transform: translate(-50%, -50%) rotate(0deg); }
   25% { transform: translate(-50%, -60%) rotate(-15deg); }
@@ -2019,6 +2026,8 @@ select:disabled {
 .momentum-max {
   animation: momentum-max 0.5s infinite;
   border: 2px solid white !important;
+}
+
 @keyframes celebrate-jump {
   0% { transform: translate(-50%, -50%) scale(1); }
   20% { transform: translate(-55%, -55%) scale(0.9) rotate(-5deg); }
@@ -2041,6 +2050,8 @@ select:disabled {
 
 .tackle-collision {
   animation: tackle-collision 0.3s ease-out;
+}
+
 @keyframes celebrate-spin {
     0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
     50% { transform: translate(-50%, -50%) rotate(180deg) scale(1.2); }

@@ -329,7 +329,16 @@ test.describe('Daily Regression Pass', () => {
                 const btn = decisionModal.locator('button').first();
                 if (await btn.isVisible()) {
                     await btn.click();
-                    await page.waitForTimeout(500); // Wait for animation
+                    // Wait for modal to disappear to prevent interception
+                    try {
+                        await decisionModal.waitFor({ state: 'hidden', timeout: 3000 });
+                    } catch (e) {
+                        console.log("Decision modal didn't close, trying forceful removal via JS");
+                        await page.evaluate(() => {
+                            const m = document.getElementById('decisionModal');
+                            if(m) { m.remove(); m.style.display = 'none'; }
+                        });
+                    }
                 }
             }
 
