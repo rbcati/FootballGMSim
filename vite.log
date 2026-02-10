@@ -9,3 +9,5 @@
   ➜  Network: use --host to expose
 10:08:09 AM [vite] (client) page reload live-game-viewer.js
 10:08:38 AM [vite] (client) hmr update /style.css?direct
+10:24:54 AM [vite] (client) hmr update /ui-enhancements.css?direct
+10:24:54 AM [vite] (client) hmr update /ui-enhancements.css?direct
