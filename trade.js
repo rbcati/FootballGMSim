@@ -277,7 +277,7 @@ export function evaluateTrade(league, fromTeamId, toTeamId, fromAssets, toAssets
 
   let validation = { valid: true, reason: '' };
 
-  // 1. Cap Check
+  // 1. Cap Check (Bilateral Validation)
   if (window.calculateCapImpact) {
       const fromCap = window.calculateCapImpact(fromTeam, 'trade', toAssets, fromAssets);
       if (!fromCap.valid) {
@@ -285,7 +285,8 @@ export function evaluateTrade(league, fromTeamId, toTeamId, fromAssets, toAssets
       } else {
           const toCap = window.calculateCapImpact(toTeam, 'trade', fromAssets, toAssets);
           if (!toCap.valid) {
-              validation = { valid: false, reason: `Their Team Cap: ${toCap.message}` };
+              // Standardized rejection message for AI cap failure
+              validation = { valid: false, reason: "The other team cannot afford this trade." };
           }
       }
   }

@@ -608,6 +608,9 @@ class GameController {
                              <div style="font-size: 0.8rem; opacity: 0.9;">
                                 <span style="font-weight: 700; color: ${playoffColor};">${divRank}${divSuffix} Div</span>
                             </div>
+                            <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 4px;">
+                                Upcoming Draft Class (${window.state.draftClass ? window.state.draftClass.length : 0} Prospects)
+                            </div>
                         </div>
 
                         <!-- ADVANCE WEEK BUTTON (MOVED HERE) -->
@@ -2102,6 +2105,7 @@ class GameController {
 
     async _performInit() {
         console.log('GameController: Initializing...');
+        if (showLoading) showLoading('Initializing...');
         try {
             // ENTRY FLOW UPDATE: Check for saves first
             const hasSaves = hasSavedLeagues ? hasSavedLeagues() : (window.hasSavedLeagues ? window.hasSavedLeagues() : false);
@@ -2245,6 +2249,8 @@ class GameController {
                 console.error('Recovery failed:', recoveryError);
                 this.setStatus('Game failed to start. Please refresh the page.', 'error', 0);
             }
+        } finally {
+            if (hideLoading) hideLoading();
         }
     }
 
@@ -2835,6 +2841,11 @@ console.log('✅ GameController functions exported globally (patched version)');
 // --- HEADER & DASHBOARD FIXES ---
 
 window.updateHeader = function() {
+    // Update Command Center Footer
+    if (window.updateCommandCenter) {
+        window.updateCommandCenter();
+    }
+
     const L = window.state?.league;
     const seasonNow = document.getElementById('seasonNow');
     const capUsed = document.getElementById('capUsed');
@@ -2879,10 +2890,14 @@ window.updateHeader = function() {
         }
     }
 
-    if (L) {
-        if (seasonNow) seasonNow.textContent = L.year || new Date().getFullYear();
-        if (hubWeek) hubWeek.textContent = L.week || 1;
+    // Use state fallbacks if league is missing (Fix Zero State)
+    const year = L?.year || window.state?.season || new Date().getFullYear();
+    const week = L?.week || window.state?.week || 1;
 
+    if (seasonNow) seasonNow.textContent = year;
+    if (hubWeek) hubWeek.textContent = week;
+
+    if (L) {
         // Update Cap Info if user team is selected
         const userTeamId = window.state.userTeamId;
         if (userTeamId !== undefined && L.teams && L.teams[userTeamId]) {

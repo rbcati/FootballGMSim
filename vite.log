@@ -3,11 +3,7 @@
 > vite
 
 
-  VITE v7.3.1  ready in 323 ms
+  VITE v7.3.1  ready in 249 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: use --host to expose
-10:08:09 AM [vite] (client) page reload live-game-viewer.js
-10:08:38 AM [vite] (client) hmr update /style.css?direct
-10:24:54 AM [vite] (client) hmr update /ui-enhancements.css?direct
-10:24:54 AM [vite] (client) hmr update /ui-enhancements.css?direct

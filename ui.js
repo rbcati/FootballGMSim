@@ -1856,6 +1856,54 @@ window.openTradeCenter = function() {
     }
 };
 
+// --- Command Center Footer Logic ---
+window.updateCommandCenter = function() {
+    const footer = document.getElementById('command-center-footer');
+    if (!footer) return;
+
+    const L = window.state?.league;
+    const userTeam = window.state?.userTeamId !== undefined && L?.teams ? L.teams[window.state.userTeamId] : null;
+
+    // Default values
+    const currentWeek = L?.week || 1;
+    const currentCap = userTeam ? (userTeam.capRoom || 0).toFixed(2) + 'M' : 'N/A';
+    const isOffseason = window.state?.offseason;
+
+    const capColor = userTeam && userTeam.capRoom < 0 ? '#ff4444' : 'var(--accent)';
+
+    footer.innerHTML = `
+        <div class="info-group">
+            <div class="info-item">
+                <span class="info-label">Week</span>
+                <span class="info-value">${isOffseason ? 'Offseason' : currentWeek}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Cap Space</span>
+                <span class="info-value" style="color: ${capColor}">$${currentCap}</span>
+            </div>
+        </div>
+        <div>
+            <button id="btnFooterAdvance" class="btn-advance">
+                ${isOffseason ? 'Next Phase >' : 'Advance Week >'}
+            </button>
+        </div>
+    `;
+
+    // Bind Event
+    const btn = footer.querySelector('#btnFooterAdvance');
+    if (btn) {
+        btn.addEventListener('click', () => {
+            if (window.handleGlobalAdvance) {
+                window.handleGlobalAdvance();
+            } else if (window.simulateWeek) {
+                window.simulateWeek(); // Fallback
+            } else {
+                console.error('Advance function not found');
+            }
+        });
+    }
+};
+
 window.renderScouting = function() {
     console.log('Rendering scouting...');
     try {

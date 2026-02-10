@@ -11,6 +11,14 @@ const C = Constants;
 const SAVE_KEY_BASE = (C.GAME_CONFIG && C.GAME_CONFIG.SAVE_KEY) || 'nflGM4.state';
 const YEAR_START = (C.GAME_CONFIG && C.GAME_CONFIG.YEAR_START) || 2025;
 
+const DefaultGameState = {
+  season: 2024,
+  week: 1,
+  salaryCap: 255000000,
+  currentFunds: 10000000,
+  deadCap: 0
+};
+
 const MAX_SAVE_SLOTS = 5;
 
 function normalizeSlot(slot) {
@@ -132,9 +140,15 @@ export const State = {
     const freshState = {
       // Core game data
       league: null,
-      season: 1,
+      season: DefaultGameState.season, // Use DefaultGameState
+      week: DefaultGameState.week, // Use DefaultGameState
       year: YEAR_START,
       
+      // Financial defaults
+      salaryCap: DefaultGameState.salaryCap,
+      currentFunds: DefaultGameState.currentFunds,
+      deadCap: DefaultGameState.deadCap,
+
       // Player/Team data
       player: {
         teamId: 0,

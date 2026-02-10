@@ -817,7 +817,11 @@ function startNewSeason() {
     }
 
     if (typeof window.makeSchedule === 'function') L.schedule = window.makeSchedule(L.teams);
-    if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
+
+    // Fix Empty Array Bug: Ensure draft class exists
+    if (!window.state.draftClass || window.state.draftClass.length === 0) {
+        if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
+    }
 
     // CPU Free Agency - simulate other teams signing free agents
     try {

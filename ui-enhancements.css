@@ -2159,3 +2159,94 @@ select:disabled {
     box-shadow: 0 0 10px #ff4500;
     animation: pulse-glow 0.5s infinite;
 }
+
+/* Command Center Footer */
+.command-center {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background: rgba(10, 12, 16, 0.95);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--accent);
+    padding: 10px 20px;
+    z-index: 2000;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.5);
+    color: var(--text);
+    font-size: 0.9rem;
+    height: 60px; /* Fixed height for layout calculations if needed */
+}
+
+.command-center .info-group {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+}
+
+.command-center .info-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.command-center .info-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.command-center .info-value {
+    font-weight: bold;
+    font-family: monospace;
+    font-size: 1rem;
+    color: var(--accent);
+}
+
+.command-center .btn-advance {
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: all 0.2s;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+}
+
+.command-center .btn-advance:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    filter: brightness(1.1);
+}
+
+.command-center .btn-advance:active {
+    transform: translateY(0);
+}
+
+/* Adjust main content padding so footer doesn't overlap */
+body {
+    padding-bottom: 70px;
+}
+
+/* Hide bottom nav on mobile if command center is active?
+   Or stack them. Usually command center replaces bottom nav or sits above.
+   For now, we let them coexist but ensure padding.
+*/
+@media (max-width: 768px) {
+    .command-center {
+        bottom: 60px; /* Sit above bottom nav (usually 60px height) */
+        border-bottom: 1px solid var(--hairline);
+    }
+    body {
+        padding-bottom: 130px; /* 60px nav + 60px footer + spacing */
+    }
+}
