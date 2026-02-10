@@ -2534,6 +2534,7 @@ window.renderTradeCenter = function () {
 
       const from = evalResult.fromValue;
       const to   = evalResult.toValue;
+      const validation = evalResult.validation || { valid: true, reason: '' };
       const cpuLossLimit = -15; // Assuming the rule is -15
 
       // Show results clearly (ADHD friendly!)
@@ -2543,11 +2544,16 @@ window.renderTradeCenter = function () {
         `<br>Net Gain: <span style="font-weight:700; color: ${from.delta >= 0 ? '#3c9' : '#f66'};">${from.delta.toFixed(1)}</span>. ` +
         `CPU's Net: ${to.delta.toFixed(1)} (Must be > ${cpuLossLimit}).`;
 
-      btnExecute.disabled = to.delta < cpuLossLimit;
-      if (!btnExecute.disabled) {
-          info.innerHTML += '<br>✅ **Trade is viable!** Hit Execute.'
+      if (!validation.valid) {
+          btnExecute.disabled = true;
+          info.innerHTML += `<br>🚫 **Rejected:** ${validation.reason}`;
       } else {
-          info.innerHTML += '<br>❌ **Trade rejected by CPU rules.** Try adding more assets.'
+          btnExecute.disabled = to.delta < cpuLossLimit;
+          if (!btnExecute.disabled) {
+              info.innerHTML += '<br>✅ **Trade is viable!** Hit Execute.'
+          } else {
+              info.innerHTML += '<br>❌ **Trade rejected by CPU rules (Value).** Try adding more assets.'
+          }
       }
     });
     btnValidate._hasTradeListener = true;

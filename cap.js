@@ -295,3 +295,94 @@ window.validateSigning = validateSigning;
 window.processCapRollover = processCapRollover;
 window.getCapSummary = getCapSummary;
 window.recalcAllTeamCaps = recalcAllTeamCaps;
+
+/**
+ * Calculates the salary cap impact of a proposed transaction
+ * @param {Object} team - The team making the move
+ * @param {string} transactionType - 'trade', 'sign', or 'release'
+ * @param {Array} incomingAssets - Players/assets coming to the team
+ * @param {Array} outgoingAssets - Players/assets leaving the team
+ * @returns {Object} { valid: boolean, newCapRoom: number, message: string, impact: number }
+ */
+function calculateCapImpact(team, transactionType, incomingAssets = [], outgoingAssets = []) {
+    if (!team) return { valid: false, message: 'Invalid team' };
+
+    const currentCapRoom = team.capRoom || 0;
+    let capChange = 0;
+    let deadMoneyChange = 0;
+
+    // 1. Calculate Impact of Outgoing Players
+    outgoingAssets.forEach(asset => {
+        if (asset.kind === 'player' || asset.pos) { // Handle both asset wrapper and direct player object
+            const player = asset.player || asset;
+
+            // Remove current cap hit
+            const currentHit = window.capHitFor ? window.capHitFor(player, 0) : (player.baseAnnual || 0);
+
+            if (transactionType === 'trade') {
+                // Trading a player:
+                // - Save Base Salary (and proration for this year, effectively)
+                // - Accelerate ALL remaining signing bonus to this year (Dead Cap)
+                // Cap Hit Saved = Current Hit (Base + Proration)
+                // New Charge = Total Remaining Proration
+
+                const proration = window.prorationPerYear ? window.prorationPerYear(player) : 0;
+                const yearsLeft = player.years || 1;
+                const totalDead = proration * yearsLeft;
+
+                // Net change for this year: We pay TotalDead instead of CurrentHit
+                // Impact = New - Old. Positive means less room.
+                const impact = totalDead - currentHit;
+
+                capChange += impact;
+                deadMoneyChange += totalDead;
+
+            } else if (transactionType === 'release') {
+                // Releasing a player
+                // Similar to trade but might have guaranteed base salary too
+                // For simplicity, we use the releaseWithProration logic but just calculate it
+
+                const proration = window.prorationPerYear ? window.prorationPerYear(player) : 0;
+                const yearsLeft = player.years || 1;
+                const guaranteedAmount = (player.baseAnnual || 0) * (player.guaranteedPct || 0);
+                const totalDead = (proration * yearsLeft) + guaranteedAmount;
+
+                const impact = totalDead - currentHit;
+                capChange += impact;
+                deadMoneyChange += totalDead;
+            }
+        }
+    });
+
+    // 2. Calculate Impact of Incoming Players
+    incomingAssets.forEach(asset => {
+        if (asset.kind === 'player' || asset.pos) {
+            const player = asset.player || asset;
+
+            if (transactionType === 'trade') {
+                // Acquired via trade: Cap hit is just Base Salary (bonus stays with old team)
+                const hit = player.baseAnnual || 0;
+                capChange += hit;
+            } else if (transactionType === 'sign') {
+                // Free Agent Signing: Full Cap Hit (Base + Proration)
+                const hit = window.capHitFor ? window.capHitFor(player, 0) : (player.baseAnnual || 0);
+                capChange += hit;
+            }
+        }
+    });
+
+    const newCapRoom = currentCapRoom - capChange;
+
+    return {
+        valid: newCapRoom >= 0,
+        newCapRoom: Math.round(newCapRoom * 100) / 100,
+        impact: Math.round(capChange * 100) / 100,
+        deadMoneyAdded: Math.round(deadMoneyChange * 100) / 100,
+        message: newCapRoom < 0
+            ? `Cap Space Exceeded (Short by $${Math.abs(newCapRoom).toFixed(2)}M)`
+            : 'Valid Transaction'
+    };
+}
+
+// Make globally available
+window.calculateCapImpact = calculateCapImpact;

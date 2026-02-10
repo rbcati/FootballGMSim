@@ -1388,6 +1388,13 @@ window.startDraft = function() {
   if (initializeDraft(L, draftYear)) {
     renderDraft();
     window.setStatus(`🚀 ${draftYear} Draft Started!`, 'success');
+
+    // Auto-save on phase change
+    if (window.saveGameState) {
+        window.saveGameState().catch(e => console.error("Auto-save failed:", e));
+    } else if (saveState) {
+        saveState();
+    }
   } else {
     window.setStatus('Failed to start draft');
   }
