@@ -269,29 +269,54 @@ export class FootballDB {
         return;
     }
 
-    const gameIdsToDelete = games.map(g => g.game_id);
+    // Ensure IDs are numbers for range logic, and sort them
+    const gameIdsToDelete = games.map(g => Number(g.game_id)).filter(id => Number.isInteger(id));
+    gameIdsToDelete.sort((a, b) => a - b);
 
     const transaction = this.db.transaction(["play_logs"], "readwrite");
     const logsStore = transaction.objectStore("play_logs");
     const index = logsStore.index("game_id");
 
-    // This is inefficient if there are millions of logs, but fine for local browser DB usually.
-    // Better approach: store season in logs? No, keep normalized.
-    // We iterate games and delete logs for each game.
-
-    for (const gameId of gameIdsToDelete) {
-        // Delete logs for this game
-        // Optimization: Use getAllKeys instead of cursor iteration to reduce IPC overhead
-        const request = index.getAllKeys(gameId);
-
-        request.onsuccess = (event) => {
-            const keys = event.target.result;
-            if (keys && keys.length > 0) {
-                for (const key of keys) {
-                    logsStore.delete(key);
-                }
+    // Optimization: Group game IDs into ranges and batch requests to reduce IPC overhead
+    const ranges = [];
+    if (gameIdsToDelete.length > 0) {
+        let start = gameIdsToDelete[0];
+        let end = start;
+        for (let i = 1; i < gameIdsToDelete.length; i++) {
+            if (gameIdsToDelete[i] === end + 1) {
+                end = gameIdsToDelete[i];
+            } else {
+                ranges.push(IDBKeyRange.bound(start, end));
+                start = gameIdsToDelete[i];
+                end = start;
             }
-        };
+        }
+        ranges.push(IDBKeyRange.bound(start, end));
+    }
+
+    // Use Promise.all to handle deletions in parallel batches (fetching keys)
+    // Note: The deletions themselves are queued in the transaction and executed asynchronously.
+    const deletionPromises = ranges.map(range => {
+        return new Promise((resolve, reject) => {
+            const request = index.getAllKeys(range);
+            request.onsuccess = (event) => {
+                const keys = event.target.result;
+                if (keys && keys.length > 0) {
+                    for (const key of keys) {
+                        logsStore.delete(key);
+                    }
+                }
+                resolve();
+            };
+            request.onerror = (event) => reject(event.target.error);
+        });
+    });
+
+    try {
+        await Promise.all(deletionPromises);
+    } catch (error) {
+        console.error("Error during batch log deletion:", error);
+        // Transaction will likely abort or fail later
     }
 
     return new Promise((resolve, reject) => {
