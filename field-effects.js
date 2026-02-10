@@ -69,6 +69,9 @@ export class FieldEffects {
                       type === 'defense_stop' ? 45 :
                       type === 'interception' ? 50 :
                       type === 'fumble' ? 35 :
+                      type === 'shockwave' ? 100 :
+                      type === 'spiral' ? 40 :
+                      type === 'fire' ? 5 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -194,6 +197,32 @@ export class FieldEffects {
             p.decay = 0.03;
             p.gravity = 0.3; // Heavy
             p.size = (window.Utils?.random || Math.random)() * 4 + 1;
+        } else if (type === 'shockwave') {
+             const angle = (Math.random() * Math.PI * 2);
+             const speed = Math.random() * 10 + 5;
+             p.vx = Math.cos(angle) * speed;
+             p.vy = Math.sin(angle) * speed;
+             p.color = 'rgba(255, 255, 255, 0.8)';
+             p.decay = 0.05;
+             p.size = Math.random() * 3 + 2;
+        } else if (type === 'spiral') {
+             const angle = (Math.random() * Math.PI * 2);
+             const speed = Math.random() * 5 + 2;
+             p.vx = Math.cos(angle) * speed;
+             p.vy = Math.sin(angle) * speed;
+             p.color = this.getThemeColor('--accent', '#007bff');
+             p.decay = 0.02;
+             p.size = Math.random() * 3 + 1;
+             p.spiralAngle = 0; // Custom prop
+        } else if (type === 'fire') {
+             // Spawn mostly center-ish but spread
+             p.x = x + (Math.random() - 0.5) * 100;
+             p.y = this.canvas.height; // Bottom
+             p.vx = (Math.random() - 0.5) * 2;
+             p.vy = -(Math.random() * 5 + 2); // Up
+             p.color = Math.random() > 0.5 ? '#FF4500' : '#FFD700'; // OrangeRed / Gold
+             p.decay = 0.01;
+             p.size = Math.random() * 5 + 2;
         }
 
         return p;
@@ -217,10 +246,19 @@ export class FieldEffects {
                 continue;
             }
 
-            p.x += p.vx;
-            p.y += p.vy;
+            if (p.type === 'spiral') {
+                p.spiralAngle = (p.spiralAngle || 0) + 0.2;
+                p.x += p.vx + Math.cos(p.spiralAngle) * 2;
+                p.y += p.vy + Math.sin(p.spiralAngle) * 2;
+            } else {
+                p.x += p.vx;
+                p.y += p.vy;
+            }
 
             if (p.gravity) p.vy += p.gravity;
+            if (p.type === 'fire') {
+                p.vx += (Math.random() - 0.5) * 0.5; // Wobble
+            }
 
             this.ctx.globalAlpha = p.life;
             this.ctx.fillStyle = p.color;

@@ -254,6 +254,18 @@ class SoundManager {
         this.playTone(500, 'triangle', 0.5, 0.1, 1000, 100); // Rise higher
     }
 
+    playShockwave() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(60, 'sawtooth', 0.5, 0.5, 20); // Deep bass drop
+        this.playNoise(0.5, 0.4); // Explosion
+    }
+
+    playCrowdGasp() {
+        if (!this.enabled || this.muted) return;
+        this.playNoise(0.4, 0.3); // Short noise
+        this.playTone(300, 'triangle', 0.3, 0.1, 200); // Downward slide
+    }
+
     toggleMute() {
         this.muted = !this.muted;
         return this.muted;
