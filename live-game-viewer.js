@@ -31,6 +31,7 @@ class LiveGameViewer {
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
     this.combo = 0; // Combo counter for consecutive successes
+    this.lastFireTime = 0; // Throttle for momentum fire effects
 
     this.timeouts = new Set(); // Track active timeouts
   }
@@ -781,6 +782,10 @@ class LiveGameViewer {
               // 2. Throw
               const throwDuration = 700 * durationScale;
 
+              if (play.playType === 'pass_long' && this.fieldEffects) {
+                  this.fieldEffects.spawnParticles(dropbackPct, 'spiral');
+              }
+
               // Ball Arc - Use Linear for X to simulate projectile
               await this.animateTrajectory(ballEl, {
                   startX: dropbackPct,
@@ -928,6 +933,7 @@ class LiveGameViewer {
       if (this.fieldEffects) {
           if (play.result === 'sack') {
               this.fieldEffects.spawnParticles(endPct, 'sack');
+              this.fieldEffects.spawnParticles(endPct, 'shockwave');
           } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
               if (play.playType.includes('pass') || (play.message && play.message.toLowerCase().includes('intercept'))) {
                   this.fieldEffects.spawnParticles(endPct, 'interception');
@@ -946,6 +952,9 @@ class LiveGameViewer {
               }
           } else if (play.message && play.message.includes('First down')) {
               this.fieldEffects.spawnParticles(endPct, 'first_down');
+          } else if (play.result === 'big_play') {
+              this.fieldEffects.spawnParticles(endPct, 'big_play');
+              this.fieldEffects.spawnParticles(endPct, 'shockwave');
           } else if (!['field_goal', 'punt', 'field_goal_miss', 'incomplete'].includes(play.result) && !play.playType.includes('kick') && !play.playType.includes('punt')) {
               this.fieldEffects.spawnParticles(endPct, 'tackle');
           }
@@ -1995,10 +2004,12 @@ class LiveGameViewer {
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFieldGoalMiss();
+            soundManager.playCrowdGasp();
             this.triggerShake();
             this.triggerFloatText('NO GOOD!', 'bad');
         } else if (play.result === 'sack') {
             soundManager.playSack();
+            soundManager.playShockwave();
             this.triggerShake();
             this.triggerFloatText('SACKED!', 'bad');
             this.triggerVisualFeedback('negative', 'SACK!');
@@ -2993,6 +3004,14 @@ class LiveGameViewer {
 
       const m = this.gameState.momentum;
       const pct = (m + 100) / 2;
+
+      // Fire logic for high momentum
+      if (Math.abs(m) > 75 && Date.now() - this.lastFireTime > 1000) {
+          if (this.fieldEffects) {
+              this.fieldEffects.spawnParticles(50, 'fire');
+          }
+          this.lastFireTime = Date.now();
+      }
 
       // Streak indicator
       let streakHtml = '';
