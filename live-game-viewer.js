@@ -31,6 +31,24 @@ class LiveGameViewer {
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
     this.combo = 0; // Combo counter for consecutive successes
+
+    this.timeouts = new Set(); // Track active timeouts
+  }
+
+  /**
+   * Safe timeout wrapper to prevent memory leaks and zombie callbacks
+   */
+  setTimeoutSafe(callback, delay) {
+      if (this.isGameEnded) return null;
+      const id = setTimeout(() => {
+          this.timeouts.delete(id);
+          // Double check state before execution
+          if (!this.isGameEnded && this.checkUI()) {
+              callback();
+          }
+      }, delay);
+      this.timeouts.add(id);
+      return id;
   }
 
   /**
@@ -43,6 +61,13 @@ class LiveGameViewer {
         clearTimeout(this.intervalId);
         this.intervalId = null;
     }
+
+    // Clear all tracked timeouts
+    if (this.timeouts) {
+        this.timeouts.forEach(id => clearTimeout(id));
+        this.timeouts.clear();
+    }
+
     this.gameState = null;
     this.isGameEnded = true; // Prevent any pending callbacks
     this.clearTempState();
@@ -66,7 +91,7 @@ class LiveGameViewer {
           target.classList.remove('shake');
           void target.offsetWidth; // Force reflow
           target.classList.add('shake');
-          setTimeout(() => target.classList.remove('shake'), 500);
+          this.setTimeoutSafe(() => target.classList.remove('shake'), 500);
       }
   }
 
@@ -74,7 +99,7 @@ class LiveGameViewer {
       const flash = document.createElement('div');
       flash.className = 'flash-overlay';
       document.body.appendChild(flash);
-      setTimeout(() => flash.remove(), 600);
+      this.setTimeoutSafe(() => flash.remove(), 600);
   }
 
   triggerFloatText(text, type = '') {
@@ -85,7 +110,7 @@ class LiveGameViewer {
       el.style.top = '40%';
       el.style.marginLeft = `-${text.length * 10}px`; // Rough centering
       document.body.appendChild(el);
-      setTimeout(() => el.remove(), 1500);
+      this.setTimeoutSafe(() => el.remove(), 1500);
   }
 
   /**
@@ -143,9 +168,9 @@ class LiveGameViewer {
       }
       parent.appendChild(banner);
 
-      setTimeout(() => {
+      this.setTimeoutSafe(() => {
           banner.classList.add('fade-out');
-          setTimeout(() => banner.remove(), 500);
+          this.setTimeoutSafe(() => banner.remove(), 500);
       }, 2000);
   }
 
@@ -375,7 +400,7 @@ class LiveGameViewer {
 
           this.triggerShake();
 
-          setTimeout(() => {
+          this.setTimeoutSafe(() => {
               elements.forEach(e => {
                   e.style.transition = 'none';
                   e.style.left = `${pct}%`;
@@ -401,7 +426,7 @@ class LiveGameViewer {
                   e.classList.add('fade-in');
               });
 
-              setTimeout(() => {
+              this.setTimeoutSafe(() => {
                   elements.forEach(e => e.classList.remove('fade-in'));
               }, 300);
           }, 300);
@@ -685,7 +710,7 @@ class LiveGameViewer {
           if (skillMarker && skillMarker.style.opacity !== '0') skillMarker.classList.add('pre-snap-set');
           if (defMarker) defMarker.classList.add('pre-snap-set');
 
-          await new Promise(r => setTimeout(r, 400 * durationScale));
+          await new Promise(r => this.setTimeoutSafe(r, 400 * durationScale));
 
           if (qbMarker) qbMarker.classList.remove('pre-snap-set');
           if (skillMarker) skillMarker.classList.remove('pre-snap-set');
@@ -749,7 +774,7 @@ class LiveGameViewer {
           if (play.result === 'sack') {
              if (qbMarker) {
                  qbMarker.classList.add('sack-shake');
-                 setTimeout(() => qbMarker.classList.remove('sack-shake'), 600);
+                 this.setTimeoutSafe(() => qbMarker.classList.remove('sack-shake'), 600);
              }
              if (defMarker) defMarker.classList.add('tackle-collision');
           } else {
@@ -779,7 +804,7 @@ class LiveGameViewer {
                    soundManager.playCatch();
                    if (skillMarker) {
                        skillMarker.classList.add('marker-catch');
-                       setTimeout(() => skillMarker.classList.remove('marker-catch'), 500);
+                       this.setTimeoutSafe(() => skillMarker.classList.remove('marker-catch'), 500);
                    }
               }
 
@@ -798,7 +823,7 @@ class LiveGameViewer {
               skillMarker.style.left = `${startPct}%`;
           }
 
-          await new Promise(r => setTimeout(r, handoffDuration));
+          await new Promise(r => this.setTimeoutSafe(r, handoffDuration));
 
           const runDuration = 800 * durationScale;
           if (qbMarker) qbMarker.style.opacity = '0.5';
@@ -831,11 +856,11 @@ class LiveGameViewer {
           } else {
               if (skillMarker) {
                   skillMarker.classList.add('tackle-collision'); // Updated to new class
-                  setTimeout(() => skillMarker.classList.remove('tackle-collision'), 300);
+                  this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
               }
               if (defMarker) {
                   defMarker.classList.add('tackle-collision');
-                  setTimeout(() => defMarker.classList.remove('tackle-collision'), 300);
+                  this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
               }
           }
 
@@ -846,7 +871,7 @@ class LiveGameViewer {
 
           if (ballEl) {
               ballEl.classList.add('kick-flash');
-              setTimeout(() => ballEl.classList.remove('kick-flash'), 300);
+              this.setTimeoutSafe(() => ballEl.classList.remove('kick-flash'), 300);
           }
 
           if (qbMarker) qbMarker.style.opacity = 0;
@@ -884,7 +909,7 @@ class LiveGameViewer {
                    const endzone = isHome ? parent.querySelector('.endzone.right') : parent.querySelector('.endzone.left');
                    if (endzone) {
                        endzone.classList.add('endzone-pulse');
-                       setTimeout(() => endzone.classList.remove('endzone-pulse'), 2000);
+                       this.setTimeoutSafe(() => endzone.classList.remove('endzone-pulse'), 2000);
                    }
 
                    this.fieldEffects.spawnParticles(endPct, 'touchdown');
@@ -927,7 +952,7 @@ class LiveGameViewer {
       }
 
       // Cleanup
-      setTimeout(() => {
+      this.setTimeoutSafe(() => {
           if (ballEl) ballEl.classList.remove('animate-pulse');
           if (qbMarker) qbMarker.style.opacity = 0;
           if (skillMarker) skillMarker.style.opacity = 0;
@@ -1587,7 +1612,7 @@ class LiveGameViewer {
     // Visual Feedback for Possession Change
     if (!this.isSkipping) {
         // Delay slightly to not overlap with previous play feedback
-        setTimeout(() => {
+        this.setTimeoutSafe(() => {
              this.triggerVisualFeedback('drive-summary', 'CHANGE OF POSSESSION');
         }, 1500);
     }
@@ -1829,7 +1854,7 @@ class LiveGameViewer {
     this.isProcessingTurn = false;
     this.updateControls();
 
-    this.intervalId = setTimeout(() => {
+    this.intervalId = this.setTimeoutSafe(() => {
       if (!this.isPaused) {
         this.displayNextPlay();
       }
@@ -1920,7 +1945,7 @@ class LiveGameViewer {
 
         if (play.result === 'touchdown') {
             soundManager.playTouchdown();
-            setTimeout(() => soundManager.playHorns(), 500); // Delayed horns
+            this.setTimeoutSafe(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
             this.triggerShake(); // Add shake!
@@ -1962,7 +1987,7 @@ class LiveGameViewer {
             // Screen shake
             if (this.container) this.container.classList.add('shake');
             else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
-            setTimeout(() => {
+            this.setTimeoutSafe(() => {
                 if (this.container) this.container.classList.remove('shake-hard');
                 else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake-hard');
             }, 500);
@@ -2110,7 +2135,7 @@ class LiveGameViewer {
     parent.appendChild(overlay);
 
     // Remove after animation
-    setTimeout(() => {
+    this.setTimeoutSafe(() => {
         if (overlay && overlay.parentNode) {
             overlay.remove();
         }
@@ -2335,7 +2360,7 @@ class LiveGameViewer {
                     if (soundManager && soundManager.playPing) soundManager.playPing();
 
                     // Small delay to show feedback before hiding
-                    setTimeout(() => {
+                    this.setTimeoutSafe(() => {
                         this.callPlay(e.target.dataset.play);
                     }, 150);
                 });
@@ -2388,7 +2413,7 @@ class LiveGameViewer {
     const playCalling = parent.querySelector('.play-calling');
     if (playCalling) {
       playCalling.classList.remove('visible');
-      setTimeout(() => {
+      this.setTimeoutSafe(() => {
           if (!playCalling.classList.contains('visible')) {
               playCalling.style.display = 'none';
           }
@@ -2431,6 +2456,9 @@ class LiveGameViewer {
       const MAX_PLAYS = 1000; // Safety break for infinite loops
 
       const processChunk = () => {
+          // Safety check for destroyed game
+          if (!this.gameState || this.isGameEnded) return;
+
           let playsInChunk = 0;
           const CHUNK_SIZE = 20; // Process 20 plays per frame
 
@@ -2830,7 +2858,7 @@ class LiveGameViewer {
         modal.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
         e.target.classList.add('selected');
 
-        setTimeout(() => {
+        this.setTimeoutSafe(() => {
              this.callPlay(e.target.dataset.play);
         }, 150);
       });
