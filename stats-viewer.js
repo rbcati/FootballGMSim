@@ -4,7 +4,7 @@
 (function() {
     'use strict';
 
-    let currentStatsView = 'players';
+    let currentStatsView = 'leaders';
     let currentSort = 'ovr';
     let sortDesc = true;
     let currentPosFilter = 'All';
@@ -35,10 +35,11 @@
         statsContainer.innerHTML = `
             <div class="card">
                 <div class="row" style="margin-bottom: 20px;">
-                    <div class="stats-controls" style="display: flex; gap: 10px;">
+                    <div class="stats-controls" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button class="btn ${currentStatsView === 'leaders' ? 'primary' : ''}" onclick="window.setStatsView('leaders')">League Leaders</button>
                         <button class="btn ${currentStatsView === 'team' ? 'primary' : ''}" onclick="window.setStatsView('team')">Standings</button>
                         <button class="btn ${currentStatsView === 'team_stats' ? 'primary' : ''}" onclick="window.setStatsView('team_stats')">Team Stats</button>
-                        <button class="btn ${currentStatsView === 'players' ? 'primary' : ''}" onclick="window.setStatsView('players')">Player Leaders</button>
+                        <button class="btn ${currentStatsView === 'players' ? 'primary' : ''}" onclick="window.setStatsView('players')">Player Stats</button>
                     </div>
                 </div>
                 <div id="stats-content"></div>
@@ -46,7 +47,13 @@
         `;
 
         const content = document.getElementById('stats-content');
-        if (currentStatsView === 'team') {
+        if (currentStatsView === 'leaders') {
+             if (window.renderLeagueLeaders) {
+                 window.renderLeagueLeaders(content);
+             } else {
+                 content.innerHTML = '<p class="muted">League Leaders component not loaded.</p>';
+             }
+        } else if (currentStatsView === 'team') {
             renderStandingsView(content);
         } else if (currentStatsView === 'team_stats') {
             renderTeamStatsView(content);

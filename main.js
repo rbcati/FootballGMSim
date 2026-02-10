@@ -2315,6 +2315,50 @@ class GameController {
             });
         }
 
+        // Sound Toggle UI
+        const navContainer = document.querySelector('.nav-toggle-container');
+        if (navContainer && !document.getElementById('soundToggle')) {
+            const soundBtn = document.createElement('button');
+            soundBtn.id = 'soundToggle';
+            soundBtn.className = 'nav-toggle'; // Style like nav toggle
+            soundBtn.style.marginRight = '10px';
+            soundBtn.style.background = 'none';
+            soundBtn.style.border = 'none';
+            soundBtn.style.color = 'var(--text)';
+            soundBtn.style.cursor = 'pointer';
+            soundBtn.setAttribute('aria-label', 'Toggle Sound');
+
+            const updateIcon = () => {
+                const enabled = window.state?.settings?.soundEnabled;
+                // Icons: SpeakerHigh vs SpeakerSlash
+                soundBtn.innerHTML = enabled
+                    ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>'
+                    : '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
+            };
+
+            // Initialize from LocalStorage
+            if (!window.state) window.state = { settings: {} };
+            if (!window.state.settings) window.state.settings = {};
+
+            const storedSound = localStorage.getItem('nflGM_sound');
+            if (storedSound !== null) {
+                window.state.settings.soundEnabled = (storedSound === 'true');
+            } else if (window.state.settings.soundEnabled === undefined) {
+                window.state.settings.soundEnabled = true; // Default On
+            }
+            updateIcon();
+
+            soundBtn.addEventListener('click', () => {
+                if (!window.state.settings) window.state.settings = {};
+                window.state.settings.soundEnabled = !window.state.settings.soundEnabled;
+                localStorage.setItem('nflGM_sound', window.state.settings.soundEnabled);
+                updateIcon();
+            });
+
+            // Insert before nav toggle if possible
+            navContainer.insertBefore(soundBtn, navContainer.firstChild);
+        }
+
         // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
         // ui-interactions.js handles mobile menu toggle via .nav-toggle
 
@@ -2559,10 +2603,26 @@ class GameController {
                 'game-results', 'powerRankings', 'trade', 'freeagency', 'scouting',
                 'coaching', 'draft', 'awards', 'injuries', 'news', 'owner',
                 'relocation', 'playoffs', 'stats', 'leagueStats', 'game-sim', 'player'];
+
             if (!window.state?.league && gameViews.includes(viewName.split('/')[0])) {
-                console.warn('[ROUTER] No league data for view:', viewName, '- redirecting to dashboard');
-                viewName = 'leagueDashboard';
-                location.hash = '#/leagueDashboard';
+                // If initializing (e.g. from refresh), show loading instead of bouncing
+                // We simulate this by checking if we have a save loaded but league is null (unlikely in this flow, but good for safety)
+                // or if we simply want to gate access.
+                console.warn('[ROUTER] No league data for view:', viewName);
+
+                // Show Loading Screen
+                const mainContent = document.getElementById('main-content');
+                if (mainContent) {
+                    mainContent.innerHTML = `
+                        <div class="loading-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
+                            <div class="loading-spinner" style="width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s ease-in-out infinite;"></div>
+                            <h2 style="margin-top: 20px;">Initializing League Database...</h2>
+                            <p class="muted">Please wait while we load your game.</p>
+                            <button class="btn secondary mt" onclick="location.hash='#/leagueDashboard'">Cancel / Return to Dashboard</button>
+                        </div>
+                    `;
+                }
+                return; // Stop processing router
             }
 
             // Always show the requested view if the UI helper exists

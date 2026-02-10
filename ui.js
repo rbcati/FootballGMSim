@@ -561,6 +561,10 @@ window.renderRoster = function() {
                     <th>Pos</th>
                     <th>Age</th>
                     <th>OVR</th>
+                    <th title="Games Played">G</th>
+                    <th title="Yards / Tackles">Yds</th>
+                    <th title="Touchdowns / Sacks">TD</th>
+                    <th title="Average / Rating / INTs">Avg</th>
                     <th>Eff</th>
                     <th>Morale</th>
                     <th>Depth</th>
@@ -638,18 +642,67 @@ window.renderRoster = function() {
             
             // Player info
             const nameCell = tr.insertCell();
-            let nameHtml = player.name || 'Unknown';
+            // Make name a clickable link as requested
+            let nameHtml = `<span class="player-name-link" style="font-weight: 600; color: var(--accent); cursor: pointer;">${player.name || 'Unknown'}</span>`;
+
             // Add development indicator
             if (player.developmentStatus === 'BREAKOUT') nameHtml += ' <span title="Breakout Player">🔥</span>';
             else if (player.developmentStatus === 'DECLINING') nameHtml += ' <span title="Declining">📉</span>';
             else if (player.developmentStatus === 'STAGNATED') nameHtml += ' <span title="Development Stalled">⚠️</span>';
 
             nameCell.innerHTML = nameHtml;
-            // nameCell.style.color and text-decoration removed, handled by CSS fix
+
+            // Attach explicit click handler to the name
+            const nameLink = nameCell.querySelector('.player-name-link');
+            if (nameLink) {
+                nameLink.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Prevent row click
+                    if (window.showPlayerDetails) {
+                        window.showPlayerDetails(player);
+                    } else if (window.viewPlayerStats) {
+                        window.viewPlayerStats(player.id);
+                    }
+                });
+            }
             
             tr.insertCell().textContent = player.pos || 'N/A';
             tr.insertCell().textContent = player.age || 'N/A';
             tr.insertCell().textContent = player.displayOvr || player.ovr || 'N/A';
+
+            // Stats Columns (G, Yds, TD, Avg)
+            const s = player.stats?.season || {};
+            const pPos = player.pos;
+
+            // Games
+            tr.insertCell().textContent = s.gamesPlayed || 0;
+
+            // Yds, TD, Avg
+            let stat1 = 0, stat2 = 0, stat3 = 0;
+            if (pPos === 'QB') {
+                stat1 = s.passYd || 0;
+                stat2 = s.passTD || 0;
+                stat3 = s.passerRating || 0;
+            } else if (pPos === 'RB') {
+                stat1 = s.rushYd || 0;
+                stat2 = s.rushTD || 0;
+                stat3 = (s.rushAtt > 0) ? (s.rushYd / s.rushAtt) : 0;
+            } else if (['WR', 'TE'].includes(pPos)) {
+                stat1 = s.recYd || 0;
+                stat2 = s.recTD || 0;
+                stat3 = (s.receptions > 0) ? (s.recYd / s.receptions) : 0;
+            } else if (['DL', 'LB', 'CB', 'S', 'DE', 'DT', 'OLB', 'MLB'].includes(pPos)) {
+                stat1 = s.tackles || 0;
+                stat2 = s.sacks || 0;
+                stat3 = s.interceptions || 0;
+            } else if (['K', 'P'].includes(pPos)) {
+                stat1 = s.fgMade || 0;
+                stat2 = s.fgAttempts || 0; // Using TD col for Attempts
+                stat3 = (s.fgAttempts > 0) ? (s.fgMade / s.fgAttempts * 100) : 0;
+            }
+
+            tr.insertCell().textContent = (pPos === 'QB' || pPos === 'RB' || ['WR', 'TE'].includes(pPos)) ? stat1.toLocaleString() : stat1;
+            tr.insertCell().textContent = stat2;
+            tr.insertCell().textContent = stat3.toFixed(1);
             
             // Effective Rating (from depth chart)
             const effCell = tr.insertCell();
@@ -765,24 +818,67 @@ window.renderRoster = function() {
  * @param {Object} player - Player object
  */
 function showPlayerDetails(player) {
-    // 🏆 REFACTORED: Now uses ui-components.js Modal class
     if (!window.Modal) {
         console.error('Modal component not found, falling back to legacy render.');
-        // Fallback to simple stats viewer or route
         if (window.viewPlayerStats) window.viewPlayerStats(player.id);
         else location.hash = `#/player/${player.id}`;
         return;
     }
 
+    // Helper to get game logs
+    const getGameLogs = (p) => {
+        const league = window.state?.league;
+        if (!league || !league.resultsByWeek) return [];
+        const logs = [];
+        const season = league.year;
+
+        // Iterate weeks (assuming up to 18 weeks + playoffs potentially)
+        // resultsByWeek is object or array. Standard is array.
+        const weeks = Array.isArray(league.resultsByWeek) ? league.resultsByWeek : Object.values(league.resultsByWeek);
+
+        weeks.forEach((games, weekIdx) => {
+            if (!games) return;
+            // Find game involving player's team
+            const game = games.find(g => {
+                const h = typeof g.home === 'object' ? g.home.id : g.home;
+                const a = typeof g.away === 'object' ? g.away.id : g.away;
+                return h === p.teamId || a === p.teamId;
+            });
+
+            if (game && game.boxScore) {
+                // Check home or away
+                const isHome = (typeof game.home === 'object' ? game.home.id : game.home) === p.teamId;
+                const side = isHome ? 'home' : 'away';
+                const oppId = isHome ? (typeof game.away === 'object' ? game.away.id : game.away) : (typeof game.home === 'object' ? game.home.id : game.home);
+                const oppTeam = league.teams[oppId];
+
+                // Find player stats in box score
+                const pStats = game.boxScore[side]?.[p.id]?.stats;
+                if (pStats) {
+                    logs.push({
+                        week: weekIdx + 1,
+                        opponent: oppTeam ? oppTeam.abbr : 'OPP',
+                        result: (game.scoreHome > game.scoreAway) === isHome ? 'W' : (game.scoreHome === game.scoreAway ? 'T' : 'L'),
+                        score: `${game.scoreHome}-${game.scoreAway}`,
+                        stats: pStats
+                    });
+                }
+            }
+        });
+        return logs.reverse(); // Newest first
+    };
+
+    const logs = getGameLogs(player);
     const interestReason = getPlayerInterestReason ? getPlayerInterestReason(player) : '';
 
-    const content = `
+    // Tab Content Generators
+    const renderRatingsTab = () => `
         <div class="player-info grid two">
             <div class="player-basic">
                 <h4>Basic Info</h4>
                 <p><strong>Age:</strong> ${player.age || 'N/A'}</p>
                 <p><strong>Contract:</strong> ${player.years || 0} years, $${(player.baseAnnual || 0).toFixed(1)}M/year</p>
-                <p><strong>Cap Hit (Current):</strong> $${(window.capHitFor ? window.capHitFor(player, 0) : player.baseAnnual || 0).toFixed(1)}M</p>
+                <p><strong>Cap Hit:</strong> $${(window.capHitFor ? window.capHitFor(player, 0) : player.baseAnnual || 0).toFixed(1)}M</p>
                 ${interestReason ? `<p style="color: #fbbf24; font-size: 0.9rem; margin-top: 5px;"><em>💡 ${interestReason}</em></p>` : ''}
             </div>
             ${player.ratings ? `
@@ -801,58 +897,108 @@ function showPlayerDetails(player) {
         </div>
         ${player.abilities && player.abilities.length > 0 ? `
             <div class="player-abilities mt">
-                <h4>Abilities/Traits</h4>
+                <h4>Abilities</h4>
                 <p class="trait-list">${player.abilities.join(', ')}</p>
             </div>
         ` : ''}
-
         ${renderInjuryHistory(player)}
-        ${renderSeasonHistory(player)}
-        ${renderPlayerNews(player)}
+    `;
 
-        <div class="player-actions mt" style="display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <button class="btn primary" onclick="window.viewPlayerStats('${player.id}')">View Stats</button>
-                <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit Player</button>
-                ${window.showPlayerComparison ? `<button class="btn secondary" onclick="window.showPlayerComparison('${player.id}')">Compare Player</button>` : ''}
+    const renderLogsTab = () => {
+        if (logs.length === 0) return '<p class="muted">No games played this season.</p>';
+
+        // Define columns based on position
+        let headers = ['Wk', 'Opp', 'Res'];
+        const pos = player.pos;
+        if(pos === 'QB') headers.push('Yds', 'TD', 'Int', 'Rate');
+        else if(pos === 'RB') headers.push('Rush', 'Yds', 'TD', 'Avg');
+        else if(['WR','TE'].includes(pos)) headers.push('Rec', 'Yds', 'TD', 'Avg');
+        else if(['DL','LB','CB','S'].includes(pos)) headers.push('Tkl', 'Sk', 'Int', 'PD');
+        else headers.push('G');
+
+        const rows = logs.map(log => {
+            const s = log.stats;
+            let cells = `<td>${log.week}</td><td>${log.opponent}</td><td>${log.result} ${log.score}</td>`;
+
+            if(pos === 'QB') cells += `<td>${s.passYd}</td><td>${s.passTD}</td><td>${s.interceptions}</td><td>${(s.passerRating||0).toFixed(1)}</td>`;
+            else if(pos === 'RB') cells += `<td>${s.rushAtt}</td><td>${s.rushYd}</td><td>${s.rushTD}</td><td>${((s.rushYd/Math.max(1,s.rushAtt))||0).toFixed(1)}</td>`;
+            else if(['WR','TE'].includes(pos)) cells += `<td>${s.receptions}</td><td>${s.recYd}</td><td>${s.recTD}</td><td>${((s.recYd/Math.max(1,s.receptions))||0).toFixed(1)}</td>`;
+            else if(['DL','LB','CB','S'].includes(pos)) cells += `<td>${s.tackles}</td><td>${s.sacks}</td><td>${s.interceptions}</td><td>${s.passesDefended}</td>`;
+            else cells += `<td>1</td>`;
+
+            return `<tr>${cells}</tr>`;
+        }).join('');
+
+        return `
+            <div class="table-wrapper">
+                <table class="table table-sm">
+                    <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
             </div>
-            <button id="btnToggleFollow_${player.id}" class="btn ${player.isFollowed ? 'primary' : 'secondary'}" style="margin-left: auto;">
+        `;
+    };
+
+    const renderCareerTab = () => {
+        return renderSeasonHistory(player); // Reuse existing helper
+    };
+
+    const content = `
+        <div class="modal-tabs">
+            <button class="tab-btn active" onclick="switchModalTab(this, 'tab-ratings')">Ratings</button>
+            <button class="tab-btn" onclick="switchModalTab(this, 'tab-logs')">Season Stats</button>
+            <button class="tab-btn" onclick="switchModalTab(this, 'tab-career')">Career</button>
+        </div>
+        <div id="tab-ratings" class="tab-content active">${renderRatingsTab()}</div>
+        <div id="tab-logs" class="tab-content" style="display:none;">${renderLogsTab()}</div>
+        <div id="tab-career" class="tab-content" style="display:none;">${renderCareerTab()}</div>
+
+        <div class="player-actions mt" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--hairline); padding-top: 15px;">
+            <div>
+                <button class="btn secondary" onclick="window.editPlayer('${player.id}')">Edit</button>
+            </div>
+            <button id="btnToggleFollow_${player.id}" class="btn ${player.isFollowed ? 'primary' : 'secondary'}">
                 ${player.isFollowed ? '⭐ Unfollow' : '📌 Follow'}
             </button>
         </div>
     `;
 
-    // Ensure CSS for grid layout exists
-    if (!document.getElementById('player-detail-styles')) {
+    // Inject styles if needed
+    if (!document.getElementById('modal-tab-styles')) {
         const style = document.createElement('style');
-        style.id = 'player-detail-styles';
+        style.id = 'modal-tab-styles';
         style.textContent = `
+            .modal-tabs { display: flex; border-bottom: 1px solid var(--hairline); margin-bottom: 15px; }
+            .modal-tabs .tab-btn { background: none; border: none; padding: 10px 15px; cursor: pointer; color: var(--text-muted); font-weight: 600; border-bottom: 2px solid transparent; }
+            .modal-tabs .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
             .player-info { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-            .player-basic p { margin: 5px 0; font-size: 0.95rem; }
-            .player-ratings h4, .player-abilities h4 { color: var(--accent); margin-top: 0; margin-bottom: 10px; }
             .ratings-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 15px; font-size: 0.9rem; }
             .rating-item { display: flex; justify-content: space-between; }
             .rating-value { font-weight: 600; color: var(--text); }
-            .trait-list { font-style: italic; color: var(--text); }
-            .mt { margin-top: 20px; }
-            .player-actions button { margin-right: 10px; padding: 8px 15px; border: none; border-radius: 6px; cursor: pointer; }
-            .player-actions .primary { background: var(--accent); color: var(--on-accent, #fff); }
-            .player-actions .secondary { background: var(--surface-secondary, #333); color: var(--text); }
             @media (max-width: 600px) { .player-info { grid-template-columns: 1fr; } }
         `;
         document.head.appendChild(style);
     }
 
+    // Global tab switcher for modal
+    window.switchModalTab = function(btn, tabId) {
+        const modalBody = btn.closest('.modal-body');
+        modalBody.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        modalBody.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        modalBody.querySelector('#' + tabId).style.display = 'block';
+    };
+
     const modal = new window.Modal({
-        title: `${player.name || 'Unknown Player'} <span class="muted-tag" style="font-size: 0.9rem; color: var(--text-muted); font-weight: 400; margin-left: 10px;">${player.pos || 'N/A'} (OVR ${player.displayOvr || player.ovr || 'N/A'})</span>`,
+        title: `${player.name} <span style="font-weight:400; color:var(--text-muted); font-size:0.9em;">#${player.id} • ${player.pos} • ${player.displayOvr || player.ovr} OVR</span>`,
         content: content,
         size: 'large'
     });
 
     const modalEl = modal.render(document.body);
-    modalEl.style.display = 'flex'; // Ensure centering via flexbox
+    modalEl.style.display = 'flex';
 
-    // Attach Follow Listener
+    // Follow Logic
     const followBtn = modalEl.querySelector(`#btnToggleFollow_${player.id}`);
     if (followBtn) {
         followBtn.addEventListener('click', () => {
@@ -862,18 +1008,8 @@ function showPlayerDetails(player) {
                     followBtn.innerHTML = result.isFollowed ? '⭐ Unfollow' : '📌 Follow';
                     followBtn.className = `btn ${result.isFollowed ? 'primary' : 'secondary'}`;
                     if (window.setStatus) window.setStatus(result.message, 'success');
-
-                    // Refresh view if needed
-                    if (window.renderHub && window.location.hash === '#/hub') {
-                        // Ideally just refresh the tracking card, but full render is safer
-                        window.renderHub();
-                    }
-                } else {
-                    if (window.setStatus) window.setStatus(result.message, 'error');
-                    else alert(result.message);
+                    if (window.renderHub && window.location.hash === '#/hub') window.renderHub();
                 }
-            } else {
-                console.error('toggleFollow not available');
             }
         });
     }
