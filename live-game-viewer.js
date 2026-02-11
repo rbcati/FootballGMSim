@@ -394,9 +394,9 @@ class LiveGameViewer {
 
       const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // Detect Jump (> 15% difference implies teleportation/turnover)
+      // Detect Jump (> 5% difference implies teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 15;
+      const isTeleport = currentLeft > 0 && dist > 5;
 
       if (isTeleport) {
           // Fade Out Sequence
@@ -583,14 +583,23 @@ class LiveGameViewer {
 
                   // Rotation logic
                   if (shouldRotate) {
-                      const rotations = options.rotateType === 'spiral' ? 3 : 2;
-                      const rot = easeProgress * (360 * rotations);
-                      transform += ` rotate(${rot}deg)`;
-
-                      // Scale wobble for spiral
                       if (options.rotateType === 'spiral') {
-                          const wobble = 1 - (Math.sin(easeProgress * Math.PI * 4) * 0.1);
+                          // Fast spiral rotation
+                          const rotations = 4;
+                          const rot = easeProgress * (360 * rotations);
+                          transform += ` rotate(${rot}deg)`;
+                          // Slight wobble scale
+                          const wobble = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.1);
                           transform += ` scale(${wobble})`;
+                      } else if (options.rotateType === 'wobble') {
+                          // Gentle wobble
+                          const angle = Math.sin(easeProgress * Math.PI * 6) * 15;
+                          transform += ` rotate(${angle}deg)`;
+                      } else {
+                          // Standard tumble
+                          const rotations = 2;
+                          const rot = easeProgress * (360 * rotations);
+                          transform += ` rotate(${rot}deg)`;
                       }
                   }
 
@@ -599,10 +608,12 @@ class LiveGameViewer {
                   // Shadow Effect (only if arc)
                   if (arcHeight && shadowEl) {
                        const peakFactor = 4 * easeProgress * (1 - easeProgress);
-                       const scale = 1 - (peakFactor * 0.3);
-                       const opacity = 1 - (peakFactor * 0.4);
+                       const scale = 1 - (peakFactor * 0.5); // Shrink more
+                       const opacity = 1 - (peakFactor * 0.6); // Fade more
+
                        shadowEl.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                       shadowEl.style.opacity = opacity;
+                       shadowEl.style.opacity = Math.max(0.2, opacity);
+                       shadowEl.style.filter = `blur(${peakFactor * 2}px)`; // Add blur
                   }
               }
 
@@ -615,6 +626,7 @@ class LiveGameViewer {
                       shadowEl.style.left = `${endX}%`;
                       shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
                       shadowEl.style.opacity = 1;
+                      shadowEl.style.filter = 'blur(1px)';
                   }
                   if (options.animationClass) element.classList.remove(options.animationClass);
                   resolve();
@@ -718,11 +730,20 @@ class LiveGameViewer {
 
       // PRE-SNAP PHASE
       if (!play.playType.includes('kick') && !play.playType.includes('punt')) {
+          // Add a small pause for cadence
+          await new Promise(r => this.setTimeoutSafe(r, 500 * durationScale));
+
           if (qbMarker) qbMarker.classList.add('pre-snap-set');
           if (skillMarker && skillMarker.style.opacity !== '0') skillMarker.classList.add('pre-snap-set');
           if (defMarker) defMarker.classList.add('pre-snap-set');
 
-          await new Promise(r => this.setTimeoutSafe(r, 400 * durationScale));
+          // Ball bob slightly (center)
+          if (ballEl) {
+              ballEl.style.transform = 'translate(-50%, -55%)';
+              this.setTimeoutSafe(() => ballEl.style.transform = 'translate(-50%, -50%)', 200);
+          }
+
+          await new Promise(r => this.setTimeoutSafe(r, 600 * durationScale));
 
           if (qbMarker) qbMarker.classList.remove('pre-snap-set');
           if (skillMarker) skillMarker.classList.remove('pre-snap-set');
@@ -797,6 +818,9 @@ class LiveGameViewer {
                   this.fieldEffects.spawnParticles(dropbackPct, 'spiral');
               }
 
+              // Determine rotation type
+              const rotType = play.playType === 'pass_short' ? 'wobble' : 'spiral';
+
               // Ball Arc - Use Linear for X to simulate projectile
               await this.animateTrajectory(ballEl, {
                   startX: dropbackPct,
@@ -805,7 +829,7 @@ class LiveGameViewer {
                   arcHeight: 25,
                   easing: 'linear', // Improved physics
                   rotate: true,
-                  rotateType: 'spiral',
+                  rotateType: rotType,
                   trail: true
               });
 
@@ -847,18 +871,19 @@ class LiveGameViewer {
 
           const animations = [];
 
+          // Use .run-bob instead of .bob for more energy
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
           }));
 
           // Def Logic: Chase
           if (defMarker) {
              animations.push(this.animateTrajectory(defMarker, {
-                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut' // Meet at tackle point
+                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob' // Meet at tackle point
              }));
           }
 
@@ -869,16 +894,19 @@ class LiveGameViewer {
           } else if (skillMarker) {
               // Collision/Tackle
                ballEl.classList.add('animate-pulse');
-               if (skillMarker) skillMarker.classList.add('celebrate-spin');
-          } else {
-              if (skillMarker) {
-                  skillMarker.classList.add('tackle-collision'); // Updated to new class
-                  this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
-              }
-              if (defMarker) {
-                  defMarker.classList.add('tackle-collision');
-                  this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
-              }
+               if (play.result === 'big_play') {
+                   if (skillMarker) skillMarker.classList.add('celebrate-spin');
+               } else {
+                   // Standard tackle
+                   if (skillMarker) {
+                       skillMarker.classList.add('tackle-collision');
+                       this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
+                   }
+                   if (defMarker) {
+                       defMarker.classList.add('tackle-collision');
+                       this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
+                   }
+               }
           }
 
       } else if (play.playType === 'punt' || play.playType === 'field_goal') {
@@ -1926,8 +1954,8 @@ class LiveGameViewer {
     // Reduce delays slightly since animation takes time now
     switch (this.tempo) {
       case 'hurry-up': return 200; // was 800
-      case 'slow': return 2000; // was 3000
-      default: return 800; // was 1500
+      case 'slow': return 3000; // Slower for detail
+      default: return 1200; // Natural pace
     }
   }
 
@@ -2262,28 +2290,28 @@ class LiveGameViewer {
     if (homeChanged) {
         const el = scoreboard.querySelector('#scoreHome');
         if (el) {
-            el.classList.remove('pulse-score');
+            el.classList.remove('pulse-score', 'pulse-score-strong');
             if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
 
             // Sync animation duration
             el.style.animationDuration = '1s';
 
             void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
+            el.classList.add('pulse-score-strong');
             this.animateNumber(el, this.lastHomeScore, home.score, 1000);
         }
     }
     if (awayChanged) {
         const el = scoreboard.querySelector('#scoreAway');
         if (el) {
-            el.classList.remove('pulse-score');
+            el.classList.remove('pulse-score', 'pulse-score-strong');
             if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
 
             // Sync animation duration
             el.style.animationDuration = '1s';
 
             void el.offsetWidth; // Force reflow
-            el.classList.add('pulse-score');
+            el.classList.add('pulse-score-strong');
             this.animateNumber(el, this.lastAwayScore, away.score, 1000);
         }
     }
@@ -2323,10 +2351,10 @@ class LiveGameViewer {
     const awayEl = scoreboard.querySelector('#scoreAway');
 
     if (homeChanged && homeEl) {
-        homeEl.classList.remove('pulse-score');
+        homeEl.classList.remove('pulse-score', 'pulse-score-strong');
         if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
         void homeEl.offsetWidth; // Force reflow
-        homeEl.classList.add('pulse-score');
+        homeEl.classList.add('pulse-score-strong');
         this.animateNumber(homeEl, this.lastHomeScore, home.score, 1500);
     } else if (homeEl) {
          // Ensure accurate if not animating
@@ -2339,10 +2367,10 @@ class LiveGameViewer {
     }
 
     if (awayChanged && awayEl) {
-        awayEl.classList.remove('pulse-score');
+        awayEl.classList.remove('pulse-score', 'pulse-score-strong');
         if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
         void awayEl.offsetWidth; // Force reflow
-        awayEl.classList.add('pulse-score');
+        awayEl.classList.add('pulse-score-strong');
         this.animateNumber(awayEl, this.lastAwayScore, away.score, 1500);
     } else if (awayEl) {
          if (awayEl.textContent != away.score && !awayEl.classList.contains('pulse-score')) {
