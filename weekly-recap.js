@@ -97,10 +97,12 @@ export function showWeeklyRecap(week, results, news) {
             if (isSeed) {
                  if (win) {
                      resultText = "PLAYOFF PUSH";
+                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION LEADER";
                      // If seed 1
                      if (playoffs.playoffs[0].id === userTeamId) resultText = "TOP SEED PACE";
                  } else {
                      resultText = "SETBACK";
+                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION RACE TIGHTENS";
                  }
                  highStakesClass = 'high-stakes';
             } else if (isBubble) {
@@ -120,7 +122,10 @@ export function showWeeklyRecap(week, results, news) {
         // Coach Hot Seat Implications
         if (window.state.ownerMode && window.state.ownerMode.enabled && !win) {
              const satisfaction = window.state.ownerMode.fanSatisfaction;
-             if (satisfaction < 40) {
+             if (satisfaction < 25) {
+                 resultText = `ON THE BRINK`;
+                 highStakesClass = 'high-stakes';
+             } else if (satisfaction < 40) {
                  resultText = `JOB IN JEOPARDY`;
                  highStakesClass = 'high-stakes';
              }

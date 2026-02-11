@@ -683,6 +683,12 @@ function optimizeResultsByWeek(resultsByWeek, keepBoxScoreWeeks = 1) {
 }
 
 function prepareStateForSave(stateObj, { keepBoxScoreWeeks = 1 } = {}) {
+  // Prevent function cloning error by removing pendingEvent from saved state
+  if (stateObj.pendingEvent) {
+      const { pendingEvent, ...rest } = stateObj;
+      stateObj = rest;
+  }
+
   const league = stateObj?.league;
   if (!league?.resultsByWeek) {
     return stateObj;
