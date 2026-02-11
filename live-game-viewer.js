@@ -2395,8 +2395,15 @@ class LiveGameViewer {
             // Attach events
             pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    // Visual feedback
-                    pcContainer.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+                    if (this.playCallQueue) return; // Prevent rapid fire
+
+                    // Visual feedback & Disable
+                    pcContainer.querySelectorAll('.play-call-btn').forEach(b => {
+                        b.classList.remove('selected');
+                        b.disabled = true; // Disable all buttons
+                        b.style.pointerEvents = 'none';
+                    });
+
                     e.target.classList.add('selected');
                     if (soundManager && soundManager.playPing) soundManager.playPing();
 
@@ -2467,6 +2474,7 @@ class LiveGameViewer {
    * User calls a play
    */
   callPlay(playType) {
+    if (this.playCallQueue) return;
     this.playCallQueue = playType;
     this.hidePlayCalling();
     
@@ -2518,7 +2526,8 @@ class LiveGameViewer {
               this.playByPlay.push(play);
               // Only render if skipping is slow or we want logs, but for speed we skip rendering intermediate plays
               // However, we DO update the state
-              this.updateGameState(play, state);
+              // OPTIMIZATION: Skip visual updates during fast-forward
+              // this.updateGameState(play, state);
               this.handleEndOfQuarter(state);
           }
 
@@ -2895,8 +2904,15 @@ class LiveGameViewer {
     modal.querySelector('.skip-btn').addEventListener('click', () => this.skipToEnd());
     modal.querySelectorAll('.play-call-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
+        if (this.playCallQueue) return; // Prevent rapid fire
+
         // Visual feedback
-        modal.querySelectorAll('.play-call-btn').forEach(b => b.classList.remove('selected'));
+        modal.querySelectorAll('.play-call-btn').forEach(b => {
+            b.classList.remove('selected');
+            b.disabled = true;
+            b.style.pointerEvents = 'none';
+        });
+
         e.target.classList.add('selected');
 
         this.setTimeoutSafe(() => {
