@@ -16,8 +16,10 @@ export class FieldEffects {
 
         this.ctx = this.canvas.getContext('2d');
         this.particles = [];
+        this.weatherParticles = [];
         this.animating = false;
         this.animationId = null;
+        this.weatherType = null; // 'rain', 'snow', 'clear'
 
         this.resize();
         this._resizeHandler = () => this.resize();
@@ -48,12 +50,67 @@ export class FieldEffects {
         }
         this.animating = false;
         this.particles = [];
+        this.weatherParticles = [];
+        this.weatherType = null;
     }
 
     resize() {
         if (!this.container) return;
         this.canvas.width = this.container.offsetWidth;
         this.canvas.height = this.container.offsetHeight;
+    }
+
+    startWeather(type) {
+        if (type === 'clear' || !type) {
+            this.clearWeather();
+            return;
+        }
+        this.weatherType = type;
+        if (!this.animating) {
+            this.animating = true;
+            this.animate();
+        }
+    }
+
+    clearWeather() {
+        this.weatherType = null;
+        this.weatherParticles = [];
+        // Don't stop animation if regular particles exist
+        if (this.particles.length === 0) {
+            this.animating = false;
+            if (this.animationId) {
+                cancelAnimationFrame(this.animationId);
+                this.animationId = null;
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+        }
+    }
+
+    createRainParticle() {
+        return {
+            x: Math.random() * this.canvas.width,
+            y: -20, // Start above
+            vx: -2 + Math.random(), // Slight wind to left
+            vy: 15 + Math.random() * 10, // Fast
+            life: 1,
+            type: 'rain',
+            length: 15 + Math.random() * 10,
+            color: 'rgba(174, 194, 224, 0.6)'
+        };
+    }
+
+    createSnowParticle() {
+        return {
+            x: Math.random() * this.canvas.width,
+            y: -10,
+            vx: Math.sin(Math.random() * Math.PI * 2) * 1, // Drift
+            vy: 2 + Math.random() * 3, // Slow
+            life: 1,
+            type: 'snow',
+            size: 2 + Math.random() * 2,
+            color: 'rgba(255, 255, 255, 0.8)',
+            oscillation: Math.random() * Math.PI * 2
+        };
     }
 
     spawnParticles(xPct, type) {
@@ -247,7 +304,7 @@ export class FieldEffects {
     }
 
     animate() {
-        if (this.particles.length === 0) {
+        if (this.particles.length === 0 && this.weatherParticles.length === 0 && !this.weatherType) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
             this.animating = false;
             return;
@@ -255,6 +312,42 @@ export class FieldEffects {
 
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
+        // Spawn Weather Particles
+        if (this.weatherType) {
+            const density = this.weatherType === 'rain' ? 3 : 1; // Rain falls faster/more
+            for(let i=0; i<density; i++) {
+                if (this.weatherType === 'rain') this.weatherParticles.push(this.createRainParticle());
+                if (this.weatherType === 'snow') this.weatherParticles.push(this.createSnowParticle());
+            }
+        }
+
+        // Process Weather Particles
+        for (let i = this.weatherParticles.length - 1; i >= 0; i--) {
+            const p = this.weatherParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+
+            if (p.type === 'snow') {
+                p.oscillation += 0.05;
+                p.x += Math.sin(p.oscillation) * 0.5;
+            }
+
+            if (p.y > this.canvas.height) {
+                this.weatherParticles.splice(i, 1);
+                continue;
+            }
+
+            this.ctx.fillStyle = p.color;
+            if (p.type === 'rain') {
+                this.ctx.fillRect(p.x, p.y, 1, p.length);
+            } else {
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        }
+
+        // Process Regular Particles
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
             p.life -= p.decay;

@@ -270,6 +270,22 @@ class SoundManager {
         this.muted = !this.muted;
         return this.muted;
     }
+
+    playClick() {
+        if (!this.enabled || this.muted) return;
+        // Short, crisp "tick"
+        this.playTone(1200, 'sine', 0.03, 0.02);
+    }
+
+    setupGlobalSounds() {
+        if (typeof window === 'undefined') return;
+        document.addEventListener('click', (e) => {
+            // Check if user clicked something interactive
+            if (e.target.closest('button, a, .nav-item, .card, .btn, .play-call-btn, .choice-btn')) {
+                this.playClick();
+            }
+        });
+    }
 }
 
 export const soundManager = new SoundManager();
