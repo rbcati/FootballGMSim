@@ -200,7 +200,13 @@ class LiveGameViewer {
     if (this.preGameContext?.stakes > 60) {
          const isExtreme = this.preGameContext.stakes > 80;
          const color = isExtreme ? '#ef4444' : '#fbbf24';
-         const text = isExtreme ? '🔥 HIGH STAKES 🔥' : '⚠️ KEY MATCHUP';
+         let text = this.preGameContext.reason || (isExtreme ? '🔥 HIGH STAKES 🔥' : '⚠️ KEY MATCHUP');
+
+         // Add icons based on text content if generic
+         if (text === 'RIVALRY MATCHUP') text = '⚔️ RIVALRY MATCHUP ⚔️';
+         else if (text === 'PLAYOFF ELIMINATION') text = '🏆 PLAYOFF GAME 🏆';
+         else if (text === 'CRITICAL SEEDING GAME') text = '📅 CRITICAL MATCHUP';
+
          const animation = isExtreme ? 'pulse-text-glow 1.5s infinite alternate' : '';
 
          stakesHtml = `
@@ -992,7 +998,7 @@ class LiveGameViewer {
     }
 
     // Capture Pre-Game Context
-    if (userTeamId) {
+    if (userTeamId !== null && userTeamId !== undefined) {
         const league = window.state?.league;
         const isHome = homeTeam.id === userTeamId;
         const userTeam = isHome ? homeTeam : awayTeam;
@@ -1022,8 +1028,31 @@ class LiveGameViewer {
         }
 
         let stakesVal = 0;
+        let stakesReason = '';
+
         if (userTeam.rivalries && userTeam.rivalries[oppTeam.id]) {
-            stakesVal = userTeam.rivalries[oppTeam.id].score;
+            const rivScore = userTeam.rivalries[oppTeam.id].score;
+            if (rivScore > 50) {
+                stakesVal += rivScore;
+                stakesReason = 'RIVALRY MATCHUP';
+            } else {
+                stakesVal += rivScore;
+            }
+        }
+
+        // Playoff Implications (Simple check)
+        const week = league?.week || 1;
+        if (week > 18) {
+            stakesVal += 100;
+            stakesReason = 'PLAYOFF ELIMINATION';
+        } else if (week > 14) {
+            // Late season drama
+            const userWins = userTeam.stats?.wins || 0;
+            const oppWins = oppTeam.stats?.wins || 0;
+            if (Math.abs(userWins - oppWins) <= 1 && userWins > 6) {
+                stakesVal += 30;
+                if (!stakesReason) stakesReason = 'CRITICAL SEEDING GAME';
+            }
         }
 
         // Calculate Difficulty Label
@@ -1040,6 +1069,7 @@ class LiveGameViewer {
             defPlanId: plan.defPlanId,
             riskId: plan.riskId,
             stakes: stakesVal,
+            reason: stakesReason,
             userIsHome: isHome
         };
     } else {
