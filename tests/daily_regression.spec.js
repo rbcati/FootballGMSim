@@ -325,20 +325,36 @@ test.describe('Daily Regression Pass', () => {
             const decisionModal = page.locator('#decisionModal');
             if (await decisionModal.isVisible()) {
                 console.log('Decision modal found, dismissing...');
-                // Click the first button (usually "Dismiss" or an option)
-                const btn = decisionModal.locator('button').first();
-                if (await btn.isVisible()) {
-                    await btn.click();
-                    // Wait for modal to disappear to prevent interception
-                    try {
-                        await decisionModal.waitFor({ state: 'hidden', timeout: 3000 });
-                    } catch (e) {
-                        console.log("Decision modal didn't close, trying forceful removal via JS");
-                        await page.evaluate(() => {
-                            const m = document.getElementById('decisionModal');
-                            if(m) { m.remove(); m.style.display = 'none'; }
-                        });
+
+                // Check if we are already at the result screen (Continue button)
+                const continueBtn = decisionModal.locator('#closeDecisionModal');
+                if (await continueBtn.isVisible()) {
+                     await continueBtn.click();
+                } else {
+                    // Click the first choice button
+                    const choiceBtn = decisionModal.locator('button').first();
+                    if (await choiceBtn.isVisible()) {
+                        await choiceBtn.click();
+
+                        // Wait for result/continue button
+                        try {
+                            await continueBtn.waitFor({ state: 'visible', timeout: 2000 });
+                            await continueBtn.click();
+                        } catch (e) {
+                            console.log('No continue button found, checking if modal closed...');
+                        }
                     }
+                }
+
+                // Wait for modal to disappear to prevent interception
+                try {
+                    await decisionModal.waitFor({ state: 'hidden', timeout: 3000 });
+                } catch (e) {
+                    console.log("Decision modal didn't close, trying forceful removal via JS");
+                    await page.evaluate(() => {
+                        const m = document.getElementById('decisionModal');
+                        if(m) { m.remove(); m.style.display = 'none'; }
+                    });
                 }
             }
 
