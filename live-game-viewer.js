@@ -565,6 +565,11 @@ class LiveGameViewer {
               element.style.left = `${currentX}%`;
               if (shadowEl) shadowEl.style.left = `${currentX}%`;
 
+              // Trail Effect
+              if (options.trail && this.fieldEffects && Math.random() > 0.6) {
+                  this.fieldEffects.spawnParticles(currentX, 'trail');
+              }
+
               // Y Position (Arc) & Rotation
               if (arcHeight || shouldRotate) {
                   let transform = 'translate(-50%, -50%)';
@@ -800,7 +805,8 @@ class LiveGameViewer {
                   arcHeight: 25,
                   easing: 'linear', // Improved physics
                   rotate: true,
-                  rotateType: 'spiral'
+                  rotateType: 'spiral',
+                  trail: true
               });
 
               // Pulse if TD
@@ -899,7 +905,8 @@ class LiveGameViewer {
               duration: kickDuration,
               arcHeight: arc,
               easing: 'linear', // Projectile motion
-              rotate: true
+              rotate: true,
+              trail: true
           });
 
            if (play.result === 'touchdown' || play.result === 'field_goal') {
@@ -946,6 +953,7 @@ class LiveGameViewer {
               } else if (play.message && play.message.toLowerCase().includes('fumble')) {
                   this.fieldEffects.spawnParticles(endPct, 'fumble');
               } else {
+                  this.fieldEffects.spawnParticles(endPct, 'shield');
                   this.fieldEffects.spawnParticles(endPct, 'defense_stop');
               }
           } else if (play.result === 'touchdown') {
@@ -2059,6 +2067,7 @@ class LiveGameViewer {
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
             this.triggerVisualFeedback('field-goal-made', 'FIELD GOAL! IT IS GOOD!');
+            if (launchConfetti) launchConfetti();
         } else if (play.playType === 'punt') {
             soundManager.playKick();
             this.triggerVisualFeedback('punt', 'PUNT');

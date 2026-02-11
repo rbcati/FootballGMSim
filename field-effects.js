@@ -72,6 +72,8 @@ export class FieldEffects {
                       type === 'shockwave' ? 100 :
                       type === 'spiral' ? 40 :
                       type === 'fire' ? 5 :
+                      type === 'trail' ? 3 :
+                      type === 'shield' ? 40 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -223,6 +225,22 @@ export class FieldEffects {
              p.color = Math.random() > 0.5 ? '#FF4500' : '#FFD700'; // OrangeRed / Gold
              p.decay = 0.01;
              p.size = Math.random() * 5 + 2;
+        } else if (type === 'trail') {
+             p.color = 'rgba(255, 255, 255, 0.5)';
+             p.size = (Math.random() * 3) + 1;
+             p.life = 0.4;
+             p.decay = 0.1;
+             p.vx = (Math.random() - 0.5) * 0.5;
+             p.vy = (Math.random() - 0.5) * 0.5;
+        } else if (type === 'shield') {
+             const angle = Math.random() * Math.PI * 2;
+             const speed = Math.random() * 4 + 1;
+             p.vx = Math.cos(angle) * speed;
+             p.vy = Math.sin(angle) * speed;
+             p.color = this.getThemeColor('--accent', '#007bff');
+             p.decay = 0.05;
+             p.size = Math.random() * 4 + 2;
+             p.life = 0.8;
         }
 
         return p;
