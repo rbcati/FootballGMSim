@@ -18,6 +18,7 @@
         let rushers = [];
         let defenders = []; // Sacks
         let defendersInt = []; // Interceptions
+        let defendersTkl = []; // Tackles
 
         L.teams.forEach(team => {
             if (!team.roster) return;
@@ -76,6 +77,19 @@
                         subLabel: 'PD'
                     });
                 }
+
+                // Defense - Tackles
+                if (s.tackles > 0) {
+                    defendersTkl.push({
+                        name: p.name,
+                        team: team.abbr || team.name.substring(0, 3).toUpperCase(),
+                        id: p.id,
+                        stat: s.tackles,
+                        subStat: s.tacklesForLoss || 0,
+                        label: 'Tkl',
+                        subLabel: 'TFL'
+                    });
+                }
             });
         });
 
@@ -84,11 +98,13 @@
         rushers.sort((a, b) => b.stat - a.stat);
         defenders.sort((a, b) => b.stat - a.stat);
         defendersInt.sort((a, b) => b.stat - a.stat);
+        defendersTkl.sort((a, b) => b.stat - a.stat);
 
         const topPassers = passers.slice(0, 10);
         const topRushers = rushers.slice(0, 10);
         const topDefenders = defenders.slice(0, 10);
         const topInts = defendersInt.slice(0, 10);
+        const topTacklers = defendersTkl.slice(0, 10);
 
         // Render Tabs
         const renderTabButton = (id, label, active) => `
@@ -124,14 +140,16 @@
 
         container.innerHTML = `
             <div class="league-leaders-component">
-                <div class="leader-tabs" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <div class="leader-tabs" style="display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
                     ${renderTabButton('tab-passing', 'Passing', true)}
                     ${renderTabButton('tab-rushing', 'Rushing', false)}
-                    ${renderTabButton('tab-defense', 'Defense', false)}
+                    ${renderTabButton('tab-tackles', 'Tackles', false)}
+                    ${renderTabButton('tab-defense', 'Sacks', false)}
                 </div>
 
                 ${renderList('tab-passing', 'Passing Leaders', topPassers, '🏈', true)}
                 ${renderList('tab-rushing', 'Rushing Leaders', topRushers, '🏃', false)}
+                ${renderList('tab-tackles', 'Tackle Leaders', topTacklers, '🛑', false)}
                 ${renderList('tab-defense', 'Sack Leaders', topDefenders, '🛡️', false)}
             </div>
             <style>

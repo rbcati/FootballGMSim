@@ -399,6 +399,11 @@ export function applyTrade(league, fromTeamId, toTeamId, fromAssets, toAssets) {
     saveState();
   }
 
+  // Use enhanced save system if available
+  if (window.saveGameState) {
+      window.saveGameState().catch(e => console.error("Auto-save failed:", e));
+  }
+
   return true;
 }
 

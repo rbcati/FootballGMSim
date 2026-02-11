@@ -906,7 +906,35 @@ function showPlayerDetails(player) {
     `;
 
     const renderLogsTab = () => {
-        if (logs.length === 0) return '<p class="muted">No games played this season.</p>';
+        // Render Season Summary Table
+        const s = player.stats?.season || {};
+        let summaryHtml = '';
+
+        if (Object.keys(s).length > 0) {
+            summaryHtml = '<div class="season-summary mb-4"><h4>2024 Season Stats</h4><table class="table table-sm"><thead><tr>';
+            let summaryRows = '<tr>';
+
+            const pos = player.pos;
+            if(pos === 'QB') {
+                summaryHtml += '<th>Yds</th><th>TD</th><th>Int</th><th>Rate</th><th>Comp%</th></tr></thead>';
+                summaryRows += `<td>${s.passYd||0}</td><td>${s.passTD||0}</td><td>${s.interceptions||0}</td><td>${(s.passerRating||0).toFixed(1)}</td><td>${(s.completionPct||0).toFixed(1)}%</td>`;
+            } else if(['RB', 'WR', 'TE'].includes(pos)) {
+                summaryHtml += '<th>Rush Yds</th><th>Rush TD</th><th>Rec Yds</th><th>Rec TD</th><th>Total Yds</th></tr></thead>';
+                summaryRows += `<td>${s.rushYd||0}</td><td>${s.rushTD||0}</td><td>${s.recYd||0}</td><td>${s.recTD||0}</td><td>${(s.rushYd||0)+(s.recYd||0)}</td>`;
+            } else if(['DL','LB','CB','S', 'DE', 'DT', 'OLB', 'MLB'].includes(pos)) {
+                summaryHtml += '<th>Tkl</th><th>Sack</th><th>Int</th><th>PD</th><th>TFL</th></tr></thead>';
+                summaryRows += `<td>${s.tackles||0}</td><td>${s.sacks||0}</td><td>${s.interceptions||0}</td><td>${s.passesDefended||0}</td><td>${s.tacklesForLoss||0}</td>`;
+            } else if (['K', 'P'].includes(pos)) {
+                summaryHtml += '<th>FGM</th><th>FGA</th><th>Pct</th><th>Long</th></tr></thead>';
+                summaryRows += `<td>${s.fgMade||0}</td><td>${s.fgAttempts||0}</td><td>${((s.fgMade/Math.max(1, s.fgAttempts))*100).toFixed(1)}%</td><td>${s.longestFG||0}</td>`;
+            } else {
+                summaryHtml += '<th>Games Played</th><th>Starts</th></tr></thead>';
+                summaryRows += `<td>${s.gamesPlayed||0}</td><td>${s.gamesStarted||0}</td>`;
+            }
+            summaryHtml += summaryRows + '</tr></table></div>';
+        }
+
+        if (logs.length === 0) return summaryHtml + '<p class="muted">No games played this season.</p>';
 
         // Define columns based on position
         let headers = ['Wk', 'Opp', 'Res'];
@@ -1817,6 +1845,9 @@ window.renderSettings = function() {
                         <div class="form-group">
                             <label><input type="checkbox" id="settingCoachFiring" ${window.state?.settings?.allowCoachFiring !== false ? 'checked' : ''}> Coaches can be fired</label>
                         </div>
+                        <div class="form-group">
+                            <label><input type="checkbox" id="settingSound" ${window.state?.settings?.soundEnabled !== false ? 'checked' : ''}> Enable Sound Effects</label>
+                        </div>
                         <div style="margin-top: 20px; border-top: 1px solid var(--hairline); padding-top: 15px;">
                             <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--text-highlight);">Diagnostics</h4>
                             <a href="#/diagnostics" class="btn secondary" style="width: 100%; text-align: center; display: block; text-decoration: none;">Open Control Panel (Diagnostics)</a>
@@ -1848,6 +1879,28 @@ window.renderSettings = function() {
                 window.state.theme = e.target.value;
                 if (window.applyTheme) window.applyTheme(window.state.theme);
                 if (saveState) saveState();
+            });
+        }
+
+        const soundToggle = settingsContainer.querySelector('#settingSound');
+        if (soundToggle) {
+            soundToggle.addEventListener('change', (e) => {
+                if (!window.state?.settings) window.state.settings = {};
+                window.state.settings.soundEnabled = e.target.checked;
+                localStorage.setItem('nflGM_sound', e.target.checked);
+                localStorage.setItem('gameSettings', JSON.stringify(window.state.settings));
+
+                if (window.soundManager) {
+                    window.soundManager.muted = !e.target.checked;
+                }
+
+                // Update nav icon if it exists
+                const navBtn = document.getElementById('soundToggle');
+                if (navBtn) {
+                    navBtn.innerHTML = e.target.checked
+                        ? '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>'
+                        : '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
+                }
             });
         }
 

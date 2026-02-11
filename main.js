@@ -378,20 +378,30 @@ class GameController {
 
             // [DIAGNOSTICS] Prevent broken hub if league not loaded
             if (!window.state || !window.state.league) {
+                // Show loading if we are just waiting for init
+                if (showLoading) showLoading('Initializing League...');
+
                 const errDetail = !window.state ? 'State object missing' : 'League object missing';
                 console.error(`[Hub] Render blocked: ${errDetail}`);
-                hubContainer.innerHTML = `
-                    <div class="card" style="text-align: center; padding: 40px;">
-                        <h2>No Active League</h2>
-                        <p class="muted">Load a save or create a new league to continue.</p>
-                        <p class="small text-danger" style="margin-top:5px; opacity:0.8;">Error: ${errDetail}</p>
-                        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
-                            <button class="btn primary" onclick="location.hash='#/leagueDashboard'">Load Save</button>
-                            <button class="btn" onclick="window.gameController.startNewLeague()">New League</button>
-                            <button class="btn secondary" onclick="location.hash='#/diagnostics'">Diagnostics</button>
-                        </div>
-                    </div>
-                `;
+
+                // If initialization takes too long, show the error state
+                setTimeout(() => {
+                    if (!window.state || !window.state.league) {
+                        if (hideLoading) hideLoading();
+                        hubContainer.innerHTML = `
+                            <div class="card" style="text-align: center; padding: 40px;">
+                                <h2>No Active League</h2>
+                                <p class="muted">Load a save or create a new league to continue.</p>
+                                <p class="small text-danger" style="margin-top:5px; opacity:0.8;">Error: ${errDetail}</p>
+                                <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">
+                                    <button class="btn primary" onclick="location.hash='#/leagueDashboard'">Load Save</button>
+                                    <button class="btn" onclick="window.gameController.startNewLeague()">New League</button>
+                                    <button class="btn secondary" onclick="location.hash='#/diagnostics'">Diagnostics</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }, 1000);
                 return;
             }
 
@@ -1490,6 +1500,12 @@ class GameController {
             if (simulateWeek) {
                 console.log('[GameController] Calling simulateWeek()');
                 await simulateWeek();
+
+                // Save game after simulation
+                if (this.saveGameState) {
+                    await this.saveGameState();
+                }
+
                 // Simulation complete, UI updated by worker callback
             } else {
                 console.error('[GameController] simulateWeek function missing');
@@ -2247,6 +2263,12 @@ class GameController {
 
                 // No saves: Go to Onboarding
                 console.log('No saves found, starting onboarding.');
+
+                // FALLBACK: Ensure state exists to prevent crash before onboarding
+                if (!window.state) {
+                    window.state = window.initState ? window.initState() : {};
+                }
+
                 await this.openOnboard();
             }
 
@@ -2369,6 +2391,12 @@ class GameController {
             } else if (window.state.settings.soundEnabled === undefined) {
                 window.state.settings.soundEnabled = true; // Default On
             }
+
+            // Sync initial state with SoundManager
+            if (window.soundManager) {
+                window.soundManager.muted = !window.state.settings.soundEnabled;
+            }
+
             updateIcon();
 
             soundBtn.addEventListener('click', () => {
@@ -2377,6 +2405,12 @@ class GameController {
                 localStorage.setItem('nflGM_sound', window.state.settings.soundEnabled);
                 // Also save to gameSettings for consistency with SettingsContext request
                 localStorage.setItem('gameSettings', JSON.stringify(window.state.settings));
+
+                // Sync with SoundManager
+                if (window.soundManager) {
+                    window.soundManager.muted = !window.state.settings.soundEnabled;
+                }
+
                 updateIcon();
             });
 
@@ -2678,7 +2712,11 @@ class GameController {
             case 'game-results':
                 if (this.renderGameResults) this.renderGameResults();
                 break;
-            // case 'standings': // Removed as per bug fix request (use stats page)
+            case 'standings':
+                if (window.renderStandingsPage) {
+                    window.renderStandingsPage();
+                }
+                break;
             case 'powerRankings':
                 if (window.renderPowerRankingsPage) {
                     window.renderPowerRankingsPage();

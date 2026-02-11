@@ -1490,6 +1490,7 @@ window.generateProspectName = generateProspectName;
 window.generateCollege = generateCollege;
 window.generateCollegeStats = generateCollegeStats;
 window.calculateRookieContract = calculateRookieContract;
+window.generateDraftClass = generateProspects; // Alias for gameEngine
 window.renderDraft = renderDraft;
 window.renderTopProspects = renderTopProspects;
 window.scoutProspect = scoutProspect;
