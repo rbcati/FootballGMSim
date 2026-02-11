@@ -3092,4 +3092,9 @@ window.addEventListener('load', () => {
             window.updateHeader();
         };
     }
+
+    // Initialize Global Sounds
+    if (window.soundManager && window.soundManager.setupGlobalSounds) {
+        window.soundManager.setupGlobalSounds();
+    }
 });

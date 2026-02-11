@@ -31,6 +31,7 @@ class LiveGameViewer {
     // Streak / Momentum state
     this.streak = 0; // Positive for user success, negative for failure (approx)
     this.combo = 0; // Combo counter for consecutive successes
+    this.driveMomentum = 0; // Heat of current drive
     this.lastFireTime = 0; // Throttle for momentum fire effects
 
     this.timeouts = new Set(); // Track active timeouts
@@ -193,8 +194,15 @@ class LiveGameViewer {
         else diffColor = 'var(--accent)';
     }
 
-    const difficultyHtml = this.preGameContext?.difficulty ?
-        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${this.preGameContext.difficulty}</div>` : '';
+    let difficultyText = this.preGameContext?.difficulty || '';
+    let adaptiveBadge = '';
+
+    if (this.preGameContext?.adaptiveAI) {
+        adaptiveBadge = `<span style="background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 5px; vertical-align: middle;">🤖 ADAPTIVE</span>`;
+    }
+
+    const difficultyHtml = difficultyText ?
+        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${difficultyText} ${adaptiveBadge}</div>` : '';
 
     let stakesHtml = '';
     if (this.preGameContext?.stakes > 60) {
@@ -339,6 +347,11 @@ class LiveGameViewer {
           this.fieldEffects = new FieldEffects(container);
       } else {
           this.fieldEffects.resize();
+      }
+
+      // Apply Weather
+      if (this.fieldEffects && this.preGameContext && this.preGameContext.weather) {
+          this.fieldEffects.startWeather(this.preGameContext.weather);
       }
 
       const homeName = this.gameState?.home?.team?.abbr || 'HOME';
@@ -851,6 +864,7 @@ class LiveGameViewer {
 
               // End of play collision (tackle)
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
+                  soundManager.playTackle();
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
               }
@@ -898,6 +912,7 @@ class LiveGameViewer {
                    if (skillMarker) skillMarker.classList.add('celebrate-spin');
                } else {
                    // Standard tackle
+                   soundManager.playTackle();
                    if (skillMarker) {
                        skillMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
@@ -926,6 +941,7 @@ class LiveGameViewer {
           if (this.fieldEffects) {
               this.fieldEffects.spawnParticles(startPct, 'kick');
           }
+          soundManager.playKick();
 
           await this.animateTrajectory(ballEl, {
               startX: startPct,
@@ -1098,6 +1114,25 @@ class LiveGameViewer {
         else if (ovrDiff < -5) difficultyLabel = "Tough Matchup (Hard)";
         else if (ovrDiff < -10) difficultyLabel = "Nightmare Matchup (Very Hard)";
 
+        // Adaptive AI Logic (Dynamic Difficulty)
+        // If user is on a winning streak (>= 3 games), enable Adaptive AI to make it harder
+        const userStreak = userTeam.stats?.streak || 0;
+        const adaptiveAI = userStreak >= 3;
+
+        if (adaptiveAI) {
+            difficultyLabel += " (Adaptive AI Active)";
+        }
+
+        // Weather Logic
+        const weatherRoll = Math.random();
+        let weather = 'clear';
+        // Simple seasonality check if week available
+        const weekNum = league?.week || 1;
+        const isWinter = weekNum > 13; // Late season
+
+        if (isWinter && weatherRoll < 0.20) weather = 'snow';
+        else if (weatherRoll < 0.15) weather = 'rain';
+
         this.preGameContext = {
             matchup: matchupStr,
             difficulty: difficultyLabel,
@@ -1106,7 +1141,9 @@ class LiveGameViewer {
             riskId: plan.riskId,
             stakes: stakesVal,
             reason: stakesReason,
-            userIsHome: isHome
+            userIsHome: isHome,
+            weather: weather,
+            adaptiveAI: adaptiveAI
         };
     } else {
         this.preGameContext = null;
@@ -1261,6 +1298,20 @@ class LiveGameViewer {
     const momentumMod = (gameState.momentum || 0) / 2000;
     const momentumEffect = gameState.ballPossession === 'home' ? momentumMod : -momentumMod;
 
+    // Adaptive AI Difficulty Adjustment
+    let adaptiveMod = 0;
+    if (this.preGameContext?.adaptiveAI) {
+        const isUserOffense = offense.team.id === this.userTeamId;
+        const isUserDefense = defense.team.id === this.userTeamId;
+        const userLeading = (isUserOffense && offense.score > defense.score) || (isUserDefense && defense.score > offense.score);
+
+        // If User is leading, tilt scales against them slightly to keep it engaging
+        if (userLeading) {
+             if (isUserOffense) adaptiveMod = -0.05; // User offense struggles more
+             else adaptiveMod = 0.05; // AI offense performs better
+        }
+    }
+
     // Defense Modifiers
     let defModSack = 0;
     let defModRun = 0;
@@ -1280,7 +1331,7 @@ class LiveGameViewer {
         defModInt = 0.02;
     }
 
-    const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100 + momentumEffect));
+    const successChance = Math.max(0.3, Math.min(0.7, 0.5 + (offenseStrength - defenseStrength) / 100 + momentumEffect + adaptiveMod));
 
     // Update Drive Info
     gameState.drive.plays++;
@@ -1494,6 +1545,13 @@ class LiveGameViewer {
     // Update Momentum
     gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? momentumChange : -momentumChange)));
 
+    // Update Drive Momentum
+    if (yards > 0) {
+        this.driveMomentum = Math.min(100, this.driveMomentum + yards + (play.result === 'big_play' ? 15 : 0));
+    } else if (play.result === 'sack' || play.result === 'turnover') {
+        this.driveMomentum = 0;
+    }
+
     // Update yard line and down/distance
     if (play.result !== 'turnover' && play.result !== 'field_goal' && play.result !== 'field_goal_miss') {
       const newYardLine = gameState[gameState.ballPossession].yardLine + yards;
@@ -1699,6 +1757,8 @@ class LiveGameViewer {
         startTime: gameState.time,
         startYardLine: startYardLine
     };
+
+    this.driveMomentum = 0;
 
     gameState.ballPossession = gameState.ballPossession === 'home' ? 'away' : 'home';
     const newOffense = gameState[gameState.ballPossession];
@@ -2701,7 +2761,7 @@ class LiveGameViewer {
       const parent = this.viewMode ? this.container : this.modal.querySelector('.modal-content');
       if (!parent) return;
 
-      // Calculate MVP (Player with most yards or TDs)
+      // Calculate MVP
       let mvp = null;
       let mvpScore = -1;
       const stats = this.gameState.stats;
@@ -2722,6 +2782,32 @@ class LiveGameViewer {
           }
       });
 
+      // Calculate Fan Grade & XP
+      let xp = 100; // Base
+      let grade = 'C';
+
+      const isHome = this.gameState.home.team.id === this.userTeamId;
+      const userTeam = isHome ? this.gameState.home.team : this.gameState.away.team;
+      const oppTeam = isHome ? this.gameState.away.team : this.gameState.home.team;
+      const diff = scoreA - scoreB; // Already user vs opp in call? No, title/scoreA is generic.
+
+      // We need to know who scoreA is. The caller passes userScore as A, oppScore as B.
+      // So scoreA = userScore.
+
+      if (scoreA > scoreB) {
+          xp += 50; // Win bonus
+          if (scoreA - scoreB > 14) { grade = 'A+'; xp += 25; }
+          else if (scoreA > 28) grade = 'A';
+          else grade = 'B';
+      } else {
+          if (scoreB - scoreA < 7) { grade = 'C+'; xp += 10; } // Close loss
+          else if (scoreB - scoreA > 20) grade = 'F';
+          else grade = 'D';
+      }
+
+      // Add stats bonuses
+      // (Simplified for now, could access this.gameState.stats)
+
       const overlay = document.createElement('div');
       overlay.className = 'game-over-overlay';
 
@@ -2729,42 +2815,50 @@ class LiveGameViewer {
       if (type === 'positive') bannerClass += ' victory';
       if (type === 'negative') bannerClass += ' defeat';
 
-      // Determine colors for dynamic styling
-      const isHome = this.gameState.home.team.id === this.userTeamId;
-      const userTeam = isHome ? this.gameState.home.team : this.gameState.away.team;
-      const oppTeam = isHome ? this.gameState.away.team : this.gameState.home.team;
-
       let mainColor = '#fff';
       if (type === 'positive') mainColor = userTeam.color || '#34C759';
       else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
 
-      // Play End Game Sound
-      if (type === 'positive') soundManager.playTouchdown(); // Victory fanfare
+      if (type === 'positive') soundManager.playTouchdown();
       else if (type === 'negative') soundManager.playFailure();
 
       overlay.innerHTML = `
-        <div class="${bannerClass}" style="border-color: ${mainColor}; box-shadow: 0 0 60px ${mainColor}60; background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);">
-            <div style="font-size: 5rem; margin-bottom: 10px;">${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}</div>
-            <h2 style="color: ${mainColor}; text-shadow: 0 0 30px ${mainColor}80;">${title}</h2>
-            <div class="game-over-score" style="color: #fff; font-weight: 900; font-size: 3rem;">${scoreA} - ${scoreB}</div>
         <div class="${bannerClass}" style="
             border-color: ${mainColor};
             box-shadow: 0 0 60px ${mainColor}60;
             background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);
         ">
+            <div style="font-size: 5rem; margin-bottom: 10px; animation: bounce 1s;">
+                ${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}
+            </div>
             <h2 style="
                 color: ${mainColor};
                 text-shadow: 0 0 30px ${mainColor}80;
-                font-size: 4.5rem;
-                margin-bottom: 20px;
+                font-size: 4rem;
+                margin-bottom: 10px;
+                text-transform: uppercase;
+                letter-spacing: 4px;
             ">${title}</h2>
-            <div class="game-over-score" style="font-size: 3rem;">${scoreA} - ${scoreB}</div>
+            <div class="game-over-score" style="font-size: 3.5rem; font-weight: 900; margin-bottom: 20px;">
+                ${scoreA} - ${scoreB}
+            </div>
+
+            <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px;">
+                <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
+                    <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">Fan Grade</div>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: ${grade.startsWith('A') ? '#4cd964' : (grade === 'F' ? '#ff3b30' : '#fff')}">${grade}</div>
+                </div>
+                 <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
+                    <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">XP Earned</div>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #ffd700;">+${xp}</div>
+                </div>
+            </div>
 
             ${mvp ? `
-            <div class="game-over-mvp">
-                <div class="label">Player of the Game</div>
-                <div class="player-name">${mvp.name}</div>
-                <div class="player-stats">
+            <div class="game-over-mvp" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px;">
+                <div class="label" style="font-size: 0.8rem; text-transform: uppercase; color: #aaa; letter-spacing: 2px;">Player of the Game</div>
+                <div class="player-name" style="font-size: 1.4rem; font-weight: bold; margin: 5px 0;">${mvp.name}</div>
+                <div class="player-stats" style="color: #ccc; font-size: 0.9rem;">
                     ${mvp.pos} •
                     ${mvp.passYds ? mvp.passYds + ' Pass Yds, ' : ''}
                     ${mvp.rushYds ? mvp.rushYds + ' Rush Yds, ' : ''}
@@ -2774,13 +2868,13 @@ class LiveGameViewer {
             </div>
             ` : ''}
 
-            <div style="margin-top: 30px;">
-                <button class="btn primary" id="dismissOverlay" style="font-size: 1.2rem; padding: 10px 30px;">Continue</button>
+            <div style="margin-top: 30px; display: flex; gap: 10px; justify-content: center;">
+                <button class="btn primary" id="dismissOverlay" style="font-size: 1.1rem; padding: 10px 30px;">Continue</button>
+                <button class="btn secondary" id="replayGame" style="font-size: 1.1rem; padding: 10px 20px;">🔄 Replay</button>
             </div>
         </div>
       `;
 
-      // Ensure positioning
       if (getComputedStyle(parent).position === 'static') {
           parent.style.position = 'relative';
       }
@@ -2789,6 +2883,17 @@ class LiveGameViewer {
 
       overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
           overlay.remove();
+      });
+
+      overlay.querySelector('#replayGame').addEventListener('click', () => {
+           overlay.remove();
+           // Restart Game
+           if (this.userTeamId && this.gameState) {
+                // Find teams again from ID to be safe
+                const hId = this.gameState.home.team.id;
+                const aId = this.gameState.away.team.id;
+                window.watchLiveGame(hId, aId);
+           }
       });
   }
 
@@ -3126,6 +3231,12 @@ class LiveGameViewer {
             <span>${this.gameState.away.team.abbr}</span>
             <span>${this.gameState.home.team.abbr}</span>
         </div>
+
+        <div style="text-align: center; font-size: 0.7em; margin-top: 5px; color: var(--text-muted); opacity: 0.8;">Drive Heat</div>
+        <div style="height: 4px; background: #333; border-radius: 2px; margin-top: 2px; overflow: hidden; width: 60%; margin-left: auto; margin-right: auto;">
+            <div style="width: ${this.driveMomentum}%; height: 100%; background: linear-gradient(90deg, #ff9500, #ff3b30); transition: width 0.3s;"></div>
+        </div>
+
         ${streakHtml}
       `;
   }
