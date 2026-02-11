@@ -217,6 +217,12 @@
     if (!league || !league.teams) return [];
 
     const retired = [];
+
+    // Check league-level retired players (primary storage)
+    if (league.retiredPlayers && Array.isArray(league.retiredPlayers)) {
+        retired.push(...league.retiredPlayers);
+    }
+
     league.teams.forEach(team => {
       // Check if team has a retired players list
       if (team.retiredPlayers && Array.isArray(team.retiredPlayers)) {
