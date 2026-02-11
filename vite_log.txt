@@ -1,9 +1,0 @@
-
-> dev
-> vite
-
-
-  VITE v7.3.1  ready in 557 ms
-
-  ➜  Local:   http://localhost:3000/
-  ➜  Network: use --host to expose

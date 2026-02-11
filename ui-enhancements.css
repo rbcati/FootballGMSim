@@ -2294,3 +2294,44 @@ body {
   color: #FFD700;
   text-shadow: 0 0 20px #FFA500;
 }
+
+/* Additional Game Animations - Added by Day 2 Task */
+@keyframes run-bob {
+  0%, 100% { transform: translate(-50%, -50%); }
+  50% { transform: translate(-50%, -60%); }
+}
+
+.run-bob {
+  animation: run-bob 0.3s infinite ease-in-out;
+}
+
+@keyframes wobble-pass {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -50%) rotate(-5deg); }
+  75% { transform: translate(-50%, -50%) rotate(5deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.wobble-pass {
+  animation: wobble-pass 0.4s infinite ease-in-out;
+}
+
+@keyframes slide-in-smooth {
+  0% { opacity: 0; transform: translateX(-20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+.slide-in-smooth {
+  animation: slide-in-smooth 0.5s ease-out forwards;
+}
+
+/* Ensure pulse-score is distinct */
+@keyframes pulse-score-strong {
+  0% { transform: scale(1); color: inherit; }
+  50% { transform: scale(1.5); color: var(--accent); text-shadow: 0 0 10px var(--accent); }
+  100% { transform: scale(1); color: inherit; }
+}
+
+.pulse-score-strong {
+  animation: pulse-score-strong 0.6s ease-out;
+}
