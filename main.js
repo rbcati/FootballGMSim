@@ -1945,6 +1945,17 @@ class GameController {
             // 3. Update State
             window.state.league = league;
 
+            // FORCE DRAFT CLASS if missing (New Game Fix)
+            if (!window.state.draftClass || window.state.draftClass.length === 0) {
+                console.log('Forcing generation of missing draft class (New Game)...');
+                const nextYear = (league.year || 2025) + 1;
+                if (window.generateDraftClass) {
+                    window.state.draftClass = window.generateDraftClass(nextYear);
+                } else if (window.generateProspects) {
+                    window.state.draftClass = window.generateProspects(nextYear);
+                }
+            }
+
             // Fix 1: Schema Migration (Fresh Init)
             if (migrateSchema) {
                 migrateSchema(window.state.league);
@@ -2176,6 +2187,18 @@ class GameController {
                 // STRICT CHECK: Ensure league object exists
                 if (loaded && window.state && window.state.league) {
                     console.log("Resuming league successfully.");
+
+                    // FORCE DRAFT CLASS if missing (Resume Fix)
+                    if (!window.state.draftClass || window.state.draftClass.length === 0) {
+                        console.log('Forcing generation of missing draft class (Resume)...');
+                        const nextYear = (window.state.league.year || 2025) + 1;
+                        if (window.generateDraftClass) {
+                            window.state.draftClass = window.generateDraftClass(nextYear);
+                        } else if (window.generateProspects) {
+                            window.state.draftClass = window.generateProspects(nextYear);
+                        }
+                    }
+
                     // Persist critical IDs for rehydration on refresh
                     try {
                         if (window.state.userTeamId !== undefined) {
@@ -2352,6 +2375,8 @@ class GameController {
                 if (!window.state.settings) window.state.settings = {};
                 window.state.settings.soundEnabled = !window.state.settings.soundEnabled;
                 localStorage.setItem('nflGM_sound', window.state.settings.soundEnabled);
+                // Also save to gameSettings for consistency with SettingsContext request
+                localStorage.setItem('gameSettings', JSON.stringify(window.state.settings));
                 updateIcon();
             });
 
@@ -2489,18 +2514,20 @@ class GameController {
         if (this.autoSaveInterval) {
             clearInterval(this.autoSaveInterval);
         }
+        // Auto-save every 60 seconds (User Request)
         this.autoSaveInterval = setInterval(() => {
-            if (window.state?.onboarded && window.state?.needsSave) {
+            if (window.state?.onboarded) {
+                // Always try to save if onboarded, not just if needsSave (for robustness)
                 this.saveGameState().then(result => {
                     if (result.success) {
                         window.state.needsSave = false;
-                        console.log('Auto-save completed');
+                        console.log('Auto-saved at', new Date().toLocaleTimeString());
                     }
                 }).catch(error => {
                     console.error('Auto-save failed:', error);
                 });
             }
-        }, 5 * 60 * 1000);
+        }, 60000);
     }
 
     // --- ENHANCED SAVE/LOAD ---
@@ -2610,15 +2637,14 @@ class GameController {
                 // or if we simply want to gate access.
                 console.warn('[ROUTER] No league data for view:', viewName);
 
-                // Show Loading Screen
+                // Show Loading Screen (Zero-State Initialization Fix)
                 const mainContent = document.getElementById('main-content');
                 if (mainContent) {
                     mainContent.innerHTML = `
-                        <div class="loading-screen" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;">
-                            <div class="loading-spinner" style="width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s ease-in-out infinite;"></div>
-                            <h2 style="margin-top: 20px;">Initializing League Database...</h2>
-                            <p class="muted">Please wait while we load your game.</p>
-                            <button class="btn secondary mt" onclick="location.hash='#/leagueDashboard'">Cancel / Return to Dashboard</button>
+                        <div class="min-h-screen flex items-center justify-center bg-gray-900" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 80vh;">
+                            <div class="loading-spinner" style="width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--accent); animation: spin 1s ease-in-out infinite; margin-bottom: 20px;"></div>
+                            <div class="text-white text-xl" style="font-size: 1.5rem; color: white;">Initializing League...</div>
+                            <p class="muted" style="margin-top: 10px;">Please wait while we load your game.</p>
                         </div>
                     `;
                 }

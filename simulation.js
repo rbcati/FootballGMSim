@@ -17,6 +17,7 @@ import { checkAchievements } from './achievements.js';
 import { validateLeagueState } from './game-simulator.js'; // Needed for validation
 import { processStaffPoaching } from './coach-system.js';
 import { checkRosterLegality } from './validation.js';
+import { updatePlayerStats } from './stats-tracking.js';
 
 // Simulation Lock
 let isSimulating = false;
@@ -1096,6 +1097,29 @@ function handleSimulationComplete(payload) {
                 // Merge properties carefully or replace?
                 // Replacing is safer for deeply nested stats that changed
                 L.teams[index] = updatedTeam;
+            }
+        });
+    } else if (results && results.length > 0) {
+        // Fallback: If no team updates from worker, calculate stats locally (Stats Tracking System)
+        // This ensures the Stats Tracking System is utilized even if the worker optimization fails
+        const L = window.state.league;
+        results.forEach(res => {
+            if (res.boxScore) {
+                 const homeTeam = L.teams[typeof res.home === 'object' ? res.home.id : res.home];
+                 const awayTeam = L.teams[typeof res.away === 'object' ? res.away.id : res.away];
+
+                 if (homeTeam && res.boxScore.home) {
+                     Object.entries(res.boxScore.home).forEach(([pid, data]) => {
+                         const p = homeTeam.roster.find(pl => pl.id === pid || pl.id === parseInt(pid));
+                         if (p && data.stats) updatePlayerStats(p, data.stats);
+                     });
+                 }
+                 if (awayTeam && res.boxScore.away) {
+                     Object.entries(res.boxScore.away).forEach(([pid, data]) => {
+                         const p = awayTeam.roster.find(pl => pl.id === pid || pl.id === parseInt(pid));
+                         if (p && data.stats) updatePlayerStats(p, data.stats);
+                     });
+                 }
             }
         });
     }
