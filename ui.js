@@ -3,6 +3,7 @@ import { saveState } from './state.js';
 import { generateDepthChart, renderDepthChart, movePlayerDepth, initializeDepthChartStats, calculateEffectiveRating, generateDraftClass } from './player.js';
 import { toggleFollow, getPlayerInterestReason } from './player-tracking.js';
 import { startNewSeason } from './simulation.js';
+import { getCareerStats } from './stats-tracking.js';
 
 const enhancedCSS = `
 /* New styles for a more readable onboarding team select */
@@ -940,7 +941,37 @@ function showPlayerDetails(player) {
     };
 
     const renderCareerTab = () => {
-        return renderSeasonHistory(player); // Reuse existing helper
+        const careerStats = getCareerStats ? getCareerStats(player) : null;
+        let html = '';
+
+        if (careerStats) {
+             html += `
+                <div class="career-stats-summary mb-4">
+                    <h4>Career Totals</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>G</th>
+                                ${player.pos === 'QB' ? '<th>Yds</th><th>TD</th><th>Int</th>' : ''}
+                                ${['RB', 'WR', 'TE'].includes(player.pos) ? '<th>Rush</th><th>Rec</th><th>Total Yds</th><th>TD</th>' : ''}
+                                ${['DL', 'LB', 'CB', 'S'].includes(player.pos) ? '<th>Tkl</th><th>Sack</th><th>Int</th>' : ''}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>${careerStats.gamesPlayed}</td>
+                                ${player.pos === 'QB' ? `<td>${careerStats.passing.yards}</td><td>${careerStats.passing.tds}</td><td>${careerStats.passing.ints}</td>` : ''}
+                                ${['RB', 'WR', 'TE'].includes(player.pos) ? `<td>${careerStats.rushing.yards}</td><td>${careerStats.receiving.yards}</td><td>${careerStats.rushing.yards + careerStats.receiving.yards}</td><td>${careerStats.rushing.tds + careerStats.receiving.tds}</td>` : ''}
+                                ${['DL', 'LB', 'CB', 'S'].includes(player.pos) ? `<td>${careerStats.defense.tackles}</td><td>${careerStats.defense.sacks}</td><td>${careerStats.defense.ints}</td>` : ''}
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+             `;
+        }
+
+        html += renderSeasonHistory(player);
+        return html;
     };
 
     const content = `

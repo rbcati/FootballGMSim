@@ -88,45 +88,65 @@
         const topPassers = passers.slice(0, 10);
         const topRushers = rushers.slice(0, 10);
         const topDefenders = defenders.slice(0, 10);
-        const topInts = defendersInt.slice(0, 10); // Optional, maybe toggle? Let's show Sacks for now as primary DEF stat
+        const topInts = defendersInt.slice(0, 10);
+
+        // Render Tabs
+        const renderTabButton = (id, label, active) => `
+            <button class="tab-btn ${active ? 'active' : ''}" onclick="window.switchLeaderTab('${id}')">${label}</button>
+        `;
 
         // Render Cards
-        const renderList = (title, list, icon) => `
-            <div class="card leader-card">
-                <h3>${icon} ${title}</h3>
-                <div class="leader-list">
-                    ${list.map((p, i) => `
-                        <div class="leader-item" onclick="window.viewPlayerStats('${p.id}')">
-                            <div class="rank">${i + 1}</div>
-                            <div class="info">
-                                <div class="name">${p.name}</div>
-                                <div class="team-sub">${p.team}</div>
+        const renderList = (id, title, list, icon, active) => `
+            <div id="${id}" class="leader-tab-content" style="display: ${active ? 'block' : 'none'};">
+                <div class="card leader-card">
+                    <h3>${icon} ${title}</h3>
+                    <div class="leader-list">
+                        ${list.map((p, i) => `
+                            <div class="leader-item" onclick="window.viewPlayerStats('${p.id}')">
+                                <div class="rank">${i + 1}</div>
+                                <div class="info">
+                                    <div class="name">${p.name}</div>
+                                    <div class="team-sub">${p.team}</div>
+                                </div>
+                                <div class="stat-primary">
+                                    ${p.stat} <span class="stat-label">${p.label}</span>
+                                </div>
+                                <div class="stat-secondary">
+                                    ${p.subStat} <span class="stat-label">${p.subLabel}</span>
+                                </div>
                             </div>
-                            <div class="stat-primary">
-                                ${p.stat} <span class="stat-label">${p.label}</span>
-                            </div>
-                            <div class="stat-secondary">
-                                ${p.subStat} <span class="stat-label">${p.subLabel}</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                    ${list.length === 0 ? '<div class="muted" style="padding:10px;">No stats recorded yet.</div>' : ''}
+                        `).join('')}
+                        ${list.length === 0 ? '<div class="muted" style="padding:10px;">No stats recorded yet.</div>' : ''}
+                    </div>
                 </div>
             </div>
         `;
 
         container.innerHTML = `
-            <div class="league-leaders-grid">
-                ${renderList('Passing Leaders', topPassers, '🏈')}
-                ${renderList('Rushing Leaders', topRushers, '🏃')}
-                ${renderList('Sack Leaders', topDefenders, '🛡️')}
+            <div class="league-leaders-component">
+                <div class="leader-tabs" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    ${renderTabButton('tab-passing', 'Passing', true)}
+                    ${renderTabButton('tab-rushing', 'Rushing', false)}
+                    ${renderTabButton('tab-defense', 'Defense', false)}
+                </div>
+
+                ${renderList('tab-passing', 'Passing Leaders', topPassers, '🏈', true)}
+                ${renderList('tab-rushing', 'Rushing Leaders', topRushers, '🏃', false)}
+                ${renderList('tab-defense', 'Sack Leaders', topDefenders, '🛡️', false)}
             </div>
             <style>
-                .league-leaders-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                    gap: 15px;
-                    margin-bottom: 20px;
+                .leader-tabs .tab-btn {
+                    padding: 8px 16px;
+                    background: var(--surface);
+                    border: 1px solid var(--hairline);
+                    color: var(--text-muted);
+                    cursor: pointer;
+                    border-radius: 4px;
+                }
+                .leader-tabs .tab-btn.active {
+                    background: var(--accent);
+                    color: white;
+                    border-color: var(--accent);
                 }
                 .leader-card {
                     padding: 0;
@@ -192,6 +212,26 @@
                 }
             </style>
         `;
+    };
+
+    // Global tab switcher
+    window.switchLeaderTab = function(tabId) {
+        // Hide all contents
+        document.querySelectorAll('.leader-tab-content').forEach(el => el.style.display = 'none');
+        // Show target
+        const target = document.getElementById(tabId);
+        if (target) target.style.display = 'block';
+
+        // Update buttons
+        const tabs = document.querySelector('.leader-tabs');
+        if (tabs) {
+            tabs.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.getAttribute('onclick').includes(tabId)) {
+                    btn.classList.add('active');
+                }
+            });
+        }
     };
 
     console.log('✅ League Leaders component loaded');
