@@ -318,14 +318,16 @@ function exerciseFifthYearOption(league, team, player) {
  *
  * @param {Object} player - Player object
  * @param {Object} league - League object
+ * @param {Object} team - User team object (optional, for context)
  * @returns {Object} { minAAV, minYears, maxYears, marketValue, leverageScore }
  */
-function calculatePlayerLeverage(player, league) {
+function calculatePlayerLeverage(player, league, team) {
   if (!player) return { minAAV: 0.9, minYears: 1, maxYears: 4, marketValue: 1, leverageScore: 0 };
 
   const ovr = player.ovr || 60;
   const age = player.age || 25;
   const pos = player.pos || 'RB';
+  const character = player.character || {};
 
   // Position value multipliers (same scale as salary calculation)
   const posMultipliers = {
@@ -366,8 +368,36 @@ function calculatePlayerLeverage(player, league) {
   if (player.injured) leverage -= 20;
   leverage = Math.max(0, Math.min(100, leverage));
 
+  // Personality Modifiers
+  let personalityMod = 0;
+
+  // Greed: Increases demand (up to +20%)
+  if (character.greed) {
+      if (character.greed > 70) personalityMod += 0.15;
+      else if (character.greed < 30) personalityMod -= 0.10;
+  }
+
+  // Loyalty: Discount if re-signing (assumed if team passed)
+  if (team && character.loyalty && character.loyalty > 75) {
+      personalityMod -= 0.10; // Home-town discount
+  }
+
+  // Play For Winner: Tax for losers, discount for winners
+  if (team && character.playForWinner && character.playForWinner > 70) {
+      const wins = team.wins || (team.record ? team.record.w : 0);
+      const losses = team.losses || (team.record ? team.record.l : 0);
+      const isWinner = wins > losses;
+      const isContender = wins >= 10; // Very strong team
+
+      if (isContender) personalityMod -= 0.15; // Wants a ring
+      else if (!isWinner) personalityMod += 0.20; // Needs to be overpaid to stay on bad team
+  }
+
   // Minimum acceptable AAV (players won't sign for less than ~80% of market)
-  const minAAV = roundToDecimals(marketAAV * (0.75 + leverage * 0.002), 1);
+  let demandRatio = 0.75 + (leverage * 0.002) + personalityMod;
+  demandRatio = Math.max(0.6, demandRatio); // Floor at 60% of market
+
+  const minAAV = roundToDecimals(marketAAV * demandRatio, 1);
 
   // Term preferences: young stars want shorter deals to hit FA again, veterans want security
   let minYears = 1, maxYears = 5;
@@ -406,7 +436,7 @@ function extendContract(league, team, player, years, baseSalary, signingBonus) {
 
   // --- PLAYER NEGOTIATION LEVERAGE ---
   // Calculate what the player demands based on market value
-  const leverage = calculatePlayerLeverage(player, league);
+  const leverage = calculatePlayerLeverage(player, league, team);
 
   // Check if offer meets minimum requirements
   if (baseSalary < leverage.minAAV) {
@@ -849,7 +879,8 @@ if (typeof global !== 'undefined' && global !== null) {
     applyTransitionTag,
     exerciseFifthYearOption,
     extendContract,
-    updateContract
+    updateContract,
+    calculatePlayerLeverage
   };
 }
 

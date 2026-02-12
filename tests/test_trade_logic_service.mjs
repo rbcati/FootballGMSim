@@ -1,5 +1,12 @@
 import { TradeLogicService } from '../trade-logic-service.js';
 
+// Mock window for Node environment
+if (typeof window === 'undefined') {
+    global.window = {
+        calculateCapImpact: () => ({ valid: true })
+    };
+}
+
 console.log('Running Trade Logic Service Tests...');
 
 let passed = 0;

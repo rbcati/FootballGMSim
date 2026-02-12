@@ -463,15 +463,19 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   let baseCompPct = (throwAccuracy + awareness) / 2;
   if (modifiers.passAccuracy) baseCompPct *= modifiers.passAccuracy;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
-  const compPct = Math.max(48, Math.min(78,
-    60 + (baseCompPct - 70) * 0.4 + defenseFactor * 12 + U.rand(-3, 3)
-  ));
+
+  // Gaussian distribution for Comp% (Mean: derived from ratings, StdDev: 6.0)
+  const meanCompPct = 60 + (baseCompPct - 70) * 0.4 + defenseFactor * 12;
+  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 90);
+
   const completions = Math.round(attempts * (compPct / 100));
 
   // Yards per completion: NFL average ~10.5, driven by arm strength
   // REMOVED teamScore dependency — yards should come from QB ability, not score
-  const avgYPC = 8.5 + (throwPower - 70) * 0.06 + defenseFactor * 2 + U.rand(-1, 1);
-  const yards = Math.max(0, Math.round(completions * avgYPC + U.rand(-20, 40)));
+  const meanYPC = 10.5 + (throwPower - 75) * 0.1 + defenseFactor * 2;
+  const avgYPC = U.gaussianClamped(meanYPC, 2.0, 5.0, 20.0);
+
+  const yards = Math.max(0, Math.round(completions * avgYPC));
 
   // TDs: derived from PRODUCTION (yards, completions), not from score
   // NFL average: ~1.4 pass TD/game. Roughly 1 TD per ~150 passing yards.
@@ -532,10 +536,12 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   carries = Math.max(2, Math.min(35, carries));
 
   // Reduced base YPC to ~4.2 average
-  const baseYPC = 2.5 + (speed + trucking + juking) / 225;
+  const baseYPC = 3.5 + (speed + trucking + juking - 210) / 40; // ~4.2 at 70s
   const defenseFactor = (100 - (defenseStrength || 70)) / 50;
-  const yardsPerCarry = Math.max(2.0, Math.min(8.0, baseYPC + defenseFactor + U.rand(-0.5, 0.5)));
-  const rushYd = Math.round(carries * yardsPerCarry + U.rand(-10, 20));
+
+  // Gaussian distribution for YPC (Mean: rating-based, StdDev: 1.2)
+  const yardsPerCarry = U.gaussianClamped(baseYPC + defenseFactor, 1.2, 1.5, 12.0);
+  const rushYd = Math.round(carries * yardsPerCarry);
 
   // TDs: derived from rushing production, not from team score
   // NFL average: ~0.6 rush TD/game for lead back. ~1 TD per 80 rushing yards.
@@ -610,8 +616,10 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (receptionPct / 100) + U.rand(-1, 1))));
 
   // Adjusted YPC to match QB output ~11.0
-  const avgYardsPerCatch = 7 + (speed / 18);
-  const recYd = Math.round(receptions * avgYardsPerCatch + U.rand(-20, 50));
+  // Gaussian distribution for Yards Per Catch
+  const meanYPR = 11.0 + (speed - 70) * 0.15;
+  const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.5, 4.0, 30.0);
+  const recYd = Math.round(receptions * avgYardsPerCatch);
 
   // TDs: derived from receiving production, not from team score.
   // NFL average: ~0.4 rec TD/game for primary WR. ~1 TD per 100 rec yards.
