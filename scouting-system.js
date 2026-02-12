@@ -352,8 +352,49 @@ function generateScoutingReport(prospect, thoroughness, accuracy) {
   } else {
     report.notes.push('Basic evaluation completed');
   }
+
+  // --- PERSONALITY & FIT (New Section) ---
+  if (thoroughness !== 'basic' && prospect.character) {
+      report.personalityProfile = evaluateCharacterProfile(prospect.character);
+  } else {
+      report.personalityProfile = ["Unknown (Scout more to reveal)"];
+  }
   
   return report;
+}
+
+/**
+ * Translates character traits into actionable text profiles.
+ * @param {Object} char - Character object
+ * @returns {Array} List of personality descriptions
+ */
+function evaluateCharacterProfile(char) {
+    const profile = [];
+    if (!char) return profile;
+
+    // Leadership
+    if (char.leadership >= 90) profile.push("Team Captain: Natural leader who elevates teammates.");
+    else if (char.leadership >= 75) profile.push("Vocal Leader: Good locker room presence.");
+    else if (char.leadership <= 30) profile.push("Quiet: Prefers to lead by example (or not at all).");
+
+    // Work Ethic
+    if (char.workEthic >= 90) profile.push("Gym Rat: First in, last out. Will reach potential.");
+    else if (char.workEthic <= 40) profile.push("Lazy: Relies on talent alone. High bust risk.");
+
+    // Greed / Loyalty
+    if (char.greed >= 80) profile.push("Mercenary: Maximizes earnings above all else.");
+    else if (char.loyalty >= 80) profile.push("Loyalist: Likely to re-sign for a discount.");
+
+    // Intelligence
+    if (char.footballIQ >= 85) profile.push("Playbook Master: Learns schemes instantly.");
+
+    // Competitiveness
+    if (char.competitiveness >= 90) profile.push("Killer Instinct: Thrives in clutch moments.");
+    else if (char.competitiveness <= 40) profile.push("Passive: Disappears in big games.");
+
+    if (profile.length === 0) profile.push("Standard Professional: No major character outliers.");
+
+    return profile;
 }
 
 /**
@@ -922,6 +963,19 @@ window.viewScoutingReport = function(prospectId) {
             </div>
           </div>
           
+          <div class="report-section">
+            <h4>Personality & Fit</h4>
+            ${report.schemeFit ? `
+              <div class="fit-grade" style="margin-bottom: 10px;">
+                <strong>Scheme Fit:</strong> <span class="rating-grade grade-${report.schemeFit.fitGrade}" style="font-size: 1.1em;">${report.schemeFit.fitGrade}</span>
+                <p class="fit-explanation" style="font-size: 0.9em; color: var(--text-muted); margin-top: 4px;">${report.schemeFit.explanation}</p>
+              </div>
+            ` : ''}
+            <ul class="personality-list">
+              ${Array.isArray(report.personalityProfile) ? report.personalityProfile.map(p => `<li>${p}</li>`).join('') : `<li>${report.personalityProfile}</li>`}
+            </ul>
+          </div>
+
           <div class="report-section">
             <h4>Notes</h4>
             <ul>

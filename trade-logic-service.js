@@ -47,8 +47,12 @@ export class TradeLogicService {
 
     if (baseValue < 1) baseValue = 1;
 
-    // Future discount: 0.75 per year
-    const discount = Math.pow(0.75, yearOffset);
+    // Future discount: 0.90 for next year, 0.80 for 2 years out
+    // Matching Jimmy Johnson chart standards (roughly 1 round penalty per year)
+    let discountRate = 0.90;
+    if (yearOffset >= 2) discountRate = 0.80;
+
+    const discount = Math.pow(discountRate, yearOffset);
     return Math.round(baseValue * discount);
   }
 
@@ -254,6 +258,20 @@ export class TradeLogicService {
     // Calculate AI Valuation of what they are GIVING UP (aiAssets)
     // They value their own assets based on their status
     aiValue = calculateContextualValue(aiAssets);
+
+    // FRANCHISE PLAYER PROTECTION
+    // If AI is giving up a young elite player, apply a massive premium
+    // unless they are explicitly rebuilding (even then, it's expensive)
+    aiAssets.forEach(asset => {
+        if (asset.kind === 'player') {
+            const p = asset.player;
+            if (p.ovr >= 88 && p.age <= 28) {
+                // Franchise Player Detected
+                const protectionFactor = 1.5;
+                aiValue += (this.calculatePlayerValue(p) * (protectionFactor - 1));
+            }
+        }
+    });
 
     // Calculate AI Valuation of what they are RECEIVING (userOffer)
     // They value incoming assets based on their status

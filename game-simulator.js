@@ -1003,24 +1003,37 @@ export function simGameStats(home, away, options = {}) {
             const varianceMod = (mods.variance || 1.0);
             const upsetChance = varianceBoost * 0.015;
 
-            // Base TD probability: 15-30% depending on quality
-            let tdProb = U.clamp(0.18 + netQuality * 0.12 + upsetChance, 0.08, 0.35);
-            // Base FG probability: 10-18%
-            let fgProb = U.clamp(0.14 + netQuality * 0.04, 0.08, 0.22);
+            // Red Zone Efficiency Factor
+            // Convert offensive strength to a red zone rating (using strength as proxy)
+            // Higher strength = better conversion of drives to TDs
+            const rzFactor = (offStr - 60) * 0.005;
 
-            // Strategy mods
-            if (mods.passVolume && mods.passVolume > 1.1) tdProb += 0.03; // Aggressive passing = more TDs but riskier
-            if (mods.runVolume && mods.runVolume > 1.1) { fgProb += 0.02; tdProb -= 0.01; } // Ball control = more FGs
-            if (mods.variance && mods.variance > 1.0) { tdProb += 0.02; } // Aggressive risk = more boom
+            // Base Probability that a drive results in points (TD or FG)
+            // NFL average ~35% of drives score points
+            let scoreProb = 0.32 + netQuality * 0.15 + upsetChance;
+            scoreProb = U.clamp(scoreProb, 0.15, 0.60);
 
-            if (driveRoll < tdProb) {
-                // Touchdown (6 pts + XP attempt)
-                const xpRoll = U.random();
-                if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
-                else if (xpRoll < 0.97) score += 6; // Missed XP
-                else score += 8;                     // 2-point conversion
-            } else if (driveRoll < tdProb + fgProb) {
-                score += 3; // Field goal
+            // If drive scores, what % is TD vs FG?
+            // NFL average: ~60% of scores are TDs, 40% FGs
+            // Adjusted by RZ factor and aggression
+            let tdShare = 0.58 + rzFactor;
+            if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05; // Aggressive
+            if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05; // Conservative
+            tdShare = U.clamp(tdShare, 0.35, 0.80);
+
+            if (driveRoll < scoreProb) {
+                // It's a scoring drive. Now determine TD vs FG.
+                const typeRoll = U.random();
+
+                if (typeRoll < tdShare) {
+                    // Touchdown (6 pts + XP attempt)
+                    const xpRoll = U.random();
+                    if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
+                    else if (xpRoll < 0.97) score += 6; // Missed XP
+                    else score += 8;                     // 2-point conversion
+                } else {
+                    score += 3; // Field goal
+                }
             }
             // Otherwise: punt, turnover, turnover on downs (no points)
         }
