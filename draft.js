@@ -186,6 +186,10 @@ function makeProspect(year, index, weightedPositions) {
       leadership: U.rand(45, 95),
       competitiveness: U.rand(50, 95),   // NEW: clutch performance modifier
       footballIQ: U.rand(55, 98),         // NEW: scheme learning speed
+      greed: U.rand(10, 90),              // NEW: financial motivation
+      loyalty: U.rand(10, 90),            // NEW: desire to stay with one team
+      playForWinner: U.rand(10, 90),      // NEW: desire to be on a contender
+      poise: U.rand(30, 95),              // NEW: composure under pressure
       injury_prone: U.random() < 0.12,
       red_flags: U.random() < 0.04
     };

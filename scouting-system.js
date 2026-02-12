@@ -317,6 +317,21 @@ function generateScoutingReport(prospect, thoroughness, accuracy) {
     if (prospect.character.workEthic < 70) report.weaknesses.push('Work ethic concerns');
     if (prospect.character.injury_prone) report.concerns.push('Injury history');
     if (prospect.character.red_flags) report.concerns.push('Character concerns');
+
+    // New Personality Traits (Thorough/Combine only)
+    if (thoroughness !== 'basic') {
+      const c = prospect.character;
+      if (c.greed >= 80) report.notes.push('Highly money-motivated');
+      else if (c.greed <= 30) report.strengths.push('Team-friendly negotiator');
+
+      if (c.loyalty >= 80) report.strengths.push('Extremely loyal');
+      else if (c.loyalty <= 30) report.concerns.push('Mercenary mentality');
+
+      if (c.playForWinner >= 80) report.notes.push('Demands a winning culture');
+
+      if (c.poise >= 85) report.strengths.push('Ice in their veins (Clutch)');
+      else if (c.poise <= 40) report.weaknesses.push('Crumbles under pressure');
+    }
   }
   
   // College performance analysis

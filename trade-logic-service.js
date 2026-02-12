@@ -192,25 +192,80 @@ export class TradeLogicService {
     let userValue = 0;
     let aiValue = 0;
 
-    // Helper to sum value
-    const sumValue = (assets) => {
+    // Determine AI Team Status (Context-Aware)
+    let isRebuilder = false;
+    let isContender = false;
+
+    if (aiTeam) {
+        const wins = aiTeam.wins || (aiTeam.record ? aiTeam.record.w : 0);
+        const losses = aiTeam.losses || (aiTeam.record ? aiTeam.record.l : 0);
+        const gamesPlayed = wins + losses;
+
+        if (gamesPlayed > 4) {
+            // Mid-season logic
+            if (wins / gamesPlayed >= 0.60) isContender = true;
+            else if (wins / gamesPlayed <= 0.40) isRebuilder = true;
+        } else {
+            // Pre-season / Early season logic (based on OVR/Rank)
+            // Assuming powerRank is available or we estimate from roster
+            // Simple heuristic: Count >80 OVR players
+            const stars = aiTeam.roster ? aiTeam.roster.filter(p => p.ovr >= 80).length : 0;
+            if (stars >= 5) isContender = true;
+            else if (stars <= 1) isRebuilder = true;
+        }
+    }
+
+    // Context-Aware Value Calculator
+    const calculateContextualValue = (assets, forTeamStatus) => {
         let total = 0;
         for (const asset of assets) {
+            let val = 0;
             if (asset.kind === 'player') {
-                total += this.calculatePlayerValue(asset.player);
+                val = this.calculatePlayerValue(asset.player);
+                const age = asset.player.age;
+                const ovr = asset.player.ovr;
+
+                // Rebuilders value youth, devalue age
+                if (isRebuilder) {
+                    if (age <= 24) val *= 1.25;
+                    else if (age >= 29) val *= 0.8;
+                }
+                // Contenders value elite production now
+                if (isContender) {
+                    if (ovr >= 80) val *= 1.15;
+                    else if (ovr < 75 && age > 26) val *= 0.9; // Useless depth
+                }
+
             } else if (asset.kind === 'pick') {
                 const pick = asset.pickInRound || 16;
                 const offset = asset.yearOffset || 0;
-                total += this.calculatePickValue(asset.round, pick, offset);
+                val = this.calculatePickValue(asset.round, pick, offset);
+
+                // Rebuilders LOVE picks
+                if (isRebuilder) val *= 1.3;
+                // Contenders value them less (willing to trade)
+                if (isContender) val *= 0.85;
             }
+            total += val;
         }
         return total;
     };
 
-    userValue = sumValue(userOffer);
-    aiValue = sumValue(aiAssets);
+    // Calculate AI Valuation of what they are GIVING UP (aiAssets)
+    // They value their own assets based on their status
+    aiValue = calculateContextualValue(aiAssets);
 
-    const requiredValue = aiValue * 1.05; // 5% Human Tax
+    // Calculate AI Valuation of what they are RECEIVING (userOffer)
+    // They value incoming assets based on their status
+    userValue = calculateContextualValue(userOffer);
+
+    // Dynamic Tax based on "Fairness" / "Desperation"
+    let tax = 1.05; // Base 5% tax
+    if (isRebuilder && userOffer.some(a => a.kind === 'pick' && a.round === 1)) {
+        tax = 1.0; // Waive tax if you give a rebuilder a 1st round pick
+    }
+
+    const requiredValue = aiValue * tax;
 
     // 1. Value Check
     if (userValue < requiredValue) {
