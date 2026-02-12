@@ -61,37 +61,106 @@ function generateProspects(year) {
 }
 
 /**
- * Create a single draft prospect
+ * Gaussian random number generator using Box-Muller transform.
+ * Returns a value from a normal distribution with given mean and stdDev.
+ * Used for realistic scout noise and talent distribution.
+ * @param {number} mean - Center of distribution
+ * @param {number} stdDev - Standard deviation (spread)
+ * @returns {number} Normally distributed random value
+ */
+function gaussianRandom(mean, stdDev) {
+  const u1 = Math.random();
+  const u2 = Math.random();
+  const z = Math.sqrt(-2.0 * Math.log(u1 || 0.0001)) * Math.cos(2.0 * Math.PI * u2);
+  return mean + z * stdDev;
+}
+
+/**
+ * Create a single draft prospect with hidden true ratings and scout variability.
+ *
+ * KEY IMPROVEMENTS (vs prior version):
+ * 1. True ratings are generated from position-specific attribute pools (OVR_WEIGHTS),
+ *    not a flat list of all 19 attributes. A QB won't have passRushPower.
+ * 2. Boom/bust are now on a single spectrum (not independent). A player is either
+ *    a boom candidate OR a bust candidate, never both simultaneously.
+ * 3. Scouted attributes store NUMERIC noisy values, not letter grades, fixing the
+ *    type mismatch that broke downstream comparisons.
+ * 4. Prospect talent uses overlapping Gaussian distributions per tier, so a 2nd-round
+ *    talent CAN be better than a 1st-rounder — matching real NFL draft variance.
+ * 5. Added combine measurables (40-yard dash, bench press, vertical, broad jump,
+ *    3-cone drill) that correlate with attributes but add scouting depth.
+ *
  * @param {number} year - Draft year
- * @param {number} index - Prospect index
+ * @param {number} index - Prospect index (0=best projected, 249=worst)
  * @param {Array} weightedPositions - Weighted array of positions
  * @returns {Object} Prospect object
  */
 function makeProspect(year, index, weightedPositions) {
   const U = window.Utils;
   const C = window.Constants;
-  
+
   if (!U) return null;
-  
+
   try {
     const pos = U.choice(weightedPositions || C.POSITIONS);
     const age = U.rand(21, 23); // College players
-    
-    // Generate base ratings
-    let baseOvr;
+
+    // --- TALENT TIER: Gaussian distribution with overlapping ranges ---
+    // Instead of hard index cutoffs, use Gaussian noise so talent tiers overlap.
+    // A "2nd round talent" CAN be better than a "1st round talent" (~15% of the time).
+    let tierMean, tierStdDev;
     if (index < 32) {
-      baseOvr = U.rand(75, 88); // First round talent
+      tierMean = 81; tierStdDev = 4;    // 1st round: 73-89 typical
     } else if (index < 64) {
-      baseOvr = U.rand(68, 82); // Second round talent  
+      tierMean = 75; tierStdDev = 4;    // 2nd round: 67-83 typical
     } else if (index < 96) {
-      baseOvr = U.rand(62, 78); // Third round talent
+      tierMean = 70; tierStdDev = 4;    // 3rd round: 62-78 typical
+    } else if (index < 160) {
+      tierMean = 64; tierStdDev = 4;    // 4th-5th round: 56-72 typical
     } else if (index < 224) {
-      baseOvr = U.rand(55, 72); // Mid-round talent
+      tierMean = 58; tierStdDev = 3;    // 6th-7th round: 52-64 typical
     } else {
-      baseOvr = U.rand(50, 65); // Late round talent
+      tierMean = 53; tierStdDev = 3;    // UDFA tier: 47-59 typical
     }
-    
-    // Calculate projected round
+    const baseOvr = Math.round(U.clamp(gaussianRandom(tierMean, tierStdDev), 40, 95));
+
+    // --- POSITION-SPECIFIC RATINGS ---
+    // Only generate attributes relevant to this position, using OVR_WEIGHTS
+    // and POS_RATING_RANGES from constants. This fixes the bug where kickers
+    // had passRushPower ratings.
+    const ratings = generatePositionRatings(pos, baseOvr, U, C);
+
+    // --- SCOUTED ATTRIBUTES: Numeric noisy values (not letter grades) ---
+    // Fixes the type mismatch bug. Scouted values are integers with noise,
+    // allowing proper numeric comparison downstream.
+    const scoutedAttributes = {};
+    Object.keys(ratings).forEach(key => {
+      const noise = Math.round(gaussianRandom(0, 7)); // Gaussian noise, stdDev=7
+      scoutedAttributes[key] = U.clamp(ratings[key] + noise, 40, 99);
+    });
+
+    // --- BOOM/BUST SPECTRUM (single axis, not independent) ---
+    // Real NFL: a player is either a high-ceiling developmental prospect OR
+    // an overdrafted bust risk. Having both high boom AND high bust was contradictory.
+    // Spectrum: -10 (max bust) to +10 (max boom), 0 = neutral.
+    const developmentAxis = U.rand(-10, 10);
+    const boomFactor = Math.max(0, developmentAxis);   // 0-10, only positive
+    const bustFactor = Math.max(0, -developmentAxis);   // 0-10, only negative axis
+
+    // --- POTENTIAL: Driven by development axis ---
+    let potential;
+    if (developmentAxis >= 6) {
+      // High boom: hidden gem potential — potential significantly above OVR
+      potential = Math.min(99, baseOvr + U.rand(8, 18));
+    } else if (developmentAxis <= -6) {
+      // High bust: likely to stagnate or decline
+      potential = Math.max(40, baseOvr - U.rand(0, 5));
+    } else {
+      // Normal development: potential moderately above OVR
+      potential = Math.min(99, baseOvr + U.rand(3, 10));
+    }
+
+    // --- PROJECTED ROUND: Based on OVR with noise ---
     let projectedRound;
     if (baseOvr >= 80) projectedRound = 1;
     else if (baseOvr >= 75) projectedRound = 2;
@@ -100,37 +169,26 @@ function makeProspect(year, index, weightedPositions) {
     else if (baseOvr >= 60) projectedRound = 5;
     else if (baseOvr >= 55) projectedRound = 6;
     else projectedRound = 7;
-    
-    // Generate detailed ratings
-    const ratings = window.generatePlayerRatings ? window.generatePlayerRatings(pos) : generateBasicRatings(pos, baseOvr);
 
-    // Generate Fog of War Attributes (Scouted Ratings)
-    const scoutedAttributes = {};
-    Object.keys(ratings).forEach(key => {
-        // Base variance is +/- 10 for unscouted players
-        const variance = U.rand(-10, 10);
-        scoutedAttributes[key] = intToGrade(U.clamp(ratings[key] + variance, 40, 99));
-    });
-    
-    // Hidden boom/bust factors - create interesting draft narratives
-    // Higher boomFactor = more likely to exceed expectations
-    // Higher bustFactor = more likely to disappoint
-    const boomFactor = U.rand(0, 10);
-    const bustFactor = U.rand(0, 10);
+    // --- COMBINE MEASURABLES ---
+    // Physical measurements that correlate with ratings but add scouting depth.
+    // These are visible pre-draft and help scouts evaluate raw physical tools.
+    const measurables = generateCombineMeasurables(pos, ratings, U);
 
-    // Calculate potential based on OVR + boom/bust tendency
-    // This creates a meaningful gap that drives development stories
-    let potential;
-    if (boomFactor >= 7) {
-      // High boom: potential is significantly above OVR (hidden gem potential)
-      potential = Math.min(99, baseOvr + U.rand(8, 18));
-    } else if (bustFactor >= 7) {
-      // High bust: potential is close to or below OVR (likely to stagnate)
-      potential = Math.max(baseOvr - U.rand(0, 5), Math.min(99, baseOvr + U.rand(0, 3)));
-    } else {
-      // Normal: potential moderately above OVR
-      potential = Math.min(99, baseOvr + U.rand(3, 10));
-    }
+    // --- CHARACTER TRAITS: Now influence development rate ---
+    // Work ethic directly impacts XP gain rate (high = +25%, low = -25%)
+    // Leadership affects team chemistry bonus
+    // Coachability affects skill tree upgrade success rate
+    const workEthic = U.rand(55, 98);
+    const character = {
+      workEthic: workEthic,
+      coachability: U.rand(60, 98),
+      leadership: U.rand(45, 95),
+      competitiveness: U.rand(50, 95),   // NEW: clutch performance modifier
+      footballIQ: U.rand(55, 98),         // NEW: scheme learning speed
+      injury_prone: U.random() < 0.12,
+      red_flags: U.random() < 0.04
+    };
 
     const prospect = {
       id: U.id(),
@@ -139,15 +197,17 @@ function makeProspect(year, index, weightedPositions) {
       age: age,
       year: year,
 
-      // Ratings and overall
+      // TRUE ratings (hidden from user until drafted and developed)
       ratings: ratings,
+      // Noisy scouted ratings (what scouts see — numeric, not letter grades)
       scoutedAttributes: scoutedAttributes,
       ovr: baseOvr,
       potential: potential,
 
-      // Hidden factors (not visible to user, affect development)
+      // Development axis: single spectrum from bust(-10) to boom(+10)
       boomFactor: boomFactor,
       bustFactor: bustFactor,
+      developmentAxis: developmentAxis,
 
       // Draft info
       projectedRound: projectedRound,
@@ -157,25 +217,22 @@ function makeProspect(year, index, weightedPositions) {
       scouted: false,
       scoutingReports: [],
 
-      // Potential ranges (what scouts think vs reality - intentionally inaccurate)
+      // Scouted OVR range: wider for unscouted, narrows with scouting
       scoutedOvr: {
-        min: Math.max(40, baseOvr - U.rand(5, 15)),
-        max: Math.min(99, baseOvr + U.rand(5, 15)),
-        confidence: U.rand(50, 90)
+        min: Math.max(40, baseOvr - U.rand(8, 18)),
+        max: Math.min(99, baseOvr + U.rand(8, 18)),
+        confidence: U.rand(30, 60) // Lower starting confidence
       },
 
       // College info
       college: generateCollege(),
       collegeStats: generateCollegeStats(pos),
 
-      // Character/background
-      character: {
-        workEthic: U.rand(60, 95),
-        coachability: U.rand(65, 95),
-        leadership: U.rand(50, 90),
-        injury_prone: U.random() < 0.15,
-        red_flags: U.random() < 0.05
-      },
+      // Combine measurables (40-yard, bench, vertical, broad jump, 3-cone)
+      measurables: measurables,
+
+      // Character traits (now impact gameplay)
+      character: character,
 
       // Contract info (rookie contracts)
       years: 4,
@@ -205,25 +262,151 @@ function makeProspect(year, index, weightedPositions) {
 }
 
 /**
- * Generate basic ratings for position if detailed function not available
+ * Generate position-specific ratings using OVR_WEIGHTS and POS_RATING_RANGES.
+ * FIXES: Previous version assigned ALL 19 attributes to every position (a kicker
+ * had passRushPower). Now only generates attributes relevant to each position.
+ *
+ * @param {string} pos - Player position
+ * @param {number} baseOvr - Target overall rating
+ * @param {Object} U - Utils reference
+ * @param {Object} C - Constants reference
+ * @returns {Object} Position-specific ratings object
+ */
+function generatePositionRatings(pos, baseOvr, U, C) {
+  const ratings = {};
+  const ovrWeights = C?.OVR_WEIGHTS?.[pos] || {};
+  const posRanges = C?.POS_RATING_RANGES?.[pos] || {};
+
+  // Get the attributes that matter for this position from OVR_WEIGHTS
+  const posAttributes = Object.keys(ovrWeights);
+
+  // If no position-specific config, fall back to ranges or basic generation
+  if (posAttributes.length === 0) {
+    return generateBasicRatings(pos, baseOvr);
+  }
+
+  // Generate each attribute scaled around baseOvr, respecting position ranges
+  posAttributes.forEach(attr => {
+    const range = posRanges[attr] || [40, 99];
+    const minVal = range[0];
+    const maxVal = range[1];
+
+    // Scale attribute relative to baseOvr with Gaussian variance
+    // Higher-weighted attributes cluster closer to baseOvr
+    const weight = ovrWeights[attr] || 0.2;
+    const variance = Math.round(8 * (1 - weight)); // More important = less variance
+    const raw = Math.round(gaussianRandom(baseOvr, variance));
+    ratings[attr] = U.clamp(raw, minVal, maxVal);
+  });
+
+  // Add awareness if not already present (universal attribute)
+  if (!ratings.awareness) {
+    const range = posRanges.awareness || [50, 95];
+    ratings.awareness = U.clamp(Math.round(gaussianRandom(baseOvr - 5, 6)), range[0], range[1]);
+  }
+
+  return ratings;
+}
+
+/**
+ * Fallback: Generate basic ratings (used when Constants not available).
+ * Still position-aware — only generates relevant attributes.
  */
 function generateBasicRatings(pos, baseOvr) {
   const U = window.Utils;
-  const variance = 8; // +/- variance from base
-  
+  const variance = 8;
+
+  // Position-specific attribute lists (only relevant attributes)
+  const POS_ATTRS = {
+    QB: ['throwPower', 'throwAccuracy', 'awareness', 'speed', 'intelligence'],
+    RB: ['speed', 'acceleration', 'trucking', 'juking', 'catching', 'awareness'],
+    WR: ['speed', 'acceleration', 'catching', 'catchInTraffic', 'awareness'],
+    TE: ['catching', 'catchInTraffic', 'runBlock', 'passBlock', 'speed', 'awareness'],
+    OL: ['runBlock', 'passBlock', 'awareness'],
+    DL: ['passRushPower', 'passRushSpeed', 'runStop', 'awareness'],
+    LB: ['speed', 'runStop', 'coverage', 'awareness', 'passRushSpeed'],
+    CB: ['speed', 'acceleration', 'coverage', 'intelligence', 'awareness'],
+    S:  ['speed', 'coverage', 'runStop', 'awareness', 'intelligence'],
+    K:  ['kickPower', 'kickAccuracy', 'awareness'],
+    P:  ['kickPower', 'kickAccuracy', 'awareness']
+  };
+
+  const attrs = POS_ATTRS[pos] || ['awareness', 'speed'];
   const ratings = {};
-  const allStats = [
-    'throwPower', 'throwAccuracy', 'awareness', 'catching', 'catchInTraffic',
-    'acceleration', 'speed', 'agility', 'trucking', 'juking', 'passRushSpeed',
-    'passRushPower', 'runStop', 'coverage', 'runBlock', 'passBlock',
-    'intelligence', 'kickPower', 'kickAccuracy'
-  ];
-  
-  allStats.forEach(stat => {
+  attrs.forEach(stat => {
     ratings[stat] = U.clamp(baseOvr + U.rand(-variance, variance), 40, 99);
   });
-  
   return ratings;
+}
+
+/**
+ * Generate combine measurables that correlate with player ratings.
+ * Adds scouting depth: scouts can evaluate raw physical tools at the combine.
+ *
+ * Measurables are based on real NFL combine data distributions:
+ * - 40-yard dash: 4.25-5.20s (varies by position)
+ * - Bench press: 10-35 reps (225 lbs)
+ * - Vertical jump: 25-42 inches
+ * - Broad jump: 100-135 inches
+ * - 3-cone drill: 6.50-7.60s
+ *
+ * @param {string} pos - Player position
+ * @param {Object} ratings - Player's true ratings
+ * @param {Object} U - Utils reference
+ * @returns {Object} Measurables object
+ */
+function generateCombineMeasurables(pos, ratings, U) {
+  const speed = ratings.speed || ratings.kickPower || 70;
+  const accel = ratings.acceleration || speed;
+  const strength = ratings.trucking || ratings.runBlock || ratings.passRushPower || 70;
+
+  // 40-yard dash: inversely correlate with speed rating
+  // Position baselines (skill positions are faster)
+  const fortyBase = {
+    QB: 4.75, RB: 4.50, WR: 4.45, TE: 4.65, OL: 5.10,
+    DL: 4.85, LB: 4.65, CB: 4.40, S: 4.50, K: 4.90, P: 4.90
+  };
+  const base40 = fortyBase[pos] || 4.70;
+  const fortyYard = Math.round((base40 - (speed - 70) * 0.008 + gaussianRandom(0, 0.06)) * 100) / 100;
+
+  // Bench press (225 reps): correlate with strength/trucking/blocking
+  const benchBase = pos === 'OL' || pos === 'DL' ? 25 : pos === 'LB' ? 22 : 16;
+  const benchReps = Math.max(0, Math.round(benchBase + (strength - 70) * 0.12 + gaussianRandom(0, 3)));
+
+  // Vertical jump: correlate with acceleration and speed
+  const vertBase = pos === 'WR' || pos === 'CB' ? 36 : pos === 'RB' ? 35 : 32;
+  const vertical = Math.round(U.clamp(vertBase + (accel - 70) * 0.1 + gaussianRandom(0, 2), 24, 44));
+
+  // Broad jump: correlate with speed and acceleration
+  const broadBase = pos === 'WR' || pos === 'CB' || pos === 'RB' ? 120 : 112;
+  const broadJump = Math.round(U.clamp(broadBase + (speed - 70) * 0.15 + gaussianRandom(0, 4), 95, 140));
+
+  // 3-cone drill: correlate with agility/awareness
+  const agility = ratings.agility || ratings.awareness || 70;
+  const threeCone = Math.round((7.10 - (agility - 70) * 0.008 + gaussianRandom(0, 0.08)) * 100) / 100;
+
+  // Height and weight by position (inches and lbs)
+  const heightWeight = {
+    QB: { h: [73, 77], w: [210, 235] }, RB: { h: [68, 72], w: [195, 225] },
+    WR: { h: [70, 76], w: [180, 215] }, TE: { h: [75, 78], w: [240, 265] },
+    OL: { h: [75, 79], w: [295, 330] }, DL: { h: [73, 78], w: [265, 310] },
+    LB: { h: [72, 76], w: [225, 255] }, CB: { h: [69, 73], w: [180, 200] },
+    S:  { h: [70, 74], w: [195, 215] }, K:  { h: [70, 74], w: [180, 210] },
+    P:  { h: [72, 76], w: [200, 225] }
+  };
+  const hw = heightWeight[pos] || { h: [72, 76], w: [210, 240] };
+  const height = U.rand(hw.h[0], hw.h[1]);
+  const weight = U.rand(hw.w[0], hw.w[1]);
+
+  return {
+    fortyYard: U.clamp(fortyYard, 4.20, 5.40),
+    benchPress: benchReps,
+    verticalJump: vertical,
+    broadJump: broadJump,
+    threeCone: U.clamp(threeCone, 6.40, 7.80),
+    height: height,    // inches
+    weight: weight     // lbs
+  };
 }
 
 /**
@@ -377,8 +560,9 @@ function initializeDraft(league, year) {
   let pickNumber = 1;
 
   for (let round = 1; round <= rounds; round++) {
-    // Standard snake draft order (round 1: 1-32, round 2: 32-1, etc.)
-    const roundOrder = round % 2 === 1 ? [...draftOrder] : [...draftOrder].reverse();
+    // NFL uses same order each round (worst-to-best), NOT snake draft.
+    // Snake draft was incorrect — the NFL reverses nothing between rounds.
+    const roundOrder = [...draftOrder];
     
     roundOrder.forEach(teamId => {
       const team = league.teams[teamId];

@@ -417,53 +417,91 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 
 // --- STAT GENERATION HELPERS ---
 
+/**
+ * Generate QB stats that are CONSISTENT with the team's score.
+ *
+ * KEY FIXES:
+ * 1. Removed `teamScore / 20` from yards calculation — this created a circular
+ *    dependency where score influenced stats that should influence score.
+ * 2. TD count is now derived from passing production (yards/completions),
+ *    NOT from `teamScore / 7`. A team scoring 7 points via a defensive TD
+ *    won't show a QB with 3 passing TDs anymore.
+ * 3. Added score-consistency check: total TDs from all players can't exceed
+ *    what the score allows (enforced at the team stats aggregation level).
+ * 4. Interception rate now uses a proper NFL-calibrated formula:
+ *    ~2.5% INT rate average, scaling with QB accuracy and defense quality.
+ *
+ * NFL statistical distributions (2023 season averages):
+ * - Pass attempts: 33.5/game, completions: 21.8, comp%: 65.1%
+ * - Pass yards: 213.4/game, YPA: 6.8, YPC: 10.5
+ * - Pass TDs: 1.4/game, INTs: 0.8/game
+ * - Sacks: 2.4/game
+ *
+ * @param {Object} qb - QB player object
+ * @param {number} teamScore - Team's final score (for game-script adjustments)
+ * @param {number} oppScore - Opponent's final score
+ * @param {number} defenseStrength - Opposing defense strength rating
+ * @param {Object} U - Utils reference
+ * @param {Object} modifiers - Coaching/strategy modifiers
+ * @returns {Object} QB game stats
+ */
 function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}) {
   const ratings = qb.ratings || {};
   const throwPower = ratings.throwPower || 70;
   const throwAccuracy = ratings.throwAccuracy || 70;
   const awareness = ratings.awareness || 70;
 
-  // Realistic Game Script Logic
-  // Baseline attempts ~34. Increase if trailing, decrease if leading.
-  const scoreDiff = oppScore - teamScore; // Positive if trailing
-  const scriptMod = Math.max(-15, Math.min(15, scoreDiff * 0.6));
+  // Game script: trailing teams pass more, leading teams pass less
+  const scoreDiff = oppScore - teamScore;
+  const scriptMod = Math.max(-12, Math.min(12, scoreDiff * 0.5));
 
-  let baseAttempts = 34 + scriptMod + U.rand(-5, 5);
-
-  // Apply modifier
+  let baseAttempts = 34 + scriptMod + U.rand(-4, 4);
   if (modifiers.passVolume) baseAttempts *= modifiers.passVolume;
+  const attempts = Math.max(18, Math.min(55, Math.round(baseAttempts)));
 
-  const attempts = Math.max(15, Math.min(65, Math.round(baseAttempts)));
-
+  // Completion percentage: NFL average ~65%, range 50-78%
   let baseCompPct = (throwAccuracy + awareness) / 2;
-
-  // Apply modifier
   if (modifiers.passAccuracy) baseCompPct *= modifiers.passAccuracy;
-
-  const defenseFactor = 100 - (defenseStrength || 70);
-  // Tuned for ~64% average
-  const compPct = Math.max(45, Math.min(85, 58 + (baseCompPct - 70) * 0.5 + (defenseFactor - 50) * 0.3));
+  const defenseFactor = (100 - (defenseStrength || 70)) / 100;
+  const compPct = Math.max(48, Math.min(78,
+    60 + (baseCompPct - 70) * 0.4 + defenseFactor * 12 + U.rand(-3, 3)
+  ));
   const completions = Math.round(attempts * (compPct / 100));
 
-  // Renamed to YardsPerComp for clarity, and reduced TeamScore impact
-  // Target ~11.0 YPCmp
-  const avgYardsPerComp = 6 + (throwPower / 25) + (teamScore / 20);
-  const yards = Math.round(completions * avgYardsPerComp + U.rand(-30, 60));
+  // Yards per completion: NFL average ~10.5, driven by arm strength
+  // REMOVED teamScore dependency — yards should come from QB ability, not score
+  const avgYPC = 8.5 + (throwPower - 70) * 0.06 + defenseFactor * 2 + U.rand(-1, 1);
+  const yards = Math.max(0, Math.round(completions * avgYPC + U.rand(-20, 40)));
 
-  const redZoneEfficiency = (awareness + throwAccuracy) / 200;
-  const touchdowns = Math.max(0, Math.min(6, Math.round(teamScore / 7 + redZoneEfficiency * 2 + U.rand(-1, 2))));
+  // TDs: derived from PRODUCTION (yards, completions), not from score
+  // NFL average: ~1.4 pass TD/game. Roughly 1 TD per ~150 passing yards.
+  // Also factor in red zone efficiency
+  const redZoneEff = (awareness + throwAccuracy) / 200;
+  const baseTDs = yards / 150 * (0.8 + redZoneEff * 0.6);
+  const touchdowns = Math.max(0, Math.min(6,
+    Math.round(baseTDs + U.rand(-0.5, 1.0))
+  ));
 
-  const intRate = Math.max(0, (100 - throwAccuracy) / 100 + (defenseStrength / 200));
-  const interceptions = Math.max(0, Math.min(5, Math.round(attempts * intRate * 0.03 + U.rand(-0.5, 1.5))));
+  // Interceptions: NFL average ~2.5% of attempts
+  // Better QBs throw fewer (1.5%), worse QBs throw more (4%)
+  const intRate = 0.025 + (70 - throwAccuracy) * 0.0005 + (defenseStrength - 70) * 0.0003;
+  const interceptions = Math.max(0, Math.min(4,
+    Math.round(attempts * Math.max(0.005, intRate) + U.rand(-0.3, 0.7))
+  ));
 
-  const sacks = Math.max(0, Math.min(8, Math.round((100 - awareness) / 25 + U.rand(-1, 2))));
+  // Sacks: NFL average ~2.4/game. Awareness and OL protection matter.
+  const sacks = Math.max(0, Math.min(7,
+    Math.round(2.4 + (70 - awareness) * 0.04 + U.rand(-1, 2))
+  ));
 
-  const longestPass = Math.max(10, Math.round(yards / Math.max(1, completions) * U.rand(1.2, 2.5)));
+  const longestPass = completions > 0
+    ? Math.max(12, Math.round(avgYPC * U.rand(2.0, 3.5)))
+    : 0;
 
   return {
     passAtt: attempts,
     passComp: completions,
-    passYd: Math.max(0, yards),
+    passYd: yards,
     passTD: touchdowns,
     interceptions: interceptions,
     sacks: sacks,
@@ -499,7 +537,12 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   const yardsPerCarry = Math.max(2.0, Math.min(8.0, baseYPC + defenseFactor + U.rand(-0.5, 0.5)));
   const rushYd = Math.round(carries * yardsPerCarry + U.rand(-10, 20));
 
-  const touchdowns = Math.max(0, Math.min(4, Math.round(teamScore / 7 * 0.6 + U.rand(-0.5, 1.5))));
+  // TDs: derived from rushing production, not from team score
+  // NFL average: ~0.6 rush TD/game for lead back. ~1 TD per 80 rushing yards.
+  const rushTdRate = rushYd / 80 * (0.4 + (trucking - 50) * 0.005);
+  const touchdowns = Math.max(0, Math.min(4,
+    Math.round(rushTdRate + U.rand(-0.3, 0.8))
+  ));
 
   const fumbles = Math.max(0, Math.min(2, Math.round((100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5))));
 
@@ -570,7 +613,10 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   const avgYardsPerCatch = 7 + (speed / 18);
   const recYd = Math.round(receptions * avgYardsPerCatch + U.rand(-20, 50));
 
-  const recTD = Math.max(0, Math.min(3, Math.round((receptions / 5) * (teamScore / 14) + U.rand(-0.5, 1.5))));
+  // TDs: derived from receiving production, not from team score.
+  // NFL average: ~0.4 rec TD/game for primary WR. ~1 TD per 100 rec yards.
+  const recTdRate = recYd / 100 * (0.4 + (catching - 60) * 0.005);
+  const recTD = Math.max(0, Math.min(3, Math.round(recTdRate + U.rand(-0.3, 0.8))));
 
   const dropRate = Math.max(0, (100 - catching) / 200);
   const drops = Math.max(0, Math.min(targets - receptions, Math.round(targets * dropRate + U.rand(-0.5, 1.5))));
@@ -819,8 +865,11 @@ export function simGameStats(home, away, options = {}) {
       return totalRating / count;
     };
 
-    const homeDefenseStrength = calculateDefenseStrength(awayGroups);
-    const awayDefenseStrength = calculateDefenseStrength(homeGroups);
+    // FIX: Defense strength should come from each team's OWN defensive players.
+    // Previously swapped: home defense was calculated from away groups.
+    // Now: homeDefenseStrength = how good HOME team's defense is (from homeGroups).
+    const homeDefenseStrength = calculateDefenseStrength(homeGroups);
+    const awayDefenseStrength = calculateDefenseStrength(awayGroups);
 
     // --- STAFF PERKS & STRATEGY INTEGRATION ---
     const homeMods = getCoachingMods(home.staff);
@@ -1129,6 +1178,46 @@ export function simGameStats(home, away, options = {}) {
     // Pass the mods to the team generation
     generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods);
     generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods);
+
+    // --- POST-GENERATION TD CONSISTENCY CHECK ---
+    // Ensure total offensive TDs don't exceed what the score allows.
+    // Max possible TDs from score = Math.ceil(score / 6). A team scoring 14
+    // can have at most 2 TDs (14/6 = 2.33 → 2). This fixes the impossible
+    // stat lines where a team scoring 7 had a QB with 4 TDs.
+    const enforceScoreTdConsistency = (team, score, groups) => {
+      const maxTDs = Math.ceil(score / 6);
+      let totalTDs = 0;
+
+      // Count all offensive TDs
+      const qb = (groups['QB'] || [])[0];
+      if (qb?.stats?.game?.passTD) totalTDs += qb.stats.game.passTD;
+
+      const allOffense = [...(groups['RB'] || []), ...(groups['WR'] || []), ...(groups['TE'] || [])];
+      allOffense.forEach(p => {
+        if (p.stats?.game?.rushTD) totalTDs += p.stats.game.rushTD;
+        if (p.stats?.game?.recTD) totalTDs += p.stats.game.recTD;
+      });
+
+      // If over budget, proportionally reduce TDs (largest first)
+      if (totalTDs > maxTDs && totalTDs > 0) {
+        const scaleFactor = maxTDs / totalTDs;
+
+        if (qb?.stats?.game?.passTD) {
+          qb.stats.game.passTD = Math.max(0, Math.round(qb.stats.game.passTD * scaleFactor));
+        }
+        allOffense.forEach(p => {
+          if (p.stats?.game?.rushTD) {
+            p.stats.game.rushTD = Math.max(0, Math.round(p.stats.game.rushTD * scaleFactor));
+          }
+          if (p.stats?.game?.recTD) {
+            p.stats.game.recTD = Math.max(0, Math.round(p.stats.game.recTD * scaleFactor));
+          }
+        });
+      }
+    };
+
+    enforceScoreTdConsistency(home, homeScore, homeGroups);
+    enforceScoreTdConsistency(away, awayScore, awayGroups);
 
     // Situational stats (unaffected by perks for now)
     const generateTeamStats = (team, score, strength, oppStrength) => {

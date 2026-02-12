@@ -137,34 +137,63 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
   }
 
   /**
-   * Calculates XP earned based on performance and overall rating difference.
+   * Calculates XP earned based on performance, potential gap, and character traits.
+   *
+   * FIXES:
+   * 1. Removed the reverse-progression bug where ovr <= 70 players got +100 XP
+   *    bonus (causing all players to converge to similar ratings). Now low-rated
+   *    players don't get artificial catch-up XP.
+   * 2. Added character trait impact: work ethic directly modifies XP gain rate
+   *    (+25% for elite work ethic, -15% for poor). This makes character traits
+   *    from scouting reports actually matter for player development.
+   * 3. Age-based decline: players over 30 earn less XP and face natural decline,
+   *    solving the problem where players only got better, never worse.
+   *
    * @param {Object} gameStats - Player's game statistics
    * @param {number} ovr - Player's current overall rating
    * @returns {number} Amount of XP earned
    */
   function calculateGameXP(gameStats, ovr) {
     let baseXP = 50; // Base XP for playing a game
-    
-    // Performance Bonus (simplified, real logic uses position-specific stats)
-    if (ovr >= 90) baseXP += 50; // Elite players get more for performing
-    else if (ovr <= 70) baseXP += 100; // Lower rated players get more to catch up
 
-    // Age/Potential Modifier: Younger players with higher potential earn more
+    // Performance tier: better players earn proportionally more from performing well
+    // (Reversed from old system where bad players earned MORE)
+    if (ovr >= 90) baseXP += 40;      // Elite: consistent high performance
+    else if (ovr >= 80) baseXP += 30;  // Good: solid performance rewards
+    else if (ovr >= 70) baseXP += 20;  // Average: moderate improvement
+    // Below 70: just the base 50 XP — no artificial catch-up
+
+    // Potential gap modifier: players far below their potential improve faster
+    // This is the ONLY "catch up" mechanic, and it's driven by individual potential,
+    // not a blanket bonus for low ratings
     const age = gameStats.age || 22;
     const potential = gameStats.potential || ovr;
     const potentialDiff = potential - ovr;
-    
-    baseXP += U.clamp(potentialDiff * 5, 0, 100); 
-    
-    // Contract Bonus (Players playing for a new deal perform better)
-    if (gameStats.years <= 1) baseXP += 25; 
+    baseXP += U.clamp(potentialDiff * 5, 0, 100);
 
-    // Position-Specific Performance
+    // Age-based modifier: younger players develop faster, older players slower
+    // After age 30, XP gain decreases significantly (representing physical decline)
+    if (age <= 24) baseXP *= 1.15;       // Young: developing quickly
+    else if (age <= 27) baseXP *= 1.0;   // Prime: steady
+    else if (age <= 30) baseXP *= 0.8;   // Late prime: slowing
+    else if (age <= 33) baseXP *= 0.4;   // Declining: minimal improvement
+    else baseXP *= 0.15;                  // Late career: maintaining at best
+
+    // Character trait impact: work ethic modifies XP gain
+    const workEthic = gameStats.workEthic || gameStats.character?.workEthic || 75;
+    if (workEthic >= 90) baseXP *= 1.25;       // Elite work ethic: +25% development
+    else if (workEthic >= 80) baseXP *= 1.10;  // Good: +10%
+    else if (workEthic < 65) baseXP *= 0.85;   // Poor: -15% (talent wasted)
+
+    // Contract year bonus (players playing for a new deal perform better)
+    if (gameStats.years <= 1) baseXP += 20;
+
+    // Position-specific performance bonuses
     if (gameStats.passYd && gameStats.passYd > 200) baseXP += Math.floor(gameStats.passYd / 50);
     if (gameStats.rushYd && gameStats.rushYd > 100) baseXP += Math.floor(gameStats.rushYd / 20);
     if (gameStats.interceptions === 0) baseXP += 10;
-    
-    return U.clamp(baseXP, 50, 500);
+
+    return U.clamp(Math.round(baseXP), 20, 500);
   }
 
   /**

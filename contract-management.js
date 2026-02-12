@@ -306,7 +306,92 @@ function exerciseFifthYearOption(league, team, player) {
 }
 
 /**
- * Extends a player's contract
+ * Calculates a player's negotiation leverage — their minimum acceptable contract.
+ * Players with high OVR, young age, premium positions, and strong recent performance
+ * demand more money. This prevents the user from signing elite QBs for pennies.
+ *
+ * Based on real NFL negotiation dynamics:
+ * - Elite QBs have enormous leverage (can demand top-of-market)
+ * - Older players at devalued positions (RB) have less leverage
+ * - Players coming off injuries accept discounts
+ * - Players with multiple years remaining have less urgency
+ *
+ * @param {Object} player - Player object
+ * @param {Object} league - League object
+ * @returns {Object} { minAAV, minYears, maxYears, marketValue, leverageScore }
+ */
+function calculatePlayerLeverage(player, league) {
+  if (!player) return { minAAV: 0.9, minYears: 1, maxYears: 4, marketValue: 1, leverageScore: 0 };
+
+  const ovr = player.ovr || 60;
+  const age = player.age || 25;
+  const pos = player.pos || 'RB';
+
+  // Position value multipliers (same scale as salary calculation)
+  const posMultipliers = {
+    QB: 2.2, WR: 1.15, OL: 1.10, CB: 1.10, DL: 1.05,
+    LB: 0.95, S: 0.90, TE: 0.85, RB: 0.70, K: 0.35, P: 0.30
+  };
+  const posMult = posMultipliers[pos] || 1.0;
+
+  // Base market value (what the open market would pay)
+  let marketAAV;
+  if (ovr >= 95) marketAAV = 26;
+  else if (ovr >= 90) marketAAV = 20;
+  else if (ovr >= 85) marketAAV = 15;
+  else if (ovr >= 80) marketAAV = 10;
+  else if (ovr >= 75) marketAAV = 6;
+  else if (ovr >= 70) marketAAV = 3.5;
+  else if (ovr >= 65) marketAAV = 2;
+  else marketAAV = 1;
+
+  marketAAV *= posMult;
+
+  // Age discount for older players
+  if (age >= 33) marketAAV *= 0.6;
+  else if (age >= 30) marketAAV *= 0.8;
+  else if (age <= 25) marketAAV *= 1.1;
+
+  // Injury discount
+  if (player.injured) marketAAV *= 0.75;
+
+  // Leverage score (0-100): how much bargaining power the player has
+  let leverage = 50;
+  if (ovr >= 85) leverage += 20;
+  else if (ovr >= 75) leverage += 10;
+  if (age <= 27) leverage += 10;
+  if (age >= 31) leverage -= 15;
+  if (pos === 'QB') leverage += 15; // QBs always have leverage
+  if (player.awards && player.awards.length > 0) leverage += 10;
+  if (player.injured) leverage -= 20;
+  leverage = Math.max(0, Math.min(100, leverage));
+
+  // Minimum acceptable AAV (players won't sign for less than ~80% of market)
+  const minAAV = roundToDecimals(marketAAV * (0.75 + leverage * 0.002), 1);
+
+  // Term preferences: young stars want shorter deals to hit FA again, veterans want security
+  let minYears = 1, maxYears = 5;
+  if (ovr >= 85 && age <= 27) { minYears = 3; maxYears = 6; }  // Stars want long-term security
+  else if (ovr >= 80 && age <= 29) { minYears = 2; maxYears = 5; }
+  else if (age >= 32) { minYears = 1; maxYears = 2; }  // Veterans take short deals
+  else { minYears = 1; maxYears = 4; }
+
+  return {
+    minAAV: Math.max(0.9, minAAV),  // Never below league minimum
+    minYears: minYears,
+    maxYears: maxYears,
+    marketValue: roundToDecimals(marketAAV, 1),
+    leverageScore: leverage
+  };
+}
+
+/**
+ * Extends a player's contract with negotiation validation.
+ *
+ * IMPROVEMENT: Now validates the offer against the player's leverage/market value.
+ * Players will reject lowball offers. The user must offer at least ~80% of market
+ * value to get a deal done, matching real NFL negotiation dynamics.
+ *
  * @param {Object} league - League object
  * @param {Object} team - Team object
  * @param {Object} player - Player to extend
@@ -318,42 +403,69 @@ function exerciseFifthYearOption(league, team, player) {
 function extendContract(league, team, player, years, baseSalary, signingBonus) {
   const capHitFor = window.capHitFor || ((p) => p.baseAnnual || 0);
   const recalcCap = window.recalcCap || (() => {});
-  
+
+  // --- PLAYER NEGOTIATION LEVERAGE ---
+  // Calculate what the player demands based on market value
+  const leverage = calculatePlayerLeverage(player, league);
+
+  // Check if offer meets minimum requirements
+  if (baseSalary < leverage.minAAV) {
+    return {
+      success: false,
+      message: `${player.name} rejected the offer. They want at least $${leverage.minAAV.toFixed(1)}M/yr (market value: $${leverage.marketValue.toFixed(1)}M/yr). Your offer: $${baseSalary.toFixed(1)}M/yr.`
+    };
+  }
+
+  if (years < leverage.minYears) {
+    return {
+      success: false,
+      message: `${player.name} wants at least a ${leverage.minYears}-year commitment. Your offer: ${years} years.`
+    };
+  }
+
+  if (years > leverage.maxYears) {
+    return {
+      success: false,
+      message: `${player.name} won't commit to more than ${leverage.maxYears} years at this stage of their career.`
+    };
+  }
+
   const totalContractValue = (baseSalary * years) + signingBonus;
   const firstYearCapHit = baseSalary + (signingBonus / years);
-  
+
   // Check cap space against the immediate cap impact
   const currentCapHit = capHitFor(player, 0);
   const capImpact = firstYearCapHit - currentCapHit;
 
   if (team.capRoom < capImpact) {
-    return { 
-      success: false, 
-      message: `Extension adds $${capImpact.toFixed(1)}M to the cap, exceeding your $${team.capRoom.toFixed(1)}M room. 😬`
+    return {
+      success: false,
+      message: `Extension adds $${capImpact.toFixed(1)}M to the cap, exceeding your $${team.capRoom.toFixed(1)}M room.`
     };
   }
-  
+
   // Calculate Guaranteed % for realism
-  let guaranteedPct = roundToDecimals(signingBonus / totalContractValue, 2); 
-  guaranteedPct = Math.min(CONTRACT_CONSTANTS.MAX_GUARANTEED_PCT, guaranteedPct + 0.1); 
+  let guaranteedPct = roundToDecimals(signingBonus / totalContractValue, 2);
+  guaranteedPct = Math.min(CONTRACT_CONSTANTS.MAX_GUARANTEED_PCT, guaranteedPct + 0.1);
 
   // Apply contract extension
-  player.years = years + player.years; // Add new years to existing remaining years
+  player.years = years + player.years;
   player.yearsTotal = player.years;
   player.baseAnnual = roundToDecimals(baseSalary, 1);
   player.signingBonus = roundToDecimals(signingBonus, 1);
   player.guaranteedPct = guaranteedPct;
   player.extended = true;
   player.contractYear = league.season;
-  
+
   recalcCap(league, team);
-  
+
   return {
     success: true,
-    message: `Extension approved! **${player.name}** is locked in for **${years}** more years, totaling **$${totalContractValue.toFixed(1)}M**! 🤑`,
+    message: `Extension approved! **${player.name}** is locked in for **${years}** more years, totaling **$${totalContractValue.toFixed(1)}M**!`,
     years: years,
     baseSalary: baseSalary,
-    signingBonus: signingBonus
+    signingBonus: signingBonus,
+    leverage: leverage  // Return leverage data for UI display
   };
 }
 

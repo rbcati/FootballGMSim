@@ -150,7 +150,24 @@ function generateBasicName() {
 }
 
 /**
- * Calculates realistic salary based on overall rating, position, and age
+ * Calculates realistic salary based on overall rating, position, and age.
+ *
+ * FIXES: Previous version had salaries ~10x too low relative to the $255M cap.
+ * Elite QBs were earning $6M when real NFL QBs earn $40-55M. This made the
+ * salary cap meaningless — every team had $200M+ in cap room.
+ *
+ * New scale is calibrated to the 2025 NFL salary cap ($255M):
+ * - Elite QB (95+ OVR): $45-55M AAV (Mahomes/Burrow tier)
+ * - Star QB (90+ OVR): $35-45M AAV
+ * - Good starter (80+ OVR): $12-22M AAV
+ * - Solid player (75+ OVR): $6-12M AAV
+ * - Average (70+ OVR): $3-6M AAV
+ * - Depth (60-69 OVR): $1-3M AAV
+ * - Minimum salary (<60 OVR): $0.9-1.1M
+ *
+ * Position multipliers match real NFL market values (QBs >> RBs).
+ * Age adjustment reflects declining market value after age 30.
+ *
  * @param {number} overall - Player overall rating
  * @param {string} position - Player position
  * @param {number} age - Player age
@@ -158,57 +175,61 @@ function generateBasicName() {
  */
 function calculateRealisticSalary(overall, position, age) {
   const U = window.Utils;
-  
-  // Base salary multiplier by position (relative to overall rating)
+
+  // Position multipliers calibrated to real NFL cap % allocation
+  // QBs consume ~18% of cap ($45M), WRs ~10% ($25M), RBs ~4% ($10M), etc.
   const positionMultipliers = {
-    'QB': 1.8,    // Quarterbacks get paid the most
-    'OL': 1.2,    // Offensive linemen are valuable
-    'DL': 1.1,    // Defensive linemen
-    'WR': 1.0,    // Wide receivers
-    'CB': 0.95,   // Cornerbacks
-    'LB': 0.9,    // Linebackers
-    'RB': 0.85,   // Running backs (shorter careers)
-    'S': 0.8,     // Safeties
-    'TE': 0.75,   // Tight ends
-    'K': 0.4,     // Kickers
-    'P': 0.3      // Punters
+    'QB': 2.2,    // Quarterbacks: highest-paid position by far
+    'WR': 1.15,   // Wide receivers: 2nd highest non-QB
+    'OL': 1.10,   // Offensive linemen: premium trench players
+    'CB': 1.10,   // Cornerbacks: premium coverage
+    'DL': 1.05,   // Defensive linemen: pass rush premium
+    'LB': 0.95,   // Linebackers
+    'S':  0.90,   // Safeties
+    'TE': 0.85,   // Tight ends
+    'RB': 0.70,   // Running backs: devalued in modern NFL
+    'K':  0.35,   // Kickers
+    'P':  0.30    // Punters
   };
-  
+
   const multiplier = positionMultipliers[position] || 1.0;
-  
-  // Base salary calculation based on overall rating - more realistic scale
+
+  // Base salary tiers calibrated to $255M cap
+  // These are the BASE before position multiplier — so a 90+ OVR QB gets
+  // $22M * 2.2 = ~$48M, matching real NFL star QB contracts.
   let baseSalary;
-  if (overall >= 90) {
-    // Elite players: $3-6M
-    baseSalary = U.rand(3, 6);
+  if (overall >= 95) {
+    baseSalary = U.rand(24, 28);     // Generational: $24-28M base * pos multiplier
+  } else if (overall >= 90) {
+    baseSalary = U.rand(18, 24);     // Elite: $18-24M base
   } else if (overall >= 85) {
-    // Star players: $2-4M
-    baseSalary = U.rand(2, 4);
+    baseSalary = U.rand(13, 18);     // Star: $13-18M base
   } else if (overall >= 80) {
-    // Good players: $1.5-3M
-    baseSalary = U.rand(1.5, 3);
+    baseSalary = U.rand(8, 14);      // Good starter: $8-14M base
   } else if (overall >= 75) {
-    // Solid players: $1-2M
-    baseSalary = U.rand(1, 2);
+    baseSalary = U.rand(5, 9);       // Solid player: $5-9M base
   } else if (overall >= 70) {
-    // Average players: $0.5-1.5M
-    baseSalary = U.rand(0.5, 1.5);
+    baseSalary = U.rand(3, 6);       // Average: $3-6M base
   } else if (overall >= 65) {
-    // Below average: $0.3-1M
-    baseSalary = U.rand(0.3, 1);
+    baseSalary = U.rand(1.5, 3.5);   // Below average: $1.5-3.5M base
   } else {
-    // Depth players: $0.2-0.6M
-    baseSalary = U.rand(0.2, 0.6);
+    // Depth/minimum salary players: $0.9-1.5M (near league minimum)
+    baseSalary = U.rand(0.9, 1.5);
   }
-  
-  // Apply position multiplier
+
+  // Apply position multiplier (this is where QB gets $22M*2.2=$48M)
   baseSalary *= multiplier;
-  
-  // Age adjustment (older players get slight discount, younger players slight premium)
-  if (age >= 30) {
-    baseSalary *= U.rand(0.8, 0.95); // 5-20% discount for older players
+
+  // Age adjustment: NFL market pays a premium for prime-age players (24-28)
+  // and significantly discounts players over 30 (especially RBs and WRs)
+  if (age >= 33) {
+    baseSalary *= U.rand(0.55, 0.70);  // Major decline: 30-45% discount
+  } else if (age >= 30) {
+    baseSalary *= U.rand(0.75, 0.90);  // Decline phase: 10-25% discount
+  } else if (age >= 28) {
+    baseSalary *= U.rand(0.90, 1.0);   // Late prime: slight discount
   } else if (age <= 25) {
-    baseSalary *= U.rand(1.0, 1.1); // 0-10% premium for young players
+    baseSalary *= U.rand(1.05, 1.15);  // Young upside premium: 5-15%
   }
   
   // Add some randomness (±10%)

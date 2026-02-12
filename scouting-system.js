@@ -55,7 +55,12 @@ function getProspectById(prospectId) {
 }
 
 /**
- * Initialize scouting system
+ * Initialize scouting system.
+ *
+ * FIX: scoutedProspects was a Set(), which serializes to {} in JSON/localStorage.
+ * Every save/load cycle would lose all scouting progress. Now uses a plain Array,
+ * which serializes correctly. The lookup functions use Array.includes() which is
+ * functionally equivalent for the small dataset sizes involved (~250 prospects).
  */
 function initializeScoutingSystem() {
   // Add scouting data to state if not exists
@@ -68,19 +73,32 @@ function initializeScoutingSystem() {
         thorough: 0,
         combine: 0
       },
-      scoutedProspects: new Set(),
+      // FIX: Use Array instead of Set for JSON serialization compatibility.
+      // Set objects serialize to {} in localStorage, losing all scouting progress.
+      scoutedProspects: [],
       scoutingReports: {},
       lastReset: window.state.league?.year || 2025
     };
   }
-  
+
+  // Migrate legacy Set to Array if needed (handles existing saves)
+  if (window.state.scouting.scoutedProspects instanceof Set) {
+    window.state.scouting.scoutedProspects = Array.from(window.state.scouting.scoutedProspects);
+  }
+  // Also handle the {} case from corrupted saves
+  if (window.state.scouting.scoutedProspects &&
+      typeof window.state.scouting.scoutedProspects === 'object' &&
+      !Array.isArray(window.state.scouting.scoutedProspects)) {
+    window.state.scouting.scoutedProspects = [];
+  }
+
   // Reset weekly limits if new season
   const currentYear = window.state.league?.year || 2025;
   if (window.state.scouting.lastReset !== currentYear) {
     window.state.scouting.weeklyScouts = { basic: 0, thorough: 0, combine: 0 };
     window.state.scouting.lastReset = currentYear;
   }
-  
+
   console.log('Scouting system initialized');
 }
 
@@ -110,8 +128,8 @@ function scoutProspect(prospectId, thoroughness = 'basic') {
     return { success: false, message: `Weekly ${thoroughness} scouting limit reached` };
   }
   
-  // Check if already scouted this week
-  if (scouting.scoutedProspects.has(prospectId)) {
+  // Check if already scouted this week (uses Array.includes instead of Set.has)
+  if (scouting.scoutedProspects.includes(prospectId)) {
     return { success: false, message: 'Prospect already scouted this week' };
   }
   
@@ -121,7 +139,10 @@ function scoutProspect(prospectId, thoroughness = 'basic') {
   // Update scouting data
   scouting.used += cost;
   scouting.weeklyScouts[thoroughness]++;
-  scouting.scoutedProspects.add(prospectId);
+  // FIX: Use Array.push instead of Set.add for serialization compatibility
+  if (!scouting.scoutedProspects.includes(prospectId)) {
+    scouting.scoutedProspects.push(prospectId);
+  }
   scouting.scoutingReports[prospectId] = result.report;
   
   return {
@@ -182,13 +203,32 @@ function performScouting(prospect, thoroughness) {
       }
   }
 
-  // Generate detailed scouting report
+  // Generate detailed scouting report with scheme fit analysis
   const report = generateScoutingReport(prospect, thoroughness, effectiveAccuracy);
-  
+
+  // --- SCHEME FIT EVALUATION (NEW) ---
+  // Thorough+ scouting includes how well the prospect fits YOUR team's schemes
+  if (thoroughness !== 'basic') {
+    const schemeFit = evaluateProspectSchemeFit(prospect, team);
+    report.schemeFit = schemeFit;
+  }
+
+  // --- COMBINE MEASURABLES DISPLAY (NEW) ---
+  // Combine-level scouting reveals physical measurements
+  if (thoroughness === 'combine' && prospect.measurables) {
+    report.measurables = prospect.measurables;
+  }
+
+  // --- CHARACTER IMPACT PROJECTION (NEW) ---
+  // Shows how character traits will affect development
+  if (thoroughness !== 'basic' && prospect.character) {
+    report.characterImpact = evaluateCharacterImpact(prospect.character);
+  }
+
   // Mark as scouted
   prospect.scouted = true;
   prospect.scoutingThoroughness = thoroughness;
-  
+
   return { report };
 }
 
@@ -299,6 +339,155 @@ function generateScoutingReport(prospect, thoroughness, accuracy) {
   }
   
   return report;
+}
+
+/**
+ * Evaluates how well a prospect fits the user team's offensive/defensive scheme.
+ * This is a key scouting feature missing from most GM games — in the real NFL,
+ * scheme fit is often MORE important than raw talent for draft success.
+ *
+ * For example, a zone-blocking OL is perfect for a Run Heavy scheme but may
+ * struggle in a Pass Heavy system that needs pass protectors.
+ *
+ * @param {Object} prospect - Prospect object with ratings and position
+ * @param {Object} team - User's team object with scheme info
+ * @returns {Object} { fitScore (0-100), fitGrade, explanation }
+ */
+function evaluateProspectSchemeFit(prospect, team) {
+  const pos = prospect.pos;
+  const ratings = prospect.ratings || {};
+
+  // Get team's current schemes
+  const offScheme = team?.offensiveScheme || team?.scheme || 'Balanced';
+  const defScheme = team?.defensiveScheme || team?.defScheme || '4-3';
+
+  // Scheme-specific key stats from Constants
+  const C = window.Constants;
+  const offSchemeData = C?.OFFENSIVE_SCHEMES?.[offScheme];
+  const defSchemeData = C?.DEFENSIVE_SCHEMES?.[defScheme];
+
+  const isOffensivePos = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'].includes(pos);
+  const schemeData = isOffensivePos ? offSchemeData : defSchemeData;
+
+  if (!schemeData || !schemeData.keyStats) {
+    return { fitScore: 50, fitGrade: 'C', explanation: 'Unable to evaluate scheme fit.' };
+  }
+
+  // Calculate how well the prospect's ratings match the scheme's key stats
+  const keyStats = schemeData.keyStats;
+  let totalFit = 0;
+  let matchedStats = 0;
+
+  keyStats.forEach(statName => {
+    const playerRating = ratings[statName];
+    if (typeof playerRating === 'number') {
+      // Score 0-100 based on how high the rating is for this key stat
+      totalFit += (playerRating - 40) / 59 * 100; // Normalize 40-99 to 0-100
+      matchedStats++;
+    }
+  });
+
+  const fitScore = matchedStats > 0 ? Math.round(totalFit / matchedStats) : 50;
+
+  // Convert to letter grade
+  let fitGrade;
+  if (fitScore >= 85) fitGrade = 'A';
+  else if (fitScore >= 75) fitGrade = 'B+';
+  else if (fitScore >= 65) fitGrade = 'B';
+  else if (fitScore >= 55) fitGrade = 'C+';
+  else if (fitScore >= 45) fitGrade = 'C';
+  else if (fitScore >= 35) fitGrade = 'D';
+  else fitGrade = 'F';
+
+  // Generate explanation
+  const schemeName = isOffensivePos ? offScheme : defScheme;
+  let explanation;
+  if (fitScore >= 80) {
+    explanation = `Excellent fit for your ${schemeName} scheme. Key attributes align perfectly.`;
+  } else if (fitScore >= 60) {
+    explanation = `Good fit for your ${schemeName} scheme. Most key attributes are solid.`;
+  } else if (fitScore >= 40) {
+    explanation = `Average fit for your ${schemeName} scheme. May need development in key areas.`;
+  } else {
+    explanation = `Poor fit for your ${schemeName} scheme. Attributes don't align with system needs.`;
+  }
+
+  return { fitScore, fitGrade, explanation, schemeName };
+}
+
+/**
+ * Evaluates how a prospect's character traits will impact their NFL development.
+ * This adds meaningful depth to scouting — work ethic, coachability, and leadership
+ * aren't just numbers, they project to concrete development outcomes.
+ *
+ * Based on real NFL scouting principles:
+ * - High work ethic → faster development, more consistent improvement
+ * - High coachability → better scheme learning, adapts to coaching changes
+ * - High leadership → chemistry boost, locker room presence
+ * - Low work ethic → risk of stagnation, may never reach potential
+ *
+ * @param {Object} character - Prospect's character traits object
+ * @returns {Object} { developmentProjection, risks, strengths }
+ */
+function evaluateCharacterImpact(character) {
+  if (!character) return { developmentProjection: 'Unknown', risks: [], strengths: [] };
+
+  const strengths = [];
+  const risks = [];
+
+  // Work ethic: directly impacts XP gain rate
+  if (character.workEthic >= 90) {
+    strengths.push('Elite work ethic — projects to develop faster than peers (+25% XP)');
+  } else if (character.workEthic >= 80) {
+    strengths.push('Strong work ethic — steady development expected');
+  } else if (character.workEthic < 65) {
+    risks.push('Questionable work ethic — may plateau before reaching potential (-15% XP)');
+  }
+
+  // Coachability: affects skill tree and scheme adaptation
+  if (character.coachability >= 90) {
+    strengths.push('Highly coachable — picks up new schemes quickly');
+  } else if (character.coachability < 65) {
+    risks.push('Coaching concerns — slow scheme learner, may resist adjustments');
+  }
+
+  // Leadership: affects team chemistry
+  if (character.leadership >= 85) {
+    strengths.push('Natural leader — will boost locker room culture');
+  } else if (character.leadership < 55) {
+    risks.push('Quiet personality — unlikely to be a vocal leader');
+  }
+
+  // Competitiveness (new trait)
+  if (character.competitiveness >= 90) {
+    strengths.push('Fierce competitor — performs well in high-pressure situations');
+  }
+
+  // Football IQ (new trait)
+  if (character.footballIQ >= 90) {
+    strengths.push('Exceptional football IQ — reads plays before the snap');
+  } else if (character.footballIQ < 60) {
+    risks.push('Limited football IQ — may struggle with complex playbooks');
+  }
+
+  // Red flags
+  if (character.red_flags) {
+    risks.push('CHARACTER RED FLAG — off-field concerns could affect availability');
+  }
+  if (character.injury_prone) {
+    risks.push('Injury-prone — increased risk of missing games');
+  }
+
+  // Overall development projection
+  let developmentProjection;
+  const avgCharacter = ((character.workEthic || 70) + (character.coachability || 70) +
+                        (character.footballIQ || 70)) / 3;
+  if (avgCharacter >= 85) developmentProjection = 'FAST DEVELOPER — likely to exceed draft position';
+  else if (avgCharacter >= 75) developmentProjection = 'STEADY DEVELOPER — should reach projected ceiling';
+  else if (avgCharacter >= 65) developmentProjection = 'AVERAGE — development timeline is uncertain';
+  else developmentProjection = 'HIGH RISK — character concerns may limit development';
+
+  return { developmentProjection, risks, strengths };
 }
 
 /**

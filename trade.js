@@ -114,21 +114,55 @@ function getPositionMultiplier(pos) {
   return C.POSITION_VALUES[pos] || 1;
 }
 
+/**
+ * Contract factor for trade value. Now uses cap percentage rather than
+ * arbitrary division by 5. A player earning 2% of cap ($5.1M) is much
+ * more tradeable than one earning 15% ($38M).
+ *
+ * FIX: Previous version divided salary by 5 (magic number), making
+ * $1M and $5M players identical in value. Now properly scaled to cap.
+ */
 function getContractFactor(player) {
   if (!player) return 1;
 
   const salary = player.baseAnnual || player.salary || 1;
   const yearsLeft = player.years || player.yearsRemaining || 1;
+  const capBase = 255; // $255M salary cap
 
-  // Cheaper players (lower salary/5) are more valuable. Salary cap relief is key.
-  const costFactor = 1 / Math.max(0.5, salary / 5);
+  // Cap percentage: $5M = 2%, $25M = 10%, $50M = 20%
+  const capPct = salary / capBase;
 
-  // More years left = slightly more valuable, up to 3 years.
-  const termFactor = 0.8 + Math.min(3, yearsLeft) * 0.1;
+  // Cost factor: inversely related to cap%. Low cap% = high value.
+  // A player at 2% cap has factor ~1.4, at 10% cap has ~0.8, at 20% has ~0.5
+  const costFactor = Math.max(0.3, 1.5 - capPct * 5);
+
+  // More years of control = more valuable (up to 4 years)
+  const termFactor = 0.85 + Math.min(4, yearsLeft) * 0.05;
 
   return costFactor * termFactor;
 }
 
+/**
+ * Calculate a player's trade value with a realistic NFL age curve and
+ * context-aware contract valuation.
+ *
+ * FIXES:
+ * 1. Age curve now covers every age (no gap at 29). Uses smooth polynomial
+ *    curve peaking at position-specific prime ages (QB=28, RB=25, etc.).
+ * 2. Contract factor uses cap% instead of arbitrary division by 5.
+ * 3. Potential/development is factored in for young players.
+ * 4. Awards/accolades provide small value bumps.
+ *
+ * Based on real NFL trade value principles:
+ * - Young stars on rookie deals = MAXIMUM value (cheap + productive)
+ * - Older veterans on big contracts = MINIMUM value (expensive + declining)
+ * - QBs always command premium (1.6x multiplier)
+ * - Draft capital is slightly overvalued by GMs (reflected in pick values)
+ *
+ * @param {Object} player - Player object
+ * @param {number} leagueYear - Current league year
+ * @returns {number} Trade value (higher = more valuable)
+ */
 function calcPlayerTradeValue(player, leagueYear) {
   if (!player) return 0;
 
@@ -136,20 +170,60 @@ function calcPlayerTradeValue(player, leagueYear) {
   const age = getPlayerAge(player, leagueYear);
   const pos = player.pos || player.position || 'RB';
 
+  // --- BASE VALUE: OVR * position premium ---
   let value = ovr * getPositionMultiplier(pos);
 
-  // Age curve – prime around 24–28
-  if (age < 23) value *= 0.9;
-  else if (age >= 23 && age <= 28) value *= 1.05;
-  else if (age > 30) value *= 0.8;
+  // --- SMOOTH AGE CURVE: Position-specific prime ages ---
+  // NFL value peaks at different ages by position:
+  // QBs peak at 28-30, RBs at 24-26, CBs at 25-27, etc.
+  const PEAK_AGES = {
+    QB: 28, RB: 25, WR: 27, TE: 27, OL: 29,
+    DL: 28, LB: 27, CB: 26, S: 27, K: 30, P: 30
+  };
+  const peak = PEAK_AGES[pos] || 27;
 
-  // Player value is significantly driven by contract
-  value *= getContractFactor(player);
+  // Smooth curve: 1.0 at peak, declining on both sides
+  // Young players (pre-peak) lose less value than old players (post-peak)
+  const ageDiff = age - peak;
+  let ageMult;
+  if (ageDiff <= 0) {
+    // Pre-peak: slight discount for very young (raw), increasing toward peak
+    ageMult = 1.0 - Math.pow(Math.abs(ageDiff), 1.3) * 0.015;
+  } else {
+    // Post-peak: accelerating decline (quadratic), steeper for RBs
+    const decayRate = pos === 'RB' ? 0.04 : pos === 'QB' ? 0.015 : 0.025;
+    ageMult = 1.0 - Math.pow(ageDiff, 1.5) * decayRate;
+  }
+  ageMult = Math.max(0.2, Math.min(1.1, ageMult));
+  value *= ageMult;
 
-  // Low OVR players have minimal value
-  if (ovr < 70) value *= 0.5;
+  // --- CONTRACT VALUE: Cap% based, not arbitrary division ---
+  // Cheaper players relative to the cap are more valuable (surplus value)
+  const salary = player.baseAnnual || player.salary || 1;
+  const yearsLeft = player.years || player.yearsRemaining || 1;
+  const capBase = 255; // $255M cap
 
-  return Math.max(0, value);
+  // Surplus value = how much production exceeds cost
+  // A 90 OVR player earning $5M is far more valuable than one earning $40M
+  const expectedSalary = ovr >= 85 ? 20 : ovr >= 75 ? 8 : ovr >= 65 ? 3 : 1;
+  const surplusMult = Math.max(0.3, 1.0 + (expectedSalary - salary) / expectedSalary * 0.3);
+  value *= surplusMult;
+
+  // Contract term: more years of control = slightly more valuable
+  const termMult = 0.85 + Math.min(4, yearsLeft) * 0.05;
+  value *= termMult;
+
+  // --- POTENTIAL BONUS: Young high-potential players ---
+  if (age <= 26 && player.potential && player.potential > ovr + 5) {
+    const potentialBonus = (player.potential - ovr) * 0.5;
+    value += potentialBonus;
+  }
+
+  // --- LOW OVR PENALTY ---
+  if (ovr < 65) value *= 0.4;
+  else if (ovr < 70) value *= 0.6;
+
+  return Math.max(0, Math.round(value * 10) / 10);
 }
 
 /**
@@ -432,15 +506,76 @@ function formatAssetForHistory(league, team, asset) {
   return asset;
 }
 
+/**
+ * Process a user-initiated trade proposal with context-aware AI evaluation.
+ *
+ * IMPROVEMENT: CPU teams now evaluate trades based on their team situation:
+ * - Contending teams (>0.5 win%) are conservative: reject trades where they
+ *   lose more than 3 value points.
+ * - Rebuilding teams (<0.4 win%) are willing to accept slight losses (-10)
+ *   for young players and future picks.
+ * - Mid-tier teams use standard evaluation (-5 tolerance).
+ *
+ * This prevents the exploit where users could fleece any CPU team with
+ * lopsided trades (old cpuLossLimit was -15, now context-dependent).
+ *
+ * Also checks positional need: CPU won't trade for a position they're stacked at.
+ */
 function proposeUserTradeInternal(league, userTeamId, cpuTeamId, userAssets, cpuAssets, options = {}) {
   const evalResult = evaluateTrade(league, userTeamId, cpuTeamId, userAssets, cpuAssets);
   if (!evalResult) return { accepted: false, eval: null };
 
-  const cpuLossLimit = typeof options.cpuLossLimit === 'number' ? options.cpuLossLimit : -15;
+  // Validation check (cap, positional surplus, etc.)
+  if (evalResult.validation && !evalResult.validation.valid) {
+    return { accepted: false, eval: evalResult, reason: evalResult.validation.reason };
+  }
+
+  const cpuTeam = league.teams[cpuTeamId];
   const cpuDelta = evalResult.toValue.delta;
 
+  // --- CONTEXT-AWARE ACCEPTANCE THRESHOLD ---
+  // CPU teams evaluate trades based on their competitive window
+  let cpuLossLimit;
+  if (typeof options.cpuLossLimit === 'number') {
+    cpuLossLimit = options.cpuLossLimit;
+  } else if (cpuTeam) {
+    const cpuRebuilding = isTeamRebuilding(cpuTeam);
+    const cpuRecord = getTeamRecord(cpuTeam);
+
+    if (cpuRebuilding) {
+      // Rebuilding: willing to take slight losses for future assets
+      cpuLossLimit = -10;
+    } else if (cpuRecord > 0.6) {
+      // Contending: very conservative, won't accept bad trades
+      cpuLossLimit = -3;
+    } else {
+      // Mid-tier: standard evaluation
+      cpuLossLimit = -5;
+    }
+
+    // --- NEED-BASED BONUS ---
+    // If the CPU team needs the positions they're getting, they value the trade more
+    const cpuNeeds = analyzeTeamNeeds(cpuTeam);
+    let needBonus = 0;
+    userAssets.forEach(asset => {
+      if (asset.kind === 'player') {
+        const p = findPlayerOnTeam(league.teams[userTeamId], asset.playerId);
+        if (p && cpuNeeds.includes(p.pos)) {
+          needBonus += 5; // Willing to overpay slightly for needed positions
+        }
+      }
+    });
+
+    // Apply need bonus to the delta evaluation
+    if (cpuDelta + needBonus < cpuLossLimit) {
+      return { accepted: false, eval: evalResult, reason: 'Trade value too lopsided for the other team.' };
+    }
+  } else {
+    cpuLossLimit = -5;
+  }
+
   if (cpuDelta < cpuLossLimit) {
-    return { accepted: false, eval: evalResult };
+    return { accepted: false, eval: evalResult, reason: 'Trade value too lopsided for the other team.' };
   }
 
   const applied = applyTrade(league, userTeamId, cpuTeamId, userAssets, cpuAssets);

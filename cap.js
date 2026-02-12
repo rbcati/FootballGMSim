@@ -40,18 +40,25 @@ function addDead(team, season, amount) {
 }
 
 /**
- * Calculates rollover cap space from previous season
+ * Calculates rollover cap space from previous season.
+ *
+ * FIX: Previous version read team.capTotal and team.capUsed which may be
+ * uninitialized (undefined - undefined = NaN). Now defaults to 0 if not set,
+ * preventing NaN propagation through the cap system.
+ *
  * @param {Object} team - Team object
- * @param {Object} league - League object  
+ * @param {Object} league - League object
  * @returns {number} Rollover amount (capped at maximum)
  */
 function calculateRollover(team, league) {
   if (!team || !league) return 0;
-  
+
   const C = window.Constants;
-  const capEnabled = window.state?.settings?.salaryCapEnabled !== false;
-  const unused = team.capTotal - team.capUsed;
-  const maxRollover = C.SALARY_CAP.MAX_ROLLOVER;
+  // Guard against uninitialized cap values (fixes NaN propagation bug)
+  const capTotal = typeof team.capTotal === 'number' ? team.capTotal : (C?.SALARY_CAP?.BASE || 255);
+  const capUsed = typeof team.capUsed === 'number' ? team.capUsed : 0;
+  const unused = capTotal - capUsed;
+  const maxRollover = C?.SALARY_CAP?.MAX_ROLLOVER || 10;
   return Math.min(Math.max(0, unused), maxRollover);
 }
 
