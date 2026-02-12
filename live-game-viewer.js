@@ -2285,6 +2285,10 @@ class LiveGameViewer {
    */
   animateNumber(element, start, end, duration = 1000) {
       if (start === end || !element) return;
+
+      // Mark as animating
+      element.setAttribute('data-animating', 'true');
+
       const range = end - start;
       const startTime = performance.now();
 
@@ -2301,6 +2305,7 @@ class LiveGameViewer {
               requestAnimationFrame(step);
           } else {
               element.textContent = end;
+              element.removeAttribute('data-animating');
           }
       };
 
@@ -2418,9 +2423,7 @@ class LiveGameViewer {
         this.animateNumber(homeEl, this.lastHomeScore, home.score, 1500);
     } else if (homeEl) {
          // Ensure accurate if not animating
-         // Only update if not currently animating (hacky check: assume animating if class present?)
-         // Ideally animateNumber handles final state. But if page refreshed, we need to set it.
-         if (homeEl.textContent != home.score && !homeEl.classList.contains('pulse-score')) {
+         if (homeEl.textContent != home.score && !homeEl.hasAttribute('data-animating')) {
              homeEl.textContent = home.score;
              if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
          }
@@ -2433,7 +2436,7 @@ class LiveGameViewer {
         awayEl.classList.add('pulse-score-strong');
         this.animateNumber(awayEl, this.lastAwayScore, away.score, 1500);
     } else if (awayEl) {
-         if (awayEl.textContent != away.score && !awayEl.classList.contains('pulse-score')) {
+         if (awayEl.textContent != away.score && !awayEl.hasAttribute('data-animating')) {
              awayEl.textContent = away.score;
              if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
          }
@@ -2586,6 +2589,8 @@ class LiveGameViewer {
    * Uses async chunking to prevent UI freeze
    */
   skipToEnd() {
+      if (this.isSkipping) return;
+
       // Set skipping flag IMMEDIATELY to short-circuit any running animations
       this.isSkipping = true;
 
@@ -2948,6 +2953,7 @@ class LiveGameViewer {
     } catch (e) {
         console.error("Exception in finalizeGame:", e);
         if (window.setStatus) window.setStatus("CRITICAL ERROR SAVING GAME", "error");
+        this.hasAppliedResult = false;
     }
   }
 
@@ -3372,6 +3378,9 @@ class LiveGameViewer {
    * Cleanup
    */
   destroy() {
+    // Ensure all timers and loops are stopped
+    this.stopGame();
+
     this.isPlaying = false;
     this.isPaused = true;
     this.isGameEnded = true; // Prevent further updates
