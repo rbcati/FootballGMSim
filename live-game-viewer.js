@@ -452,6 +452,9 @@ class LiveGameViewer {
           }, 300);
       } else {
           // Normal Smooth Update (CSS transition handles it)
+          // Ensure transition is active if it was disabled by JS animation previously and not cleared
+          if (ballEl.style.transition === 'none') ballEl.style.transition = '';
+
           ballEl.style.left = `${pct}%`;
           if (losEl) losEl.style.left = `${pct}%`;
 
@@ -516,6 +519,10 @@ class LiveGameViewer {
 
           // Apply animation class
           if (options.animationClass) element.classList.add(options.animationClass);
+
+          // CRITICAL: Disable CSS transitions while JS is driving the position
+          // This prevents the browser from interpolating between JS frames, which causes lag/drag.
+          element.style.transition = 'none';
 
           // Easing functions
           const easeLinear = t => t;
@@ -642,6 +649,10 @@ class LiveGameViewer {
                       shadowEl.style.filter = 'blur(1px)';
                   }
                   if (options.animationClass) element.classList.remove(options.animationClass);
+
+                  // Restore CSS transitions (clear inline style to revert to CSS class)
+                  element.style.transition = '';
+
                   resolve();
               }
           };
@@ -867,6 +878,10 @@ class LiveGameViewer {
                   soundManager.playTackle();
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
+                  if (ballEl) {
+                      ballEl.classList.add('tackle-collision');
+                      this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
+                  }
               }
           }
 
@@ -878,7 +893,10 @@ class LiveGameViewer {
               skillMarker.style.left = `${startPct}%`;
           }
 
+          // Visual Handoff
+          if (ballEl) ballEl.classList.add('run-bob');
           await new Promise(r => this.setTimeoutSafe(r, handoffDuration));
+          if (ballEl) ballEl.classList.remove('run-bob');
 
           const runDuration = 800 * durationScale;
           if (qbMarker) qbMarker.style.opacity = '0.5';
@@ -920,6 +938,10 @@ class LiveGameViewer {
                    if (defMarker) {
                        defMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
+                   }
+                   if (ballEl) {
+                       ballEl.classList.add('tackle-collision');
+                       this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
                    }
                }
           }
@@ -1947,6 +1969,8 @@ class LiveGameViewer {
     );
 
     // 1. Animate Play (Async)
+    // Only animate ONCE. The play object contains the result (yards, etc),
+    // but startState tracks where we began (for the animation start point).
     if (play.type === 'play') {
         await this.animatePlay(play, startState);
         // RACE CHECK: If skipping or ended during animation, abort
@@ -1958,14 +1982,6 @@ class LiveGameViewer {
 
     this.playByPlay.push(play);
     this.currentPlayIndex = this.playByPlay.length;
-
-    // ANIMATE!
-    await this.animatePlay(play);
-    // RACE CHECK
-    if (this.isGameEnded || this.isSkipping) {
-        this.isProcessingTurn = false;
-        return;
-    }
 
     this.renderPlay(play);
     this.updateGameState(play, state);
@@ -2337,7 +2353,7 @@ class LiveGameViewer {
     const displayAway = awayChanged ? this.lastAwayScore : away.score;
 
     scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}" id="awayTeamBox">
         <div class="team-name">${away.team.abbr}</div>
         <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
       </div>
@@ -2347,7 +2363,7 @@ class LiveGameViewer {
           ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
         </div>
       </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}">
+      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}" id="homeTeamBox">
         <div class="team-name">${home.team.abbr}</div>
         <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
       </div>
@@ -2356,92 +2372,23 @@ class LiveGameViewer {
     // Trigger animations explicitly
     if (homeChanged) {
         const el = scoreboard.querySelector('#scoreHome');
+        const box = scoreboard.querySelector('#homeTeamBox');
         if (el) {
-            el.classList.remove('pulse-score', 'pulse-score-strong');
-            if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
-
-            // Sync animation duration
-            el.style.animationDuration = '1s';
-
-            void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score-strong');
+            if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
+            if (box) box.classList.add('pulse-score-strong'); // Pulse container
             this.animateNumber(el, this.lastHomeScore, home.score, 1000);
         }
     }
     if (awayChanged) {
         const el = scoreboard.querySelector('#scoreAway');
+        const box = scoreboard.querySelector('#awayTeamBox');
         if (el) {
-            el.classList.remove('pulse-score', 'pulse-score-strong');
-            if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
-
-            // Sync animation duration
-            el.style.animationDuration = '1s';
-
-            void el.offsetWidth; // Force reflow
             el.classList.add('pulse-score-strong');
+            if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
+            if (box) box.classList.add('pulse-score-strong'); // Pulse container
             this.animateNumber(el, this.lastAwayScore, away.score, 1000);
         }
-    }
-    // Initialize scoreboard structure if missing
-    if (!scoreboard.querySelector('#scoreHome')) {
-        scoreboard.innerHTML = `
-          <div class="score-team" id="awayTeamBox">
-            <div class="team-name">${away.team.abbr}</div>
-            <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
-          </div>
-          <div class="score-info">
-            <div class="game-clock"></div>
-            <div class="down-distance"></div>
-          </div>
-          <div class="score-team" id="homeTeamBox">
-            <div class="team-name">${home.team.abbr}</div>
-            <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
-          </div>
-        `;
-    }
-
-    // Update Possession Classes
-    const awayBox = scoreboard.querySelector('#awayTeamBox');
-    const homeBox = scoreboard.querySelector('#homeTeamBox');
-    if (awayBox) awayBox.className = `score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}`;
-    if (homeBox) homeBox.className = `score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}`;
-
-    // Update Info
-    const clockEl = scoreboard.querySelector('.game-clock');
-    if (clockEl) clockEl.textContent = `Q${state.quarter} ${this.formatTime(state.time)}`;
-
-    const ddEl = scoreboard.querySelector('.down-distance');
-    if (ddEl) ddEl.textContent = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
-
-    // Update Scores with Animation
-    const homeEl = scoreboard.querySelector('#scoreHome');
-    const awayEl = scoreboard.querySelector('#scoreAway');
-
-    if (homeChanged && homeEl) {
-        homeEl.classList.remove('pulse-score', 'pulse-score-strong');
-        if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
-        void homeEl.offsetWidth; // Force reflow
-        homeEl.classList.add('pulse-score-strong');
-        this.animateNumber(homeEl, this.lastHomeScore, home.score, 1500);
-    } else if (homeEl) {
-         // Ensure accurate if not animating
-         if (homeEl.textContent != home.score && !homeEl.hasAttribute('data-animating')) {
-             homeEl.textContent = home.score;
-             if (home.score.toString().length > 2) homeEl.style.fontSize = '1.5rem';
-         }
-    }
-
-    if (awayChanged && awayEl) {
-        awayEl.classList.remove('pulse-score', 'pulse-score-strong');
-        if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
-        void awayEl.offsetWidth; // Force reflow
-        awayEl.classList.add('pulse-score-strong');
-        this.animateNumber(awayEl, this.lastAwayScore, away.score, 1500);
-    } else if (awayEl) {
-         if (awayEl.textContent != away.score && !awayEl.hasAttribute('data-animating')) {
-             awayEl.textContent = away.score;
-             if (away.score.toString().length > 2) awayEl.style.fontSize = '1.5rem';
-         }
     }
 
     this.lastHomeScore = home.score;
