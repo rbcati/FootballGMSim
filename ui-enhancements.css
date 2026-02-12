@@ -1211,7 +1211,7 @@ select:disabled {
 .streak-fire {
     color: #ff9500;
     text-shadow: 0 0 5px #ff3b30;
-    animation: pulse-glow 0.5s infinite;
+    animation: pulse-text-glow 0.5s infinite;
 }
 
 /* Game Over Overlay */
