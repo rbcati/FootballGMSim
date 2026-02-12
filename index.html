@@ -30,6 +30,7 @@
     <!-- Features (standings, coaching, scouting, etc.) -->
     <link rel="stylesheet" href="features.css" />
     <link rel="stylesheet" href="ui-enhancements.css" />
+    <link rel="stylesheet" href="hub.css" />
     <!-- Mobile responsive (all @media queries) -->
     <link rel="stylesheet" href="mobile.css" />
     <!-- Legacy stylesheets (keep for compatibility) -->
@@ -237,26 +238,7 @@
             </section>
 
             <section id="hub" class="view">
-              <div class="card">
-                <div class="row"><h2>League Hub</h2><div class="spacer"></div><div class="muted">Season <span id="hubSeason"></span></div></div>
-                <div class="grid two">
-                  <div>
-                    <div>Week <span id="hubWeek"></span> of <span id="hubWeeks"></span></div>
-                    <div>Games this week: <span id="hubGames"></span></div>
-                    <!-- Simulate Week button is rendered dynamically in main.js -->
-                  </div>
-                  <div><h3>Power Ranking</h3><ol id="hubPower"></ol></div>
-                </div>
-                
-                <!-- League Team Ratings Overview -->
-                <div class="card mt">
-                  <h3>League Team Ratings</h3>
-                  <div id="leagueTeamRatings" class="league-ratings-grid">
-                    <!-- League team ratings will be rendered here -->
-                  </div>
-                </div>
-              </div>
-              <div class="card"><h3>Last Week Results</h3><div id="hubResults" class="list"></div></div>
+              <!-- New Premium Hub Layout will be rendered here by ui.js -->
             </section>
             
             <section id="roster" class="view" hidden>
@@ -445,31 +427,31 @@
     </main>
 
     <nav class="bottom-nav">
-        <a href="#/hub" class="nav-item-bottom active" data-view="hub">
+        <a href="#/hub" class="nav-item-bottom active" data-view="hub" aria-label="Dashboard">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
             <span>Hub</span>
         </a>
-        <a href="#/roster" class="nav-item-bottom" data-view="roster">
+        <a href="#/roster" class="nav-item-bottom" data-view="roster" aria-label="Team Roster">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
             <span>Roster</span>
         </a>
-        <a href="#/schedule" class="nav-item-bottom" data-view="schedule">
+        <a href="#/schedule" class="nav-item-bottom" data-view="schedule" aria-label="Schedule">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             <span>Schedule</span>
         </a>
-        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats">
+        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats" aria-label="Standings">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
             <span>Standings</span>
         </a>
-        <a href="#/trade" class="nav-item-bottom" data-view="trade">
+        <a href="#/trade" class="nav-item-bottom" data-view="trade" aria-label="Trade Center">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
             <span>Trade</span>
         </a>
-        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats">
+        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats" aria-label="Stats">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
             <span>Stats</span>
         </a>
-        <a href="#" class="nav-item-bottom" id="navMenuBottom">
+        <a href="#" class="nav-item-bottom" id="navMenuBottom" aria-label="More Menu">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
             <span>Menu</span>
         </a>
