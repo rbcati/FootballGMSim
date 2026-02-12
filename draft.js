@@ -703,7 +703,22 @@ function autoPickForCPU() {
 
   // Score each available prospect for this team
   const scoredProspects = draftState.availableProspects.map(p => {
-    let score = p.ovr || 50;
+    // --- AI FOG OF WAR ---
+    // AI uses a "perceived" OVR, not the true OVR.
+    // This allows them to draft busts or miss gems, just like the user.
+    // Base error is random, but weighted by the prospect's boom/bust factors.
+    // A high 'boomFactor' makes them look better than they are (potential bust for AI).
+    // A high 'bustFactor' makes them look worse (hidden gem).
+
+    // Simulating AI scouting error
+    const scoutingError = U.rand(-5, 5);
+    const hypeFactor = (p.boomFactor || 0) * 0.5; // Hype inflates perceived value
+    const riskFactor = (p.bustFactor || 0) * 0.5; // Risk deflates perceived value
+
+    // Perceived OVR = True OVR + Noise + Hype - Risk
+    const perceivedOvr = (p.ovr || 50) + scoutingError + hypeFactor - riskFactor;
+
+    let score = perceivedOvr;
 
     // Roster saturation check: penalize positions where team is already stacked
     const saturationMultiplier = getPositionSaturationMultiplier(team, p.pos);

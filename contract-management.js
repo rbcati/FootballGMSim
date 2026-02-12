@@ -330,8 +330,9 @@ function calculatePlayerLeverage(player, league, team) {
   const character = player.character || {};
 
   // Position value multipliers (same scale as salary calculation)
+  // UPDATED: Elite QBs now demand 2.5x base market value (Patrick Mahomes effect)
   const posMultipliers = {
-    QB: 2.2, WR: 1.15, OL: 1.10, CB: 1.10, DL: 1.05,
+    QB: 2.5, WR: 1.15, OL: 1.10, CB: 1.10, DL: 1.05,
     LB: 0.95, S: 0.90, TE: 0.85, RB: 0.70, K: 0.35, P: 0.30
   };
   const posMult = posMultipliers[pos] || 1.0;
@@ -375,6 +376,13 @@ function calculatePlayerLeverage(player, league, team) {
   if (character.greed) {
       if (character.greed > 70) personalityMod += 0.15;
       else if (character.greed < 30) personalityMod -= 0.10;
+  }
+
+  // HOLDOUT RISK: If player is grossly underpaid relative to current market
+  // Checks if current AAV is < 50% of market value
+  if (player.baseAnnual > 0 && marketAAV > player.baseAnnual * 2 && player.years > 1) {
+      // Player knows they are underpaid
+      personalityMod += 0.20; // Massive leverage boost (Holdout threat)
   }
 
   // Loyalty: Discount if re-signing (assumed if team passed)
