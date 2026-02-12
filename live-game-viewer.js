@@ -3156,10 +3156,10 @@ class LiveGameViewer {
           this.lastFireTime = Date.now();
       }
 
-      // Streak indicator
+      // Streak indicator (using Combo for consecutive plays)
       let streakHtml = '';
-      if (this.streak >= 3) {
-          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
+      if (this.combo >= 3) {
+          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-text-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
       if (this.combo > 0) {
