@@ -1,0 +1,399 @@
+/* Hub / Dashboard Premium Styles */
+
+/* Header Section */
+.hub-header {
+  position: relative;
+  background: linear-gradient(135deg, var(--surface-strong) 0%, var(--surface) 100%);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+  border: 1px solid var(--hairline);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+.hub-header::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(circle at top right, rgba(var(--accent-rgb), 0.15), transparent 70%);
+  pointer-events: none;
+}
+
+.hub-header-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.team-identity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.team-name-large {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.team-record-large {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.division-rank-badge {
+  font-size: var(--text-xs);
+  background: var(--surface-elevated);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline-strong);
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.season-context {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.current-week-large {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text);
+}
+
+.season-year-large {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Matchup Card (Broadcast Style) */
+.matchup-card {
+  background: linear-gradient(to bottom, #1a1f26, #0a0c10); /* Deep dark for contrast */
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--hairline-strong);
+  padding: 0; /* No padding on container, handled inside */
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-lg);
+  position: relative;
+  overflow: hidden;
+}
+
+.matchup-header {
+  background: rgba(255, 255, 255, 0.03);
+  padding: var(--space-3) var(--space-5);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--hairline);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+}
+
+.matchup-content {
+  padding: var(--space-6) var(--space-4);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.matchup-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+}
+
+.matchup-team.away { order: 1; }
+.matchup-team.home { order: 3; }
+
+.team-logo-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--surface-elevated);
+  border: 4px solid var(--hairline-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2xl);
+  font-weight: 900;
+  color: var(--text-muted);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  position: relative;
+}
+
+.user-team-logo {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.team-name-matchup {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.team-record-matchup {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.matchup-vs {
+  order: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.vs-badge {
+  font-size: var(--text-2xl);
+  font-weight: 900;
+  color: var(--text-subtle);
+  opacity: 0.5;
+  font-style: italic;
+}
+
+.at-badge {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-top: -5px;
+}
+
+.matchup-actions {
+  padding: var(--space-4);
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  justify-content: center;
+  gap: var(--space-4);
+}
+
+.btn-watch {
+  background: var(--accent);
+  color: white;
+  padding: var(--space-3) var(--space-8);
+  font-size: var(--text-lg);
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.4);
+  border: none;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.btn-watch:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.6);
+  filter: brightness(1.1);
+}
+
+.btn-sim-week {
+  background: var(--surface-elevated);
+  color: var(--text);
+  padding: var(--space-3) var(--space-6);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--hairline-strong);
+  transition: all 0.2s ease;
+}
+
+.btn-sim-week:hover {
+  background: var(--surface-strong);
+  border-color: var(--text-muted);
+}
+
+/* Status Grid (Ratings) */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.stat-box {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  border: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  transition: transform 0.2s ease;
+}
+
+.stat-box:hover {
+  transform: translateY(-2px);
+  border-color: var(--hairline-strong);
+}
+
+.stat-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value-large {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1;
+}
+
+.stat-bar-container {
+  height: 4px;
+  background: var(--surface-strong);
+  border-radius: var(--radius-pill);
+  overflow: hidden;
+  margin-top: auto;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+}
+
+/* Rating Colors */
+.rating-color-elite { background: #8b5cf6; } /* Purple */
+.rating-color-good { background: #10b981; }  /* Green */
+.rating-color-avg { background: #f59e0b; }   /* Orange */
+.rating-color-bad { background: #ef4444; }   /* Red */
+
+/* Secondary Sections Grid */
+.hub-secondary-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr; /* News/Results takes more space? Or maybe 1fr 1fr */
+  gap: var(--space-6);
+}
+
+.hub-section-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Compact Power Rankings List */
+.hub-rankings-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.hub-ranking-item {
+  display: flex;
+  align-items: center;
+  padding: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  gap: var(--space-3);
+}
+
+.hub-ranking-rank {
+  font-weight: 800;
+  color: var(--text-muted);
+  width: 24px;
+  text-align: center;
+}
+
+.hub-ranking-team {
+  flex: 1;
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.hub-ranking-record {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Mobile Adjustments */
+@media (max-width: 768px) {
+  .hub-header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .season-context {
+    align-items: flex-start;
+    text-align: left;
+    margin-top: var(--space-2);
+  }
+
+  .matchup-content {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+    text-align: center;
+  }
+
+  .matchup-team.away { order: 1; }
+  .matchup-vs { order: 2; margin: var(--space-2) 0; }
+  .matchup-team.home { order: 3; }
+
+  .status-grid {
+    grid-template-columns: 1fr 1fr; /* 2x2 on mobile */
+  }
+
+  .hub-secondary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-watch {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .matchup-actions {
+    flex-direction: column;
+  }
+
+  .btn-sim-week {
+    width: 100%;
+    text-align: center;
+  }
+}

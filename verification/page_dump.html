@@ -1,0 +1,1591 @@
+<!DOCTYPE html><html lang="en" style="--safe-area-inset-top: env(safe-area-inset-top); --safe-area-inset-bottom: env(safe-area-inset-bottom); --safe-area-inset-left: env(safe-area-inset-left); --safe-area-inset-right: env(safe-area-inset-right);"><head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFL GM Simulator</title>
+
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NFL GM">
+    <meta name="theme-color" content="#0a0c10">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <!-- Prevent iOS Safari from auto-formatting phone numbers -->
+    <meta name="format-detection" content="telephone=no">
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Stylesheets - Primary stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Modular CSS Structure (if available) -->
+    <!-- Base styles (variables, reset, typography) -->
+    <link rel="stylesheet" href="base.css">
+    <!-- Layout (grid, navigation, sidebars) -->
+    <link rel="stylesheet" href="layout.css">
+    <!-- Components (cards, buttons, forms, tables, modals) -->
+    <link rel="stylesheet" href="components.css">
+    <!-- Features (standings, coaching, scouting, etc.) -->
+    <link rel="stylesheet" href="features.css">
+    <link rel="stylesheet" href="ui-enhancements.css">
+    <link rel="stylesheet" href="hub.css">
+    <!-- Mobile responsive (all @media queries) -->
+    <link rel="stylesheet" href="mobile.css">
+    <!-- Legacy stylesheets (keep for compatibility) -->
+    <link rel="stylesheet" href="standings-savemanager.css">
+    <link rel="stylesheet" href="coaching-styles.css">
+
+<script type="importmap">
+{
+  "imports": {
+    "./confetti.js": "./confetti.js?v=1.0.1",
+    "./sound-manager.js": "./sound-manager.js?v=1.0.1",
+    "./awards-viewer.js": "./awards-viewer.js?v=1.0.1",
+    "./awards.js": "./awards.js?v=1.0.1",
+    "./box-score-viewer.js": "./box-score-viewer.js?v=1.0.1",
+    "./cap.js": "./cap.js?v=1.0.1",
+    "./coach-system.js": "./coach-system.js?v=1.0.1",
+    "./coaching.js": "./coaching.js?v=1.0.1",
+    "./constants.js": "./constants.js?v=1.0.1",
+    "./contract-management.js": "./contract-management.js?v=1.0.1",
+    "./data-visualization.js": "./data-visualization.js?v=1.0.1",
+    "./debug-helper.js": "./debug-helper.js?v=1.0.1",
+    "./draft.js": "./draft.js?v=1.0.1",
+    "./events.js": "./events.js?v=1.0.1",
+    "./expanded-names.js": "./expanded-names.js?v=1.0.1",
+    "./fixes.js": "./fixes.js?v=1.0.1",
+    "./football-db.js": "./football-db.js?v=1.0.1",
+    "./freeagency.js": "./freeagency.js?v=1.0.1",
+    "./field-effects.js": "./field-effects.js?v=1.0.1",
+    "./game-results-viewer.js": "./game-results-viewer.js?v=1.0.1",
+    "./game-runner.js": "./game-runner.js?v=1.0.1",
+    "./game-simulator.js": "./game-simulator.js?v=1.0.1",
+    "./history.js": "./history.js?v=1.0.1",
+    "./injury-core.js": "./injury-core.js?v=1.0.1",
+    "./injury-system.js": "./injury-system.js?v=1.0.1",
+    "./league-stats.js": "./league-stats.js?v=1.0.1",
+    "./league.js": "./league.js?v=1.0.1",
+    "./live-game-viewer.js": "./live-game-viewer.js?v=1.0.1",
+    "./main.js": "./main.js?v=1.0.1",
+    "./offseason.js": "./offseason.js?v=1.0.1",
+    "./owner-mode.js": "./owner-mode.js?v=1.0.1",
+    "./picks.js": "./picks.js?v=1.0.1",
+    "./player-comparison.js": "./player-comparison.js?v=1.0.1",
+    "./player-database.js": "./player-database.js?v=1.0.1",
+    "./player-factory.js": "./player-factory.js?v=1.0.1",
+    "./player-stats-viewer.js": "./player-stats-viewer.js?v=1.0.1",
+    "./player.js": "./player.js?v=1.0.1",
+    "./playoffs.js": "./playoffs.js?v=1.0.1",
+    "./power-rankings.js": "./power-rankings.js?v=1.0.1",
+    "./records.js": "./records.js?v=1.0.1",
+    "./retirement-system.js": "./retirement-system.js?v=1.0.1",
+    "./schedule-factory.js": "./schedule-factory.js?v=1.0.1",
+    "./schedule-viewer.js": "./schedule-viewer.js?v=1.0.1",
+    "./schedule.js": "./schedule.js?v=1.0.1",
+    "./scheme-core.js": "./scheme-core.js?v=1.0.1",
+    "./scheme-management.js": "./scheme-management.js?v=1.0.1",
+    "./scouting-system.js": "./scouting-system.js?v=1.0.1",
+    "./sound-manager.js": "./sound-manager.js?v=1.0.1",
+    "./confetti.js": "./confetti.js?v=1.0.1",
+    "./simulation.js": "./simulation.js?v=1.0.1",
+    "./staff.js": "./staff.js?v=1.0.1",
+    "./standings-page.js": "./standings-page.js?v=1.0.1",
+    "./state.js": "./state.js?v=1.0.1",
+    "./stats-viewer.js": "./stats-viewer.js?v=1.0.1",
+    "./story-events.js": "./story-events.js?v=1.0.1",
+    "./strategy.js": "./strategy.js?v=1.0.1",
+    "./team-ratings.js": "./team-ratings.js?v=1.0.1",
+    "./team-statistics.js": "./team-statistics.js?v=1.0.1",
+    "./teams.js": "./teams.js?v=1.0.1",
+    "./test.js": "./test.js?v=1.0.1",
+    "./trade.js": "./trade.js?v=1.0.1",
+    "./tradeproposals.js": "./tradeproposals.js?v=1.0.1",
+    "./ui-components.js": "./ui-components.js?v=1.0.1",
+    "./ui-interactions.js": "./ui-interactions.js?v=1.0.1",
+    "./stats-tracking.js": "./stats-tracking.js?v=1.0.1",
+    "./ui.js": "./ui.js?v=1.0.1",
+    "./utils.js": "./utils.js?v=1.0.1",
+    "./war-calculator.js": "./war-calculator.js?v=1.0.1",
+    "./news-viewer.js": "./news-viewer.js?v=1.0.1"
+  }
+}
+</script>
+
+<style>
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sortable:hover { background-color: rgba(255,255,255,0.05); }
+        th.sortable.sorted-asc::after { content: ' ▲'; font-size: 0.8em; opacity: 0.7; }
+        th.sortable.sorted-desc::after { content: ' ▼'; font-size: 0.8em; opacity: 0.7; }
+        .highlight-stat { color: var(--text); font-weight: 500; }
+        td { color: var(--text-muted); }
+        .stat-ovr { font-weight: bold; color: var(--accent); }
+    </style><style id="ripple-styles">
+      @keyframes ripple {
+        to {
+          transform: scale(4);
+          opacity: 0;
+        }
+      }
+    </style><style>
+.draft-picks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.draft-pick-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  text-align: center;
+}
+
+.draft-pick-card .round {
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.prospect-card {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.prospect-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.prospect-header h4 {
+  color: var(--text);
+  margin: 0;
+}
+
+.prospect-info {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.prospect-ratings {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.rating-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rating-item span:first-child {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.rating-item span:last-child {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prospect-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-scout {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+.btn-scout:hover {
+  background: var(--accent-hover);
+}
+
+.ovr-elite { color: #34C759; }
+.ovr-very-good { color: #00D4AA; }
+.ovr-good { color: var(--accent); }
+.ovr-average { color: var(--warning); }
+.ovr-below-average { color: var(--danger); }
+</style><style>
+/* New styles for a more readable onboarding team select */
+#onboardTeam {
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 8px;
+  background-color: #2a2a2e;
+  color: #f0f0f0;
+  padding: 10px;
+  border: 1px solid #444;
+  cursor: pointer;
+  width: 100%;
+}
+
+#onboardTeam option {
+  padding: 10px;
+  font-weight: 500;
+  background-color: #2a2a2e;
+}
+
+/* Existing styles */
+.user-team {
+  background: rgba(10,132,255,.1) !important;
+  border-left: 3px solid var(--accent) !important;
+}
+
+.standings-table .user-team td {
+  color: var(--text) !important;
+  font-weight: 600 !important;
+}
+
+.conference {
+  margin-bottom: 2rem;
+}
+
+.conference h3 {
+  color: var(--text);
+  margin-bottom: 1rem;
+  font-size: 1.25rem;
+}
+
+.divisions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.division {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  border: 1px solid var(--hairline);
+}
+
+.division h4 {
+  color: var(--text-muted);
+  margin-bottom: .5rem;
+  font-size: .875rem;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+
+.standings-table {
+  margin: 0;
+  font-size: .875rem;
+}
+
+.standings-table td {
+  padding: .5rem;
+}
+
+.result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: .5rem;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  margin-bottom: .25rem;
+  font-size: .875rem;
+}
+
+.result-item .teams {
+  color: var(--text);
+}
+
+.result-item .winner {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.abilities {
+  font-size: .75rem;
+  color: var(--text-subtle);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .divisions {
+    grid-template-columns: 1fr;
+  }
+  .standings-table {
+    font-size: .75rem;
+  }
+  .standings-table th,
+  .standings-table td {
+    padding: .25rem;
+  }
+}
+
+/* Trade center asset styles */
+.asset-item {
+  background: var(--surface);
+  padding: 4px 6px;
+  margin: 2px 0;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 0.875rem;
+}
+
+.asset-item.selected {
+  background-color: var(--accent);
+  color: var(--on-accent, #fff);
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.dark-player-card.clickable, .player-card.clickable {
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.dark-player-card.clickable:hover, .player-card.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+</style></head>
+<body class="theme-dark" style="overscroll-behavior-y: contain; pointer-events: auto; overflow: auto;">
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+    <!-- Topbar removed as per request -->
+    <div class="nav-toggle-container"><button id="soundToggle" class="nav-toggle" aria-label="Toggle Sound" style="margin-right: 10px; background: none; border: none; color: var(--text); cursor: pointer; pointer-events: auto;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg></button>
+        <button id="navToggle" class="nav-toggle" aria-label="Toggle navigation menu" tabindex="0" role="button" aria-expanded="true" style="display: none; visibility: visible; opacity: 1; pointer-events: auto; cursor: pointer; z-index: 100; position: relative;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+    </div>
+
+    <main class="layout">
+        <aside id="nav-sidebar" class="nav-sidebar sidebar-wrapper active" aria-label="Primary navigation">
+            <div class="glass-bg"></div>
+            <nav id="site-nav" class="nav-menu menu-items">
+                <a href="#/hub" class="nav-item active" data-view="hub" aria-current="page">Home</a>
+
+                <details class="nav-group" open="">
+                    <summary class="nav-item nav-summary">Team</summary>
+                    <div class="nav-group-content">
+                        <a href="#/roster" class="nav-item" data-view="roster">Roster</a>
+                        <a href="#/contracts" class="nav-item" data-view="contracts">Contracts</a>
+                        <a href="#/trade" class="nav-item" data-view="trade">Trades</a>
+                        <a href="#/freeagency" class="nav-item" data-view="freeagency">Free Agency</a>
+                        <a href="#/draft" class="nav-item" data-view="draft">Draft</a>
+                        <a href="#/scouting" class="nav-item" data-view="scouting">Scouting</a>
+                        <a href="#/coaching" class="nav-item" data-view="coaching">Coaching</a>
+                        <!-- New Owner Mode Link -->
+                        <a href="#/owner" class="nav-item" data-view="owner">Owner Mode</a>
+                    </div>
+                </details>
+
+                <details class="nav-group">
+                    <summary class="nav-item nav-summary">League</summary>
+                    <div class="nav-group-content">
+                        <a href="#/leagueStats" class="nav-item" data-view="leagueStats">Standings</a>
+                        <a href="#/schedule" class="nav-item" data-view="schedule">Schedule</a>
+                        <a href="#/powerRankings" class="nav-item" data-view="powerRankings">Power Rankings</a>
+                        <a href="#/leagueStats" class="nav-item" data-view="leagueStats">Stats</a>
+                        <a href="#/awards" class="nav-item" data-view="awards">Award Races</a>
+                        <a href="#/injuries" class="nav-item" data-view="injuries">Injuries</a>
+                        <!-- New Newsroom Link -->
+                        <a href="#/news" class="nav-item" data-view="news">Newsroom</a>
+                    </div>
+                </details>
+
+                <details class="nav-group">
+                    <summary class="nav-item nav-summary">History</summary>
+                    <div class="nav-group-content">
+                        <a href="#/playerDatabase" class="nav-item" data-view="playerDatabase">Player DB</a>
+                        <a href="#/history" class="nav-item" data-view="history">History</a>
+                        <a href="#/records" class="nav-item" data-view="records">Records</a>
+                        <a href="#/hallOfFame" class="nav-item" data-view="hallOfFame">Hall of Fame</a>
+                    </div>
+                </details>
+
+                <a href="#/settings" class="nav-item" data-view="settings">Settings</a>
+            <a href="#/standings" class="nav-item" data-view="standings">Standings</a></nav>
+        </aside>
+
+        <aside class="sidebar">
+            <div class="section">
+                <label for="userTeam">Your Team</label>
+                <select id="userTeam"></select>
+            </div>
+            <div class="section">
+              <div>Season <span id="seasonNow"></span></div>
+              <div>Cap Used: <span id="capUsed"></span> / <span id="capTotal"></span></div>
+              <div class="muted small">Dead Cap: <span id="deadCap"></span></div>
+              <div class="muted small">Room: <span id="capRoom"></span></div>
+            </div>
+            <div class="section">
+                <button id="btnGlobalAdvance" class="btn primary" style="width: 100%; margin-bottom: 10px; pointer-events: auto; cursor: pointer;">Advance Week</button>
+                <button id="btnDashboard" class="btn secondary" style="width: 100%; pointer-events: auto; cursor: pointer;">League Dashboard</button>
+            </div>
+            <div id="statusMsg" class="section muted"></div>
+        </aside>
+
+        <section id="main-content" class="content">
+            <section id="leagueDashboard" class="view" hidden="" style="display: none;">
+                <div class="card" style="cursor: pointer;">
+                    <h1>Football GM Dashboard</h1>
+
+                    <div class="dashboard-section">
+                        <h3>Current Leagues</h3>
+                        <div class="table-wrapper">
+                            <table class="table" id="leagues-table">
+                                <thead>
+                                    <tr>
+                                        <th>League Name</th>
+                                        <th>Team</th>
+                                        <th>Year</th>
+                                        <th>Last Played</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leagues-list"></tbody>
+                            </table>
+                        </div>
+                        <div id="no-leagues-msg" style="display: block; padding: 10px;" class="muted">
+                <div class="empty-state-card" style="text-align: center; padding: 40px; background: var(--surface-strong); border-radius: var(--radius-lg); border: 1px solid var(--hairline);">
+                    <div style="font-size: 48px; margin-bottom: 20px;">🏈</div>
+                    <h3 style="margin-bottom: 10px; color: var(--text);">No Leagues Found</h3>
+                    <p style="color: var(--text-muted); margin-bottom: 20px;">Start your career as a General Manager today.</p>
+                    <button class="btn primary large" onclick="document.getElementById('new-league-name').focus()" style="pointer-events: auto; cursor: pointer;">Create New League</button>
+                </div>
+            </div>
+                    </div>
+
+                    <div class="dashboard-section mt-4">
+                        <h3>Create New League</h3>
+                        <div class="row">
+                            <input type="text" id="new-league-name" aria-label="League Name" placeholder="Enter League Name" style="max-width: 300px;">
+                            <button id="create-league-btn" class="btn primary" style="pointer-events: auto; cursor: pointer;">Create League</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="relocation" class="view" hidden="" style="display: none;">
+                <!-- Relocation Wizard will be rendered here -->
+            </section>
+
+            <section id="news" class="view" hidden="" style="display: none;">
+                <!-- Newsroom View -->
+            </section>
+
+            <section id="owner" class="view" hidden="" style="display: none;">
+                <!-- Owner Mode View -->
+            </section>
+
+            <section id="hub" class="view" style="display: block;">
+
+
+
+
+                    <div class="team-header compact-header" style="padding: 15px; margin-bottom: 15px; flex-wrap: nowrap;">
+                        <div class="team-primary-info">
+                            <h1 class="team-name" style="font-size: 24px; margin-bottom: 4px;">Team 0</h1>
+                            <div class="team-record" style="font-size: 20px;">
+                                0-0-0 <span style="font-size: 0.8em; opacity: 0.7;">(-)</span>
+                            </div>
+                             <div style="font-size: 0.8rem; opacity: 0.9;">
+                                <span style="font-weight: 700; color: #9ca3af;">4th Div</span>
+                            </div>
+                            <div style="font-size: 0.8rem; opacity: 0.7; margin-top: 4px;">
+                                Upcoming Draft Class (0 Prospects)
+                            </div>
+                        </div>
+
+                        <!-- ADVANCE WEEK BUTTON (MOVED HERE) -->
+                         <div class="week-summary" style="text-align: right; min-width: 150px; display: flex; flex-direction: column; justify-content: center;">
+                            <div class="week-label" style="color: #ccc; margin-bottom: 8px; font-size: 14px;">Week 1</div>
+
+                                <button id="btnAdvanceWeekTop" class="btn primary" style="width: 100%; padding: 10px; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.3); white-space: nowrap;">
+                                    Advance Week &gt;
+                                </button>
+
+                        </div>
+                    </div>
+
+                    <!-- FEATURED GAME CARD (MOVED HERE) -->
+
+                        <div class="user-game-card featured" style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 1px solid var(--accent); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <h3 style="margin:0; color: var(--accent); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;">Your Game This Week</h3>
+                                <span class="tag is-warning">Upcoming</span>
+                            </div>
+
+                            <div class="matchup" style="display: flex; justify-content: space-around; align-items: center; margin-bottom: 20px; font-size: 1.5rem; font-weight: bold;">
+                                <div class="team away" style="text-align: center;">
+                                    <div style="font-size: 2rem;">TM1</div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">1-1</div>
+                                </div>
+                                <div class="vs" style="font-size: 1rem; color: #666; font-weight: normal;">@</div>
+                                <div class="team home" style="text-align: center;">
+                                    <div style="font-size: 2rem;">TM0</div>
+                                    <div style="font-size: 0.8rem; opacity: 0.7;">0-0</div>
+                                </div>
+                            </div>
+
+
+                            <button onclick="window.watchLiveGame(0, 1)" class="btn btn-watch" style="width: 100%; background: var(--success); color: white; padding: 12px; font-size: 1.1rem; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                                📺 Watch Game
+                            </button>
+
+                        </div>
+
+
+                    <!-- STATS GRID (KEPT BUT MOVED DOWN) -->
+                    <div class="team-stats-grid" style="margin-bottom: 20px; display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;">
+                            <div class="stat-card">
+                                <div class="stat-label">Overall</div>
+                                <div class="stat-value">55</div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-label">Offense</div>
+                                <div class="stat-value" style="color: #60a5fa;">61</div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-label">Defense</div>
+                                <div class="stat-value" style="color: #f87171;">50</div>
+                            </div>
+
+                            <div class="stat-card">
+                                <div class="stat-label">Cap Space</div>
+                                <div class="stat-value" style="color: #48bb78; font-size: 1.2rem;">$15.5M</div>
+                            </div>
+                    </div>
+
+                    <style>
+                    /* Improve top header spacing and sizing (Bug #5 Fix) */
+                    .team-header {
+                        padding: 24px;
+                        background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+                        border-radius: 12px;
+                        margin-bottom: 20px;
+                        display: flex;
+                        flex-wrap: wrap;
+                        justify-content: space-between;
+                        align-items: center;
+                        gap: 20px;
+                    }
+
+                    .team-primary-info {
+                        flex: 1;
+                        min-width: 250px;
+                    }
+
+                    .team-name {
+                        font-size: 32px;
+                        font-weight: bold;
+                        margin-bottom: 12px;
+                        margin-top: 0;
+                        color: white;
+                    }
+
+                    .team-record {
+                        font-size: 24px;
+                        color: #00d4ff;
+                        font-weight: 600;
+                        margin-bottom: 16px;
+                    }
+
+                    .team-stats-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                        gap: 16px;
+                        flex: 2;
+                        justify-content: flex-end;
+                    }
+
+                    .stat-card {
+                        background: rgba(255, 255, 255, 0.05);
+                        padding: 12px;
+                        border-radius: 8px;
+                        text-align: center;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        min-width: 90px;
+                    }
+
+                    .stat-card .stat-label {
+                        font-size: 12px;
+                        color: #999;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        margin-bottom: 6px;
+                    }
+
+                    .stat-card .stat-value {
+                        font-size: 24px;
+                        font-weight: bold;
+                        color: white;
+                    }
+
+                    /* Mobile adjustments */
+                    @media (max-width: 768px) {
+                        .team-header {
+                            padding: 16px;
+                            flex-direction: column;
+                            align-items: flex-start;
+                        }
+
+                        .team-stats-grid {
+                            width: 100%;
+                            display: grid;
+                            grid-template-columns: repeat(2, 1fr);
+                        }
+
+                        .team-name {
+                            font-size: 24px;
+                        }
+
+                        .team-record {
+                            font-size: 20px;
+                        }
+
+                        .stat-value {
+                            font-size: 20px;
+                        }
+                    }
+                    </style>
+
+
+        <div id="matchup-comparison-strip" class="card mb-4" style="background: linear-gradient(to bottom, #2d3748, #1a202c); border-top: 4px solid var(--accent);">
+
+            <!-- Header: Teams & Record -->
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 15px; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+                <div style="text-align: right;">
+                    <div style="font-weight: 800; font-size: 1.2rem; line-height: 1.1;">Team 0</div>
+                    <div style="font-size: 0.9rem; opacity: 0.7;">0-0</div>
+                </div>
+                <div style="font-weight: 700; opacity: 0.5; font-size: 0.9rem;">VS</div>
+                <div style="text-align: left;">
+                    <div style="font-weight: 800; font-size: 1.2rem; line-height: 1.1;">Team 1</div>
+                    <div style="font-size: 0.9rem; opacity: 0.7;">1-1</div>
+                </div>
+            </div>
+
+            <!-- Core Stats: OVR -->
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px; margin-bottom: 15px;">
+                <div style="text-align: right;">
+                    <span style="font-size: 1.4rem; font-weight: 800; color: #f56565;">55</span> <span style="font-size: 0.8rem; opacity: 0.6;">OVR</span>
+                    <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 2px;">
+                        Off <strong>61</strong> / Def <strong>50</strong>
+                    </div>
+                </div>
+                <div style="width: 1px; background: rgba(255,255,255,0.1);"></div>
+                <div style="text-align: left;">
+                    <span style="font-size: 1.4rem; font-weight: 800; color: #48bb78;">81</span> <span style="font-size: 0.8rem; opacity: 0.6;">OVR</span>
+                     <div style="font-size: 0.8rem; opacity: 0.8; margin-top: 2px;">
+                        Off <strong>83</strong> / Def <strong>79</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Matchup Rows (Cross-Matched) -->
+            <div style="background: rgba(0,0,0,0.2); border-radius: 6px; padding: 10px;">
+                <!-- My Offense vs Their Defense -->
+
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 4px 0; font-size: 0.9rem;">
+                <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    <span style="font-weight: 700; color: #48bb78;">#1</span>
+                    <span style="opacity: 0.8;">Pass Off</span>
+
+                </div>
+                <div style="opacity: 0.3; font-size: 0.8rem;">vs</div>
+                <div style="text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 8px;">
+
+                    <span style="opacity: 0.8;">Pass Def</span>
+                    <span style="font-weight: 700; color: #48bb78;">#2</span>
+                </div>
+            </div>
+
+
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 4px 0; font-size: 0.9rem;">
+                <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    <span style="font-weight: 700; color: #48bb78;">#1</span>
+                    <span style="opacity: 0.8;">Rush Off</span>
+
+                </div>
+                <div style="opacity: 0.3; font-size: 0.8rem;">vs</div>
+                <div style="text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 8px;">
+
+                    <span style="opacity: 0.8;">Rush Def</span>
+                    <span style="font-weight: 700; color: #48bb78;">#2</span>
+                </div>
+            </div>
+
+
+                <div style="height: 1px; background: rgba(255,255,255,0.05); margin: 5px 0;"></div>
+
+                <!-- My Defense vs Their Offense -->
+
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 4px 0; font-size: 0.9rem;">
+                <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    <span style="font-weight: 700; color: #48bb78;">#1</span>
+                    <span style="opacity: 0.8;">Pass Def</span>
+
+                </div>
+                <div style="opacity: 0.3; font-size: 0.8rem;">vs</div>
+                <div style="text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 8px;">
+
+                    <span style="opacity: 0.8;">Pass Off</span>
+                    <span style="font-weight: 700; color: #48bb78;">#2</span>
+                </div>
+            </div>
+
+
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; padding: 4px 0; font-size: 0.9rem;">
+                <div style="text-align: right; display: flex; justify-content: flex-end; align-items: center; gap: 8px;">
+                    <span style="font-weight: 700; color: #48bb78;">#1</span>
+                    <span style="opacity: 0.8;">Rush Def</span>
+
+                </div>
+                <div style="opacity: 0.3; font-size: 0.8rem;">vs</div>
+                <div style="text-align: left; display: flex; justify-content: flex-start; align-items: center; gap: 8px;">
+
+                    <span style="opacity: 0.8;">Rush Off</span>
+                    <span style="font-weight: 700; color: #48bb78;">#2</span>
+                </div>
+            </div>
+
+            </div>
+
+            <!-- Strategy Insight -->
+            <div style="margin-top: 15px; text-align: center; font-style: italic; background: rgba(66, 153, 225, 0.15); padding: 8px; border-radius: 4px; color: #90cdf4; font-size: 0.9rem; border-left: 3px solid #4299e1;">
+                "Heavyweight bout: Your top passing unit vs their elite secondary."
+            </div>
+        </div>
+
+
+                    <div class="card mb-4 manager-panel" style="border-left: 4px solid var(--accent); position: relative; overflow: hidden;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--hairline); padding-bottom: 10px;">
+                            <div>
+                                <h3 style="margin:0; font-size: 1.2rem;">Manager Control Panel</h3>
+                                <div style="font-size: 0.85rem; opacity: 0.8;">vs Team 1 <span class="tag is-dark">Balanced</span></div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 0.8rem; font-weight: bold; opacity: 0.6;">WEEKLY STRATEGY</div>
+                                <button class="btn btn-sm" onclick="if(window.saveGame) window.saveGame()" style="margin-top: 4px;">Save Game</button>
+                            </div>
+                        </div>
+
+                        <div class="grid two" style="gap: 20px;">
+                            <!-- Game Plans -->
+                            <div>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">1. Offensive Plan</label>
+                                <select id="managerOffPlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
+
+                                        <option value="BALANCED" selected="">Balanced Offense</option>
+
+                                        <option value="AGGRESSIVE_PASSING">Aggressive Passing</option>
+
+                                        <option value="BALL_CONTROL">Ball Control</option>
+
+                                        <option value="PROTECT_QB">Protect the QB</option>
+
+                                        <option value="FEED_STAR">Feed the Star</option>
+
+                                </select>
+                                <div id="offPlanDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; margin-bottom: 15px;">
+                            <div style="margin-bottom: 8px;">No specific focus. Adapt to the flow of the game.</div>
+                            <div style="margin-bottom: 6px;"></div>
+                            <div style="font-size: 0.8rem; opacity: 0.8;">
+                                <span style="color: #48bb78;">+ None</span><br>
+                                <span style="color: #f56565;">- None</span>
+                            </div>
+                         </div>
+
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">2. Defensive Plan</label>
+                                <select id="managerDefPlan" class="form-control" style="width:100%; padding:10px; margin-bottom:10px; background: var(--surface-strong); border: 1px solid var(--border); color: white;">
+
+                                        <option value="BALANCED" selected="">Balanced Defense</option>
+
+                                        <option value="SELL_OUT_RUN">Sell Out vs Run</option>
+
+                                        <option value="DISGUISE_COVERAGE">Disguise Coverage</option>
+
+                                        <option value="BLITZ_HEAVY">Blitz Heavy</option>
+
+                                        <option value="TWO_HIGH_SAFE">Two-High Safety</option>
+
+                                </select>
+                                <div id="defPlanDesc" style="font-size:0.85rem; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                            <div style="margin-bottom: 8px;">Standard defensive sets.</div>
+                            <div style="margin-bottom: 6px;"></div>
+                            <div style="font-size: 0.8rem; opacity: 0.8;">
+                                <span style="color: #48bb78;">+ None</span><br>
+                                <span style="color: #f56565;">- None</span>
+                            </div>
+                         </div>
+                            </div>
+
+                            <!-- Risk Profile -->
+                            <div>
+                                <label style="display:block; margin-bottom:8px; font-weight:bold; color: var(--text-highlight);">3. Risk Profile</label>
+                                <div class="btn-group" style="display:flex; gap:5px; margin-bottom: 10px;">
+
+                                        <button class="btn btn-sm secondary risk-btn" data-id="CONSERVATIVE" style="flex:1; padding: 10px;">
+                                            Conservative
+                                        </button>
+
+                                        <button class="btn btn-sm primary risk-btn" data-id="BALANCED" style="flex:1; padding: 10px;">
+                                            Balanced
+                                        </button>
+
+                                        <button class="btn btn-sm secondary risk-btn" data-id="AGGRESSIVE" style="flex:1; padding: 10px;">
+                                            Aggressive
+                                        </button>
+
+                                </div>
+                                <div id="riskDesc" style="font-size:0.85rem; color: var(--text-muted); padding: 0 5px;">
+                                    Standard risk/reward approach.
+                                    <div style="margin-top:5px; font-weight:bold; color: #ed8936;">
+                                        Volatility: NORMAL
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <div class="card mb-4">
+                        <h3>This Week's Games (Week 1)</h3>
+                        <div class="games-list-preview" style="max-height: 300px; overflow-y: auto;">
+
+                                    <div class="game-row user-game-row" style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid var(--hairline); background: rgba(52, 211, 153, 0.1);">
+                                        <div style="flex: 1;">
+                                            <span style="">TM1</span>
+
+                                        </div>
+                                        <div style="flex: 0 0 20px; text-align: center;">@</div>
+                                        <div style="flex: 1; text-align: right;">
+
+                                            <span style="">TM0</span>
+                                        </div>
+                                        <div style="flex: 0 0 80px; text-align: right; margin-left: 10px;">
+                                            <button class="btn btn-xs primary" onclick="window.watchLiveGame(0, 1)">Watch</button>
+                                        </div>
+                                    </div>
+
+                        </div>
+                        <div style="margin-top: 10px; text-align: center;">
+                            <button class="btn btn-sm secondary" onclick="location.hash='#/schedule'">View Full Schedule</button>
+                        </div>
+                    </div>
+
+
+                    <div class="card mb-4" id="hubTopPlayers">
+                        <h3>Matchup Preview: Top Talent</h3>
+                        <div class="grid two">
+                            <div>
+                                <h4 style="border-bottom: 1px solid var(--hairline); padding-bottom: 5px; margin-bottom: 10px;">
+                                    Team 0
+                                </h4>
+                                <div class="player-list">
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('0')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 0</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('1')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 1</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('2')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 2</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="border-bottom: 1px solid var(--hairline); padding-bottom: 5px; margin-bottom: 10px;">
+                                    Team 1
+                                </h4>
+
+                                <div class="player-list">
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('0')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 0</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('1')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 1</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                        <div class="player-item" style="display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--hairline); cursor: pointer;" onclick="if(window.viewPlayerStats) window.viewPlayerStats('2')">
+                                            <div>
+                                                <span style="font-weight: 600;">Player 2</span>
+                                                <span class="text-muted small">(QB)</span>
+                                            </div>
+                                            <div class="ovr-badge" style="padding: 2px 6px; border-radius: 4px; background: var(--surface-strong); font-weight: 700;">80</div>
+                                        </div>
+
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                <div class="card">
+                    <h2>Team Hub</h2>
+                    <div class="grid two">
+                        <div>
+                            <h3>Quick Actions</h3>
+                            <div class="actions" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 8px;">
+                                <button class="btn" onclick="if(window.saveGame) window.saveGame()" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center; border: 1px solid var(--accent);">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">💾</span>
+                                    Save
+                                </button>
+                                <button class="btn" onclick="location.hash='#/roster'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">👥</span>
+                                    Roster
+                                </button>
+                                <button class="btn" onclick="location.hash='#/trade'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">⇄</span>
+                                    Trade
+                                </button>
+                                <button class="btn" onclick="location.hash='#/freeagency'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">✍️</span>
+                                    Sign
+                                </button>
+                                <button class="btn" onclick="location.hash='#/draft'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">🎓</span>
+                                    Draft
+                                </button>
+                                <button class="btn" onclick="location.hash='#/schedule'" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">📅</span>
+                                    Sched
+                                </button>
+                                <button class="btn" onclick="window.openTrainingMenu()" style="flex-direction: column; padding: 12px; text-align: center; height: 80px; justify-content: center;">
+                                    <span style="font-size: 24px; margin-bottom: 4px;">🏋️</span>
+                                    Train
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <h3>Week HQ</h3>
+                            <div class="week-hq-card" style="background: var(--surface); padding: 15px; border-radius: 8px; border: 1px solid var(--hairline);">
+                                <ul class="week-checklist" style="list-style: none; padding: 0; margin: 0 0 15px 0;">
+                                    <li style="margin-bottom: 5px;">✅ <strong>Gameplan:</strong> Set</li>
+                                    <li style="margin-bottom: 5px;">✅ <strong>Scouting:</strong> N/A</li>
+                                    <li>✅ <strong>Training:</strong> Normal</li>
+                                </ul>
+
+
+                                    <button class="btn primary large" id="btnSimWeekHQ" style="width: 100%; padding: 15px; font-size: 1.1rem; justify-content: center; font-weight: bold; margin-bottom: 10px;">
+                                        Advance Week &gt;
+                                    </button>
+
+
+                                <button class="btn btn-sm" id="btnSimSeason" onclick="handleSimulateSeason()" style="width: 100%; justify-content: center; opacity: 0.7;">Simulate Season</button>
+
+
+
+                                <button class="btn btn-sm" onclick="location.hash='#/standings'" style="justify-content: center; width: 100%; margin-top: 5px;">View Standings</button>
+
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                    <div class="card mt">
+                        <h3>AFC East Division</h3>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Team</th>
+                                    <th>W</th>
+                                    <th>L</th>
+                                    <th>T</th>
+                                    <th>Win %</th>
+                                    <th>PF</th>
+                                    <th>PA</th>
+                                    <th>Diff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+
+                                        <tr class="">
+                                            <td><strong>TM3</strong></td>
+                                            <td>3</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>1.000</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                        </tr>
+
+                                        <tr class="">
+                                            <td><strong>TM1</strong></td>
+                                            <td>1</td>
+                                            <td>1</td>
+                                            <td>0</td>
+                                            <td>0.500</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                        </tr>
+
+                                        <tr class="">
+                                            <td><strong>TM2</strong></td>
+                                            <td>2</td>
+                                            <td>2</td>
+                                            <td>0</td>
+                                            <td>0.500</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                        </tr>
+
+                                        <tr class="highlight">
+                                            <td><strong>TM0</strong> (You)</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0.000</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                            <td>0</td>
+                                        </tr>
+
+                            </tbody>
+                        </table>
+                    </div>
+
+
+            <div id="ownerModeInterface" class="owner-mode-interface"><div class="card"><h2>Owner Mode</h2><p>Take control of all business decisions including ticket prices, concessions, and staff management.</p><button class="btn btn-primary">Enable Owner Mode</button></div></div></section>
+
+            <section id="roster" class="view" hidden="" style="display: none;">
+              <div class="card" style="cursor: pointer;">
+                <div class="row"><h2 id="rosterTitle">Roster</h2><div class="spacer"></div><label for="rosterTeam">Team</label><select id="rosterTeam"></select></div>
+
+                <!-- Team Ratings Section -->
+                <div id="teamRatingsContainer" class="team-ratings-section">
+                  <!-- Team ratings will be rendered here -->
+                </div>
+
+                <!-- Depth Chart Section -->
+                <div id="depthChartContainer" class="depth-chart-section mt">
+                  <!-- Depth chart will be rendered here -->
+                </div>
+
+                <table class="table" id="rosterTable"></table>
+                <div class="row mt">
+                  <button id="btnRelease" class="btn danger" style="pointer-events: auto; cursor: pointer;">Release Selected</button>
+                </div>
+              </div>
+            </section>
+
+            <section id="contracts" class="view" hidden="" style="display: none;">
+              <div class="card">
+                <h2>Contract Management</h2>
+                <div id="contractManagement">
+                  <p>Loading contract management...</p>
+                </div>
+              </div>
+            </section>
+
+            <section id="leagueStats" class="view" hidden="" style="display: none;"></section>
+
+            <section id="powerRankings" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <p>Loading Power Rankings...</p>
+                </div>
+            </section>
+
+            <section id="scouting" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <h2>Upcoming Draft Class (<span id="draftYear"></span>)</h2>
+                    <div id="scoutingList" class="scouting-grid"></div>
+                </div>
+            </section>
+
+            <section id="playerDatabase" class="view" hidden="" style="display: none;">
+                <div id="playerDatabase"></div>
+            </section>
+
+            <section id="history" class="view" hidden="" style="display: none;">
+                <div id="history"></div>
+            </section>
+
+            <section id="injuries" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <h2>League Injuries</h2>
+                    <div id="injuriesContent">
+                        <p>Loading injuries...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="hallOfFame" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <h2>Hall of Fame</h2>
+                    <div id="hofList" class="hof-grid"></div>
+                </div>
+            </section>
+
+            <section id="trade" class="view" hidden="" style="display: none;">
+              <div class="card" style="cursor: pointer;">
+                <h2>Trade Center</h2>
+                <div class="grid two">
+                  <div>
+                    <label for="tradeA">Your Team</label>
+                    <select id="tradeA" disabled=""></select>
+                    <div id="tradeListA" class="list"></div>
+                    <div id="pickListA" class="list"></div>
+                  </div>
+                  <div>
+                    <label for="tradeB">Trade With</label>
+                    <select id="tradeB"></select>
+                    <div id="tradeListB" class="list"></div>
+                    <div id="pickListB" class="list"></div>
+                  </div>
+                </div>
+                <div class="row mt">
+                  <button id="tradeValidate" class="btn" style="pointer-events: auto; cursor: pointer;">Validate</button>
+                  <button id="btnTradeFinder" class="btn secondary" onclick="window.renderTradeProposals()" style="pointer-events: auto; cursor: pointer;">Trade Finder</button>
+                  <div id="tradeInfo" class="spacer"></div>
+                  <button id="tradeExecute" class="btn primary" disabled="" style="pointer-events: auto; cursor: pointer; opacity: 0.6;">Execute</button>
+                </div>
+              </div>
+              <div id="tradeProposalsContainer"></div>
+            </section>
+
+            <section id="freeagency" class="view" hidden="" style="display: none;">
+                <div class="card" style="cursor: pointer;">
+                  <div class="row"><h2>Free Agency</h2><div class="spacer"></div><label for="faTeam">Sign to</label><select id="faTeam"></select></div>
+                  <table class="table" id="faTable"></table>
+                  <div class="row mt">
+                    <button id="btnSignFA" class="btn primary" disabled="" style="pointer-events: auto; cursor: pointer; opacity: 0.6;">Sign Selected Player</button>
+                  </div>
+                </div>
+            </section>
+
+            <section id="draft" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <h2>Draft</h2>
+                    <div class="row">
+                        <label for="draftTeam">Team</label>
+                        <select id="draftTeam"></select>
+                    </div>
+                    <div id="draftPicks" class="draft-picks-grid"></div>
+                </div>
+                <!-- Dynamic Draft Content -->
+                <div id="draftBoard"></div>
+                <div id="availableProspects"></div>
+            </section>
+
+            <section id="playoffs" class="view" hidden="" style="display: none;">
+                <div class="card" style="cursor: pointer;">
+                    <h2>Playoffs</h2>
+                    <div id="playoff-bracket">
+                        <p>Playoffs will appear here when the regular season is complete.</p>
+                    </div>
+                    <div class="row mt">
+                        <button id="btnSimPlayoff" class="btn primary" style="pointer-events: auto; cursor: pointer;">Simulate Playoff Week</button>
+                    </div>
+                </div>
+            </section>
+
+            <section id="standings" class="view" hidden="" style="display: none;">
+                <div id="standingsWrap"></div>
+            </section>
+
+            <section id="coaching" class="view" hidden="" style="display: none;">
+                <div class="card" style="cursor: pointer;">
+                    <h2>Coaching &amp; Scheme Management</h2>
+                    <div class="coaching-tabs">
+                        <button class="tab-btn active" data-tab="scheme" style="pointer-events: auto; cursor: pointer;">Scheme</button>
+                        <button class="tab-btn" data-tab="coaching-stats" style="pointer-events: auto; cursor: pointer;">Coaching Stats</button>
+                    </div>
+                    <div id="schemeManagement" class="tab-content active">
+                        <p>Loading scheme management...</p>
+                    </div>
+                    <div id="coaching-content" class="tab-content">
+                        <p>Loading coaching statistics...</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="schedule" class="view" hidden="" style="display: none;">
+                <div class="card" style="cursor: pointer;">
+                    <h2>Schedule</h2>
+                    <div id="scheduleWrap">
+                <div class="schedule-controls-card">
+                    <div class="schedule-header">
+                        <div class="schedule-controls">
+                            <div class="view-toggle">
+                                <button class="btn active" data-view="schedule" style="pointer-events: auto; cursor: pointer;">Schedule</button>
+                                <button class="btn " data-view="results" style="pointer-events: auto; cursor: pointer;">Results</button>
+                            </div>
+                            <div class="week-selector">
+                                <label for="weekSelect">Week:</label>
+                                <select id="weekSelect"></select>
+                            </div>
+                            <div class="filter-toggle">
+                                <label>
+                                    <input type="checkbox" id="scheduleFilterMyTeam" style=""> My Team Only
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="schedule-content">
+                    <div id="scheduleContent"></div>
+                </div>
+            </div>
+                </div>
+            </section>
+
+            <section id="settings" class="view" hidden="" style="display: none;">
+                <div class="card">
+                    <h2>Settings</h2>
+                    <div class="section">
+                        <label for="settingsYear">Season Year</label>
+                        <input type="number" id="settingsYear" min="1930" max="9999" style="">
+                    </div>
+                </div>
+            </section>
+
+            <section id="diagnostics" class="view" hidden="" style="display: none;">
+                <!-- Diagnostics Control Panel will be rendered here -->
+            </section>
+
+            <section id="playerProfile" class="view" hidden="" style="display: none;">
+                <!-- Player Profile Content will be rendered here -->
+            </section>
+
+            <section id="game-sim" class="view" hidden="" style="display: none;">
+                <!-- Live Game Simulation will be rendered here -->
+            </section>
+        </section>
+    </main>
+
+    <nav class="bottom-nav">
+        <a href="#/hub" class="nav-item-bottom active" data-view="hub" aria-label="Dashboard" aria-current="page">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <span>Hub</span>
+        </a>
+        <a href="#/roster" class="nav-item-bottom" data-view="roster" aria-label="Team Roster">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            <span>Roster</span>
+        </a>
+        <a href="#/schedule" class="nav-item-bottom" data-view="schedule" aria-label="Schedule">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+            <span>Schedule</span>
+        </a>
+        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats" aria-label="Standings">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span>Standings</span>
+        </a>
+        <a href="#/trade" class="nav-item-bottom" data-view="trade" aria-label="Trade Center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
+            <span>Trade</span>
+        </a>
+        <a href="#/leagueStats" class="nav-item-bottom" data-view="leagueStats" aria-label="Stats">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+            <span>Stats</span>
+        </a>
+        <a href="#" class="nav-item-bottom" id="navMenuBottom" aria-label="More Menu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <span>Menu</span>
+        </a>
+    </nav>
+
+    <div id="onboardModal" class="modal" style="display: flex;">
+      <div class="modal-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0;">Start New League</h3>
+            <span class="close" onclick="this.closest('.modal').hidden=true; this.closest('.modal').style.display='none';" style="font-size: 24px; cursor: pointer;">×</span>
+        </div>
+        <div class="section">
+          <label>Team Names</label>
+          <div class="row">
+            <label><input type="radio" name="namesMode" value="fictional" checked="" style=""> Fictional</label>
+            <label><input type="radio" name="namesMode" value="real" style=""> Real NFL</label>
+          </div>
+        </div>
+        <div class="section">
+          <label>Game Mode</label>
+          <div class="row">
+            <label><input type="radio" name="gameMode" value="gm" checked="" style=""> GM Mode</label>
+            <label><input type="radio" name="gameMode" value="career" style=""> Career Mode</label>
+          </div>
+        </div>
+        <div class="section">
+          <label>Starting Point</label>
+          <div class="row">
+            <label><input type="radio" name="startPoint" value="regular" checked="" style=""> Week 1</label>
+            <label><input type="radio" name="startPoint" value="offseason" style=""> Offseason (Draft/FA)</label>
+          </div>
+        </div>
+        <div id="careerOptions" class="section" hidden="">
+          <label for="careerRole">Your Role</label>
+          <select id="careerRole">
+            <option value="GM">General Manager</option>
+            <option value="OC">Offensive Coordinator</option>
+            <option value="DC">Defensive Coordinator</option>
+          </select>
+        </div>
+        <div class="section">
+          <label for="onboardTeam">Choose your team</label>
+          <div class="row">
+            <select id="onboardTeam"><option value="0">BOS — Boston Minutemen</option><option value="1">TOR — Toronto Huskies</option><option value="2">MIA — Miami Sharks</option><option value="3">NJ — New Jersey Generals</option><option value="4">PIT — Pittsburgh Ironmen</option><option value="5">CLE — Cleveland Steamers</option><option value="6">CHI — Chicago Tigers</option><option value="7">DET — Detroit Gears</option><option value="8">HOU — Houston Oilers</option><option value="9">MEM — Memphis Blues</option><option value="10">IND — Indiana Racers</option><option value="11">ORL — Orlando Wizards</option><option value="12">DEN — Denver Gold</option><option value="13">SD — San Diego Chargers</option><option value="14">OAK — Oakland Invaders</option><option value="15">POR — Portland Beavers</option><option value="16">NY — New York Knights</option><option value="17">PHI — Philadelphia Quakers</option><option value="18">WAS — Washington Federals</option><option value="19">BAL — Baltimore Stars</option><option value="20">MIN — Minnesota Lumberjacks</option><option value="21">GB — Green Bay Pioneers</option><option value="22">STL — St. Louis Stallions</option><option value="23">MIL — Milwaukee Brewers</option><option value="24">ATL — Atlanta Firebirds</option><option value="25">NO — New Orleans Jazz</option><option value="26">CAR — Carolina Cougars</option><option value="27">BHM — Birmingham Vulcans</option><option value="28">LA — Los Angeles Express</option><option value="29">SF — San Francisco Demons</option><option value="30">SEA — Seattle Kings</option><option value="31">ARI — Arizona Scorpions</option></select>
+            <button id="onboardRandom" class="btn" style="pointer-events: auto; cursor: pointer;">Random</button>
+          </div>
+        </div>
+        <div class="section">
+          <button id="onboardStart" class="btn primary" style="pointer-events: auto; cursor: pointer;">Start Season</button>
+          <button id="onboardResume" class="btn secondary" hidden="" style="margin-top: 10px; width: 100%; pointer-events: auto; cursor: pointer;">Resume League</button>
+        </div>
+      </div>
+    </div>
+
+<!-- Stub for window.watchLiveGame - ensures graceful fallback if live-game-viewer module fails to load -->
+<script>
+window.watchLiveGame = function() {
+    var msg = 'Game viewer is still loading. Please wait a moment and try again.';
+    if (window.setStatus) { window.setStatus(msg, 'warning'); }
+    else { alert(msg); }
+};
+</script>
+
+<script type="module" src="fixes.js?v=1.0.1"></script>
+<!-- Note: fixes.js now includes error-overlay.js, missing-functions.js, league-creation-fix.js, team-selection-fix.js, navbar-fix.js, dom-helpers-fix.js, and critical-fixes.js -->
+<script type="module" src="constants.js?v=1.0.1"></script>
+<script type="module" src="utils.js?v=1.0.1"></script>
+<script src="expanded-names.js?v=1.0.1"></script>
+
+<!-- Player systems (now combined in player.js) - ES Module -->
+<script type="module" src="player.js?v=1.0.1"></script>
+<!-- Note: player.js now includes player-progression.js, player.legacy.js, player-factory.js, and rookies.js -->
+<!-- Note: player.js also includes the new Depth Chart System with playbook knowledge and chemistry -->
+
+<!-- Lightweight fallbacks to guarantee core factories -->
+<script src="schedule-factory.js?v=1.0.1"></script>
+
+<!-- Staff & coaching -->
+<script src="staff.js?v=1.0.1"></script>
+<script type="module" src="coaching.js?v=1.0.1"></script>
+<!-- Note: coaching.js now includes coaching-advanced.js, coaching-integration.js, coaching-roles.js, and training.js -->
+
+<!-- League core AFTER dependencies -->
+<script type="module" src="league.js?v=1.0.1"></script>
+<script type="module" src="schedule.js?v=1.0.1"></script>
+
+<!-- ✅ Your unified state manager (ES Module) -->
+<script type="module" src="state.js?v=1.0.1"></script>
+
+<script src="teams.js?v=1.0.1"></script>
+
+
+
+
+<!-- League core -->
+
+<!-- Simulation system - ES Module -->
+<script type="module" src="coach-system.js?v=1.0.1"></script>
+<script type="module" src="simulation.js?v=1.0.1"></script>
+<script type="module" src="events.js?v=1.0.1"></script>
+<script src="story-events.js?v=1.0.1"></script>
+<script src="cap.js?v=1.0.1"></script>
+<script src="offseason.js?v=1.0.1"></script>
+<script type="module" src="playoffs.js?v=1.0.1"></script>
+<script type="module" src="game-runner.js?v=1.0.1"></script>
+
+<!-- Contracts & finances -->
+<script src="picks.js?v=1.0.1"></script>
+<script src="contract-management.js?v=1.0.1"></script>
+
+<!-- Personnel management -->
+<script type="module" src="freeagency.js?v=1.0.1"></script>
+<script type="module" src="trade.js?v=1.0.1"></script>
+<script type="module" src="tradeproposals.js?v=1.0.1"></script>
+<script type="module" src="draft.js?v=1.0.1"></script>
+<!-- Note: rookies.js is now combined in player.js -->
+
+<!-- Coaching extensions (now combined in coaching.js) -->
+<script src="owner-mode.js?v=1.0.1"></script>
+<script src="relocation.js?v=1.0.1"></script>
+<script src="relocation-viewer.js?v=1.0.1"></script>
+
+<!-- Team & stats -->
+<script src="team-ratings.js?v=1.0.1"></script>
+<script type="module" src="scheme-management.js?v=1.0.1"></script>
+<script src="team-statistics.js?v=1.0.1"></script>
+<script type="module" src="player-stats-viewer.js?v=1.0.1"></script>
+<script src="game-results-viewer.js?v=1.0.1"></script>
+<script src="schedule-viewer.js?v=1.0.1"></script>
+<script src="box-score-viewer.js?v=1.0.1"></script>
+<script type="module" src="live-game-viewer.js?v=1.0.1"></script>
+<script type="module" src="standings-page.js?v=1.0.1"></script>
+<script src="power-rankings.js?v=1.0.1"></script>
+
+<!-- Player Database & History -->
+<script src="player-database.js?v=1.0.1"></script>
+<script type="module" src="football-db.js?v=1.0.1"></script>
+<script src="history.js?v=1.0.1"></script>
+<script src="awards.js?v=1.0.1"></script>
+<script src="awards-viewer.js?v=1.0.1"></script>
+<script src="records.js?v=1.0.1"></script>
+<script src="league-leaders.js?v=1.0.1"></script>
+<script src="stats-viewer.js?v=1.0.1"></script>
+<script src="league-stats.js?v=1.0.1"></script>
+
+<!-- New Features -->
+<script src="injury-system.js?v=1.0.1"></script>
+<script src="player-comparison.js?v=1.0.1"></script>
+<script src="retirement-system.js?v=1.0.1"></script>
+<script src="data-visualization.js?v=1.0.1"></script>
+
+<!-- UI -->
+<script src="ui-components.js?v=1.0.1"></script>
+<script type="module" src="ui.js?v=1.0.1"></script>
+<script src="ui-interactions.js?v=1.0.1"></script>
+
+<!-- New Features -->
+<script type="module" src="achievements.js?v=1.0.1"></script>
+<script type="module" src="weekly-recap.js?v=1.0.1"></script>
+<script type="module" src="action-items.js?v=1.0.1"></script>
+<script type="module" src="news-viewer.js?v=1.0.1"></script>
+
+<!-- Main Game Controller -->
+<script type="module" src="main.js?v=1.0.1"></script>
+<script type="module" src="league-dashboard.js?v=1.0.1"></script>
+<!-- Note: Fix files are now combined in fixes.js -->
+
+<div id="menu-overlay" style="display: none;"></div>
+<footer id="command-center-footer" class="command-center"></footer>
+
+
+<div id="errorOverlay" class="error-overlay hidden" role="alert" aria-live="assertive" style="display: none;">
+    <div class="error-panel">
+      <div class="error-header">
+        <div>
+          <div class="error-title">Something went wrong</div>
+          <div class="error-subtitle">This pop-up is only visible to testers. Screenshot it for developers.</div>
+        </div>
+        <div class="error-actions">
+          <button type="button" class="btn" id="errorCopy" style="pointer-events: auto; cursor: pointer;">Copy details</button>
+          <button type="button" class="btn" id="errorClose" style="pointer-events: auto; cursor: pointer;">Close</button>
+        </div>
+      </div>
+      <div class="error-body">
+        <div class="error-meta">
+          <div><span class="label">Time:</span> <span id="errorTime"></span></div>
+          <div><span class="label">Page:</span> <span id="errorRoute"></span></div>
+          <div><span class="label">Last action:</span> <span id="errorAction">Unknown</span></div>
+        </div>
+        <div class="error-section">
+          <div class="label">Message</div>
+          <div id="errorMessage" class="error-message"></div>
+        </div>
+        <div class="error-section">
+          <div class="label">Stack Trace</div>
+          <pre id="errorStack" class="error-stack"></pre>
+        </div>
+        <div class="error-section muted small">If a button stopped working, include this pop-up in your screenshot so developers can see the console error.</div>
+      </div>
+    </div>
+  </div><div id="gameResultsModal" class="modal" hidden="" style="display: none; visibility: hidden; opacity: 0; pointer-events: none;">
+            <div class="modal-content game-results-modal">
+                <div class="modal-header">
+                    <h2 id="gameModalTitle">Game Results</h2>
+                    <button type="button" class="close" aria-label="Close modal" style="pointer-events: auto; cursor: pointer;">×</button>
+                </div>
+                <div class="modal-body" id="gameModalBody">
+                    <div class="game-info">
+                        <div class="game-header">
+                            <div class="game-teams" id="gameTeams"></div>
+                            <div class="game-score" id="gameScore"></div>
+                            <div class="game-week" id="gameWeek"></div>
+                        </div>
+                        <div class="game-stats-grid" id="gameStatsGrid"></div>
+                    </div>
+                </div>
+            </div>
+        </div><div id="global-loading-spinner" style="position: fixed; top: 0px; left: 0px; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; color: white; font-family: sans-serif;">
+            <div style="border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;"></div>
+            <p id="loading-text" style="margin-top: 20px; font-size: 1.2rem;">Initializing League...</p>
+            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+        </div><div id="playerStatsModal" class="modal" hidden="" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="playerModalTitle">Player Statistics</h2>
+                    <button type="button" class="close" aria-label="Close modal">×</button>
+                </div>
+                <div class="modal-body" id="playerModalBody">
+                    <div class="player-info">
+                        <div class="player-header">
+                            <div class="player-name" id="playerName"></div>
+                            <div class="player-position" id="playerPosition"></div>
+                            <div class="player-team" id="playerTeam"></div>
+                        </div>
+                        <div class="player-stats-grid" id="playerStatsGrid"></div>
+                    </div>
+                </div>
+                <div class="modal-progression-ui" id="playerProgressionUI"></div>
+            </div>
+        </div><div id="ownerGambleModal" class="modal">
+        <div class="modal-content" style="max-width: 600px; text-align: center; border: 2px solid #ffd700; background: linear-gradient(145deg, #1a1a1a, #2a2a2a);">
+            <h2 style="color: #ffd700; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;">The Owner's Gamble</h2>
+            <p style="color: #ddd; margin-bottom: 20px;">The owner wants to place a wager on this season's outcome. Choose wisely.</p>
+
+            <div class="gamble-options" style="display: grid; gap: 15px; text-align: left;">
+                <div class="gamble-card" onclick="selectGamble('SAFE')" style="padding: 15px; border: 1px solid #555; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255,255,255,0.05);">
+                    <h3 style="color: #fff; margin: 0 0 5px 0;">Option A: The Safe Bet</h3>
+                    <div style="font-size: 0.9rem; color: #aaa;">Win 6 Games</div>
+                    <div style="font-size: 0.8rem; color: #888; margin-top: 5px;">Reward: None | Penalty: None</div>
+                </div>
+
+                <div class="gamble-card" onclick="selectGamble('AGGRESSIVE')" style="padding: 15px; border: 1px solid #ffd700; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255, 215, 0, 0.1);">
+                    <h3 style="color: #ffd700; margin: 0 0 5px 0;">Option B: Aggressive</h3>
+                    <div style="font-size: 0.9rem; color: #eee;">Make Playoffs</div>
+                    <div style="font-size: 0.8rem; color: #ccc; margin-top: 5px;">Reward: +$5M Cap Room | Penalty: -$2M Cap Room</div>
+                </div>
+
+                <div class="gamble-card" onclick="selectGamble('ALL_IN')" style="padding: 15px; border: 1px solid #ff4444; border-radius: 8px; cursor: pointer; transition: all 0.2s; background: rgba(255, 68, 68, 0.1);">
+                    <h3 style="color: #ff4444; margin: 0 0 5px 0;">Option C: All In</h3>
+                    <div style="font-size: 0.9rem; color: #eee;">Win Conference Championship</div>
+                    <div style="font-size: 0.8rem; color: #ccc; margin-top: 5px;">Reward: +$15M Cap Room | Penalty: -$10M Cap (or Fired)</div>
+                </div>
+            </div>
+        </div>
+    </div></body></html>

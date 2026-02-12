@@ -1221,115 +1221,231 @@ function renderSeasonHistory(player) {
 // window.renderStandings removed to allow standings-page.js implementation to take precedence
 
 window.renderHub = function() {
-    console.log('Rendering hub...');
-    try {
-        const L = window.state?.league;
-        if (!L) return;
-        
-        const isOffseason = window.state?.offseason === true;
-        
-        // Update season/week info
-        const hubSeason = document.getElementById('hubSeason');
-        const hubWeek = document.getElementById('hubWeek');
-        const hubWeeks = document.getElementById('hubWeeks');
-        const hubGames = document.getElementById('hubGames');
-        
-        if (hubSeason) hubSeason.textContent = L.year || '2025';
-        
-        if (isOffseason) {
-            // Show offseason info
-            if (hubWeek) hubWeek.textContent = 'Offseason';
-            if (hubWeeks) hubWeeks.textContent = '';
-            if (hubGames) hubGames.textContent = '0';
+    console.log('Rendering premium hub...');
+    const L = window.state?.league;
+    if (!L) return;
+
+    const hubContainer = document.getElementById('hub');
+    if (!hubContainer) return;
+
+    const userTeamId = window.state.userTeamId ?? 0;
+    const team = L.teams[userTeamId];
+    if (!team) {
+        console.error("renderHub: User team not found");
+        return;
+    }
+
+    const isOffseason = window.state.offseason === true;
+    const currentWeek = L.week || 1;
+    const seasonYear = L.year || 2025;
+
+    // --- 1. Calculate Division Rank ---
+    const divisionTeams = L.teams.filter(t => t.conf === team.conf && t.div === team.div);
+    divisionTeams.sort((a, b) => {
+        const wa = a.record?.w || 0; const la = a.record?.l || 0;
+        const wb = b.record?.w || 0; const lb = b.record?.l || 0;
+        const pctA = (wa + 0.5 * (a.record?.t || 0)) / Math.max(1, wa + la + (a.record?.t || 0));
+        const pctB = (wb + 0.5 * (b.record?.t || 0)) / Math.max(1, wb + lb + (b.record?.t || 0));
+        return pctB - pctA;
+    });
+    const rankIndex = divisionTeams.findIndex(t => t.id === team.id);
+    const rank = rankIndex + 1;
+    const rankSuffix = (rank === 1) ? 'st' : (rank === 2) ? 'nd' : (rank === 3) ? 'rd' : 'th';
+    const divisionName = `${team.conf === 0 ? 'AFC' : 'NFC'} ${['East', 'North', 'South', 'West'][team.div]}`;
+
+    // --- 2. Find Next Matchup ---
+    let nextGameHtml = '';
+    if (isOffseason) {
+        nextGameHtml = `
+            <div class="matchup-content" style="text-align: center; display: block;">
+                <h3 style="color: var(--text); margin-bottom: var(--space-2);">Offseason Mode</h3>
+                <p style="color: var(--text-muted); margin-bottom: var(--space-4);">Manage your roster, draft players, and prepare for the next season.</p>
+                <button id="btnStartNewSeason" class="btn primary" onclick="if(window.startNewSeason) window.startNewSeason()">Start ${seasonYear + 1} Season</button>
+            </div>
+        `;
+    } else {
+        const scheduleWeeks = Array.isArray(L.schedule?.weeks) ? L.schedule.weeks : [];
+        const currentWeekGames = scheduleWeeks.find(week => week.weekNumber === currentWeek || week.week === currentWeek)?.games || [];
+        const game = currentWeekGames.find(g => g.home === userTeamId || g.away === userTeamId);
+
+        if (game) {
+            const isHome = game.home === userTeamId;
+            const oppId = isHome ? game.away : game.home;
+            const oppTeam = L.teams[oppId];
             
-            // Add offseason banner and button to hub
-            const hubContainer = document.getElementById('hub');
-            if (hubContainer) {
-                // Check if offseason banner already exists
-                let offseasonBanner = document.getElementById('offseasonBanner');
-                if (!offseasonBanner) {
-                    offseasonBanner = document.createElement('div');
-                    offseasonBanner.id = 'offseasonBanner';
-                    offseasonBanner.className = 'card';
-                    offseasonBanner.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                    offseasonBanner.style.color = 'white';
-                    offseasonBanner.style.marginBottom = '1rem';
-                    hubContainer.insertBefore(offseasonBanner, hubContainer.firstChild);
-                }
-                
-                offseasonBanner.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                        <div>
-                            <h2 style="margin: 0; color: white;">🏆 ${L.year} Season Complete - Offseason</h2>
-                            <p style="margin: 0.5rem 0 0 0; opacity: 0.9;">
-                                Resign players, sign free agents, and draft rookies before starting the ${L.year + 1} season.
-                            </p>
+            // Fix: Fallback for undefined game.homeScore/awayScore
+            const gamePlayed = (game.homeScore !== undefined && game.awayScore !== undefined);
+
+            nextGameHtml = `
+                <div class="matchup-header">
+                    <span>${isHome ? 'Home Game' : 'Away Game'}</span>
+                    <span>Week ${currentWeek}</span>
+                </div>
+                <div class="matchup-content">
+                    <div class="matchup-team away">
+                        <div class="team-logo-placeholder ${!isHome ? 'user-team-logo' : ''}">
+                            ${!isHome ? (team.abbr || team.name.substring(0,2)).toUpperCase() : (oppTeam.abbr || oppTeam.name.substring(0,2)).toUpperCase()}
                         </div>
-                        <button id="btnStartNewSeason" class="btn" style="background: white; color: #667eea; font-weight: bold; padding: 0.75rem 1.5rem;">
-                            Start ${L.year + 1} Season
+                        <div class="team-name-matchup">${!isHome ? team.name : oppTeam.name}</div>
+                        <div class="team-record-matchup">
+                            ${!isHome
+                                ? `${team.record?.w}-${team.record?.l}`
+                                : `${oppTeam.record?.w}-${oppTeam.record?.l}`}
+                        </div>
+                    </div>
+
+                    <div class="matchup-vs">
+                        <span class="vs-badge">${isHome ? 'VS' : '@'}</span>
+                        ${gamePlayed ? '<span class="badge" style="background:var(--surface-elevated)">FINAL</span>' : ''}
+                    </div>
+
+                    <div class="matchup-team home">
+                        <div class="team-logo-placeholder ${isHome ? 'user-team-logo' : ''}">
+                            ${isHome ? (team.abbr || team.name.substring(0,2)).toUpperCase() : (oppTeam.abbr || oppTeam.name.substring(0,2)).toUpperCase()}
+                        </div>
+                        <div class="team-name-matchup">${isHome ? team.name : oppTeam.name}</div>
+                        <div class="team-record-matchup">
+                            ${isHome
+                                ? `${team.record?.w}-${team.record?.l}`
+                                : `${oppTeam.record?.w}-${oppTeam.record?.l}`}
+                        </div>
+                    </div>
+                </div>
+                
+                ${!gamePlayed ? `
+                <div class="matchup-actions">
+                    <button class="btn-watch" onclick="window.watchLiveGame(${game.home}, ${game.away})">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                        Watch Game
+                    </button>
+                    <button class="btn-sim-week" onclick="if(window.handleGlobalAdvance) window.handleGlobalAdvance(); else if(window.simulateWeek) window.simulateWeek();">
+                        Simulate Week
+                    </button>
+                </div>
+                ` : `
+                <div class="matchup-actions">
+                    <button class="btn-sim-week" onclick="if(window.handleGlobalAdvance) window.handleGlobalAdvance(); else if(window.simulateWeek) window.simulateWeek();">
+                        Advance to Next Week
+                    </button>
+                </div>
+                `}
+            `;
+        } else {
+            nextGameHtml = `
+                <div class="matchup-content" style="text-align: center; display: block;">
+                    <h3 style="margin-bottom: var(--space-2);">BYE WEEK</h3>
+                    <p class="muted">No game scheduled for Week ${currentWeek}. Rest up!</p>
+                    <div class="matchup-actions" style="border:none; background:transparent;">
+                        <button class="btn-sim-week" onclick="if(window.handleGlobalAdvance) window.handleGlobalAdvance(); else if(window.simulateWeek) window.simulateWeek();">
+                            Advance Week
                         </button>
                     </div>
-                `;
-                
-                // Add event listener for start new season button
-                const btnStartNewSeason = document.getElementById('btnStartNewSeason');
-                if (btnStartNewSeason) {
-                    btnStartNewSeason.onclick = function() {
-                        if (startNewSeason) {
-                            startNewSeason();
-                        } else {
-                            window.setStatus('Error: startNewSeason function not available', 'error');
-                        }
-                    };
-                }
-            }
-        } else {
-            // Regular season info
-            if (hubWeek) hubWeek.textContent = L.week || '1';
-            if (hubWeeks) hubWeeks.textContent = '18';
-            
-            // Calculate games this week
-            const scheduleWeeks = Array.isArray(L.schedule?.weeks) ? L.schedule.weeks : [];
-            const currentWeekGames = scheduleWeeks.find(week => week.weekNumber === L.week)?.games || [];
-            if (hubGames) hubGames.textContent = currentWeekGames.length;
-            
-            // Remove offseason banner if it exists
-            const offseasonBanner = document.getElementById('offseasonBanner');
-            if (offseasonBanner) {
-                offseasonBanner.remove();
-            }
+                </div>
+            `;
         }
-        
-        // Render power rankings
-        renderPowerRankings();
-        
-        // Render team ratings overview (assuming renderLeagueTeamRatings exists)
-        if (window.renderLeagueTeamRatings) {
-            window.renderLeagueTeamRatings(L, 'leagueTeamRatings');
-        }
-        
-        // Render last week results (only if not offseason)
-        if (!isOffseason) {
-            renderLastWeekResults();
-            renderUpcomingGames();
-        }
-        
-        // Render standings on hub
-        renderHubStandings(L);
-        
-// Render trade proposals on hub
-        renderHubTradeProposals();
-        
-        // Update cap sidebar
-        if (window.updateCapSidebar) {
-            window.updateCapSidebar();
-        }
-        
-        console.log('✅ Hub rendered successfully');
-        
-    } catch (error) {
-        console.error('Error rendering hub:', error);
     }
+
+    // --- 3. Ratings & Stats ---
+    // Ensure ratings exist
+    if (!team.ratings && window.calculateTeamRating) {
+        team.ratings = window.calculateTeamRating(team);
+    }
+
+    const ratings = team.ratings || { offense: { overall: 75 }, defense: { overall: 75 }, overall: 75 };
+    const capSpace = (team.capRoom || 0).toFixed(2);
+
+    // Calculate progress bar percentages (scale 50-100 to 0-100 for visual impact)
+    const getPct = (val) => Math.max(0, Math.min(100, (val - 50) * 2));
+
+    // --- 4. Render Layout ---
+    hubContainer.innerHTML = `
+        <!-- Header -->
+        <div class="hub-header">
+            <div class="hub-header-content">
+                <div class="team-identity">
+                    <div class="team-name-large">${team.name}</div>
+                    <div class="team-record-large">
+                        ${team.record?.w || 0}-${team.record?.l || 0}-${team.record?.t || 0}
+                        <span class="division-rank-badge">${rank}${rankSuffix} in ${divisionName}</span>
+                    </div>
+                </div>
+                <div class="season-context">
+                    <div class="current-week-large">${isOffseason ? 'Offseason' : `Week ${currentWeek}`}</div>
+                    <div class="season-year-large">${seasonYear} Season</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Matchup Card -->
+        <div class="matchup-card">
+            ${nextGameHtml}
+        </div>
+
+        <!-- Status Grid -->
+        <div class="status-grid">
+            <div class="stat-box">
+                <div class="stat-label">Overall</div>
+                <div class="stat-value-large" style="color: ${ratings.overall >= 85 ? '#34C759' : '#fff'}">${ratings.overall}</div>
+                <div class="stat-bar-container">
+                    <div class="stat-bar-fill rating-color-avg" style="width: ${getPct(ratings.overall)}%"></div>
+                </div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Offense</div>
+                <div class="stat-value-large">${ratings.offense.overall}</div>
+                <div class="stat-bar-container">
+                    <div class="stat-bar-fill rating-color-good" style="width: ${getPct(ratings.offense.overall)}%"></div>
+                </div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Defense</div>
+                <div class="stat-value-large">${ratings.defense.overall}</div>
+                <div class="stat-bar-container">
+                    <div class="stat-bar-fill rating-color-elite" style="width: ${getPct(ratings.defense.overall)}%"></div>
+                </div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Cap Space</div>
+                <div class="stat-value-large" style="font-size: 1.5rem; color: ${team.capRoom < 0 ? '#ff453a' : '#34c759'}">$${capSpace}M</div>
+                <div class="stat-bar-container">
+                    <div class="stat-bar-fill" style="width: ${Math.max(0, Math.min(100, (team.capRoom / 200) * 100))}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Grid -->
+        <div class="hub-secondary-grid">
+            <div>
+                <div class="hub-section-title">
+                    <span>Recent Results</span>
+                    <a href="#/schedule" style="font-size: 0.8rem; color: var(--accent); text-decoration: none;">View Schedule</a>
+                </div>
+                <div id="hubResults" class="list"></div>
+            </div>
+            <div>
+                <div class="hub-section-title">
+                    <span>League Power</span>
+                    <a href="#/powerRankings" style="font-size: 0.8rem; color: var(--accent); text-decoration: none;">Full Rankings</a>
+                </div>
+                <ol id="hubPower" class="hub-rankings-list"></ol>
+            </div>
+        </div>
+        
+        <!-- Standings Container (Compact) -->
+        <div id="hubStandings" style="margin-top: var(--space-6);"></div>
+        
+        <!-- Trade Proposals -->
+        <div id="hubTradeProposals"></div>
+    `;
+
+    // --- 5. Populate Dynamic Sub-Sections ---
+    if (window.renderPowerRankings) window.renderPowerRankings();
+    if (!isOffseason && window.renderLastWeekResults) window.renderLastWeekResults();
+    if (window.renderHubStandings) window.renderHubStandings(L);
+    if (window.renderHubTradeProposals) window.renderHubTradeProposals();
+    if (window.updateCapSidebar) window.updateCapSidebar();
+
+    console.log('✅ Premium Hub rendered successfully');
 };
 
 /**
