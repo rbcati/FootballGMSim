@@ -2328,12 +2328,35 @@ body {
 /* Ensure pulse-score is distinct */
 @keyframes pulse-score-strong {
   0% { transform: scale(1); color: inherit; }
-  50% { transform: scale(1.5); color: var(--accent); text-shadow: 0 0 10px var(--accent); }
+  50% { transform: scale(1.5); color: var(--accent); text-shadow: 0 0 20px var(--accent); font-weight: 900; }
   100% { transform: scale(1); color: inherit; }
 }
 
 .pulse-score-strong {
-  animation: pulse-score-strong 0.6s ease-out;
+  animation: pulse-score-strong 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* --- New Player Action Animations --- */
+@keyframes throw-motion {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-60%, -50%) rotate(-15deg) scale(0.9); } /* Wind up */
+  50% { transform: translate(-40%, -50%) rotate(10deg) scale(1.1); } /* Release */
+  100% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+}
+
+.throw-animation {
+  animation: throw-motion 0.5s ease-in-out;
+}
+
+@keyframes kick-follow-through {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  30% { transform: translate(-40%, -50%) rotate(15deg) scale(1.1); }
+  60% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+  100% { transform: translate(-50%, -50%); }
+}
+
+.kick-follow-through {
+  animation: kick-follow-through 0.6s ease-out;
 }
 
 /* ============================================
