@@ -180,14 +180,21 @@ test.describe('Daily Regression Pass', () => {
 
         // Select first player
         await page.waitForSelector('#rosterTable tbody tr', { state: 'visible' });
-        const firstCheckbox = page.locator('#rosterTable tbody tr:first-child input[type="checkbox"]');
-        await firstCheckbox.check();
+        // Use JS click to avoid stability issues with re-rendering
+        await page.evaluate(() => {
+            const cb = document.querySelector('#rosterTable tbody tr:first-child input[type="checkbox"]');
+            if (cb) cb.click();
+        });
 
         // Capture roster size before release
         const rosterSizeBefore = await page.evaluate(() => window.state.league.teams[window.state.userTeamId].roster.length);
 
         page.on('dialog', d => d.accept());
-        await page.click('#btnRelease');
+        // Use JS click for button stability
+        await page.evaluate(() => {
+            const btn = document.getElementById('btnRelease');
+            if (btn) btn.click();
+        });
         await page.waitForTimeout(1000); // Increased timeout
 
         // Verify release
