@@ -2406,3 +2406,28 @@ body {
   filter: brightness(1.1);
   transform: translateY(-2px);
 }
+
+/* Fade Out Animation for View Transitions */
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+.fade-out {
+  animation: fadeOut 0.2s ease-out forwards !important;
+  pointer-events: none; /* Prevent clicks during exit */
+}
+
+/* Quarter End Style */
+.game-event-overlay.quarter-end .event-text {
+  color: #fff;
+  text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  font-family: 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+}
+.game-event-overlay.quarter-end::before {
+  content: '⏱️';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+}
