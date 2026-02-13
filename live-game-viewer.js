@@ -87,13 +87,13 @@ class LiveGameViewer {
     return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
   }
 
-  triggerShake() {
+  triggerShake(intensity = 'normal') {
       const target = this.viewMode ? this.container : this.modal;
       if (target) {
-          target.classList.remove('shake');
+          target.classList.remove('shake', 'shake-hard');
           void target.offsetWidth; // Force reflow
-          target.classList.add('shake');
-          this.setTimeoutSafe(() => target.classList.remove('shake'), 500);
+          target.classList.add(intensity === 'hard' ? 'shake-hard' : 'shake');
+          this.setTimeoutSafe(() => target.classList.remove('shake', 'shake-hard'), 500);
       }
   }
 
@@ -1356,6 +1356,11 @@ class LiveGameViewer {
         if (userLeading) {
              if (isUserOffense) adaptiveMod = -0.05; // User offense struggles more
              else adaptiveMod = 0.05; // AI offense performs better
+
+             // Visual feedback for difficulty increase
+             if (Math.random() < 0.05 && !this.isSkipping) {
+                 this.triggerFloatText('⚠️ AI ADAPTING', 'warning');
+             }
         }
     }
 
@@ -2159,22 +2164,13 @@ class LiveGameViewer {
             }
             soundManager.playFailure();
             // Intense shake
-            if (this.container) this.container.classList.add('shake-hard');
-            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake-hard');
+            this.triggerShake('hard');
 
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('save', 'STOPPED!');
             } else {
                 this.triggerVisualFeedback('save', 'TURNOVER!');
             }
-
-            // Screen shake
-            if (this.container) this.container.classList.add('shake');
-            else if (this.modal) this.modal.querySelector('.modal-content').classList.add('shake');
-            this.setTimeoutSafe(() => {
-                if (this.container) this.container.classList.remove('shake-hard');
-                else if (this.modal) this.modal.querySelector('.modal-content').classList.remove('shake-hard');
-            }, 500);
 
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
