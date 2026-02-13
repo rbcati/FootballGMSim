@@ -259,13 +259,7 @@ function accumulateCareerStats(league) {
       // We can't import initializePlayerStats easily if it's in game-simulator.js which is now pure/module
       // But we can reset manually or use getZeroStats
 
-      if (!player.stats.season) player.stats.season = getZeroStats();
-      else {
-          // Reset existing object
-          const zero = getZeroStats();
-          Object.keys(player.stats.season).forEach(k => delete player.stats.season[k]);
-          Object.assign(player.stats.season, zero);
-      }
+      player.stats.season = getZeroStats();
       
       const career = player.stats.career;
 
