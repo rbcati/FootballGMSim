@@ -154,55 +154,85 @@ document.head.appendChild(styleElement);
 // --- CORE UI FUNCTIONS ---
 window.show = function(viewId) {
   console.log('Showing view:', viewId);
-  document.querySelectorAll('.view').forEach(view => {
-    view.hidden = true;
-    view.style.display = 'none';
-    view.classList.remove('fade-in'); // Reset animation
-  });
+
+  const currentView = document.querySelector('.view:not([hidden])');
   const targetView = document.getElementById(viewId);
-  if (targetView) {
-    targetView.hidden = false;
-    targetView.style.display = 'block';
 
-    // Trigger reflow to restart animation
-    void targetView.offsetWidth;
-    targetView.classList.add('fade-in');
+  if (!targetView) {
+      console.error('❌ View not found:', viewId);
+      return;
+  }
 
-    document.querySelectorAll('.nav-pill').forEach(pill => {
-      const href = pill.getAttribute('href');
-      const isActive = href === `#/${viewId}`;
-      pill.setAttribute('aria-current', isActive ? 'page' : null);
-    });
+  // If already on this view, do nothing
+  if (currentView && currentView.id === viewId) return;
 
-    // Update sidebar nav (.nav-item)
-    document.querySelectorAll('.nav-item').forEach(item => {
-      const href = item.getAttribute('href');
-      const isActive = href === `#/${viewId}`;
-      if (isActive) {
-          item.classList.add('active');
-          item.setAttribute('aria-current', 'page');
-      } else {
-          item.classList.remove('active');
-          item.removeAttribute('aria-current');
-      }
-    });
+  const performSwitch = () => {
+      // Hide all views
+      document.querySelectorAll('.view').forEach(view => {
+        view.hidden = true;
+        view.style.display = 'none';
+        view.classList.remove('fade-in', 'fade-out');
+      });
 
-    // Update bottom nav
-    document.querySelectorAll('.nav-item-bottom').forEach(item => {
+      // Show target
+      targetView.hidden = false;
+      targetView.style.display = 'block';
+
+      // Trigger reflow
+      void targetView.offsetWidth;
+      targetView.classList.add('fade-in');
+
+      // Update Navigation State
+      updateNavigationState(viewId);
+
+      console.log('✅ View shown successfully:', viewId);
+  };
+
+  // Helper to update navigation state
+  const updateNavigationState = (vId) => {
+      document.querySelectorAll('.nav-pill').forEach(pill => {
+        const href = pill.getAttribute('href');
+        const isActive = href === `#/${vId}`;
+        pill.setAttribute('aria-current', isActive ? 'page' : null);
+      });
+
+      // Update sidebar nav (.nav-item)
+      document.querySelectorAll('.nav-item').forEach(item => {
         const href = item.getAttribute('href');
-        const isActive = href === `#/${viewId}`;
+        const isActive = href === `#/${vId}`;
         if (isActive) {
             item.classList.add('active');
             item.setAttribute('aria-current', 'page');
+
+            // Expand parent details if needed
+            const details = item.closest('details');
+            if (details && !details.open) details.open = true;
         } else {
             item.classList.remove('active');
             item.removeAttribute('aria-current');
         }
-    });
+      });
 
-    console.log('✅ View shown successfully:', viewId);
+      // Update bottom nav
+      document.querySelectorAll('.nav-item-bottom').forEach(item => {
+          const href = item.getAttribute('href');
+          const isActive = href === `#/${vId}`;
+          if (isActive) {
+              item.classList.add('active');
+              item.setAttribute('aria-current', 'page');
+          } else {
+              item.classList.remove('active');
+              item.removeAttribute('aria-current');
+          }
+      });
+  };
+
+  if (currentView) {
+      currentView.classList.add('fade-out');
+      // Wait for animation (200ms matches CSS)
+      setTimeout(performSwitch, 200);
   } else {
-    console.error('❌ View not found:', viewId);
+      performSwitch();
   }
 };
 
