@@ -7388,3 +7388,130 @@ details[open] .nav-summary::after {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* ============================================================================
+   LIVE GAME VIEWER MOBILE OPTIMIZATIONS & EXTRATED STYLES
+   ============================================================================ */
+
+/* Extracted Inline Styles */
+.difficulty-badge {
+    text-align: center;
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    font-weight: bold;
+    text-shadow: 0 0 10px rgba(255,255,255,0.2);
+}
+
+.stakes-badge {
+    text-align: center;
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+.adaptive-badge {
+    background: var(--accent);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    margin-left: 5px;
+    vertical-align: middle;
+}
+
+.streak-fire {
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.1em;
+    margin-top: 8px;
+    animation: pulse-text-glow 0.5s infinite alternate;
+}
+
+.box-score-table {
+    width: 100%;
+    font-size: 0.8em;
+    color: var(--text);
+}
+
+/* Mobile Responsive Improvements */
+@media (max-width: 768px) {
+    .live-game-content {
+        padding: 0;
+        border-radius: 0;
+        max-width: 100%;
+        max-height: 100vh;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .live-game-header {
+        padding: var(--space-2);
+        flex-shrink: 0;
+    }
+
+    .field-container {
+        height: 100px; /* Smaller field on mobile */
+    }
+
+    .scoreboard {
+        padding: var(--space-2);
+    }
+
+    .score-team .team-name {
+        font-size: 1rem;
+    }
+
+    .score-team .team-score {
+        font-size: 1.5rem;
+    }
+
+    .game-dashboard {
+        grid-template-columns: 1fr !important; /* Force stack */
+        gap: 10px;
+    }
+
+    .stats-panel {
+        font-size: 0.75rem;
+        overflow-x: auto;
+    }
+
+    .control-bar {
+        padding: var(--space-2);
+        gap: var(--space-2);
+        overflow-x: auto;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .control-btn {
+        padding: var(--space-2);
+        font-size: 0.8rem;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    /* Ensure modal close button is accessible */
+    .live-game-modal .close {
+        top: 10px;
+        right: 10px;
+        z-index: 2000;
+        background: rgba(0,0,0,0.5);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+    }
+}
+
+.stats-panel {
+    padding: 10px;
+    font-size: 0.8em;
+    overflow-x: auto;
+    background: rgba(0,0,0,0.1);
+    margin-top: 10px;
+    border-radius: 8px;
+}
+
+.momentum-panel {
+    margin-top: 10px;
+}

@@ -198,11 +198,11 @@ class LiveGameViewer {
     let adaptiveBadge = '';
 
     if (this.preGameContext?.adaptiveAI) {
-        adaptiveBadge = `<span style="background: var(--accent); color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 5px; vertical-align: middle;">🤖 ADAPTIVE</span>`;
+        adaptiveBadge = `<span class="adaptive-badge">🤖 ADAPTIVE</span>`;
     }
 
     const difficultyHtml = difficultyText ?
-        `<div class="difficulty-badge" style="text-align: center; margin-bottom: 5px; font-size: 0.9em; font-weight: bold; color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${difficultyText} ${adaptiveBadge}</div>` : '';
+        `<div class="difficulty-badge" style="color: ${diffColor}; text-shadow: 0 0 10px ${diffColor}40;">${difficultyText} ${adaptiveBadge}</div>` : '';
 
     let stakesHtml = '';
     if (this.preGameContext?.stakes > 60) {
@@ -218,7 +218,7 @@ class LiveGameViewer {
          const animation = isExtreme ? 'pulse-text-glow 1.5s infinite alternate' : '';
 
          stakesHtml = `
-            <div class="stakes-badge" style="text-align: center; margin-bottom: 8px; font-size: ${isExtreme ? '1.1em' : '0.9em'}; font-weight: 800; color: ${color}; text-shadow: 0 0 15px ${color}60; animation: ${animation}; letter-spacing: 1px;">
+            <div class="stakes-badge" style="font-size: ${isExtreme ? '1.1em' : '0.9em'}; font-weight: 800; color: ${color}; text-shadow: 0 0 15px ${color}60; animation: ${animation};">
                 ${text}
             </div>
          `;
@@ -258,7 +258,7 @@ class LiveGameViewer {
                 <h3>Game Stats</h3>
                 <div class="game-dashboard live-game-dashboard">
                     <div class="box-score-panel"></div>
-                    <div class="momentum-panel" style="margin-top: 10px;"></div>
+            <div class="momentum-panel"></div>
                 </div>
                 <div class="stats-panel"></div>
             </div>
@@ -2015,12 +2015,20 @@ class LiveGameViewer {
   updateControls() {
       if (!this.checkUI()) return;
       const parent = this.viewMode ? this.container : this.modal;
-      const btn = parent.querySelector('#btnNextPlay');
-      if (btn) {
-          btn.disabled = this.isProcessingTurn;
-          btn.style.opacity = this.isProcessingTurn ? '0.5' : '1';
-          btn.style.cursor = this.isProcessingTurn ? 'not-allowed' : 'pointer';
-      }
+
+      const disable = this.isProcessingTurn;
+
+      // Disable navigation controls during play animation, but keep Play/Pause/Tempo active
+      const selectors = ['#btnPrevPlay', '#btnNextPlay', '#btnNextDrive', '#btnSkipEnd'];
+
+      selectors.forEach(sel => {
+          const btn = parent.querySelector(sel);
+          if (btn) {
+              btn.disabled = disable;
+              btn.style.opacity = disable ? '0.5' : '1';
+              btn.style.cursor = disable ? 'not-allowed' : 'pointer';
+          }
+      });
   }
 
   /**
@@ -2348,47 +2356,89 @@ class LiveGameViewer {
     const homeChanged = this.lastHomeScore !== undefined && this.lastHomeScore !== home.score;
     const awayChanged = this.lastAwayScore !== undefined && this.lastAwayScore !== away.score;
 
-    // Use old score as starting point for animation
-    const displayHome = homeChanged ? this.lastHomeScore : home.score;
-    const displayAway = awayChanged ? this.lastAwayScore : away.score;
+    // Elements
+    let scoreHomeEl = scoreboard.querySelector('#scoreHome');
+    let scoreAwayEl = scoreboard.querySelector('#scoreAway');
+    let homeBox = scoreboard.querySelector('#homeTeamBox');
+    let awayBox = scoreboard.querySelector('#awayTeamBox');
+    let clockEl = scoreboard.querySelector('.game-clock');
+    let ddEl = scoreboard.querySelector('.down-distance');
 
-    scoreboard.innerHTML = `
-      <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}" id="awayTeamBox">
-        <div class="team-name">${away.team.abbr}</div>
-        <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
-      </div>
-      <div class="score-info">
-        <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
-        <div class="down-distance">
-          ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
-        </div>
-      </div>
-      <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}" id="homeTeamBox">
-        <div class="team-name">${home.team.abbr}</div>
-        <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
-      </div>
-    `;
+    // Initial Render
+    if (!scoreHomeEl) {
+        const displayHome = homeChanged ? this.lastHomeScore : home.score;
+        const displayAway = awayChanged ? this.lastAwayScore : away.score;
 
-    // Trigger animations explicitly
-    if (homeChanged) {
-        const el = scoreboard.querySelector('#scoreHome');
-        const box = scoreboard.querySelector('#homeTeamBox');
-        if (el) {
-            el.classList.add('pulse-score-strong');
-            if (home.score.toString().length > 2) el.style.fontSize = '1.5rem';
-            if (box) box.classList.add('pulse-score-strong'); // Pulse container
-            this.animateNumber(el, this.lastHomeScore, home.score, 1000);
+        scoreboard.innerHTML = `
+          <div class="score-team ${state.ballPossession === 'away' ? 'has-possession' : ''}" id="awayTeamBox">
+            <div class="team-name">${away.team.abbr}</div>
+            <div class="team-score" id="scoreAway" style="${displayAway.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayAway}</div>
+          </div>
+          <div class="score-info">
+            <div class="game-clock">Q${state.quarter} ${this.formatTime(state.time)}</div>
+            <div class="down-distance">
+              ${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}
+            </div>
+          </div>
+          <div class="score-team ${state.ballPossession === 'home' ? 'has-possession' : ''}" id="homeTeamBox">
+            <div class="team-name">${home.team.abbr}</div>
+            <div class="team-score" id="scoreHome" style="${displayHome.toString().length > 2 ? 'font-size: 1.5rem;' : ''}">${displayHome}</div>
+          </div>
+        `;
+        // Re-query elements
+        scoreHomeEl = scoreboard.querySelector('#scoreHome');
+        scoreAwayEl = scoreboard.querySelector('#scoreAway');
+        homeBox = scoreboard.querySelector('#homeTeamBox');
+        awayBox = scoreboard.querySelector('#awayTeamBox');
+    } else {
+        // Update Non-Score Elements
+        if (clockEl) clockEl.textContent = `Q${state.quarter} ${this.formatTime(state.time)}`;
+        if (ddEl) ddEl.textContent = `${state[state.ballPossession].down} & ${state[state.ballPossession].distance} at ${state[state.ballPossession].yardLine}`;
+
+        if (homeBox) {
+            if (state.ballPossession === 'home') homeBox.classList.add('has-possession');
+            else homeBox.classList.remove('has-possession');
+        }
+        if (awayBox) {
+            if (state.ballPossession === 'away') awayBox.classList.add('has-possession');
+            else awayBox.classList.remove('has-possession');
+        }
+
+        // Sync score if not changing (and not animating)
+        if (!homeChanged && scoreHomeEl && !scoreHomeEl.hasAttribute('data-animating')) {
+             scoreHomeEl.textContent = home.score;
+        }
+        if (!awayChanged && scoreAwayEl && !scoreAwayEl.hasAttribute('data-animating')) {
+             scoreAwayEl.textContent = away.score;
         }
     }
-    if (awayChanged) {
-        const el = scoreboard.querySelector('#scoreAway');
-        const box = scoreboard.querySelector('#awayTeamBox');
-        if (el) {
-            el.classList.add('pulse-score-strong');
-            if (away.score.toString().length > 2) el.style.fontSize = '1.5rem';
-            if (box) box.classList.add('pulse-score-strong'); // Pulse container
-            this.animateNumber(el, this.lastAwayScore, away.score, 1000);
+
+    // Trigger animations explicitly
+    if (homeChanged && scoreHomeEl) {
+        scoreHomeEl.classList.remove('pulse-score-strong');
+        void scoreHomeEl.offsetWidth; // Reflow
+        scoreHomeEl.classList.add('pulse-score-strong');
+
+        if (home.score.toString().length > 2) scoreHomeEl.style.fontSize = '1.5rem';
+        if (homeBox) {
+             homeBox.classList.remove('pulse-score-strong');
+             void homeBox.offsetWidth;
+             homeBox.classList.add('pulse-score-strong');
         }
+        this.animateNumber(scoreHomeEl, this.lastHomeScore, home.score, 1000);
+    }
+    if (awayChanged && scoreAwayEl) {
+        scoreAwayEl.classList.remove('pulse-score-strong');
+        void scoreAwayEl.offsetWidth;
+        scoreAwayEl.classList.add('pulse-score-strong');
+
+        if (away.score.toString().length > 2) scoreAwayEl.style.fontSize = '1.5rem';
+        if (awayBox) {
+             awayBox.classList.remove('pulse-score-strong');
+             void awayBox.offsetWidth;
+             awayBox.classList.add('pulse-score-strong');
+        }
+        this.animateNumber(scoreAwayEl, this.lastAwayScore, away.score, 1000);
     }
 
     this.lastHomeScore = home.score;
@@ -2542,6 +2592,7 @@ class LiveGameViewer {
 
       // Set skipping flag IMMEDIATELY to short-circuit any running animations
       this.isSkipping = true;
+      this.toggleControls(false);
 
       if (this.intervalId) {
           clearTimeout(this.intervalId);
@@ -2945,7 +2996,7 @@ class LiveGameViewer {
             <div class="box-score-panel"></div>
             <div class="momentum-panel"></div>
         </div>
-        <div class="stats-panel" style="padding: 10px; font-size: 0.8em; overflow-x: auto; background: rgba(0,0,0,0.1); margin-top: 10px; border-radius: 8px;"></div>
+        <div class="stats-panel"></div>
 
         <div class="play-calling" style="display: none;">
           <div class="play-call-prompt">Call Your Play:</div>
@@ -3159,7 +3210,7 @@ class LiveGameViewer {
       // Streak indicator (using Combo for consecutive plays)
       let streakHtml = '';
       if (this.combo >= 3) {
-          streakHtml = `<div class="streak-fire" style="text-align:center; font-weight:bold; font-size: 1.1em; margin-top: 8px; animation: pulse-text-glow 0.5s infinite alternate;">🔥 ON FIRE! 🔥</div>`;
+          streakHtml = `<div class="streak-fire">🔥 ON FIRE! 🔥</div>`;
       }
       // Combo indicator
       if (this.combo > 0) {
@@ -3229,7 +3280,7 @@ class LiveGameViewer {
       };
 
       container.innerHTML = `
-        <div class="game-stats-panel" style="margin-top: 0;">
+        <div class="game-stats-panel">
             <div class="stats-column">
                 <h4>${this.gameState.away.team.abbr} Leaders</h4>
                 <div class="stat-leader">
@@ -3265,36 +3316,100 @@ class LiveGameViewer {
   }
 
   /**
+   * Helper to toggle control state
+   */
+  toggleControls(enable) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      // Target specific control buttons
+      const selectors = [
+          '#btnPrevPlay', '#btnPlayPause', '#btnNextPlay', '#btnNextDrive', '#btnSkipEnd',
+          '.tempo-btn', '.control-btn', '.pause-btn', '.skip-btn'
+      ];
+      const buttons = parent.querySelectorAll(selectors.join(','));
+
+      buttons.forEach(btn => {
+          if (btn.classList.contains('close') || btn.classList.contains('close-game-btn')) return;
+          btn.disabled = !enable;
+          btn.style.opacity = enable ? '1' : '0.5';
+          btn.style.cursor = enable ? 'pointer' : 'not-allowed';
+          btn.style.pointerEvents = enable ? 'auto' : 'none';
+      });
+  }
+
+  /**
    * Skip to next drive
    */
   skipToNextDrive() {
-      if (this.intervalId) clearTimeout(this.intervalId);
+      if (this.isSkipping) return;
+      if (this.intervalId) {
+          clearTimeout(this.intervalId);
+          this.intervalId = null;
+      }
+
+      this.isSkipping = true;
       this.isPaused = false;
       this.isPlaying = true;
-      this.isSkipping = true;
+      this.toggleControls(false);
 
       const currentPossession = this.gameState.ballPossession;
       let safetyCounter = 0;
+      const MAX_SAFETY = 100;
 
-      // Simulate until possession changes
-      while (this.gameState.ballPossession === currentPossession && !this.gameState.gameComplete && safetyCounter < 50) {
-          safetyCounter++;
-          const state = this.gameState;
-          const offense = state.ballPossession === 'home' ? state.home : state.away;
-          const defense = state.ballPossession === 'home' ? state.away : state.home;
-          const isUserOffense = offense.team.id === this.userTeamId;
+      const processChunk = () => {
+          if (!this.gameState || this.isGameEnded) return;
 
-          const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+          let playsInChunk = 0;
+          const CHUNK_SIZE = 10;
 
-          this.playByPlay.push(play);
-          this.renderPlay(play); // Safe guarded
-          this.updateGameState(play, state);
-          this.handleEndOfQuarter(state);
-      }
+          while (
+              this.gameState.ballPossession === currentPossession &&
+              !this.gameState.gameComplete &&
+              playsInChunk < CHUNK_SIZE &&
+              safetyCounter < MAX_SAFETY
+          ) {
+              playsInChunk++;
+              safetyCounter++;
 
-      this.isSkipping = false;
-      this.isPaused = true; // Pause after drive
-      this.renderGame(); // Safe guarded
+              const state = this.gameState;
+              const offense = state.ballPossession === 'home' ? state.home : state.away;
+              const defense = state.ballPossession === 'home' ? state.away : state.home;
+              const isUserOffense = offense.team.id === this.userTeamId;
+
+              const play = this.generatePlay(offense, defense, state, isUserOffense, null, null);
+
+              this.playByPlay.push(play);
+              this.handleEndOfQuarter(state);
+          }
+
+          if (this.gameState.ballPossession !== currentPossession || this.gameState.gameComplete || safetyCounter >= MAX_SAFETY) {
+              this.isSkipping = false;
+              this.isPaused = true;
+
+              if (this.checkUI()) {
+                  this.renderGame();
+                  const parent = this.viewMode ? this.container : this.modal;
+                  if (parent) {
+                     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
+                     if (playLog) {
+                         const lastPlay = this.playByPlay[this.playByPlay.length - 1];
+                         if (lastPlay) this.renderPlay(lastPlay);
+                         playLog.scrollTop = playLog.scrollHeight;
+                     }
+                  }
+              }
+
+              if (this.gameState.gameComplete) {
+                  this.endGame();
+              } else {
+                  this.toggleControls(true);
+              }
+          } else {
+              requestAnimationFrame(processChunk);
+          }
+      };
+
+      requestAnimationFrame(processChunk);
   }
 
   /**
