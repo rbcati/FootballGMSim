@@ -708,8 +708,14 @@ class LiveGameViewer {
       const currentLeft = parseFloat(ballEl.style.left || '-1');
       const shouldSnap = Math.abs(currentLeft - startPct) > 1;
 
-      // Reset Ball
+      // Reset Ball with Smooth Fade for Possession Change
       if (shouldSnap) {
+          // Fade Out
+          ballEl.style.opacity = 0;
+          if (ballShadow) ballShadow.style.opacity = 0;
+
+          await new Promise(r => this.setTimeoutSafe(r, 200));
+
           ballEl.style.transition = 'none';
           ballEl.style.left = `${startPct}%`;
           ballEl.style.transform = 'translate(-50%, -50%)';
@@ -718,8 +724,15 @@ class LiveGameViewer {
               ballShadow.style.transition = 'none';
               ballShadow.style.left = `${startPct}%`;
               ballShadow.style.transform = 'translate(-50%, -50%)';
-              ballShadow.style.opacity = 1;
           }
+
+          // Wait briefly for position to set
+          await new Promise(r => this.setTimeoutSafe(r, 50));
+
+          // Fade In
+          ballEl.style.opacity = 1;
+          if (ballShadow) ballShadow.style.opacity = 1;
+          ballEl.style.transition = '';
       }
 
       // Setup Markers
@@ -837,6 +850,12 @@ class LiveGameViewer {
           } else {
               // 2. Throw
               const throwDuration = 700 * durationScale;
+
+              // QB Throw Animation
+              if (qbMarker) {
+                  qbMarker.classList.add('throw-animation');
+                  this.setTimeoutSafe(() => qbMarker.classList.remove('throw-animation'), 500);
+              }
 
               if (play.playType === 'pass_long' && this.fieldEffects) {
                   this.fieldEffects.spawnParticles(dropbackPct, 'spiral');
@@ -957,7 +976,13 @@ class LiveGameViewer {
           }
 
           if (qbMarker) qbMarker.style.opacity = 0;
-          if (skillMarker) skillMarker.style.opacity = 0;
+          // Show skill marker as Kicker
+          if (skillMarker) {
+              skillMarker.style.opacity = 1;
+              skillMarker.style.left = `${startPct}%`;
+              skillMarker.classList.add('kick-follow-through');
+              this.setTimeoutSafe(() => skillMarker.classList.remove('kick-follow-through'), 600);
+          }
           if (defMarker) defMarker.style.opacity = 0; // Hide defense for kicks for simplicity
 
           if (this.fieldEffects) {
