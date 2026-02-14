@@ -1,0 +1,165 @@
+
+/* ============================================================================
+   UI POLISH 2.0 - Refined Transitions & Feedback
+   ============================================================================ */
+
+/* Smoother View Transitions */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.98) translateY(5px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeOutScale {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.02); }
+}
+
+.fade-in {
+  animation: fadeInScale 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+}
+
+.fade-out {
+  animation: fadeOutScale 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* Enhanced Button States */
+.btn, .control-btn {
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: center;
+}
+
+.btn:hover, .control-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+  filter: brightness(1.1);
+}
+
+.btn:active, .control-btn:active {
+  transform: translateY(0) scale(0.96) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  filter: brightness(0.95);
+}
+
+/* Enhanced Game Event Overlays */
+.game-event-overlay {
+  /* Ensure centered */
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%); /* Center it */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2000;
+  width: auto;
+  min-width: 300px;
+  text-align: center;
+  animation: overlayPopIn 2s ease-out forwards;
+}
+
+/* Icon Animation */
+@keyframes iconPop {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  60% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+/* Icons */
+.game-event-overlay::before {
+  font-size: 6rem;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 15px rgba(255,255,255,0.2));
+  animation: iconPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: block;
+}
+
+/* Goal Variants */
+.game-event-overlay.goal::before { content: '🙌'; }
+.game-event-overlay.goal.touchdown::before { content: '🙌'; }
+.game-event-overlay.goal.field-goal::before { content: '👟'; }
+.game-event-overlay.goal.victory::before { content: '🏆'; }
+
+/* Save Variants */
+.game-event-overlay.save::before { content: '🛡️'; }
+.game-event-overlay.save.turnover::before { content: '🛑'; }
+.game-event-overlay.save.sack::before { content: '💥'; }
+.game-event-overlay.save.safety::before { content: '⚠️'; }
+.game-event-overlay.save.defeat::before { content: '💀'; }
+.game-event-overlay.save.stop::before { content: '😤'; }
+
+/* Kick Variants */
+.game-event-overlay.kick::before { content: '🦶'; }
+
+/* Text Styles */
+.game-event-overlay .event-text {
+    font-weight: 900;
+    text-transform: uppercase;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    letter-spacing: 2px;
+}
+
+.game-event-overlay.goal .event-text {
+    color: #FFD700;
+    font-size: 4rem;
+    text-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 69, 0, 0.4);
+    font-family: "Arial Black", "Impact", sans-serif;
+}
+
+.game-event-overlay.save .event-text {
+    color: #FF453A;
+    font-size: 3.5rem;
+    border: 4px solid currentColor;
+    padding: 10px 20px;
+    transform: rotate(-3deg);
+    background: rgba(0, 0, 0, 0.9);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    font-family: "Courier New", monospace;
+}
+
+.game-event-overlay.kick .event-text {
+    color: #0A84FF;
+    font-size: 3rem;
+    text-shadow: 0 0 15px rgba(10, 132, 255, 0.5);
+    font-family: "Arial Black", sans-serif;
+}
+
+/* Quarter/Game End */
+.game-event-overlay.quarter-end .event-text {
+    font-size: 3rem;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+}
+.game-event-overlay.quarter-end::before { content: '⏱️'; }
+
+/* Drive Summary - Special Case */
+.game-event-overlay.drive-summary {
+    background: rgba(10, 12, 16, 0.95);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-xl);
+    max-width: 80%;
+    transform: translate(-50%, -50%);
+}
+.game-event-overlay.drive-summary .event-text {
+    font-size: 1.2rem;
+    color: var(--text);
+    font-family: var(--font-sans, sans-serif);
+    text-transform: none;
+    letter-spacing: normal;
+    text-shadow: none;
+}
+.game-event-overlay.drive-summary::before {
+    content: none;
+}
+
+/* Override existing overlayPopIn to handle centering correctly */
+@keyframes overlayPopIn {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}

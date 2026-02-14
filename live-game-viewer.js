@@ -2141,7 +2141,7 @@ class LiveGameViewer {
             this.triggerShake(); // Added Juice
             this.triggerFloatText('TOUCHDOWN!');
             launchConfetti();
-            this.triggerVisualFeedback('goal', 'TOUCHDOWN!');
+            this.triggerVisualFeedback('goal touchdown', 'TOUCHDOWN!');
             // Ensure particles trigger even if animation skipped slightly
             if (this.fieldEffects) {
                  const isHome = this.gameState.ballPossession === 'home';
@@ -2167,9 +2167,9 @@ class LiveGameViewer {
             this.triggerShake('hard');
 
             if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save', 'STOPPED!');
+                this.triggerVisualFeedback('save stop', 'STOPPED!');
             } else {
-                this.triggerVisualFeedback('save', 'TURNOVER!');
+                this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
 
             this.triggerFloatText('TURNOVER!', 'bad');
@@ -2178,13 +2178,13 @@ class LiveGameViewer {
             soundManager.playCrowdGasp();
             this.triggerShake();
             this.triggerFloatText('NO GOOD!', 'bad');
-            this.triggerVisualFeedback('save', 'NO GOOD!');
+            this.triggerVisualFeedback('save stop', 'NO GOOD!');
         } else if (play.result === 'sack') {
             soundManager.playSack();
             soundManager.playShockwave();
             this.triggerShake();
             this.triggerFloatText('SACKED!', 'bad');
-            this.triggerVisualFeedback('save', 'SACK!');
+            this.triggerVisualFeedback('save sack', 'SACK!');
         } else if (play.result === 'big_play') {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
@@ -2200,11 +2200,11 @@ class LiveGameViewer {
             soundManager.playFieldGoal();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
-            this.triggerVisualFeedback('goal', 'FIELD GOAL!');
+            this.triggerVisualFeedback('goal field-goal', 'FIELD GOAL!');
             if (launchConfetti) launchConfetti();
         } else if (play.playType === 'punt') {
             soundManager.playKick();
-            this.triggerVisualFeedback('kick', 'PUNT');
+            this.triggerVisualFeedback('kick punt', 'PUNT');
         } else if (play.type === 'game_end') {
             // Check winner
             const userWon = (this.userTeamId && ((this.gameState.home.team.id === this.userTeamId && this.gameState.home.score > this.gameState.away.score) || (this.gameState.away.team.id === this.userTeamId && this.gameState.away.score > this.gameState.home.score)));
@@ -2213,18 +2213,18 @@ class LiveGameViewer {
                 soundManager.playHorns();
                 soundManager.playVictory();
                 launchConfetti();
-                this.triggerVisualFeedback('goal', 'VICTORY!');
+                this.triggerVisualFeedback('goal victory', 'VICTORY!');
             } else {
                 soundManager.playWhistle();
-                this.triggerVisualFeedback('save', 'GAME OVER');
+                this.triggerVisualFeedback('save defeat', 'GAME OVER');
             }
              soundManager.playPing();
         } else if (play.result === 'field_goal_miss') {
              soundManager.playFailure();
-             this.triggerVisualFeedback('save', 'NO GOOD!');
+             this.triggerVisualFeedback('save stop', 'NO GOOD!');
         } else if (play.result === 'safety') {
              soundManager.playFailure();
-             this.triggerVisualFeedback('save', 'SAFETY!');
+             this.triggerVisualFeedback('save safety', 'SAFETY!');
         } else if (play.type === 'quarter_end') {
             soundManager.playWhistle();
         }
