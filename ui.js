@@ -835,32 +835,48 @@ window.renderRoster = function() {
             cellAbilities.className = 'abilities';
             cellAbilities.textContent = abilities;
             
-            // Add click handler for player details
-            tr.addEventListener('click', (e) => {
-                // Prevent bubbling to avoid interfering with other UI interactions
-                e.stopPropagation();
-
-                // Ensure clicking the checkbox doesn't trigger details
-                if (e.target.matches('input[type="checkbox"]')) return;
-
-                // Use modal view instead of navigation to keep context
-                // Prioritize showPlayerDetails (Card View) -> viewPlayerStats (Stats Modal) -> Route
-                try {
-                    if (window.showPlayerDetails) {
-                        window.showPlayerDetails(player);
-                    } else if (window.viewPlayerStats) {
-                        window.viewPlayerStats(player.id);
-                    } else {
-                        location.hash = `#/player/${player.id}`;
-                    }
-                } catch (err) {
-                    console.error("Error handling player click:", err);
-                    location.hash = `#/player/${player.id}`;
-                }
-            });
         });
 
         tbody.appendChild(fragment);
+
+        // Add delegated click handler for player details (Performance Optimization)
+        tbody.addEventListener('click', (e) => {
+            const tr = e.target.closest('tr');
+            if (!tr || !tr.dataset.playerId) return;
+
+            // Prevent bubbling to avoid interfering with other UI interactions
+            e.stopPropagation();
+
+            // Ensure clicking the checkbox doesn't trigger details
+            if (e.target.matches('input[type="checkbox"]') || e.target.closest('input[type="checkbox"]')) return;
+
+            // Allow player name link to handle its own click
+            if (e.target.closest('.player-name-link')) return;
+
+            const playerId = tr.dataset.playerId;
+
+            // Find player object
+            // Using loose equality because dataset stores strings
+            const playerEntry = sortedRoster.find(p => String(p.player.id) === playerId);
+            if (!playerEntry) return;
+
+            const player = playerEntry.player;
+
+            // Use modal view instead of navigation to keep context
+            // Prioritize showPlayerDetails (Card View) -> viewPlayerStats (Stats Modal) -> Route
+            try {
+                if (window.showPlayerDetails) {
+                    window.showPlayerDetails(player);
+                } else if (window.viewPlayerStats) {
+                    window.viewPlayerStats(player.id);
+                } else {
+                    location.hash = `#/player/${player.id}`;
+                }
+            } catch (err) {
+                console.error("Error handling player click:", err);
+                location.hash = `#/player/${player.id}`;
+            }
+        });
         
         // Assuming these functions are defined elsewhere or not strictly needed for this file's logic
         if (typeof setupRosterEvents === 'function') {
