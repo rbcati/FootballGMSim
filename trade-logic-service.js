@@ -1,15 +1,13 @@
+import { Constants } from './constants.js';
+
 export class TradeLogicService {
   /**
    * Modified Jimmy Johnson Trade Value Chart
    * specific values for top picks, formula for others.
    */
-  static DRAFT_PICK_VALUES = {
-    1: 3000, 2: 2600, 3: 2200, 4: 1800, 5: 1700, 6: 1600, 7: 1500, 8: 1400,
-    9: 1350, 10: 1300, 11: 1250, 12: 1200, 13: 1150, 14: 1100, 15: 1050,
-    16: 1000, 17: 950, 18: 900, 19: 875, 20: 850, 21: 825, 22: 800,
-    23: 760, 24: 740, 25: 720, 26: 700, 27: 680, 28: 660, 29: 640, 30: 620,
-    31: 600, 32: 590
-  };
+  static get DRAFT_PICK_VALUES() {
+    return Constants.TRADE_LOGIC_CONFIG.DRAFT_PICK_VALUES;
+  }
 
   /**
    * Calculates the value of a draft pick.
@@ -47,10 +45,10 @@ export class TradeLogicService {
 
     if (baseValue < 1) baseValue = 1;
 
-    // Future discount: 0.90 for next year, 0.80 for 2 years out
-    // Matching Jimmy Johnson chart standards (roughly 1 round penalty per year)
-    let discountRate = 0.90;
-    if (yearOffset >= 2) discountRate = 0.80;
+    // Future discount rates from Constants
+    const rates = Constants.TRADE_LOGIC_CONFIG.FUTURE_DISCOUNT || { ONE_YEAR: 0.90, TWO_PLUS_YEARS: 0.80 };
+    let discountRate = rates.ONE_YEAR;
+    if (yearOffset >= 2) discountRate = rates.TWO_PLUS_YEARS;
 
     const discount = Math.pow(discountRate, yearOffset);
     return Math.round(baseValue * discount);
@@ -74,17 +72,10 @@ export class TradeLogicService {
 
     let ovr = player.ovr;
     let baseValue = 0;
+    const curve = Constants.TRADE_LOGIC_CONFIG.PLAYER_VALUE_CURVE || { A: 1.5, K: 2.1, THRESHOLD: 55 };
 
-    if (ovr > 55) {
-        // Solving for 75 -> 800:
-        // 800 = C * (75-55)^k = C * 20^k
-        // 4000 = C * (99-55)^k = C * 44^k
-        // 5 = (44/20)^k = 2.2^k
-        // log(5) / log(2.2) ~= 2.05
-        // Let's use k=2.1
-        // C = 800 / 20^2.1 ~= 1.48
-
-        baseValue = 1.5 * Math.pow(ovr - 55, 2.1);
+    if (ovr > curve.THRESHOLD) {
+        baseValue = curve.A * Math.pow(ovr - curve.THRESHOLD, curve.K);
     }
 
     // 2. Age Decay
@@ -150,38 +141,22 @@ export class TradeLogicService {
    * @returns {number} Expected Salary in Millions
    */
   static getExpectedSalary(ovr, pos) {
-    // Base salary curve
+    // Base salary curve from Constants
     let salary = 0;
+    const config = Constants.TRADE_LOGIC_CONFIG.EXPECTED_SALARY || { A: 0.017, THRESHOLD: 60, MIN: 0.8 };
 
-    // Exponential salary curve
-    // 99 OVR -> $25M
-    // 70 OVR -> $2M
-    if (ovr < 70) return 0.8; // Minimum
+    if (ovr < 70) return config.MIN; // Minimum
 
-    // Simple quadratic curve
-    // Salary = A * (OVR - 60)^2
-    // 25 = A * (39)^2 => A = 25/1521 = 0.0164
-    // Check 75: 0.0164 * 15^2 = 3.7M. Close to existing logic.
+    salary = config.A * Math.pow(ovr - config.THRESHOLD, 2);
 
-    salary = 0.017 * Math.pow(ovr - 60, 2);
-
-    // Position Multipliers
-    const posMultipliers = {
-        QB: 1.4,
-        DE: 1.1, EDGE: 1.1,
-        LT: 1.1, OT: 1.0,
-        WR: 1.1,
-        CB: 1.0,
-        DT: 0.9,
-        LB: 0.8,
-        S: 0.7,
-        RB: 0.6, // RB devaluation
-        TE: 0.6,
-        K: 0.2, P: 0.2
+    // Position Multipliers from Constants
+    const posMultipliers = Constants.TRADE_LOGIC_CONFIG.POS_MULTIPLIERS || {
+        QB: 1.4, DE: 1.1, EDGE: 1.1, LT: 1.1, OT: 1.0, WR: 1.1, CB: 1.0,
+        DT: 0.9, LB: 0.8, S: 0.7, RB: 0.6, TE: 0.6, K: 0.2, P: 0.2
     };
 
     const mult = posMultipliers[pos] || 1.0;
-    return Math.max(0.8, salary * mult);
+    return Math.max(config.MIN, salary * mult);
   }
 
   /**

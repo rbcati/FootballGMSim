@@ -26,7 +26,7 @@ let simReject = null;
 let simWatchdogTimer = null;
 
 // Watchdog: Maximum time (ms) to wait for the worker before forcibly aborting
-const SIM_WATCHDOG_TIMEOUT_MS = 5000;
+const SIM_WATCHDOG_TIMEOUT_MS = Constants.SIM_CONFIG.WATCHDOG_TIMEOUT_MS;
 
 /**
  * Saves a debug snapshot of the current simulation state so that hangs
@@ -128,15 +128,16 @@ function applyCompetitiveBalance(league) {
         if (!team.roster) return;
 
         const tierPct = rank / totalTeams; // 0.0 = best, 1.0 = worst
+        const { TOP_TIER_CUTOFF, BOTTOM_TIER_CUTOFF, VETERAN_AGE, YOUNG_AGE, FATIGUE_CHANCE, DEVELOPMENT_CHANCE } = Constants.SIM_CONFIG.COMP_BALANCE;
 
-        if (tierPct <= 0.25) {
+        if (tierPct <= TOP_TIER_CUTOFF) {
             // TOP QUARTER: Slight regression
             // Simulate the difficulty of staying on top (key FAs leave, coaching turnover, etc.)
             team.roster.forEach(p => {
                 if (!p || !p.ratings) return;
 
                 // Veteran fatigue: players on winning teams age slightly faster
-                if (p.age >= 28 && U.random() < 0.15) {
+                if (p.age >= VETERAN_AGE && U.random() < FATIGUE_CHANCE) {
                     const stat = U.choice(['speed', 'acceleration', 'agility', 'stamina']);
                     if (p.ratings[stat] && p.ratings[stat] > 50) {
                         p.ratings[stat] = Math.max(50, p.ratings[stat] - 1);
@@ -149,7 +150,7 @@ function applyCompetitiveBalance(league) {
                 team.capRoom = Math.max(0, team.capRoom - U.rand(1, 3));
             }
 
-        } else if (tierPct >= 0.75) {
+        } else if (tierPct >= BOTTOM_TIER_CUTOFF) {
             // BOTTOM QUARTER: Development boost
             // High draft picks help, plus young players develop faster on bad teams
             // (more playing time for rookies)
@@ -157,7 +158,7 @@ function applyCompetitiveBalance(league) {
                 if (!p || !p.ratings) return;
 
                 // Young player development boost (more playing time on bad teams)
-                if (p.age <= 25 && U.random() < 0.20) {
+                if (p.age <= YOUNG_AGE && U.random() < DEVELOPMENT_CHANCE) {
                     const stat = U.choice(['awareness', 'intelligence']);
                     if (p.ratings[stat]) {
                         p.ratings[stat] = Math.min(99, p.ratings[stat] + U.rand(1, 2));
@@ -887,7 +888,7 @@ function enforceAIRosterMinimums(league) {
     if (!freeAgents) return;
 
     // Minimums: QB >= 2, OL >= 4, DL >= 3
-    const MINS = { 'QB': 2, 'OL': 4, 'DL': 3 };
+    const MINS = Constants.SIM_CONFIG.ROSTER_MINIMUMS;
 
     league.teams.forEach(team => {
         // Skip user team (handled by blockers)
@@ -932,9 +933,9 @@ function enforceAIRosterMinimums(league) {
                         // Add to Team
                         signee.teamId = team.id;
                         // Give minimum contract
-                        signee.baseAnnual = 0.8;
-                        signee.years = 1;
-                        signee.yearsTotal = 1;
+                        signee.baseAnnual = Constants.SIM_CONFIG.AI_SIGNING.BASE_ANNUAL;
+                        signee.years = Constants.SIM_CONFIG.AI_SIGNING.YEARS;
+                        signee.yearsTotal = Constants.SIM_CONFIG.AI_SIGNING.YEARS;
                         signee.signingBonus = 0;
 
                         team.roster.push(signee);

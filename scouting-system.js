@@ -6,25 +6,12 @@
  * Integrates with existing draft system to provide detailed prospect evaluation
  */
 
-// Scouting system constants
+// Use central Constants for scouting logic
+const C = (typeof window !== 'undefined' ? window.Constants : null) || { SCOUTING_CONFIG: {} };
 const SCOUTING_CONSTANTS = {
-  SCOUTING_ACCURACY: {
-    BASIC: 60,      // Basic scouting accuracy
-    THOROUGH: 85,   // Thorough scouting accuracy
-    COMBINE: 95     // Combine scouting accuracy
-  },
-  
-  SCOUTING_COSTS: {
-    BASIC: 50000,    // $50k per basic scout
-    THOROUGH: 150000, // $150k per thorough scout
-    COMBINE: 500000   // $500k per combine scout
-  },
-  
-  SCOUTING_LIMITS: {
-    BASIC_PER_WEEK: 10,
-    THOROUGH_PER_WEEK: 5,
-    COMBINE_PER_WEEK: 2
-  }
+  get SCOUTING_ACCURACY() { return C.SCOUTING_CONFIG.SCOUTING_ACCURACY || { BASIC: 60, THOROUGH: 85, COMBINE: 95 }; },
+  get SCOUTING_COSTS() { return C.SCOUTING_CONFIG.SCOUTING_COSTS || { BASIC: 50000, THOROUGH: 150000, COMBINE: 500000 }; },
+  get SCOUTING_LIMITS() { return C.SCOUTING_CONFIG.SCOUTING_LIMITS || { BASIC_PER_WEEK: 10, THOROUGH_PER_WEEK: 5, COMBINE_PER_WEEK: 2 }; }
 };
 
 // Cache for prospect lookups
@@ -66,7 +53,7 @@ function initializeScoutingSystem() {
   // Add scouting data to state if not exists
   if (!window.state.scouting) {
     window.state.scouting = {
-      budget: 2000000, // $2M scouting budget
+      budget: C.SCOUTING_CONFIG.INITIAL_BUDGET || 2000000, // $2M scouting budget
       used: 0,
       weeklyScouts: {
         basic: 0,
@@ -77,7 +64,7 @@ function initializeScoutingSystem() {
       // Set objects serialize to {} in localStorage, losing all scouting progress.
       scoutedProspects: [],
       scoutingReports: {},
-      lastReset: window.state.league?.year || 2025
+      lastReset: window.state.league?.year || (window.Constants?.GAME_CONFIG?.YEAR_START || 2025)
     };
   }
 
@@ -93,7 +80,7 @@ function initializeScoutingSystem() {
   }
 
   // Reset weekly limits if new season
-  const currentYear = window.state.league?.year || 2025;
+  const currentYear = window.state.league?.year || (window.Constants?.GAME_CONFIG?.YEAR_START || 2025);
   if (window.state.scouting.lastReset !== currentYear) {
     window.state.scouting.weeklyScouts = { basic: 0, thorough: 0, combine: 0 };
     window.state.scouting.lastReset = currentYear;

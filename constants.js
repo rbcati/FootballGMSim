@@ -249,8 +249,139 @@
       "tertiary": ["speed", "strength"]
     }
   };
-  
-  // --- VIII. EXPORT EVERYTHING ---
+
+  // --- IX. NEW CONSOLIDATED CONFIGURATIONS ---
+
+  const PLAYOFF_CONFIG = {
+    TEAMS_PER_CONF: 7
+  };
+
+  const SIM_CONFIG = {
+    WATCHDOG_TIMEOUT_MS: 5000,
+    COMP_BALANCE: {
+      TOP_TIER_CUTOFF: 0.25,
+      BOTTOM_TIER_CUTOFF: 0.75,
+      VETERAN_AGE: 28,
+      YOUNG_AGE: 25,
+      FATIGUE_CHANCE: 0.15,
+      DEVELOPMENT_CHANCE: 0.20
+    },
+    ROSTER_MINIMUMS: { QB: 2, OL: 4, DL: 3 },
+    AI_SIGNING: {
+      BASE_ANNUAL: 0.8,
+      YEARS: 1
+    }
+  };
+
+  const CONTRACT_MGMT = {
+    MIN_BASE_SALARY: 0.5,
+    EXTENSION_LIMITS: { MIN: 2, MAX: 7 },
+    NEGOTIATION_THRESHOLDS: { LOWBALL: 0.75, OVERPAY: 1.10 },
+    TAG_MULTIPLIERS: {
+      FRANCHISE: 1.2,
+      TRANSITION: 1.1,
+      FIFTH_YEAR: 1.25
+    },
+    TAG_ESTIMATES: {
+      FRANCHISE: { 'QB': 30, 'OL': 18, 'DL': 15, 'WR': 16, 'CB': 14, 'LB': 10, 'RB': 8, 'S': 9, 'TE': 7, 'K': 4, 'P': 3 },
+      TRANSITION: { 'QB': 25, 'OL': 15, 'DL': 12, 'WR': 13, 'CB': 11, 'LB': 8, 'RB': 6, 'S': 7, 'TE': 5, 'K': 3, 'P': 2 }
+    },
+    ROOKIE_CONTRACT_LENGTH: 4,
+    MAX_GUARANTEED_PCT: 0.95,
+    MAX_TAGS: { FRANCHISE: 1, TRANSITION: 1 },
+    LEVERAGE: {
+        POS_MULTIPLIERS: {
+          QB: 2.5, WR: 1.15, OL: 1.10, CB: 1.10, DL: 1.05,
+          LB: 0.95, S: 0.90, TE: 0.85, RB: 0.70, K: 0.35, P: 0.30
+        },
+        MARKET_AAV_LADDER: [
+          { ovr: 95, aav: 26 },
+          { ovr: 90, aav: 20 },
+          { ovr: 85, aav: 15 },
+          { ovr: 80, aav: 10 },
+          { ovr: 75, aav: 6 },
+          { ovr: 70, aav: 3.5 },
+          { ovr: 65, aav: 2 },
+          { ovr: 0, aav: 1 }
+        ]
+    }
+  };
+
+  const SCOUTING_CONFIG = {
+    INITIAL_BUDGET: 2000000,
+    SCOUTING_ACCURACY: {
+      BASIC: 60,
+      THOROUGH: 85,
+      COMBINE: 95
+    },
+    SCOUTING_COSTS: {
+      BASIC: 50000,
+      THOROUGH: 150000,
+      COMBINE: 500000
+    },
+    SCOUTING_LIMITS: {
+      BASIC_PER_WEEK: 10,
+      THOROUGH_PER_WEEK: 5,
+      COMBINE_PER_WEEK: 2
+    }
+  };
+
+  const TRADE_LOGIC_CONFIG = {
+    DRAFT_PICK_VALUES: {
+      1: 3000, 2: 2600, 3: 2200, 4: 1800, 5: 1700, 6: 1600, 7: 1500, 8: 1400,
+      9: 1350, 10: 1300, 11: 1250, 12: 1200, 13: 1150, 14: 1100, 15: 1050,
+      16: 1000, 17: 950, 18: 900, 19: 875, 20: 850, 21: 825, 22: 800,
+      23: 760, 24: 740, 25: 720, 26: 700, 27: 680, 28: 660, 29: 640, 30: 620,
+      31: 600, 32: 590
+    },
+    PLAYER_VALUE_CURVE: { A: 1.5, K: 2.1, THRESHOLD: 55 },
+    EXPECTED_SALARY: { A: 0.017, THRESHOLD: 60, MIN: 0.8 },
+    POS_MULTIPLIERS: {
+        QB: 1.4, DE: 1.1, EDGE: 1.1, LT: 1.1, OT: 1.0, WR: 1.1, CB: 1.0,
+        DT: 0.9, LB: 0.8, S: 0.7, RB: 0.6, TE: 0.6, K: 0.2, P: 0.2
+    },
+    FUTURE_DISCOUNT: { ONE_YEAR: 0.75, TWO_PLUS_YEARS: 0.80 }
+  };
+
+  const DRAFT_LOGIC_CONFIG = {
+    POSITION_WEIGHTS: {
+      'QB': 8,   'RB': 15,  'WR': 25,  'TE': 12,  'OL': 35,
+      'DL': 30,  'LB': 20,  'CB': 18,  'S': 15,   'K': 3,   'P': 2
+    },
+    TALENT_TIERS: [
+      { maxIndex: 32, mean: 81, stdDev: 4 },
+      { maxIndex: 64, mean: 75, stdDev: 4 },
+      { maxIndex: 96, mean: 70, stdDev: 4 },
+      { maxIndex: 160, mean: 64, stdDev: 4 },
+      { maxIndex: 224, mean: 58, stdDev: 3 },
+      { default: true, mean: 53, stdDev: 3 }
+    ],
+    BOOM_BUST_THRESHOLDS: { BOOM: 6, BUST: -6 },
+    ROOKIE_WAGE_SCALE: {
+      1: { min: 4.0, max: 8.5 },
+      2: { min: 2.5, max: 4.0 },
+      3: { min: 1.8, max: 2.5 },
+      4: { min: 1.2, max: 1.8 },
+      5: { min: 0.9, max: 1.2 },
+      6: { min: 0.7, max: 0.9 },
+      7: { min: 0.5, max: 0.7 }
+    }
+  };
+
+  const LEAGUE_GEN_CONFIG = {
+    STARTERS_COUNT: {
+      QB: 1, RB: 1, WR: 3, TE: 1, OL: 5,
+      DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1
+    },
+    ROSTER_OVR_RANGES: {
+      STAR: [82, 95],
+      STARTER: [76, 90],
+      BACKUP: [65, 75],
+      DEPTH: [60, 74]
+    }
+  };
+
+  // --- X. EXPORT EVERYTHING ---
   const Constants = {
     GAME_CONFIG,
     SALARY_CAP,
@@ -267,6 +398,15 @@
     OVR_WEIGHTS, POS_RATING_RANGES,
     OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
     POSITION_TRAINING_WEIGHTS,
+
+    // New Configurations
+    PLAYOFF_CONFIG,
+    SIM_CONFIG,
+    CONTRACT_MGMT,
+    SCOUTING_CONFIG,
+    TRADE_LOGIC_CONFIG,
+    DRAFT_LOGIC_CONFIG,
+    LEAGUE_GEN_CONFIG,
 
     // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
     get FIRST_NAMES() { return getFirstNames(); },

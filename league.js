@@ -55,25 +55,23 @@ const initializeRoster = (team, Constants, Utils, makePlayer) => {
     const totalPlayersNeeded = positions.reduce((sum, pos) => sum + Constants.DEPTH_NEEDS[pos], 0);
     let playersCreated = 0;
 
+    const LG = Constants.LEAGUE_GEN_CONFIG || {};
     positions.forEach(pos => {
         const count = Constants.DEPTH_NEEDS[pos];
         for (let j = 0; j < count; j++) {
-            // Logic for rating ranges (simplified OVR targets)
-            let ovrRange = [65, 75]; // Default backup range
+            // Logic for rating ranges (simplified OVR targets) from Constants
+            let ovrRange = LG.ROSTER_OVR_RANGES?.BACKUP || [65, 75]; // Default backup range
 
             // Starters should be better
-            const startersCount = {
-                QB: 1, RB: 1, WR: 3, TE: 1, OL: 5,
-                DL: 4, LB: 3, CB: 2, S: 2, K: 1, P: 1
-            }[pos] || 1;
+            const startersCount = (LG.STARTERS_COUNT && LG.STARTERS_COUNT[pos]) || 1;
 
             if (j < startersCount) {
-                ovrRange = [76, 90]; // Starter material
+                ovrRange = LG.ROSTER_OVR_RANGES?.STARTER || [76, 90]; // Starter material
                 if (j === 0 && ['QB', 'WR', 'DL', 'LB'].includes(pos)) {
-                    ovrRange = [82, 95]; // Star material
+                    ovrRange = LG.ROSTER_OVR_RANGES?.STAR || [82, 95]; // Star material
                 }
             } else {
-                ovrRange = [60, 74]; // Depth
+                ovrRange = LG.ROSTER_OVR_RANGES?.DEPTH || [60, 74]; // Depth
             }
 
             const ovr = Utils.rand(ovrRange[0], ovrRange[1]);
@@ -163,7 +161,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
 
     try {
         // Configuration
-        const leagueYear = options.year || (typeof window !== 'undefined' && window.state?.year) || 2025;
+        const leagueYear = options.year || (typeof window !== 'undefined' && window.state?.year) || Constants.GAME_CONFIG.YEAR_START;
         const startPoint = options.startPoint || 'regular';
 
         const league = {
