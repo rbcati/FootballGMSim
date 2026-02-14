@@ -2,6 +2,7 @@
 'use strict';
 
 import { saveState } from './state.js';
+import { launchConfetti } from './confetti.js';
 
 /**
  * Generate draft prospects for upcoming draft
@@ -838,6 +839,10 @@ function makeDraftPickEnhanced(teamId, prospectId) {
     }
 
     window.setStatus(`${team.name} selects ${prospect.name} (${prospect.pos}) - Pick ${currentPick.pick}`);
+
+    if (teamId === window.state.userTeamId && window.soundManager?.playDraftPick) {
+        window.soundManager.playDraftPick();
+    }
 
     // Auto-pick for CPU teams
     if (teamId !== window.state.userTeamId && draftState.currentPick < draftState.draftBoard.length) {
@@ -1678,6 +1683,16 @@ function showDraftRevealModal(player, status, title, message) {
 
     // Auto-dismiss after 5 seconds if not clicked (optional, but good for flow)
     // setTimeout(() => { if(document.body.contains(modal)) modal.remove(); }, 5000);
+
+    // Audio/Visual Feedback
+    if (status === 'GEM' || status === 'SLEEPER') {
+        if (window.soundManager?.playGemReveal) window.soundManager.playGemReveal();
+        if (launchConfetti) launchConfetti();
+    } else if (status === 'BUST') {
+        if (window.soundManager?.playBustReveal) window.soundManager.playBustReveal();
+    } else {
+        if (window.soundManager?.playDraftPick) window.soundManager.playDraftPick();
+    }
 }
 
 // Make functions globally available
