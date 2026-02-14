@@ -264,12 +264,14 @@ window.fillTeamSelect = function(selectElement, mode = window.state?.namesMode |
     selectElement.innerHTML = '';
 
     // Add team options
+    const fragment = document.createDocumentFragment();
     teams.forEach((team, index) => {
       const option = document.createElement('option');
       option.value = String(index);
       option.textContent = `${team.abbr} — ${team.name}`;
-      selectElement.appendChild(option);
+      fragment.appendChild(option);
     });
+    selectElement.appendChild(fragment);
 
     // Set default selection
     if (window.state?.userTeamId !== undefined && window.state.userTeamId < teams.length) {
