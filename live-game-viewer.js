@@ -78,10 +78,12 @@ class LiveGameViewer {
   /**
    * Helper to check if UI is available
    */
-  checkUI() {
+  checkUI(force = false) {
     if (this.viewMode) {
       // Ensure container is in DOM AND visible (not hidden by router)
-      return this.container && document.body.contains(this.container) && this.container.offsetParent !== null;
+      // Force skips visibility check (offsetParent) for initial render
+      const exists = this.container && document.body.contains(this.container);
+      return force ? exists : (exists && this.container.offsetParent !== null);
     }
     // Modal check
     return this.modal && document.body.contains(this.modal) && !this.modal.hidden && this.modal.style.display !== 'none';
@@ -328,7 +330,7 @@ class LiveGameViewer {
         }
     }
 
-    this.renderGame();
+    this.renderGame(true);
   }
 
   /**
@@ -1088,6 +1090,11 @@ class LiveGameViewer {
       console.error('Invalid teams for live game');
       return;
     }
+
+    // Ensure clean state
+    this.stopGame();
+    this.isGameEnded = false;
+    this.isProcessingTurn = false;
 
     this.userTeamId = userTeamId;
 
@@ -2362,8 +2369,8 @@ class LiveGameViewer {
   /**
    * Update scoreboard display
    */
-  updateScoreboard() {
-    if (!this.checkUI()) return; // Safety guard
+  updateScoreboard(force = false) {
+    if (!this.checkUI(force)) return; // Safety guard
     const parent = this.viewMode ? this.container : this.modal;
 
     const scoreboard = parent.querySelector('.scoreboard');
@@ -3153,8 +3160,8 @@ class LiveGameViewer {
   /**
    * Render game UI
    */
-  renderGame() {
-    if (!this.checkUI()) return;
+  renderGame(force = false) {
+    if (!this.checkUI(force)) return;
     if (!this.gameState) return;
 
     // Ensure field is rendered if empty
@@ -3164,7 +3171,7 @@ class LiveGameViewer {
         this.renderField();
     }
 
-    this.updateScoreboard();
+    this.updateScoreboard(force);
     this.updateField(this.gameState);
     this.renderBoxScore();
     this.renderMomentum();
