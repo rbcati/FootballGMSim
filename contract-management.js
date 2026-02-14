@@ -26,17 +26,18 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-// Contract management constants
+// Use central Constants for contract management logic
+const C = (typeof window !== 'undefined' ? window.Constants : null) || { CONTRACT_MGMT: {} };
 const CONTRACT_CONSTANTS = {
-  FRANCHISE_TAG_MULTIPLIER: 1.2, // 120% of top 5 salaries at position
-  TRANSITION_TAG_MULTIPLIER: 1.1, // 110% of top 10 salaries at position
-  FIFTH_YEAR_OPTION_MULTIPLIER: 1.25, // Increased multiplier for more realism
-  MAX_FRANCHISE_TAGS: 1, 
-  MAX_TRANSITION_TAGS: 1, 
-  EXTENSION_MIN_YEARS: 2,
-  EXTENSION_MAX_YEARS: 7, // Increased max years for big deals
-  ROOKIE_CONTRACT_LENGTH: 4, 
-  MAX_GUARANTEED_PCT: 0.95 // Maximum percentage of money that can be guaranteed
+  get FRANCHISE_TAG_MULTIPLIER() { return C.CONTRACT_MGMT.TAG_MULTIPLIERS?.FRANCHISE || 1.2; },
+  get TRANSITION_TAG_MULTIPLIER() { return C.CONTRACT_MGMT.TAG_MULTIPLIERS?.TRANSITION || 1.1; },
+  get FIFTH_YEAR_OPTION_MULTIPLIER() { return C.CONTRACT_MGMT.TAG_MULTIPLIERS?.FIFTH_YEAR || 1.25; },
+  get MAX_FRANCHISE_TAGS() { return C.CONTRACT_MGMT.MAX_TAGS?.FRANCHISE || 1; },
+  get MAX_TRANSITION_TAGS() { return C.CONTRACT_MGMT.MAX_TAGS?.TRANSITION || 1; },
+  get EXTENSION_MIN_YEARS() { return C.CONTRACT_MGMT.EXTENSION_LIMITS?.MIN || 2; },
+  get EXTENSION_MAX_YEARS() { return C.CONTRACT_MGMT.EXTENSION_LIMITS?.MAX || 7; },
+  get ROOKIE_CONTRACT_LENGTH() { return C.CONTRACT_MGMT.ROOKIE_CONTRACT_LENGTH || 4; },
+  get MAX_GUARANTEED_PCT() { return C.CONTRACT_MGMT.MAX_GUARANTEED_PCT || 0.95; }
 };
 
 /**
@@ -112,8 +113,8 @@ function calculateFranchiseTagSalary(position, league, cachedSalaries = null) {
   }
   
   if (allPlayerSalaries.length < 5) {
-    // Fallback if not enough players (using position estimates)
-    const estimates = { 'QB': 30, 'OL': 18, 'DL': 15, 'WR': 16, 'CB': 14, 'LB': 10, 'RB': 8, 'S': 9, 'TE': 7, 'K': 4, 'P': 3 };
+    // Fallback if not enough players (using position estimates from Constants)
+    const estimates = C.CONTRACT_MGMT.TAG_ESTIMATES?.FRANCHISE || { 'QB': 30, 'OL': 18, 'DL': 15, 'WR': 16, 'CB': 14, 'LB': 10, 'RB': 8, 'S': 9, 'TE': 7, 'K': 4, 'P': 3 };
     return estimates[position] || 10;
   }
   
@@ -148,8 +149,8 @@ function calculateTransitionTagSalary(position, league, cachedSalaries = null) {
   }
   
   if (allPlayerSalaries.length < 10) {
-    // Fallback if not enough players (slightly lower estimates than franchise)
-    const estimates = { 'QB': 25, 'OL': 15, 'DL': 12, 'WR': 13, 'CB': 11, 'LB': 8, 'RB': 6, 'S': 7, 'TE': 5, 'K': 3, 'P': 2 };
+    // Fallback if not enough players (slightly lower estimates from Constants)
+    const estimates = C.CONTRACT_MGMT.TAG_ESTIMATES?.TRANSITION || { 'QB': 25, 'OL': 15, 'DL': 12, 'WR': 13, 'CB': 11, 'LB': 8, 'RB': 6, 'S': 7, 'TE': 5, 'K': 3, 'P': 2 };
     return estimates[position] || 8;
   }
   
@@ -329,24 +330,27 @@ function calculatePlayerLeverage(player, league, team) {
   const pos = player.pos || 'RB';
   const character = player.character || {};
 
-  // Position value multipliers (same scale as salary calculation)
-  // UPDATED: Elite QBs now demand 2.5x base market value (Patrick Mahomes effect)
-  const posMultipliers = {
+  // Position value multipliers from Constants
+  const posMultipliers = C.CONTRACT_MGMT.LEVERAGE?.POS_MULTIPLIERS || {
     QB: 2.5, WR: 1.15, OL: 1.10, CB: 1.10, DL: 1.05,
     LB: 0.95, S: 0.90, TE: 0.85, RB: 0.70, K: 0.35, P: 0.30
   };
   const posMult = posMultipliers[pos] || 1.0;
 
-  // Base market value (what the open market would pay)
-  let marketAAV;
-  if (ovr >= 95) marketAAV = 26;
-  else if (ovr >= 90) marketAAV = 20;
-  else if (ovr >= 85) marketAAV = 15;
-  else if (ovr >= 80) marketAAV = 10;
-  else if (ovr >= 75) marketAAV = 6;
-  else if (ovr >= 70) marketAAV = 3.5;
-  else if (ovr >= 65) marketAAV = 2;
-  else marketAAV = 1;
+  // Base market value (what the open market would pay) - Uses ladder from Constants
+  let marketAAV = 1;
+  const ladder = C.CONTRACT_MGMT.LEVERAGE?.MARKET_AAV_LADDER || [
+      { ovr: 95, aav: 26 }, { ovr: 90, aav: 20 }, { ovr: 85, aav: 15 },
+      { ovr: 80, aav: 10 }, { ovr: 75, aav: 6 }, { ovr: 70, aav: 3.5 },
+      { ovr: 65, aav: 2 }, { ovr: 0, aav: 1 }
+  ];
+
+  for (const tier of ladder) {
+      if (ovr >= tier.ovr) {
+          marketAAV = tier.aav;
+          break;
+      }
+  }
 
   marketAAV *= posMult;
 
@@ -778,7 +782,7 @@ function calculateNextYearCapSpace(league, team) {
   const expiringIds = new Set(expiring.map(p => p.id));
   
   let projectedUsed = 0;
-  let projectedDead = team.deadCapBook?.[(league.season || league.year || 2025) + 1] || 0;
+  let projectedDead = team.deadCapBook?.[(league.season || league.year || Constants.GAME_CONFIG.YEAR_START) + 1] || 0;
   
   (team.roster || []).forEach(player => {
     if (!expiringIds.has(player.id) && player.years > 1) {
@@ -998,15 +1002,15 @@ window.openContractExtensionModal = function(playerId) {
             
             <div class="form-group" style="margin-bottom: 15px;">
               <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text);">Years to Add</label>
-              <input type="number" id="extYears" min="2" max="7" value="4" 
+              <input type="number" id="extYears" min="${CONTRACT_CONSTANTS.EXTENSION_MIN_YEARS}" max="${CONTRACT_CONSTANTS.EXTENSION_MAX_YEARS}" value="4"
                      style="width: 100%; padding: 10px; border-radius: 6px; background: var(--surface); color: var(--text); border: 1px solid var(--hairline); font-size: 14px;"
                      onchange="updateExtensionSummary()" oninput="updateExtensionSummary()">
-              <small style="color: var(--text-muted); font-size: 12px; display: block; margin-top: 5px;">Add 2-7 years to existing contract</small>
+              <small style="color: var(--text-muted); font-size: 12px; display: block; margin-top: 5px;">Add ${CONTRACT_CONSTANTS.EXTENSION_MIN_YEARS}-${CONTRACT_CONSTANTS.EXTENSION_MAX_YEARS} years to existing contract</small>
             </div>
 
             <div class="form-group" style="margin-bottom: 15px;">
               <label style="display: block; margin-bottom: 8px; font-weight: 500; color: var(--text);">Average Annual Salary ($M)</label>
-              <input type="number" id="extBaseSalary" min="0.5" step="0.1" value="${currentCapHit.toFixed(1)}"
+              <input type="number" id="extBaseSalary" min="${C.CONTRACT_MGMT.MIN_BASE_SALARY || 0.5}" step="0.1" value="${currentCapHit.toFixed(1)}"
                      style="width: 100%; padding: 10px; border-radius: 6px; background: var(--surface); color: var(--text); border: 1px solid var(--hairline); font-size: 14px;"
                      onchange="updateExtensionSummary()" oninput="updateExtensionSummary()">
               <small style="color: var(--text-muted); font-size: 12px; display: block; margin-top: 5px;">Base salary per year</small>
@@ -1166,13 +1170,14 @@ window.submitContractExtension = function(playerId) {
   const baseSalary = parseFloat(baseSalaryEl.value || '0', 10);
   const signingBonus = parseFloat(signingBonusEl.value || '0', 10);
 
-  if (years < 2 || years > 7) {
-    setStatus('Years must be between 2 and 7', 'error');
+  if (years < CONTRACT_CONSTANTS.EXTENSION_MIN_YEARS || years > CONTRACT_CONSTANTS.EXTENSION_MAX_YEARS) {
+    setStatus(`Years must be between ${CONTRACT_CONSTANTS.EXTENSION_MIN_YEARS} and ${CONTRACT_CONSTANTS.EXTENSION_MAX_YEARS}`, 'error');
     return;
   }
 
-  if (baseSalary < 0.5) {
-    setStatus('Base salary must be at least $0.5M', 'error');
+  const minBase = C.CONTRACT_MGMT.MIN_BASE_SALARY || 0.5;
+  if (baseSalary < minBase) {
+    setStatus(`Base salary must be at least $${minBase}M`, 'error');
     return;
   }
 
@@ -1207,8 +1212,9 @@ window.submitContractExtension = function(playerId) {
   const offerAAV = baseSalary + (signingBonus / years);
   const ratio = offerAAV / Math.max(0.1, marketValue);
 
-  // 3. Lowball Logic (< 0.75)
-  if (ratio < 0.75) {
+  // 3. Lowball Logic from Constants
+  const thresholds = C.CONTRACT_MGMT.NEGOTIATION_THRESHOLDS || { LOWBALL: 0.75, OVERPAY: 1.10 };
+  if (ratio < thresholds.LOWBALL) {
       // 30% Chance of Insult
       if ((window.Utils?.random || Math.random)() < 0.30) {
           player.negotiationStatus = 'LOCKED';
@@ -1235,8 +1241,8 @@ window.submitContractExtension = function(playerId) {
       }
   }
 
-  // 4. Overpay Logic (> 1.10)
-  if (ratio > 1.10) {
+  // 4. Overpay Logic from Constants
+  if (ratio > thresholds.OVERPAY) {
       player.morale = Math.min(100, (player.morale || 50) + 5);
       // Visual feedback handled by success message
   }
@@ -1244,7 +1250,7 @@ window.submitContractExtension = function(playerId) {
   const result = extendContract(league, team, player, years, baseSalary, signingBonus);
   
   if (result.success) {
-    if (ratio > 1.10) {
+    if (ratio > thresholds.OVERPAY) {
         setStatus(`ECSTATIC! Player accepted immediately. (+5 Morale)`, 'success');
     } else {
         setStatus(result.message, 'success');

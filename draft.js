@@ -22,8 +22,8 @@ function generateProspects(year) {
   const prospects = [];
   const totalProspects = C.DRAFT_CONFIG?.TOTAL_PROSPECTS || 250;
   
-  // Position distribution (realistic for NFL draft)
-  const positionWeights = {
+  // Position distribution (realistic for NFL draft) from Constants
+  const positionWeights = C.DRAFT_LOGIC_CONFIG?.POSITION_WEIGHTS || {
     'QB': 8,   'RB': 15,  'WR': 25,  'TE': 12,  'OL': 35,
     'DL': 30,  'LB': 20,  'CB': 18,  'S': 15,   'K': 3,   'P': 2
   };
@@ -105,22 +105,15 @@ function makeProspect(year, index, weightedPositions) {
     const pos = U.choice(weightedPositions || C.POSITIONS);
     const age = U.rand(21, 23); // College players
 
-    // --- TALENT TIER: Gaussian distribution with overlapping ranges ---
-    // Instead of hard index cutoffs, use Gaussian noise so talent tiers overlap.
-    // A "2nd round talent" CAN be better than a "1st round talent" (~15% of the time).
-    let tierMean, tierStdDev;
-    if (index < 32) {
-      tierMean = 81; tierStdDev = 4;    // 1st round: 73-89 typical
-    } else if (index < 64) {
-      tierMean = 75; tierStdDev = 4;    // 2nd round: 67-83 typical
-    } else if (index < 96) {
-      tierMean = 70; tierStdDev = 4;    // 3rd round: 62-78 typical
-    } else if (index < 160) {
-      tierMean = 64; tierStdDev = 4;    // 4th-5th round: 56-72 typical
-    } else if (index < 224) {
-      tierMean = 58; tierStdDev = 3;    // 6th-7th round: 52-64 typical
-    } else {
-      tierMean = 53; tierStdDev = 3;    // UDFA tier: 47-59 typical
+    // --- TALENT TIER: Gaussian distribution from Constants ---
+    let tierMean = 53, tierStdDev = 3;
+    const tiers = C.DRAFT_LOGIC_CONFIG?.TALENT_TIERS || [];
+    for (const tier of tiers) {
+        if (tier.default || index < tier.maxIndex) {
+            tierMean = tier.mean;
+            tierStdDev = tier.stdDev;
+            break;
+        }
     }
     const baseOvr = Math.round(U.clamp(gaussianRandom(tierMean, tierStdDev), 40, 95));
 
@@ -147,12 +140,13 @@ function makeProspect(year, index, weightedPositions) {
     const boomFactor = Math.max(0, developmentAxis);   // 0-10, only positive
     const bustFactor = Math.max(0, -developmentAxis);   // 0-10, only negative axis
 
-    // --- POTENTIAL: Driven by development axis ---
+    // --- POTENTIAL: Driven by development axis (Thresholds from Constants) ---
     let potential;
-    if (developmentAxis >= 6) {
+    const boomBust = C.DRAFT_LOGIC_CONFIG?.BOOM_BUST_THRESHOLDS || { BOOM: 6, BUST: -6 };
+    if (developmentAxis >= boomBust.BOOM) {
       // High boom: hidden gem potential — potential significantly above OVR
       potential = Math.min(99, baseOvr + U.rand(8, 18));
-    } else if (developmentAxis <= -6) {
+    } else if (developmentAxis <= boomBust.BUST) {
       // High bust: likely to stagnate or decline
       potential = Math.max(40, baseOvr - U.rand(0, 5));
     } else {
@@ -468,8 +462,9 @@ function generateCollegeStats(pos) {
  * Calculate rookie contract value
  */
 function calculateRookieContract(round, pick) {
-  // Simplified rookie wage scale
-  const roundValues = {
+  // Simplified rookie wage scale from Constants
+  const C = window.Constants;
+  const roundValues = C?.DRAFT_LOGIC_CONFIG?.ROOKIE_WAGE_SCALE || {
     1: { min: 4.0, max: 8.5 },
     2: { min: 2.5, max: 4.0 },
     3: { min: 1.8, max: 2.5 },

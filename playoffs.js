@@ -6,6 +6,7 @@ import GameRunner from './game-runner.js';
 import newsEngine from './news-engine.js';
 import { showWeeklyRecap } from './weekly-recap.js';
 import { startOffseason } from './simulation.js';
+import { Constants } from './constants.js';
 
 /**
  * Playoff Management System
@@ -14,11 +15,11 @@ import { startOffseason } from './simulation.js';
 
 // --- PLAYOFF STRUCTURE & GENERATION ---
 function generatePlayoffs(teams) {
-    // Define playoff constants since window.Constants.PLAYOFFS doesn't exist
-    const TEAMS_PER_CONF = 7; // 7 teams per conference make playoffs
+    // Define playoff constants from Constants
+    const TEAMS_PER_CONF = Constants.PLAYOFF_CONFIG.TEAMS_PER_CONF;
     
     const bracket = {
-        year: window.state?.league?.year || 2025,
+        year: window.state?.league?.year || Constants.GAME_CONFIG.YEAR_START,
         rounds: { afc: [[], [], []], nfc: [[], [], []], superbowl: [] },
         winner: null,
         currentRound: 0,
@@ -102,7 +103,7 @@ function simPlayoffWeek() {
         if (window.recordSuperBowl && window.state?.league) {
             const matchup = P.rounds.superbowl[0];
             const runnerUp = matchup.home.id === winner.id ? matchup.away : matchup.home;
-            const year = P.year || window.state.league.year || 2025;
+            const year = P.year || window.state.league.year || Constants.GAME_CONFIG.YEAR_START;
             window.recordSuperBowl(window.state.league, year, winner, runnerUp);
         }
         
