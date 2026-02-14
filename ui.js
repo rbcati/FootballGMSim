@@ -559,6 +559,33 @@ window.renderRoster = function() {
         const rosterTable = document.getElementById('rosterTable');
         if (!rosterTable) return;
 
+        // Prevent unnecessary re-renders
+        const currentViewMode = window.state.rosterViewMode || 'table';
+        if (!window.forceRosterRender &&
+            rosterTable.dataset.teamId === String(teamId) &&
+            rosterTable.dataset.viewMode === currentViewMode) {
+
+            // Ensure visibility is correct even on early return
+            const gridContainer = document.getElementById('rosterGrid');
+            if (currentViewMode === 'cards') {
+                rosterTable.style.display = 'none';
+                if(gridContainer) gridContainer.style.display = 'grid';
+            } else {
+                rosterTable.style.display = 'table';
+                if(gridContainer) gridContainer.style.display = 'none';
+            }
+
+            console.log('Roster already rendered for team', teamId);
+            return;
+        }
+
+        // Reset force flag
+        window.forceRosterRender = false;
+
+        // Update state tracking
+        rosterTable.dataset.teamId = String(teamId);
+        rosterTable.dataset.viewMode = currentViewMode;
+
         // --- Card View Implementation ---
         if (!window.state.rosterViewMode) window.state.rosterViewMode = 'table';
 

@@ -676,6 +676,7 @@ function releaseSelected(selectedIds) {
   }
   
   // Refresh UI
+  window.forceRosterRender = true;
   if (window.renderRoster) window.renderRoster();
   if (window.updateCapSidebar) window.updateCapSidebar();
   
