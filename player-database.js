@@ -35,10 +35,11 @@
 
   /**
    * Get the best player in the game
+   * @param {Array} [players] - Optional array of players to use (optimization)
    * @returns {Object} Best player object
    */
-  function getBestPlayer() {
-    const allPlayers = getAllPlayers();
+  function getBestPlayer(players) {
+    const allPlayers = players || getAllPlayers();
     if (allPlayers.length === 0) return null;
 
     // Sort by effective rating if available, otherwise by OVR
@@ -160,7 +161,7 @@
     }
 
     // Get best player
-    const bestPlayer = getBestPlayer();
+    const bestPlayer = getBestPlayer(allPlayers);
 
     // OPTIMIZATION: Do not pre-calculate legacy for all players.
     // Calculations are deferred until rendering (page view) or sorting (if needed).
@@ -347,8 +348,27 @@
    * Show detailed player view from database
    */
   window.showPlayerDatabaseDetails = function(playerId) {
-    const allPlayers = getAllPlayers();
-    const player = allPlayers.find(p => p.id === playerId);
+    // OPTIMIZATION: Search directly instead of generating all player objects
+    let player = null;
+    const L = window.state?.league;
+
+    if (L && L.teams) {
+      for (const team of L.teams) {
+        if (team.roster) {
+          const found = team.roster.find(p => p.id === playerId);
+          if (found) {
+            // Create view model on demand
+            player = {
+              ...found,
+              teamName: team.name,
+              teamAbbr: team.abbr,
+              teamId: team.id
+            };
+            break;
+          }
+        }
+      }
+    }
     
     if (!player) {
       window.setStatus('Player not found');
