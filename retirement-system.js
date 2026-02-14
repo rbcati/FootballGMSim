@@ -52,7 +52,16 @@
       announcements.forEach(ann => {
         console.log(ann);
         if (league.news && Array.isArray(league.news)) {
-          league.news.push(ann);
+          // Filter out less significant retirements from global news feed to prevent spam
+          // Include if: Star player (OVR > 80), Long career (> 10 years), or Award winner
+          // We check the announcement text for key achievements which are added by createRetirementAnnouncement
+          const isNotable = ann.includes('passing yards') || ann.includes('rushing yards') ||
+                            ann.includes('sacks') || ann.includes('interceptions') ||
+                            ann.includes('Awards:') || ann.includes('Super Bowl');
+
+          if (isNotable) {
+              league.news.push(ann);
+          }
         }
       });
     }
