@@ -565,7 +565,9 @@ class LiveGameViewer {
                   return resolve();
               }
 
+              // RACE CONDITION FIX: Check skipping flag INSIDE loop
               if (this.isSkipping) {
+                   // Ensure final state is applied instantly
                    element.style.left = `${endX}%`;
                    if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
                    if (shadowEl) {
@@ -573,6 +575,8 @@ class LiveGameViewer {
                        shadowEl.style.transform = `translate(-50%, -50%)`;
                        shadowEl.style.opacity = 1;
                    }
+                   if (options.animationClass) element.classList.remove(options.animationClass);
+                   element.style.transition = ''; // Restore transitions
                    return resolve();
               }
 
@@ -657,7 +661,7 @@ class LiveGameViewer {
               }
           };
 
-          requestAnimationFrame(animate);
+          this.animationFrameId = requestAnimationFrame(animate);
       });
   }
 
@@ -3465,6 +3469,11 @@ class LiveGameViewer {
   destroy() {
     // Ensure all timers and loops are stopped
     this.stopGame();
+
+    if (this.animationFrameId) {
+        cancelAnimationFrame(this.animationFrameId);
+        this.animationFrameId = null;
+    }
 
     this.isPlaying = false;
     this.isPaused = true;
