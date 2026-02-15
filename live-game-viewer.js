@@ -702,6 +702,27 @@ class LiveGameViewer {
       if (this.tempo === 'hurry-up') durationScale = 0.5;
       if (this.tempo === 'slow') durationScale = 2.0;
 
+      // Slow-Mo for Big Plays
+      if (play.result === 'big_play') {
+          durationScale *= 1.5;
+          const root = this.viewMode ? this.container : this.modal;
+          const fieldWrapper = root ? root.querySelector('.field-wrapper') : null;
+          if (fieldWrapper) {
+              fieldWrapper.style.transition = 'transform 1s ease';
+              fieldWrapper.style.transform = 'scale(1.05)';
+              this.setTimeoutSafe(() => fieldWrapper.style.transform = 'scale(1)', 2000 * durationScale);
+          }
+      }
+
+      // Critical Moment Heartbeat
+      const scoreDiff = Math.abs(this.gameState.home.score - this.gameState.away.score);
+      const isCritical = this.gameState.quarter >= 4 && scoreDiff <= 8 && play.down >= 3;
+
+      if (isCritical && !play.playType.includes('kick') && !play.playType.includes('punt')) {
+          soundManager.playHeartbeat();
+          if (play.down === 4) this.triggerFloatText('CRITICAL DOWN', 'warning');
+      }
+
       // Use startState.possession to determine perspective during the play (before any switch)
       const playPossession = startState ? startState.possession : this.gameState.ballPossession;
       const isHome = playPossession === 'home';
@@ -2176,10 +2197,10 @@ class LiveGameViewer {
             this.setTimeoutSafe(() => soundManager.playHorns(), 500); // Delayed horns
             soundManager.playCheer();
             this.triggerFlash();
-            this.triggerShake(); // Add shake!
-            this.triggerShake(); // Added Juice
+            this.triggerShake('hard'); // Intense shake
             this.triggerFloatText('TOUCHDOWN!');
-            launchConfetti();
+            if (launchConfetti) launchConfetti('cannon');
+            if (soundManager && soundManager.playCannon) soundManager.playCannon();
             this.triggerVisualFeedback('goal touchdown', 'TOUCHDOWN!');
             // Ensure particles trigger even if animation skipped slightly
             if (this.fieldEffects) {
@@ -2211,6 +2232,7 @@ class LiveGameViewer {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
 
+            this.triggerShake('hard');
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFieldGoalMiss();
@@ -2251,7 +2273,7 @@ class LiveGameViewer {
                 soundManager.playCheer();
                 soundManager.playHorns();
                 soundManager.playVictory();
-                launchConfetti();
+                if (launchConfetti) launchConfetti('victory');
                 this.triggerVisualFeedback('goal victory', 'VICTORY!');
             } else {
                 soundManager.playWhistle();

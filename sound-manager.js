@@ -260,6 +260,20 @@ class SoundManager {
         this.playNoise(0.5, 0.4); // Explosion
     }
 
+    playHeartbeat() {
+        if (!this.enabled || this.muted) return;
+        // Low thud-thud
+        this.playTone(60, 'sine', 0.1, 0.5);
+        this.playTone(50, 'sine', 0.1, 0.4, null, 150);
+    }
+
+    playCannon() {
+        if (!this.enabled || this.muted) return;
+        // heavy explosion
+        this.playNoise(0.5, 0.8);
+        this.playTone(40, 'sawtooth', 0.5, 0.5); // Bass rumble
+    }
+
     playCrowdGasp() {
         if (!this.enabled || this.muted) return;
         this.playNoise(0.4, 0.3); // Short noise

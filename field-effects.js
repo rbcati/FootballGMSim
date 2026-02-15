@@ -128,9 +128,9 @@ export class FieldEffects {
                       type === 'defense_stop' ? 45 :
                       type === 'interception' ? 50 :
                       type === 'fumble' ? 35 :
-                      type === 'shockwave' ? 100 :
+                      type === 'shockwave' ? 3 :
                       type === 'spiral' ? 40 :
-                      type === 'fire' ? 5 :
+                      type === 'fire' ? 30 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
                       type === 'big_play' ? 60 : 25;
@@ -239,13 +239,15 @@ export class FieldEffects {
             p.size = rand() * 4 + 2;
             p.gravity = 0.05;
         } else if (type === 'shockwave') {
-             const angle = (Math.random() * Math.PI * 2);
-             const speed = Math.random() * 10 + 5;
-             p.vx = Math.cos(angle) * speed;
-             p.vy = Math.sin(angle) * speed;
+             // Expanding ring effect
+             p.vx = 0;
+             p.vy = 0;
              p.color = 'rgba(255, 255, 255, 0.8)';
-             p.decay = 0.05;
-             p.size = Math.random() * 3 + 2;
+             p.decay = 0.02;
+             p.size = 1; // Start small
+             p.maxSize = 100 + Math.random() * 50; // Grow large
+             p.growthRate = 5;
+             p.lineWidth = 3;
         } else if (type === 'spiral') {
              const angle = (Math.random() * Math.PI * 2);
              const speed = Math.random() * 5 + 2;
@@ -261,9 +263,11 @@ export class FieldEffects {
              p.y = this.canvas.height; // Bottom
              p.vx = (Math.random() - 0.5) * 2;
              p.vy = -(Math.random() * 5 + 2); // Up
-             p.color = Math.random() > 0.5 ? '#FF4500' : '#FFD700'; // OrangeRed / Gold
-             p.decay = 0.01;
-             p.size = Math.random() * 5 + 2;
+             // Use gradient colors
+             const colors = ['#FF0000', '#FF4500', '#FF8C00', '#FFD700', '#FFFF00'];
+             p.color = colors[Math.floor(Math.random() * colors.length)];
+             p.decay = 0.015;
+             p.size = Math.random() * 6 + 3;
         } else if (type === 'trail') {
              p.color = 'rgba(255, 255, 255, 0.5)';
              p.size = (Math.random() * 3) + 1;
@@ -352,12 +356,25 @@ export class FieldEffects {
             if (p.type === 'fire') {
                 p.vx += (Math.random() - 0.5) * 0.5; // Wobble
             }
+            if (p.type === 'shockwave') {
+                p.size += p.growthRate;
+                p.lineWidth = Math.max(0.1, p.lineWidth - 0.05);
+            }
 
             this.ctx.globalAlpha = p.life;
-            this.ctx.fillStyle = p.color;
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fill();
+
+            if (p.type === 'shockwave') {
+                this.ctx.strokeStyle = p.color;
+                this.ctx.lineWidth = p.lineWidth;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                this.ctx.stroke();
+            } else {
+                this.ctx.fillStyle = p.color;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
 
         this.ctx.globalAlpha = 1;
