@@ -78,9 +78,9 @@ export function showWeeklyRecap(week, results, news) {
         const rivalry = userTeam.rivalries ? userTeam.rivalries[oppId] : null;
         if (rivalry && rivalry.score > 50) {
             if (win) {
-                 resultText = rivalry.score > 80 ? "DOMINATED RIVAL" : "RIVALRY VICTORY";
+                 resultText = rivalry.score > 80 ? "OWNING THE RIVALRY" : "RIVALRY VICTORY";
             } else {
-                 resultText = rivalry.score > 80 ? "CRUSHING LOSS" : "BITTER DEFEAT";
+                 resultText = rivalry.score > 80 ? "HUMILIATING DEFEAT" : "BITTER RIVALRY LOSS";
             }
             highStakesClass = 'high-stakes';
         }
@@ -96,17 +96,17 @@ export function showWeeklyRecap(week, results, news) {
 
             if (isSeed) {
                  if (win) {
-                     resultText = "PLAYOFF PUSH";
-                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION LEADER";
+                     resultText = "MARCH TO THE PLAYOFFS";
+                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "COMMANDING THE DIVISION";
                      // If seed 1
-                     if (playoffs.playoffs[0].id === userTeamId) resultText = "TOP SEED PACE";
+                     if (playoffs.playoffs[0].id === userTeamId) resultText = "PATH TO THE #1 SEED";
                  } else {
-                     resultText = "SETBACK";
-                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION RACE TIGHTENS";
+                     resultText = "PLAYOFF SETBACK";
+                     if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION LEAD SHRINKS";
                  }
                  highStakesClass = 'high-stakes';
             } else if (isBubble) {
-                 resultText = win ? "HOPE ALIVE" : "SLIPPING AWAY";
+                 resultText = win ? "PLAYOFF DREAMS ALIVE" : "HOPE FADING FAST";
                  highStakesClass = 'high-stakes';
             }
 

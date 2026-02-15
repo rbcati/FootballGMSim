@@ -178,7 +178,7 @@ function calculateTeamRanks(league) {
 class GameController {
     constructor() {
         this.domCache = new Map();
-        this.eventListeners = new Map();
+        this.eventListeners = new Map(); // Map<Element, Map<EventName, Handler>>
         this.initialized = false;
         this.initPromise = null;
     }
@@ -2444,19 +2444,25 @@ class GameController {
     }
 
     addEventListener(element, event, handler) {
-        const key = `${element.constructor.name}_${event}`;
-        if (this.eventListeners.has(key)) {
-            element.removeEventListener(event, this.eventListeners.get(key));
+        if (!element) return;
+        if (!this.eventListeners.has(element)) {
+            this.eventListeners.set(element, new Map());
         }
+        const elementListeners = this.eventListeners.get(element);
+
+        if (elementListeners.has(event)) {
+            element.removeEventListener(event, elementListeners.get(event));
+        }
+
         element.addEventListener(event, handler);
-        this.eventListeners.set(key, handler);
+        elementListeners.set(event, handler);
     }
 
     removeAllEventListeners() {
-        this.eventListeners.forEach((handler, key) => {
-            const [elementType, event] = key.split('_');
-            const element = elementType === 'Window' ? window : document;
-            element.removeEventListener(event, handler);
+        this.eventListeners.forEach((listeners, element) => {
+            listeners.forEach((handler, event) => {
+                element.removeEventListener(event, handler);
+            });
         });
         this.eventListeners.clear();
     }
