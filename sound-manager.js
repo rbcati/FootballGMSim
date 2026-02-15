@@ -266,6 +266,47 @@ class SoundManager {
         this.playTone(300, 'triangle', 0.3, 0.1, 200); // Downward slide
     }
 
+    playTradeAccepted() {
+        if (!this.enabled || this.muted) return;
+        // Cash register / Success chime
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C E G C
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'sine', 0.1, 0.2, null, i * 50);
+        });
+        this.playTone(1046.50, 'square', 0.4, 0.1, null, 200); // Ding
+    }
+
+    playDraftPick() {
+        if (!this.enabled || this.muted) return;
+        // Pop sound
+        this.playTone(400, 'sine', 0.1, 0.2, 600); // Slide up quickly
+    }
+
+    playGemReveal() {
+        if (!this.enabled || this.muted) return;
+        // Sparkly Arpeggio
+        const notes = [1046.50, 1318.51, 1567.98, 2093.00];
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'triangle', 0.3, 0.1, null, i * 80);
+            this.playTone(freq * 1.5, 'sine', 0.3, 0.05, null, i * 80 + 40);
+        });
+        this.playNoise(1.0, 0.1); // Shimmer
+    }
+
+    playBustReveal() {
+        if (!this.enabled || this.muted) return;
+        // Sad trombone-ish
+        this.playTone(150, 'sawtooth', 0.4, 0.2);
+        this.playTone(140, 'sawtooth', 0.4, 0.2, 135, 300);
+        this.playTone(130, 'sawtooth', 0.8, 0.2, 120, 600);
+    }
+
+    playGameStart() {
+        if (!this.enabled || this.muted) return;
+        this.playWhistle();
+        this.playCheer();
+    }
+
     toggleMute() {
         this.muted = !this.muted;
         return this.muted;

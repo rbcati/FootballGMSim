@@ -1973,6 +1973,12 @@ class LiveGameViewer {
     this.isPlaying = true;
     this.isPaused = false;
     this.currentPlayIndex = 0;
+
+    // Play kickoff sound if starting from beginning
+    if (this.currentPlayIndex === 0 && soundManager.playGameStart) {
+        soundManager.playGameStart();
+    }
+
     this.displayNextPlay();
   }
 

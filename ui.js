@@ -1,4 +1,5 @@
 import { generateAITradeProposals, renderTradeProposals } from './tradeproposals.js';
+import { launchConfetti } from './confetti.js';
 import { saveState } from './state.js';
 import { generateDepthChart, renderDepthChart, movePlayerDepth, initializeDepthChartStats, calculateEffectiveRating, generateDraftClass } from './player.js';
 import { toggleFollow, getPlayerInterestReason } from './player-tracking.js';
@@ -3046,6 +3047,11 @@ window.renderTradeCenter = function () {
       }
 
       info.textContent = 'Trade completed! 🥳 Time to check the roster.';
+
+      // Game Juice
+      if (window.soundManager?.playTradeAccepted) window.soundManager.playTradeAccepted();
+      if (launchConfetti) launchConfetti();
+
       clearSelections();
       // league mutated in-place by trade.js; just re-render lists
       renderTeamLists();
