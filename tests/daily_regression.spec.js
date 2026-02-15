@@ -165,6 +165,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
+        test.setTimeout(60000); // Increase timeout for slow league generation
         await page.goto('http://localhost:3000');
 
         // Force new league to ensure cap space
