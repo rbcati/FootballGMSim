@@ -409,7 +409,13 @@ class LiveGameViewer {
 
       // Detect Jump (> 5% difference implies teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 5;
+
+      // Also check LOS marker to prevent "sliding across field" on turnovers
+      const losCurrent = parseFloat(losEl ? losEl.style.left || '-1' : '-1');
+      const losDist = losEl ? Math.abs(pct - losCurrent) : 0;
+
+      // Teleport if ball moves significantly OR if LOS moves significantly (turnover/field flip)
+      const isTeleport = (currentLeft > 0 && dist > 5) || (losCurrent > 0 && losDist > 20);
 
       if (isTeleport) {
           // Fade Out Sequence
@@ -418,7 +424,7 @@ class LiveGameViewer {
               if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
           });
 
-          this.triggerShake();
+          if (dist > 5) this.triggerShake(); // Only shake if ball jumps (unexpected)
 
           this.setTimeoutSafe(() => {
               elements.forEach(e => {
@@ -551,7 +557,8 @@ class LiveGameViewer {
           };
 
           let easing = easeInOutQuad;
-          if (options.easing === 'linear') easing = easeLinear;
+          if (typeof options.easing === 'function') easing = options.easing;
+          else if (options.easing === 'linear') easing = easeLinear;
           else if (options.easing === 'easeOut') easing = easeOutQuad;
           else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
           else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
@@ -887,8 +894,8 @@ class LiveGameViewer {
                    if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
                    soundManager.playCatch();
                    if (skillMarker) {
-                       skillMarker.classList.add('marker-catch');
-                       this.setTimeoutSafe(() => skillMarker.classList.remove('marker-catch'), 500);
+                       skillMarker.classList.add('catch-jump');
+                       this.setTimeoutSafe(() => skillMarker.classList.remove('catch-jump'), 600);
                    }
               }
 
@@ -922,19 +929,19 @@ class LiveGameViewer {
 
           const animations = [];
 
-          // Use .run-bob instead of .bob for more energy
+          // Use .run-wobble instead of .run-bob for more energy
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-wobble'
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-wobble'
           }));
 
           // Def Logic: Chase
           if (defMarker) {
              animations.push(this.animateTrajectory(defMarker, {
-                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob' // Meet at tackle point
+                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-wobble' // Meet at tackle point
              }));
           }
 

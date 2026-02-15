@@ -2419,3 +2419,32 @@ body {
   font-size: 4rem;
   margin-bottom: 10px;
 }
+
+/* --- Enhanced Player Animations --- */
+
+@keyframes catch-jump {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  40% { transform: translate(-50%, -150%) scale(1.2); } /* Jump up */
+  60% { transform: translate(-50%, -50%) scale(0.9); } /* Land squat */
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.catch-jump {
+  animation: catch-jump 0.6s ease-in-out;
+}
+
+@keyframes run-wobble {
+  0% { transform: translate(-50%, -50%) rotate(0deg); }
+  25% { transform: translate(-50%, -50%) rotate(-5deg); }
+  75% { transform: translate(-50%, -50%) rotate(5deg); }
+  100% { transform: translate(-50%, -50%) rotate(0deg); }
+}
+
+.run-wobble {
+  animation: run-wobble 0.4s infinite linear;
+}
+
+/* Ensure markers transition smoothly */
+.player-marker {
+    transition: opacity 0.2s ease, transform 0.2s ease, left 0.5s linear;
+}
