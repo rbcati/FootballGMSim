@@ -982,12 +982,14 @@ export function simGameStats(home, away, options = {}) {
      * @param {number} defStr - Opposing defense strength
      * @param {number} advantage - Net strength advantage (positive = favored)
      * @param {Object} mods - Coaching/strategy modifiers
-     * @returns {number} Final score
+     * @returns {Object} { score, touchdowns, field_goals }
      */
     const simulateDrives = (offStr, defStr, advantage, mods) => {
         // NFL teams average ~12 possessions per game
         const numDrives = U.rand(10, 14);
         let score = 0;
+        let touchdowns = 0;
+        let field_goals = 0;
 
         // Base scoring probability calibrated to ~22 pts/game avg
         // offStr/defStr are roughly 50-90 range
@@ -1031,22 +1033,25 @@ export function simGameStats(home, away, options = {}) {
                     if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
                     else if (xpRoll < 0.97) score += 6; // Missed XP
                     else score += 8;                     // 2-point conversion
+                    touchdowns++;
                 } else {
                     score += 3; // Field goal
+                    field_goals++;
                 }
             }
             // Otherwise: punt, turnover, turnover on downs (no points)
         }
 
-        return score;
+        return { score, touchdowns, field_goals };
     };
 
-    let homeScore = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
-    let awayScore = simulateDrives(awayStrength, homeStrength, -strengthDiff, awayMods);
+    const homeRes = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
+    const awayRes = simulateDrives(awayStrength, homeStrength, -strengthDiff, awayMods);
 
-    // Ensure scores don't go negative (shouldn't happen with drive sim, but safety)
-    homeScore = Math.max(0, homeScore);
-    awayScore = Math.max(0, awayScore);
+    let homeScore = Math.max(0, homeRes.score);
+    let awayScore = Math.max(0, awayRes.score);
+    let homeTDs = homeRes.touchdowns;
+    let awayTDs = awayRes.touchdowns;
 
     // --- OVERTIME LOGIC ---
     // If tied at end of regulation, simulate OT
@@ -1088,8 +1093,13 @@ export function simGameStats(home, away, options = {}) {
 
             // Apply score
             if (drivePoints > 0) {
-                if (possession === 'home') homeScore += drivePoints;
-                else awayScore += drivePoints;
+                if (possession === 'home') {
+                    homeScore += drivePoints;
+                    if (drivePoints >= 6) homeTDs++;
+                } else {
+                    awayScore += drivePoints;
+                    if (drivePoints >= 6) awayTDs++;
+                }
             }
 
             // Apply NFL OT Rules (2024+: both teams guaranteed a possession)
@@ -1134,7 +1144,7 @@ export function simGameStats(home, away, options = {}) {
 
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
-    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods) => {
+    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs) => {
        team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
@@ -1197,48 +1207,71 @@ export function simGameStats(home, away, options = {}) {
     };
 
     // Pass the mods to the team generation
-    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods);
-    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods);
+    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs);
+    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs);
 
     // --- POST-GENERATION TD CONSISTENCY CHECK ---
     // Ensure total offensive TDs don't exceed what the score allows.
-    // Max possible TDs from score = Math.ceil(score / 6). A team scoring 14
-    // can have at most 2 TDs (14/6 = 2.33 → 2). This fixes the impossible
-    // stat lines where a team scoring 7 had a QB with 4 TDs.
-    const enforceScoreTdConsistency = (team, score, groups) => {
-      const maxTDs = Math.ceil(score / 6);
-      let totalTDs = 0;
+    // Uses actualTDs derived from drive simulation for strict accuracy.
+    const enforceScoreTdConsistency = (team, score, groups, limitTDs) => {
+      // Limit is either the simulated TDs or the theoretical max (fallback)
+      const maxTDs = limitTDs !== undefined ? limitTDs : Math.ceil(score / 6);
 
-      // Count all offensive TDs
-      const qb = (groups['QB'] || [])[0];
-      if (qb?.stats?.game?.passTD) totalTDs += qb.stats.game.passTD;
+      let totalScoringTDs = 0;
+      let totalRecTDs = 0;
 
       const allOffense = [...(groups['RB'] || []), ...(groups['WR'] || []), ...(groups['TE'] || [])];
       allOffense.forEach(p => {
-        if (p.stats?.game?.rushTD) totalTDs += p.stats.game.rushTD;
-        if (p.stats?.game?.recTD) totalTDs += p.stats.game.recTD;
+        if (p.stats?.game?.rushTD) totalScoringTDs += p.stats.game.rushTD;
+        if (p.stats?.game?.recTD) {
+            totalScoringTDs += p.stats.game.recTD;
+            totalRecTDs += p.stats.game.recTD;
+        }
       });
 
-      // If over budget, proportionally reduce TDs (largest first)
-      if (totalTDs > maxTDs && totalTDs > 0) {
-        const scaleFactor = maxTDs / totalTDs;
+      // 1. Enforce Scoring Limit (Rush + Rec <= Actual TDs)
+      // This prevents "Team score 7, but 2 players scored TDs"
+      if (totalScoringTDs > maxTDs) {
+        let attempts = 0;
+        while (totalScoringTDs > maxTDs && attempts < 100) {
+            attempts++;
 
-        if (qb?.stats?.game?.passTD) {
-          qb.stats.game.passTD = Math.max(0, Math.round(qb.stats.game.passTD * scaleFactor));
+            // Find players with > 0 TDs (Excluding QB Pass TDs here)
+            const scorers = [];
+            allOffense.forEach(p => {
+                if (p.stats?.game?.rushTD > 0) scorers.push({ p: p, type: 'rush' });
+                if (p.stats?.game?.recTD > 0) scorers.push({ p: p, type: 'rec' });
+            });
+
+            if (scorers.length === 0) break;
+
+            // Pick one random scorer to tax
+            const victim = scorers[Math.floor(U.random() * scorers.length)];
+
+            if (victim.type === 'rush') victim.p.stats.game.rushTD--;
+            else if (victim.type === 'rec') {
+                victim.p.stats.game.recTD--;
+                totalRecTDs--;
+            }
+
+            totalScoringTDs--;
         }
-        allOffense.forEach(p => {
-          if (p.stats?.game?.rushTD) {
-            p.stats.game.rushTD = Math.max(0, Math.round(p.stats.game.rushTD * scaleFactor));
+      }
+
+      // 2. Enforce Passing Limit (Pass TD <= Rec TD)
+      // QB Passing TDs are attribution, not scoring events, but must match receivers.
+      const qb = (groups['QB'] || [])[0];
+      if (qb?.stats?.game?.passTD) {
+          // Limit to Total Rec TDs (after adjustment) AND Max TDs
+          const passLimit = Math.min(totalRecTDs, maxTDs);
+          if (qb.stats.game.passTD > passLimit) {
+              qb.stats.game.passTD = passLimit;
           }
-          if (p.stats?.game?.recTD) {
-            p.stats.game.recTD = Math.max(0, Math.round(p.stats.game.recTD * scaleFactor));
-          }
-        });
       }
     };
 
-    enforceScoreTdConsistency(home, homeScore, homeGroups);
-    enforceScoreTdConsistency(away, awayScore, awayGroups);
+    enforceScoreTdConsistency(home, homeScore, homeGroups, homeTDs);
+    enforceScoreTdConsistency(away, awayScore, awayGroups, awayTDs);
 
     // Situational stats (unaffected by perks for now)
     const generateTeamStats = (team, score, strength, oppStrength) => {

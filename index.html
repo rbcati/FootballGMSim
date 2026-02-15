@@ -255,7 +255,9 @@
                   <!-- Depth chart will be rendered here -->
                 </div>
                 
-                <table class="table" id="rosterTable"></table>
+                <div class="table-wrapper">
+                    <table class="table" id="rosterTable"></table>
+                </div>
                 <div class="row mt">
                   <button id="btnRelease" class="btn danger">Release Selected</button>
                 </div>
@@ -340,7 +342,9 @@
             <section id="freeagency" class="view" hidden>
                 <div class="card">
                   <div class="row"><h2>Free Agency</h2><div class="spacer"></div><label for="faTeam">Sign to</label><select id="faTeam"></select></div>
-                  <table class="table" id="faTable"></table>
+                  <div class="table-wrapper">
+                      <table class="table" id="faTable"></table>
+                  </div>
                   <div class="row mt">
                     <button id="btnSignFA" class="btn primary" disabled>Sign Selected Player</button>
                   </div>

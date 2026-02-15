@@ -446,51 +446,55 @@ function renderPlayoffPicture(standingsData) {
       
       <div class="playoff-teams">
         <h4 class="playoff-section-title">In the Playoffs (7 teams)</h4>
-        <table class="standings-table playoff-table">
-          <thead>
-            <tr>
-              <th>Seed</th>
-              <th>Team</th>
-              <th>Record</th>
-              <th>Division</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${confData.playoffs.map((team, index) => `
-              <tr class="${team.id === userTeamId ? 'user-team' : ''}">
-                <td class="seed">${index + 1}</td>
-                <td class="team-name">${team.name}</td>
-                <td>${team.wins}-${team.losses}-${team.ties}</td>
-                <td>${getDivisionName(team.conf, team.div).replace(confName + ' ', '')}</td>
-                <td class="playoff-status">${getPlayoffStatus(team, index + 1, confData.divisionWinners)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-      
-      ${confData.bubble.length > 0 ? `
-        <div class="bubble-teams">
-          <h4 class="playoff-section-title">On the Bubble</h4>
-          <table class="standings-table bubble-table">
+        <div class="table-wrapper">
+          <table class="standings-table playoff-table">
             <thead>
               <tr>
+                <th>Seed</th>
                 <th>Team</th>
                 <th>Record</th>
-                <th>Games Back</th>
+                <th>Division</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody>
-              ${confData.bubble.map(team => `
+              ${confData.playoffs.map((team, index) => `
                 <tr class="${team.id === userTeamId ? 'user-team' : ''}">
+                  <td class="seed">${index + 1}</td>
                   <td class="team-name">${team.name}</td>
                   <td>${team.wins}-${team.losses}-${team.ties}</td>
-                  <td>${calculateGamesBack(confData.playoffs[6], team)}</td>
+                  <td>${getDivisionName(team.conf, team.div).replace(confName + ' ', '')}</td>
+                  <td class="playoff-status">${getPlayoffStatus(team, index + 1, confData.divisionWinners)}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      ${confData.bubble.length > 0 ? `
+        <div class="bubble-teams">
+          <h4 class="playoff-section-title">On the Bubble</h4>
+          <div class="table-wrapper">
+            <table class="standings-table bubble-table">
+              <thead>
+                <tr>
+                  <th>Team</th>
+                  <th>Record</th>
+                  <th>Games Back</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${confData.bubble.map(team => `
+                  <tr class="${team.id === userTeamId ? 'user-team' : ''}">
+                    <td class="team-name">${team.name}</td>
+                    <td>${team.wins}-${team.losses}-${team.ties}</td>
+                    <td>${calculateGamesBack(confData.playoffs[6], team)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
         </div>
       ` : ''}
     </div>
@@ -593,20 +597,22 @@ function renderDivisionStandings(data) {
           return `
             <div class="division">
               <h4>${getDivisionName(conf, div)}</h4>
-              <table class="standings-table">
-                <thead><tr><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th><th>GB</th></tr></thead>
-                <tbody>
-                  ${teams.map((team, idx) => {
-                    const leader = leaders[conf][div]?.[0];
-                    const gamesBack = leader ? calculateGamesBack(leader, team) : 0;
-                    return `<tr class="${team.id === userTeamId ? 'user-team' : ''}">
-                      <td>${team.abbr || team.name}</td>
-                      <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
-                      <td>${team.winPercentage.toFixed(3)}</td><td>${idx === 0 ? '-' : gamesBack}</td>
-                    </tr>`;
-                  }).join('')}
-                </tbody>
-              </table>
+              <div class="table-wrapper">
+                <table class="standings-table">
+                  <thead><tr><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th><th>GB</th></tr></thead>
+                  <tbody>
+                    ${teams.map((team, idx) => {
+                      const leader = leaders[conf][div]?.[0];
+                      const gamesBack = leader ? calculateGamesBack(leader, team) : 0;
+                      return `<tr class="${team.id === userTeamId ? 'user-team' : ''}">
+                        <td>${team.abbr || team.name}</td>
+                        <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
+                        <td>${team.winPercentage.toFixed(3)}</td><td>${idx === 0 ? '-' : gamesBack}</td>
+                      </tr>`;
+                    }).join('')}
+                  </tbody>
+                </table>
+              </div>
             </div>`;
         }).join('')}
       </div>`;
@@ -623,17 +629,19 @@ function renderConferenceStandings(data) {
     return `
       <div class="conference">
         <h3>${confName} Conference</h3>
-        <table class="standings-table">
-          <thead><tr><th>Seed</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
-          <tbody>
-            ${teams.map((team, idx) => `
-              <tr class="${team.id === userTeamId ? 'user-team' : ''}">
-                <td>${idx + 1}</td><td>${team.abbr || team.name}</td>
-                <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
-                <td>${team.winPercentage.toFixed(3)}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
+        <div class="table-wrapper">
+          <table class="standings-table">
+            <thead><tr><th>Seed</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
+            <tbody>
+              ${teams.map((team, idx) => `
+                <tr class="${team.id === userTeamId ? 'user-team' : ''}">
+                  <td>${idx + 1}</td><td>${team.abbr || team.name}</td>
+                  <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
+                  <td>${team.winPercentage.toFixed(3)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>`;
   }).join('');
 }
@@ -642,31 +650,35 @@ function renderOverallStandings(data) {
   if (!data || !data.overall) return '<div class="muted">No standings available.</div>';
   const userTeamId = window.state?.userTeamId ?? 0;
   return `
-    <table class="standings-table">
-      <thead><tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
-      <tbody>
-        ${data.overall.map((team, idx) => `
-          <tr class="${team.id === userTeamId ? 'user-team' : ''}">
-            <td>${idx + 1}</td><td>${team.abbr || team.name}</td>
-            <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
-            <td>${team.winPercentage.toFixed(3)}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>`;
+    <div class="table-wrapper">
+      <table class="standings-table">
+        <thead><tr><th>Rank</th><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
+        <tbody>
+          ${data.overall.map((team, idx) => `
+            <tr class="${team.id === userTeamId ? 'user-team' : ''}">
+              <td>${idx + 1}</td><td>${team.abbr || team.name}</td>
+              <td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td>
+              <td>${team.winPercentage.toFixed(3)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 function renderSimpleConferenceStandings(confTeams = []) {
   const userTeamId = window.state?.userTeamId ?? 0;
   return `
-    <table class="standings-table">
-      <thead><tr><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
-      <tbody>
-        ${(confTeams || []).map(team => `
-          <tr class="${team.id === userTeamId ? 'user-team' : ''}">
-            <td>${team.abbr || team.name}</td><td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td><td>${team.winPercentage.toFixed(3)}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>`;
+    <div class="table-wrapper">
+      <table class="standings-table">
+        <thead><tr><th>Team</th><th>W</th><th>L</th><th>T</th><th>Pct</th></tr></thead>
+        <tbody>
+          ${(confTeams || []).map(team => `
+            <tr class="${team.id === userTeamId ? 'user-team' : ''}">
+              <td>${team.abbr || team.name}</td><td>${team.wins}</td><td>${team.losses}</td><td>${team.ties}</td><td>${team.winPercentage.toFixed(3)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
 }
 
 function setupStandingsTabs() {
