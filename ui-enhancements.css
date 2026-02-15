@@ -2419,3 +2419,11 @@ body {
   font-size: 4rem;
   margin-bottom: 10px;
 }
+
+/* Handoff Animation - QB and RB interaction */
+.handoff-meet {
+    transform: translate(-50%, -50%) scale(0.8) !important;
+    filter: brightness(1.2);
+    transition: transform 0.3s ease-in-out;
+    border-color: #ffd700; /* Gold highlight */
+}

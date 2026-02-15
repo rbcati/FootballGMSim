@@ -698,7 +698,10 @@ class LiveGameViewer {
       if (this.tempo === 'hurry-up') durationScale = 0.5;
       if (this.tempo === 'slow') durationScale = 2.0;
 
-      const isHome = this.gameState.ballPossession === 'home';
+      // Use startState.possession to determine perspective during the play (before any switch)
+      const playPossession = startState ? startState.possession : this.gameState.ballPossession;
+      const isHome = playPossession === 'home';
+
       const startYard = startState ? startState.yardLine : play.yardLine;
       const endYard = startYard + play.yards; // Simplified end point
 
@@ -769,8 +772,8 @@ class LiveGameViewer {
 
       // PRE-SNAP PHASE
       if (!play.playType.includes('kick') && !play.playType.includes('punt')) {
-          // Add a small pause for cadence
-          await new Promise(r => this.setTimeoutSafe(r, 500 * durationScale));
+          // Add a small pause for cadence (reduced for better flow)
+          await new Promise(r => this.setTimeoutSafe(r, 300 * durationScale));
 
           if (qbMarker) qbMarker.classList.add('pre-snap-set');
           if (skillMarker && skillMarker.style.opacity !== '0') skillMarker.classList.add('pre-snap-set');
@@ -782,7 +785,7 @@ class LiveGameViewer {
               this.setTimeoutSafe(() => ballEl.style.transform = 'translate(-50%, -50%)', 200);
           }
 
-          await new Promise(r => this.setTimeoutSafe(r, 600 * durationScale));
+          await new Promise(r => this.setTimeoutSafe(r, 300 * durationScale));
 
           if (qbMarker) qbMarker.classList.remove('pre-snap-set');
           if (skillMarker) skillMarker.classList.remove('pre-snap-set');
@@ -912,12 +915,18 @@ class LiveGameViewer {
           if (skillMarker) {
               skillMarker.style.opacity = '1';
               skillMarker.style.left = `${startPct}%`;
+              // Add handoff meeting animation
+              skillMarker.classList.add('handoff-meet');
+              if (qbMarker) qbMarker.classList.add('handoff-meet');
           }
 
           // Visual Handoff
           if (ballEl) ballEl.classList.add('run-bob');
           await new Promise(r => this.setTimeoutSafe(r, handoffDuration));
           if (ballEl) ballEl.classList.remove('run-bob');
+
+          if (skillMarker) skillMarker.classList.remove('handoff-meet');
+          if (qbMarker) qbMarker.classList.remove('handoff-meet');
 
           const runDuration = 800 * durationScale;
           if (qbMarker) qbMarker.style.opacity = '0.5';
@@ -1526,7 +1535,11 @@ class LiveGameViewer {
         // Interception
         if (U.random() < (intChance + defModInt)) {
           play.result = 'turnover'; // Standardize to turnover
-          yards = 0;
+
+          // Calculate interception depth for visual animation and field position
+          const interceptDepth = Math.floor(U.rand(5, 25));
+          yards = interceptDepth;
+
           play.message = `${offense.qb?.name || 'QB'} pass intercepted!`;
           momentumChange -= 20;
 
@@ -1534,6 +1547,15 @@ class LiveGameViewer {
              const qbStats = ensureStats(qb.id, qb.name, qb.pos, offense.team.id);
              qbStats.passInt++;
           }
+
+          // Calculate turnover spot
+          const currentYard = gameState[gameState.ballPossession].yardLine;
+          const interceptPoint = Math.min(99, currentYard + interceptDepth);
+          let nextStart = 100 - interceptPoint;
+          if (nextStart < 1) nextStart = 20; // Touchback safety
+
+          this.switchPossession(gameState, nextStart);
+
         } else {
              // Successful Completion
              if (qb) {
@@ -2076,7 +2098,7 @@ class LiveGameViewer {
     switch (this.tempo) {
       case 'hurry-up': return 200; // was 800
       case 'slow': return 3000; // Slower for detail
-      default: return 1200; // Natural pace
+      default: return 900; // Natural pace (reduced for engagement)
     }
   }
 
