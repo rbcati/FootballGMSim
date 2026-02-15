@@ -2155,23 +2155,29 @@ class LiveGameViewer {
 
             soundManager.playDefenseStop();
 
+            let visualType = 'save';
+            let visualText = 'TURNOVER!';
+
             if (play.message && play.message.toLowerCase().includes('intercept')) {
                  soundManager.playInterception();
+                 visualType = 'interception';
+                 visualText = 'INTERCEPTION!';
             } else if (play.message && play.message.toLowerCase().includes('fumble')) {
                  soundManager.playFumble();
+                 visualText = 'FUMBLE!';
             } else {
                  soundManager.playDefenseStop();
             }
+
+            if (play.result === 'turnover_downs') {
+                visualText = 'STOPPED!';
+            }
+
             soundManager.playFailure();
             // Intense shake
             this.triggerShake('hard');
 
-            if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save', 'STOPPED!');
-            } else {
-                this.triggerVisualFeedback('save', 'TURNOVER!');
-            }
-
+            this.triggerVisualFeedback(visualType, visualText);
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
             soundManager.playFieldGoalMiss();
@@ -2184,11 +2190,12 @@ class LiveGameViewer {
             soundManager.playShockwave();
             this.triggerShake();
             this.triggerFloatText('SACKED!', 'bad');
-            this.triggerVisualFeedback('save', 'SACK!');
+            this.triggerVisualFeedback('sack', 'SACK!');
         } else if (play.result === 'big_play') {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
             this.triggerFloatText('BIG PLAY!');
+            this.triggerVisualFeedback('big-play', 'BIG PLAY!');
 
             if (this.fieldEffects) {
                 const isHome = this.gameState.ballPossession === 'home';

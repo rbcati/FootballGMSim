@@ -515,8 +515,9 @@ html, body {
 }
 
 .btn.primary:hover {
-  box-shadow: var(--shadow-lg);
+  box-shadow: 0 0 15px rgba(10, 132, 255, 0.4), var(--shadow-lg);
   filter: brightness(1.1);
+  border-color: var(--accent);
 }
 
 .btn.danger {
@@ -913,8 +914,8 @@ select:disabled {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slideUp {
@@ -961,8 +962,48 @@ select:disabled {
 .game-event-overlay.field-goal .event-text { color: #34C759; text-shadow: 0 0 20px rgba(52, 199, 89, 0.5); }
 .game-event-overlay.turnover .event-text { color: #FF453A; text-shadow: 0 0 20px rgba(255, 69, 58, 0.5); }
 .game-event-overlay.safety .event-text { color: #FF9F0A; text-shadow: 0 0 20px rgba(255, 159, 10, 0.5); }
-.game-event-overlay.sack .event-text { color: #FF9F0A; }
-.game-event-overlay.big-play .event-text { color: #0A84FF; text-shadow: 0 0 20px rgba(10, 132, 255, 0.5); }
+.game-event-overlay.sack .event-text {
+  color: #FF9F0A;
+  text-shadow: 0 0 20px rgba(255, 159, 10, 0.5);
+  font-family: 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+}
+.game-event-overlay.sack::before {
+  content: '💥';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  animation: shake 0.5s ease-out;
+}
+
+.game-event-overlay.big-play .event-text {
+  color: #0A84FF;
+  text-shadow: 0 0 20px rgba(10, 132, 255, 0.8);
+  font-family: 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+}
+.game-event-overlay.big-play::before {
+  content: '⚡';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  animation: pulse-glow 1s infinite;
+  filter: drop-shadow(0 0 10px #0A84FF);
+}
+
+.game-event-overlay.interception .event-text {
+  color: #FF453A;
+  text-shadow: 0 0 20px rgba(255, 69, 58, 0.8);
+  font-family: 'Arial Black', sans-serif;
+  letter-spacing: 2px;
+}
+.game-event-overlay.interception::before {
+  content: '✋';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
 
 /* Play log item flash animations */
 .play-item.play-touchdown {
