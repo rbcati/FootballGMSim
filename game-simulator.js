@@ -990,6 +990,8 @@ export function simGameStats(home, away, options = {}) {
         let score = 0;
         let touchdowns = 0;
         let field_goals = 0;
+        let xpMade = 0;
+        let twoPtMade = 0;
 
         // Base scoring probability calibrated to ~22 pts/game avg
         // offStr/defStr are roughly 50-90 range
@@ -1030,9 +1032,17 @@ export function simGameStats(home, away, options = {}) {
                 if (typeRoll < tdShare) {
                     // Touchdown (6 pts + XP attempt)
                     const xpRoll = U.random();
-                    if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
-                    else if (xpRoll < 0.97) score += 6; // Missed XP
-                    else score += 8;                     // 2-point conversion
+                    if (xpRoll < 0.94) {
+                        score += 7; // Normal XP make (94% NFL avg)
+                        xpMade++;
+                    }
+                    else if (xpRoll < 0.97) {
+                        score += 6; // Missed XP
+                    }
+                    else {
+                        score += 8; // 2-point conversion
+                        twoPtMade++;
+                    }
                     touchdowns++;
                 } else {
                     score += 3; // Field goal
@@ -1042,7 +1052,7 @@ export function simGameStats(home, away, options = {}) {
             // Otherwise: punt, turnover, turnover on downs (no points)
         }
 
-        return { score, touchdowns, field_goals };
+        return { score, touchdowns, field_goals, xpMade, twoPtMade };
     };
 
     const homeRes = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
@@ -1052,6 +1062,10 @@ export function simGameStats(home, away, options = {}) {
     let awayScore = Math.max(0, awayRes.score);
     let homeTDs = homeRes.touchdowns;
     let awayTDs = awayRes.touchdowns;
+    let homeFGs = homeRes.field_goals;
+    let awayFGs = awayRes.field_goals;
+    let homeXPs = homeRes.xpMade;
+    let awayXPs = awayRes.xpMade;
 
     // --- OVERTIME LOGIC ---
     // If tied at end of regulation, simulate OT
@@ -1083,9 +1097,20 @@ export function simGameStats(home, away, options = {}) {
             let drivePoints = 0;
             if (U.rand(0, 100) / 100 < scoreChance) {
                 if (U.rand(0, 100) < 60) {
-                    drivePoints = 6 + (U.rand(0,100) < 95 ? 1 : 0); // TD + XP
+                    // Touchdown
+                    drivePoints = 6;
+                    let xp = 0;
+                    if (U.rand(0,100) < 95) {
+                        drivePoints += 1;
+                        xp = 1;
+                    }
+                    if (possession === 'home') { homeTDs++; homeXPs += xp; }
+                    else { awayTDs++; awayXPs += xp; }
                 } else {
-                    drivePoints = 3; // FG
+                    // Field Goal
+                    drivePoints = 3;
+                    if (possession === 'home') homeFGs++;
+                    else awayFGs++;
                 }
             }
 
@@ -1095,10 +1120,8 @@ export function simGameStats(home, away, options = {}) {
             if (drivePoints > 0) {
                 if (possession === 'home') {
                     homeScore += drivePoints;
-                    if (drivePoints >= 6) homeTDs++;
                 } else {
                     awayScore += drivePoints;
-                    if (drivePoints >= 6) awayTDs++;
                 }
             }
 
@@ -1144,7 +1167,7 @@ export function simGameStats(home, away, options = {}) {
 
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
-    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs) => {
+    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualFGs, actualXPs) => {
        team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
@@ -1158,6 +1181,8 @@ export function simGameStats(home, away, options = {}) {
         const qbStats = generateQBStats(qb, score, oppScore, oppDefenseStrength, U, mods);
         if (score > oppScore) qbStats.wins = 1;
         else if (score < oppScore) qbStats.losses = 1;
+        // Zero out random TDs, we will set real ones later
+        qbStats.passTD = 0;
         Object.assign(qb.stats.game, qbStats);
         totalPassAttempts = qbStats.passAtt || 30;
       }
@@ -1166,6 +1191,9 @@ export function simGameStats(home, away, options = {}) {
       rbs.forEach((rb, index) => {
         const share = index === 0 ? 0.7 : 0.3;
         const rbStats = generateRBStats(rb, score, oppScore, oppDefenseStrength, U, mods, share);
+        // Zero out random TDs
+        rbStats.rushTD = 0;
+        rbStats.recTD = 0;
         Object.assign(rb.stats.game, rbStats);
       });
 
@@ -1177,6 +1205,8 @@ export function simGameStats(home, away, options = {}) {
 
       distributedTargets.forEach(item => {
         const wrStats = generateReceiverStats(item.player, item.targets, score, oppDefenseStrength, U);
+        // Zero out random TDs
+        wrStats.recTD = 0;
         Object.assign(item.player.stats.game, wrStats);
       });
 
@@ -1197,81 +1227,84 @@ export function simGameStats(home, away, options = {}) {
 
       const kickers = groups['K'] || [];
       if (kickers.length > 0) {
-        Object.assign(kickers[0].stats.game, generateKickerStats(kickers[0], score, U));
+        // Use standard generator for attempts/yards, but overwrite makes
+        const k = kickers[0];
+        const kStats = generateKickerStats(k, score, U);
+        kStats.fgMade = actualFGs;
+        kStats.xpMade = actualXPs;
+        // Ensure attempts logic is consistent
+        kStats.fgAttempts = Math.max(kStats.fgAttempts, actualFGs);
+        kStats.xpAttempts = Math.max(kStats.xpAttempts, actualXPs);
+        kStats.fgMissed = kStats.fgAttempts - kStats.fgMade;
+        kStats.xpMissed = kStats.xpAttempts - kStats.xpMade;
+        kStats.successPct = kStats.fgAttempts > 0 ? Math.round((kStats.fgMade / kStats.fgAttempts) * 1000) / 10 : 0;
+
+        Object.assign(k.stats.game, kStats);
       }
 
       const punters = groups['P'] || [];
       if (punters.length > 0) {
         Object.assign(punters[0].stats.game, generatePunterStats(punters[0], score, U));
       }
+
+      // --- DISTRIBUTE TOUCHDOWNS ---
+      // Distribute actualTDs among offensive players based on performance
+      let tdsToAssign = actualTDs;
+      let totalRecTDs = 0;
+
+      const scorers = [];
+
+      // RBs are eligible
+      rbs.forEach(p => {
+          if (p.stats && p.stats.game) {
+              const w = (p.stats.game.rushYd || 0) + (p.stats.game.recYd || 0);
+              scorers.push({ p, weight: Math.max(1, w), type: 'RB' });
+          }
+      });
+
+      // Receivers are eligible
+      distributedTargets.forEach(item => {
+          if (item.player.stats && item.player.stats.game) {
+              const w = (item.player.stats.game.recYd || 0);
+              scorers.push({ p: item.player, weight: Math.max(1, w), type: 'WR' });
+          }
+      });
+
+      if (scorers.length > 0) {
+          while (tdsToAssign > 0) {
+              const weights = scorers.map(s => s.weight);
+              const idx = U.weightedChoice(weights);
+              const winner = scorers[idx];
+
+              if (winner.type === 'RB') {
+                  // Bias towards rush TD if rush yards > rec yards
+                  const rushY = winner.p.stats.game.rushYd || 0;
+                  const recY = winner.p.stats.game.recYd || 0;
+                  const rushChance = rushY / Math.max(1, rushY + recY);
+
+                  if (U.random() < rushChance) {
+                      winner.p.stats.game.rushTD = (winner.p.stats.game.rushTD || 0) + 1;
+                  } else {
+                      winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
+                      totalRecTDs++;
+                  }
+              } else {
+                  winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
+                  totalRecTDs++;
+              }
+              tdsToAssign--;
+          }
+      }
+
+      // Assign Pass TDs to QB
+      if (qb && qb.stats.game) {
+          qb.stats.game.passTD = totalRecTDs;
+      }
     };
 
     // Pass the mods to the team generation
-    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs);
-    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs);
-
-    // --- POST-GENERATION TD CONSISTENCY CHECK ---
-    // Ensure total offensive TDs don't exceed what the score allows.
-    // Uses actualTDs derived from drive simulation for strict accuracy.
-    const enforceScoreTdConsistency = (team, score, groups, limitTDs) => {
-      // Limit is either the simulated TDs or the theoretical max (fallback)
-      const maxTDs = limitTDs !== undefined ? limitTDs : Math.ceil(score / 6);
-
-      let totalScoringTDs = 0;
-      let totalRecTDs = 0;
-
-      const allOffense = [...(groups['RB'] || []), ...(groups['WR'] || []), ...(groups['TE'] || [])];
-      allOffense.forEach(p => {
-        if (p.stats?.game?.rushTD) totalScoringTDs += p.stats.game.rushTD;
-        if (p.stats?.game?.recTD) {
-            totalScoringTDs += p.stats.game.recTD;
-            totalRecTDs += p.stats.game.recTD;
-        }
-      });
-
-      // 1. Enforce Scoring Limit (Rush + Rec <= Actual TDs)
-      // This prevents "Team score 7, but 2 players scored TDs"
-      if (totalScoringTDs > maxTDs) {
-        let attempts = 0;
-        while (totalScoringTDs > maxTDs && attempts < 100) {
-            attempts++;
-
-            // Find players with > 0 TDs (Excluding QB Pass TDs here)
-            const scorers = [];
-            allOffense.forEach(p => {
-                if (p.stats?.game?.rushTD > 0) scorers.push({ p: p, type: 'rush' });
-                if (p.stats?.game?.recTD > 0) scorers.push({ p: p, type: 'rec' });
-            });
-
-            if (scorers.length === 0) break;
-
-            // Pick one random scorer to tax
-            const victim = scorers[Math.floor(U.random() * scorers.length)];
-
-            if (victim.type === 'rush') victim.p.stats.game.rushTD--;
-            else if (victim.type === 'rec') {
-                victim.p.stats.game.recTD--;
-                totalRecTDs--;
-            }
-
-            totalScoringTDs--;
-        }
-      }
-
-      // 2. Enforce Passing Limit (Pass TD <= Rec TD)
-      // QB Passing TDs are attribution, not scoring events, but must match receivers.
-      const qb = (groups['QB'] || [])[0];
-      if (qb?.stats?.game?.passTD) {
-          // Limit to Total Rec TDs (after adjustment) AND Max TDs
-          const passLimit = Math.min(totalRecTDs, maxTDs);
-          if (qb.stats.game.passTD > passLimit) {
-              qb.stats.game.passTD = passLimit;
-          }
-      }
-    };
-
-    enforceScoreTdConsistency(home, homeScore, homeGroups, homeTDs);
-    enforceScoreTdConsistency(away, awayScore, awayGroups, awayTDs);
+    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs);
+    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs);
 
     // Situational stats (unaffected by perks for now)
     const generateTeamStats = (team, score, strength, oppStrength) => {

@@ -1,3 +1,15 @@
+/* ============================================================================ */
+/*   GLOBAL RESPONSIVE UTILITIES                                              */
+/* ============================================================================ */
+
+.table-responsive,
+.table-wrapper {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 /*
  * Mobile CSS - All responsive styles consolidated
  * Part of modular CSS structure
