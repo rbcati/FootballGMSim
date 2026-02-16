@@ -209,7 +209,7 @@ class LiveGameViewer {
     let stakesHtml = '';
     if (this.preGameContext?.stakes > 60) {
          const isExtreme = this.preGameContext.stakes > 80;
-         const color = isExtreme ? '#ef4444' : '#fbbf24';
+         const color = isExtreme ? '#FF453A' : '#FF9F0A'; // Matches --danger and --warning
          let text = this.preGameContext.reason || (isExtreme ? '🔥 HIGH STAKES 🔥' : '⚠️ KEY MATCHUP');
 
          // Add icons based on text content if generic
@@ -755,8 +755,8 @@ class LiveGameViewer {
           }
       };
 
-      const homeColor = 'var(--accent, #007bff)';
-      const awayColor = 'var(--danger, #dc3545)';
+      const homeColor = 'var(--accent, #0A84FF)';
+      const awayColor = 'var(--danger, #FF453A)';
       const offenseColor = isHome ? homeColor : awayColor;
       const defenseColor = isHome ? awayColor : homeColor;
 
@@ -2196,20 +2196,17 @@ class LiveGameViewer {
 
             if (play.message && play.message.toLowerCase().includes('intercept')) {
                  soundManager.playInterception();
+                 this.triggerVisualFeedback('save interception', 'INTERCEPTED!');
             } else if (play.message && play.message.toLowerCase().includes('fumble')) {
                  soundManager.playFumble();
+                 this.triggerVisualFeedback('save fumble', 'FUMBLE!');
             } else {
                  soundManager.playDefenseStop();
+                 this.triggerVisualFeedback('save stop', 'STOPPED!');
             }
             soundManager.playFailure();
             // Intense shake
             this.triggerShake('hard');
-
-            if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save stop', 'STOPPED!');
-            } else {
-                this.triggerVisualFeedback('save turnover', 'TURNOVER!');
-            }
 
             this.triggerFloatText('TURNOVER!', 'bad');
         } else if (play.result === 'field_goal_miss') {
@@ -2258,9 +2255,6 @@ class LiveGameViewer {
                 this.triggerVisualFeedback('save defeat', 'GAME OVER');
             }
              soundManager.playPing();
-        } else if (play.result === 'field_goal_miss') {
-             soundManager.playFailure();
-             this.triggerVisualFeedback('save stop', 'NO GOOD!');
         } else if (play.result === 'safety') {
              soundManager.playFailure();
              this.triggerVisualFeedback('save safety', 'SAFETY!');
@@ -3291,7 +3285,7 @@ class LiveGameViewer {
         <div style="text-align: center; font-size: 0.8em; margin-bottom: 4px; color: var(--text-muted);">Momentum</div>
         <div class="${Math.abs(m) > 80 ? 'momentum-max' : (Math.abs(m) > 75 ? 'momentum-surge' : '')}" style="height: 10px; background: #333; border-radius: 5px; position: relative; overflow: hidden; transition: all 0.3s;">
             <div style="position: absolute; top:0; bottom:0; left: ${pct}%; width: 2px; background: white; z-index: 2;"></div>
-            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--danger, #dc3545) 0%, var(--accent, #007bff) 100%); opacity: 0.8;"></div>
+            <div style="width: 100%; height: 100%; background: linear-gradient(90deg, var(--danger, #FF453A) 0%, var(--accent, #0A84FF) 100%); opacity: 0.8;"></div>
         </div>
         <div style="display: flex; justify-content: space-between; font-size: 0.7em; color: var(--text-muted);">
             <span>${this.gameState.away.team.abbr}</span>
