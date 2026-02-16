@@ -133,7 +133,8 @@ export class FieldEffects {
                       type === 'fire' ? 5 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
-                      type === 'big_play' ? 60 : 25;
+                      type === 'big_play' ? 60 :
+                      type === 'confetti_cannon' ? 100 : 25;
 
         for (let i = 0; i < count; i++) {
             this.particles.push(this.createParticle(x, y, type));
@@ -280,6 +281,18 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'confetti_cannon') {
+             // Burst from bottom center (or xPct) upwards
+             p.x = x + (Math.random() - 0.5) * 50;
+             p.y = this.canvas.height;
+             p.vx = (Math.random() - 0.5) * 10;
+             p.vy = -(Math.random() * 15 + 10); // Fast Up
+             p.gravity = 0.5; // Fall down
+             p.life = 2.0;
+             p.decay = 0.01;
+             const colors = ['#f00', '#0f0', '#00f', '#ff0', '#0ff', '#f0f'];
+             p.color = colors[Math.floor(Math.random() * colors.length)];
+             p.size = Math.random() * 6 + 3;
         }
 
         return p;

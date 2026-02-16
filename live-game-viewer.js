@@ -179,16 +179,9 @@ class LiveGameViewer {
   }
 
   /**
-   * Render to a specific view container instead of modal
+   * Helper to render game header HTML (Stakes, Difficulty)
    */
-  renderToView(containerId) {
-    const container = document.querySelector(containerId);
-    if (!container) return;
-
-    this.viewMode = true;
-    this.container = container;
-
-    // Create layout
+  renderGameHeader() {
     let diffColor = 'var(--text-muted)';
     if (this.preGameContext?.difficulty) {
         if (this.preGameContext.difficulty.includes('Easy')) diffColor = 'var(--success)';
@@ -225,6 +218,22 @@ class LiveGameViewer {
             </div>
          `;
     }
+
+    return { stakesHtml, difficultyHtml };
+  }
+
+  /**
+   * Render to a specific view container instead of modal
+   */
+  renderToView(containerId) {
+    const container = document.querySelector(containerId);
+    if (!container) return;
+
+    this.viewMode = true;
+    this.container = container;
+
+    // Create layout
+    const { stakesHtml, difficultyHtml } = this.renderGameHeader();
 
     container.innerHTML = `
       <div class="card live-game-header">
@@ -776,6 +785,11 @@ class LiveGameViewer {
 
       // PRE-SNAP PHASE
       if (!play.playType.includes('kick') && !play.playType.includes('punt')) {
+          // Pre-Snap Tension (Crowd Buildup on critical downs)
+          if ((play.down === 3 || play.down === 4) && soundManager.playCrowdBuildup) {
+              soundManager.playCrowdBuildup();
+          }
+
           // Add a small pause for cadence (reduced for better flow)
           await new Promise(r => this.setTimeoutSafe(r, 300 * durationScale));
 
@@ -2187,6 +2201,7 @@ class LiveGameViewer {
                  const yardLine = this.gameState[this.gameState.ballPossession].yardLine;
                  const pct = this.getVisualPercentage(yardLine, isHome);
                  this.fieldEffects.spawnParticles(pct, 'touchdown');
+                 this.fieldEffects.spawnParticles(pct, 'confetti_cannon'); // Add confetti cannon
             }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
             if (play.playType.includes('pass')) soundManager.playIntercept();
@@ -2253,6 +2268,7 @@ class LiveGameViewer {
                 soundManager.playVictory();
                 launchConfetti();
                 this.triggerVisualFeedback('goal victory', 'VICTORY!');
+                if (this.fieldEffects) this.fieldEffects.spawnParticles(50, 'confetti_cannon');
             } else {
                 soundManager.playWhistle();
                 this.triggerVisualFeedback('save defeat', 'GAME OVER');
@@ -2905,7 +2921,7 @@ class LiveGameViewer {
                 letter-spacing: 4px;
             ">${title}</h2>
             <div class="game-over-score" style="font-size: 3.5rem; font-weight: 900; margin-bottom: 20px;">
-                ${scoreA} - ${scoreB}
+                <span id="endScoreA">0</span> - <span id="endScoreB">0</span>
             </div>
 
             <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px;">
@@ -2915,7 +2931,7 @@ class LiveGameViewer {
                 </div>
                  <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
                     <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">XP Earned</div>
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #ffd700;">+${xp}</div>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #ffd700;">+<span id="endXp">0</span></div>
                 </div>
             </div>
 
@@ -2945,6 +2961,16 @@ class LiveGameViewer {
       }
 
       parent.appendChild(overlay);
+
+      // Trigger Animations
+      this.setTimeoutSafe(() => {
+          const elA = overlay.querySelector('#endScoreA');
+          const elB = overlay.querySelector('#endScoreB');
+          const elXp = overlay.querySelector('#endXp');
+          if (elA) this.animateNumber(elA, 0, scoreA, 1500);
+          if (elB) this.animateNumber(elB, 0, scoreB, 1500);
+          if (elXp) this.animateNumber(elXp, 0, xp, 2000);
+      }, 500);
 
       overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
           overlay.remove();
@@ -3032,13 +3058,16 @@ class LiveGameViewer {
     modal.className = 'modal live-game-modal';
     modal.hidden = true;
 
+    const { stakesHtml, difficultyHtml } = this.renderGameHeader();
+
     modal.innerHTML = `
       <div class="modal-content live-game-content">
         <div class="modal-header">
           <h2>Live Game</h2>
           <button type="button" class="close" aria-label="Close modal">&times;</button>
         </div>
-        
+        ${stakesHtml}
+        ${difficultyHtml}
         <div class="scoreboard"></div>
         <div class="field-wrapper" style="margin: 10px; padding: 0 10px;"></div> <!-- Field -->
         

@@ -68,6 +68,45 @@ class SoundManager {
         }, delay);
     }
 
+    playNoiseRamp(duration, startVol, endVol, delay = 0) {
+        if (!this.enabled || this.muted || !this.ctx) return;
+        setTimeout(() => {
+            this.resume();
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
+            const noise = this.ctx.createBufferSource();
+            noise.buffer = buffer;
+            const gain = this.ctx.createGain();
+
+            // Linear ramp for swell effect
+            gain.gain.setValueAtTime(Math.max(0.001, startVol), this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(endVol, this.ctx.currentTime + duration);
+
+            // Fade out quickly at end to avoid click
+            gain.gain.setTargetAtTime(0.001, this.ctx.currentTime + duration, 0.1);
+
+            // noise.connect(gain); // Remove direct connection (harsh static)
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 800; // Slightly lower for crowd rumble
+            noise.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.ctx.destination);
+            noise.start();
+            noise.stop(this.ctx.currentTime + duration + 0.5);
+        }, delay);
+    }
+
+    playCrowdBuildup() {
+        if (!this.enabled || this.muted) return;
+        // Rising noise over 2 seconds, swelling from quiet to loud
+        this.playNoiseRamp(2.5, 0.05, 0.3);
+    }
+
     playWhistle() {
         if (!this.enabled || this.muted) return;
         this.playTone(2000, 'sine', 0.1, 0.1);
