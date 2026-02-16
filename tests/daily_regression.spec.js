@@ -109,7 +109,7 @@ test.describe('Daily Regression Pass', () => {
             window.liveGameViewer.renderToView('#test-sim-container');
         });
 
-        const badge = page.locator('.stakes-badge');
+        const badge = page.locator('.matchup-stakes');
         await expect(badge).toBeVisible();
         await expect(badge).toContainText('HIGH STAKES');
     });

@@ -217,10 +217,19 @@ class LiveGameViewer {
          else if (text === 'PLAYOFF ELIMINATION') text = '🏆 PLAYOFF GAME 🏆';
          else if (text === 'CRITICAL SEEDING GAME') text = '📅 CRITICAL MATCHUP';
 
-         const animation = isExtreme ? 'pulse-text-glow 1.5s infinite alternate' : '';
+         const pulseClass = isExtreme ? 'pulse-text-glow' : '';
 
          stakesHtml = `
-            <div class="stakes-badge" style="font-size: ${isExtreme ? '1.1em' : '0.9em'}; font-weight: 800; color: ${color}; text-shadow: 0 0 15px ${color}60; animation: ${animation};">
+            <div class="matchup-stakes ${pulseClass}" style="
+                text-align: center;
+                margin-bottom: 10px;
+                color: ${color};
+                font-weight: 800;
+                font-size: 0.9rem;
+                letter-spacing: 1px;
+                text-transform: uppercase;
+                text-shadow: 0 0 10px ${color}40;
+            ">
                 ${text}
             </div>
          `;

@@ -1791,6 +1791,10 @@ select:disabled {
     100% { text-shadow: 0 0 5px currentColor; transform: scale(1); }
 }
 
+.pulse-text-glow {
+    animation: pulse-text-glow 2s infinite;
+}
+
 /* Player Marker Animations */
 @keyframes pulse-marker {
   0% { transform: translate(-50%, -50%) scale(1); opacity: 0.8; }

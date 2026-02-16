@@ -1352,11 +1352,71 @@ window.renderHub = function() {
             // Fix: Fallback for undefined game.homeScore/awayScore
             const gamePlayed = (game.homeScore !== undefined && game.awayScore !== undefined);
 
+            // --- STAKES CALCULATION ---
+            let stakesHtml = '';
+            let stakesVal = 0;
+            let stakesText = '';
+
+            // 1. Rivalry
+            if (team.rivalries && team.rivalries[oppId]) {
+                const rScore = team.rivalries[oppId].score;
+                if (rScore > 50) {
+                    stakesVal += rScore;
+                    stakesText = rScore > 80 ? '⚔️ BITTER RIVALRY' : '⚔️ RIVALRY GAME';
+                }
+            }
+
+            // 2. Playoff Implications (Late Season)
+            if (currentWeek > 14 && !gamePlayed) {
+                // Determine if teams are close in wins
+                const teamWins = team.record?.w || 0;
+                const oppWins = oppTeam.record?.w || 0;
+
+                if (Math.abs(teamWins - oppWins) <= 1 && teamWins > 6) {
+                    stakesVal += 30;
+                    if (!stakesText) stakesText = '📅 KEY MATCHUP';
+                }
+
+                // Division Lead Battle?
+                if (team.div === oppTeam.div && Math.abs(teamWins - oppWins) <= 1) {
+                    stakesVal += 20;
+                    stakesText = '🏆 DIVISION BATTLE';
+                }
+            }
+
+            // 3. Elimination Game (Simple Check)
+            if (currentWeek > 16 && (team.record?.w || 0) < 9 && (team.record?.w || 0) > 6) {
+                 stakesVal += 40;
+                 if (!stakesText) stakesText = '☠️ MUST WIN';
+            }
+
+            if (stakesVal > 50 || stakesText) {
+                const isExtreme = stakesVal > 80;
+                const color = isExtreme ? '#ef4444' : '#fbbf24';
+                const pulseClass = isExtreme ? 'pulse-text-glow' : '';
+
+                stakesHtml = `
+                    <div class="matchup-stakes ${pulseClass}" style="
+                        text-align: center;
+                        margin-bottom: 10px;
+                        color: ${color};
+                        font-weight: 800;
+                        font-size: 0.9rem;
+                        letter-spacing: 1px;
+                        text-transform: uppercase;
+                        text-shadow: 0 0 10px ${color}40;
+                    ">
+                        ${stakesText || '🔥 HIGH STAKES'}
+                    </div>
+                `;
+            }
+
             nextGameHtml = `
                 <div class="matchup-header">
                     <span>${isHome ? 'Home Game' : 'Away Game'}</span>
                     <span>Week ${currentWeek}</span>
                 </div>
+                ${stakesHtml}
                 <div class="matchup-content">
                     <div class="matchup-team away">
                         <div class="team-logo-placeholder ${!isHome ? 'user-team-logo' : ''}">

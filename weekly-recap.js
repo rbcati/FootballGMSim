@@ -94,12 +94,21 @@ export function showWeeklyRecap(week, results, news) {
             const isSeed = playoffs.playoffs.find(t => t.id === userTeamId);
             const isBubble = playoffs.bubble.find(t => t.id === userTeamId);
 
+            // Calculate clinch status if available
+            const divisionClinch = playoffs.divisionWinners.includes(userTeamId) && week >= 14;
+            const playoffClinch = isSeed && week >= 16;
+
             if (isSeed) {
                  if (win) {
                      resultText = "MARCH TO THE PLAYOFFS";
                      if (playoffs.divisionWinners.includes(userTeamId)) resultText = "COMMANDING THE DIVISION";
                      // If seed 1
                      if (playoffs.playoffs[0].id === userTeamId) resultText = "PATH TO THE #1 SEED";
+
+                     // Clinch Overrides
+                     if (divisionClinch) resultText = "DIVISION CHAMPIONS";
+                     else if (playoffClinch) resultText = "CLINCHED PLAYOFFS";
+
                  } else {
                      resultText = "PLAYOFF SETBACK";
                      if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION LEAD SHRINKS";
@@ -108,6 +117,12 @@ export function showWeeklyRecap(week, results, news) {
             } else if (isBubble) {
                  resultText = win ? "PLAYOFF DREAMS ALIVE" : "HOPE FADING FAST";
                  highStakesClass = 'high-stakes';
+            } else {
+                // Eliminated?
+                // Simple heuristic: if week > 14 and not in bubble or playoffs, likely eliminated
+                if (week > 14) {
+                    resultText = win ? "PLAYING FOR PRIDE" : "ELIMINATED";
+                }
             }
 
             // Override with clutch factor if game was super close regardless of standings
