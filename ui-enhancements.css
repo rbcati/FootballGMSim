@@ -1541,8 +1541,7 @@ select:disabled {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
-    box-shadow: 0 0 12px var(--accent-muted);
-    font-weight: 700;
+    box-shadow: 0 0 0 2px var(--accent-muted);
 }
 
 .defense-row {
@@ -2055,9 +2054,9 @@ select:disabled {
 }
 
 @keyframes shield-pop {
-  0% { transform: scale(0.5); opacity: 0; }
-  50% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+  0% { transform: scale(0.5); opacity: 0; border-width: 0px; }
+  50% { transform: scale(1.2); opacity: 1; border-width: 4px; }
+  100% { transform: scale(1); opacity: 1; border-width: 2px; }
 }
 
 /* Update Defense Stop to use Shield Pop */
@@ -2426,4 +2425,27 @@ body {
     filter: brightness(1.2);
     transition: transform 0.3s ease-in-out;
     border-color: #ffd700; /* Gold highlight */
+}
+
+/* Blur Transition */
+.blur-transition {
+    filter: blur(5px);
+    transition: filter 0.3s ease;
+}
+
+/* Huddle Break Animation */
+@keyframes huddle-break {
+    0% { transform: scale(0.5); opacity: 0; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.huddle-break {
+    animation: huddle-break 0.5s ease-out;
+}
+
+/* Motion Blur Helper */
+.blur-motion {
+    filter: blur(2px);
+    transition: filter 0.1s;
 }
