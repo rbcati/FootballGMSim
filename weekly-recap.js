@@ -100,14 +100,24 @@ export function showWeeklyRecap(week, results, news) {
                      if (playoffs.divisionWinners.includes(userTeamId)) resultText = "COMMANDING THE DIVISION";
                      // If seed 1
                      if (playoffs.playoffs[0].id === userTeamId) resultText = "PATH TO THE #1 SEED";
+
+                     // Check for clinch (Week 14+, team is in playoffs list)
+                     if (week >= 14 && playoffs.playoffs.find(t => t.id === userTeamId)) {
+                         resultText = "PLAYOFF SPOT SECURED";
+                         highStakesClass = 'clinch';
+                     }
                  } else {
                      resultText = "PLAYOFF SETBACK";
                      if (playoffs.divisionWinners.includes(userTeamId)) resultText = "DIVISION LEAD SHRINKS";
                  }
-                 highStakesClass = 'high-stakes';
+                 highStakesClass = highStakesClass || 'high-stakes';
             } else if (isBubble) {
                  resultText = win ? "PLAYOFF DREAMS ALIVE" : "HOPE FADING FAST";
                  highStakesClass = 'high-stakes';
+                 if (!win && week >= 16) {
+                     resultText = "ELIMINATION LOOMS";
+                     highStakesClass = 'eliminated';
+                 }
             }
 
             // Override with clutch factor if game was super close regardless of standings
@@ -178,8 +188,9 @@ export function showWeeklyRecap(week, results, news) {
                 let narrative = "";
                 if (win) {
                     narrative = riv.score > 50 ? "A massive win against a bitter rival!" : "Beating a rival always feels good.";
-                    if (riv.events && riv.events[0] && riv.events[0].includes("Eliminated")) {
-                        narrative = "Revenge exacted for past heartbreak!";
+                    // Check history for any elimination event
+                    if (riv.events && riv.events.some(e => e.includes("Eliminated"))) {
+                        narrative = "REVENGE! Payback for that playoff elimination.";
                     }
                 } else {
                     narrative = "Losing to them hurts more than usual.";
@@ -458,6 +469,20 @@ export function showWeeklyRecap(week, results, news) {
             .recap-outcome.win.high-stakes { background: linear-gradient(135deg, #059669 0%, #047857 50%, #10b981 100%); border: 2px solid #fbbf24; box-shadow: 0 0 15px rgba(251, 191, 36, 0.4); }
             .recap-outcome.loss.high-stakes { background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 50%, #ef4444 100%); border: 2px solid #1f2937; }
             .recap-outcome.playoff { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); border: 2px solid white; }
+
+            .recap-outcome.clinch {
+                background: linear-gradient(135deg, #FFD700 0%, #DAA520 100%);
+                color: #000;
+                border: 2px solid #fff;
+                box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+                animation: pulse-glow 2s infinite;
+            }
+            .recap-outcome.eliminated {
+                background: linear-gradient(135deg, #1f2937 0%, #000000 100%);
+                filter: grayscale(100%);
+                border: 1px solid #4b5563;
+                color: #9ca3af;
+            }
 
             .recap-result-label { font-size: 2rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
             .recap-score { font-size: 3rem; font-weight: 700; line-height: 1; }
