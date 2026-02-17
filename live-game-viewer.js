@@ -409,9 +409,9 @@ class LiveGameViewer {
 
       const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // Detect Jump (> 5% difference implies teleportation/turnover)
+      // Detect Jump (> 20% difference implies large teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 5;
+      const isTeleport = currentLeft > 0 && dist > 20;
 
       if (isTeleport) {
           // Add blur effect to container for smoother transition feeling
@@ -462,7 +462,9 @@ class LiveGameViewer {
       } else {
           // Normal Smooth Update (CSS transition handles it)
           // Ensure transition is active if it was disabled by JS animation previously and not cleared
-          if (ballEl.style.transition === 'none') ballEl.style.transition = '';
+          if (ballEl.style.transition === 'none') {
+              ballEl.style.transition = 'left 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
+          }
 
           ballEl.style.left = `${pct}%`;
           if (losEl) losEl.style.left = `${pct}%`;
@@ -634,6 +636,14 @@ class LiveGameViewer {
                   // Parabola: y = 4 * h * x * (1 - x)
                   const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
                   translateY = parabolicY;
+              }
+
+              // Sway Logic (Lateral Movement for Runs)
+              if (options.sway) {
+                  // Sine wave lateral movement
+                  const swayAmount = typeof options.sway === 'number' ? options.sway : 5;
+                  const lateralOffset = Math.sin(easeProgress * Math.PI * 4) * swayAmount;
+                  translateY += lateralOffset;
               }
 
               // Rotation logic
@@ -813,7 +823,7 @@ class LiveGameViewer {
               el.style.left = `${startPct}%`;
               el.style.opacity = show ? '1' : '0';
               el.style.backgroundColor = color;
-              el.classList.remove('pulse-marker', 'celebrate-jump', 'celebrate-spin', 'marker-catch', 'marker-collision');
+              el.classList.remove('pulse-marker', 'celebrate-jump', 'celebrate-spin', 'marker-catch', 'marker-collision', 'dive-td');
           }
       };
 
@@ -1036,18 +1046,20 @@ class LiveGameViewer {
 
           // Use .run-bob instead of .bob for more energy
           // Use easeInOutCubic for smoother run
+          const swayVal = play.playType === 'run_outside' ? 8 : 3;
+
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
           }));
 
           // Def Logic: Chase
           if (defMarker) {
              animations.push(this.animateTrajectory(defMarker, {
-                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob' // Meet at tackle point
+                 startX: parseFloat(defMarker.style.left), endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob', sway: swayVal // Meet at tackle point
              }));
           }
 
@@ -1055,6 +1067,10 @@ class LiveGameViewer {
 
           if (play.result === 'touchdown') {
               ballEl.classList.add('animate-pulse');
+              // Dive Animation for Short TDs
+              if (skillMarker && play.yards < 5) {
+                  skillMarker.classList.add('dive-td');
+              }
           } else if (skillMarker) {
               // Collision/Tackle
                ballEl.classList.add('animate-pulse');
@@ -2172,11 +2188,28 @@ class LiveGameViewer {
     this.isProcessingTurn = false;
     this.updateControls();
 
+    // Huddle Feedback
+    if (delay > 1500) {
+        this.showHuddleFeedback();
+    }
+
     this.intervalId = this.setTimeoutSafe(() => {
       if (!this.isPaused) {
         this.displayNextPlay();
       }
     }, delay);
+  }
+
+  showHuddleFeedback() {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      const ddEl = parent.querySelector('.down-distance');
+      if (ddEl && !ddEl.querySelector('.huddle-text')) {
+          const span = document.createElement('span');
+          span.className = 'huddle-text';
+          span.textContent = '(Huddle)';
+          ddEl.appendChild(span);
+      }
   }
 
   updateControls() {
