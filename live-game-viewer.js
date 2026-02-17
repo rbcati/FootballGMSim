@@ -851,6 +851,7 @@ class LiveGameViewer {
 
           // SACK CHECK
           if (play.result === 'sack') {
+             this.triggerShake(); // Visual impact
              if (qbMarker) {
                  qbMarker.classList.add('sack-shake');
                  this.setTimeoutSafe(() => qbMarker.classList.remove('sack-shake'), 600);
@@ -904,6 +905,7 @@ class LiveGameViewer {
               // End of play collision (tackle)
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
                   soundManager.playTackle();
+                  this.triggerShake(); // Visual impact
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
                   if (ballEl) {
@@ -965,6 +967,7 @@ class LiveGameViewer {
                } else {
                    // Standard tackle
                    soundManager.playTackle();
+                   this.triggerShake(); // Visual impact
                    if (skillMarker) {
                        skillMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
