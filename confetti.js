@@ -1,4 +1,4 @@
-export function launchConfetti() {
+export function launchConfetti(mode = 'rain') {
     // Create canvas
     const canvas = document.createElement('canvas');
     canvas.style.position = 'fixed';
@@ -19,19 +19,49 @@ export function launchConfetti() {
     const particles = [];
     const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff', '#00ffff', '#ffa500', '#ffffff'];
 
-    // Create particles
-    for (let i = 0; i < 300; i++) {
+    const count = mode === 'cannon' ? 150 : (mode === 'victory' ? 200 : 300);
+
+    for (let i = 0; i < count; i++) {
+        let x, y, vx, vy;
+        let size = Math.random() * 10 + 5;
+        let color = colors[Math.floor(Math.random() * colors.length)];
+
+        if (mode === 'cannon') {
+            x = width / 2;
+            y = height / 2;
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 15 + 5;
+            vx = Math.cos(angle) * speed;
+            vy = Math.sin(angle) * speed;
+        } else if (mode === 'victory') {
+            // Spawn from bottom corners
+            x = (i % 2 === 0) ? 0 : width;
+            y = height;
+            const angle = (i % 2 === 0) ? -Math.PI/4 + (Math.random()-0.5) : -3*Math.PI/4 + (Math.random()-0.5);
+            const speed = Math.random() * 20 + 10;
+            vx = Math.cos(angle) * speed; // Shoot inwards/up
+            vy = Math.sin(angle) * speed; // Shoot up
+        } else {
+            // Rain (Default)
+            x = Math.random() * width;
+            y = Math.random() * height - height; // Start above screen
+            vx = Math.random() * 4 - 2;
+            vy = Math.random() * 5 + 5;
+        }
+
         particles.push({
-            x: Math.random() * width,
-            y: Math.random() * height - height, // Start above the screen
-            vx: Math.random() * 4 - 2,
-            vy: Math.random() * 4 + 2,
-            color: colors[Math.floor(Math.random() * colors.length)],
-            size: Math.random() * 10 + 5,
+            x: x,
+            y: y,
+            vx: vx,
+            vy: vy,
+            color: color,
+            size: size,
             rotation: Math.random() * 360,
             rotationSpeed: Math.random() * 10 - 5,
             oscillation: Math.random() * 20,
-            oscillationSpeed: Math.random() * 0.1
+            oscillationSpeed: Math.random() * 0.1,
+            gravity: 0.15,
+            drag: 0.96
         });
     }
 
@@ -47,17 +77,25 @@ export function launchConfetti() {
 
         // Stop adding new frames if duration exceeded and all particles are off screen
         if (currentTime - startTime > duration) {
-             particles.forEach(p => p.y += 20); // Accelerate falling to clear
+             particles.forEach(p => p.gravity += 0.05); // Accelerate falling to clear
         }
 
         particles.forEach(p => {
-            p.x += Math.sin(p.oscillation) * 0.5; // Slight sway
+            p.x += p.vx + Math.sin(p.oscillation) * 0.5; // Slight sway
             p.oscillation += p.oscillationSpeed;
             p.y += p.vy;
             p.rotation += p.rotationSpeed;
-            p.vy += 0.05; // gravity
+            p.vy += p.gravity;
+            p.vx *= p.drag; // Air resistance
+            p.vy *= p.drag;
 
-            if (p.y < height + 50) { // Check if still visible (with buffer)
+            // Simple floor bounce for victory mode
+            if (mode === 'victory' && p.y > height - p.size && p.vy > 0) {
+                 p.vy *= -0.6;
+                 p.y = height - p.size;
+            }
+
+            if (p.y < height + 50 && p.x > -50 && p.x < width + 50) { // Check if still visible (with buffer)
                 activeParticles++;
                 ctx.save();
                 ctx.translate(p.x, p.y);
@@ -68,7 +106,7 @@ export function launchConfetti() {
             }
         });
 
-        if (activeParticles > 0 && currentTime - startTime < duration + 2000) {
+        if (activeParticles > 0 && currentTime - startTime < duration + 3000) {
             animationId = requestAnimationFrame(animate);
         } else {
             if (canvas.parentNode) {

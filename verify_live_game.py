@@ -1,68 +1,85 @@
-from playwright.sync_api import sync_playwright
-import time
+from playwright.sync_api import sync_playwright, expect
+import os
 
-def verify_live_game_effects():
+def run():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        try:
+            print("Navigating to app...")
+            page.goto("http://localhost:3000/#/game-sim")
 
-        # Navigate to app
-        page.goto("http://localhost:8001")
+            # Wait for JS to load
+            page.wait_for_timeout(2000)
 
-        # Wait for load
-        page.wait_for_timeout(3000)
+            print("Injecting Test State...")
+            page.evaluate("""
+                console.log("Starting Injection...");
 
-        # Inject mock data and start viewer
-        page.evaluate("""
-            const home = {id: 1, name: 'Home Team', abbr: 'HOM', color: '#003366', roster: [{pos:'QB', id:10, name:'Test QB'}]};
-            const away = {id: 2, name: 'Away Team', abbr: 'AWY', color: '#990000', roster: []};
+                // Ensure LiveGameViewer exists
+                if (!window.liveGameViewer) {
+                    console.log("Creating new Viewer");
+                    window.liveGameViewer = new LiveGameViewer();
+                }
 
-            // Mock state
-            window.state = {
-                league: {
-                    teams: {1: home, 2: away},
-                    weeklyGamePlan: {}
-                },
-                userTeamId: 1
-            };
+                // Mock Game State
+                const homeTeam = { id: 0, abbr: 'HOME', color: '#003366', name: 'Home Team' };
+                const awayTeam = { id: 1, abbr: 'AWAY', color: '#990000', name: 'Away Team' };
 
-            // Ensure container exists
-            document.body.innerHTML = '<div id="game-view" style="width: 100%; height: 100vh;"></div>';
+                window.liveGameViewer.gameState = {
+                    home: { team: homeTeam, score: 20, distance: 10, down: 1, yardLine: 20 },
+                    away: { team: awayTeam, score: 14, distance: 10, down: 1, yardLine: 20 },
+                    quarter: 4,
+                    time: 120,
+                    ballPossession: 'home',
+                    stats: { home: { players: {} }, away: { players: {} } },
+                    quarterScores: { home: [0,0,0,20], away: [7,7,0,0] },
+                    momentum: 80,
+                    drive: { plays: 5, yards: 60 }
+                };
 
-            window.liveGameViewer.initGame(home, away, 1);
-            window.liveGameViewer.renderToView('#game-view');
+                window.liveGameViewer.userTeamId = 0; // User is Home
 
-            // Manually trigger a touchdown play to see effects
-            const play = {
-                type: 'play',
-                playType: 'pass_long',
-                result: 'touchdown',
-                yards: 50,
-                message: 'TOUCHDOWN! Amazing play!',
-                quarter: 4,
-                time: 60,
-                down: 1,
-                distance: 10,
-                yardLine: 50,
-                offense: 1,
-                defense: 2
-            };
+                // Force Render to body if route didn't pick it up
+                if (!document.getElementById('game-sim')) {
+                    document.body.innerHTML = '<div id="game-sim" style="height: 800px; width: 100%;"></div>';
+                }
 
-            // Force state update so renderPlay has something to work with
-            window.liveGameViewer.gameState.ballPossession = 'home';
-            window.liveGameViewer.gameState.home.score = 6;
+                window.liveGameViewer.renderToView('#game-sim');
 
-            // Trigger render
-            window.liveGameViewer.renderPlay(play);
-        """)
+                // Force Render Play: Touchdown
+                setTimeout(() => {
+                    console.log("Rendering Touchdown...");
+                    window.liveGameViewer.renderPlay({
+                        type: 'play',
+                        playType: 'pass_long',
+                        result: 'touchdown',
+                        yards: 35,
+                        message: 'TOUCHDOWN! Cannon Blast!',
+                        offense: 0,
+                        defense: 1,
+                        quarter: 4,
+                        time: 115,
+                        down: 1,
+                        distance: 10,
+                        yardLine: 100
+                    });
+                }, 500);
+            """)
 
-        # Wait for animations (shake, confetti, particles)
-        page.wait_for_timeout(500)
+            # Wait for animation (confetti + overlay)
+            print("Waiting for animation...")
+            page.wait_for_timeout(2000)
 
-        # Take screenshot
-        page.screenshot(path="verification_touchdown.png")
+            # Take screenshot
+            print("Taking screenshot...")
+            page.screenshot(path="verification_touchdown.png", full_page=True)
+            print("Screenshot saved.")
 
-        browser.close()
+        except Exception as e:
+            print(f"Error: {e}")
+        finally:
+            browser.close()
 
 if __name__ == "__main__":
-    verify_live_game_effects()
+    run()
