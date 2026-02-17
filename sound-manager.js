@@ -321,6 +321,31 @@ class SoundManager {
         this.playCheer();
     }
 
+    playLevelUp() {
+        if (!this.enabled || this.muted) return;
+        // Rising arpeggio (C-E-G-C)
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'triangle', 0.1, 0.1, null, i * 100);
+        });
+        this.playNoise(0.5, 0.05, 300); // Sparkle
+    }
+
+    playDenied() {
+        if (!this.enabled || this.muted) return;
+        // Heavy, low-frequency impact (Door slam)
+        this.playTone(100, 'sawtooth', 0.1, 0.3);
+        this.playTone(80, 'square', 0.2, 0.2, null, 20);
+        this.playNoise(0.2, 0.4);
+    }
+
+    playMomentumMax() {
+        if (!this.enabled || this.muted) return;
+        // High frequency energy hum
+        this.playTone(800, 'sine', 0.5, 0.05, 1200);
+        this.playNoise(0.5, 0.1);
+    }
+
     toggleMute() {
         this.muted = !this.muted;
         return this.muted;

@@ -133,6 +133,7 @@ export class FieldEffects {
                       type === 'fire' ? 30 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
+                      type === 'wall' ? 100 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -284,6 +285,15 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'wall') {
+             p.vx = 0;
+             p.vy = (Math.random() - 0.5) * 2;
+             p.color = '#ccc';
+             p.life = 0.8;
+             p.size = Math.random() * 4 + 2;
+             // Vertical wall spread
+             p.x = x + (Math.random() - 0.5) * 10;
+             p.y = this.canvas.height / 2 + (Math.random() - 0.5) * (this.canvas.height * 0.6);
         }
 
         return p;

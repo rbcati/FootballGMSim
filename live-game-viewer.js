@@ -483,8 +483,52 @@ class LiveGameViewer {
       // Hide players regardless (reset state)
       const qbMarker = parent.querySelector('.marker-qb');
       const skillMarker = parent.querySelector('.marker-skill');
+      const defMarker = parent.querySelector('.marker-def');
       if (qbMarker) qbMarker.style.opacity = 0;
       if (skillMarker) skillMarker.style.opacity = 0;
+
+      // Momentum Fire Effect (Day 3)
+      if (this.gameState && Math.abs(this.gameState.momentum) > 80) {
+          const isHomeHot = this.gameState.momentum > 80;
+          // Apply fire to offense or defense based on momentum
+          const markers = [qbMarker, skillMarker, defMarker];
+          // Simplified: apply to all markers, but only show relevant ones per play
+          // But wait, we don't know who is who exactly here without context,
+          // however, marker-qb/skill are offense, marker-def is defense.
+          // Momentum > 80 = Home is Hot. Momentum < -80 = Away is Hot.
+          // If Home is Offense and Home is Hot, Offense has fire.
+          // If Home is Defense and Home is Hot, Defense has fire.
+
+          const homeIsOffense = this.gameState.ballPossession === 'home';
+
+          markers.forEach(m => {
+              if(!m) return;
+              m.classList.remove('marker-fire');
+
+              if (isHomeHot) {
+                  // Home is Hot
+                  if (homeIsOffense) {
+                      if (m.classList.contains('marker-qb') || m.classList.contains('marker-skill')) m.classList.add('marker-fire');
+                  } else {
+                      if (m.classList.contains('marker-def')) m.classList.add('marker-fire');
+                  }
+              } else {
+                  // Away is Hot (momentum < -80)
+                  if (!homeIsOffense) {
+                      // Away is Offense
+                      if (m.classList.contains('marker-qb') || m.classList.contains('marker-skill')) m.classList.add('marker-fire');
+                  } else {
+                      // Away is Defense
+                      if (m.classList.contains('marker-def')) m.classList.add('marker-fire');
+                  }
+              }
+          });
+      } else {
+          // Clear fire
+          [qbMarker, skillMarker, defMarker].forEach(m => {
+              if (m) m.classList.remove('marker-fire');
+          });
+      }
   }
 
   /**
@@ -1477,7 +1521,7 @@ class LiveGameViewer {
 
              // Visual feedback for difficulty increase
              if (Math.random() < 0.05 && !this.isSkipping) {
-                 this.triggerFloatText('⚠️ AI ADAPTING', 'warning');
+                 this.triggerVisualFeedback('ai-adapt', 'AI ADAPTING');
              }
         }
     }
@@ -2318,7 +2362,14 @@ class LiveGameViewer {
             this.triggerShake('hard');
 
             if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save stop', 'STOPPED!');
+                this.triggerVisualFeedback('denied', 'DENIED!');
+                soundManager.playDenied();
+                if (this.fieldEffects) {
+                     const isHome = this.gameState.ballPossession === 'home';
+                     const yardLine = play.yardLine + play.yards; // Approximate spot
+                     const pct = this.getVisualPercentage(yardLine, isHome);
+                     this.fieldEffects.spawnParticles(pct, 'wall');
+                }
             } else {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
@@ -2385,6 +2436,19 @@ class LiveGameViewer {
     const parent = this.viewMode ? this.container : this.modal;
 
     // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
+    // XP Calculation and Feedback (Day 3)
+    let xp = 0;
+    if (play.result === 'touchdown') xp = 50;
+    else if (play.result === 'turnover') xp = 30;
+    else if (play.result === 'turnover_downs') xp = 30;
+    else if (play.result === 'sack') xp = 15;
+    else if (play.result === 'big_play') xp = 10;
+
+    if (xp > 0 && !this.isSkipping) {
+        soundManager.playLevelUp();
+        this.triggerFloatText(`+${xp} XP`, 'xp-float');
+    }
+
     const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
     if (!playLog) return;
 
