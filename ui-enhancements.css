@@ -2449,3 +2449,56 @@ body {
     filter: blur(2px);
     transition: filter 0.1s;
 }
+
+/* ============================================
+   Fluidity & Animation Enhancements (Day 2)
+   ============================================ */
+
+/* Dive Animation for Touchdowns */
+@keyframes dive-td {
+  0% { transform: translate(-50%, -50%) scale(1); }
+  30% { transform: translate(-50%, -150%) scale(1.1) rotate(-15deg); } /* Initial Leap */
+  60% { transform: translate(-50%, -50%) scale(0.9) rotate(-5deg); } /* Impact */
+  80% { transform: translate(-50%, -80%) scale(1.05) rotate(0deg); } /* Bounce */
+  100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.dive-td {
+  animation: dive-td 0.8s ease-out forwards;
+  z-index: 20; /* Ensure on top */
+}
+
+/* Huddle Pulse for status text */
+@keyframes huddle-pulse {
+  0% { opacity: 0.6; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.02); }
+  100% { opacity: 0.6; transform: scale(0.98); }
+}
+
+.huddle-text {
+  display: inline-block;
+  margin-left: 8px;
+  font-style: italic;
+  font-weight: normal;
+  color: var(--warning);
+  animation: huddle-pulse 2s infinite ease-in-out;
+  font-size: 0.9em;
+}
+
+/* Juke Animation Helper (CSS-based sway fallback) */
+@keyframes juke-sway {
+  0%, 100% { transform: translate(-50%, -50%) translateX(0); }
+  25% { transform: translate(-50%, -50%) translateX(-4px); }
+  75% { transform: translate(-50%, -50%) translateX(4px); }
+}
+
+.juke-move {
+  animation: juke-sway 0.4s ease-in-out infinite;
+}
+
+/* Smooth Transitions for Non-Animated Updates */
+.ball, .player-marker {
+  transition: left 0.6s cubic-bezier(0.22, 1, 0.36, 1), top 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+}
+
+/* Ensure animated elements disable transition temporarily via JS, but this base rule handles the 'walk back' */
