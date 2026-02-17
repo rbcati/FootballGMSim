@@ -224,6 +224,15 @@ class LiveGameViewer {
                 ${text}
             </div>
          `;
+
+         // Audio Cue for Stakes
+         this.setTimeoutSafe(() => {
+             if (isExtreme) {
+                 if (soundManager.playHeartbeat) soundManager.playHeartbeat();
+             } else {
+                 if (soundManager.playMomentumShift) soundManager.playMomentumShift();
+             }
+         }, 500);
     }
 
     container.innerHTML = `
@@ -3766,10 +3775,14 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     }
 
     // 3. Wait a tick for router to render view, then start sim
-    setTimeout(() => {
+    if (window.liveGameViewer.initTimeout) clearTimeout(window.liveGameViewer.initTimeout);
+    window.liveGameViewer.initTimeout = setTimeout(() => {
         // Double check render if router missed it
-        window.liveGameViewer.renderToView('#game-sim');
-        window.liveGameViewer.startSim();
+        if (location.hash === '#/game-sim') {
+            window.liveGameViewer.renderToView('#game-sim');
+            window.liveGameViewer.startSim();
+        }
+        window.liveGameViewer.initTimeout = null;
     }, 50);
 
   } catch (error) {
