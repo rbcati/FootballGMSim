@@ -414,6 +414,10 @@ class LiveGameViewer {
       const isTeleport = currentLeft > 0 && dist > 5;
 
       if (isTeleport) {
+          // Add blur effect to container for smoother transition feeling
+          const fieldContainer = parent.querySelector('.football-field-container') || parent.querySelector('.field-container');
+          if (fieldContainer) fieldContainer.classList.add('blur-transition');
+
           // Fade Out Sequence
           const elements = [ballEl, losEl, fdEl].filter(e => e);
           elements.forEach(e => {
@@ -426,6 +430,7 @@ class LiveGameViewer {
               elements.forEach(e => {
                   e.style.transition = 'none';
                   e.style.left = `${pct}%`;
+                  e.style.transform = 'translate(-50%, -50%)'; // Reset any transforms
               });
 
               // First Down update inside timeout
@@ -441,6 +446,8 @@ class LiveGameViewer {
               }
 
               void ballEl.offsetWidth; // Reflow
+
+              if (fieldContainer) fieldContainer.classList.remove('blur-transition');
 
               elements.forEach(e => {
                   e.style.transition = '';
@@ -537,6 +544,17 @@ class LiveGameViewer {
               const c3 = c1 + 1;
               return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
           };
+          const easeInBack = t => {
+              const c1 = 1.70158;
+              const c3 = c1 + 1;
+              return c3 * t * t * t - c1 * t * t;
+          };
+          const easeOutElastic = t => {
+              const c4 = (2 * Math.PI) / 3;
+              return t === 0 ? 0 : t === 1 ? 1 : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * c4) + 1;
+          };
+          const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
           // Bounce easing for landings
           const easeBounce = t => {
               const n1 = 7.5625;
@@ -558,7 +576,16 @@ class LiveGameViewer {
           else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
           else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
           else if (options.easing === 'easeOutBack') easing = easeOutBack;
+          else if (options.easing === 'easeInBack') easing = easeInBack;
+          else if (options.easing === 'easeOutElastic') easing = easeOutElastic;
+          else if (options.easing === 'easeInOutCubic') easing = easeInOutCubic;
           else if (options.easing === 'bounce') easing = easeBounce;
+
+          // Pre-calculate field width for transform logic
+          const fieldWidth = element.offsetParent ? element.offsetParent.offsetWidth : 0;
+          // Set initial left position just once
+          element.style.left = `${startX}%`;
+          if (shadowEl) shadowEl.style.left = `${startX}%`;
 
           const animate = (currentTime) => {
               // Safety break for cleanup
@@ -571,6 +598,7 @@ class LiveGameViewer {
               if (this.isSkipping) {
                    // Ensure final state is applied instantly
                    element.style.left = `${endX}%`;
+                   element.style.transform = 'translate(-50%, -50%)'; // Reset transform
                    if (arcHeight) element.style.transform = `translate(-50%, -50%)`;
                    if (shadowEl) {
                        shadowEl.style.left = `${endX}%`;
@@ -586,68 +614,81 @@ class LiveGameViewer {
               const progress = Math.min(elapsed / duration, 1);
               const easeProgress = easing(progress);
 
-              // X Position
-              const currentX = startX + (endX - startX) * easeProgress;
-              element.style.left = `${currentX}%`;
-              if (shadowEl) shadowEl.style.left = `${currentX}%`;
+              // Calculate X displacement in pixels for transform
+              // This prevents layout thrashing by avoiding left property updates
+              const deltaXPercent = (endX - startX) * easeProgress;
+              const currentXPercent = startX + deltaXPercent;
+              const translateX = (deltaXPercent / 100) * fieldWidth;
 
-              // Trail Effect
+              // Trail Effect (use calculated current percentage)
               if (options.trail && this.fieldEffects && Math.random() > 0.6) {
-                  this.fieldEffects.spawnParticles(currentX, 'trail');
+                  this.fieldEffects.spawnParticles(currentXPercent, 'trail');
               }
 
-              // Y Position (Arc) & Rotation
-              if (arcHeight || shouldRotate) {
-                  let transform = 'translate(-50%, -50%)';
+              let translateY = 0;
+              let rotation = '';
+              let scale = '';
 
-                  // Arc logic
-                  if (arcHeight) {
-                      // Parabola: y = 4 * h * x * (1 - x)
-                      const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
-                      transform = `translate(-50%, calc(-50% + ${parabolicY}px))`;
+              // Y Position (Arc)
+              if (arcHeight) {
+                  // Parabola: y = 4 * h * x * (1 - x)
+                  const parabolicY = -4 * arcHeight * easeProgress * (1 - easeProgress);
+                  translateY = parabolicY;
+              }
+
+              // Rotation logic
+              if (shouldRotate) {
+                  if (options.rotateType === 'spiral') {
+                      // Fast spiral rotation
+                      const rotations = 4;
+                      const rot = easeProgress * (360 * rotations);
+                      rotation = `rotate(${rot}deg)`;
+                      // Slight wobble scale
+                      const wobble = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.1);
+                      scale = `scale(${wobble})`;
+                  } else if (options.rotateType === 'wobble') {
+                      // Gentle wobble
+                      const angle = Math.sin(easeProgress * Math.PI * 6) * 15;
+                      rotation = `rotate(${angle}deg)`;
+                  } else {
+                      // Standard tumble
+                      const rotations = 2;
+                      const rot = easeProgress * (360 * rotations);
+                      rotation = `rotate(${rot}deg)`;
                   }
+              }
 
-                  // Rotation logic
-                  if (shouldRotate) {
-                      if (options.rotateType === 'spiral') {
-                          // Fast spiral rotation
-                          const rotations = 4;
-                          const rot = easeProgress * (360 * rotations);
-                          transform += ` rotate(${rot}deg)`;
-                          // Slight wobble scale
-                          const wobble = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.1);
-                          transform += ` scale(${wobble})`;
-                      } else if (options.rotateType === 'wobble') {
-                          // Gentle wobble
-                          const angle = Math.sin(easeProgress * Math.PI * 6) * 15;
-                          transform += ` rotate(${angle}deg)`;
-                      } else {
-                          // Standard tumble
-                          const rotations = 2;
-                          const rot = easeProgress * (360 * rotations);
-                          transform += ` rotate(${rot}deg)`;
-                      }
-                  }
+              // Apply Transform (Combined X and Y)
+              // We use calc(-50% + Xpx) to maintain the centering of the marker while moving it
+              element.style.transform = `translate3d(calc(-50% + ${translateX}px), calc(-50% + ${translateY}px), 0) ${rotation} ${scale}`;
 
-                  element.style.transform = transform;
+              // Shadow Effect (only if arc)
+              if (shadowEl) {
+                   const shadowTranslateX = translateX;
+                   let shadowScale = 1;
+                   let shadowOpacity = 1;
+                   let shadowBlur = 1;
 
-                  // Shadow Effect (only if arc)
-                  if (arcHeight && shadowEl) {
+                   if (arcHeight) {
                        const peakFactor = 4 * easeProgress * (1 - easeProgress);
-                       const scale = 1 - (peakFactor * 0.5); // Shrink more
-                       const opacity = 1 - (peakFactor * 0.6); // Fade more
+                       shadowScale = 1 - (peakFactor * 0.5); // Shrink more
+                       shadowOpacity = 1 - (peakFactor * 0.6); // Fade more
+                       shadowBlur = peakFactor * 2;
+                   }
 
-                       shadowEl.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                       shadowEl.style.opacity = Math.max(0.2, opacity);
-                       shadowEl.style.filter = `blur(${peakFactor * 2}px)`; // Add blur
-                  }
+                   shadowEl.style.transform = `translate3d(calc(-50% + ${shadowTranslateX}px), -50%, 0) scale(${shadowScale})`;
+                   shadowEl.style.opacity = Math.max(0.2, shadowOpacity);
+                   shadowEl.style.filter = `blur(${shadowBlur}px)`;
               }
 
               if (progress < 1) {
                   requestAnimationFrame(animate);
               } else {
+                  // Finalize state - Commit the final 'left' position and reset transform
+                  // This ensures responsive resizing works after animation ends
                   element.style.left = `${endX}%`;
-                  if (arcHeight || shouldRotate) element.style.transform = `translate(-50%, -50%)`;
+                  element.style.transform = `translate(-50%, -50%)`; // Back to standard centering
+
                   if (shadowEl) {
                       shadowEl.style.left = `${endX}%`;
                       shadowEl.style.transform = `translate(-50%, -50%) scale(1)`;
@@ -797,11 +838,22 @@ class LiveGameViewer {
 
       // PRE-SNAP PHASE
       if (!play.playType.includes('kick') && !play.playType.includes('punt')) {
-          // Add a small pause for cadence (reduced for better flow)
-          await new Promise(r => this.setTimeoutSafe(r, 300 * durationScale));
+          // Randomized cadence delay (variable start count)
+          const cadenceDelay = (300 + Math.random() * 400) * durationScale;
+          await new Promise(r => this.setTimeoutSafe(r, cadenceDelay));
 
           if (qbMarker) qbMarker.classList.add('pre-snap-set');
-          if (skillMarker && skillMarker.style.opacity !== '0') skillMarker.classList.add('pre-snap-set');
+
+          // RB Offset Logic: If run play, position RB slightly back for handoff visual
+          if (play.playType.startsWith('run') && skillMarker) {
+               const rbOffset = isHome ? -3 : 3; // 3 yards back
+               const rbStartPct = this.getVisualPercentage(startYard + rbOffset, isHome);
+               skillMarker.style.left = `${rbStartPct}%`;
+               skillMarker.classList.add('pre-snap-set');
+          } else if (skillMarker && skillMarker.style.opacity !== '0') {
+               skillMarker.classList.add('pre-snap-set');
+          }
+
           if (defMarker) defMarker.classList.add('pre-snap-set');
 
           // Ball bob slightly (center)
@@ -810,7 +862,7 @@ class LiveGameViewer {
               this.setTimeoutSafe(() => ballEl.style.transform = 'translate(-50%, -50%)', 200);
           }
 
-          await new Promise(r => this.setTimeoutSafe(r, 300 * durationScale));
+          await new Promise(r => this.setTimeoutSafe(r, 400 * durationScale));
 
           if (qbMarker) qbMarker.classList.remove('pre-snap-set');
           if (skillMarker) skillMarker.classList.remove('pre-snap-set');
@@ -881,9 +933,11 @@ class LiveGameViewer {
               // 2. Throw
               const throwDuration = 700 * durationScale;
 
-              // QB Throw Animation
+              // QB Windup Animation
               if (qbMarker) {
                   qbMarker.classList.add('throw-animation');
+                  // Add delay for windup before ball release
+                  await new Promise(r => this.setTimeoutSafe(r, 200 * durationScale));
                   this.setTimeoutSafe(() => qbMarker.classList.remove('throw-animation'), 500);
               }
 
@@ -935,23 +989,45 @@ class LiveGameViewer {
           }
 
       } else if (play.playType.startsWith('run')) {
-          // RUN PLAY
-          const handoffDuration = 400 * durationScale;
+          // RUN PLAY - Handoff Sequence
+          const handoffDuration = 500 * durationScale;
+
           if (skillMarker) {
               skillMarker.style.opacity = '1';
-              skillMarker.style.left = `${startPct}%`;
-              // Add handoff meeting animation
-              skillMarker.classList.add('handoff-meet');
-              if (qbMarker) qbMarker.classList.add('handoff-meet');
+              // Note: skillMarker was positioned at rbStartPct in pre-snap phase
           }
 
-          // Visual Handoff
-          if (ballEl) ballEl.classList.add('run-bob');
-          await new Promise(r => this.setTimeoutSafe(r, handoffDuration));
-          if (ballEl) ballEl.classList.remove('run-bob');
+          // Animate QB and RB meeting at mesh point (startPct)
+          // 1. Mesh
+          const meshAnimations = [];
 
-          if (skillMarker) skillMarker.classList.remove('handoff-meet');
-          if (qbMarker) qbMarker.classList.remove('handoff-meet');
+          // QB moves to handoff point (if dropping back or just turning)
+          if (qbMarker) {
+              meshAnimations.push(this.animateTrajectory(qbMarker, {
+                  startX: startPct, endX: startPct, duration: handoffDuration, easing: 'easeOut', animationClass: 'handoff-meet'
+              }));
+          }
+
+          // RB moves forward to mesh point
+          if (skillMarker) {
+               // Calculate current pos (from pre-snap offset)
+               // This is tricky because we set style.left directly.
+               // We need to animate from that position.
+               // animateTrajectory handles 'startX' as visual percentage.
+               // We can get current percentage from style.left
+               const rbCurrentPct = parseFloat(skillMarker.style.left);
+               meshAnimations.push(this.animateTrajectory(skillMarker, {
+                   startX: rbCurrentPct, endX: startPct, duration: handoffDuration, easing: 'easeIn', animationClass: 'handoff-meet'
+               }));
+          }
+
+          // Ball stays with QB/Mesh
+          if (ballEl) ballEl.classList.add('run-bob');
+
+          await Promise.all(meshAnimations);
+
+          // Handoff complete
+          if (ballEl) ballEl.classList.remove('run-bob');
 
           const runDuration = 800 * durationScale;
           if (qbMarker) qbMarker.style.opacity = '0.5';
@@ -959,12 +1035,13 @@ class LiveGameViewer {
           const animations = [];
 
           // Use .run-bob instead of .bob for more energy
+          // Use easeInOutCubic for smoother run
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob'
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOut', animationClass: 'run-bob'
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob'
           }));
 
           // Def Logic: Chase
@@ -2122,15 +2199,29 @@ class LiveGameViewer {
   }
 
   /**
-   * Get delay between plays based on tempo
+   * Get delay between plays based on tempo and context
    */
   getPlayDelay() {
-    // Reduce delays slightly since animation takes time now
-    switch (this.tempo) {
-      case 'hurry-up': return 200; // was 800
-      case 'slow': return 3000; // Slower for detail
-      default: return 900; // Natural pace (reduced for engagement)
+    let baseDelay = 900;
+
+    // Adjust based on tempo
+    if (this.tempo === 'hurry-up') baseDelay = 200;
+    else if (this.tempo === 'slow') baseDelay = 3000;
+
+    // Context-aware pacing: Check last play result
+    if (this.playByPlay.length > 0) {
+        const lastPlay = this.playByPlay[this.playByPlay.length - 1];
+        if (lastPlay) {
+            if (lastPlay.result === 'touchdown') baseDelay += 2000; // Let celebration breathe
+            else if (lastPlay.result === 'turnover' || lastPlay.result === 'turnover_downs') baseDelay += 1500;
+            else if (lastPlay.result === 'big_play') baseDelay += 1000;
+            else if (lastPlay.result === 'incomplete') {
+                if (this.tempo !== 'slow') baseDelay = Math.max(400, baseDelay - 400); // Speed up after incomplete
+            }
+        }
     }
+
+    return baseDelay;
   }
 
 
@@ -3161,32 +3252,6 @@ class LiveGameViewer {
   }
 
   /**
-   * Render Field
-   */
-  renderField() {
-      if (!this.checkUI()) return;
-      const parent = this.viewMode ? this.container : this.modal;
-      const fieldContainer = parent.querySelector('.field-container');
-      if (!fieldContainer) return;
-
-      fieldContainer.innerHTML = `
-          <div class="end-zone" style="left: 0; background: rgba(0,0,100,0.3); border-right: 2px solid white; display: none;"></div>
-          <div class="end-zone" style="right: 0; background: rgba(0,0,100,0.3); border-left: 2px solid white; display: none;"></div>
-          <div class="field-marker marker-los" style="left: 50%;"></div>
-          <div class="field-marker marker-first-down" style="left: 60%;"></div>
-
-          <div class="player-markers">
-              <div class="player-marker marker-qb"></div>
-              <div class="player-marker marker-skill"></div>
-              <div class="player-marker marker-def"></div>
-          </div>
-
-          <div class="ball-shadow" style="left: 50%;"></div>
-          <div class="ball" style="left: 50%;"></div>
-      `;
-  }
-
-  /**
    * Update Field Visualization
    */
   updateField(state) {
@@ -3200,7 +3265,7 @@ class LiveGameViewer {
       }
 
       // Handle Red Zone (extra visual)
-      const fieldContainer = parent.querySelector('.field-container');
+      const fieldContainer = parent.querySelector('.football-field-container') || parent.querySelector('.field-container');
       if (state && fieldContainer) {
           const currentPossession = state[state.ballPossession];
           const isRedZone = (state.ballPossession === 'home' && currentPossession.yardLine >= 80) ||
@@ -3218,11 +3283,11 @@ class LiveGameViewer {
     if (!this.checkUI(force)) return;
     if (!this.gameState) return;
 
-    // Ensure field is rendered if empty
+    // Ensure field is rendered if empty (using the wrapper)
     const parent = this.viewMode ? this.container : this.modal;
-    const field = parent.querySelector('.field-container');
-    if (field && !field.hasChildNodes()) {
-        this.renderField();
+    const fieldWrapper = parent.querySelector('.field-wrapper');
+    if (fieldWrapper && !fieldWrapper.hasChildNodes()) {
+        this.renderField(fieldWrapper);
     }
 
     this.updateScoreboard(force);
