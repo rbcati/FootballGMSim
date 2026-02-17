@@ -742,7 +742,7 @@ function generateOLStats(ol, defenseStrength, U) {
   };
 }
 
-function generateKickerStats(kicker, teamScore, U) {
+function generateKickerStats(kicker, teamScore, U, actualXP, actualXPA) {
   const ratings = kicker.ratings || {};
   const kickPower = ratings.kickPower || 70;
   const kickAccuracy = ratings.kickAccuracy || 70;
@@ -754,8 +754,9 @@ function generateKickerStats(kicker, teamScore, U) {
 
   const longestFG = Math.max(20, Math.min(65, Math.round(30 + (kickPower / 2) + U.rand(-5, 10))));
 
-  const xpAttempts = Math.max(0, Math.round(teamScore / 7));
-  const xpMade = Math.max(0, Math.min(xpAttempts, Math.round(xpAttempts * (kickAccuracy / 100) + U.rand(-0.3, 0.3))));
+  // Use actual simulation data if available, otherwise fallback to estimation
+  const xpAttempts = actualXPA !== undefined ? actualXPA : Math.max(0, Math.round(teamScore / 7));
+  const xpMade = actualXP !== undefined ? actualXP : Math.max(0, Math.min(xpAttempts, Math.round(xpAttempts * (kickAccuracy / 100) + U.rand(-0.3, 0.3))));
 
   const successPct = fgAttempts > 0 ? Math.round((fgMade / fgAttempts) * 1000) / 10 : 0;
 
@@ -990,6 +991,10 @@ export function simGameStats(home, away, options = {}) {
         let score = 0;
         let touchdowns = 0;
         let field_goals = 0;
+        let xpMade = 0;
+        let xpAttempted = 0;
+        let twoPtMade = 0;
+        let twoPtAttempted = 0;
 
         // Base scoring probability calibrated to ~22 pts/game avg
         // offStr/defStr are roughly 50-90 range
@@ -1030,9 +1035,18 @@ export function simGameStats(home, away, options = {}) {
                 if (typeRoll < tdShare) {
                     // Touchdown (6 pts + XP attempt)
                     const xpRoll = U.random();
-                    if (xpRoll < 0.94) score += 7;     // Normal XP make (94% NFL avg)
-                    else if (xpRoll < 0.97) score += 6; // Missed XP
-                    else score += 8;                     // 2-point conversion
+                    if (xpRoll < 0.94) {
+                        score += 7;     // Normal XP make (94% NFL avg)
+                        xpMade++;
+                        xpAttempted++;
+                    } else if (xpRoll < 0.97) {
+                        score += 6; // Missed XP
+                        xpAttempted++;
+                    } else {
+                        score += 8; // 2-point conversion
+                        twoPtMade++;
+                        twoPtAttempted++;
+                    }
                     touchdowns++;
                 } else {
                     score += 3; // Field goal
@@ -1042,7 +1056,7 @@ export function simGameStats(home, away, options = {}) {
             // Otherwise: punt, turnover, turnover on downs (no points)
         }
 
-        return { score, touchdowns, field_goals };
+        return { score, touchdowns, field_goals, xpMade, xpAttempted, twoPtMade, twoPtAttempted };
     };
 
     const homeRes = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
@@ -1144,7 +1158,7 @@ export function simGameStats(home, away, options = {}) {
 
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
-    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs) => {
+    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualXP, actualXPA) => {
        team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
@@ -1197,7 +1211,7 @@ export function simGameStats(home, away, options = {}) {
 
       const kickers = groups['K'] || [];
       if (kickers.length > 0) {
-        Object.assign(kickers[0].stats.game, generateKickerStats(kickers[0], score, U));
+        Object.assign(kickers[0].stats.game, generateKickerStats(kickers[0], score, U, actualXP, actualXPA));
       }
 
       const punters = groups['P'] || [];
@@ -1207,8 +1221,8 @@ export function simGameStats(home, away, options = {}) {
     };
 
     // Pass the mods to the team generation
-    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs);
-    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs);
+    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeRes.xpMade, homeRes.xpAttempted);
+    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayRes.xpMade, awayRes.xpAttempted);
 
     // --- POST-GENERATION TD CONSISTENCY CHECK ---
     // Ensure total offensive TDs don't exceed what the score allows.

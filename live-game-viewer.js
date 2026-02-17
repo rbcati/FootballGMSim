@@ -2119,6 +2119,9 @@ class LiveGameViewer {
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
 
+    // NEW: Optimization for skipping - avoid DOM updates unless it's a critical game-end event
+    if (this.isSkipping && play.type !== 'game_end') return;
+
     // Update Combo State
     let comboIncreased = false;
     let comboBroken = false;
