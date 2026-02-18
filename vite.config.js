@@ -1,22 +1,17 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
-  // Root directory of the project
+  plugins: [react()],
   root: './',
-
-  // Build configuration
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    target: 'esnext', // Support Top-level await and modern workers
+    target: 'esnext',
   },
-
-  // Worker configuration
   worker: {
-    format: 'es', // Use ES modules for workers
+    format: 'es',
   },
-
-  // Server configuration
   server: {
     open: true,
     port: 3000,

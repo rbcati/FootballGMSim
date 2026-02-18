@@ -1,7 +1,9 @@
 // league.js - Core League Generation Logic
 'use strict';
-import { initializeCoachingStats } from './coaching.js';
+import { initializeCoachingStats } from './coach-system.js';
 import { makePlayer as makePlayerImport } from './player.js';
+import { Constants as ConstantsImport } from './constants.js';
+import { Utils as UtilsImport } from './utils.js';
 
 /**
  * Generates draft picks for a team for the next few years.
@@ -138,14 +140,14 @@ function getZeroTeamStats() {
  * @returns {Object} The generated league object.
  */
 function makeLeague(teams, options = {}, dependencies = {}) {
-    // Destructure dependencies with fallbacks to window
+    // Destructure dependencies with fallbacks to imported modules
     const {
-        Constants = (typeof window !== 'undefined' ? window.Constants : null),
-        Utils = (typeof window !== 'undefined' ? window.Utils : null),
-        makePlayer = makePlayerImport || (typeof window !== 'undefined' ? window.makePlayer : null),
-        makeSchedule = (typeof window !== 'undefined' ? window.makeSchedule : null),
-        recalcCap = (typeof window !== 'undefined' ? window.recalcCap : null),
-        generateInitialStaff = (typeof window !== 'undefined' ? window.generateInitialStaff : null)
+        Constants = ConstantsImport,
+        Utils = UtilsImport,
+        makePlayer = makePlayerImport,
+        makeSchedule = (dependencies.makeSchedule || null),
+        recalcCap = (dependencies.recalcCap || null),
+        generateInitialStaff = (dependencies.generateInitialStaff || null)
     } = dependencies;
 
     const missingDependencies = [];

@@ -1,75 +1,9 @@
 // coaching.js - Comprehensive Coaching Statistics System
 'use strict';
 
-import { COACH_SKILL_TREES } from './coach-system.js';
+import { COACH_SKILL_TREES, initializeCoachingStats } from './coach-system.js';
 
-/**
- * Initialize coaching stats for a coach
- * @param {Object} coach - Coach object
- * @returns {Object} Coach with initialized stats
- */
-export function initializeCoachingStats(coach) {
-  if (!coach) return null;
-  
-  if (!coach.stats) {
-    coach.stats = {
-      asHeadCoach: {
-        seasons: 0,
-        regularSeason: {
-          wins: 0,
-          losses: 0,
-          ties: 0,
-          winPercentage: 0.0
-        },
-        playoffs: {
-          wins: 0,
-          losses: 0,
-          winPercentage: 0.0,
-          appearances: 0
-        },
-        championships: {
-          superBowls: 0,
-          conferenceChampionships: 0
-        },
-        teamHistory: [],
-        bestSeason: {
-          year: 0,
-          team: '',
-          wins: 0,
-          losses: 17,
-          ties: 0,
-          winPercentage: 0.0
-        },
-        awards: []
-      },
-      asCoordinator: {
-        OC: {
-          seasons: 0,
-          teams: [],
-          pointsPerGame: [],
-          rankings: [], // Offensive rankings by season
-          awards: []
-        },
-        DC: {
-          seasons: 0,
-          teams: [],
-          pointsAllowedPerGame: [],
-          rankings: [], // Defensive rankings by season  
-          awards: []
-        }
-      },
-      careerStart: 0,
-      totalSeasons: 0
-    };
-  }
-  
-  // Initialize career tracking
-  if (!coach.careerHistory) {
-    coach.careerHistory = [];
-  }
-  
-  return coach;
-}
+export { initializeCoachingStats };
 
 /**
  * Update coaching stats after a regular season game
