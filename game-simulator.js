@@ -1167,7 +1167,7 @@ export function simGameStats(home, away, options = {}) {
 
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
-    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualFGs, actualXPs) => {
+    const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualFGs, actualXPs, actualTwoPts) => {
        team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
@@ -1296,15 +1296,45 @@ export function simGameStats(home, away, options = {}) {
           }
       }
 
+      // --- DISTRIBUTE 2-POINT CONVERSIONS ---
+      // Prioritize players who scored TDs, but fallback to any scorer
+      if (actualTwoPts > 0) {
+          let ptsToAssign = actualTwoPts;
+
+          // Scorer pool is already built
+          if (scorers.length > 0) {
+              while (ptsToAssign > 0) {
+                  // Bias heavily towards players who actually scored touchdowns
+                  const tdScorers = scorers.filter(s => (s.p.stats.game.rushTD > 0 || s.p.stats.game.recTD > 0));
+                  const pool = tdScorers.length > 0 ? tdScorers : scorers;
+
+                  const weights = pool.map(s => s.weight);
+                  const idx = U.weightedChoice(weights);
+                  const winner = pool[idx];
+
+                  if (winner && winner.p && winner.p.stats && winner.p.stats.game) {
+                      winner.p.stats.game.twoPtMade = (winner.p.stats.game.twoPtMade || 0) + 1;
+                  }
+                  ptsToAssign--;
+              }
+          }
+      }
+
       // Assign Pass TDs to QB
       if (qb && qb.stats.game) {
           qb.stats.game.passTD = totalRecTDs;
+          // QB doesn't get 2PT stats in standard box scores usually (unless rushing/catching),
+          // but sometimes passing 2PTs are tracked. For simplicity, we track it on the scorer.
       }
     };
 
     // Pass the mods to the team generation
-    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs);
-    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs);
+    // Pass actualTwoPts (homeRes.twoPtMade / awayRes.twoPtMade)
+    const homeTwoPts = homeRes.twoPtMade || 0;
+    const awayTwoPts = awayRes.twoPtMade || 0;
+
+    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs, homeTwoPts);
+    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs, awayTwoPts);
 
     // Situational stats (unaffected by perks for now)
     const generateTeamStats = (team, score, strength, oppStrength) => {

@@ -357,7 +357,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
       // Kicking/Punting
       fgMade: 0, fgAttempts: 0, xpMade: 0, xpAttempts: 0, punts: 0, puntYards: 0,
       fgMissed: 0, longestFG: 0, xpMissed: 0, successPct: 0, avgKickYards: 0,
-      avgPuntYards: 0, longestPunt: 0
+      avgPuntYards: 0, longestPunt: 0, twoPtMade: 0
     };
   }
 

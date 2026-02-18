@@ -600,7 +600,7 @@ class LiveGameViewer {
 
           const animate = (currentTime) => {
               // Safety break for cleanup
-              if (this.isGameEnded || !this.checkUI()) {
+              if (this.isGameEnded || !this.checkUI() || (this.viewMode && !this.container)) {
                   if (options.animationClass) element.classList.remove(options.animationClass);
                   return resolve();
               }
@@ -1542,7 +1542,8 @@ class LiveGameViewer {
                 name, pos,
                 passAtt: 0, passComp: 0, passYds: 0, passTD: 0, passInt: 0,
                 rushAtt: 0, rushYds: 0, rushTD: 0,
-                recTargets: 0, rec: 0, recYds: 0, recTD: 0
+                recTargets: 0, rec: 0, recYds: 0, recTD: 0,
+                xpMade: 0, xpAtt: 0, twoPtMade: 0
             };
         }
         return teamStats.players[pid];
@@ -1792,14 +1793,69 @@ class LiveGameViewer {
              }
         }
 
-        // Try for extra point (auto-success for now)
-        offense.score += 1;
-        if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
-             gameState.quarterScores[gameState.ballPossession][qIdx] += 1;
+        // Extra Point / 2-Point Conversion Logic
+        const scoreDiff = offense.score - defense.score; // After TD (6 pts added)
+        let attemptedTwoPoint = false;
+        let pointsAdded = 0;
+
+        // Logic: Go for 2 if...
+        // 1. Trailing by 2 (to tie)
+        // 2. Trailing by 1 (to win - aggressive)
+        // 3. Random small chance (analytics)
+        if (scoreDiff === -2 || (scoreDiff === -1 && gameState.quarter === 4 && gameState.time < 120)) {
+            attemptedTwoPoint = true;
+        } else if (U.random() < 0.05) {
+            attemptedTwoPoint = true;
         }
 
-        momentumChange += 15;
-        gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? 15 : -15)));
+        if (attemptedTwoPoint) {
+            // ~48% success rate for 2PT
+            if (U.random() < 0.48) {
+                pointsAdded = 2;
+                play.message += " (2-Pt Conversion GOOD)";
+                this.triggerVisualFeedback('two-point', '2 POINTS!');
+                if (offense.qb) {
+                     const qbStats = ensureStats(offense.qb.id, offense.qb.name, offense.qb.pos, offense.team.id);
+                     qbStats.twoPtMade = (qbStats.twoPtMade || 0) + 1; // Track for QB (or scorer)
+                }
+            } else {
+                play.message += " (2-Pt Conversion FAILED)";
+                this.triggerVisualFeedback('two-point-miss', 'FAILED');
+            }
+        } else {
+            // Extra Point (~94% success)
+            const kicker = offense.players.k;
+            const kickAcc = kicker?.ratings?.kickAccuracy || 75;
+            // Base 94% + accuracy modifier
+            const successChance = 0.94 + ((kickAcc - 70) * 0.002);
+
+            if (U.random() < successChance) {
+                pointsAdded = 1;
+                play.message += " (XP Good)";
+                // Update Kicker Stats
+                if (kicker) {
+                    const kStats = ensureStats(kicker.id, kicker.name, kicker.pos, offense.team.id);
+                    kStats.xpMade = (kStats.xpMade || 0) + 1;
+                    kStats.xpAtt = (kStats.xpAtt || 0) + 1;
+                }
+            } else {
+                play.message += " (XP Missed)";
+                this.triggerVisualFeedback('missed-xp', 'XP MISSED');
+                soundManager.playCrowdGasp();
+                if (kicker) {
+                    const kStats = ensureStats(kicker.id, kicker.name, kicker.pos, offense.team.id);
+                    kStats.xpAtt = (kStats.xpAtt || 0) + 1;
+                }
+            }
+        }
+
+        offense.score += pointsAdded;
+        if (gameState.quarterScores[gameState.ballPossession][qIdx] !== undefined) {
+             gameState.quarterScores[gameState.ballPossession][qIdx] += pointsAdded;
+        }
+
+        momentumChange += 15 + pointsAdded;
+        gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? (15+pointsAdded) : -(15+pointsAdded))));
 
         // OT Rule: Touchdown ends game on first possession (or any possession if sudden death)
         if (gameState.isOvertime) {
@@ -2826,7 +2882,7 @@ class LiveGameViewer {
           if (!this.gameState || this.isGameEnded) return;
 
           let playsInChunk = 0;
-          const CHUNK_SIZE = 20; // Process 20 plays per frame
+              const CHUNK_SIZE = 10; // Process 10 plays per frame (Optimized for mobile)
 
           while (!this.gameState.gameComplete && playsInChunk < CHUNK_SIZE && totalPlays < MAX_PLAYS) {
               playsInChunk++;
