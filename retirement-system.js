@@ -46,20 +46,36 @@
       }
     });
 
-    // Log announcements
+    // Log announcements and add to news
     if (announcements.length > 0) {
       console.log(`\n🏈 RETIREMENT ANNOUNCEMENTS (Year ${year}):`);
-      announcements.forEach(ann => {
+
+      // Iterate through retiredPlayers to check significance, using the index to get the announcement
+      retiredPlayers.forEach((entry, index) => {
+        const player = entry.player;
+        const ann = announcements[index];
         console.log(ann);
+
         if (league.news && Array.isArray(league.news)) {
           // Filter out less significant retirements from global news feed to prevent spam
-          // Include if: Star player (OVR > 80), Long career (> 10 years), or Award winner
-          // We check the announcement text for key achievements which are added by createRetirementAnnouncement
-          const isNotable = ann.includes('passing yards') || ann.includes('rushing yards') ||
-                            ann.includes('sacks') || ann.includes('interceptions') ||
-                            ann.includes('Awards:') || ann.includes('Super Bowl');
+          // Stricter Criteria for "Notable":
+          // 1. High OVR (> 80)
+          // 2. Hall of Fame Inductee
+          // 3. Significant Career Stats thresholds
 
-          if (isNotable) {
+          const stats = player.stats?.career || {};
+          const isHoF = player.legacy?.hallOfFame?.inducted;
+          const isStar = (player.ovr > 80) || (player.displayOvr > 80);
+
+          const hasSignificantStats =
+              (stats.passYd > 20000) ||
+              (stats.rushYd > 8000) ||
+              (stats.recYd > 8000) ||
+              (stats.sacks > 50) ||
+              (stats.defensiveInterceptions > 20) ||
+              (stats.tackles > 500);
+
+          if (isHoF || isStar || hasSignificantStats) {
               league.news.push(ann);
           }
         }

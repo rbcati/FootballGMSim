@@ -407,6 +407,8 @@ class LiveGameViewer {
   updateFieldState(yardLine, isHomePossession) {
       if (!this.checkUI()) return;
       const parent = this.viewMode ? this.container : this.modal;
+      if (!parent) return;
+
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
       const losEl = parent.querySelector('.marker-los') || parent.querySelector('.field-marker.marker-los');
       const fdEl = parent.querySelector('.marker-first-down') || parent.querySelector('.field-marker.marker-first-down');
@@ -738,17 +740,18 @@ class LiveGameViewer {
           return Promise.resolve();
       }
 
+      const parent = this.viewMode ? this.container : this.modal;
+      if (!parent) return Promise.resolve();
+
       // Safety check for FieldEffects
       if (!this.fieldEffects) {
           // Try to recover or just proceed without effects
-          const parent = this.viewMode ? this.container : this.modal;
           if (parent && parent.querySelector('.field-wrapper')) {
               this.renderField(parent.querySelector('.field-wrapper'));
           }
           if (!this.fieldEffects) return Promise.resolve();
       }
 
-      const parent = this.viewMode ? this.container : this.modal;
       const ballEl = parent.querySelector('.football-ball') || parent.querySelector('.ball');
       const ballShadow = parent.querySelector('.ball-shadow');
       const qbMarker = parent.querySelector('.marker-qb');
