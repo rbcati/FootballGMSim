@@ -2259,6 +2259,42 @@ body {
   text-shadow: 0 0 20px #FFA500;
 }
 
+/* Special Game Event Overlays */
+.game-event-overlay.two-point .event-text {
+  color: #FFD700;
+  text-shadow: 0 0 20px #FFA500;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.game-event-overlay.two-point::before {
+  content: '✌️';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: bounce 1s infinite;
+}
+
+.game-event-overlay.two-point-miss .event-text {
+  color: #FF453A;
+}
+.game-event-overlay.two-point-miss::before {
+  content: '❌';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: shake 0.5s;
+}
+
+.game-event-overlay.missed-xp .event-text {
+  color: #FF453A;
+}
+.game-event-overlay.missed-xp::before {
+  content: '🚫';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: shake 0.5s;
+}
+
 /* Additional Game Animations - Added by Day 2 Task */
 @keyframes run-bob {
   0%, 100% { transform: translate(-50%, -50%); }
