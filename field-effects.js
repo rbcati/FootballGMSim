@@ -133,6 +133,8 @@ export class FieldEffects {
                       type === 'fire' ? 30 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
+                      type === 'confetti_cannon' ? 200 :
+                      type === 'wall' ? 100 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -284,6 +286,32 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'confetti_cannon') {
+             // Explosive burst from center
+             const angle = Math.random() * Math.PI * 2;
+             const speed = Math.random() * 15 + 5;
+             p.x = this.canvas.width / 2;
+             p.y = this.canvas.height / 2;
+             p.vx = Math.cos(angle) * speed;
+             p.vy = Math.sin(angle) * speed;
+             // Bright colors
+             const colors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF'];
+             p.color = colors[Math.floor(Math.random() * colors.length)];
+             p.decay = 0.01;
+             p.size = Math.random() * 5 + 2;
+             p.gravity = 0.2;
+             p.life = 1.5;
+        } else if (type === 'wall') {
+             // Vertical wall of particles
+             p.x = x + (Math.random() - 0.5) * 10;
+             p.y = Math.random() * this.canvas.height;
+             p.vx = 0;
+             p.vy = (Math.random() - 0.5) * 2;
+             p.color = '#fff';
+             p.size = Math.random() * 3 + 1;
+             p.decay = 0.03;
+             p.life = 0.6;
+             p.gravity = 0;
         }
 
         return p;

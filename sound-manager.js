@@ -315,6 +315,42 @@ class SoundManager {
         this.playTone(130, 'sawtooth', 0.8, 0.2, 120, 600);
     }
 
+    playLevelUp() {
+        if (!this.enabled || this.muted) return;
+        const notes = [440, 554, 659, 880, 1108]; // A Major Arpeggio
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'sine', 0.2, 0.2, null, i * 100);
+        });
+        this.playNoise(1.5, 0.1, 500); // Shimmer
+    }
+
+    playDenied() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(100, 'sawtooth', 0.1, 0.5); // Sharp low
+        this.playTone(80, 'square', 0.3, 0.4, 40, 50); // Deep buzz
+        this.playNoise(0.4, 0.4); // Slam
+    }
+
+    playCrowdBuildup() {
+        if (!this.enabled || this.muted) return;
+        // Rising noise
+        for(let i=0; i<10; i++) {
+             setTimeout(() => {
+                 if(!this.muted) this.playNoise(0.3, 0.05 + (i * 0.03));
+             }, i * 200);
+        }
+        // Rising tone
+        this.playTone(200, 'sawtooth', 2.0, 0.05, 600);
+    }
+
+    playStreakFire() {
+        if (!this.enabled || this.muted) return;
+        // Crackling fire sound + high energy ping
+        this.playNoise(1.0, 0.3);
+        this.playTone(880, 'sine', 0.5, 0.1);
+        this.playTone(1760, 'sine', 0.5, 0.05, null, 100);
+    }
+
     playGameStart() {
         if (!this.enabled || this.muted) return;
         this.playWhistle();

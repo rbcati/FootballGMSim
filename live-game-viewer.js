@@ -33,6 +33,7 @@ class LiveGameViewer {
     this.combo = 0; // Combo counter for consecutive successes
     this.driveMomentum = 0; // Heat of current drive
     this.lastFireTime = 0; // Throttle for momentum fire effects
+    this.hasPlayedFireSound = false;
 
     this.timeouts = new Set(); // Track active timeouts
   }
@@ -768,9 +769,13 @@ class LiveGameViewer {
           const root = this.viewMode ? this.container : this.modal;
           const fieldWrapper = root ? root.querySelector('.field-wrapper') : null;
           if (fieldWrapper) {
+              fieldWrapper.classList.add('slow-mo');
               fieldWrapper.style.transition = 'transform 1s ease';
               fieldWrapper.style.transform = 'scale(1.05)';
-              this.setTimeoutSafe(() => fieldWrapper.style.transform = 'scale(1)', 2000 * durationScale);
+              this.setTimeoutSafe(() => {
+                  fieldWrapper.style.transform = 'scale(1)';
+                  fieldWrapper.classList.remove('slow-mo');
+              }, 2000 * durationScale);
           }
       }
 
@@ -857,6 +862,11 @@ class LiveGameViewer {
 
       // PRE-SNAP PHASE
       if (!play.playType.includes('kick') && !play.playType.includes('punt')) {
+          // Crowd Tension on 3rd/4th down
+          if (play.down >= 3 && play.distance > 2 && soundManager.playCrowdBuildup) {
+               soundManager.playCrowdBuildup();
+          }
+
           // Randomized cadence delay (variable start count)
           const cadenceDelay = (300 + Math.random() * 400) * durationScale;
           await new Promise(r => this.setTimeoutSafe(r, cadenceDelay));
@@ -2340,13 +2350,18 @@ class LiveGameViewer {
                  const isHome = this.gameState.ballPossession === 'home';
                  const yardLine = this.gameState[this.gameState.ballPossession].yardLine;
                  const pct = this.getVisualPercentage(yardLine, isHome);
+                 this.fieldEffects.spawnParticles(50, 'confetti_cannon');
                  this.fieldEffects.spawnParticles(pct, 'touchdown');
             }
         } else if (play.result === 'turnover' || play.result === 'turnover_downs') {
-            if (play.playType.includes('pass')) soundManager.playIntercept();
-            else soundManager.playFumble();
-
-            soundManager.playDefenseStop();
+            if (play.result === 'turnover_downs') {
+                 if (soundManager.playDenied) soundManager.playDenied();
+                 else soundManager.playDefenseStop();
+            } else {
+                if (play.playType.includes('pass')) soundManager.playIntercept();
+                else soundManager.playFumble();
+                soundManager.playDefenseStop();
+            }
 
             if (play.message && play.message.toLowerCase().includes('intercept')) {
                  soundManager.playInterception();
@@ -2361,6 +2376,12 @@ class LiveGameViewer {
 
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('save stop', 'STOPPED!');
+                if (this.fieldEffects) {
+                     const isHome = this.gameState.ballPossession === 'home';
+                     const yardLine = this.gameState[this.gameState.ballPossession].yardLine;
+                     const pct = this.getVisualPercentage(yardLine, isHome);
+                     this.fieldEffects.spawnParticles(pct, 'wall');
+                }
             } else {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
@@ -2948,6 +2969,11 @@ class LiveGameViewer {
              if (userScore > oppScore) {
                  soundManager.playCheer();
                  if (soundManager.playHorns) soundManager.playHorns();
+
+                 this.setTimeoutSafe(() => {
+                     if (soundManager.playLevelUp) soundManager.playLevelUp();
+                 }, 1500);
+
                  launchConfetti();
                  this.showGameOverOverlay('VICTORY', userScore, oppScore, 'positive');
              } else if (userScore < oppScore) {
@@ -3068,9 +3094,10 @@ class LiveGameViewer {
                     <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">Fan Grade</div>
                     <div style="font-size: 2.5rem; font-weight: bold; color: ${grade.startsWith('A') ? '#4cd964' : (grade === 'F' ? '#ff3b30' : '#fff')}">${grade}</div>
                 </div>
-                 <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
+                 <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 150px;">
                     <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">XP Earned</div>
                     <div style="font-size: 2.5rem; font-weight: bold; color: #ffd700;">+${xp}</div>
+                    <div class="xp-progress-bar"><div class="xp-progress-fill" style="width: 0%"></div></div>
                 </div>
             </div>
 
@@ -3100,6 +3127,11 @@ class LiveGameViewer {
       }
 
       parent.appendChild(overlay);
+
+      this.setTimeoutSafe(() => {
+          const bar = overlay.querySelector('.xp-progress-fill');
+          if(bar) bar.style.width = '100%';
+      }, 500);
 
       overlay.querySelector('#dismissOverlay').addEventListener('click', () => {
           overlay.remove();
@@ -3400,6 +3432,13 @@ class LiveGameViewer {
       let streakHtml = '';
       if (this.combo >= 3) {
           streakHtml = `<div class="streak-fire">🔥 ON FIRE! 🔥</div>`;
+          // Sound trigger (throttled)
+          if (this.combo === 3 && soundManager.playStreakFire && !this.hasPlayedFireSound) {
+               soundManager.playStreakFire();
+               this.hasPlayedFireSound = true;
+          }
+      } else {
+          this.hasPlayedFireSound = false; // Reset
       }
       // Combo indicator
       if (this.combo > 0) {
