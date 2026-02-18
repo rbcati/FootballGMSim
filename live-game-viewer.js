@@ -430,7 +430,7 @@ class LiveGameViewer {
           // Fade Out Sequence
           const elements = [ballEl, losEl, fdEl].filter(e => e);
           elements.forEach(e => {
-              if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
+              if (!e.classList.contains('smooth-fade')) e.classList.add('smooth-fade');
           });
 
           this.triggerShake();
@@ -460,7 +460,7 @@ class LiveGameViewer {
 
               elements.forEach(e => {
                   e.style.transition = '';
-                  e.classList.remove('fade-out');
+                  e.classList.remove('smooth-fade');
                   e.classList.add('fade-in');
               });
 
@@ -647,12 +647,28 @@ class LiveGameViewer {
                   translateY = parabolicY;
               }
 
+              // Gravity (Drop)
+              if (options.gravity) {
+                  // Accelerate down: y = 0.5 * g * t^2
+                  // We scale it so at t=1, y = gravity
+                  translateY += options.gravity * easeProgress * easeProgress;
+              }
+
               // Sway Logic (Lateral Movement for Runs)
               if (options.sway) {
                   // Sine wave lateral movement
                   const swayAmount = typeof options.sway === 'number' ? options.sway : 5;
                   const lateralOffset = Math.sin(easeProgress * Math.PI * 4) * swayAmount;
                   translateY += lateralOffset;
+              }
+
+              // Bounce Logic
+              if (options.bounce && progress > 0.8) {
+                  // Simple bounce near end
+                  const bounceProgress = (progress - 0.8) / 0.2; // 0 to 1
+                  // Sine wave dampening
+                  const bounceY = -Math.abs(Math.sin(bounceProgress * Math.PI * 3)) * 10 * (1 - bounceProgress);
+                  translateY += bounceY;
               }
 
               // Rotation logic
@@ -947,7 +963,10 @@ class LiveGameViewer {
                  qbMarker.classList.add('sack-shake');
                  this.setTimeoutSafe(() => qbMarker.classList.remove('sack-shake'), 600);
              }
-             if (defMarker) defMarker.classList.add('tackle-collision');
+             if (defMarker) {
+                 defMarker.classList.add('sack-impact'); // New animation
+                 this.setTimeoutSafe(() => defMarker.classList.remove('sack-impact'), 500);
+             }
           } else {
               // 2. Throw
               const throwDuration = 700 * durationScale;
@@ -967,10 +986,15 @@ class LiveGameViewer {
               // Determine rotation type
               const rotType = play.playType === 'pass_short' ? 'wobble' : 'spiral';
 
+              // Check for Interception to adjust target
+              let targetPct = endPct;
+              // If interception, ball goes to defender (who is at endPct) or slightly modified
+              // We'll stick with endPct as the interception point
+
               // Ball Arc - Use Linear for X to simulate projectile
               await this.animateTrajectory(ballEl, {
                   startX: dropbackPct,
-                  endX: endPct,
+                  endX: targetPct,
                   duration: throwDuration,
                   arcHeight: 25,
                   easing: 'linear', // Improved physics
@@ -979,30 +1003,67 @@ class LiveGameViewer {
                   trail: true
               });
 
+              // Interception Specifics
+              if (play.result === 'turnover' && (play.message.toLowerCase().includes('intercept') || play.playType.includes('pass'))) {
+                  if (defMarker) {
+                      defMarker.classList.add('interception-catch');
+                      this.setTimeoutSafe(() => defMarker.classList.remove('interception-catch'), 800);
+                  }
+                  // Optional: Return Animation?
+                  // For now, just the catch is good
+              }
+
               // Pulse if TD
               if (play.result === 'touchdown') {
                   ballEl.classList.add('animate-pulse');
-                  if (skillMarker) skillMarker.classList.add('celebrate-jump');
+                  if (skillMarker) {
+                      const celebrations = ['celebrate-jump', 'celebrate-dance-2', 'celebrate-flip'];
+                      const anim = celebrations[Math.floor(Math.random() * celebrations.length)];
+                      skillMarker.classList.add(anim);
+                  }
               }
 
-              // Catch Effect
-              if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
+              // Catch Effect (Offense)
+              if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover' && !play.message.toLowerCase().includes('intercept')) {
                    if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
                    soundManager.playCatch();
                    if (skillMarker) {
                        skillMarker.classList.add('marker-catch');
                        this.setTimeoutSafe(() => skillMarker.classList.remove('marker-catch'), 500);
                    }
+              } else if (play.result === 'incomplete') {
+                  // Bounce off ground
+                  await this.animateTrajectory(ballEl, {
+                      startX: endPct,
+                      endX: endPct + (isHome ? 2 : -2),
+                      duration: 300,
+                      arcHeight: 5,
+                      bounce: true
+                  });
               }
 
               // End of play collision (tackle)
-              if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
+              if (play.result !== 'touchdown' && play.result !== 'incomplete' && !play.message.toLowerCase().includes('intercept')) {
                   soundManager.playTackle();
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
-                  if (ballEl) {
-                      ballEl.classList.add('tackle-collision');
-                      this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
+
+                  // Fumble check
+                  if (play.message.toLowerCase().includes('fumble')) {
+                      ballEl.classList.add('fumble-bounce');
+                      // Animate fumble bounce
+                      await this.animateTrajectory(ballEl, {
+                          startX: endPct,
+                          endX: endPct + (Math.random() * 6 - 3), // Random bounce
+                          duration: 500,
+                          arcHeight: 5,
+                          bounce: true
+                      });
+                  } else {
+                      if (ballEl) {
+                          ballEl.classList.add('tackle-collision');
+                          this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
+                      }
                   }
               }
           }
@@ -1079,6 +1140,10 @@ class LiveGameViewer {
               // Dive Animation for Short TDs
               if (skillMarker && play.yards < 5) {
                   skillMarker.classList.add('dive-td');
+              } else if (skillMarker) {
+                  const celebrations = ['celebrate-jump', 'celebrate-dance-2', 'celebrate-flip', 'celebrate-spin'];
+                  const anim = celebrations[Math.floor(Math.random() * celebrations.length)];
+                  skillMarker.classList.add(anim);
               }
           } else if (skillMarker) {
               // Collision/Tackle
@@ -1096,9 +1161,22 @@ class LiveGameViewer {
                        defMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => defMarker.classList.remove('tackle-collision'), 300);
                    }
-                   if (ballEl) {
-                       ballEl.classList.add('tackle-collision');
-                       this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
+
+                   // Fumble on run
+                   if (play.message.toLowerCase().includes('fumble')) {
+                       ballEl.classList.add('fumble-bounce');
+                       await this.animateTrajectory(ballEl, {
+                           startX: endPct,
+                           endX: endPct + (Math.random() * 6 - 3),
+                           duration: 500,
+                           arcHeight: 3,
+                           bounce: true
+                       });
+                   } else {
+                       if (ballEl) {
+                           ballEl.classList.add('tackle-collision');
+                           this.setTimeoutSafe(() => ballEl.classList.remove('tackle-collision'), 300);
+                       }
                    }
                }
           }
@@ -2254,14 +2332,21 @@ class LiveGameViewer {
     if (this.playByPlay.length > 0) {
         const lastPlay = this.playByPlay[this.playByPlay.length - 1];
         if (lastPlay) {
-            if (lastPlay.result === 'touchdown') baseDelay += 2000; // Let celebration breathe
-            else if (lastPlay.result === 'turnover' || lastPlay.result === 'turnover_downs') baseDelay += 1500;
-            else if (lastPlay.result === 'big_play') baseDelay += 1000;
-            else if (lastPlay.result === 'incomplete') {
-                if (this.tempo !== 'slow') baseDelay = Math.max(400, baseDelay - 400); // Speed up after incomplete
+            if (lastPlay.result === 'touchdown') baseDelay = 5000; // Let celebration breathe
+            else if (lastPlay.result === 'turnover' || lastPlay.result === 'turnover_downs') baseDelay = 5000;
+            else if (lastPlay.message && lastPlay.message.includes('First down')) baseDelay = 3000;
+            else if (lastPlay.result === 'big_play') baseDelay = 3500;
+            else if (lastPlay.result === 'incomplete' || Math.abs(lastPlay.yards) < 3) {
+                if (this.tempo !== 'slow') baseDelay = 1500; // Speed up after incomplete/short
+            } else {
+                baseDelay = 2500; // Standard play
             }
         }
     }
+
+    // Tempo overrides (scaling)
+    if (this.tempo === 'hurry-up') baseDelay *= 0.3;
+    if (this.tempo === 'slow') baseDelay *= 1.5;
 
     return baseDelay;
   }
@@ -2630,28 +2715,28 @@ class LiveGameViewer {
 
     // Trigger animations explicitly
     if (homeChanged && scoreHomeEl) {
-        scoreHomeEl.classList.remove('pulse-score-strong');
+        scoreHomeEl.classList.remove('score-pop');
         void scoreHomeEl.offsetWidth; // Reflow
-        scoreHomeEl.classList.add('pulse-score-strong');
+        scoreHomeEl.classList.add('score-pop');
 
         if (home.score.toString().length > 2) scoreHomeEl.style.fontSize = '1.5rem';
         if (homeBox) {
-             homeBox.classList.remove('pulse-score-strong');
+             homeBox.classList.remove('score-pop');
              void homeBox.offsetWidth;
-             homeBox.classList.add('pulse-score-strong');
+             homeBox.classList.add('score-pop');
         }
         this.animateNumber(scoreHomeEl, this.lastHomeScore, home.score, 1000);
     }
     if (awayChanged && scoreAwayEl) {
-        scoreAwayEl.classList.remove('pulse-score-strong');
+        scoreAwayEl.classList.remove('score-pop');
         void scoreAwayEl.offsetWidth;
-        scoreAwayEl.classList.add('pulse-score-strong');
+        scoreAwayEl.classList.add('score-pop');
 
         if (away.score.toString().length > 2) scoreAwayEl.style.fontSize = '1.5rem';
         if (awayBox) {
-             awayBox.classList.remove('pulse-score-strong');
+             awayBox.classList.remove('score-pop');
              void awayBox.offsetWidth;
-             awayBox.classList.add('pulse-score-strong');
+             awayBox.classList.add('score-pop');
         }
         this.animateNumber(scoreAwayEl, this.lastAwayScore, away.score, 1000);
     }
