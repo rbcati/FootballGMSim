@@ -472,7 +472,8 @@ class LiveGameViewer {
           // Normal Smooth Update (CSS transition handles it)
           // Ensure transition is active if it was disabled by JS animation previously and not cleared
           if (ballEl.style.transition === 'none') {
-              ballEl.style.transition = 'left 0.6s cubic-bezier(0.22, 1, 0.36, 1)';
+              ballEl.style.transition = ''; // Revert to CSS class transition
+              ballEl.classList.add('smooth-transition');
           }
 
           ballEl.style.left = `${pct}%`;
@@ -2416,7 +2417,7 @@ class LiveGameViewer {
             this.triggerShake('hard');
 
             if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save stop', 'STOPPED!');
+                this.triggerVisualFeedback('save defense-stop', 'STOPPED!');
             } else {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
@@ -2428,7 +2429,7 @@ class LiveGameViewer {
             soundManager.playCrowdGasp();
             this.triggerShake();
             this.triggerFloatText('NO GOOD!', 'bad');
-            this.triggerVisualFeedback('save stop', 'NO GOOD!');
+            this.triggerVisualFeedback('save defense-stop', 'NO GOOD!');
         } else if (play.result === 'sack') {
             soundManager.playSack();
             soundManager.playShockwave();
@@ -2450,7 +2451,7 @@ class LiveGameViewer {
             soundManager.playFieldGoal();
             soundManager.playKick();
             this.triggerFloatText('GOOD!');
-            this.triggerVisualFeedback('goal field-goal', 'FIELD GOAL!');
+            this.triggerVisualFeedback('goal field-goal-made', 'FIELD GOAL!');
             if (launchConfetti) launchConfetti();
         } else if (play.playType === 'punt') {
             soundManager.playKick();
@@ -2471,7 +2472,7 @@ class LiveGameViewer {
              soundManager.playPing();
         } else if (play.result === 'field_goal_miss') {
              soundManager.playFailure();
-             this.triggerVisualFeedback('save stop', 'NO GOOD!');
+             this.triggerVisualFeedback('save defense-stop', 'NO GOOD!');
         } else if (play.result === 'safety') {
              soundManager.playFailure();
              this.triggerVisualFeedback('save safety', 'SAFETY!');

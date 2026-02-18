@@ -4,8 +4,8 @@ test('Live Game: Skip to End Race Condition', async ({ page }) => {
   page.on('console', msg => console.log('PAGE LOG:', msg.text()));
   page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
 
-  // 1. Setup Game (Assume server running at localhost:8000)
-  await page.goto('http://localhost:8000/');
+  // 1. Setup Game (Assume server running at localhost:3000)
+  await page.goto('http://localhost:3000/');
 
   // Wait for game controller to initialize
   await page.waitForFunction(() => window.initNewGame, { timeout: 10000 });
