@@ -5,10 +5,13 @@
   },
   "dependencies": {
     "jsdom": "^27.4.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "vite": "^7.3.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@vitejs/plugin-react": "^5.1.4",
     "playwright": "^1.58.2"
   }
 }
