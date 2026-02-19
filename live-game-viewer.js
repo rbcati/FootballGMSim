@@ -585,6 +585,10 @@ class LiveGameViewer {
           };
 
           let easing = easeInOutQuad;
+
+          // Improved default easing for arcs (passes/kicks)
+          if (!options.easing && options.arcHeight > 0) easing = easeOutCubic;
+
           if (options.easing === 'linear') easing = easeLinear;
           else if (options.easing === 'easeOut') easing = easeOutQuad;
           else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
@@ -804,29 +808,47 @@ class LiveGameViewer {
 
       // Reset Ball with Smooth Fade for Possession Change
       if (shouldSnap) {
-          // Fade Out
-          ballEl.style.opacity = 0;
-          if (ballShadow) ballShadow.style.opacity = 0;
+          const isSamePossession = startState.possession === this.gameState.ballPossession;
+          const dist = Math.abs(currentLeft - startPct);
 
-          await new Promise(r => this.setTimeoutSafe(r, 200));
+          // Only slide back if same possession and reasonable distance (e.g. incomplete pass return)
+          if (isSamePossession && dist < 40 && dist > 0) {
+              // Slide Back Animation (Referee Spot)
+              await this.animateTrajectory(ballEl, {
+                  startX: currentLeft,
+                  endX: startPct,
+                  duration: 400 * durationScale,
+                  easing: 'easeOutCubic'
+              });
 
-          ballEl.style.transition = 'none';
-          ballEl.style.left = `${startPct}%`;
-          ballEl.style.transform = 'translate(-50%, -50%)';
+              // Ensure final state
+              ballEl.style.left = `${startPct}%`;
+              if (ballShadow) ballShadow.style.left = `${startPct}%`;
+          } else {
+              // Fade Out (Standard Reset / Turnover)
+              ballEl.style.opacity = 0;
+              if (ballShadow) ballShadow.style.opacity = 0;
 
-          if (ballShadow) {
-              ballShadow.style.transition = 'none';
-              ballShadow.style.left = `${startPct}%`;
-              ballShadow.style.transform = 'translate(-50%, -50%)';
+              await new Promise(r => this.setTimeoutSafe(r, 200));
+
+              ballEl.style.transition = 'none';
+              ballEl.style.left = `${startPct}%`;
+              ballEl.style.transform = 'translate(-50%, -50%)';
+
+              if (ballShadow) {
+                  ballShadow.style.transition = 'none';
+                  ballShadow.style.left = `${startPct}%`;
+                  ballShadow.style.transform = 'translate(-50%, -50%)';
+              }
+
+              // Wait briefly for position to set
+              await new Promise(r => this.setTimeoutSafe(r, 50));
+
+              // Fade In
+              ballEl.style.opacity = 1;
+              if (ballShadow) ballShadow.style.opacity = 1;
+              ballEl.style.transition = '';
           }
-
-          // Wait briefly for position to set
-          await new Promise(r => this.setTimeoutSafe(r, 50));
-
-          // Fade In
-          ballEl.style.opacity = 1;
-          if (ballShadow) ballShadow.style.opacity = 1;
-          ballEl.style.transition = '';
       }
 
       // Setup Markers
@@ -834,8 +856,21 @@ class LiveGameViewer {
           if (el) {
               el.style.transition = 'none';
               el.style.left = `${startPct}%`;
-              el.style.opacity = show ? '1' : '0';
               el.style.backgroundColor = color;
+
+              if (show) {
+                  // Force reflow and restore transition for fade-in
+                  void el.offsetWidth;
+                  el.style.transition = '';
+
+                  el.style.opacity = '1';
+                  el.classList.remove('fade-out-marker');
+                  el.classList.add('fade-in-marker');
+              } else {
+                  el.style.opacity = '0';
+                  el.classList.remove('fade-in-marker');
+              }
+
               el.classList.remove('pulse-marker', 'celebrate-jump', 'celebrate-spin', 'marker-catch', 'marker-collision', 'dive-td');
           }
       };
@@ -1210,9 +1245,16 @@ class LiveGameViewer {
       // Cleanup
       this.setTimeoutSafe(() => {
           if (ballEl) ballEl.classList.remove('animate-pulse');
-          if (qbMarker) qbMarker.style.opacity = 0;
-          if (skillMarker) skillMarker.style.opacity = 0;
-          if (defMarker) defMarker.style.opacity = 0;
+
+          const cleanupMarker = (m) => {
+              if (m) {
+                  m.classList.remove('fade-in-marker');
+                  m.classList.add('fade-out-marker');
+              }
+          };
+          cleanupMarker(qbMarker);
+          cleanupMarker(skillMarker);
+          cleanupMarker(defMarker);
       }, 1000);
 
       return Promise.resolve();

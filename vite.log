@@ -3,43 +3,8 @@
 > vite
 
 
-  VITE v7.3.1  ready in 378 ms
+  VITE v7.3.1  ready in 249 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: use --host to expose
-(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error: The following dependencies are imported but could not be resolved:
-
-  fixes.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  constants.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  utils.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  player.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  coaching.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  league.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  schedule.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  state.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  coach-system.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  simulation.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  events.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  playoffs.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  game-runner.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  freeagency.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  trade.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  tradeproposals.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  draft.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  scheme-management.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  player-stats-viewer.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  live-game-viewer.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  standings-page.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  football-db.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  ui.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  achievements.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  weekly-recap.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  action-items.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  news-viewer.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  main.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-  league-dashboard.js?v=1.0.1 (imported by /app/verification/page_dump.html)
-
-Are they installed?
-    at file:///app/node_modules/vite/dist/node/chunks/config.js:31903:33
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async file:///app/node_modules/vite/dist/node/chunks/config.js:34111:15
+4:02:48 PM [vite] (client) page reload live-game-viewer.js
