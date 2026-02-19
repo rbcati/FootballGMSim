@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult, distributePassingTargets } from './game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -1415,8 +1415,12 @@ class LiveGameViewer {
       ballPossession: 'home', // 'home' or 'away'
       gameComplete: false,
       quarterScores: {
-          home: [0, 0, 0, 0],
-          away: [0, 0, 0, 0]
+          home: [0, 0, 0, 0, 0, 0],
+          away: [0, 0, 0, 0, 0, 0]
+      },
+      otPossessions: {
+          home: 0,
+          away: 0
       },
       drive: {
           plays: 0,
@@ -1618,8 +1622,18 @@ class LiveGameViewer {
 
     } else if (baseType === 'pass') {
       // Pick Target
-      const targets = [...offense.players.wrs, ...offense.players.tes];
-      const target = targets.length > 0 ? targets[Math.floor(U.random() * targets.length)] : null;
+      let target = null;
+      const allReceivers = [...offense.players.wrs, ...offense.players.tes];
+      if (typeof distributePassingTargets === 'function' && allReceivers.length > 0) {
+          // Use weighted logic from simulator
+          const weightedTargets = distributePassingTargets(allReceivers, 100, U);
+          const weights = weightedTargets.map(t => t.targets);
+          const selectedIdx = U.weightedChoice(weights);
+          target = weightedTargets[selectedIdx] ? weightedTargets[selectedIdx].player : null;
+      } else {
+          // Fallback
+          target = allReceivers.length > 0 ? allReceivers[Math.floor(U.random() * allReceivers.length)] : null;
+      }
       player = target;
       const qb = offense.qb;
 
@@ -1728,7 +1742,25 @@ class LiveGameViewer {
             gameState.quarterScores[gameState.ballPossession][qIdx] += 3;
         }
         momentumChange += 5;
-        this.switchPossession(gameState); // Kickoff next (assume touchback for now)
+
+        // OT Rules for FG
+        if (gameState.isOvertime) {
+            if (gameState.otFirstPossession) {
+                // First possession FG does NOT end game
+                gameState.otFirstPossession = false;
+                this.switchPossession(gameState);
+            } else if (gameState.home.score !== gameState.away.score) {
+                // Sudden death winner
+                play.message += " (Game Winner!)";
+                gameState.time = 0;
+                gameState.gameComplete = true;
+            } else {
+                // Tied (Matching FG)
+                this.switchPossession(gameState);
+            }
+        } else {
+            this.switchPossession(gameState);
+        }
       } else {
         play.result = 'field_goal_miss';
         play.message = `Field goal is NO GOOD (${distance} yards)`;
@@ -1861,7 +1893,7 @@ class LiveGameViewer {
         momentumChange += 15 + pointsAdded;
         gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? (15+pointsAdded) : -(15+pointsAdded))));
 
-        // OT Rule: Touchdown ends game on first possession (or any possession if sudden death)
+        // OT Rule: Touchdown ends game
         if (gameState.isOvertime) {
             play.message += " (Game Winner!)";
             gameState.time = 0; // End game immediately
@@ -1999,6 +2031,25 @@ class LiveGameViewer {
    * Switch ball possession
    */
   switchPossession(gameState, startYardLine = 25) {
+    // Handle OT Logic BEFORE switch
+    if (gameState.isOvertime) {
+        if (gameState.otPossessions) {
+            gameState.otPossessions[gameState.ballPossession]++;
+        }
+        gameState.otFirstPossession = false; // Any possession change ends "first possession" status
+
+        // If scores differ in OT (and we are switching), it means the defense held the lead -> Game Over
+        if (gameState.home.score !== gameState.away.score) {
+            gameState.gameComplete = true;
+            this.renderPlay({
+                type: 'game_end',
+                message: 'Game Over (Defense Stop)',
+                finalScore: { home: gameState.home.score, away: gameState.away.score }
+            });
+            return;
+        }
+    }
+
     // Generate Drive Summary
     const drive = gameState.drive;
     const timeElapsed = Math.max(0, drive.startTime - gameState.time);
@@ -2227,6 +2278,8 @@ class LiveGameViewer {
         await this.animatePlay(play, startState);
         // RACE CHECK: If skipping or ended during animation, abort
         if (this.isGameEnded || this.isSkipping) {
+            // Ensure we log this play so stats/history aren't lost
+            this.playByPlay.push(play);
             this.isProcessingTurn = false;
             return;
         }
@@ -2332,6 +2385,7 @@ class LiveGameViewer {
    */
   renderPlay(play) {
     if (!this.checkUI()) return; // Safety guard
+    if (!play.result) play.result = ''; // Null safety
 
     // Update Combo State
     let comboIncreased = false;
