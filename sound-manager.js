@@ -315,6 +315,45 @@ class SoundManager {
         this.playTone(130, 'sawtooth', 0.8, 0.2, 120, 600);
     }
 
+    playDenied() {
+        if (!this.enabled || this.muted) return;
+        // Double buzzer / heavy block
+        this.playTone(150, 'square', 0.4, 0.2);
+        this.playTone(100, 'sawtooth', 0.5, 0.3, 50); // Deep crunch
+        this.playTone(150, 'square', 0.4, 0.2, 300); // Second hit
+    }
+
+    playLevelUp() {
+        if (!this.enabled || this.muted) return;
+        // Ascending chime
+        const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51]; // C E G C E
+        notes.forEach((freq, i) => {
+            this.playTone(freq, 'sine', 0.4, 0.1, null, i * 100);
+        });
+        this.playNoise(1.0, 0.1, 500); // Shimmer
+    }
+
+    playStreakFire() {
+        if (!this.enabled || this.muted) return;
+        // Whoosh + Crackle
+        this.playNoise(0.8, 0.3);
+        this.playTone(200, 'sawtooth', 0.3, 0.1, 100); // Pop
+        this.playTone(300, 'sawtooth', 0.3, 0.1, 250); // Pop
+        this.playTone(400, 'sawtooth', 0.3, 0.1, 400); // Pop
+    }
+
+    playCrowdBuildup() {
+        if (!this.enabled || this.muted) return;
+        // Rising noise
+        this.playNoise(2.0, 0.1); // Base noise
+        this.playTone(100, 'sawtooth', 0.2, 2.0, 200); // Low rumble rising
+        // Simulate volume swell manually via multiple noise bursts?
+        // Simple approach: long noise with rising filter/gain if possible, but our playNoise is simple.
+        // We'll layer a rising tone.
+        this.playTone(200, 'triangle', 0.2, 0.1, 800); // Rise
+        this.playTone(300, 'triangle', 0.3, 0.1, 1200); // Rise more
+    }
+
     playGameStart() {
         if (!this.enabled || this.muted) return;
         this.playWhistle();

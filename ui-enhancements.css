@@ -2455,6 +2455,35 @@ body {
   margin-bottom: 10px;
 }
 
+/* Denied Overlay */
+.game-event-overlay.denied .event-text {
+  color: #fff;
+  border: 6px solid #fff;
+  background: #d32f2f; /* Deep Red */
+  padding: 10px 40px;
+  transform: rotate(-15deg) scale(1.2);
+  border-radius: 4px;
+  box-shadow: 0 0 30px rgba(211, 47, 47, 0.8);
+  font-family: 'Impact', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+}
+
+.game-event-overlay.denied::before {
+  content: '⛔';
+  display: block;
+  font-size: 6rem;
+  margin-bottom: 10px;
+  animation: stomp 0.4s ease-out;
+}
+
+@keyframes stomp {
+    0% { transform: scale(3); opacity: 0; }
+    60% { transform: scale(0.8); opacity: 1; }
+    80% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
 /* Handoff Animation - QB and RB interaction */
 .handoff-meet {
     transform: translate(-50%, -50%) scale(0.8) !important;

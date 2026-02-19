@@ -783,7 +783,9 @@ class LiveGameViewer {
       const isCritical = this.gameState.quarter >= 4 && scoreDiff <= 8 && play.down >= 3;
 
       if (isCritical && !play.playType.includes('kick') && !play.playType.includes('punt')) {
-          soundManager.playHeartbeat();
+          if (soundManager.playCrowdBuildup) soundManager.playCrowdBuildup();
+          else soundManager.playHeartbeat();
+
           if (play.down === 4) this.triggerFloatText('CRITICAL DOWN', 'warning');
       }
 
@@ -2365,7 +2367,11 @@ class LiveGameViewer {
         // Combo Feedback
         if (comboIncreased && this.combo > 1) {
              this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
-             soundManager.playPing();
+             if (this.combo >= 3 && soundManager.playStreakFire) {
+                 soundManager.playStreakFire();
+             } else {
+                 soundManager.playPing();
+             }
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
@@ -2420,7 +2426,17 @@ class LiveGameViewer {
             this.triggerShake('hard');
 
             if (play.result === 'turnover_downs') {
-                this.triggerVisualFeedback('save defense-stop', 'STOPPED!');
+                this.triggerVisualFeedback('denied', 'DENIED!');
+                if (soundManager.playDenied) soundManager.playDenied();
+                else soundManager.playDefenseStop();
+
+                // Spawn Wall Particles
+                if (this.fieldEffects) {
+                     // Use the yardLine from the play object as that's where the stop happened
+                     const isHome = this.gameState.ballPossession === 'home';
+                     const pct = this.getVisualPercentage(play.yardLine, isHome);
+                     this.fieldEffects.spawnParticles(pct, 'wall');
+                }
             } else {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
@@ -3099,8 +3115,14 @@ class LiveGameViewer {
       if (type === 'positive') mainColor = userTeam.color || '#34C759';
       else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
 
-      if (type === 'positive') soundManager.playTouchdown();
-      else if (type === 'negative') soundManager.playFailure();
+      if (type === 'positive') {
+          soundManager.playTouchdown();
+          setTimeout(() => {
+              if (soundManager.playLevelUp) soundManager.playLevelUp();
+          }, 1500);
+      } else if (type === 'negative') {
+          soundManager.playFailure();
+      }
 
       overlay.innerHTML = `
         <div class="${bannerClass}" style="

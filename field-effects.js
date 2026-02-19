@@ -133,6 +133,7 @@ export class FieldEffects {
                       type === 'fire' ? 30 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
+                      type === 'wall' ? 50 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -284,6 +285,17 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'wall') {
+             // Vertical barrier effect
+             p.x = x + (Math.random() - 0.5) * 60;
+             p.y = this.canvas.height / 2 + (Math.random() - 0.5) * 120;
+             p.vx = 0;
+             p.vy = (Math.random() - 0.5) * 0.5; // Slight drift
+             p.color = this.getThemeColor('--danger', '#FF453A');
+             p.life = 1.0;
+             p.decay = 0.02 + Math.random() * 0.02;
+             p.width = 4;
+             p.height = 40 + Math.random() * 30;
         }
 
         return p;
@@ -326,6 +338,9 @@ export class FieldEffects {
             this.ctx.fillStyle = p.color;
             if (p.type === 'rain') {
                 this.ctx.fillRect(p.x, p.y, 1, p.length);
+            } else if (p.type === 'wall') {
+                this.ctx.globalAlpha = p.life;
+                this.ctx.fillRect(p.x, p.y, p.width, p.height);
             } else {
                 this.ctx.beginPath();
                 this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
