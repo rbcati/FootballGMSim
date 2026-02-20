@@ -1,0 +1,31 @@
+# netlify.toml — Netlify configuration for Football GM SPA
+
+[build]
+  command   = "npm run build"
+  publish   = "dist"
+
+# SPA fallback: route all paths to index.html so React Router (or any
+# client-side routing) works on direct URL loads and refreshes.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# Never cache the service worker so the browser picks up new deployments.
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control         = "no-cache, no-store, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+# Cache-bust the HTML shell on each deploy.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+# Vite hashes all JS/CSS filenames; cache them forever.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
