@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from './src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -3791,7 +3791,7 @@ class LiveGameViewer {
 }
 
 // Initialize global instance
-if (!window.liveGameViewer) {
+if (typeof window !== 'undefined' && !window.liveGameViewer) {
   window.liveGameViewer = new LiveGameViewer();
 }
 
@@ -3801,6 +3801,7 @@ if (!window.liveGameViewer) {
  * @param {number} awayTeamId - Away team ID
  */
 
+if (typeof window !== 'undefined') {
 window.watchLiveGame = function(homeTeamId, awayTeamId) {
   try {
     const L = window.state?.league;
@@ -3885,5 +3886,8 @@ window.watchLiveGame = function(homeTeamId, awayTeamId) {
     }
   }
 };
+}
 
 console.log('✅ Live Game Viewer loaded');
+
+export { LiveGameViewer };
