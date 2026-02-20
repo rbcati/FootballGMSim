@@ -1347,6 +1347,23 @@ select:disabled {
     color: #ddd;
 }
 
+.game-over-emoji {
+    font-size: 5rem;
+    margin-bottom: 10px;
+}
+
+@media (max-width: 768px) {
+    .game-over-emoji {
+        font-size: 3rem;
+    }
+    .game-over-banner h2 {
+        font-size: 2.5rem;
+    }
+    .game-over-score {
+        font-size: 2.5rem;
+    }
+}
+
 /* Player Markers and Advanced Animation Support */
 .player-markers {
     position: absolute;

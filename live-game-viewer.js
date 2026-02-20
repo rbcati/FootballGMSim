@@ -1468,6 +1468,7 @@ class LiveGameViewer {
    */
   generatePlay(offense, defense, gameState, isUserTeam, targetHomeScore, targetAwayScore) {
     const U = window.Utils;
+    const currentPossession = gameState.ballPossession; // Capture for momentum calc
 
     // Determine play type (Offense)
     let playType = this.choosePlayType(offense, gameState);
@@ -1609,6 +1610,20 @@ class LiveGameViewer {
         }
       }
 
+      // Check for Fumble on Run
+      const fumbleChance = 0.01 + (defModBigPlay * 0.2);
+      if (U.random() < fumbleChance) {
+          play.result = 'turnover';
+          play.message = `FUMBLE! ${player?.name || 'Runner'} loses the ball!`;
+          momentumChange -= 20;
+
+          const currentYard = gameState[gameState.ballPossession].yardLine;
+          const fumbleYard = Math.max(1, Math.min(99, currentYard + yards));
+          const nextStart = 100 - fumbleYard;
+
+          this.switchPossession(gameState, nextStart);
+      }
+
       // Update Stats
       if (player) {
           const stats = ensureStats(player.id, player.name, player.pos, offense.team.id);
@@ -1701,6 +1716,20 @@ class LiveGameViewer {
                  targetStats.recYds += yards;
                  targetStats.recTargets++;
              }
+
+             // Check for Fumble after Catch
+             const fumbleChance = 0.008 + (defModBigPlay * 0.2);
+             if (U.random() < fumbleChance) {
+                 play.result = 'turnover';
+                 play.message = `FUMBLE! ${player?.name || 'Receiver'} coughs it up after the catch!`;
+                 momentumChange -= 20;
+
+                 const currentYard = gameState[gameState.ballPossession].yardLine;
+                 const fumbleYard = Math.max(1, Math.min(99, currentYard + yards));
+                 const nextStart = 100 - fumbleYard;
+
+                 this.switchPossession(gameState, nextStart);
+             }
         }
       } else {
         yards = 0;
@@ -1756,7 +1785,7 @@ class LiveGameViewer {
     }
 
     // Update Momentum
-    gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? momentumChange : -momentumChange)));
+    gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (currentPossession === 'home' ? momentumChange : -momentumChange)));
 
     // Update Drive Momentum
     if (yards > 0) {
@@ -1892,7 +1921,8 @@ class LiveGameViewer {
              gameState.time = 0;
              gameState.gameComplete = true;
         } else {
-             this.switchPossession(gameState);
+             // Safety Kick: Receiving team starts around their own 35-40
+             this.switchPossession(gameState, 35);
         }
 
       } else {
@@ -1915,7 +1945,12 @@ class LiveGameViewer {
             play.message = 'Turnover on downs';
             momentumChange -= 10;
             gameState.momentum = Math.max(-100, Math.min(100, gameState.momentum + (gameState.ballPossession === 'home' ? -10 : 10)));
-            this.switchPossession(gameState);
+
+            // Turnover spot: 100 - current yard line
+            const currentYard = gameState[gameState.ballPossession].yardLine;
+            const nextStart = Math.max(1, Math.min(99, 100 - currentYard));
+
+            this.switchPossession(gameState, nextStart);
           } else {
             play.message = `${yards >= 0 ? '+' : ''}${yards} yards. ${gameState[gameState.ballPossession].down} & ${gameState[gameState.ballPossession].distance}`;
           }
@@ -2886,9 +2921,15 @@ class LiveGameViewer {
           if (!this.gameState || this.isGameEnded) return;
 
           let playsInChunk = 0;
-              const CHUNK_SIZE = 10; // Process 10 plays per frame (Optimized for mobile)
+          const chunkStartTime = performance.now();
+          const TIME_BUDGET = 12; // ms per frame (aim for 60fps)
 
-          while (!this.gameState.gameComplete && playsInChunk < CHUNK_SIZE && totalPlays < MAX_PLAYS) {
+          while (!this.gameState.gameComplete && totalPlays < MAX_PLAYS) {
+              // Dynamic chunking based on time
+              if (playsInChunk > 5 && (performance.now() - chunkStartTime) > TIME_BUDGET) {
+                  break;
+              }
+
               playsInChunk++;
               totalPlays++;
 
@@ -3108,7 +3149,7 @@ class LiveGameViewer {
             box-shadow: 0 0 60px ${mainColor}60;
             background: linear-gradient(135deg, rgba(0,0,0,0.95), ${mainColor}20);
         ">
-            <div style="font-size: 5rem; margin-bottom: 10px; animation: bounce 1s;">
+            <div class="game-over-emoji" style="animation: bounce 1s;">
                 ${type === 'positive' ? '🏆' : (type === 'negative' ? '💔' : '🤝')}
             </div>
             <h2 style="
