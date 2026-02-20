@@ -209,7 +209,7 @@ class LiveGameViewer {
     let stakesHtml = '';
     if (this.preGameContext?.stakes > 60) {
          const isExtreme = this.preGameContext.stakes > 80;
-         const color = isExtreme ? '#ef4444' : '#fbbf24';
+         const color = isExtreme ? 'var(--danger)' : 'var(--warning)';
          let text = this.preGameContext.reason || (isExtreme ? '🔥 HIGH STAKES 🔥' : '⚠️ KEY MATCHUP');
 
          // Add icons based on text content if generic
@@ -1111,6 +1111,8 @@ class LiveGameViewer {
           // KICK
           const kickDuration = 1200 * durationScale;
           const arc = play.playType === 'punt' ? 40 : 30;
+
+          this.triggerFlash();
 
           if (ballEl) {
               ballEl.classList.add('kick-flash');
@@ -2564,7 +2566,11 @@ class LiveGameViewer {
 
     // Create overlay element
     const overlay = document.createElement('div');
-    overlay.className = `game-event-overlay ${type} pop-in`;
+    let className = `game-event-overlay ${type} pop-in`;
+    if (type.includes('defense-stop') || type.includes('turnover')) {
+        className += ' shield-pop';
+    }
+    overlay.className = className;
     overlay.innerHTML = `<div class="event-text">${text}</div>`;
 
     if (getComputedStyle(parent).position === 'static') {
@@ -3096,8 +3102,8 @@ class LiveGameViewer {
       if (type === 'negative') bannerClass += ' defeat';
 
       let mainColor = '#fff';
-      if (type === 'positive') mainColor = userTeam.color || '#34C759';
-      else if (type === 'negative') mainColor = oppTeam.color || '#FF453A';
+      if (type === 'positive') mainColor = userTeam.color || 'var(--success)';
+      else if (type === 'negative') mainColor = oppTeam.color || 'var(--danger)';
 
       if (type === 'positive') soundManager.playTouchdown();
       else if (type === 'negative') soundManager.playFailure();
@@ -3126,11 +3132,11 @@ class LiveGameViewer {
             <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px;">
                 <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
                     <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">Fan Grade</div>
-                    <div style="font-size: 2.5rem; font-weight: bold; color: ${grade.startsWith('A') ? '#4cd964' : (grade === 'F' ? '#ff3b30' : '#fff')}">${grade}</div>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: ${grade.startsWith('A') ? 'var(--success)' : (grade === 'F' ? 'var(--danger)' : '#fff')}">${grade}</div>
                 </div>
                  <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
                     <div style="font-size: 0.8rem; text-transform: uppercase; color: #aaa;">XP Earned</div>
-                    <div style="font-size: 2.5rem; font-weight: bold; color: #ffd700;">+${xp}</div>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: var(--warning);">+${xp}</div>
                 </div>
             </div>
 
@@ -3489,7 +3495,7 @@ class LiveGameViewer {
 
         <div style="text-align: center; font-size: 0.7em; margin-top: 5px; color: var(--text-muted); opacity: 0.8;">Drive Heat</div>
         <div style="height: 4px; background: #333; border-radius: 2px; margin-top: 2px; overflow: hidden; width: 60%; margin-left: auto; margin-right: auto;">
-            <div style="width: ${this.driveMomentum}%; height: 100%; background: linear-gradient(90deg, #ff9500, #ff3b30); transition: width 0.3s;"></div>
+            <div style="width: ${this.driveMomentum}%; height: 100%; background: linear-gradient(90deg, var(--warning), var(--danger)); transition: width 0.3s;"></div>
         </div>
 
         ${streakHtml}
