@@ -432,7 +432,8 @@ class LiveGameViewer {
           // Fade Out Sequence
           const elements = [ballEl, losEl, fdEl].filter(e => e);
           elements.forEach(e => {
-              if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
+              e.classList.add('smooth-fade');
+              e.style.opacity = 0;
           });
 
           this.triggerShake();
@@ -462,14 +463,15 @@ class LiveGameViewer {
 
               elements.forEach(e => {
                   e.style.transition = '';
-                  e.classList.remove('fade-out');
+                  e.style.opacity = 1;
+                  e.classList.remove('smooth-fade');
                   e.classList.add('fade-in');
               });
 
               this.setTimeoutSafe(() => {
                   elements.forEach(e => e.classList.remove('fade-in'));
-              }, 300);
-          }, 300);
+              }, 400);
+          }, 400);
       } else {
           // Normal Smooth Update (CSS transition handles it)
           // Ensure transition is active if it was disabled by JS animation previously and not cleared
@@ -658,23 +660,34 @@ class LiveGameViewer {
                   translateY += lateralOffset;
               }
 
+              // Juke Logic
+              if (options.juke) {
+                   // Sharp lateral movement
+                   const jukePhase = Math.sin(easeProgress * Math.PI * 8); // Fast zig-zag
+                   const jukeAmount = 8;
+                   translateY += jukePhase * jukeAmount;
+                   if (Math.abs(jukePhase) > 0.8) {
+                       scale = `scale(1.1)`; // Pop on juke
+                   }
+              }
+
               // Rotation logic
               if (shouldRotate) {
                   if (options.rotateType === 'spiral') {
                       // Fast spiral rotation
-                      const rotations = 4;
+                      const rotations = 10;
                       const rot = easeProgress * (360 * rotations);
                       rotation = `rotate(${rot}deg)`;
-                      // Slight wobble scale
-                      const wobble = 1 - (Math.sin(easeProgress * Math.PI * 8) * 0.1);
-                      scale = `scale(${wobble})`;
+                      // 3D spin effect
+                      const wobble = 1 - (Math.sin(easeProgress * Math.PI * 10) * 0.15);
+                      scale = `scaleX(${wobble})`;
                   } else if (options.rotateType === 'wobble') {
                       // Gentle wobble
-                      const angle = Math.sin(easeProgress * Math.PI * 6) * 15;
+                      const angle = Math.sin(easeProgress * Math.PI * 6) * 25;
                       rotation = `rotate(${angle}deg)`;
                   } else {
                       // Standard tumble
-                      const rotations = 2;
+                      const rotations = 3;
                       const rot = easeProgress * (360 * rotations);
                       rotation = `rotate(${rot}deg)`;
                   }
@@ -879,6 +892,12 @@ class LiveGameViewer {
 
           if (defMarker) defMarker.classList.add('pre-snap-set');
 
+          // Pre-Snap Motion (Receiver Motion)
+          if (Math.random() < 0.35 && skillMarker && play.playType.includes('pass')) {
+               skillMarker.classList.add('pre-snap-motion');
+               this.setTimeoutSafe(() => skillMarker.classList.remove('pre-snap-motion'), 1500);
+          }
+
           // Ball bob slightly (center)
           if (ballEl) {
               ballEl.style.transform = 'translate(-50%, -55%)';
@@ -969,7 +988,7 @@ class LiveGameViewer {
               }
 
               // Determine rotation type
-              const rotType = play.playType === 'pass_short' ? 'wobble' : 'spiral';
+              const rotType = (play.playType === 'pass_long' || play.playType === 'pass_medium') ? 'spiral' : 'wobble';
 
               // Ball Arc - Use Linear for X to simulate projectile
               await this.animateTrajectory(ballEl, {
@@ -994,8 +1013,8 @@ class LiveGameViewer {
                    if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
                    soundManager.playCatch();
                    if (skillMarker) {
-                       skillMarker.classList.add('marker-catch');
-                       this.setTimeoutSafe(() => skillMarker.classList.remove('marker-catch'), 500);
+                       skillMarker.classList.add('jump-catch'); // Use new jump-catch
+                       this.setTimeoutSafe(() => skillMarker.classList.remove('jump-catch'), 500);
                    }
               }
 
@@ -1060,13 +1079,17 @@ class LiveGameViewer {
           // Use .run-bob instead of .bob for more energy
           // Use easeInOutCubic for smoother run
           const swayVal = play.playType === 'run_outside' ? 8 : 3;
+          const isBigPlay = play.result === 'big_play';
 
           animations.push(this.animateTrajectory(ballEl, {
               startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic',
+              animationClass: isBigPlay ? 'juke-move' : 'run-bob',
+              sway: isBigPlay ? 0 : swayVal, // Juke overrides sway
+              juke: isBigPlay
           }));
 
           // Def Logic: Chase
@@ -2314,11 +2337,15 @@ class LiveGameViewer {
     if (this.playByPlay.length > 0) {
         const lastPlay = this.playByPlay[this.playByPlay.length - 1];
         if (lastPlay) {
-            if (lastPlay.result === 'touchdown') baseDelay += 2000; // Let celebration breathe
-            else if (lastPlay.result === 'turnover' || lastPlay.result === 'turnover_downs') baseDelay += 1500;
-            else if (lastPlay.result === 'big_play') baseDelay += 1000;
+            if (lastPlay.result === 'touchdown') baseDelay += 2500; // Let celebration breathe
+            else if (lastPlay.result === 'turnover' || lastPlay.result === 'turnover_downs') baseDelay += 2000;
+            else if (lastPlay.result === 'big_play') baseDelay += 1200;
             else if (lastPlay.result === 'incomplete') {
-                if (this.tempo !== 'slow') baseDelay = Math.max(400, baseDelay - 400); // Speed up after incomplete
+                if (this.tempo !== 'slow') baseDelay = Math.max(300, baseDelay - 500); // Faster after incomplete
+            }
+            else if (lastPlay.yards < 3 && lastPlay.yards > -3) {
+                 // Boring play, speed up slightly
+                 if (this.tempo !== 'slow') baseDelay = Math.max(500, baseDelay - 200);
             }
         }
     }
