@@ -1,0 +1,268 @@
+/**
+ * useWorker.js
+ *
+ * React hook that owns the game Web Worker singleton for the lifetime of the app.
+ *
+ * Responsibilities:
+ *  - Spawn the worker once on mount, terminate on unmount
+ *  - Route every inbound worker message to the correct state setter
+ *  - Expose a stable `send(type, payload)` function for the UI to use
+ *  - Expose a `request(type, payload)` function that returns a Promise
+ *    resolved when the worker echoes back the matching correlation id
+ *  - Track a loading/simulating flag
+ *  - Expose the latest view-state snapshot and last week's results
+ *
+ * The hook does NOT store the full league object.  It only stores the
+ * view-model slices the worker sends back (buildViewState shape).
+ */
+
+import { useEffect, useRef, useCallback, useReducer } from 'react';
+import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
+
+// ── State shape ───────────────────────────────────────────────────────────────
+
+const INITIAL_STATE = {
+  /** true while the worker is handling a command */
+  busy:         false,
+  /** true while multi-game sim is in progress */
+  simulating:   false,
+  /** progress 0-100 during simulation */
+  simProgress:  0,
+  /** worker announced it loaded + ready */
+  workerReady:  false,
+  /** true if a save exists (worker confirmed on INIT) */
+  hasSave:      false,
+  /** the view-model slice from the worker */
+  league:       null,   // { seasonId, year, week, phase, userTeamId, teams[] }
+  /** results from the last simulated week */
+  lastResults:  null,
+  /** last error message */
+  error:        null,
+  /** notification queue */
+  notifications:[],
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case 'BUSY':
+      return { ...state, busy: true, error: null };
+    case 'IDLE':
+      return { ...state, busy: false, simulating: false, simProgress: 0 };
+    case 'WORKER_READY':
+      return { ...state, workerReady: true, hasSave: action.hasSave ?? false };
+    case 'FULL_STATE':
+      return { ...state, busy: false, simulating: false, league: action.payload };
+    case 'STATE_UPDATE':
+      return { ...state, league: { ...(state.league ?? {}), ...action.payload } };
+    case 'SIM_START':
+      return { ...state, simulating: true, simProgress: 0 };
+    case 'SIM_PROGRESS':
+      return {
+        ...state,
+        simProgress: action.total > 0
+          ? Math.round((action.done / action.total) * 100)
+          : 0,
+      };
+    case 'WEEK_COMPLETE':
+      return {
+        ...state,
+        simulating:  false,
+        busy:        false,
+        simProgress: 100,
+        lastResults: action.results,
+        league:      {
+          ...(state.league ?? {}),
+          week:  action.nextWeek,
+          phase: action.phase,
+          teams: action.standings ?? state.league?.teams,
+        },
+      };
+    case 'ERROR':
+      return { ...state, busy: false, simulating: false, error: action.message };
+    case 'NOTIFY':
+      return {
+        ...state,
+        notifications: [
+          ...state.notifications.slice(-9),   // keep last 10
+          { id: Date.now(), level: action.level, message: action.message },
+        ],
+      };
+    case 'DISMISS_NOTIFY':
+      return {
+        ...state,
+        notifications: state.notifications.filter(n => n.id !== action.id),
+      };
+    default:
+      return state;
+  }
+}
+
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useWorker() {
+  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+
+  /** Ref to the worker instance so it can be used inside callbacks without re-renders. */
+  const workerRef = useRef(null);
+
+  /**
+   * Pending promise resolvers keyed by message correlation id.
+   * Map<id, { resolve, reject }>
+   */
+  const pendingRef = useRef(new Map());
+
+  // ── Spawn worker once ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const worker = new Worker(
+      new URL('../../worker/worker.js', import.meta.url),
+      { type: 'module' }
+    );
+    workerRef.current = worker;
+
+    worker.onmessage = (event) => {
+      const { type, payload = {}, id } = event.data;
+
+      // Resolve any waiting promise first
+      if (id && pendingRef.current.has(id)) {
+        const { resolve } = pendingRef.current.get(id);
+        pendingRef.current.delete(id);
+        resolve({ type, payload });
+      }
+
+      // Then update React state
+      switch (type) {
+        case toUI.READY:
+          dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave });
+          break;
+        case toUI.FULL_STATE:
+          dispatch({ type: 'FULL_STATE', payload });
+          break;
+        case toUI.STATE_UPDATE:
+          dispatch({ type: 'STATE_UPDATE', payload });
+          break;
+        case toUI.SIM_PROGRESS:
+          dispatch({ type: 'SIM_PROGRESS', done: payload.done, total: payload.total });
+          break;
+        case toUI.WEEK_COMPLETE:
+          dispatch({
+            type:       'WEEK_COMPLETE',
+            results:    payload.results,
+            nextWeek:   payload.nextWeek,
+            phase:      payload.phase,
+            standings:  payload.standings,
+          });
+          break;
+        case toUI.SAVED:
+          dispatch({ type: 'IDLE' });
+          break;
+        case toUI.ERROR:
+          dispatch({ type: 'ERROR', message: payload.message });
+          // Reject any pending promise too
+          if (id && pendingRef.current.has(id)) {
+            const { reject } = pendingRef.current.get(id);
+            pendingRef.current.delete(id);
+            reject(new Error(payload.message));
+          }
+          break;
+        case toUI.NOTIFICATION:
+          dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message });
+          break;
+        default:
+          // Other message types (draft, career stats, history) are handled
+          // exclusively via the pending promise map — no extra dispatch needed.
+          break;
+      }
+    };
+
+    worker.onerror = (err) => {
+      console.error('[useWorker] Worker threw:', err);
+      dispatch({ type: 'ERROR', message: err.message ?? 'Unknown worker error' });
+    };
+
+    // Kick off initialization
+    worker.postMessage(buildMsg(toWorker.INIT));
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  // ── send (fire-and-forget) ─────────────────────────────────────────────────
+  const send = useCallback((type, payload = {}) => {
+    if (!workerRef.current) return;
+    dispatch({ type: 'BUSY' });
+    workerRef.current.postMessage(buildMsg(type, payload));
+  }, []);
+
+  // ── request (returns a Promise resolved on worker reply) ──────────────────
+  const request = useCallback((type, payload = {}) => {
+    return new Promise((resolve, reject) => {
+      if (!workerRef.current) {
+        reject(new Error('Worker not ready'));
+        return;
+      }
+      const msg = buildMsg(type, payload);
+      pendingRef.current.set(msg.id, { resolve, reject });
+      dispatch({ type: 'BUSY' });
+      workerRef.current.postMessage(msg);
+    });
+  }, []);
+
+  // ── Convenience action wrappers ────────────────────────────────────────────
+
+  const actions = {
+    /** Load existing save or show new-league screen. */
+    init: ()                   => send(toWorker.INIT),
+
+    /** Generate a new league. teams = array of team definitions. */
+    newLeague: (teams, options) => {
+      dispatch({ type: 'BUSY' });
+      send(toWorker.NEW_LEAGUE, { teams, options });
+    },
+
+    /** Simulate the current week. */
+    advanceWeek: () => {
+      dispatch({ type: 'SIM_START' });
+      send(toWorker.ADVANCE_WEEK);
+    },
+
+    /** Fast-forward to a specific week. */
+    simToWeek: (targetWeek)    => send(toWorker.SIM_TO_WEEK, { targetWeek }),
+
+    /** Sim all remaining regular-season weeks. */
+    simToPlayoffs: ()          => send(toWorker.SIM_TO_PLAYOFFS),
+
+    /** Fetch a specific season's history (returns a Promise). */
+    getSeasonHistory: (seasonId) => request(toWorker.GET_SEASON_HISTORY, { seasonId }),
+
+    /** Fetch a player's career stats (returns a Promise). */
+    getPlayerCareer: (playerId)  => request(toWorker.GET_PLAYER_CAREER, { playerId }),
+
+    /** Fetch all season summaries for the history browser. */
+    getAllSeasons: ()             => request(toWorker.GET_ALL_SEASONS),
+
+    /** Force an immediate DB flush. */
+    save: ()                     => send(toWorker.SAVE_NOW),
+
+    /** Wipe the save and restart. */
+    reset: ()                    => send(toWorker.RESET_LEAGUE),
+
+    /** Set which team the human manages. */
+    setUserTeam: (teamId)        => send(toWorker.SET_USER_TEAM, { teamId }),
+
+    /** Sign a free agent. */
+    signPlayer: (playerId, teamId, contract) =>
+      send(toWorker.SIGN_PLAYER, { playerId, teamId, contract }),
+
+    /** Release a player. */
+    releasePlayer: (playerId, teamId) =>
+      send(toWorker.RELEASE_PLAYER, { playerId, teamId }),
+
+    /** Dismiss a notification. */
+    dismissNotification: (id) =>
+      dispatch({ type: 'DISMISS_NOTIFY', id }),
+  };
+
+  return { state, actions };
+}
