@@ -2225,7 +2225,10 @@ class GameController {
                     this.setupEventListeners();
                     this.setupAutoSave();
                     // Route to hub (or current view if saved)
-                    const savedView = window.state.currentView || 'hub';
+                    let savedView = window.state.currentView || 'hub';
+                    if (location.hash && location.hash.length > 2) {
+                        savedView = location.hash.slice(2);
+                    }
                     location.hash = `#/${savedView}`;
                     this.router(savedView);
                     return; // Skip dashboard
@@ -2251,7 +2254,10 @@ class GameController {
                             this.setupEventListeners();
                             this.setupAutoSave();
                             if (window.saveGame) window.saveGame(); // Upgrade to new format
-                            const savedView = window.state.currentView || 'hub';
+                            let savedView = window.state.currentView || 'hub';
+                            if (location.hash && location.hash.length > 2) {
+                                savedView = location.hash.slice(2);
+                            }
                             location.hash = `#/${savedView}`;
                             this.router(savedView);
                             return;
