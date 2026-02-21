@@ -7,8 +7,8 @@ import { Utils } from './utils.js';
  */
 function makeAccurateSchedule(teams) {
     if (!teams || teams.length !== 32) {
-        console.warn('Expected 32 teams, got', teams.length, '. Using simple schedule as fallback.');
-        return createSimpleSchedule(teams);
+        console.warn('Expected 32 teams, got', teams?.length, '. Using simple schedule as fallback.');
+        return createSimpleSchedule(teams || []);
     }
     try {
         return createNFLStyleSchedule(teams);
@@ -51,13 +51,13 @@ function createNFLStyleSchedule(teams) {
         teamOpponents[team.id] = new Set();
     });
 
-    // Pre-assign all bye weeks: 2 teams per week for weeks 5-17, 4 teams in week 18
+    // Pre-assign all bye weeks: 4 teams per week for weeks 5-12 (32 teams total)
     const teamsForBye = [...teams];
     shuffleArray(teamsForBye);
     let byeIndex = 0;
 
-    for (let week = 5; week <= 18; week++) {
-        const teamsThisWeek = week <= 17 ? 2 : 4; // 2 teams per week, 4 in week 18
+    for (let week = 5; week <= 12; week++) {
+        const teamsThisWeek = 4;
         for (let i = 0; i < teamsThisWeek && byeIndex < teamsForBye.length; i++) {
             teamByeWeek[teamsForBye[byeIndex].id] = week;
             byeIndex++;
@@ -83,7 +83,7 @@ function createNFLStyleSchedule(teams) {
 }
 
 /**
- * Distributes bye weeks across weeks 5-18
+ * Distributes bye weeks across weeks 5-12
  * @param {Array} teams - Array of team objects
  * @returns {Array} Array of arrays, each containing team IDs for that bye week
  */
@@ -91,22 +91,18 @@ function distributeByeWeeks(teams) {
     const shuffledTeams = [...teams];
     shuffleArray(shuffledTeams);
 
-    const byeWeeks = []; // Index 0 = week 5, Index 13 = week 18
-    const weeksAvailable = 14; // weeks 5-18
-    const teamsPerWeek = Math.floor(32 / weeksAvailable); // 2 teams per week
-    const extraWeeks = 32 % weeksAvailable; // 4 extra teams need to be distributed
+    const byeWeeks = [];
+    const weeksAvailable = 8; // weeks 5-12
+    const teamsPerWeek = 4; // 8 weeks * 4 teams = 32 teams
 
     let teamIndex = 0;
 
     for (let weekIndex = 0; weekIndex < weeksAvailable; weekIndex++) {
-        const teamsThisWeek = teamsPerWeek + (weekIndex < extraWeeks ? 1 : 0);
         const weekTeams = [];
-
-        for (let i = 0; i < teamsThisWeek && teamIndex < shuffledTeams.length; i++) {
+        for (let i = 0; i < teamsPerWeek && teamIndex < shuffledTeams.length; i++) {
             weekTeams.push(shuffledTeams[teamIndex].id);
             teamIndex++;
         }
-        
         byeWeeks.push(weekTeams);
     }
 
@@ -199,6 +195,7 @@ function createWeekSchedule(week, teams, teamByeWeek, teamGameCount, teamOpponen
 
     return {
         weekNumber: week,
+        week: week, // CRITICAL: Ensures Worker UI bridge can read the week
         games: weekGames,
         teamsWithBye: teamsOnBye.map(team => team.id)
     };
@@ -232,13 +229,13 @@ function fixScheduleCompletely(teams) {
         teamByeWeek[team.id] = null;
     });
 
-    // Pre-assign all bye weeks: 2 teams per week for weeks 5-17, 4 teams in week 18
+    // Pre-assign all bye weeks: 4 teams per week for weeks 5-12 (32 teams total)
     const teamsNeedingBye = [...teams];
     shuffleArray(teamsNeedingBye);
     let byeIndex = 0;
 
-    for (let week = 5; week <= 18; week++) {
-        const teamsThisWeek = week <= 17 ? 2 : 4; // 2 teams per week, 4 in week 18
+    for (let week = 5; week <= 12; week++) {
+        const teamsThisWeek = 4;
         for (let i = 0; i < teamsThisWeek && byeIndex < teamsNeedingBye.length; i++) {
             teamByeWeek[teamsNeedingBye[byeIndex].id] = week;
             byeIndex++;
@@ -257,7 +254,7 @@ function fixScheduleCompletely(teams) {
             });
         }
 
-        // Get teams available to play this week (not on bye and haven't played 17 games)
+        // Get teams available to play this week
         const teamsToSchedule = teams.filter(team =>
             teamByeWeek[team.id] !== week && 
             teamGameCount[team.id] < 17
@@ -316,6 +313,7 @@ function fixScheduleCompletely(teams) {
 
         schedule.weeks.push({
             weekNumber: week, 
+            week: week, // CRITICAL: Ensures Worker UI bridge can read the week
             games: weekGames,
             teamsWithBye: teamsOnBye.map(team => team.id)
         });
@@ -344,7 +342,6 @@ function validateSchedule(schedule, teams) {
     const teamGameCount = {};
     const teamByeCount = {};
 
-    // Create a map for O(1) team lookups
     const teamMap = new Map();
     teams.forEach(team => {
         teamGameCount[team.id] = 0;
@@ -353,28 +350,20 @@ function validateSchedule(schedule, teams) {
     });
 
     schedule.weeks.forEach((week, weekIndex) => {
-        const weekNumber = week.weekNumber || (weekIndex + 1);
-
-        // Use a Set to avoid double-counting byes from both teamsWithBye and games[].bye
+        const weekNumber = week.weekNumber || week.week || (weekIndex + 1);
         const byeTeamsThisWeek = new Set();
 
-        // Collect bye teams from teamsWithBye array
         if (week.teamsWithBye) {
             week.teamsWithBye.forEach(teamId => {
-                if (teamId !== undefined && teamId !== null) {
-                    byeTeamsThisWeek.add(teamId);
-                }
+                if (teamId !== undefined && teamId !== null) byeTeamsThisWeek.add(teamId);
             });
         }
 
-        // Count games and collect bye teams from games array
         week.games.forEach(game => {
             if (game.bye) {
                 if (Array.isArray(game.bye)) {
                     game.bye.forEach(teamId => {
-                        if (teamId !== undefined && teamId !== null) {
-                            byeTeamsThisWeek.add(teamId);
-                        }
+                        if (teamId !== undefined && teamId !== null) byeTeamsThisWeek.add(teamId);
                     });
                 }
                 return;
@@ -386,10 +375,8 @@ function validateSchedule(schedule, teams) {
             }
         });
 
-        // Apply bye counts (deduplicated)
         byeTeamsThisWeek.forEach(teamId => {
             teamByeCount[teamId] = (teamByeCount[teamId] || 0) + 1;
-
             if (weekNumber <= 4) {
                 result.valid = false;
                 result.errors.push(`Team ${teamMap.get(teamId)?.name || teamId} has bye in week ${weekNumber} (should be week 5+)`);
@@ -397,20 +384,17 @@ function validateSchedule(schedule, teams) {
         });
     });
 
-    // Validate game counts
     teams.forEach(team => {
         if (teamGameCount[team.id] !== 17) {
             result.valid = false;
             result.errors.push(`Team ${team.name} plays ${teamGameCount[team.id]} games instead of 17`);
         }
-        
         if (teamByeCount[team.id] !== 1) {
             result.valid = false;
             result.errors.push(`Team ${team.name} has ${teamByeCount[team.id]} bye weeks instead of 1`);
         }
     });
 
-    // Validate week count
     if (schedule.weeks.length !== 18) {
         result.valid = false;
         result.errors.push(`Schedule has ${schedule.weeks.length} weeks instead of 18`);
@@ -434,25 +418,19 @@ function logScheduleStats(schedule, teams) {
     schedule.weeks.forEach(week => {
         if (week.teamsWithBye) {
             week.teamsWithBye.forEach(teamId => {
-                if (teamId !== undefined && teamId !== null) {
-                    teamByeWeek[teamId] = week.weekNumber;
-                }
+                if (teamId !== undefined && teamId !== null) teamByeWeek[teamId] = week.weekNumber || week.week;
             });
         }
         
         week.games.forEach(game => {
             if (game.bye) {
-                // Count bye teams from game.bye array
                 if (Array.isArray(game.bye)) {
                     game.bye.forEach(teamId => {
-                        if (teamId !== undefined && teamId !== null) {
-                            teamByeWeek[teamId] = week.weekNumber;
-                        }
+                        if (teamId !== undefined && teamId !== null) teamByeWeek[teamId] = week.weekNumber || week.week;
                     });
                 }
                 return;
             }
-            
             if (game.home !== undefined && game.away !== undefined) {
                 teamGameCount[game.home]++;
                 teamGameCount[game.away]++;
@@ -464,7 +442,7 @@ function logScheduleStats(schedule, teams) {
     console.log('- Weeks:', schedule.weeks.length);
     console.log('- Games per team:', Object.values(teamGameCount));
     console.log('- Bye week distribution:',
-        schedule.weeks.slice(4).map((week, i) =>
+        schedule.weeks.slice(4, 12).map((week, i) =>
             `Week ${i+5}: ${week.teamsWithBye.length} teams`
         ).join(', ')
     );
@@ -495,13 +473,13 @@ function createSimpleSchedule(teams) {
         teamByeWeek[team.id] = null;
     });
 
-    // Pre-assign all bye weeks: 2 teams per week for weeks 5-17, 4 teams in week 18
+    // Pre-assign all bye weeks: 4 teams per week for weeks 5-12
     const teamsForBye = [...teams];
     shuffleArray(teamsForBye);
     let byeIndex = 0;
 
-    for (let week = 5; week <= 18; week++) {
-        const teamsThisWeek = week <= 17 ? 2 : 4; // 2 teams per week, 4 in week 18
+    for (let week = 5; week <= 12; week++) {
+        const teamsThisWeek = 4;
         for (let i = 0; i < teamsThisWeek && byeIndex < teamsForBye.length; i++) {
             teamByeWeek[teamsForBye[byeIndex].id] = week;
             byeIndex++;
@@ -546,6 +524,7 @@ function createSimpleSchedule(teams) {
         
         schedule.weeks.push({
             weekNumber: week,
+            week: week, // CRITICAL: Ensures Worker UI bridge can read the week
             games: weekGames,
             teamsWithBye: teamsOnBye.map(team => team.id)
         });
@@ -576,7 +555,6 @@ function getWeekGames(schedule, weekNumber) {
     const weeks = schedule.weeks || schedule;
     if (!Array.isArray(weeks)) return null;
 
-    // Handle 1-based indexing
     const index = weekNumber - 1;
     if (index < 0 || index >= weeks.length) return null;
 
