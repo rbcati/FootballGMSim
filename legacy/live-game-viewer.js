@@ -70,6 +70,12 @@ class LiveGameViewer {
         this.timeouts.clear();
     }
 
+    // Cleanup effects
+    if (this.fieldEffects) {
+        this.fieldEffects.destroy();
+        this.fieldEffects = null;
+    }
+
     this.gameState = null;
     this.isGameEnded = true; // Prevent any pending callbacks
     this.clearTempState();
@@ -1818,9 +1824,15 @@ class LiveGameViewer {
                 pointsAdded = 2;
                 play.message += " (2-Pt Conversion GOOD)";
                 this.triggerVisualFeedback('two-point', '2 POINTS!');
-                if (offense.qb) {
+
+                // Credit Scorer (Runner or Receiver)
+                if (player) {
+                     const pStats = ensureStats(player.id, player.name, player.pos, offense.team.id);
+                     pStats.twoPtMade = (pStats.twoPtMade || 0) + 1;
+                } else if (offense.qb) {
+                     // Fallback
                      const qbStats = ensureStats(offense.qb.id, offense.qb.name, offense.qb.pos, offense.team.id);
-                     qbStats.twoPtMade = (qbStats.twoPtMade || 0) + 1; // Track for QB (or scorer)
+                     qbStats.twoPtMade = (qbStats.twoPtMade || 0) + 1;
                 }
             } else {
                 play.message += " (2-Pt Conversion FAILED)";
@@ -1892,7 +1904,9 @@ class LiveGameViewer {
              gameState.time = 0;
              gameState.gameComplete = true;
         } else {
-             this.switchPossession(gameState);
+             // After safety, team punts from own 20. Receiving team gets it around midfield/35.
+             // switchPossession arg is 'yards from own goal', so 35 means own 35.
+             this.switchPossession(gameState, 35);
         }
 
       } else {
@@ -2736,6 +2750,7 @@ class LiveGameViewer {
    */
   showPlayCalling() {
     if (!this.checkUI()) return;
+    this.inputLocked = false;
     const parent = this.viewMode ? this.container : this.modal;
 
     // Check if we need to inject the buttons for view mode
@@ -2769,7 +2784,8 @@ class LiveGameViewer {
             // Attach events
             pcContainer.querySelectorAll('.play-call-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    if (this.playCallQueue) return; // Prevent rapid fire
+                    if (this.playCallQueue || this.inputLocked) return; // Prevent rapid fire
+                    this.inputLocked = true;
 
                     // Visual feedback & Disable
                     pcContainer.querySelectorAll('.play-call-btn').forEach(b => {
@@ -2792,6 +2808,18 @@ class LiveGameViewer {
 
     const playCalling = parent.querySelector('.play-calling');
     if (!playCalling) return;
+
+    // Reset buttons state if reused
+    if (this.viewMode) {
+        const pcContainer = parent.querySelector('.play-calling');
+        if (pcContainer) {
+             pcContainer.querySelectorAll('.play-call-btn').forEach(b => {
+                 b.disabled = false;
+                 b.style.pointerEvents = 'auto';
+                 b.classList.remove('selected');
+             });
+        }
+    }
 
     playCalling.style.display = 'flex';
     void playCalling.offsetWidth; // Force reflow for transition
@@ -2885,11 +2913,16 @@ class LiveGameViewer {
           // Safety check for destroyed game
           if (!this.gameState || this.isGameEnded) return;
 
-          let playsInChunk = 0;
-              const CHUNK_SIZE = 10; // Process 10 plays per frame (Optimized for mobile)
+          const startTime = performance.now();
+          const TIME_BUDGET = 12; // 12ms per frame (target 60fps with overhead)
 
-          while (!this.gameState.gameComplete && playsInChunk < CHUNK_SIZE && totalPlays < MAX_PLAYS) {
-              playsInChunk++;
+          while (!this.gameState.gameComplete && totalPlays < MAX_PLAYS) {
+              // Time check
+              if (performance.now() - startTime > TIME_BUDGET) {
+                  requestAnimationFrame(processChunk);
+                  return;
+              }
+
               totalPlays++;
 
               const state = this.gameState;
@@ -2928,7 +2961,7 @@ class LiveGameViewer {
               // 3. Cleanup
               this.endGame();
           } else {
-              // Schedule next chunk
+              // Schedule next chunk (redundant if loop broke due to time, but safe)
               requestAnimationFrame(processChunk);
           }
       };
