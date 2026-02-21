@@ -570,9 +570,3 @@ const Scheduler = {
 
 // Export for ES modules
 export { Scheduler, makeAccurateSchedule, getWeekGames };
-
-// Maintain global compatibility
-if (typeof window !== 'undefined') {
-    window.Scheduler = Scheduler;
-    window.makeSchedule = makeAccurateSchedule;
-}
