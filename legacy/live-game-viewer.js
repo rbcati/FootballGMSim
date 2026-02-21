@@ -106,6 +106,16 @@ class LiveGameViewer {
       this.setTimeoutSafe(() => flash.remove(), 600);
   }
 
+  triggerImpact() {
+      const target = this.viewMode ? this.container : this.modal;
+      if (target) {
+          target.classList.remove('impact-pulse');
+          void target.offsetWidth; // Force reflow
+          target.classList.add('impact-pulse');
+          this.setTimeoutSafe(() => target.classList.remove('impact-pulse'), 300);
+      }
+  }
+
   triggerFloatText(text, type = '') {
       const el = document.createElement('div');
       el.className = `float-text ${type}`;
@@ -1002,6 +1012,7 @@ class LiveGameViewer {
               // End of play collision (tackle)
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
                   soundManager.playTackle();
+                  this.triggerImpact(); // Visual impact
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
                   if (ballEl) {
@@ -1092,6 +1103,7 @@ class LiveGameViewer {
                } else {
                    // Standard tackle
                    soundManager.playTackle();
+                   this.triggerImpact(); // Visual impact
                    if (skillMarker) {
                        skillMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
@@ -2436,12 +2448,13 @@ class LiveGameViewer {
         } else if (play.result === 'sack') {
             soundManager.playSack();
             soundManager.playShockwave();
-            this.triggerShake();
+            this.triggerShake('hard');
             this.triggerFloatText('SACKED!', 'bad');
             this.triggerVisualFeedback('save sack', 'SACK!');
         } else if (play.result === 'big_play') {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
+            this.triggerFlash();
             this.triggerFloatText('BIG PLAY!');
 
             if (this.fieldEffects) {
@@ -2869,6 +2882,11 @@ class LiveGameViewer {
       this.isSkipping = true;
       this.toggleControls(false);
 
+      // Fade out for smoothness
+      if (this.viewMode && this.container) {
+          this.container.classList.add('fade-transition', 'hidden');
+      }
+
       if (this.intervalId) {
           clearTimeout(this.intervalId);
           this.intervalId = null;
@@ -2917,6 +2935,13 @@ class LiveGameViewer {
               // 2. Update UI if it exists (Safe DOM Access)
               if (this.checkUI()) {
                   this.renderGame();
+
+                  // Fade back in
+                  if (this.viewMode && this.container) {
+                      this.container.classList.remove('hidden');
+                      this.setTimeoutSafe(() => this.container.classList.remove('fade-transition'), 300);
+                  }
+
                   // Scroll log to bottom safely
                   const parent = this.viewMode ? this.container : this.modal;
                   if (parent) {
