@@ -37,6 +37,12 @@ class GameRunner {
 
         const pairings = weekData.games || [];
 
+        // Optimization: Create a Map for O(1) team lookup
+        const teamMap = new Map();
+        if (league.teams) {
+            league.teams.forEach(t => teamMap.set(t.id, t));
+        }
+
         // Prepare games
         const gamesToSim = pairings.map(pair => {
             if (pair.bye !== undefined) return { bye: pair.bye };
@@ -48,8 +54,8 @@ class GameRunner {
             const homeId = typeof pair.home === 'object' ? pair.home.id : pair.home;
             const awayId = typeof pair.away === 'object' ? pair.away.id : pair.away;
 
-            const home = league.teams.find(t => t.id === homeId);
-            const away = league.teams.find(t => t.id === awayId);
+            const home = teamMap.get(homeId);
+            const away = teamMap.get(awayId);
 
             if (!home || !away) return null;
 
