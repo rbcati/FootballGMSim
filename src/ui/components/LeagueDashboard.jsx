@@ -1,52 +1,528 @@
-import React from 'react';
+/**
+ * LeagueDashboard.jsx
+ *
+ * Tabbed dashboard using the legacy CSS design system (hub.css, components.css,
+ * base.css).  Receives the view-model slice from the Web Worker via `league` prop.
+ *
+ * Tabs:
+ *  - Standings  — AFC/NFC conference tables
+ *  - Schedule   — Current-week matchup cards
+ *  - Leaders    — Simple per-stat top-5 tables
+ */
+
+import React, { useState, useMemo } from 'react';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const TABS = ['Standings', 'Schedule', 'Leaders'];
+const DIVS = ['North', 'South', 'East', 'West'];
+const CONFS = ['AFC', 'NFC'];
+
+// Deterministic colour from team abbreviation so logos feel branded
+function teamColor(abbr = '') {
+  const palette = [
+    '#0A84FF', '#34C759', '#FF9F0A', '#FF453A',
+    '#5E5CE6', '#64D2FF', '#FFD60A', '#30D158',
+    '#FF6961', '#AEC6CF', '#FF6B35', '#B4A0E5',
+  ];
+  let hash = 0;
+  for (let i = 0; i < abbr.length; i++) hash = abbr.charCodeAt(i) + ((hash << 5) - hash);
+  return palette[Math.abs(hash) % palette.length];
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+/** Circular team "logo" placeholder with first 3 chars of abbreviation. */
+function TeamLogo({ abbr, size = 56, isUser = false }) {
+  const color = teamColor(abbr);
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        background: `${color}22`,
+        border: `3px solid ${isUser ? 'var(--accent)' : color}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontWeight: 900,
+        fontSize: size * 0.28,
+        color: isUser ? 'var(--accent)' : color,
+        flexShrink: 0,
+        letterSpacing: '-0.5px',
+      }}
+    >
+      {abbr?.slice(0, 3) ?? '?'}
+    </div>
+  );
+}
+
+/** Win-pct helper. */
+function winPct(wins, losses, ties) {
+  const games = wins + losses + ties;
+  if (games === 0) return '.000';
+  return ((wins + ties * 0.5) / games).toFixed(3).replace(/^0/, '');
+}
+
+/** Colour-coded OVR pill. */
+function OvrPill({ ovr }) {
+  let cls = 'rating-color-avg';
+  if (ovr >= 85) cls = 'rating-color-elite';
+  else if (ovr >= 75) cls = 'rating-color-good';
+  else if (ovr < 65)  cls = 'rating-color-bad';
+
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        width: 32,
+        padding: '2px 0',
+        borderRadius: 'var(--radius-pill)',
+        fontSize: 'var(--text-xs)',
+        fontWeight: 700,
+        textAlign: 'center',
+        color: '#fff',
+      }}
+      className={cls}
+    >
+      {ovr}
+    </span>
+  );
+}
+
+// ── Standings Tab ─────────────────────────────────────────────────────────────
+
+function StandingsTab({ teams, userTeamId }) {
+  const [activeConf, setActiveConf] = useState('AFC');
+
+  // Group by conference → division
+  const grouped = useMemo(() => {
+    const confTeams = teams.filter(t => t.conf === activeConf);
+    return DIVS.map(div => ({
+      div,
+      teams: confTeams
+        .filter(t => t.div === div)
+        .sort((a, b) => {
+          const pa = winPct(a.wins, a.losses, a.ties);
+          const pb = winPct(b.wins, b.losses, b.ties);
+          return pb - pa || b.wins - a.wins;
+        }),
+    })).filter(g => g.teams.length > 0);
+  }, [teams, activeConf]);
+
+  return (
+    <div>
+      {/* Conference tab pills */}
+      <div className="standings-tabs" style={{ marginBottom: 'var(--space-6)' }}>
+        {CONFS.map(c => (
+          <button
+            key={c}
+            className={`standings-tab${activeConf === c ? ' active' : ''}`}
+            onClick={() => setActiveConf(c)}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* Division blocks */}
+      <div style={{ display: 'grid', gap: 'var(--space-6)' }}>
+        {grouped.map(({ div, teams: divTeams }) => (
+          <div key={div} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {/* Division header */}
+            <div
+              style={{
+                padding: 'var(--space-3) var(--space-5)',
+                background: 'var(--surface-strong)',
+                borderBottom: '1px solid var(--hairline)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-2)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 'var(--text-xs)',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '1px',
+                  color: 'var(--text-muted)',
+                }}
+              >
+                {activeConf} {div}
+              </span>
+            </div>
+
+            {/* Standings table */}
+            <div className="table-wrapper" style={{ padding: '0 var(--space-2)' }}>
+              <table className="standings-table" style={{ width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ paddingLeft: 'var(--space-5)' }}>Team</th>
+                    <th style={{ textAlign: 'center' }}>W</th>
+                    <th style={{ textAlign: 'center' }}>L</th>
+                    <th style={{ textAlign: 'center' }}>T</th>
+                    <th style={{ textAlign: 'center' }}>PCT</th>
+                    <th style={{ textAlign: 'center' }}>PF</th>
+                    <th style={{ textAlign: 'center' }}>PA</th>
+                    <th style={{ textAlign: 'center' }}>OVR</th>
+                    <th style={{ textAlign: 'right', paddingRight: 'var(--space-5)' }}>CAP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {divTeams.map((team, idx) => {
+                    const isUser = team.id === userTeamId;
+                    return (
+                      <tr
+                        key={team.id}
+                        className={isUser ? 'selected' : ''}
+                      >
+                        <td style={{ paddingLeft: 'var(--space-4)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+                            <span
+                              style={{
+                                width: 20,
+                                textAlign: 'center',
+                                color: 'var(--text-subtle)',
+                                fontSize: 'var(--text-xs)',
+                                fontWeight: 700,
+                              }}
+                            >
+                              {idx + 1}
+                            </span>
+                            <TeamLogo abbr={team.abbr} size={32} isUser={isUser} />
+                            <div>
+                              <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)' }}>
+                                {team.name}
+                                {isUser && (
+                                  <span
+                                    style={{
+                                      marginLeft: 6,
+                                      fontSize: 'var(--text-xs)',
+                                      color: 'var(--accent)',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    ★
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                                {team.abbr}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 700, color: 'var(--text)' }}>{team.wins}</td>
+                        <td style={{ textAlign: 'center' }}>{team.losses}</td>
+                        <td style={{ textAlign: 'center' }}>{team.ties}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 600 }}>{winPct(team.wins, team.losses, team.ties)}</td>
+                        <td style={{ textAlign: 'center' }}>{team.ptsFor}</td>
+                        <td style={{ textAlign: 'center' }}>{team.ptsAgainst}</td>
+                        <td style={{ textAlign: 'center' }}><OvrPill ovr={team.ovr} /></td>
+                        <td style={{ textAlign: 'right', paddingRight: 'var(--space-4)', color: 'var(--success)', fontSize: 'var(--text-sm)' }}>
+                          ${(team.capRoom ?? 0).toFixed(1)}M
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Schedule Tab ──────────────────────────────────────────────────────────────
+
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId }) {
+  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+
+  // Build teamById lookup
+  const teamById = useMemo(() => {
+    const map = {};
+    teams.forEach(t => { map[t.id] = t; });
+    return map;
+  }, [teams]);
+
+  const totalWeeks = schedule?.weeks?.length ?? 0;
+  const weekData = schedule?.weeks?.find(w => w.week === selectedWeek);
+  const games = weekData?.games ?? [];
+
+  return (
+    <div>
+      {/* Week selector */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', marginBottom: 'var(--space-6)', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', fontWeight: 600 }}>Week</span>
+        <div className="standings-tabs" style={{ flexWrap: 'wrap' }}>
+          {Array.from({ length: totalWeeks }, (_, i) => i + 1).map(w => (
+            <button
+              key={w}
+              className={`standings-tab${selectedWeek === w ? ' active' : ''}`}
+              onClick={() => setSelectedWeek(w)}
+              style={{ minWidth: 36 }}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Game cards grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 'var(--space-4)' }}>
+        {games.map((game, idx) => {
+          const home = teamById[game.home] ?? { name: `Team ${game.home}`, abbr: '???', wins: 0, losses: 0, ties: 0 };
+          const away = teamById[game.away] ?? { name: `Team ${game.away}`, abbr: '???', wins: 0, losses: 0, ties: 0 };
+          const isUserGame = home.id === userTeamId || away.id === userTeamId;
+
+          return (
+            <div
+              key={idx}
+              className="matchup-card"
+              style={isUserGame ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent), var(--shadow-lg)' } : {}}
+            >
+              {/* Card header */}
+              <div className="matchup-header">
+                <span>Week {selectedWeek}</span>
+                <span
+                  style={{
+                    padding: '2px 8px',
+                    borderRadius: 'var(--radius-pill)',
+                    background: game.played ? 'var(--success)22' : 'var(--accent)22',
+                    color: game.played ? 'var(--success)' : 'var(--accent)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {game.played ? 'Final' : 'Scheduled'}
+                </span>
+              </div>
+
+              {/* Teams */}
+              <div className="matchup-content">
+                {/* Away */}
+                <div className="matchup-team away">
+                  <TeamLogo abbr={away.abbr} size={64} isUser={away.id === userTeamId} />
+                  <div className="team-name-matchup">{away.abbr}</div>
+                  <div className="team-record-matchup">
+                    {away.wins}-{away.losses}{away.ties > 0 ? `-${away.ties}` : ''}
+                  </div>
+                </div>
+
+                {/* VS */}
+                <div className="matchup-vs">
+                  <span className="vs-badge">VS</span>
+                  <span className="at-badge">at</span>
+                </div>
+
+                {/* Home */}
+                <div className="matchup-team home">
+                  <TeamLogo abbr={home.abbr} size={64} isUser={home.id === userTeamId} />
+                  <div className="team-name-matchup">{home.abbr}</div>
+                  <div className="team-record-matchup">
+                    {home.wins}-{home.losses}{home.ties > 0 ? `-${home.ties}` : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {games.length === 0 && (
+          <p style={{ color: 'var(--text-muted)', gridColumn: '1/-1', textAlign: 'center', padding: 'var(--space-8)' }}>
+            No games found for week {selectedWeek}.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Leaders Tab ───────────────────────────────────────────────────────────────
+
+function LeadersTab({ teams }) {
+  const leaders = useMemo(() => [
+    {
+      label: 'Most Wins',
+      rows: [...teams].sort((a, b) => b.wins - a.wins).slice(0, 5),
+      value: t => `${t.wins}W`,
+    },
+    {
+      label: 'Top Offense (PF)',
+      rows: [...teams].sort((a, b) => b.ptsFor - a.ptsFor).slice(0, 5),
+      value: t => `${t.ptsFor} pts`,
+    },
+    {
+      label: 'Best Defense (PA)',
+      rows: [...teams].sort((a, b) => a.ptsAgainst - b.ptsAgainst).slice(0, 5),
+      value: t => `${t.ptsAgainst} PA`,
+    },
+    {
+      label: 'Highest Rated',
+      rows: [...teams].sort((a, b) => b.ovr - a.ovr).slice(0, 5),
+      value: t => `OVR ${t.ovr}`,
+    },
+  ], [teams]);
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 'var(--space-6)' }}>
+      {leaders.map(({ label, rows, value }) => (
+        <div key={label} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div
+            style={{
+              padding: 'var(--space-3) var(--space-5)',
+              background: 'var(--surface-strong)',
+              borderBottom: '1px solid var(--hairline)',
+            }}
+          >
+            <span className="hub-section-title" style={{ marginBottom: 0 }}>{label}</span>
+          </div>
+
+          <div className="hub-rankings-list" style={{ padding: 'var(--space-3)' }}>
+            {rows.map((team, i) => (
+              <div key={team.id} className="hub-ranking-item">
+                <span
+                  className="hub-ranking-rank"
+                  style={i === 0 ? { color: 'var(--warning)' } : {}}
+                >
+                  {i + 1}
+                </span>
+                <TeamLogo abbr={team.abbr} size={28} />
+                <span className="hub-ranking-team">{team.name}</span>
+                <span
+                  className="hub-ranking-record"
+                  style={{ fontWeight: 600, color: 'var(--text)' }}
+                >
+                  {value(team)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function LeagueDashboard({ league }) {
+  const [activeTab, setActiveTab] = useState('Standings');
+
   if (!league) return null;
-  if (!league.schedule || !league.schedule.weeks) {
+
+  if (!league.schedule?.weeks) {
     return (
-      <div style={{
-        padding: '20px',
-        color: '#721c24',
-        backgroundColor: '#f8d7da',
-        border: '1px solid #f5c6cb',
-        borderRadius: '4px'
-      }}>
-        Error: Schedule data missing
+      <div
+        style={{
+          padding: 'var(--space-5)',
+          color: 'var(--danger)',
+          background: 'rgba(255,69,58,0.1)',
+          border: '1px solid var(--danger)',
+          borderRadius: 'var(--radius-md)',
+        }}
+      >
+        Error: Schedule data missing from league state.
       </div>
     );
   }
 
-  const sortedTeams = [...league.teams].sort((a, b) => b.wins - a.wins);
+  const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+  const userAbbr = userTeam?.abbr ?? '---';
+  const userRecord = userTeam
+    ? `${userTeam.wins}-${userTeam.losses}${userTeam.ties ? `-${userTeam.ties}` : ''}`
+    : '0-0';
+
+  // Status grid stats (league-wide totals)
+  const totalGames = league.teams.reduce((s, t) => s + t.wins + t.losses + t.ties, 0) / 2;
+  const avgScore   = league.teams.length
+    ? Math.round(league.teams.reduce((s, t) => s + t.ptsFor, 0) / Math.max(1, totalGames * 2))
+    : 0;
+  const highWins   = Math.max(...league.teams.map(t => t.wins), 0);
+  const avgOvr     = league.teams.length
+    ? Math.round(league.teams.reduce((s, t) => s + t.ovr, 0) / league.teams.length)
+    : 75;
 
   return (
     <div>
-      <h2>Standings (Week {league.week})</h2>
-      <div style={{ overflowX: 'auto' }}>
-        <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ background: '#f0f0f0' }}>
-              <th>Rank</th>
-              <th>Team</th>
-              <th>Record</th>
-              <th>PF</th>
-              <th>PA</th>
-              <th>Cap Space</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedTeams.map((team, index) => (
-              <tr key={team.id}>
-                <td>{index + 1}</td>
-                <td>{team.name} ({team.abbr})</td>
-                <td>{team.wins}-{team.losses}-{team.ties}</td>
-                <td>{team.ptsFor}</td>
-                <td>{team.ptsAgainst}</td>
-                <td>${(team.capRoom || 0).toFixed(2)}M</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* ── Hub Header ─────────────────────────────────────────────────── */}
+      <div className="hub-header">
+        <div className="hub-header-content">
+          <div className="team-identity">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+              <TeamLogo abbr={userAbbr} size={56} isUser />
+              <div>
+                <div className="team-name-large">{userTeam?.name ?? 'No Team Selected'}</div>
+                <div className="team-record-large">
+                  {userRecord}
+                  {userTeam && (
+                    <span className="division-rank-badge">
+                      {userTeam.conf} {userTeam.div}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="season-context">
+            <div className="current-week-large">Week {league.week}</div>
+            <div className="season-year-large">
+              {league.year ?? 2025} Season · {league.phase}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* ── Status Grid ────────────────────────────────────────────────── */}
+      <div className="status-grid">
+        {[
+          { label: 'Teams', value: league.teams.length, pct: 100 },
+          { label: 'Games Played', value: Math.round(totalGames), pct: Math.min(100, Math.round((totalGames / (league.teams.length * 9)) * 100)) },
+          { label: 'Avg Score / Game', value: avgScore, pct: Math.min(100, Math.round((avgScore / 45) * 100)) },
+          { label: 'League Avg OVR', value: avgOvr, pct: avgOvr },
+        ].map(({ label, value, pct }) => (
+          <div key={label} className="stat-box">
+            <div className="stat-label">{label}</div>
+            <div className="stat-value-large">{value}</div>
+            <div className="stat-bar-container">
+              <div className="stat-bar-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Tab Navigation ─────────────────────────────────────────────── */}
+      <div className="standings-tabs" style={{ marginBottom: 'var(--space-6)' }}>
+        {TABS.map(tab => (
+          <button
+            key={tab}
+            className={`standings-tab${activeTab === tab ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab Content ────────────────────────────────────────────────── */}
+      {activeTab === 'Standings' && (
+        <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
+      )}
+      {activeTab === 'Schedule' && (
+        <ScheduleTab
+          schedule={league.schedule}
+          teams={league.teams}
+          currentWeek={league.week}
+          userTeamId={league.userTeamId}
+        />
+      )}
+      {activeTab === 'Leaders' && (
+        <LeadersTab teams={league.teams} />
+      )}
     </div>
   );
 }

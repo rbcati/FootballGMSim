@@ -87,18 +87,30 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 16, fontFamily: 'system-ui, sans-serif', maxWidth: 1200, margin: '0 auto' }}>
-      {/* Top bar */}
-      <header style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Football GM</h1>
-        <span style={{ color: '#666', fontSize: 13 }}>
+    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+
+      {/* ── Top bar ────────────────────────────────────────────────────── */}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--space-4)',
+          marginBottom: 'var(--space-4)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-0.5px' }}>
+          Football GM
+        </h1>
+        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
           Season {league.seasonId} · Week {league.week} · {league.phase}
         </span>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <button
+            className="btn btn-primary"
             onClick={handleAdvanceWeek}
             disabled={busy || simulating}
-            style={btnStyle('primary')}
           >
             {simulating
               ? `Simulating… ${simProgress}%`
@@ -106,74 +118,122 @@ export default function App() {
               ? 'Working…'
               : `Advance Week ${league.week}`}
           </button>
-          <button onClick={() => actions.save()} disabled={busy} style={btnStyle('secondary')}>
+          <button className="btn" onClick={() => actions.save()} disabled={busy}>
             Save
           </button>
-          <button onClick={handleReset} disabled={busy} style={btnStyle('danger')}>
+          <button className="btn btn-danger" onClick={handleReset} disabled={busy}>
             Reset
           </button>
         </div>
       </header>
 
-      {/* Progress bar */}
+      {/* ── Simulation progress bar ────────────────────────────────────── */}
       {simulating && (
-        <div style={{ height: 4, background: '#e0e0e0', borderRadius: 2, marginBottom: 12 }}>
-          <div style={{
-            height: '100%', width: `${simProgress}%`,
-            background: '#1976d2', borderRadius: 2,
-            transition: 'width 0.15s ease',
-          }} />
+        <div
+          style={{
+            height: 3,
+            background: 'var(--hairline)',
+            borderRadius: 'var(--radius-pill)',
+            marginBottom: 'var(--space-4)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              height: '100%',
+              width: `${simProgress}%`,
+              background: 'var(--accent)',
+              borderRadius: 'var(--radius-pill)',
+              transition: 'width 0.15s ease',
+            }}
+          />
         </div>
       )}
 
-      {/* Error banner */}
+      {/* ── Error banner ───────────────────────────────────────────────── */}
       {error && (
-        <div role="alert" style={{
-          background: '#ffebee', border: '1px solid #e57373',
-          color: '#c62828', padding: '10px 14px', borderRadius: 4, marginBottom: 12,
-        }}>
+        <div
+          role="alert"
+          style={{
+            background: 'var(--error-bg)',
+            border: '1px solid var(--danger)',
+            color: 'var(--danger)',
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--text-sm)',
+          }}
+        >
           {error}
         </div>
       )}
 
-      {/* Notifications */}
+      {/* ── Notifications ──────────────────────────────────────────────── */}
       {notifications.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
           {notifications.map(n => (
-            <div key={n.id} style={{
-              background: n.level === 'warn' ? '#fff3e0' : '#e3f2fd',
-              border: `1px solid ${n.level === 'warn' ? '#ffb300' : '#42a5f5'}`,
-              padding: '8px 12px', borderRadius: 4,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
+            <div
+              key={n.id}
+              style={{
+                background: n.level === 'warn' ? 'var(--warning-bg)' : 'var(--accent-muted)',
+                border: `1px solid ${n.level === 'warn' ? 'var(--warning)' : 'var(--accent)'}`,
+                color: n.level === 'warn' ? 'var(--warning-text)' : 'var(--text)',
+                padding: 'var(--space-3) var(--space-4)',
+                borderRadius: 'var(--radius-md)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
               <span>{n.message}</span>
               <button
                 onClick={() => actions.dismissNotification(n.id)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
-              >×</button>
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: 20,
+                  lineHeight: 1,
+                  color: 'inherit',
+                  opacity: 0.7,
+                  padding: '0 var(--space-1)',
+                }}
+              >
+                ×
+              </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Last week results ticker */}
+      {/* ── Last results ticker ────────────────────────────────────────── */}
       {lastResults && lastResults.length > 0 && (
-        <div style={{
-          overflowX: 'auto', whiteSpace: 'nowrap',
-          background: '#f5f5f5', padding: '8px 12px',
-          borderRadius: 4, marginBottom: 16, fontSize: 13,
-        }}>
+        <div
+          style={{
+            overflowX: 'auto',
+            whiteSpace: 'nowrap',
+            background: 'var(--surface)',
+            border: '1px solid var(--hairline)',
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-6)',
+            fontSize: 'var(--text-sm)',
+          }}
+        >
           {lastResults.map((r, i) => (
-            <span key={i} style={{ marginRight: 24 }}>
-              {r.homeName} <strong>{r.homeScore}</strong>
+            <span key={i} style={{ marginRight: 'var(--space-6)', color: 'var(--text-muted)' }}>
+              {r.homeName}{' '}
+              <strong style={{ color: 'var(--text)' }}>{r.homeScore}</strong>
               {' – '}
-              <strong>{r.awayScore}</strong> {r.awayName}
+              <strong style={{ color: 'var(--text)' }}>{r.awayScore}</strong>
+              {' '}{r.awayName}
             </span>
           ))}
         </div>
       )}
 
-      {/* Main dashboard */}
+      {/* ── Main dashboard ─────────────────────────────────────────────── */}
       <LeagueDashboard
         league={league}
         busy={busy}
@@ -187,17 +247,29 @@ export default function App() {
 
 function Loading({ message }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      height: '100vh', gap: 16,
-    }}>
-      <div style={{
-        width: 40, height: 40, border: '4px solid #e0e0e0',
-        borderTopColor: '#1976d2', borderRadius: '50%',
-        animation: 'spin 0.8s linear infinite',
-      }} />
-      <p style={{ color: '#666', fontSize: 15 }}>{message}</p>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        gap: 'var(--space-4)',
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          border: '4px solid var(--hairline)',
+          borderTopColor: 'var(--accent)',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }}
+      />
+      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)', margin: 0 }}>
+        {message}
+      </p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
@@ -205,45 +277,43 @@ function Loading({ message }) {
 
 function StartScreen({ onNewLeague, hasSave, busy }) {
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      height: '100vh', gap: 20, fontFamily: 'system-ui, sans-serif',
-    }}>
-      <h1 style={{ margin: 0, fontSize: 36 }}>Football GM</h1>
-      <p style={{ margin: 0, color: '#555' }}>The offline single-player football simulation.</p>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        gap: 'var(--space-5)',
+      }}
+    >
+      <h1
+        style={{
+          margin: 0,
+          fontSize: 'var(--text-4xl)',
+          fontWeight: 800,
+          letterSpacing: '-1px',
+          color: 'var(--text)',
+        }}
+      >
+        Football GM
+      </h1>
+      <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>
+        The offline single-player football simulation.
+      </p>
       {hasSave && (
-        <p style={{ color: '#e65100', fontSize: 13 }}>
+        <p style={{ color: 'var(--warning)', fontSize: 'var(--text-sm)', margin: 0 }}>
           Existing save found but could not be loaded.
         </p>
       )}
       <button
+        className="btn btn-primary"
         onClick={onNewLeague}
         disabled={busy}
-        style={btnStyle('primary', true)}
+        style={{ fontSize: 'var(--text-lg)', padding: 'var(--space-4) var(--space-10)' }}
       >
         {busy ? 'Generating league…' : 'New League'}
       </button>
     </div>
   );
-}
-
-// ── Styling helpers ───────────────────────────────────────────────────────────
-
-function btnStyle(variant, large = false) {
-  const base = {
-    padding: large ? '14px 32px' : '8px 16px',
-    fontSize: large ? 18 : 14,
-    borderRadius: 4,
-    border: 'none',
-    cursor: 'pointer',
-    fontWeight: 600,
-    transition: 'opacity 0.15s',
-  };
-  const variants = {
-    primary:   { background: '#1976d2', color: '#fff' },
-    secondary: { background: '#e0e0e0', color: '#333' },
-    danger:    { background: '#e53935', color: '#fff' },
-  };
-  return { ...base, ...(variants[variant] ?? variants.secondary) };
 }
