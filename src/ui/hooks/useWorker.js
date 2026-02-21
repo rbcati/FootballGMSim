@@ -49,7 +49,7 @@ function reducer(state, action) {
     case 'IDLE':
       return { ...state, busy: false, simulating: false, simProgress: 0 };
     case 'WORKER_READY':
-      return { ...state, workerReady: true, hasSave: action.hasSave ?? false };
+      return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false };
     case 'FULL_STATE':
       return { ...state, busy: false, simulating: false, league: action.payload };
     case 'STATE_UPDATE':
