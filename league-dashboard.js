@@ -127,7 +127,7 @@ export function migrateSchema(league) {
 }
 
 // 1. Function to Save Current Game
-export async function saveGame(stateToSave) {
+export async function saveGame(stateToSave, options = {}) {
     const gameState = stateToSave || window.state;
     if (!gameState || !gameState.league) {
         console.warn("No league to save.");
@@ -168,12 +168,16 @@ export async function saveGame(stateToSave) {
         // 1. Synchronous Backup to LocalStorage (Crucial for beforeunload reliability)
         // We do this BEFORE await so it completes even if browser unloads
         let savedToLS = false;
-        try {
-            localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
-            savedToLS = true;
-        } catch (e) {
-            // Quota exceeded or other error. We'll rely on IDB.
-            // Don't log error yet, as IDB is primary.
+
+        // OPTIMIZATION: Only do synchronous backup on unload to prevent UI blocking
+        if (options.isUnload) {
+            try {
+                localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+                savedToLS = true;
+            } catch (e) {
+                // Quota exceeded or other error. We'll rely on IDB.
+                // Don't log error yet, as IDB is primary.
+            }
         }
 
         // 2. Try IndexedDB (Primary Storage)
@@ -184,6 +188,16 @@ export async function saveGame(stateToSave) {
                 savedToIDB = true;
             } catch (idbErr) {
                 console.error("IndexedDB save failed...", idbErr);
+            }
+        }
+
+        // Fallback: If IDB failed and we didn't save to LS yet, try LS now
+        if (!savedToIDB && !savedToLS) {
+            try {
+                localStorage.setItem(DB_KEY_PREFIX + leagueName, JSON.stringify(saveData));
+                savedToLS = true;
+            } catch (e) {
+                // failed fallback
             }
         }
 
