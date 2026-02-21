@@ -188,7 +188,7 @@ async function handleNewLeague(payload, id) {
     cache.reset();
 
     // Generate via existing core logic
-    const league = makeLeague(teamDefs, options);
+    const league = makeLeague(teamDefs, options, { makeSchedule: makeAccurateSchedule });
 
     const seasonId = `s${league.season ?? 1}`;
     const meta = {
