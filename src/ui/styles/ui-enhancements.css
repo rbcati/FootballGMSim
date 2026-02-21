@@ -2219,13 +2219,45 @@ body {
    UI Polish - Tactile Feedback & New Animations
    ============================================ */
 
-/* Unified Tactile Button Feedback */
+/* Unified Tactile Feedback for All Interactive Elements */
+.btn,
+.control-btn,
+.play-call-btn,
+.nav-item,
+.tempo-btn,
+.pause-btn,
+.skip-btn,
+.close-game-btn,
+.watch-live-btn {
+  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease, box-shadow 0.2s ease;
+}
+
 .btn:active,
+.control-btn:active,
 .play-call-btn:active,
-.nav-item:active {
+.nav-item:active,
+.tempo-btn:active,
+.pause-btn:active,
+.skip-btn:active,
+.close-game-btn:active,
+.watch-live-btn:active {
   transform: scale(0.96) translateY(1px) !important;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2) !important;
   filter: brightness(0.95);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.btn:hover,
+.control-btn:hover:not(:disabled),
+.play-call-btn:hover,
+.nav-item:hover,
+.tempo-btn:hover,
+.pause-btn:hover,
+.skip-btn:hover,
+.close-game-btn:hover,
+.watch-live-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* Animations for Field Effects */
@@ -2465,8 +2497,22 @@ body {
 
 /* Blur Transition */
 .blur-transition {
-    filter: blur(5px);
-    transition: filter 0.3s ease;
+    filter: blur(8px);
+    opacity: 0.8;
+    transition: filter 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+}
+
+/* Generic Fade Transition */
+.fade-transition {
+    transition: opacity 0.3s ease-in-out, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 1;
+    transform: scale(1);
+}
+
+.fade-transition.hidden {
+    opacity: 0;
+    transform: scale(0.98);
+    pointer-events: none;
 }
 
 /* Huddle Break Animation */
@@ -2772,4 +2818,15 @@ body {
 .blur-motion {
     filter: blur(2px);
     transition: filter 0.1s;
+}
+
+/* Impact Pulse for big hits */
+@keyframes impact-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); filter: brightness(1.2); }
+  100% { transform: scale(1); }
+}
+
+.impact-pulse {
+  animation: impact-pulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
