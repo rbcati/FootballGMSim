@@ -16,7 +16,7 @@ import { Utils as UtilsImport } from './utils.js';
 const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
     const picks = [];
     // Fallback ID generator if Utils is missing or doesn't have id()
-    const genId = Utils?.id || (() => (window.Utils?.random || Math.random)().toString(36).slice(2, 10));
+    const genId = Utils?.id || (() => Math.random().toString(36).slice(2, 10));
 
     for (let y = 0; y < years; y++) {
         for (let r = 1; r <= 7; r++) {
@@ -161,7 +161,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
 
     try {
         // Configuration
-        const leagueYear = options.year || (typeof window !== 'undefined' && window.state?.year) || Constants.GAME_CONFIG.YEAR_START;
+        const leagueYear = options.year || Constants.GAME_CONFIG.YEAR_START;
         const startPoint = options.startPoint || 'regular';
 
         const league = {
@@ -249,31 +249,15 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
         }
 
-        // --- SIDE EFFECT REMOVAL ---
-        // Instead of setting window.state directly, we perform updates on the league object if helpers are available
-
-        if (typeof window !== 'undefined') {
-            // Update ratings if function exists
-            if (window.updateLeaguePlayers) {
-                window.updateLeaguePlayers(league);
-            }
-
-            if (window.updateAllTeamOveralls) {
-                window.updateAllTeamOveralls(league);
-            } else if (window.updateAllTeamRatings) {
-                window.updateAllTeamRatings(league);
+        // Calculate team overall ratings from roster
+        league.teams.forEach(t => {
+            if (t.roster.length) {
+                const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
+                t.ovr = Math.round(totalOvr / t.roster.length);
             } else {
-                // Simple rating calculation fallback
-                league.teams.forEach(t => {
-                    if (t.roster.length) {
-                        const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
-                        t.ovr = Math.round(totalOvr / t.roster.length);
-                    } else {
-                        t.ovr = 75;
-                    }
-                });
+                t.ovr = 75;
             }
-        }
+        });
 
     console.log('✨ League creation complete and modularized!');
     return league;
@@ -282,11 +266,6 @@ function makeLeague(teams, options = {}, dependencies = {}) {
         console.error('CRITICAL: League generation failed:', error);
         throw error;
     }
-}
-
-// Make available globally and export
-if (typeof window !== 'undefined') {
-    window.makeLeague = makeLeague;
 }
 
 export { makeLeague, getZeroTeamStats };
