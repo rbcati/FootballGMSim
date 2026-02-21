@@ -32,6 +32,69 @@ export function groupPlayersByPosition(roster) {
 }
 
 /**
+ * Helper to get cached groups from team object.
+ * Caches groups on team object keyed by league week.
+ * @param {Object} team - Team object
+ * @param {Object} league - League object (for current week)
+ * @returns {Object} Map of position -> sorted array of players (full roster)
+ */
+function getCachedGroups(team, league) {
+  if (!team || !team.roster) return {};
+
+  const currentWeek = league ? league.week : undefined;
+
+  // Check cache validity
+  if (league && team._cachedGroups && team._cachedGroupsWeek === currentWeek) {
+    return team._cachedGroups;
+  }
+
+  // Compute groups
+  const groups = groupPlayersByPosition(team.roster);
+
+  // Cache if league context is available
+  if (league) {
+    Object.defineProperty(team, '_cachedGroups', {
+      value: groups,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    });
+    Object.defineProperty(team, '_cachedGroupsWeek', {
+      value: currentWeek,
+      writable: true,
+      configurable: true,
+      enumerable: false
+    });
+  }
+
+  return groups;
+}
+
+/**
+ * Helper to get active roster groups and flattened active roster.
+ * Uses cached full groups and filters by injury status.
+ * @param {Object} team - Team object
+ * @param {Object} league - League object
+ * @returns {Object} { active: Array, groups: Object }
+ */
+function getActiveGroups(team, league) {
+  const fullGroups = getCachedGroups(team, league);
+  const active = [];
+  const groups = {};
+
+  for (const pos in fullGroups) {
+    // canPlayerPlay is imported from ./injury-core.js
+    const activeInPos = fullGroups[pos].filter(p => canPlayerPlay(p));
+    groups[pos] = activeInPos;
+    for (let i = 0; i < activeInPos.length; i++) {
+      active.push(activeInPos[i]);
+    }
+  }
+
+  return { active, groups };
+}
+
+/**
  * Initialize player stats structure if it doesn't exist
  * @param {Object} player - Player object
  */
@@ -820,17 +883,9 @@ export function simGameStats(home, away, options = {}) {
     }
 
     // --- OPTIMIZATION & INJURY INTEGRATION ---
-    const getActiveRoster = (team) => {
-      if (!team.roster) return [];
-      // Use imported canPlayerPlay
-      return team.roster.filter(p => canPlayerPlay(p));
-    };
-
-    const homeActive = getActiveRoster(home);
-    const awayActive = getActiveRoster(away);
-
-    const homeGroups = groupPlayersByPosition(homeActive);
-    const awayGroups = groupPlayersByPosition(awayActive);
+    // Use cached grouping + injury filtering
+    const { active: homeActive, groups: homeGroups } = getActiveGroups(home, options.league);
+    const { active: awayActive, groups: awayGroups } = getActiveGroups(away, options.league);
 
     const calculateStrength = (activeRoster, team) => {
       if (!activeRoster || !activeRoster.length) return 50;
