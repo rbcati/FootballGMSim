@@ -29,7 +29,7 @@ import { makeLeague }     from '../core/league.js';
 import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
-import { makeAccurateSchedule } from '../core/schedule.js';
+import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -187,8 +187,15 @@ async function handleNewLeague(payload, id) {
     await clearAllData();
     cache.reset();
 
+    // Ensure we have a valid schedule generator
+    // (Protects against module loading edge cases where named export might be undefined)
+    const makeScheduleFn = makeAccurateSchedule || (Scheduler && Scheduler.makeAccurateSchedule);
+    if (!makeScheduleFn) {
+        throw new Error('Critical: makeAccurateSchedule could not be loaded.');
+    }
+
     // Generate via existing core logic
-    const league = makeLeague(teamDefs, options, { makeSchedule: makeAccurateSchedule });
+    const league = makeLeague(teamDefs, options, { makeSchedule: makeScheduleFn });
 
     const seasonId = `s${league.season ?? 1}`;
     const meta = {
