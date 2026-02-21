@@ -73,6 +73,19 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!workerReady) {
+    if (error) {
+      return (
+        <div style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh',
+          color: 'var(--danger)', gap: 'var(--space-4)', padding: 'var(--space-6)', textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2rem' }}>⚠️</div>
+          <h2 style={{ fontSize: 'var(--text-xl)' }}>Initialization Failed</h2>
+          <p style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: 'var(--space-2)' }}>{error}</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      );
+    }
     return <Loading message="Starting game engine…" />;
   }
 
