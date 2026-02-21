@@ -1590,8 +1590,19 @@ export const finalizeGameResult = commitGameResult;
 function transformStatsForBoxScore(playerStatsMap, roster) {
     if (!playerStatsMap) return {};
     const box = {};
+
+    // OPTIMIZATION: Create a map for fast roster lookups O(N) instead of O(N*M)
+    const rosterMap = new Map();
+    if (roster && Array.isArray(roster)) {
+        for (const p of roster) {
+            if (p && p.id !== undefined) {
+                rosterMap.set(String(p.id), p);
+            }
+        }
+    }
+
     Object.keys(playerStatsMap).forEach(pid => {
-        const p = roster.find(pl => String(pl.id) === String(pid));
+        const p = rosterMap.get(String(pid));
         if (p) {
             box[pid] = {
                 name: p.name,
