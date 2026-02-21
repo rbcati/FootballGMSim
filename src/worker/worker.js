@@ -302,6 +302,53 @@ function expandSchedule(slimSchedule) {
   };
 }
 
+// ── Playoff bracket builder ────────────────────────────────────────────────────
+
+/**
+ * Build the Week 19 (Wildcard) slim schedule entry from current standings.
+ * Seeds the top 7 teams per conference; seed 1 receives a bye.
+ * Matchups: 2v7, 3v6, 4v5 per conference (higher seed hosts).
+ * Mirrors the logic in legacy/playoffs.js but is pure (no window/DOM deps).
+ */
+function generatePlayoffWeek19() {
+  const SEEDS = 7;
+  const teams = cache.getAllTeams();
+
+  // Determine conference identifiers from actual team data (e.g. 'AFC'/'NFC' or 0/1)
+  const confs = [...new Set(teams.map(t => t.conf))];
+
+  const rankConf = (confId) =>
+    teams
+      .filter(t => t.conf === confId)
+      .sort((a, b) => {
+        const wDiff = (b.wins ?? 0) - (a.wins ?? 0);
+        if (wDiff !== 0) return wDiff;
+        // Tiebreaker: point differential
+        const diffA = (a.ptsFor ?? 0) - (a.ptsAgainst ?? 0);
+        const diffB = (b.ptsFor ?? 0) - (b.ptsAgainst ?? 0);
+        return diffB - diffA;
+      })
+      .slice(0, SEEDS);
+
+  const makeWCGames = (seeds) => {
+    if (seeds.length < SEEDS) return [];
+    // seeds[0] = #1 seed (bye), seeds[1]=#2 … seeds[6]=#7
+    return [
+      { home: seeds[1].id, away: seeds[6].id, played: false, round: 'wildcard' },
+      { home: seeds[2].id, away: seeds[5].id, played: false, round: 'wildcard' },
+      { home: seeds[3].id, away: seeds[4].id, played: false, round: 'wildcard' },
+    ];
+  };
+
+  const allGames = confs.flatMap(confId => makeWCGames(rankConf(confId)));
+
+  return {
+    week: 19,
+    playoffRound: 'wildcard',
+    games: allGames,
+  };
+}
+
 // ── Handler: ADVANCE_WEEK ─────────────────────────────────────────────────────
 
 async function handleAdvanceWeek(payload, id) {
@@ -344,12 +391,17 @@ async function handleAdvanceWeek(payload, id) {
   const newWeek = week + 1;
   const isSeasonOver = week >= TOTAL_WEEKS;
 
-  // Mark games as played in schedule
+  // Mark games as played in schedule (scores already written by applyGameResultToCache)
   markWeekPlayed(meta.schedule, week);
 
   if (isSeasonOver) {
-    // Transition to playoffs/offseason
-    cache.setMeta({ currentWeek: newWeek, phase: 'playoffs' });
+    // Generate wildcard playoff bracket and append week 19 to the schedule
+    const week19 = generatePlayoffWeek19();
+    const updatedSchedule = cache.getMeta().schedule ?? { weeks: [] };
+    if (!updatedSchedule.weeks.find(w => w.week === 19)) {
+      updatedSchedule.weeks.push(week19);
+    }
+    cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: updatedSchedule });
   } else {
     cache.setMeta({ currentWeek: newWeek });
   }
@@ -358,9 +410,10 @@ async function handleAdvanceWeek(payload, id) {
   await flushDirty();
 
   // --- Build response (minimal) ---
+  // result.home / result.away are the team IDs (commitGameResult field names)
   const gameResults = results.map(r => ({
-    homeId:    r.homeTeamId   ?? null,
-    awayId:    r.awayTeamId   ?? null,
+    homeId:    r.home         ?? null,
+    awayId:    r.away         ?? null,
     homeName:  r.homeTeamName ?? '?',
     awayName:  r.awayTeamName ?? '?',
     homeScore: r.scoreHome    ?? 0,
@@ -422,20 +475,30 @@ function buildLeagueForSim(schedule, week, seasonId) {
 
 /**
  * Apply a game result coming from simulateBatch back to the cache.
- * Updates team win/loss records and logs the game to the dirty buffer.
+ * Updates team win/loss records, writes scores into the slim schedule,
+ * aggregates player season stats, and logs the game to the dirty buffer.
+ *
+ * NOTE: commitGameResult (game-simulator.js) stores team IDs as result.home /
+ * result.away (not homeTeamId / awayTeamId), so we read both field names and
+ * cast to Number to match the integer keys stored in the cache Map.
  */
 function applyGameResultToCache(result, week, seasonId) {
-  const { homeTeamId, awayTeamId, scoreHome, scoreAway } = result;
-  if (homeTeamId == null || awayTeamId == null) return;
+  const hId = Number(result.home ?? result.homeTeamId);
+  const aId = Number(result.away ?? result.awayTeamId);
+  if (isNaN(hId) || isNaN(aId)) return;
+
+  const scoreHome = result.scoreHome ?? result.homeScore ?? 0;
+  const scoreAway = result.scoreAway ?? result.awayScore ?? 0;
 
   const homeWin = scoreHome > scoreAway;
   const tie     = scoreHome === scoreAway;
 
-  const homeTeam = cache.getTeam(homeTeamId);
-  const awayTeam = cache.getTeam(awayTeamId);
+  // ── 1. Update team win/loss records in cache ─────────────────────────────
+  const homeTeam = cache.getTeam(hId);
+  const awayTeam = cache.getTeam(aId);
 
   if (homeTeam) {
-    cache.updateTeam(homeTeamId, {
+    cache.updateTeam(hId, {
       wins:       (homeTeam.wins ?? 0) + (homeWin ? 1 : 0),
       losses:     (homeTeam.losses ?? 0) + (!homeWin && !tie ? 1 : 0),
       ties:       (homeTeam.ties ?? 0) + (tie ? 1 : 0),
@@ -444,7 +507,7 @@ function applyGameResultToCache(result, week, seasonId) {
     });
   }
   if (awayTeam) {
-    cache.updateTeam(awayTeamId, {
+    cache.updateTeam(aId, {
       wins:       (awayTeam.wins ?? 0) + (!homeWin && !tie ? 1 : 0),
       losses:     (awayTeam.losses ?? 0) + (homeWin ? 1 : 0),
       ties:       (awayTeam.ties ?? 0) + (tie ? 1 : 0),
@@ -453,17 +516,47 @@ function applyGameResultToCache(result, week, seasonId) {
     });
   }
 
-  // Queue game for DB
-  const gameId = `${seasonId}_w${week}_${homeTeamId}_${awayTeamId}`;
+  // ── 2. Write scores back into slim schedule so the UI can display them ────
+  // getMeta() returns the live _meta reference, so mutating game objects here
+  // persists through to the subsequent markWeekPlayed → cache.setMeta() call.
+  const slimSchedule = cache.getMeta()?.schedule;
+  if (slimSchedule?.weeks) {
+    const weekData = slimSchedule.weeks.find(w => w.week === week);
+    if (weekData) {
+      const game = weekData.games.find(
+        g => Number(g.home) === hId && Number(g.away) === aId
+      );
+      if (game) {
+        game.homeScore = scoreHome;
+        game.awayScore = scoreAway;
+      }
+    }
+  }
+
+  // ── 3. Aggregate per-player game stats into seasonal totals ───────────────
+  // result.boxScore shape: { home: {[pid]: {name, pos, stats:{...}}}, away: {...} }
+  const aggregateSide = (teamId, boxSide) => {
+    if (!boxSide) return;
+    for (const [pid, entry] of Object.entries(boxSide)) {
+      if (entry?.stats) {
+        cache.updateSeasonStat(Number(pid), teamId, entry.stats);
+      }
+    }
+  };
+  aggregateSide(hId, result.boxScore?.home);
+  aggregateSide(aId, result.boxScore?.away);
+
+  // ── 4. Queue game record for DB flush ─────────────────────────────────────
+  const gameId = `${seasonId}_w${week}_${hId}_${aId}`;
   cache.addGame({
     id:        gameId,
     seasonId,
     week,
-    homeId:    homeTeamId,
-    awayId:    awayTeamId,
+    homeId:    hId,
+    awayId:    aId,
     homeScore: scoreHome,
     awayScore: scoreAway,
-    stats:     result.stats ?? null,
+    stats:     result.boxScore ?? null,
   });
 }
 
