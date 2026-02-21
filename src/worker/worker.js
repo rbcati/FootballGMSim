@@ -73,6 +73,7 @@ function buildViewState() {
     week:       meta?.currentWeek ?? 1,
     phase:      meta?.phase       ?? 'regular',
     userTeamId: meta?.userTeamId  ?? null,
+    schedule:   meta?.schedule    ?? null,
     teams,
   };
 }
@@ -196,6 +197,11 @@ async function handleNewLeague(payload, id) {
 
     // Generate via existing core logic
     const league = makeLeague(teamDefs, options, { makeSchedule: makeScheduleFn });
+
+    // Validate schedule
+    if (!league.schedule || !Array.isArray(league.schedule.weeks) || league.schedule.weeks.length === 0) {
+        throw new Error('League generation failed: Schedule is missing or empty.');
+    }
 
     const seasonId = `s${league.season ?? 1}`;
     const meta = {

@@ -2,6 +2,19 @@ import React from 'react';
 
 export default function LeagueDashboard({ league }) {
   if (!league) return null;
+  if (!league.schedule || !league.schedule.weeks) {
+    return (
+      <div style={{
+        padding: '20px',
+        color: '#721c24',
+        backgroundColor: '#f8d7da',
+        border: '1px solid #f5c6cb',
+        borderRadius: '4px'
+      }}>
+        Error: Schedule data missing
+      </div>
+    );
+  }
 
   const sortedTeams = [...league.teams].sort((a, b) => b.wins - a.wins);
 
