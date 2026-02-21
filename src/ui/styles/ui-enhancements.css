@@ -2773,3 +2773,43 @@ body {
     filter: blur(2px);
     transition: filter 0.1s;
 }
+
+/* ============================================
+   Day 3 Enhancements: Celebrations & AI Feedback
+   ============================================ */
+
+/* Adaptive AI Active State */
+.adaptive-ai-active {
+    box-shadow: 0 0 20px rgba(255, 69, 58, 0.4), inset 0 0 10px rgba(255, 69, 58, 0.2);
+    border: 1px solid rgba(255, 69, 58, 0.5) !important;
+    animation: pulse-danger 2s infinite;
+}
+
+@keyframes pulse-danger {
+    0% { box-shadow: 0 0 20px rgba(255, 69, 58, 0.4); }
+    50% { box-shadow: 0 0 40px rgba(255, 69, 58, 0.7); }
+    100% { box-shadow: 0 0 20px rgba(255, 69, 58, 0.4); }
+}
+
+/* Backflip Celebration */
+@keyframes celebrate-backflip {
+    0% { transform: translate(-50%, -50%) rotateX(0deg) translateY(0); }
+    40% { transform: translate(-50%, -50%) rotateX(-180deg) translateY(-20px); }
+    100% { transform: translate(-50%, -50%) rotateX(-360deg) translateY(0); }
+}
+
+.celebrate-backflip {
+    animation: celebrate-backflip 0.8s ease-in-out;
+    z-index: 20;
+}
+
+/* Slide Celebration */
+@keyframes celebrate-slide {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    20% { transform: translate(-50%, -50%) rotate(90deg) scale(0.8); } /* Drop */
+    100% { transform: translate(-30%, -50%) rotate(90deg) scale(0.8); } /* Slide forward */
+}
+
+.celebrate-slide {
+    animation: celebrate-slide 1.2s ease-out;
+}
