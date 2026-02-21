@@ -140,15 +140,13 @@ function getZeroTeamStats() {
  * @returns {Object} The generated league object.
  */
 function makeLeague(teams, options = {}, dependencies = {}) {
-    // Destructure dependencies with fallbacks to imported modules
-    const {
-        Constants = ConstantsImport,
-        Utils = UtilsImport,
-        makePlayer = makePlayerImport,
-        makeSchedule = (dependencies.makeSchedule || null),
-        recalcCap = (dependencies.recalcCap || null),
-        generateInitialStaff = (dependencies.generateInitialStaff || null)
-    } = dependencies;
+    // Explicitly access dependencies to avoid potential destructuring/scope issues
+    const Constants = dependencies.Constants || ConstantsImport;
+    const Utils = dependencies.Utils || UtilsImport;
+    const makePlayer = dependencies.makePlayer || makePlayerImport;
+    const makeSchedule = dependencies.makeSchedule || null;
+    const recalcCap = dependencies.recalcCap || null;
+    const generateInitialStaff = dependencies.generateInitialStaff || null;
 
     const missingDependencies = [];
     if (!Constants) missingDependencies.push('Constants');
