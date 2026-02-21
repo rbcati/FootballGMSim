@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App, { ErrorBoundary } from './App';
 
 // Legacy design system — order matters: base vars first, then components, then overrides
 import './styles/base.css';
@@ -12,6 +12,8 @@ import './styles/mobile.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </React.StrictMode>
 );
