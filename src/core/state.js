@@ -740,7 +740,7 @@ export async function saveState(stateToSave = null, options = {}) {
     // --- INTEGRATION FIX: Use Dashboard Save System if available ---
     // This ensures auto-saves via beforeunload go to the same DB as manual saves
     if (typeof window !== 'undefined' && window.saveGame && !options.legacyOnly) {
-        await window.saveGame(stateForSave);
+        await window.saveGame(stateForSave, options);
         return true;
     }
     const serialized = JSON.stringify(stateForSave);
@@ -811,7 +811,7 @@ export function hookAutoSave() {
     window.addEventListener('beforeunload', function () {
       try {
         // Attempt save, but don't await (browser may kill it if async)
-        saveState().catch(e => console.warn('Auto-save interrupted:', e));
+        saveState(null, { isUnload: true }).catch(e => console.warn('Auto-save interrupted:', e));
       } catch (err) {
         // swallow; user is leaving anyway
       }
