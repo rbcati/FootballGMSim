@@ -321,6 +321,22 @@ class SoundManager {
         this.playCheer();
     }
 
+    playComboFire() {
+        if (!this.enabled || this.muted) return;
+        // Rapid rising sequence
+        const startFreq = 400;
+        for(let i = 0; i < 5; i++) {
+            this.playTone(startFreq + (i * 150), 'triangle', 0.1, 0.1, null, i * 50);
+        }
+    }
+
+    playAdaptiveWarning() {
+        if (!this.enabled || this.muted) return;
+        // Low tension drone
+        this.playTone(80, 'sawtooth', 1.5, 0.3, 100);
+        this.playTone(82, 'sawtooth', 1.5, 0.3, 102); // Beat frequency
+    }
+
     toggleMute() {
         this.muted = !this.muted;
         return this.muted;

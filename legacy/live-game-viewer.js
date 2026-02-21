@@ -235,8 +235,10 @@ class LiveGameViewer {
          }, 500);
     }
 
+    const adaptiveClass = this.preGameContext?.adaptiveAI ? 'adaptive-ai-active' : '';
+
     container.innerHTML = `
-      <div class="card live-game-header">
+      <div class="card live-game-header ${adaptiveClass}">
         ${stakesHtml}
         ${difficultyHtml}
         <div class="scoreboard"></div>
@@ -1151,7 +1153,7 @@ class LiveGameViewer {
                if (play.result === 'touchdown') {
                    // Celebration
                    if (skillMarker) {
-                       const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance'];
+                       const anims = ['celebrate-jump', 'celebrate-spin', 'celebrate-spike', 'celebrate-dance', 'celebrate-backflip', 'celebrate-slide'];
                        const anim = anims[Math.floor(Math.random() * anims.length)];
                        skillMarker.classList.add(anim);
                    }
@@ -1507,6 +1509,8 @@ class LiveGameViewer {
              // Visual feedback for difficulty increase
              if (Math.random() < 0.05 && !this.isSkipping) {
                  this.triggerFloatText('⚠️ AI ADAPTING', 'warning');
+                 soundManager.playAdaptiveWarning();
+                 this.triggerShake('normal');
              }
         }
     }
@@ -2365,7 +2369,13 @@ class LiveGameViewer {
         // Combo Feedback
         if (comboIncreased && this.combo > 1) {
              this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
-             soundManager.playPing();
+             if (this.combo >= 3) {
+                 soundManager.playComboFire();
+                 // Fire particles in center
+                 if (this.fieldEffects) this.fieldEffects.spawnParticles(50, 'fire');
+             } else {
+                 soundManager.playPing();
+             }
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
@@ -3085,6 +3095,21 @@ class LiveGameViewer {
           else grade = 'D';
       }
 
+      // Calculate Stars
+      let stars = 1;
+      if (grade.includes('A')) stars = 5;
+      else if (grade.includes('B')) stars = 4;
+      else if (grade.includes('C')) stars = 3;
+      else if (grade.includes('D')) stars = 2;
+
+      let starsHtml = '<div class="game-stars" style="margin: 10px 0; font-size: 2.5rem; letter-spacing: 5px;">';
+      for(let i=0; i<5; i++) {
+          const color = i < stars ? '#FFD700' : 'rgba(255,255,255,0.2)';
+          const animDelay = i * 0.1;
+          starsHtml += `<span style="color: ${color}; display:inline-block; animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${animDelay}s backwards;">★</span>`;
+      }
+      starsHtml += '</div>';
+
       // Add stats bonuses
       // (Simplified for now, could access this.gameState.stats)
 
@@ -3119,9 +3144,11 @@ class LiveGameViewer {
                 text-transform: uppercase;
                 letter-spacing: 4px;
             ">${title}</h2>
-            <div class="game-over-score" style="font-size: 3.5rem; font-weight: 900; margin-bottom: 20px;">
+            <div class="game-over-score" style="font-size: 3.5rem; font-weight: 900; margin-bottom: 10px;">
                 ${scoreA} - ${scoreB}
             </div>
+
+            ${starsHtml}
 
             <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 20px;">
                 <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; min-width: 100px;">
