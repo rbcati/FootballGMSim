@@ -133,6 +133,8 @@ export class FieldEffects {
                       type === 'fire' ? 30 :
                       type === 'trail' ? 3 :
                       type === 'shield' ? 40 :
+                      type === 'combo_fire' ? 50 :
+                      type === 'victory_fireworks' ? 200 :
                       type === 'big_play' ? 60 : 25;
 
         for (let i = 0; i < count; i++) {
@@ -284,6 +286,28 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'combo_fire') {
+             // Rising fire from bottom, spreading
+             p.x = x + (Math.random() - 0.5) * 60;
+             p.y = this.canvas.height;
+             p.vx = (Math.random() - 0.5) * 1;
+             p.vy = -(Math.random() * 8 + 4); // Fast up
+             p.color = Math.random() > 0.5 ? '#FF4500' : '#FFD700'; // Orange/Gold
+             p.decay = 0.02;
+             p.size = Math.random() * 5 + 2;
+        } else if (type === 'victory_fireworks') {
+             // Random bursts all over
+             p.x = Math.random() * this.canvas.width;
+             p.y = Math.random() * (this.canvas.height * 0.7); // Top 70%
+             // Burst velocity
+             const angle = Math.random() * Math.PI * 2;
+             const speed = Math.random() * 6;
+             p.vx = Math.cos(angle) * speed;
+             p.vy = Math.sin(angle) * speed;
+             p.gravity = 0.1;
+             p.color = `hsl(${Math.random() * 360}, 100%, 50%)`;
+             p.decay = 0.01;
+             p.size = Math.random() * 4 + 2;
         }
 
         return p;
