@@ -23,7 +23,7 @@ import { cache }          from '../db/cache.js';
 import {
   Meta, Teams, Players, Rosters, Games,
   Seasons, PlayerStats, Transactions, DraftPicks,
-  clearAllData, openDB,
+  clearAllData, openDB, bulkWrite,
 } from '../db/index.js';
 import { makeLeague }     from '../core/league.js';
 import GameRunner         from '../core/game-runner.js';
@@ -95,50 +95,34 @@ function buildRosterView(teamId) {
 // ── DB flush ─────────────────────────────────────────────────────────────────
 
 /**
- * Persist all dirty cache entries to IndexedDB.
- * This is the ONLY place we write to the DB.
+ * Persist all dirty cache entries to IndexedDB in a SINGLE atomic transaction.
+ * Using bulkWrite() eliminates the "database connection is closing" error that
+ * occurred when Promise.all() fired multiple concurrent readwrite transactions
+ * against the same IDBDatabase handle.
  */
 async function flushDirty() {
   if (!cache.isDirty()) return;
   const dirty = cache.drainDirty();
 
-  const ops = [];
+  const teams         = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
+  const players       = dirty.players.map(id => cache.getPlayer(id)).filter(Boolean);
+  const playerDeletes = dirty.players.filter(id => !cache.getPlayer(id));
+  const seasonStats   = dirty.seasonStats.map(pid => cache.getSeasonStat(pid)).filter(Boolean);
 
-  if (dirty.meta) {
-    ops.push(Meta.save(cache.getMeta()));
-  }
-
-  if (dirty.teams.length > 0) {
-    const rows = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
-    ops.push(Teams.saveBulk(rows));
-  }
-
-  if (dirty.players.length > 0) {
-    const toSave   = dirty.players.map(id => cache.getPlayer(id)).filter(Boolean);
-    const toDelete = dirty.players.filter(id => !cache.getPlayer(id));
-    if (toSave.length)   ops.push(Players.saveBulk(toSave));
-    if (toDelete.length) ops.push(...toDelete.map(id => Players.delete(id)));
-  }
-
-  if (dirty.games.length > 0) {
-    ops.push(Games.saveBulk(dirty.games));
-  }
-
-  if (dirty.seasonStats.length > 0) {
-    const rows = dirty.seasonStats
-      .map(pid => cache.getSeasonStat(pid))
-      .filter(Boolean);
-    if (rows.length) ops.push(PlayerStats.saveBulk(rows));
-  }
-
+  // Draft picks are handled separately (small volume, own store not in bulkWrite).
   if (dirty.draftPicks.length > 0) {
-    const toSave   = dirty.draftPicks.map(id => cache.getDraftPick(id)).filter(Boolean);
-    const toDelete = dirty.draftPicks.filter(id => !cache.getDraftPick(id));
-    if (toSave.length)   ops.push(DraftPicks.saveBulk(toSave));
-    // For deleted picks just leave them in DB (they become historical records)
+    const toSave = dirty.draftPicks.map(id => cache.getDraftPick(id)).filter(Boolean);
+    if (toSave.length) await DraftPicks.saveBulk(toSave);
   }
 
-  await Promise.all(ops);
+  await bulkWrite({
+    meta:          dirty.meta ? cache.getMeta() : null,
+    teams,
+    players,
+    playerDeletes,
+    games:         dirty.games,
+    seasonStats,
+  });
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -410,15 +394,22 @@ async function handleAdvanceWeek(payload, id) {
   await flushDirty();
 
   // --- Build response (minimal) ---
-  // result.home / result.away are the team IDs (commitGameResult field names)
-  const gameResults = results.map(r => ({
-    homeId:    r.home         ?? null,
-    awayId:    r.away         ?? null,
-    homeName:  r.homeTeamName ?? '?',
-    awayName:  r.awayTeamName ?? '?',
-    homeScore: r.scoreHome    ?? 0,
-    awayScore: r.scoreAway    ?? 0,
-  }));
+  // commitGameResult stores team IDs in result.home / result.away (not name fields).
+  // Resolve names from cache so the UI ticker always shows real team names.
+  const gameResults = results.map(r => {
+    const rawH   = r.home ?? r.homeTeamId;
+    const rawA   = r.away ?? r.awayTeamId;
+    const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+    const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+    return {
+      homeId,
+      awayId,
+      homeName:  r.homeTeamName ?? cache.getTeam(homeId)?.name ?? '?',
+      awayName:  r.awayTeamName ?? cache.getTeam(awayId)?.name ?? '?',
+      homeScore: r.scoreHome ?? r.homeScore ?? 0,
+      awayScore: r.scoreAway ?? r.awayScore ?? 0,
+    };
+  });
 
   post(toUI.WEEK_COMPLETE, {
     week,
@@ -483,8 +474,13 @@ function buildLeagueForSim(schedule, week, seasonId) {
  * cast to Number to match the integer keys stored in the cache Map.
  */
 function applyGameResultToCache(result, week, seasonId) {
-  const hId = Number(result.home ?? result.homeTeamId);
-  const aId = Number(result.away ?? result.awayTeamId);
+  // result.home / result.away can be either an integer team ID (normal path)
+  // or a full team object (if a simulator variant returns objects).
+  // Strictly coerce to Number so the cache Map keys always match.
+  const rawH = result.home      ?? result.homeTeamId;
+  const rawA = result.away      ?? result.awayTeamId;
+  const hId  = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+  const aId  = Number(typeof rawA === 'object' ? rawA?.id : rawA);
   if (isNaN(hId) || isNaN(aId)) return;
 
   const scoreHome = result.scoreHome ?? result.homeScore ?? 0;

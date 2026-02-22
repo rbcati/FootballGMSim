@@ -40,18 +40,33 @@ const STORES = {
 
 // ── Open / upgrade ───────────────────────────────────────────────────────────
 
+/** Persistent singleton — never closed except on versionchange or unexpected disconnect. */
 let _db = null;
+/** In-flight open promise — prevents concurrent indexedDB.open() races. */
+let _opening = null;
 
 export function openDB() {
+  // Fast path: connection is already open and healthy.
   if (_db) return Promise.resolve(_db);
+  // If a previous call is already opening, return the same promise so all
+  // concurrent callers share a single IDBOpenDBRequest.
+  if (_opening) return _opening;
 
-  return new Promise((resolve, reject) => {
+  _opening = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
 
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      _opening = null;
+      reject(req.error);
+    };
     req.onsuccess = () => {
-      _db = req.result;
+      _db      = req.result;
+      _opening = null;
+      // Another context (tab) requested a version upgrade — yield gracefully.
       _db.onversionchange = () => { _db.close(); _db = null; };
+      // Null out the singleton whenever the connection is closed for any reason
+      // so the next openDB() call transparently re-establishes it.
+      _db.onclose = () => { _db = null; };
       resolve(_db);
     };
 
@@ -284,6 +299,73 @@ export const DraftPicks = {
   byOwner:  (teamId) => dbGetAllByIndex(STORES.DRAFT_PICKS, 'currentOwner', teamId),
   byYear:   (year)   => dbGetAllByIndex(STORES.DRAFT_PICKS, 'year',         year),
 };
+
+// ── Atomic multi-store flush ──────────────────────────────────────────────────
+
+/**
+ * Write all dirty data in a SINGLE multi-store readwrite transaction.
+ *
+ * Using one transaction instead of parallel per-store transactions eliminates
+ * the "database connection is closing" race that occurs when several
+ * concurrent readwrite transactions compete on the same IDBDatabase handle.
+ *
+ * @param {object} opts
+ * @param {object|null}  opts.meta          - Raw meta object (will have id:'league' forced)
+ * @param {Array}        opts.teams         - Team records to put
+ * @param {Array}        opts.players       - Player records to put
+ * @param {Array}        opts.playerDeletes - Player IDs to delete
+ * @param {Array}        opts.games         - Game records to put
+ * @param {Array}        opts.seasonStats   - PlayerStat records to put
+ */
+export async function bulkWrite({
+  meta          = null,
+  teams         = [],
+  players       = [],
+  playerDeletes = [],
+  games         = [],
+  seasonStats   = [],
+} = {}) {
+  // Determine which stores we actually need; avoid opening stores unnecessarily.
+  const needed = new Set();
+  if (meta)                                  needed.add(STORES.META);
+  if (teams.length)                          needed.add(STORES.TEAMS);
+  if (players.length || playerDeletes.length) needed.add(STORES.PLAYERS);
+  if (games.length)                          needed.add(STORES.GAMES);
+  if (seasonStats.length)                    needed.add(STORES.PLAYER_STATS);
+
+  if (needed.size === 0) return; // nothing to do
+
+  const db = await openDB();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([...needed], 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror    = () => reject(tx.error);
+    tx.onabort    = () => reject(new Error('bulkWrite transaction aborted'));
+
+    if (meta) {
+      tx.objectStore(STORES.META).put({ ...meta, id: 'league' });
+    }
+    for (const t of teams) {
+      tx.objectStore(STORES.TEAMS).put(t);
+    }
+    for (const p of players) {
+      tx.objectStore(STORES.PLAYERS).put(p);
+    }
+    for (const id of playerDeletes) {
+      tx.objectStore(STORES.PLAYERS).delete(id);
+    }
+    for (const g of games) {
+      tx.objectStore(STORES.GAMES).put(g);
+    }
+    for (const s of seasonStats) {
+      tx.objectStore(STORES.PLAYER_STATS).put({
+        ...s,
+        id: `${s.seasonId}_${s.playerId}`,
+      });
+    }
+  });
+}
 
 // ── Wipe helpers (for reset) ─────────────────────────────────────────────────
 
