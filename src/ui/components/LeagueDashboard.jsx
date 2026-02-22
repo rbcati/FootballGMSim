@@ -239,7 +239,7 @@ function StandingsTab({ teams, userTeamId }) {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 
-function ScheduleTab({ schedule, teams, currentWeek, userTeamId }) {
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   // Build teamById lookup
@@ -278,6 +278,7 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId }) {
           const home = teamById[game.home] ?? { name: `Team ${game.home}`, abbr: '???', wins: 0, losses: 0, ties: 0 };
           const away = teamById[game.away] ?? { name: `Team ${game.away}`, abbr: '???', wins: 0, losses: 0, ties: 0 };
           const isUserGame = home.id === userTeamId || away.id === userTeamId;
+          const showStakes = isUserGame && !game.played && nextGameStakes > 50 && selectedWeek === currentWeek;
 
           return (
             <div
@@ -287,7 +288,27 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId }) {
             >
               {/* Card header */}
               <div className="matchup-header">
-                <span>Week {selectedWeek}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                  <span>Week {selectedWeek}</span>
+                  {showStakes && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: 'var(--radius-pill)',
+                        background: nextGameStakes > 80 ? 'var(--danger)' : 'var(--warning)',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 'var(--text-xs)',
+                        letterSpacing: '0.5px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      {nextGameStakes > 80 ? '🔥 RIVALRY' : '⚠️ STAKES'}
+                    </span>
+                  )}
+                </div>
                 <span
                   style={{
                     padding: '2px 8px',
@@ -518,6 +539,7 @@ export default function LeagueDashboard({ league }) {
           teams={league.teams}
           currentWeek={league.week}
           userTeamId={league.userTeamId}
+          nextGameStakes={league.nextGameStakes}
         />
       )}
       {activeTab === 'Leaders' && (
