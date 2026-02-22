@@ -67,6 +67,33 @@ function buildViewState() {
     capTotal:  t.capTotal  ?? 255,
     ovr:       t.ovr       ?? 75,
   }));
+
+  // Calculate tension/stakes for the user's next game
+  let nextGameStakes = 0;
+  if (meta?.userTeamId != null && meta?.schedule?.weeks && meta.phase === 'regular') {
+    const weekData = meta.schedule.weeks.find(w => w.week === meta.currentWeek);
+    if (weekData && weekData.games) {
+      const userGame = weekData.games.find(g =>
+        Number(g.home) === meta.userTeamId || Number(g.away) === meta.userTeamId
+      );
+      if (userGame && !userGame.played) {
+        const oppId = Number(userGame.home) === meta.userTeamId ? Number(userGame.away) : Number(userGame.home);
+        const userTeam = cache.getTeam(meta.userTeamId);
+        const oppTeam = cache.getTeam(oppId);
+        if (userTeam && oppTeam) {
+          // Mock league context for GameRunner
+          const leagueCtx = {
+            week: meta.currentWeek,
+            teams: cache.getAllTeams(),
+            userTeamId: meta.userTeamId
+          };
+          // Assume owner mode enabled for max stakes calculation (fanSatisfaction defaults to 50 if missing)
+          nextGameStakes = GameRunner.calculateContextualStakes(leagueCtx, userTeam, oppTeam, { enabled: true, fanSatisfaction: 50 });
+        }
+      }
+    }
+  }
+
   return {
     seasonId:   meta?.currentSeasonId,
     year:       meta?.year,
@@ -74,6 +101,7 @@ function buildViewState() {
     phase:      meta?.phase       ?? 'regular',
     userTeamId: meta?.userTeamId  ?? null,
     schedule:   meta?.schedule    ?? null,
+    nextGameStakes,
     teams,
   };
 }
@@ -392,6 +420,15 @@ async function handleAdvanceWeek(payload, id) {
 
   // --- Flush to DB (non-blocking) ---
   await flushDirty();
+
+  // --- Check for Game Narratives (User Team) ---
+  // Send notifications for any "callbacks" (narrative moments) generated during simulation
+  const userResult = results.find(r => r.home === meta.userTeamId || r.away === meta.userTeamId);
+  if (userResult && userResult.callbacks && Array.isArray(userResult.callbacks)) {
+    userResult.callbacks.forEach(msg => {
+      post(toUI.NOTIFICATION, { level: 'info', message: msg });
+    });
+  }
 
   // --- Build response (minimal) ---
   // commitGameResult stores team IDs in result.home / result.away (not name fields).
