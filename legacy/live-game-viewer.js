@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from '../src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -302,6 +302,7 @@ class LiveGameViewer {
     // Attach listeners
     container.querySelector('#btnPlayPause').addEventListener('click', () => this.togglePause());
     container.querySelector('#btnNextPlay').addEventListener('click', () => {
+        if (this.isProcessingTurn) return; // Prevent rapid fire
         this.isPaused = true;
         this.displayNextPlay();
     });
@@ -356,6 +357,67 @@ class LiveGameViewer {
     }
 
     this.renderGame(true);
+  }
+
+  /**
+   * Populate log with recent plays (e.g. after skip)
+   */
+  renderRecentPlays(count = 20) {
+      if (!this.checkUI()) return;
+      const parent = this.viewMode ? this.container : this.modal;
+      // Determine target log - view mode uses 'play-log-enhanced', modal uses 'play-log'
+      const playLog = parent.querySelector(this.viewMode ? '.play-log-enhanced' : '.play-log');
+      if (!playLog) return;
+
+      playLog.innerHTML = ''; // Clear stale logs
+
+      // Show last `count` plays
+      const start = Math.max(0, this.playByPlay.length - count);
+      const plays = this.playByPlay.slice(start);
+
+      // Add "Skipped" indicator if needed
+      // Logic reversed for viewMode (newest top) vs modal (oldest top)
+      if (start > 0) {
+           const indicator = document.createElement('div');
+           indicator.className = 'play-item';
+           indicator.style.textAlign = 'center';
+           indicator.style.fontStyle = 'italic';
+           indicator.style.color = 'var(--text-muted)';
+           indicator.textContent = `... ${start} previous plays skipped ...`;
+
+           if (this.viewMode) {
+               // In viewMode, newest is top. So oldest (skipped) are at bottom.
+               // We append this indicator at the END (bottom).
+               // Wait, plays are rendered individually.
+               // If we render plays in chronological order, and prepend:
+               // play[0] (oldest) prepended -> [play[0]]
+               // play[1] prepended -> [play[1], play[0]]
+               // So list is [Newest ... Oldest].
+               // So "skipped" indicator should be at the BOTTOM.
+               // So we append it first? No, append it last.
+           } else {
+               // Modal: oldest top.
+               // play[0] appended -> [play[0]]
+               // play[1] appended -> [play[0], play[1]]
+               // So list is [Oldest ... Newest].
+               // So "skipped" indicator should be at the TOP.
+               playLog.appendChild(indicator);
+           }
+      }
+
+      plays.forEach(play => {
+          this.renderPlay(play);
+      });
+
+      if (start > 0 && this.viewMode) {
+           const indicator = document.createElement('div');
+           indicator.className = 'play-item';
+           indicator.style.textAlign = 'center';
+           indicator.style.fontStyle = 'italic';
+           indicator.style.color = 'var(--text-muted)';
+           indicator.textContent = `... ${start} previous plays skipped ...`;
+           playLog.appendChild(indicator);
+      }
   }
 
   /**
@@ -2573,9 +2635,17 @@ class LiveGameViewer {
     // Prepend to top if in view mode (newest first), otherwise append
     if (this.viewMode) {
         playLog.prepend(playElement);
+        // Limit log size (keep newest 50)
+        if (playLog.children.length > 50) {
+            playLog.lastElementChild.remove();
+        }
     } else {
         playLog.appendChild(playElement);
         playLog.scrollTop = playLog.scrollHeight;
+        // Limit log size (keep newest 50)
+        if (playLog.children.length > 50) {
+            playLog.firstElementChild.remove();
+        }
     }
 
     // Update scoreboard
@@ -2968,6 +3038,9 @@ class LiveGameViewer {
               // 2. Update UI if it exists (Safe DOM Access)
               if (this.checkUI()) {
                   this.renderGame();
+
+                  // Populate recent plays (20)
+                  this.renderRecentPlays(20);
 
                   // Fade back in
                   if (this.viewMode && this.container) {

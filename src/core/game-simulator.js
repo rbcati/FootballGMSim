@@ -400,13 +400,16 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     // Helper to sum stats
     const sumStat = (teamStats, statName) => {
         if (!teamStats || !teamStats.players) return 0;
-        return Object.values(teamStats.players).reduce((sum, p) => sum + (p.stats[statName] || 0), 0);
+        return Object.values(teamStats.players).reduce((sum, p) => sum + ((p.stats ? p.stats[statName] : p[statName]) || 0), 0);
     };
 
     // Helper to check for big plays (simplistic check on longest)
     const hasBigPlay = (teamStats) => {
         if (!teamStats || !teamStats.players) return false;
-        return Object.values(teamStats.players).some(p => (p.stats.longestPass > 45) || (p.stats.longestRun > 35));
+        return Object.values(teamStats.players).some(p => {
+            const stats = p.stats || p;
+            return (stats.longestPass > 45) || (stats.longestRun > 35);
+        });
     };
 
     const userRushYds = sumStat(userStats, 'rushYd');
