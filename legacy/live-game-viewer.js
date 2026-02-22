@@ -252,6 +252,7 @@ class LiveGameViewer {
     }
 
     container.innerHTML = `
+      <div class="fade-in-view">
       <div class="card live-game-header">
         ${stakesHtml}
         ${difficultyHtml}
@@ -293,6 +294,7 @@ class LiveGameViewer {
                 <!-- Play calling UI injected here -->
             </div>
         </div>
+      </div>
       </div>
     `;
 
@@ -2447,6 +2449,10 @@ class LiveGameViewer {
 
             if (play.result === 'turnover_downs') {
                 this.triggerVisualFeedback('save defense-stop', 'STOPPED!');
+            } else if (play.message && play.message.toLowerCase().includes('intercept')) {
+                this.triggerVisualFeedback('save interception', 'INTERCEPTED!');
+            } else if (play.message && play.message.toLowerCase().includes('fumble')) {
+                this.triggerVisualFeedback('save fumble', 'FUMBLE!');
             } else {
                 this.triggerVisualFeedback('save turnover', 'TURNOVER!');
             }
@@ -3318,11 +3324,11 @@ class LiveGameViewer {
         <div class="field-container" style="margin: 0 var(--space-4);"></div>
 
         <div class="game-controls">
-          <button class="tempo-btn active" data-tempo="normal">Normal</button>
-          <button class="tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
-          <button class="tempo-btn" data-tempo="slow">Slow</button>
-          <button class="pause-btn">⏸ Pause</button>
-          <button class="skip-btn" style="background: var(--danger, #dc3545); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
+          <button class="control-btn tempo-btn active" data-tempo="normal">Normal</button>
+          <button class="control-btn tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
+          <button class="control-btn tempo-btn" data-tempo="slow">Slow</button>
+          <button class="control-btn pause-btn">⏸ Pause</button>
+          <button class="control-btn skip-btn" style="background: var(--danger, #dc3545); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
         </div>
 
         <div class="game-dashboard" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); margin-top: 10px; border-radius: 8px;">
@@ -3363,7 +3369,7 @@ class LiveGameViewer {
 
         <div class="final-stats" style="display: none;">
           <h3>Game Complete!</h3>
-          <button class="close-game-btn">Close</button>
+          <button class="control-btn close-game-btn">Close</button>
         </div>
       </div>
     `;
