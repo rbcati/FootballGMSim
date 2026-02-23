@@ -1,36 +1,82 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig }    from 'vite';
+import react               from '@vitejs/plugin-react';
+import { createHash }      from 'crypto';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve }         from 'path';
+import { fileURLToPath }   from 'url';
+import { dirname }         from 'path';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * injectSwVersion
+ *
+ * After `vite build` writes the bundle, this plugin:
+ *  1. Computes a short SHA-256 hash of all emitted filenames (which are
+ *     content-addressed by Vite, so the hash changes whenever any source
+ *     file changes).
+ *  2. Patches `dist/sw.js`, replacing the literal `'fgm-dev'` CACHE_NAME
+ *     with `'fgm-<hash>'`.
+ *
+ * Why per-build hashing?
+ *  - Forces the SW activate phase to delete the previous cache → stale
+ *    assets never sneak through on Safari / iOS PWA.
+ *  - Triggers the `hadOldCache` UPDATE_AVAILABLE broadcast reliably.
+ *  - Keeps storage tidy: only the current build's assets stay on-device.
+ */
+function injectSwVersion() {
+  let buildHash = 'dev';
+
+  return {
+    name:  'inject-sw-version',
+    apply: 'build',          // only runs during `vite build`, not `vite dev`
+
+    generateBundle(_options, bundle) {
+      // Sort filenames for a stable hash regardless of emit order
+      const filenames = Object.values(bundle)
+        .map((chunk) => chunk.fileName)
+        .sort()
+        .join('\n');
+      buildHash = createHash('sha256')
+        .update(filenames)
+        .digest('hex')
+        .slice(0, 8);
+    },
+
+    closeBundle() {
+      const swPath = resolve(__dirname, 'dist', 'sw.js');
+      try {
+        let src = readFileSync(swPath, 'utf-8');
+        // Replace the placeholder CACHE_NAME with the build-specific hash.
+        // The regex is loose enough to match both 'fgm-dev' and any previous
+        // 'fgm-xxxxxxxx' value so re-running the build is idempotent.
+        src = src.replace(
+          /const CACHE_NAME\s*=\s*'fgm-[^']*'/,
+          `const CACHE_NAME = 'fgm-${buildHash}'`
+        );
+        writeFileSync(swPath, src, 'utf-8');
+        console.log(`\n[vite-inject-sw] Cache version → fgm-${buildHash}`);
+      } catch (err) {
+        // Non-fatal — worst case the dev fallback 'fgm-dev' is used
+        console.warn('[vite-inject-sw] Could not patch dist/sw.js:', err.message);
+      }
+    },
+  };
+}
 
 export default defineConfig({
   plugins: [
     react(),
-
-    /**
-     * Inline plugin: copies public/sw.js to the build output root
-     * so it can register at the correct scope ("/sw.js").
-     *
-     * We avoid adding the vite-plugin-pwa dependency to keep things simple.
-     * The service worker is hand-rolled and doesn't need any Workbox injection.
-     */
-    {
-      name: 'service-worker',
-      generateBundle() {
-        // sw.js is in /public so Vite copies it automatically.
-        // This hook is a no-op placeholder; left here for documentation.
-      },
-    },
+    injectSwVersion(),
   ],
 
-  root: './',
-
-  // Make sure public/sw.js is served at /sw.js during dev
+  root:      './',
   publicDir: 'public',
 
   build: {
-    outDir: 'dist',
+    outDir:    'dist',
     emptyOutDir: true,
-    target: 'esnext',
-
+    target:    'esnext',
   },
 
   worker: {
@@ -40,9 +86,8 @@ export default defineConfig({
   server: {
     open: true,
     port: 3000,
-    // Serve sw.js with no-cache headers during development so Chrome picks
-    // up service worker changes without a hard refresh.
     headers: {
+      // Allow the SW to intercept requests from the root scope in dev
       'Service-Worker-Allowed': '/',
     },
   },

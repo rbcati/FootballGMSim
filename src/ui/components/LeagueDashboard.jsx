@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useMemo, Component } from 'react';
-import RosterManager   from './RosterManager.jsx';
+import Roster          from './Roster.jsx';
 import FreeAgencyPanel from './FreeAgencyPanel.jsx';
 import TradeCenter     from './TradeCenter.jsx';
 
@@ -588,7 +588,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Roster' && (
         <TabErrorBoundary label="Roster">
-          <RosterManager league={league} actions={actions} />
+          <Roster league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Free Agency' && (

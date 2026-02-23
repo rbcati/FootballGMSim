@@ -46,6 +46,10 @@ function reducer(state, action) {
   switch (action.type) {
     case 'BUSY':
       return { ...state, busy: true, error: null };
+    // CLEAR_BUSY is used by silent (read-only) requests so they don't
+    // accidentally zero out simulating/simProgress mid-simulation.
+    case 'CLEAR_BUSY':
+      return { ...state, busy: false };
     case 'IDLE':
       return { ...state, busy: false, simulating: false, simProgress: 0 };
     case 'WORKER_READY':
@@ -124,14 +128,16 @@ export function useWorker() {
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
 
-      // Resolve any waiting promise first, then clear the busy flag that
-      // request() set.  Without this IDLE dispatch every tab-fetch (getRoster,
-      // getFreeAgents, submitTrade …) permanently disables the Advance button.
+      // Resolve any waiting promise first.
+      // Silent requests (getRoster, getFreeAgents, history lookups) never set
+      // busy=true, so they must NOT dispatch IDLE which would zero out
+      // simulating/simProgress mid-simulation.  Non-silent action requests
+      // (submitTrade) do set busy=true and clear it via IDLE.
       if (id && pendingRef.current.has(id)) {
-        const { resolve } = pendingRef.current.get(id);
+        const { resolve, silent } = pendingRef.current.get(id);
         pendingRef.current.delete(id);
         resolve({ type, payload });
-        dispatch({ type: 'IDLE' });
+        dispatch({ type: silent ? 'CLEAR_BUSY' : 'IDLE' });
       }
 
       // Then update React state
@@ -201,15 +207,17 @@ export function useWorker() {
   }, []);
 
   // ── request (returns a Promise resolved on worker reply) ──────────────────
-  const request = useCallback((type, payload = {}) => {
+  // Pass { silent: true } for read-only fetches (getRoster, getFreeAgents,
+  // history queries) so they do NOT set busy=true and lock the Advance button.
+  const request = useCallback((type, payload = {}, { silent = false } = {}) => {
     return new Promise((resolve, reject) => {
       if (!workerRef.current) {
         reject(new Error('Worker not ready'));
         return;
       }
       const msg = buildMsg(type, payload);
-      pendingRef.current.set(msg.id, { resolve, reject });
-      dispatch({ type: 'BUSY' });
+      pendingRef.current.set(msg.id, { resolve, reject, silent });
+      if (!silent) dispatch({ type: 'BUSY' });
       workerRef.current.postMessage(msg);
     });
   }, []);
@@ -239,13 +247,13 @@ export function useWorker() {
     simToPlayoffs: ()          => send(toWorker.SIM_TO_PLAYOFFS),
 
     /** Fetch a specific season's history (returns a Promise). */
-    getSeasonHistory: (seasonId) => request(toWorker.GET_SEASON_HISTORY, { seasonId }),
+    getSeasonHistory: (seasonId) => request(toWorker.GET_SEASON_HISTORY, { seasonId }, { silent: true }),
 
     /** Fetch a player's career stats (returns a Promise). */
-    getPlayerCareer: (playerId)  => request(toWorker.GET_PLAYER_CAREER, { playerId }),
+    getPlayerCareer: (playerId)  => request(toWorker.GET_PLAYER_CAREER, { playerId }, { silent: true }),
 
     /** Fetch all season summaries for the history browser. */
-    getAllSeasons: ()             => request(toWorker.GET_ALL_SEASONS),
+    getAllSeasons: ()             => request(toWorker.GET_ALL_SEASONS, {}, { silent: true }),
 
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
@@ -264,11 +272,11 @@ export function useWorker() {
     releasePlayer: (playerId, teamId) =>
       send(toWorker.RELEASE_PLAYER, { playerId, teamId }),
 
-    /** Fetch a team's roster (returns a Promise). */
-    getRoster: (teamId) => request(toWorker.GET_ROSTER, { teamId }),
+    /** Fetch a team's roster (returns a Promise — does NOT set busy). */
+    getRoster: (teamId) => request(toWorker.GET_ROSTER, { teamId }, { silent: true }),
 
-    /** Fetch the free agent pool (returns a Promise). */
-    getFreeAgents: () => request(toWorker.GET_FREE_AGENTS),
+    /** Fetch the free agent pool (returns a Promise — does NOT set busy). */
+    getFreeAgents: () => request(toWorker.GET_FREE_AGENTS, {}, { silent: true }),
 
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
