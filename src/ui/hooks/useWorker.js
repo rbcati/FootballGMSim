@@ -53,7 +53,9 @@ function reducer(state, action) {
     case 'FULL_STATE':
       return { ...state, busy: false, simulating: false, league: action.payload };
     case 'STATE_UPDATE':
-      return { ...state, league: { ...(state.league ?? {}), ...action.payload } };
+      // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
+      // respond with STATE_UPDATE and have no other mechanism to clear the flag.
+      return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0 };
     case 'SIM_PROGRESS':
@@ -122,11 +124,14 @@ export function useWorker() {
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
 
-      // Resolve any waiting promise first
+      // Resolve any waiting promise first, then clear the busy flag that
+      // request() set.  Without this IDLE dispatch every tab-fetch (getRoster,
+      // getFreeAgents, submitTrade …) permanently disables the Advance button.
       if (id && pendingRef.current.has(id)) {
         const { resolve } = pendingRef.current.get(id);
         pendingRef.current.delete(id);
         resolve({ type, payload });
+        dispatch({ type: 'IDLE' });
       }
 
       // Then update React state

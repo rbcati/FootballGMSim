@@ -16,7 +16,8 @@
  *    worker acts as the true caching layer.
  */
 
-const CACHE_NAME = 'football-gm-v1';
+// Bump this string with every production build so old caches are evicted.
+const CACHE_NAME = 'football-gm-v3';
 
 /**
  * Assets to precache on install.
@@ -47,13 +48,19 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then(async (keys) => {
-      await Promise.all(
-        keys
-          .filter(key => key !== CACHE_NAME)
-          .map(key => caches.delete(key))
-      );
+      const stale = keys.filter(key => key !== CACHE_NAME);
+      const hadOldCache = stale.length > 0;
+      await Promise.all(stale.map(key => caches.delete(key)));
       // Take control of all open clients without requiring a page reload
       await self.clients.claim();
+      // Broadcast to all tabs that a new version has activated so the UI can
+      // show an "Update available — reload?" banner.
+      if (hadOldCache) {
+        const allClients = await self.clients.matchAll({ type: 'window' });
+        for (const client of allClients) {
+          client.postMessage({ type: 'UPDATE_AVAILABLE' });
+        }
+      }
     })
   );
 });
@@ -69,11 +76,45 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  event.respondWith(cacheFirstWithNetworkFallback(request));
+  // Network-First for HTML navigation so iOS / PWA users always get fresh
+  // content after a Netlify deploy instead of the old cached shell.
+  const isNavigation =
+    request.mode === 'navigate' ||
+    request.headers.get('Accept')?.includes('text/html');
+
+  if (isNavigation) {
+    event.respondWith(networkFirstWithCacheFallback(request));
+  } else {
+    event.respondWith(cacheFirstWithNetworkFallback(request));
+  }
 });
 
 /**
- * Cache-first strategy:
+ * Network-First strategy (used for HTML / navigation requests).
+ *  1. Try the network; on success update the cache and return.
+ *  2. If network fails fall back to the cache.
+ *  3. If neither is available return the offline fallback page.
+ *
+ * After a successful install the SW broadcasts an UPDATE_AVAILABLE message
+ * so App.jsx can show the "New version ready" banner.
+ */
+async function networkFirstWithCacheFallback(request) {
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok && networkResponse.type !== 'opaque') {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    return offlineFallbackPage();
+  }
+}
+
+/**
+ * Cache-first strategy (JS/CSS/assets):
  *  1. Return cached response if available.
  *  2. Otherwise fetch from network, cache the response, then return it.
  *  3. If network also fails (offline), return a minimal fallback.
