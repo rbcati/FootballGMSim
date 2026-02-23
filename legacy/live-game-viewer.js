@@ -35,6 +35,7 @@ class LiveGameViewer {
     this.lastFireTime = 0; // Throttle for momentum fire effects
 
     this.timeouts = new Set(); // Track active timeouts
+    this.activeAnimations = new Set(); // Track active animation frames
   }
 
   /**
@@ -611,13 +612,14 @@ class LiveGameViewer {
           else if (options.easing === 'easeInOutCubic') easing = easeInOutCubic;
           else if (options.easing === 'bounce') easing = easeBounce;
 
-          // Pre-calculate field width for transform logic
-          const fieldWidth = element.offsetParent ? element.offsetParent.offsetWidth : 0;
           // Set initial left position just once
           element.style.left = `${startX}%`;
           if (shadowEl) shadowEl.style.left = `${startX}%`;
 
           const animate = (currentTime) => {
+              // Remove current frame from tracking (it's running)
+              if (this.animationFrameId) this.activeAnimations.delete(this.animationFrameId);
+
               // Safety break for cleanup
               if (this.isGameEnded || !this.checkUI() || (this.viewMode && !this.container)) {
                   if (options.animationClass) element.classList.remove(options.animationClass);
@@ -639,6 +641,9 @@ class LiveGameViewer {
                    element.style.transition = ''; // Restore transitions
                    return resolve();
               }
+
+              // Calculate field width dynamically to handle resize/rotate during animation
+              const fieldWidth = element.offsetParent ? element.offsetParent.offsetWidth : 0;
 
               const elapsed = currentTime - startTime;
               const progress = Math.min(elapsed / duration, 1);
@@ -720,7 +725,8 @@ class LiveGameViewer {
               }
 
               if (progress < 1) {
-                  requestAnimationFrame(animate);
+                  this.animationFrameId = requestAnimationFrame(animate);
+                  this.activeAnimations.add(this.animationFrameId);
               } else {
                   // Finalize state - Commit the final 'left' position and reset transform
                   // This ensures responsive resizing works after animation ends
@@ -743,6 +749,7 @@ class LiveGameViewer {
           };
 
           this.animationFrameId = requestAnimationFrame(animate);
+          this.activeAnimations.add(this.animationFrameId);
       });
   }
 
@@ -3752,10 +3759,11 @@ class LiveGameViewer {
     // Ensure all timers and loops are stopped
     this.stopGame();
 
-    if (this.animationFrameId) {
-        cancelAnimationFrame(this.animationFrameId);
-        this.animationFrameId = null;
+    if (this.activeAnimations) {
+        this.activeAnimations.forEach(id => cancelAnimationFrame(id));
+        this.activeAnimations.clear();
     }
+    this.animationFrameId = null;
 
     this.isPlaying = false;
     this.isPaused = true;

@@ -235,7 +235,13 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                 }
             } else {
                  // Fallback simple calc
-                 team.capUsed = team.roster.reduce((sum, p) => sum + (p.baseAnnual || 0), 0);
+                 team.capUsed = team.roster.reduce((sum, p) => {
+                     const base = p.baseAnnual || 0;
+                     const bonus = p.signingBonus || 0;
+                     const years = p.yearsTotal || 1;
+                     const proration = years > 0 ? bonus / years : 0;
+                     return sum + base + proration;
+                 }, 0);
                  team.capRoom = team.capTotal - team.capUsed;
             }
 
