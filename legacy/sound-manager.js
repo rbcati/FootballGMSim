@@ -180,6 +180,12 @@ class SoundManager {
         this.playTone(800, 'sine', 0.5, 0.05);
     }
 
+    playComboIncrease() {
+        if (!this.enabled || this.muted) return;
+        this.playTone(400, 'sine', 0.1, 0.1);
+        this.playTone(600, 'sine', 0.1, 0.1, null, 100);
+    }
+
     playFieldGoalMiss() {
         if (!this.enabled || this.muted) return;
         // Clank
@@ -243,6 +249,7 @@ class SoundManager {
         if (!this.enabled || this.muted) return;
         // Whoosh / Rising sound
         this.playTone(200, 'sine', 0.5, 0.05, 800); // Slide from 200 to 800
+        this.playTone(300, 'sawtooth', 0.4, 0.2, 600); // Added depth
         this.playNoise(0.5, 0.1, 0); // Whoosh
     }
 

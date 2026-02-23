@@ -2391,7 +2391,10 @@ class LiveGameViewer {
         // Combo Feedback
         if (comboIncreased && this.combo > 1) {
              this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
-             soundManager.playPing();
+             if (soundManager.playComboIncrease) soundManager.playComboIncrease();
+             else soundManager.playPing();
+
+             if (this.fieldEffects) this.fieldEffects.spawnParticles(50, 'combo');
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
@@ -2404,6 +2407,8 @@ class LiveGameViewer {
         const prevMomentum = this.lastMomentum !== undefined ? this.lastMomentum : 0;
         if (Math.abs(currentMomentum - prevMomentum) > 30 || (prevMomentum < 0 && currentMomentum > 0) || (prevMomentum > 0 && currentMomentum < 0)) {
             if (soundManager.playMomentumShift) soundManager.playMomentumShift();
+            this.triggerVisualFeedback('momentum-shift', 'MOMENTUM SHIFT!');
+            if (this.fieldEffects) this.fieldEffects.spawnParticles(50, 'momentum_shift');
         }
         this.lastMomentum = currentMomentum;
 
