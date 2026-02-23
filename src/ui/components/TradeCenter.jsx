@@ -232,6 +232,7 @@ export default function TradeCenter({ league, actions }) {
   const [theirPicks,  setTheirPicks]  = useState([]);          // I get
 
   const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState(null);
   const [submitting,  setSubmitting]  = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
   const [searchMy,    setSearchMy]    = useState('');
@@ -246,6 +247,7 @@ export default function TradeCenter({ league, actions }) {
   const fetchRosters = useCallback(async (tId) => {
     if (!actions?.getRoster || myTeamId == null) return;
     setLoading(true);
+    setError(null);
     setOffering(new Set()); setReceiving(new Set());
     setMyPicks([]); setTheirPicks([]); setTradeResult(null);
     try {
@@ -257,6 +259,7 @@ export default function TradeCenter({ league, actions }) {
       if (theirResp?.payload) { setTheirRoster(theirResp.payload.players ?? []); setTheirTeam(theirResp.payload.team); }
     } catch (e) {
       console.error('fetchRosters failed:', e);
+      setError(e.message || 'Failed to load trade data.');
     } finally {
       setLoading(false);
     }
@@ -389,6 +392,10 @@ export default function TradeCenter({ league, actions }) {
       ) : loading ? (
         <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
           Loading rosters…
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--danger)' }}>
+          ⚠️ {error} <button className="btn" onClick={() => fetchRosters(targetId)}>Retry</button>
         </div>
       ) : (
         <>

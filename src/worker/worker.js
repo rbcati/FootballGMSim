@@ -886,6 +886,31 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
+  // Enforce Salary Cap
+  const team = cache.getTeam(teamId);
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  const teamPlayers = cache.getPlayersByTeam(teamId);
+  let currentCapUsed = 0;
+  for (const p of teamPlayers) {
+    if (p.id === playerId) continue; // Exclude self if re-signing
+    const c = p.contract;
+    if (c) {
+      currentCapUsed += (c.baseAnnual ?? 0) + ((c.signingBonus ?? 0) / (c.yearsTotal || 1));
+    }
+  }
+
+  const newHit = (contract.baseAnnual ?? 0) + ((contract.signingBonus ?? 0) / (contract.yearsTotal || 1));
+  const projectedTotal = currentCapUsed + newHit;
+  const capTotal = team.capTotal ?? 255;
+
+  if (projectedTotal > capTotal + 0.05) { // 50k tolerance
+    post(toUI.ERROR, {
+      message: `Cap Exceeded: Need $${newHit.toFixed(2)}M, have $${(capTotal - currentCapUsed).toFixed(2)}M`
+    }, id);
+    return;
+  }
+
   const oldTeamId = player.teamId;
   cache.updatePlayer(playerId, { teamId, contract, status: 'active' });
 

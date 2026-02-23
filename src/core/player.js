@@ -413,7 +413,33 @@ function initializePlayerLegacy(player) {
 
 function updatePlayerGameLegacy(player, gameStats, gameContext) {
     initializePlayerLegacy(player);
-    // ... Legacy logic can be expanded here
+
+    const MILESTONES = [
+        { key: 'passYd', threshold: 300, desc: '300+ Passing Yards' },
+        { key: 'passYd', threshold: 400, desc: '400+ Passing Yards' },
+        { key: 'passTD', threshold: 4,   desc: '4+ Passing TDs' },
+        { key: 'rushYd', threshold: 100, desc: '100+ Rushing Yards' },
+        { key: 'rushYd', threshold: 200, desc: '200+ Rushing Yards' },
+        { key: 'recYd',  threshold: 150, desc: '150+ Receiving Yards' },
+        { key: 'sacks',  threshold: 3,   desc: '3+ Sack Game' },
+        { key: 'interceptions', threshold: 2, desc: '2+ Interception Game' }
+    ];
+
+    for (const m of MILESTONES) {
+        if (gameStats[m.key] >= m.threshold) {
+            const id = `game_${gameContext.year}_w${gameContext.week}_${m.key}_${m.threshold}`;
+            // Simple duplication check
+            if (!player.legacy.milestones.some(ms => ms.id === id)) {
+                player.legacy.milestones.push({
+                    id,
+                    desc: m.desc,
+                    year: gameContext.year,
+                    week: gameContext.week,
+                    value: gameStats[m.key]
+                });
+            }
+        }
+    }
 }
 
 function updateAdvancedStats(player, seasonStats) {

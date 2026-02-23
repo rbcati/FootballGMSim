@@ -106,6 +106,7 @@ export default function RosterManager({ league, actions }) {
   const teamId = league?.userTeamId;
 
   const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
   const [team,       setTeam]       = useState(null);
   const [players,    setPlayers]    = useState([]);
   const [posFilter,  setPosFilter]  = useState('ALL');
@@ -116,6 +117,7 @@ export default function RosterManager({ league, actions }) {
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
     setLoading(true);
+    setError(null);
     try {
       const resp = await actions.getRoster(teamId);
       if (resp?.payload) {
@@ -124,6 +126,7 @@ export default function RosterManager({ league, actions }) {
       }
     } catch (e) {
       console.error('getRoster failed:', e);
+      setError(e.message || 'Failed to load roster.');
     } finally {
       setLoading(false);
     }
@@ -221,6 +224,10 @@ export default function RosterManager({ league, actions }) {
         {loading ? (
           <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
             Loading roster…
+          </div>
+        ) : error ? (
+          <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--danger)' }}>
+            ⚠️ {error} <button className="btn" onClick={fetchRoster} style={{marginLeft: 10}}>Retry</button>
           </div>
         ) : (
           <div className="table-wrapper">
