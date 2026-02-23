@@ -440,7 +440,10 @@ async function handleAdvanceWeek(payload, id) {
   // --- Advance week counter ---
   const TOTAL_WEEKS = 18; // NFL regular season
   const newWeek = week + 1;
-  const isSeasonOver = week >= TOTAL_WEEKS;
+  // Only trigger end-of-regular-season logic on exactly week 18.
+  // Using === (not >=) ensures playoff weeks (19, 20, …) advance normally
+  // instead of looping back to week 19 on every advance.
+  const isSeasonOver = week === TOTAL_WEEKS && meta.phase !== 'playoffs';
 
   // Mark games as played in schedule (scores already written by applyGameResultToCache)
   markWeekPlayed(meta.schedule, week);
@@ -453,6 +456,10 @@ async function handleAdvanceWeek(payload, id) {
       updatedSchedule.weeks.push(week19);
     }
     cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: updatedSchedule });
+    post(toUI.NOTIFICATION, {
+      level: 'info',
+      message: 'Regular season complete! The playoff bracket has been set.',
+    });
   } else {
     cache.setMeta({ currentWeek: newWeek });
   }

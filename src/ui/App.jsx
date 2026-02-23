@@ -8,7 +8,7 @@
  *  - Renders only from the view-model slices the worker sends.
  */
 
-import React, { useEffect, useCallback, Component } from 'react';
+import React, { useEffect, useCallback, useState, Component } from 'react';
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGameViewer      from './components/LiveGameViewer.jsx';
@@ -71,6 +71,38 @@ export default function App() {
     error, notifications,
   } = state;
 
+  // ── Service Worker update detection ───────────────────────────────────────
+  // When a new SW activates it sends APP_UPDATED to all controlled clients.
+  // We also watch `controllerchange` as a belt-and-suspenders fallback.
+  // Only show the banner when the page *already had* a controller at load time
+  // (i.e., this is an upgrade, not a first install).
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Snapshot at mount — true when an old SW was already controlling the page
+    const hadController = !!navigator.serviceWorker.controller;
+
+    const handleMessage = (event) => {
+      if (event.data?.type === 'APP_UPDATED' && hadController) {
+        setUpdateAvailable(true);
+      }
+    };
+
+    const handleControllerChange = () => {
+      if (hadController) setUpdateAvailable(true);
+    };
+
+    navigator.serviceWorker.addEventListener('message', handleMessage);
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleMessage);
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+    };
+  }, []);
+
   // Auto-save when user navigates away
   useEffect(() => {
     const handler = () => { if (league) actions.save(); };
@@ -125,6 +157,59 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+
+      {/* ── SW Update banner ───────────────────────────────────────────── */}
+      {updateAvailable && (
+        <div
+          role="status"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--space-4)',
+            background: 'var(--accent)',
+            color: '#fff',
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--text-sm)',
+            fontWeight: 600,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span>A new version of Football GM is available.</span>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              background: '#fff',
+              color: 'var(--accent)',
+              border: 'none',
+              borderRadius: 'var(--radius-sm)',
+              padding: '4px 14px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            Update Now
+          </button>
+          <button
+            onClick={() => setUpdateAvailable(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'rgba(255,255,255,0.7)',
+              cursor: 'pointer',
+              fontSize: 18,
+              lineHeight: 1,
+              padding: 0,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
