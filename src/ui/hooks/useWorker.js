@@ -16,7 +16,7 @@
  * view-model slices the worker sends back (buildViewState shape).
  */
 
-import { useEffect, useRef, useCallback, useReducer } from 'react';
+import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
 
 // ── State shape ───────────────────────────────────────────────────────────────
@@ -196,6 +196,12 @@ export function useWorker() {
   }, []);
 
   // ── request (returns a Promise resolved on worker reply) ──────────────────
+  // NOTE: request() is intentionally NOT dispatching BUSY.
+  // These are read-only data fetches (getRoster, getFreeAgents, etc.) that run
+  // concurrently with normal game flow.  If we set busy=true here, it is never
+  // reset (there is no corresponding IDLE dispatch on the success path), which
+  // permanently disables the "Advance Week" button after the first tab visit.
+  // Each component that calls request() manages its own local loading state.
   const request = useCallback((type, payload = {}) => {
     return new Promise((resolve, reject) => {
       if (!workerRef.current) {
@@ -204,14 +210,19 @@ export function useWorker() {
       }
       const msg = buildMsg(type, payload);
       pendingRef.current.set(msg.id, { resolve, reject });
-      dispatch({ type: 'BUSY' });
       workerRef.current.postMessage(msg);
     });
   }, []);
 
   // ── Convenience action wrappers ────────────────────────────────────────────
+  // Wrapped in useMemo so the actions object reference is stable across renders.
+  // Without this, child components that list `actions` in a useCallback/useEffect
+  // dependency array would recreate their callbacks every render, triggering
+  // unwanted data re-fetches (e.g., RosterManager fetching the roster on every
+  // parent state update).  Both `send` and `request` are stable (useCallback
+  // with empty deps), so this memo only recomputes when the worker is restarted.
 
-  const actions = {
+  const actions = useMemo(() => ({
     /** Load existing save or show new-league screen. */
     init: ()                   => send(toWorker.INIT),
 
@@ -272,7 +283,8 @@ export function useWorker() {
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [send, request]); // send/request are stable; dispatch is always stable
 
   return { state, actions };
 }

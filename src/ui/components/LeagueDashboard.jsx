@@ -13,10 +13,68 @@
  *  - Trades      — Side-by-side roster trade interface
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Component } from 'react';
 import RosterManager   from './RosterManager.jsx';
 import FreeAgencyPanel from './FreeAgencyPanel.jsx';
 import TradeCenter     from './TradeCenter.jsx';
+
+// ── Per-tab Error Boundary ────────────────────────────────────────────────────
+// Wraps each tab so a render crash in one tab cannot freeze the entire game.
+// The `key` prop on the wrapper is set to `activeTab`, so switching away from
+// a broken tab automatically unmounts the old boundary and resets its error state.
+
+class TabErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[TabErrorBoundary] Tab render error:', error, info.componentStack);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    return (
+      <div
+        role="alert"
+        style={{
+          padding: 'var(--space-8)',
+          border: '1px solid var(--danger)',
+          borderRadius: 'var(--radius-md)',
+          background: 'rgba(255,69,58,0.07)',
+          textAlign: 'center',
+        }}
+      >
+        <p style={{ color: 'var(--danger)', fontWeight: 700, margin: '0 0 var(--space-3)' }}>
+          This tab ran into an error and could not render.
+        </p>
+        {this.state.error?.message && (
+          <pre style={{
+            fontFamily: 'monospace', fontSize: 'var(--text-xs)',
+            color: 'var(--text-muted)', background: 'rgba(0,0,0,0.2)',
+            padding: 'var(--space-3)', borderRadius: 'var(--radius-sm)',
+            maxHeight: 120, overflow: 'auto', textAlign: 'left',
+            margin: '0 0 var(--space-4)',
+          }}>
+            {this.state.error.message}
+          </pre>
+        )}
+        <button
+          className="btn"
+          onClick={() => this.setState({ hasError: false, error: null })}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -512,30 +570,35 @@ export default function LeagueDashboard({ league, busy, actions }) {
       </div>
 
       {/* ── Tab Content ── */}
-      {activeTab === 'Standings' && (
-        <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
-      )}
-      {activeTab === 'Schedule' && (
-        <ScheduleTab
-          schedule={league.schedule}
-          teams={league.teams}
-          currentWeek={league.week}
-          userTeamId={league.userTeamId}
-          nextGameStakes={league.nextGameStakes}
-        />
-      )}
-      {activeTab === 'Leaders' && (
-        <LeadersTab teams={league.teams} />
-      )}
-      {activeTab === 'Roster' && (
-        <RosterManager league={league} actions={actions} />
-      )}
-      {activeTab === 'Free Agency' && (
-        <FreeAgencyPanel league={league} actions={actions} />
-      )}
-      {activeTab === 'Trades' && (
-        <TradeCenter league={league} actions={actions} />
-      )}
+      {/* Each tab is wrapped in a TabErrorBoundary keyed to activeTab so that
+          switching to a different tab resets any error state automatically. */}
+
+      <TabErrorBoundary key={activeTab}>
+        {activeTab === 'Standings' && (
+          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
+        )}
+        {activeTab === 'Schedule' && (
+          <ScheduleTab
+            schedule={league.schedule}
+            teams={league.teams}
+            currentWeek={league.week}
+            userTeamId={league.userTeamId}
+            nextGameStakes={league.nextGameStakes}
+          />
+        )}
+        {activeTab === 'Leaders' && (
+          <LeadersTab teams={league.teams} />
+        )}
+        {activeTab === 'Roster' && (
+          <RosterManager league={league} actions={actions} />
+        )}
+        {activeTab === 'Free Agency' && (
+          <FreeAgencyPanel league={league} actions={actions} />
+        )}
+        {activeTab === 'Trades' && (
+          <TradeCenter league={league} actions={actions} />
+        )}
+      </TabErrorBoundary>
     </div>
   );
 }
