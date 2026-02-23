@@ -303,6 +303,23 @@ export const DraftPicks = {
 // ── Atomic multi-store flush ──────────────────────────────────────────────────
 
 /**
+ * Validate that a record has a defined, non-null value for the given keyPath
+ * before attempting an IDB put().  Returns true if the record is safe to write.
+ *
+ * Background: Safari / WebKit IDB throws
+ *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
+ *    key path did not yield a value."
+ * whenever the keyPath field is undefined or absent — even if the value is 0.
+ * Strict validation here prevents the entire transaction from aborting due to a
+ * single bad record.
+ */
+function _hasValidKey(record, keyPath) {
+  if (!record || typeof record !== 'object') return false;
+  const val = record[keyPath];
+  return val !== undefined && val !== null;
+}
+
+/**
  * Write all dirty data in a SINGLE multi-store readwrite transaction.
  *
  * Using one transaction instead of parallel per-store transactions eliminates
@@ -325,13 +342,45 @@ export async function bulkWrite({
   games         = [],
   seasonStats   = [],
 } = {}) {
+  // ── Pre-flight key validation ────────────────────────────────────────────
+  // Strip any record that is missing its required keyPath value BEFORE we open
+  // the IDB transaction.  A single bad record aborts the entire transaction on
+  // WebKit, causing the mobile "Evaluating the object store's key path did not
+  // yield a value" crash.
+
+  const validTeams = teams.filter(t => {
+    if (_hasValidKey(t, 'id')) return true;
+    console.error('[bulkWrite] Dropping team with missing id:', t);
+    return false;
+  });
+
+  const validPlayers = players.filter(p => {
+    if (_hasValidKey(p, 'id')) return true;
+    console.error('[bulkWrite] Dropping player with missing id:', p);
+    return false;
+  });
+
+  const validGames = games.filter(g => {
+    if (_hasValidKey(g, 'id')) return true;
+    console.error('[bulkWrite] Dropping game with missing id:', g);
+    return false;
+  });
+
+  // seasonStats: the id is assembled from seasonId + playerId at write time.
+  // Both must be defined and non-null for the resulting composite key to be valid.
+  const validSeasonStats = seasonStats.filter(s => {
+    if (s && s.seasonId != null && s.playerId != null) return true;
+    console.error('[bulkWrite] Dropping season stat with missing seasonId/playerId:', s);
+    return false;
+  });
+
   // Determine which stores we actually need; avoid opening stores unnecessarily.
   const needed = new Set();
-  if (meta)                                  needed.add(STORES.META);
-  if (teams.length)                          needed.add(STORES.TEAMS);
-  if (players.length || playerDeletes.length) needed.add(STORES.PLAYERS);
-  if (games.length)                          needed.add(STORES.GAMES);
-  if (seasonStats.length)                    needed.add(STORES.PLAYER_STATS);
+  if (meta)                                           needed.add(STORES.META);
+  if (validTeams.length)                              needed.add(STORES.TEAMS);
+  if (validPlayers.length || playerDeletes.length)    needed.add(STORES.PLAYERS);
+  if (validGames.length)                              needed.add(STORES.GAMES);
+  if (validSeasonStats.length)                        needed.add(STORES.PLAYER_STATS);
 
   if (needed.size === 0) return; // nothing to do
 
@@ -346,19 +395,19 @@ export async function bulkWrite({
     if (meta) {
       tx.objectStore(STORES.META).put({ ...meta, id: 'league' });
     }
-    for (const t of teams) {
+    for (const t of validTeams) {
       tx.objectStore(STORES.TEAMS).put(t);
     }
-    for (const p of players) {
+    for (const p of validPlayers) {
       tx.objectStore(STORES.PLAYERS).put(p);
     }
     for (const id of playerDeletes) {
       tx.objectStore(STORES.PLAYERS).delete(id);
     }
-    for (const g of games) {
+    for (const g of validGames) {
       tx.objectStore(STORES.GAMES).put(g);
     }
-    for (const s of seasonStats) {
+    for (const s of validSeasonStats) {
       tx.objectStore(STORES.PLAYER_STATS).put({
         ...s,
         id: `${s.seasonId}_${s.playerId}`,

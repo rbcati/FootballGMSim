@@ -259,6 +259,16 @@ export function useWorker() {
     releasePlayer: (playerId, teamId) =>
       send(toWorker.RELEASE_PLAYER, { playerId, teamId }),
 
+    /** Fetch a team's roster (returns a Promise). */
+    getRoster: (teamId) => request(toWorker.GET_ROSTER, { teamId }),
+
+    /** Fetch the free agent pool (returns a Promise). */
+    getFreeAgents: () => request(toWorker.GET_FREE_AGENTS),
+
+    /** Submit a trade offer to an AI team (returns a Promise). */
+    submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
+      request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),
+
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),

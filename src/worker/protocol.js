@@ -66,6 +66,10 @@ export const toWorker = Object.freeze({
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
   UPDATE_SETTINGS:    'UPDATE_SETTINGS',      // { settings }
+
+  /** Roster / Free Agency */
+  GET_ROSTER:         'GET_ROSTER',           // { teamId }
+  GET_FREE_AGENTS:    'GET_FREE_AGENTS',      // {}
 });
 
 // ─────────────────────────────────────────────
@@ -107,7 +111,11 @@ export const toUI = Object.freeze({
   GAME_LOG:           'GAME_LOG',             // { games[] }
 
   /** Trade response from AI */
-  TRADE_RESPONSE:     'TRADE_RESPONSE',       // { tradeId, accepted, counter? }
+  TRADE_RESPONSE:     'TRADE_RESPONSE',       // { accepted, offerValue, receiveValue, reason }
+
+  /** Roster / FA data responses */
+  ROSTER_DATA:        'ROSTER_DATA',          // { teamId, team, players[] }
+  FREE_AGENT_DATA:    'FREE_AGENT_DATA',      // { freeAgents[] }
 
   /** Non-fatal notices */
   NOTIFICATION:       'NOTIFICATION',         // { level: 'info'|'warn', message }

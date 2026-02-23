@@ -127,22 +127,61 @@ function buildRosterView(teamId) {
  * Using bulkWrite() eliminates the "database connection is closing" error that
  * occurred when Promise.all() fired multiple concurrent readwrite transactions
  * against the same IDBDatabase handle.
+ *
+ * Pre-flight validation ensures no record with a missing keyPath value is handed
+ * to bulkWrite — this is the primary fix for the mobile WebKit IDB crash:
+ *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
+ *    key path did not yield a value."
  */
 async function flushDirty() {
   if (!cache.isDirty()) return;
   const dirty = cache.drainDirty();
 
-  const teams         = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
-  const players       = dirty.players.map(id => cache.getPlayer(id)).filter(Boolean);
+  // Resolve dirty IDs → full objects, dropping any that are null (already deleted).
+  const teams   = dirty.teams.map(id => cache.getTeam(id)).filter(Boolean);
+  const players = dirty.players.map(id => cache.getPlayer(id)).filter(Boolean);
   const playerDeletes = dirty.players.filter(id => !cache.getPlayer(id));
-  const seasonStats   = dirty.seasonStats.map(pid => cache.getSeasonStat(pid)).filter(Boolean);
+
+  // Validate that every team / player that will be written has a proper id field.
+  // A missing id causes an IDB keyPath error that aborts the whole transaction.
+  for (const t of teams) {
+    if (t.id === undefined || t.id === null) {
+      console.error('[Worker] flushDirty: team object has no id — skipping:', t);
+    }
+  }
+  for (const p of players) {
+    if (p.id === undefined || p.id === null) {
+      console.error('[Worker] flushDirty: player object has no id — skipping:', p);
+    }
+  }
+
+  // Validate game objects accumulated in the dirty buffer.
+  for (const g of dirty.games) {
+    if (!g || g.id === undefined || g.id === null) {
+      console.error('[Worker] flushDirty: game object has no id — skipping:', g);
+    }
+  }
+
+  const seasonStats = dirty.seasonStats
+    .map(pid => cache.getSeasonStat(pid))
+    .filter(s => {
+      if (!s) return false;
+      if (s.seasonId == null || s.playerId == null) {
+        console.error('[Worker] flushDirty: season stat missing seasonId/playerId:', s);
+        return false;
+      }
+      return true;
+    });
 
   // Draft picks are handled separately (small volume, own store not in bulkWrite).
   if (dirty.draftPicks.length > 0) {
-    const toSave = dirty.draftPicks.map(id => cache.getDraftPick(id)).filter(Boolean);
+    const toSave = dirty.draftPicks
+      .map(id => cache.getDraftPick(id))
+      .filter(pk => pk && pk.id != null);
     if (toSave.length) await DraftPicks.saveBulk(toSave);
   }
 
+  // bulkWrite itself also validates before each put — belt-and-suspenders.
   await bulkWrite({
     meta:          dirty.meta ? cache.getMeta() : null,
     teams,
@@ -735,6 +774,149 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
 }
 
+// ── Handler: GET_ROSTER ───────────────────────────────────────────────────────
+
+async function handleGetRoster({ teamId }, id) {
+  const numId = Number(teamId);
+  const team  = cache.getTeam(numId);
+  if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
+
+  const players = cache.getPlayersByTeam(numId).map(p => ({
+    id:        p.id,
+    name:      p.name,
+    pos:       p.pos,
+    age:       p.age,
+    ovr:       p.ovr,
+    potential: p.potential ?? null,
+    status:    p.status ?? 'active',
+    contract:  p.contract ?? null,
+  }));
+
+  post(toUI.ROSTER_DATA, {
+    teamId: numId,
+    team: {
+      id:      team.id,
+      name:    team.name,
+      abbr:    team.abbr,
+      capUsed: team.capUsed ?? 0,
+      capRoom: team.capRoom ?? 0,
+      capTotal:team.capTotal ?? 255,
+    },
+    players,
+  }, id);
+}
+
+// ── Handler: GET_FREE_AGENTS ──────────────────────────────────────────────────
+
+async function handleGetFreeAgents(payload, id) {
+  const freeAgents = cache.getAllPlayers()
+    .filter(p => !p.teamId || p.status === 'free_agent')
+    .map(p => ({
+      id:        p.id,
+      name:      p.name,
+      pos:       p.pos,
+      age:       p.age,
+      ovr:       p.ovr,
+      potential: p.potential ?? null,
+      contract:  p.contract ?? null,   // last known contract (asking price reference)
+    }));
+
+  post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
+}
+
+// ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
+
+/**
+ * Simple OVR-based trade value: value = OVR^1.8 × positionMultiplier × ageFactor
+ * A deal is accepted by the AI if the receiving side value is ≥ 85 % of the
+ * offering side value (15 % discount for uncertainty / home-team premium).
+ */
+function _tradeValue(player) {
+  if (!player) return 0;
+  const POS_MULT = { QB: 2.0, WR: 1.2, RB: 0.9, TE: 1.1, OL: 1.0,
+                     DL: 1.0, LB: 0.95, CB: 1.05, S: 0.9 };
+  const ovr = player.ovr ?? 70;
+  const age = player.age ?? 27;
+  const posMult = POS_MULT[player.pos] ?? 1.0;
+  // Age curve: peak at 26, -3 % per year over 30, premium for youth
+  const ageFactor = age <= 26 ? 1.0 + (26 - age) * 0.02
+                 : age <= 30 ? 1.0
+                 :             Math.max(0.5, 1.0 - (age - 30) * 0.06);
+  return Math.pow(ovr, 1.8) * posMult * ageFactor;
+}
+
+async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, id) {
+  // offering  = { playerIds: [], pickIds: [] }  (what fromTeam gives)
+  // receiving = { playerIds: [], pickIds: [] }  (what fromTeam gets back)
+
+  const from = cache.getTeam(Number(fromTeamId));
+  const to   = cache.getTeam(Number(toTeamId));
+  if (!from || !to) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Team not found' }, id);
+    return;
+  }
+
+  // Calculate value on each side
+  const calcSideValue = ({ playerIds = [], pickIds = [] }) => {
+    const playerVal = playerIds.reduce((sum, pid) => {
+      const p = cache.getPlayer(Number(pid));
+      return sum + _tradeValue(p);
+    }, 0);
+    // Draft picks: rough round-based flat value (R1=800, R2=300, R3=150 …)
+    const PICK_VALUES = [0, 800, 300, 150, 60, 25, 10, 3];
+    const pickVal = pickIds.reduce((sum, pid) => {
+      const pk = cache.getDraftPick ? cache.getDraftPick(pid) : null;
+      const round = pk?.round ?? 3;
+      return sum + (PICK_VALUES[round] ?? 10);
+    }, 0);
+    return playerVal + pickVal;
+  };
+
+  const offerVal    = calcSideValue(offering);
+  const receiveVal  = calcSideValue(receiving);
+
+  // AI accepts if it gets at least 85 % of what it gives
+  const threshold   = offerVal * 0.85;
+  const accepted    = receiveVal >= threshold;
+
+  if (accepted) {
+    // Execute the trade: swap players
+    (offering.playerIds ?? []).forEach(pid => {
+      cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
+    });
+    (receiving.playerIds ?? []).forEach(pid => {
+      cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
+    });
+
+    // Recalculate caps for both teams
+    _updateTeamCap(Number(fromTeamId));
+    _updateTeamCap(Number(toTeamId));
+
+    // Log transaction
+    const meta = cache.getMeta();
+    const tradeRecord = {
+      type:     'TRADE',
+      seasonId: meta.currentSeasonId,
+      week:     meta.currentWeek,
+      teamId:   Number(fromTeamId),
+      details:  { fromTeamId, toTeamId, offering, receiving },
+    };
+    await Transactions.add(tradeRecord);
+    await flushDirty();
+  }
+
+  post(toUI.TRADE_RESPONSE, {
+    accepted,
+    offerValue:   Math.round(offerVal),
+    receiveValue: Math.round(receiveVal),
+    reason: accepted ? 'Deal accepted' : 'Offer undervalues the return',
+  }, id);
+
+  if (accepted) {
+    post(toUI.STATE_UPDATE, buildViewState());
+  }
+}
+
 // ── Handler: UPDATE_SETTINGS ─────────────────────────────────────────────────
 
 async function handleUpdateSettings({ settings }, id) {
@@ -782,6 +964,9 @@ self.onmessage = async (event) => {
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
+      case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
+      case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
+      case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);
