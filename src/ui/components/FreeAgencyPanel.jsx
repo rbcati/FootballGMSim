@@ -172,6 +172,7 @@ export default function FreeAgencyPanel({ league, actions }) {
   const capTotal = userTeam?.capTotal ?? 255;
 
   const [loading,    setLoading]    = useState(false);
+  const [error,      setError]      = useState(null);
   const [faPool,     setFaPool]     = useState([]);
   const [posFilter,  setPosFilter]  = useState('ALL');
   const [search,     setSearch]     = useState('');
@@ -185,6 +186,7 @@ export default function FreeAgencyPanel({ league, actions }) {
   const fetchFA = useCallback(async () => {
     if (!actions?.getFreeAgents) return;
     setLoading(true);
+    setError(null);
     try {
       const resp = await actions.getFreeAgents();
       if (resp?.payload?.freeAgents) {
@@ -197,6 +199,7 @@ export default function FreeAgencyPanel({ league, actions }) {
       }
     } catch (e) {
       console.error('getFreeAgents failed:', e);
+      setError(e.message || 'Failed to load free agents.');
     } finally {
       setLoading(false);
     }
@@ -338,6 +341,10 @@ export default function FreeAgencyPanel({ league, actions }) {
         {loading ? (
           <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
             Loading free agents…
+          </div>
+        ) : error ? (
+          <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--danger)' }}>
+            ⚠️ {error} <button className="btn" onClick={fetchFA} style={{marginLeft: 10}}>Retry</button>
           </div>
         ) : (
           <div className="table-wrapper">
