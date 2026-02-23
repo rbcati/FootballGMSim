@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from '../src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -986,17 +986,19 @@ class LiveGameViewer {
 
               // Determine rotation type
               const rotType = play.playType === 'pass_short' ? 'wobble' : 'spiral';
+              const isLongPass = play.playType === 'pass_long' || play.playType === 'pass_medium';
 
               // Ball Arc - Use Linear for X to simulate projectile
               await this.animateTrajectory(ballEl, {
                   startX: dropbackPct,
                   endX: endPct,
                   duration: throwDuration,
-                  arcHeight: 25,
+                  arcHeight: play.playType === 'pass_long' ? 35 : 25, // Higher arc for long bombs
                   easing: 'linear', // Improved physics
                   rotate: true,
                   rotateType: rotType,
-                  trail: true
+                  trail: true,
+                  animationClass: isLongPass ? 'blur-motion' : '' // Motion blur for velocity
               });
 
               // Pulse if TD
@@ -1082,8 +1084,14 @@ class LiveGameViewer {
               startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
           }));
 
+          // Dynamic Run Animation: Add juke/spin for big plays
+          let runAnim = 'run-bob';
+          if (play.result === 'big_play' || play.yards > 15) {
+              runAnim = Math.random() > 0.5 ? 'juke-move' : 'celebrate-spin'; // Spin/Juke while running
+          }
+
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: runAnim, sway: swayVal
           }));
 
           // Def Logic: Chase
@@ -2723,9 +2731,13 @@ class LiveGameViewer {
 
         if (home.score.toString().length > 2) scoreHomeEl.style.fontSize = '1.5rem';
         if (homeBox) {
-             homeBox.classList.remove('pulse-score-strong');
+             homeBox.classList.remove('pulse-score-strong', 'score-pop');
              void homeBox.offsetWidth;
              homeBox.classList.add('pulse-score-strong');
+             // Add pop effect to container if score increased
+             if (home.score > this.lastHomeScore) {
+                 homeBox.classList.add('score-pop');
+             }
         }
         this.animateNumber(scoreHomeEl, this.lastHomeScore, home.score, 1000);
     }
@@ -2736,9 +2748,13 @@ class LiveGameViewer {
 
         if (away.score.toString().length > 2) scoreAwayEl.style.fontSize = '1.5rem';
         if (awayBox) {
-             awayBox.classList.remove('pulse-score-strong');
+             awayBox.classList.remove('pulse-score-strong', 'score-pop');
              void awayBox.offsetWidth;
              awayBox.classList.add('pulse-score-strong');
+             // Add pop effect to container if score increased
+             if (away.score > this.lastAwayScore) {
+                 awayBox.classList.add('score-pop');
+             }
         }
         this.animateNumber(scoreAwayEl, this.lastAwayScore, away.score, 1000);
     }
