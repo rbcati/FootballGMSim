@@ -11,6 +11,7 @@
 import React, { useEffect, useCallback, Component } from 'react';
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
+import LiveGameViewer      from './components/LiveGameViewer.jsx';
 import { toWorker }        from '../worker/protocol.js';
 
 // Canonical 32-team set — conf: 0=AFC 1=NFC, div: 0=East 1=North 2=South 3=West.
@@ -242,6 +243,14 @@ export default function App() {
           ))}
         </div>
       )}
+
+      {/* ── Live game viewer (visible during simulation + results) ────── */}
+      <LiveGameViewer
+        simulating={simulating}
+        simProgress={simProgress}
+        league={league}
+        lastResults={lastResults}
+      />
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
       {lastResults && lastResults.length > 0 && (
