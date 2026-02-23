@@ -1,0 +1,662 @@
+/**
+ * Roster.jsx
+ *
+ * Data-dense ZenGM-style roster viewer combined with a visual depth chart
+ * inspired by Pro Football GM 3.
+ *
+ * Two view modes (toggled by top-right pill tabs):
+ *  1. Roster Table — sortable columns (Pos / OVR / Age / Salary), position
+ *     filter pills, Scheme Fit indicator, Morale indicator, Release flow.
+ *  2. Depth Chart  — visual positional grid showing Starter / Backup / 3rd
+ *     string for every position group across Offense, Defense, and Special Teams.
+ *
+ * Data flow:
+ *  Mount / teamId change → actions.getRoster(teamId) → ROSTER_DATA response.
+ *  getRoster uses { silent: true } so it NEVER sets busy=true and will never
+ *  lock the "Advance Week" button.
+ *  Release → actions.releasePlayer() → STATE_UPDATE → optimistic remove + re-fetch.
+ *
+ * Scheme Fit & Morale are deterministically mocked from player attributes until
+ * the worker exposes those fields.  Replace the mock* helpers with real data
+ * once available.
+ */
+
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const POSITIONS = ['ALL', 'QB', 'WR', 'RB', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+
+// Depth chart layout — each entry defines one positional row.
+// `match` is the set of pos strings that map to this group.
+const DEPTH_ROWS = [
+  // ── Offense ──────────────────────────────────────────────────
+  { group: 'OFFENSE', key: 'QB',  label: 'Quarterback',    match: ['QB'],                                slots: 3 },
+  { group: 'OFFENSE', key: 'RB',  label: 'Running Back',   match: ['RB', 'HB', 'FB'],                   slots: 3 },
+  { group: 'OFFENSE', key: 'WR',  label: 'Wide Receiver',  match: ['WR', 'FL', 'SE'],                   slots: 5 },
+  { group: 'OFFENSE', key: 'TE',  label: 'Tight End',      match: ['TE'],                               slots: 3 },
+  { group: 'OFFENSE', key: 'OL',  label: 'Offensive Line', match: ['OL', 'OT', 'LT', 'RT', 'OG', 'LG', 'RG', 'C'], slots: 5 },
+  // ── Defense ──────────────────────────────────────────────────
+  { group: 'DEFENSE', key: 'DE',  label: 'Defensive End',  match: ['DE', 'EDGE'],                       slots: 3 },
+  { group: 'DEFENSE', key: 'DT',  label: 'Defensive Tackle',match: ['DT', 'NT', 'IDL'],                 slots: 3 },
+  { group: 'DEFENSE', key: 'LB',  label: 'Linebacker',     match: ['LB', 'MLB', 'OLB', 'ILB'],         slots: 4 },
+  { group: 'DEFENSE', key: 'CB',  label: 'Cornerback',     match: ['CB', 'DB', 'NCB'],                  slots: 4 },
+  { group: 'DEFENSE', key: 'S',   label: 'Safety',         match: ['S', 'SS', 'FS'],                    slots: 3 },
+  // ── Special Teams ─────────────────────────────────────────────
+  { group: 'SPECIAL', key: 'K',   label: 'Kicker',         match: ['K', 'PK'],                          slots: 1 },
+  { group: 'SPECIAL', key: 'P',   label: 'Punter',         match: ['P'],                                slots: 1 },
+];
+
+const SLOT_LABELS = ['Starter', 'Backup', '3rd', '4th', '5th'];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function ovrColor(ovr) {
+  if (ovr >= 90) return '#34C759'; // elite  — green
+  if (ovr >= 80) return '#30D158'; // great  — green-teal
+  if (ovr >= 70) return '#0A84FF'; // solid  — blue
+  if (ovr >= 60) return '#FF9F0A'; // average — amber
+  return '#FF453A';                 // poor   — red
+}
+
+function fmtSalary(annual) {
+  if (annual == null) return '—';
+  return `$${annual.toFixed(1)}M`;
+}
+
+function fmtYears(contract) {
+  if (!contract) return '—';
+  const rem = contract.yearsRemaining ?? contract.yearsTotal ?? contract.years ?? 1;
+  return `${rem}yr`;
+}
+
+/**
+ * Deterministic Scheme Fit mock (0-100).
+ * Derived from OVR and player id so the value is stable across renders.
+ * Replace with real `player.schemeFit` when the worker exposes it.
+ */
+function mockSchemeFit(player) {
+  const base    = Math.min(98, Math.max(48, player.ovr + 8));
+  const jitter  = ((player.id ?? 0) * 7 + 3) % 22 - 11;   // -11 to +10
+  return Math.max(40, Math.min(99, base + jitter));
+}
+
+/**
+ * Deterministic Morale mock (50-100).
+ * Replace with real `player.morale` when the worker exposes it.
+ */
+function mockMorale(player) {
+  const base   = 80;
+  const jitter = ((player.id ?? 0) * 13 + 5) % 26 - 13;  // -13 to +12
+  return Math.max(50, Math.min(100, base + jitter));
+}
+
+function indicatorColor(val) {
+  if (val >= 85) return '#34C759';
+  if (val >= 70) return '#FF9F0A';
+  return '#FF453A';
+}
+
+/** Small coloured square bar (5 filled / 5 total pips). */
+function PipBar({ value, color }) {
+  const filled = Math.round((value / 100) * 5);
+  return (
+    <span style={{ display: 'inline-flex', gap: 2, verticalAlign: 'middle' }}>
+      {Array.from({ length: 5 }, (_, i) => (
+        <span
+          key={i}
+          style={{
+            width: 6, height: 6,
+            borderRadius: 1,
+            background: i < filled ? color : 'var(--hairline)',
+            display: 'inline-block',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+function sortPlayers(players, sortKey, sortDir) {
+  return [...players].sort((a, b) => {
+    let va, vb;
+    switch (sortKey) {
+      case 'ovr':    va = a.ovr ?? 0;                      vb = b.ovr ?? 0;                     break;
+      case 'age':    va = a.age ?? 0;                      vb = b.age ?? 0;                     break;
+      case 'salary': va = a.contract?.baseAnnual ?? 0;     vb = b.contract?.baseAnnual ?? 0;    break;
+      case 'fit':    va = mockSchemeFit(a);                vb = mockSchemeFit(b);               break;
+      case 'morale': va = mockMorale(a);                   vb = mockMorale(b);                  break;
+      case 'name':   va = a.name ?? '';                    vb = b.name ?? '';                   break;
+      default:       va = 0;                               vb = 0;
+    }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1;
+    if (va > vb) return sortDir === 'asc' ?  1 : -1;
+    return 0;
+  });
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function CapBar({ capUsed, capTotal }) {
+  const pct   = capTotal > 0 ? Math.min(100, (capUsed / capTotal) * 100) : 0;
+  const color = pct > 90 ? 'var(--danger)' : pct > 75 ? 'var(--warning)' : 'var(--success)';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--hairline)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'width .3s' }} />
+      </div>
+      <span style={{ fontSize: 'var(--text-xs)', color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+        ${capUsed?.toFixed(1)}M / ${capTotal?.toFixed(0)}M
+      </span>
+    </div>
+  );
+}
+
+function SortTh({ label, sortKey, currentSort, currentDir, onSort, style = {} }) {
+  const active = currentSort === sortKey;
+  return (
+    <th
+      onClick={() => onSort(sortKey)}
+      style={{
+        cursor: 'pointer', userSelect: 'none',
+        color: active ? 'var(--accent)' : 'var(--text-muted)',
+        fontWeight: active ? 700 : 600,
+        fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px',
+        whiteSpace: 'nowrap',
+        ...style,
+      }}
+    >
+      {label}{active ? (currentDir === 'asc' ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+}
+
+function OvrBadge({ ovr }) {
+  const col = ovrColor(ovr);
+  return (
+    <span style={{
+      display: 'inline-block', minWidth: 32, padding: '2px 4px',
+      borderRadius: 'var(--radius-pill)',
+      background: col + '22', color: col,
+      fontWeight: 800, fontSize: 'var(--text-xs)', textAlign: 'center',
+    }}>
+      {ovr}
+    </span>
+  );
+}
+
+function PosBadge({ pos }) {
+  return (
+    <span style={{
+      display: 'inline-block', minWidth: 32, padding: '1px 6px',
+      borderRadius: 'var(--radius-pill)',
+      background: 'var(--surface-strong)',
+      fontSize: 'var(--text-xs)', fontWeight: 700,
+      color: 'var(--text-muted)', textAlign: 'center',
+    }}>
+      {pos}
+    </span>
+  );
+}
+
+// ── Roster Table View ─────────────────────────────────────────────────────────
+
+function RosterTable({ players, actions, teamId, onRefetch }) {
+  const [posFilter, setPosFilter] = useState('ALL');
+  const [sortKey,   setSortKey]   = useState('ovr');
+  const [sortDir,   setSortDir]   = useState('desc');
+  const [releasing, setReleasing] = useState(null);
+
+  const displayed = useMemo(() => {
+    const filtered = posFilter === 'ALL'
+      ? players
+      : players.filter(p => p.pos === posFilter || DEPTH_ROWS.find(r => r.key === posFilter)?.match.includes(p.pos));
+    return sortPlayers(filtered, sortKey, sortDir);
+  }, [players, posFilter, sortKey, sortDir]);
+
+  const handleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('desc'); }
+  };
+
+  const handleRelease = async (player) => {
+    if (releasing !== player.id) { setReleasing(player.id); return; }
+    setReleasing(null);
+    actions.releasePlayer(player.id, teamId);
+    onRefetch();
+  };
+
+  return (
+    <>
+      {/* Position filter pills */}
+      <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
+        {POSITIONS.map(pos => (
+          <button
+            key={pos}
+            className={`standings-tab${posFilter === pos ? ' active' : ''}`}
+            onClick={() => setPosFilter(pos)}
+            style={{ minWidth: 36, padding: '4px 10px' }}
+          >
+            {pos}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div className="table-wrapper">
+          <table className="standings-table" style={{ width: '100%' }}>
+            <thead>
+              <tr>
+                <th style={{ paddingLeft: 'var(--space-5)', width: 32, color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>#</th>
+                <SortTh label="POS"    sortKey="pos"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'left' }} />
+                <th style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</th>
+                <SortTh label="OVR"    sortKey="ovr"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
+                <SortTh label="Age"    sortKey="age"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
+                <SortTh label="$/yr"   sortKey="salary" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
+                <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yrs</th>
+                <SortTh label="Fit"    sortKey="fit"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
+                <SortTh label="Morale" sortKey="morale" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
+                <th style={{ textAlign: 'center', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.length === 0 && (
+                <tr>
+                  <td colSpan={10} style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
+                    No players match this filter.
+                  </td>
+                </tr>
+              )}
+              {displayed.map((player, idx) => {
+                const isReleasing = releasing === player.id;
+                const fit    = mockSchemeFit(player);
+                const morale = mockMorale(player);
+                const fitCol    = indicatorColor(fit);
+                const moraleCol = indicatorColor(morale);
+
+                return (
+                  <tr key={player.id} style={isReleasing ? { background: 'rgba(255,69,58,0.07)' } : {}}>
+                    {/* # */}
+                    <td style={{ paddingLeft: 'var(--space-5)', color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                      {idx + 1}
+                    </td>
+                    {/* POS */}
+                    <td><PosBadge pos={player.pos} /></td>
+                    {/* Name */}
+                    <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                      {player.name}
+                    </td>
+                    {/* OVR */}
+                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
+                      <OvrBadge ovr={player.ovr} />
+                    </td>
+                    {/* Age */}
+                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+                      {player.age}
+                    </td>
+                    {/* Salary */}
+                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>
+                      {fmtSalary(player.contract?.baseAnnual)}
+                    </td>
+                    {/* Years */}
+                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                      {fmtYears(player.contract)}
+                    </td>
+                    {/* Scheme Fit */}
+                    <td style={{ textAlign: 'center', padding: '0 var(--space-2)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <PipBar value={fit} color={fitCol} />
+                        <span style={{ fontSize: 10, color: fitCol, fontWeight: 700, lineHeight: 1 }}>{fit}</span>
+                      </div>
+                    </td>
+                    {/* Morale */}
+                    <td style={{ textAlign: 'center', padding: '0 var(--space-2)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <PipBar value={morale} color={moraleCol} />
+                        <span style={{ fontSize: 10, color: moraleCol, fontWeight: 700, lineHeight: 1 }}>{morale}</span>
+                      </div>
+                    </td>
+                    {/* Release */}
+                    <td style={{ textAlign: 'center', paddingRight: 'var(--space-3)' }}>
+                      {isReleasing ? (
+                        <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'center' }}>
+                          <button
+                            className="btn btn-danger"
+                            style={{ fontSize: 'var(--text-xs)', padding: '2px 10px' }}
+                            onClick={() => handleRelease(player)}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            className="btn"
+                            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px' }}
+                            onClick={() => setReleasing(null)}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="btn"
+                          style={{ fontSize: 'var(--text-xs)', padding: '2px 10px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          onClick={() => handleRelease(player)}
+                        >
+                          Release
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Depth Chart View ──────────────────────────────────────────────────────────
+
+/** Single player card inside a depth chart slot. */
+function DepthCard({ player, isStarter }) {
+  if (!player) {
+    return (
+      <div style={{
+        minWidth: 130, padding: '6px 10px',
+        borderRadius: 'var(--radius-sm)',
+        background: 'var(--surface)',
+        border: '1px dashed var(--hairline)',
+        color: 'var(--text-subtle)',
+        fontSize: 'var(--text-xs)',
+        textAlign: 'center',
+      }}>
+        —
+      </div>
+    );
+  }
+
+  const fit         = mockSchemeFit(player);
+  const fitCol      = indicatorColor(fit);
+  const borderStyle = isStarter
+    ? `1px solid var(--accent)`
+    : `1px solid var(--hairline)`;
+
+  return (
+    <div style={{
+      minWidth: 130, maxWidth: 160, padding: '6px 10px',
+      borderRadius: 'var(--radius-sm)',
+      background: isStarter ? 'var(--accent-muted)' : 'var(--surface)',
+      border: borderStyle,
+    }}>
+      {/* Name + OVR */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
+        <span style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
+          {player.name}
+        </span>
+        <OvrBadge ovr={player.ovr} />
+      </div>
+      {/* Age + Fit */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Ag {player.age}</span>
+        <span style={{ fontSize: 10, color: fitCol, fontWeight: 700 }}>◆{fit}</span>
+        <PipBar value={fit} color={fitCol} />
+      </div>
+    </div>
+  );
+}
+
+function DepthChartView({ players }) {
+  // Build a map: posKey → sorted player array (best OVR first)
+  const depthMap = useMemo(() => {
+    const map = {};
+    DEPTH_ROWS.forEach(row => { map[row.key] = []; });
+    players.forEach(player => {
+      const row = DEPTH_ROWS.find(r => r.match.includes(player.pos));
+      if (row) map[row.key].push(player);
+    });
+    // Sort each group by OVR desc so the best player is always Starter
+    Object.keys(map).forEach(key => {
+      map[key].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+    });
+    return map;
+  }, [players]);
+
+  // Group rows by section for the group headers
+  const groups = ['OFFENSE', 'DEFENSE', 'SPECIAL'];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
+      {groups.map(group => {
+        const rows = DEPTH_ROWS.filter(r => r.group === group);
+        const maxSlots = Math.max(...rows.map(r => r.slots));
+
+        return (
+          <div key={group}>
+            {/* Group header */}
+            <div style={{
+              fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '1.5px', color: 'var(--text-muted)',
+              padding: 'var(--space-2) 0', marginBottom: 'var(--space-2)',
+              borderBottom: '1px solid var(--hairline)',
+            }}>
+              {group}
+            </div>
+
+            {/* Slot column headers */}
+            <div className="table-wrapper">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    <th style={{
+                      textAlign: 'left', padding: '4px 12px 4px 0',
+                      fontSize: 'var(--text-xs)', color: 'var(--text-subtle)',
+                      fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+                      width: 140, whiteSpace: 'nowrap',
+                    }}>
+                      Position
+                    </th>
+                    {Array.from({ length: maxSlots }, (_, i) => (
+                      <th key={i} style={{
+                        padding: '4px 6px',
+                        fontSize: 'var(--text-xs)', color: 'var(--text-subtle)',
+                        fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+                        textAlign: 'left', whiteSpace: 'nowrap',
+                      }}>
+                        {SLOT_LABELS[i] ?? `${i + 1}th`}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, rowIdx) => {
+                    const depth = depthMap[row.key] ?? [];
+                    return (
+                      <tr
+                        key={row.key}
+                        style={{
+                          borderTop: rowIdx > 0 ? '1px solid var(--hairline)' : undefined,
+                          verticalAlign: 'top',
+                        }}
+                      >
+                        {/* Position label */}
+                        <td style={{ padding: '8px 12px 8px 0', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
+                            {row.label}
+                          </div>
+                          <div style={{ fontSize: 10, color: 'var(--text-subtle)', marginTop: 2 }}>
+                            {depth.length} on roster
+                          </div>
+                        </td>
+                        {/* Depth slots */}
+                        {Array.from({ length: maxSlots }, (_, slotIdx) => {
+                          // Only render up to this row's designated slots; hide extras
+                          if (slotIdx >= row.slots) {
+                            return <td key={slotIdx} />;
+                          }
+                          return (
+                            <td key={slotIdx} style={{ padding: '6px' }}>
+                              <DepthCard
+                                player={depth[slotIdx] ?? null}
+                                isStarter={slotIdx === 0}
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function Roster({ league, actions }) {
+  const teamId = league?.userTeamId;
+
+  const [loading,  setLoading]  = useState(false);
+  const [team,     setTeam]     = useState(null);
+  const [players,  setPlayers]  = useState([]);
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'depth'
+
+  const fetchRoster = useCallback(async () => {
+    if (teamId == null || !actions?.getRoster) return;
+    setLoading(true);
+    try {
+      const resp = await actions.getRoster(teamId);
+      if (resp?.payload) {
+        setTeam(resp.payload.team);
+        setPlayers(resp.payload.players ?? []);
+      }
+    } catch (e) {
+      console.error('[Roster] getRoster failed:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [teamId, actions]);
+
+  // Fetch on mount and whenever the user's team changes
+  useEffect(() => { fetchRoster(); }, [fetchRoster]);
+
+  // Re-fetch when league.teams updates (sign / release resolved)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchRoster(); }, [league?.teams]);
+
+  if (teamId == null) {
+    return (
+      <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
+        No team selected.
+      </div>
+    );
+  }
+
+  const capUsed  = team?.capUsed  ?? 0;
+  const capTotal = team?.capTotal ?? 255;
+  const capRoom  = team?.capRoom  ?? capTotal - capUsed;
+  const avgOvr   = players.length
+    ? Math.round(players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length)
+    : 0;
+
+  return (
+    <div>
+      {/* ── Team cap header ── */}
+      <div className="card" style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-4) var(--space-5)' }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 'var(--space-3)', gap: 'var(--space-4)', flexWrap: 'wrap',
+        }}>
+          {/* Left: name + player count */}
+          <div>
+            <span style={{ fontWeight: 800, fontSize: 'var(--text-lg)', color: 'var(--text)' }}>
+              {team?.name ?? 'Roster'}
+            </span>
+            <span style={{ marginLeft: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+              {players.length} players · Avg OVR {avgOvr}
+            </span>
+          </div>
+
+          {/* Right: cap room + view toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)' }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 2 }}>CAP ROOM</div>
+              <div style={{
+                fontSize: 'var(--text-xl)', fontWeight: 800,
+                color: capRoom < 5 ? 'var(--danger)' : capRoom < 15 ? 'var(--warning)' : 'var(--success)',
+              }}>
+                ${capRoom.toFixed(1)}M
+              </div>
+            </div>
+
+            {/* View toggle pills */}
+            <div className="standings-tabs">
+              <button
+                className={`standings-tab${viewMode === 'table' ? ' active' : ''}`}
+                onClick={() => setViewMode('table')}
+                style={{ padding: '4px 14px', fontSize: 'var(--text-xs)' }}
+              >
+                Roster
+              </button>
+              <button
+                className={`standings-tab${viewMode === 'depth' ? ' active' : ''}`}
+                onClick={() => setViewMode('depth')}
+                style={{ padding: '4px 14px', fontSize: 'var(--text-xs)' }}
+              >
+                Depth Chart
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Cap bar */}
+        <CapBar capUsed={capUsed} capTotal={capTotal} />
+
+        {/* Legend for mocked indicators */}
+        <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-5)', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-subtle)' }}>
+            <span style={{ color: '#34C759', fontWeight: 700 }}>◆</span> Scheme Fit (mocked) &nbsp;
+            <span style={{ color: 'var(--text-subtle)' }}>|</span>&nbsp;
+            <span style={{ color: '#0A84FF', fontWeight: 700 }}>●</span> Morale (mocked) — will auto-update when worker exposes real values
+          </span>
+        </div>
+      </div>
+
+      {/* ── Loading state ── */}
+      {loading && (
+        <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--text-muted)' }}>
+          Loading roster…
+        </div>
+      )}
+
+      {/* ── Table view ── */}
+      {!loading && viewMode === 'table' && (
+        <RosterTable
+          players={players}
+          actions={actions}
+          teamId={teamId}
+          onRefetch={fetchRoster}
+        />
+      )}
+
+      {/* ── Depth chart view ── */}
+      {!loading && viewMode === 'depth' && (
+        <div className="card" style={{ padding: 'var(--space-5)' }}>
+          {players.length === 0 ? (
+            <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 'var(--space-8)' }}>
+              No players on roster.
+            </div>
+          ) : (
+            <DepthChartView players={players} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

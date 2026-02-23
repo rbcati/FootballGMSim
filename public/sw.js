@@ -1,29 +1,32 @@
 /**
  * sw.js  —  Service Worker for Football GM
  *
- * Strategy: Cache-first for all app shell assets (JS, CSS, HTML, fonts, icons).
- * Because this is a single-player offline game with no external API calls,
- * we simply precache everything on install and serve from cache on all requests.
+ * Update strategy (ZenGM-standard):
+ *  1. INSTALL:  Pre-cache shell assets.  Do NOT call skipWaiting() — the new
+ *               SW waits in the "installed" state so the current session is
+ *               never disrupted mid-game.
+ *  2. ACTIVATE: Clean up stale caches, then claim all clients.
+ *  3. FETCH:    Navigation (HTML) → Network-First so iOS PWA bookmarks always
+ *               get fresh content after a Netlify deploy.
+ *               Assets (JS/CSS/images) → Cache-First (Vite hashes filenames so
+ *               new deploys always produce new URLs).
+ *  4. MESSAGE:  Respond to { type: 'SKIP_WAITING' } sent by App.jsx when the
+ *               user clicks the "Update & Reload" banner.
  *
  * Versioning:
- *  - Bump CACHE_NAME whenever you deploy a new build.
- *  - Old caches are deleted in the activate phase so stale assets never run.
+ *  CACHE_NAME contains a build hash injected by the vite.config.js
+ *  `injectSwVersion` plugin at build time.  In dev mode it stays as-is.
+ *  Bumping the hash evicts all assets from the previous cache on activate.
  *
- * Netlify-specific:
- *  - The `netlify.toml` (or _headers file) should set Cache-Control: no-cache
- *    on /sw.js itself so the browser always re-fetches it and can detect updates.
- *  - All other assets can have long-lived cache headers because the service
- *    worker acts as the true caching layer.
+ * Netlify caching:
+ *  public/_headers sets  Cache-Control: no-cache  on /sw.js so the browser
+ *  always re-fetches this file and can detect new versions.
  */
 
-// Bump this string with every production build so old caches are evicted.
-const CACHE_NAME = 'football-gm-v3';
+// Injected by vite.config.js → injectSwVersion plugin during `vite build`.
+// In development the literal string 'dev' is used.
+const CACHE_NAME = 'fgm-dev';
 
-/**
- * Assets to precache on install.
- * Vite injects hashed filenames into the build; we cache everything under /assets/.
- * The root HTML + manifest are cached by name.
- */
 const PRECACHE_URLS = [
   '/',
   '/index.html',
@@ -31,37 +34,31 @@ const PRECACHE_URLS = [
 ];
 
 // ── Install ───────────────────────────────────────────────────────────────────
+// Pre-cache the app shell.  We deliberately do NOT call self.skipWaiting() so
+// the existing SW continues serving the current session.  The new SW moves to
+// the "waiting" state and App.jsx shows the "Update Available" banner.
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      // Cache the known shell assets
-      await cache.addAll(PRECACHE_URLS);
-      // Skip waiting so the new SW activates immediately (no tab-reload required)
-      self.skipWaiting();
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
   );
 });
 
 // ── Activate ──────────────────────────────────────────────────────────────────
+// Delete every cache that isn't CACHE_NAME (i.e. from a previous build), then
+// take control of all open clients so the new fetch handler is used immediately.
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(async (keys) => {
-      const stale = keys.filter(key => key !== CACHE_NAME);
-      const hadOldCache = stale.length > 0;
-      await Promise.all(stale.map(key => caches.delete(key)));
-      // Take control of all open clients without requiring a page reload
-      await self.clients.claim();
-      // Broadcast to all tabs that a new version has activated so the UI can
-      // show an "Update available — reload?" banner.
-      if (hadOldCache) {
-        const allClients = await self.clients.matchAll({ type: 'window' });
-        for (const client of allClients) {
-          client.postMessage({ type: 'UPDATE_AVAILABLE' });
-        }
-      }
-    })
+    caches.keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key !== CACHE_NAME)
+            .map((key) => caches.delete(key))
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
@@ -71,81 +68,65 @@ self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Only intercept same-origin GET requests
-  if (request.method !== 'GET' || url.origin !== self.location.origin) {
-    return;
-  }
+  // Only intercept same-origin GETs
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // Network-First for HTML navigation so iOS / PWA users always get fresh
-  // content after a Netlify deploy instead of the old cached shell.
   const isNavigation =
     request.mode === 'navigate' ||
     request.headers.get('Accept')?.includes('text/html');
 
   if (isNavigation) {
-    event.respondWith(networkFirstWithCacheFallback(request));
+    event.respondWith(networkFirst(request));
   } else {
-    event.respondWith(cacheFirstWithNetworkFallback(request));
+    event.respondWith(cacheFirst(request));
   }
 });
 
 /**
- * Network-First strategy (used for HTML / navigation requests).
- *  1. Try the network; on success update the cache and return.
- *  2. If network fails fall back to the cache.
- *  3. If neither is available return the offline fallback page.
- *
- * After a successful install the SW broadcasts an UPDATE_AVAILABLE message
- * so App.jsx can show the "New version ready" banner.
+ * Network-First — used for HTML/navigation requests.
+ * Fetches fresh content on every load so an updated index.html (with new
+ * hashed asset URLs) is always served.  Falls back to cache when offline.
  */
-async function networkFirstWithCacheFallback(request) {
+async function networkFirst(request) {
   try {
-    const networkResponse = await fetch(request);
-    if (networkResponse.ok && networkResponse.type !== 'opaque') {
+    const response = await fetch(request);
+    if (response.ok && response.type !== 'opaque') {
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, networkResponse.clone());
+      cache.put(request, response.clone());  // background update
     }
-    return networkResponse;
+    return response;
   } catch {
     const cached = await caches.match(request);
-    if (cached) return cached;
-    return offlineFallbackPage();
+    return cached ?? offlinePage();
   }
 }
 
 /**
- * Cache-first strategy (JS/CSS/assets):
- *  1. Return cached response if available.
- *  2. Otherwise fetch from network, cache the response, then return it.
- *  3. If network also fails (offline), return a minimal fallback.
+ * Cache-First — used for Vite-hashed JS/CSS/asset files.
+ * Content-addressed filenames mean a cache hit is always correct.
+ * New deployments produce new filenames that miss the cache and are fetched
+ * from the network, cached, and served.
  */
-async function cacheFirstWithNetworkFallback(request) {
+async function cacheFirst(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
 
   try {
-    const networkResponse = await fetch(request);
-
-    // Only cache successful, non-opaque responses
-    if (networkResponse.ok && networkResponse.type !== 'opaque') {
+    const response = await fetch(request);
+    if (response.ok && response.type !== 'opaque') {
       const cache = await caches.open(CACHE_NAME);
-      // Clone because the response body can only be consumed once
-      cache.put(request, networkResponse.clone());
+      cache.put(request, response.clone());
     }
-
-    return networkResponse;
+    return response;
   } catch {
-    // Network failed and nothing in cache — return a minimal offline page
-    // for navigation requests (HTML), or a 503 for sub-resources.
-    const acceptsHtml = request.headers.get('Accept')?.includes('text/html');
-    if (acceptsHtml) {
-      return offlineFallbackPage();
-    }
-    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+    return new Response('Offline', {
+      status: 503,
+      statusText: 'Service Unavailable',
+    });
   }
 }
 
-function offlineFallbackPage() {
+function offlinePage() {
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -153,34 +134,32 @@ function offlineFallbackPage() {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Football GM – Offline</title>
   <style>
-    body { font-family: system-ui; display: flex; flex-direction: column;
-           align-items: center; justify-content: center; height: 100vh;
-           margin: 0; background: #0a0c10; color: #fff; text-align: center; }
-    h1 { font-size: 2rem; margin-bottom: .5rem; }
-    p  { color: #aaa; }
-    button { margin-top: 1.5rem; padding: .75rem 2rem; font-size: 1rem;
-             background: #1976d2; color: #fff; border: none; border-radius: 4px;
-             cursor: pointer; }
+    body{font-family:system-ui;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;height:100vh;
+         margin:0;background:#0a0c10;color:#fff;text-align:center}
+    h1{font-size:2rem;margin-bottom:.5rem}
+    p{color:#aaa}
+    button{margin-top:1.5rem;padding:.75rem 2rem;font-size:1rem;
+           background:#1976d2;color:#fff;border:none;border-radius:4px;cursor:pointer}
   </style>
 </head>
 <body>
   <h1>Football GM</h1>
-  <p>You're offline. Reload once you have a connection to resume playing.</p>
+  <p>You're offline. Open the app once you have a connection to resume.</p>
   <button onclick="location.reload()">Try again</button>
 </body>
 </html>`;
   return new Response(html, {
-    status:  200,
+    status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
 
 // ── Message handling ──────────────────────────────────────────────────────────
+// App.jsx sends { type: 'SKIP_WAITING' } when the user clicks the
+// "Update & Reload" banner.  This activates the waiting SW immediately,
+// which triggers the `controllerchange` event in the page → hard reload.
 
-/**
- * The app can send { type: 'SKIP_WAITING' } to force an update mid-session.
- * Useful for "New version available — update now?" prompts.
- */
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
