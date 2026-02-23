@@ -155,12 +155,13 @@ async function flushDirty() {
     }
   }
 
-  // Validate game objects accumulated in the dirty buffer.
-  for (const g of dirty.games) {
-    if (!g || g.id === undefined || g.id === null) {
-      console.error('[Worker] flushDirty: game object has no id — skipping:', g);
-    }
-  }
+  // Validate game objects — filter out any without a valid id so a single bad
+  // record can't abort the entire IDB transaction (mobile WebKit InvalidStateError).
+  const validGames = dirty.games.filter(g => {
+    if (g && g.id !== undefined && g.id !== null) return true;
+    console.error('[Worker] flushDirty: dropping game with no id:', g);
+    return false;
+  });
 
   const seasonStats = dirty.seasonStats
     .map(pid => cache.getSeasonStat(pid))
@@ -187,7 +188,7 @@ async function flushDirty() {
     teams,
     players,
     playerDeletes,
-    games:         dirty.games,
+    games:         validGames,
     seasonStats,
   });
 }
@@ -359,17 +360,22 @@ function expandSchedule(slimSchedule) {
  * Build the Week 19 (Wildcard) slim schedule entry from current standings.
  * Seeds the top 7 teams per conference; seed 1 receives a bye.
  * Matchups: 2v7, 3v6, 4v5 per conference (higher seed hosts).
- * Mirrors the logic in legacy/playoffs.js but is pure (no window/DOM deps).
+ * Also returns a playoffSeeds map used by advancePlayoffBracket for later rounds.
+ *
+ * @returns {{ week19Entry: object, playoffSeeds: object }}
  */
 function generatePlayoffWeek19() {
   const SEEDS = 7;
   const teams = cache.getAllTeams();
 
-  // Determine conference identifiers from actual team data (e.g. 'AFC'/'NFC' or 0/1)
+  // Determine conference identifiers from actual team data (e.g. 0/1 integers)
   const confs = [...new Set(teams.map(t => t.conf))];
 
-  const rankConf = (confId) =>
-    teams
+  // playoffSeeds[confId] = [{ teamId, seed, conf }, ...]  (index 0 = #1 seed)
+  const playoffSeeds = {};
+
+  const rankConf = (confId) => {
+    const ranked = teams
       .filter(t => t.conf === confId)
       .sort((a, b) => {
         const wDiff = (b.wins ?? 0) - (a.wins ?? 0);
@@ -381,23 +387,132 @@ function generatePlayoffWeek19() {
       })
       .slice(0, SEEDS);
 
-  const makeWCGames = (seeds) => {
+    // Store seeds so advancePlayoffBracket can look them up later
+    playoffSeeds[confId] = ranked.map((t, i) => ({ teamId: t.id, seed: i + 1, conf: confId }));
+    return ranked;
+  };
+
+  const makeWCGames = (seeds, confId) => {
     if (seeds.length < SEEDS) return [];
     // seeds[0] = #1 seed (bye), seeds[1]=#2 … seeds[6]=#7
     return [
-      { home: seeds[1].id, away: seeds[6].id, played: false, round: 'wildcard' },
-      { home: seeds[2].id, away: seeds[5].id, played: false, round: 'wildcard' },
-      { home: seeds[3].id, away: seeds[4].id, played: false, round: 'wildcard' },
+      { home: seeds[1].id, away: seeds[6].id, played: false, round: 'wildcard', conf: confId },
+      { home: seeds[2].id, away: seeds[5].id, played: false, round: 'wildcard', conf: confId },
+      { home: seeds[3].id, away: seeds[4].id, played: false, round: 'wildcard', conf: confId },
     ];
   };
 
-  const allGames = confs.flatMap(confId => makeWCGames(rankConf(confId)));
+  const allGames = confs.flatMap(confId => makeWCGames(rankConf(confId), confId));
 
   return {
-    week: 19,
-    playoffRound: 'wildcard',
-    games: allGames,
+    week19Entry: { week: 19, playoffRound: 'wildcard', games: allGames },
+    playoffSeeds,
   };
+}
+
+/**
+ * After a playoff week is simulated, determine winners and generate the next
+ * round's slim schedule entry.  Returns null when the Super Bowl is over.
+ *
+ * Round map:
+ *   Week 19 → Wildcard  → produces Week 20 (Divisional)
+ *   Week 20 → Divisional → produces Week 21 (Conference)
+ *   Week 21 → Conference → produces Week 22 (Super Bowl)
+ *   Week 22 → Super Bowl → null (season over)
+ *
+ * Seeding mirrors legacy/playoffs.js:
+ *   Divisional: seed[0] vs seed[3], seed[1] vs seed[2] per conf (incl. bye)
+ *   Conference: lower seed hosts
+ *   Super Bowl: AFC conf champ vs NFC conf champ
+ */
+function advancePlayoffBracket(results, currentWeek) {
+  const meta = cache.getMeta();
+  const seeds = meta.playoffSeeds ?? {};
+
+  // Build a flat teamId → { teamId, seed, conf } lookup (Object.keys returns strings)
+  const seedMap = {};
+  for (const [confKey, confSeeds] of Object.entries(seeds)) {
+    for (const s of confSeeds) {
+      seedMap[s.teamId] = { ...s, conf: s.conf !== undefined ? s.conf : Number(confKey) };
+    }
+  }
+
+  // Resolve conf for a team (seedMap first, then live cache)
+  const getConf = (teamId) => {
+    if (seedMap[teamId] !== undefined) return seedMap[teamId].conf;
+    const t = cache.getTeam(teamId);
+    return t ? t.conf : 0;
+  };
+
+  const getSeed = (teamId) => seedMap[teamId]?.seed ?? 99;
+
+  // Extract winner from a single game result (home wins ties — no ties in playoffs)
+  const getWinner = (r) => {
+    const homeScore = r.scoreHome ?? r.homeScore ?? 0;
+    const awayScore = r.scoreAway ?? r.awayScore ?? 0;
+    const rawH = r.home      ?? r.homeTeamId;
+    const rawA = r.away      ?? r.awayTeamId;
+    const hId  = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+    const aId  = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+    return homeScore >= awayScore ? hId : aId;
+  };
+
+  const winners = results.map(r => getWinner(r));
+  // Unique conference ids from the seeds object (as numbers)
+  const confs = [...new Set(Object.keys(seeds).map(Number))].sort();
+
+  if (currentWeek === 19) {
+    // Wildcard → Divisional (Week 20)
+    // Per conf: add the #1-seed bye + 3 WC survivors, sort by seed, then
+    // lowest-seed (1) hosts vs highest-surviving-seed (slot 3) and so on.
+    const allGames = [];
+    for (const confId of confs) {
+      const confSeeds = seeds[confId] ?? [];
+      if (confSeeds.length === 0) continue;
+
+      const byeEntry = { teamId: confSeeds[0].teamId, seed: 1, conf: confId };
+      const wcSurvivors = winners
+        .filter(tid => getConf(tid) === confId)
+        .map(tid => ({ teamId: tid, seed: getSeed(tid), conf: confId }));
+
+      const divTeams = [byeEntry, ...wcSurvivors].sort((a, b) => a.seed - b.seed);
+
+      if (divTeams.length >= 4) {
+        allGames.push({ home: divTeams[0].teamId, away: divTeams[3].teamId, played: false, round: 'divisional', conf: confId });
+        allGames.push({ home: divTeams[1].teamId, away: divTeams[2].teamId, played: false, round: 'divisional', conf: confId });
+      }
+    }
+    return { week: 20, playoffRound: 'divisional', games: allGames };
+
+  } else if (currentWeek === 20) {
+    // Divisional → Conference (Week 21)
+    const allGames = [];
+    for (const confId of confs) {
+      const confWinners = winners
+        .filter(tid => getConf(tid) === confId)
+        .map(tid => ({ teamId: tid, seed: getSeed(tid) }))
+        .sort((a, b) => a.seed - b.seed);
+
+      if (confWinners.length >= 2) {
+        allGames.push({ home: confWinners[0].teamId, away: confWinners[1].teamId, played: false, round: 'conference', conf: confId });
+      }
+    }
+    return { week: 21, playoffRound: 'conference', games: allGames };
+
+  } else if (currentWeek === 21) {
+    // Conference → Super Bowl (Week 22)
+    // AFC (confs[0]) champ hosts by convention
+    const afcChamp = winners.find(tid => getConf(tid) === confs[0]) ?? winners[0];
+    const nfcChamp = winners.find(tid => getConf(tid) === (confs[1] ?? 1)) ?? winners[1];
+    if (afcChamp !== undefined && nfcChamp !== undefined) {
+      return { week: 22, playoffRound: 'superbowl', games: [
+        { home: afcChamp, away: nfcChamp, played: false, round: 'superbowl' },
+      ]};
+    }
+  }
+
+  // currentWeek === 22 (Super Bowl just played) or unexpected state → season over
+  return null;
 }
 
 // ── Handler: ADVANCE_WEEK ─────────────────────────────────────────────────────
@@ -437,24 +552,57 @@ async function handleAdvanceWeek(payload, id) {
     await yieldFrame();
   }
 
-  // --- Advance week counter ---
-  const TOTAL_WEEKS = 18; // NFL regular season
-  const newWeek = week + 1;
-  const isSeasonOver = week >= TOTAL_WEEKS;
+  // --- Advance week / phase ---
+  const TOTAL_REG_WEEKS    = 18;
+  const isRegSeasonEnd     = meta.phase === 'regular' && week >= TOTAL_REG_WEEKS;
+  const isPlayoffWeek      = meta.phase === 'playoffs';
+  const isSuperbowl        = isPlayoffWeek && week === 22;
 
-  // Mark games as played in schedule (scores already written by applyGameResultToCache)
+  // Mark all games in the just-simulated week as played
+  // (scores were already written into the slim schedule by applyGameResultToCache)
   markWeekPlayed(meta.schedule, week);
 
-  if (isSeasonOver) {
-    // Generate wildcard playoff bracket and append week 19 to the schedule
-    const week19 = generatePlayoffWeek19();
-    const updatedSchedule = cache.getMeta().schedule ?? { weeks: [] };
-    if (!updatedSchedule.weeks.find(w => w.week === 19)) {
-      updatedSchedule.weeks.push(week19);
+  let nextWeekNum   = week + 1;   // may be overridden below
+  let seasonEndFlag = false;
+
+  if (isRegSeasonEnd) {
+    // ── Regular season complete → generate Wildcard bracket ─────────────────
+    const { week19Entry, playoffSeeds } = generatePlayoffWeek19();
+    const sched = cache.getMeta().schedule ?? { weeks: [] };
+    if (!sched.weeks.find(w => w.week === 19)) sched.weeks.push(week19Entry);
+    cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: sched, playoffSeeds });
+    nextWeekNum = 19;
+
+  } else if (isSuperbowl) {
+    // ── Super Bowl just played → notify winner, transition to offseason ──────
+    seasonEndFlag = true;
+    // Find and announce the champion
+    if (results.length > 0) {
+      const sbR = results[0];
+      const hScore = sbR.scoreHome ?? sbR.homeScore ?? 0;
+      const aScore = sbR.scoreAway ?? sbR.awayScore ?? 0;
+      const rawW   = hScore >= aScore ? (sbR.home ?? sbR.homeTeamId) : (sbR.away ?? sbR.awayTeamId);
+      const wId    = Number(typeof rawW === 'object' ? rawW?.id : rawW);
+      const champ  = cache.getTeam(wId);
+      if (champ) {
+        post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
+      }
     }
-    cache.setMeta({ currentWeek: 19, phase: 'playoffs', schedule: updatedSchedule });
+    cache.setMeta({ phase: 'offseason' });
+
+  } else if (isPlayoffWeek) {
+    // ── Regular playoff round → advance bracket to next round ───────────────
+    const nextRound = advancePlayoffBracket(results, week);
+    if (nextRound) {
+      const sched = cache.getMeta().schedule ?? { weeks: [] };
+      if (!sched.weeks.find(w => w.week === nextRound.week)) sched.weeks.push(nextRound);
+      cache.setMeta({ currentWeek: nextRound.week, schedule: sched });
+      nextWeekNum = nextRound.week;
+    }
+
   } else {
-    cache.setMeta({ currentWeek: newWeek });
+    // ── Normal regular-season week ────────────────────────────────────────────
+    cache.setMeta({ currentWeek: nextWeekNum });
   }
 
   // --- Flush to DB (non-blocking) ---
@@ -491,9 +639,9 @@ async function handleAdvanceWeek(payload, id) {
     week,
     results:    gameResults,
     standings:  buildStandings(),
-    nextWeek:   newWeek,
+    nextWeek:   nextWeekNum,
     phase:      cache.getPhase(),
-    isSeasonOver,
+    isSeasonOver: isRegSeasonEnd || seasonEndFlag,
   }, id);
 
   // Also send a full state update so UI can re-render all panels
@@ -954,7 +1102,7 @@ self.onmessage = async (event) => {
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);
-      case toWorker.SIM_TO_PLAYOFFS:    return await handleSimToWeek({ targetWeek: 19 }, id);
+      case toWorker.SIM_TO_PLAYOFFS:    return await handleSimToWeek({ targetWeek: 18 }, id);
       case toWorker.GET_SEASON_HISTORY: return await handleGetSeasonHistory(payload, id);
       case toWorker.GET_ALL_SEASONS:    return await handleGetAllSeasons(payload, id);
       case toWorker.GET_PLAYER_CAREER:  return await handleGetPlayerCareer(payload, id);

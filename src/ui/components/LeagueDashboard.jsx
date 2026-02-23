@@ -13,10 +13,63 @@
  *  - Trades      — Side-by-side roster trade interface
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Component } from 'react';
 import RosterManager   from './RosterManager.jsx';
 import FreeAgencyPanel from './FreeAgencyPanel.jsx';
 import TradeCenter     from './TradeCenter.jsx';
+
+// ── TabErrorBoundary ─────────────────────────────────────────────────────────
+// Catches render-phase exceptions inside individual tabs.  A crash in one tab
+// surfaces a localised error panel rather than tearing down the whole dashboard.
+
+class TabErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('[TabErrorBoundary] Tab render error:', error, info);
+  }
+
+  render() {
+    if (!this.state.hasError) return this.props.children;
+
+    const label = this.props.label ?? 'This tab';
+    return (
+      <div style={{
+        padding: 'var(--space-8)',
+        textAlign: 'center',
+        color: 'var(--danger)',
+        background: 'rgba(255,69,58,0.07)',
+        borderRadius: 'var(--radius-md)',
+        border: '1px solid var(--danger)',
+      }}>
+        <div style={{ fontSize: '1.5rem', marginBottom: 'var(--space-3)' }}>⚠️</div>
+        <div style={{ fontWeight: 700, marginBottom: 'var(--space-2)' }}>
+          {label} encountered a render error
+        </div>
+        <div style={{
+          fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+          marginBottom: 'var(--space-4)', fontFamily: 'monospace',
+          maxWidth: 480, margin: '0 auto var(--space-4)',
+        }}>
+          {this.state.error?.message ?? String(this.state.error)}
+        </div>
+        <button
+          className="btn"
+          onClick={() => this.setState({ hasError: false, error: null })}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -511,30 +564,42 @@ export default function LeagueDashboard({ league, busy, actions }) {
         ))}
       </div>
 
-      {/* ── Tab Content ── */}
+      {/* ── Tab Content — each tab is independently error-bounded ── */}
       {activeTab === 'Standings' && (
-        <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
+        <TabErrorBoundary label="Standings">
+          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
+        </TabErrorBoundary>
       )}
       {activeTab === 'Schedule' && (
-        <ScheduleTab
-          schedule={league.schedule}
-          teams={league.teams}
-          currentWeek={league.week}
-          userTeamId={league.userTeamId}
-          nextGameStakes={league.nextGameStakes}
-        />
+        <TabErrorBoundary label="Schedule">
+          <ScheduleTab
+            schedule={league.schedule}
+            teams={league.teams}
+            currentWeek={league.week}
+            userTeamId={league.userTeamId}
+            nextGameStakes={league.nextGameStakes}
+          />
+        </TabErrorBoundary>
       )}
       {activeTab === 'Leaders' && (
-        <LeadersTab teams={league.teams} />
+        <TabErrorBoundary label="Leaders">
+          <LeadersTab teams={league.teams} />
+        </TabErrorBoundary>
       )}
       {activeTab === 'Roster' && (
-        <RosterManager league={league} actions={actions} />
+        <TabErrorBoundary label="Roster">
+          <RosterManager league={league} actions={actions} />
+        </TabErrorBoundary>
       )}
       {activeTab === 'Free Agency' && (
-        <FreeAgencyPanel league={league} actions={actions} />
+        <TabErrorBoundary label="Free Agency">
+          <FreeAgencyPanel league={league} actions={actions} />
+        </TabErrorBoundary>
       )}
       {activeTab === 'Trades' && (
-        <TradeCenter league={league} actions={actions} />
+        <TabErrorBoundary label="Trades">
+          <TradeCenter league={league} actions={actions} />
+        </TabErrorBoundary>
       )}
     </div>
   );

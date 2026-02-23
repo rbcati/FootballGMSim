@@ -8,7 +8,7 @@
  *  - Renders only from the view-model slices the worker sends.
  */
 
-import React, { useEffect, useCallback, Component } from 'react';
+import React, { useEffect, useCallback, useRef, useState, Component } from 'react';
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGameViewer      from './components/LiveGameViewer.jsx';
@@ -70,6 +70,55 @@ export default function App() {
     league, lastResults,
     error, notifications,
   } = state;
+
+  // ── Service-Worker update detection ───────────────────────────────────────
+  const [swUpdateReady, setSwUpdateReady] = useState(false);
+  const swRegRef = useRef(null);
+
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.getRegistration().then(reg => {
+      if (!reg) return;
+      swRegRef.current = reg;
+
+      // A waiting SW already exists (e.g. page was already open during install)
+      if (reg.waiting) setSwUpdateReady(true);
+
+      // New SW found while page is open
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            setSwUpdateReady(true);
+          }
+        });
+      });
+    });
+
+    // SW broadcasts UPDATE_AVAILABLE after evicting old caches (see sw.js)
+    const onMessage = (event) => {
+      if (event.data?.type === 'UPDATE_AVAILABLE') setSwUpdateReady(true);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+
+    // Reload automatically after the new SW takes control
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
+
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+
+  const handleSwUpdate = () => {
+    const reg = swRegRef.current;
+    if (reg?.waiting) {
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+    } else {
+      window.location.reload();
+    }
+  };
 
   // Auto-save when user navigates away
   useEffect(() => {
@@ -184,6 +233,38 @@ export default function App() {
               transition: 'width 0.15s ease',
             }}
           />
+        </div>
+      )}
+
+      {/* ── SW Update Available banner ─────────────────────────────────── */}
+      {swUpdateReady && (
+        <div
+          role="alert"
+          style={{
+            background: 'var(--accent-muted)',
+            border: '1px solid var(--accent)',
+            color: 'var(--text)',
+            padding: 'var(--space-3) var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--text-sm)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-4)',
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            A new version of Football GM is available.
+          </span>
+          <button className="btn btn-primary" style={{ fontSize: 'var(--text-sm)', padding: 'var(--space-2) var(--space-4)' }} onClick={handleSwUpdate}>
+            Update &amp; Reload
+          </button>
+          <button
+            onClick={() => setSwUpdateReady(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: 'var(--text-muted)', padding: '0 var(--space-1)' }}
+          >
+            ×
+          </button>
         </div>
       )}
 
