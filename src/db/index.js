@@ -24,7 +24,7 @@
  */
 
 const DB_NAME    = 'FootballGM_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   META:          'meta',
