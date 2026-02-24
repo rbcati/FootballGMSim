@@ -32,9 +32,10 @@ export const toWorker = Object.freeze({
   ADVANCE_PLAYOFFS:   'ADVANCE_PLAYOFFS',  // simulate the next playoff round
 
   /** Draft */
-  START_DRAFT:        'START_DRAFT',
-  MAKE_DRAFT_PICK:    'MAKE_DRAFT_PICK',   // { pickIndex, playerId }
-  SIM_DRAFT_PICK:     'SIM_DRAFT_PICK',    // AI makes the next pick
+  GET_DRAFT_STATE:    'GET_DRAFT_STATE',   // fetch current draft state (silent)
+  START_DRAFT:        'START_DRAFT',       // initialise draft (idempotent)
+  MAKE_DRAFT_PICK:    'MAKE_DRAFT_PICK',   // { playerId }
+  SIM_DRAFT_PICK:     'SIM_DRAFT_PICK',    // AI picks until user's turn
 
   /** Free agency */
   SIGN_PLAYER:        'SIGN_PLAYER',       // { playerId, teamId, contract }

@@ -303,6 +303,38 @@ export function useWorker() {
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),
 
+    // ── Draft & Offseason ────────────────────────────────────────────────────
+
+    /** Fetch the current draft state without initialising (returns a Promise). */
+    getDraftState: () =>
+      request(toWorker.GET_DRAFT_STATE, {}, { silent: true }),
+
+    /**
+     * Initialise the draft (idempotent — if already started, returns current
+     * state).  Returns a Promise resolving to { type: DRAFT_STATE, payload }.
+     */
+    startDraft: () =>
+      request(toWorker.START_DRAFT, {}, { silent: true }),
+
+    /** User makes their draft pick.  Returns a Promise. */
+    makeDraftPick: (playerId) =>
+      request(toWorker.MAKE_DRAFT_PICK, { playerId }, { silent: true }),
+
+    /** AI auto-picks until the user's next turn (or draft ends). Returns a Promise. */
+    simDraftPick: () =>
+      request(toWorker.SIM_DRAFT_PICK, {}, { silent: true }),
+
+    /**
+     * Run player progression and retirements.
+     * Sets busy=true so the UI can show a loading indicator.
+     * Returns a Promise resolving to { type: OFFSEASON_PHASE, payload }.
+     */
+    advanceOffseason: () =>
+      request(toWorker.ADVANCE_OFFSEASON, {}),
+
+    /** Finalise offseason → generate new schedule → Week 1. */
+    startNewSeason: () => send(toWorker.START_NEW_SEASON),
+
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),

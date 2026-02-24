@@ -30,6 +30,7 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
+import { makePlayer, generateDraftClass }  from '../core/player.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,8 @@ function buildViewState() {
     phase:      meta?.phase       ?? 'regular',
     userTeamId: meta?.userTeamId  ?? null,
     schedule:   meta?.schedule    ?? null,
+    offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
+    draftStarted: !!(meta?.draftState),
     nextGameStakes,
     teams,
   };
@@ -597,6 +600,7 @@ async function handleAdvanceWeek(payload, id) {
     // ── Super Bowl just played → notify winner, transition to offseason ──────
     seasonEndFlag = true;
     // Find and announce the champion
+    let sbChampId = null;
     if (results.length > 0) {
       const sbR = results[0];
       const hScore = sbR.scoreHome ?? sbR.homeScore ?? 0;
@@ -605,10 +609,11 @@ async function handleAdvanceWeek(payload, id) {
       const wId    = Number(typeof rawW === 'object' ? rawW?.id : rawW);
       const champ  = cache.getTeam(wId);
       if (champ) {
+        sbChampId = wId;
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
       }
     }
-    cache.setMeta({ phase: 'offseason' });
+    cache.setMeta({ phase: 'offseason', championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null });
 
   } else if (isPlayoffWeek) {
     // ── Regular playoff round → advance bracket to next round ───────────────
@@ -1154,6 +1159,381 @@ function _updateTeamCap(teamId) {
   });
 }
 
+// ── Draft helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Build the draft state view-model slice the UI needs.
+ * Prospects are all players with status 'draft_eligible', sorted OVR desc.
+ */
+function buildDraftStateView() {
+  const meta = cache.getMeta();
+  const draftState = meta?.draftState;
+  if (!draftState) return { notStarted: true };
+
+  const { picks, currentPickIndex } = draftState;
+  const currentPick = picks[currentPickIndex] ?? null;
+  const userTeamId  = meta.userTeamId;
+
+  // Completed picks (slim)
+  const completedPicks = picks.slice(0, currentPickIndex).map(pk => {
+    const team = cache.getTeam(pk.teamId);
+    return {
+      overall:    pk.overall,
+      round:      pk.round,
+      pickInRound:pk.pickInRound,
+      teamId:     pk.teamId,
+      teamName:   team?.name ?? '?',
+      teamAbbr:   team?.abbr ?? '???',
+      playerId:   pk.playerId ?? null,
+      playerName: pk.playerName ?? null,
+      playerPos:  pk.playerPos ?? null,
+      playerOvr:  pk.playerOvr ?? null,
+    };
+  });
+
+  // Next 25 upcoming picks (visible in the order panel)
+  const upcomingPicks = picks.slice(currentPickIndex, currentPickIndex + 25).map(pk => {
+    const team = cache.getTeam(pk.teamId);
+    return {
+      overall:    pk.overall,
+      round:      pk.round,
+      pickInRound:pk.pickInRound,
+      teamId:     pk.teamId,
+      teamName:   team?.name ?? '?',
+      teamAbbr:   team?.abbr ?? '???',
+      isUser:     pk.teamId === userTeamId,
+    };
+  });
+
+  // Enriched current pick
+  let currentPickView = null;
+  if (currentPick) {
+    const team = cache.getTeam(currentPick.teamId);
+    currentPickView = {
+      overall:    currentPick.overall,
+      round:      currentPick.round,
+      pickInRound:currentPick.pickInRound,
+      teamId:     currentPick.teamId,
+      teamName:   team?.name ?? '?',
+      teamAbbr:   team?.abbr ?? '???',
+      isUser:     currentPick.teamId === userTeamId,
+    };
+  }
+
+  // Available prospects sorted by OVR descending
+  const prospects = cache.getAllPlayers()
+    .filter(p => p.status === 'draft_eligible')
+    .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0))
+    .map(p => ({
+      id:        p.id,
+      name:      p.name,
+      pos:       p.pos,
+      age:       p.age,
+      ovr:       p.ovr,
+      potential: p.potential ?? null,
+      college:   p.college   ?? null,
+    }));
+
+  return {
+    notStarted:       false,
+    completedPicks,
+    upcomingPicks,
+    currentPick:      currentPickView,
+    prospects,
+    isUserPick:       currentPick ? currentPick.teamId === userTeamId : false,
+    isDraftComplete:  currentPickIndex >= picks.length,
+    totalPicks:       picks.length,
+    currentPickIndex,
+  };
+}
+
+/**
+ * Execute a single draft pick: sign the player to the team, update pick record.
+ */
+function _executeDraftPick(pickIndex, playerId, teamId) {
+  const meta = cache.getMeta();
+  const draftState = meta?.draftState;
+  if (!draftState) return;
+
+  const player = cache.getPlayer(playerId);
+  if (!player) return;
+
+  const pk = draftState.picks[pickIndex];
+  pk.playerId   = playerId;
+  pk.playerName = player.name;
+  pk.playerPos  = player.pos;
+  pk.playerOvr  = player.ovr;
+  draftState.currentPickIndex = pickIndex + 1;
+
+  // Sign player to team with a 4-year rookie contract
+  cache.updatePlayer(playerId, {
+    teamId,
+    status: 'active',
+    contract: {
+      years:        4,
+      yearsTotal:   4,
+      baseAnnual:   0.7,
+      signingBonus: 0.1,
+      guaranteedPct:0.5,
+    },
+  });
+
+  _updateTeamCap(teamId);
+
+  // Emit per-pick event (UI can display a ticker)
+  const team = cache.getTeam(teamId);
+  post(toUI.DRAFT_PICK_MADE, {
+    overall:    pk.overall,
+    round:      pk.round,
+    pickInRound:pk.pickInRound,
+    teamId,
+    teamName:   team?.name ?? '?',
+    teamAbbr:   team?.abbr ?? '???',
+    playerId,
+    playerName: player.name,
+    playerPos:  player.pos,
+    playerOvr:  player.ovr,
+  });
+
+  // Persist updated draftState into meta
+  cache.setMeta({ draftState });
+}
+
+// ── Handler: GET_DRAFT_STATE ──────────────────────────────────────────────────
+
+async function handleGetDraftState(payload, id) {
+  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+}
+
+// ── Handler: START_DRAFT ──────────────────────────────────────────────────────
+
+async function handleStartDraft(payload, id) {
+  const meta = cache.getMeta();
+  if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  // Idempotent: if draft is already running, return current state
+  if (meta.draftState) {
+    post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+    return;
+  }
+
+  if (meta.phase !== 'offseason') {
+    post(toUI.DRAFT_STATE, { notStarted: true }, id);
+    return;
+  }
+
+  const ROUNDS    = 5;
+  const teams     = cache.getAllTeams();
+  const classSize = ROUNDS * teams.length;
+
+  // Generate draft class and add to player pool as draft_eligible
+  const prospects = generateDraftClass(meta.year, { classSize });
+  prospects.forEach(p => {
+    cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
+  });
+
+  // Draft order: worst regular-season record first, champion always last
+  const champId  = meta.championTeamId ?? null;
+  const sorted   = [...teams].sort((a, b) => {
+    const wDiff = (a.wins ?? 0) - (b.wins ?? 0);
+    if (wDiff !== 0) return wDiff;                              // worst first
+    const diffA = (a.ptsFor ?? 0) - (a.ptsAgainst ?? 0);
+    const diffB = (b.ptsFor ?? 0) - (b.ptsAgainst ?? 0);
+    return diffA - diffB;                                       // worse pt-diff first
+  });
+  let draftOrder = sorted.map(t => t.id);
+  if (champId !== null) {
+    draftOrder = draftOrder.filter(id => id !== champId);
+    draftOrder.push(champId);                                   // champ picks last
+  }
+
+  // Build full pick table
+  const picks = [];
+  let overall = 1;
+  for (let round = 1; round <= ROUNDS; round++) {
+    let pickInRound = 1;
+    for (const teamId of draftOrder) {
+      picks.push({ overall, round, pickInRound, teamId,
+                   playerId: null, playerName: null, playerPos: null, playerOvr: null });
+      overall++;
+      pickInRound++;
+    }
+  }
+
+  cache.setMeta({ draftState: { picks, currentPickIndex: 0 } });
+  await flushDirty();
+
+  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+}
+
+// ── Handler: MAKE_DRAFT_PICK ──────────────────────────────────────────────────
+
+async function handleMakeDraftPick({ playerId }, id) {
+  const meta       = cache.getMeta();
+  const draftState = meta?.draftState;
+  if (!draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
+
+  const { picks, currentPickIndex } = draftState;
+  const currentPick = picks[currentPickIndex];
+  if (!currentPick) { post(toUI.ERROR, { message: 'Draft is complete' }, id); return; }
+
+  if (currentPick.teamId !== meta.userTeamId) {
+    post(toUI.ERROR, { message: 'Not your pick' }, id);
+    return;
+  }
+
+  const player = cache.getPlayer(playerId);
+  if (!player || player.status !== 'draft_eligible') {
+    post(toUI.ERROR, { message: 'Player not available' }, id);
+    return;
+  }
+
+  _executeDraftPick(currentPickIndex, playerId, currentPick.teamId);
+  await flushDirty();
+  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+}
+
+// ── Handler: SIM_DRAFT_PICK ───────────────────────────────────────────────────
+
+/**
+ * Auto-pick for every AI team until we reach the user's next pick (or draft ends).
+ * Each AI picks the highest-OVR available prospect.
+ */
+async function handleSimDraftPick(payload, id) {
+  const meta = cache.getMeta();
+  if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
+
+  const userTeamId = meta.userTeamId;
+  let currentPickIndex = meta.draftState.currentPickIndex;
+  const picks = meta.draftState.picks;
+
+  while (currentPickIndex < picks.length) {
+    const pick = picks[currentPickIndex];
+
+    // Pause at user's pick
+    if (pick.teamId === userTeamId) break;
+
+    // AI selects best available prospect by OVR
+    const bestProspect = cache.getAllPlayers()
+      .filter(p => p.status === 'draft_eligible')
+      .reduce((best, p) => (!best || (p.ovr ?? 0) > (best.ovr ?? 0)) ? p : best, null);
+
+    if (!bestProspect) break; // pool exhausted
+
+    _executeDraftPick(currentPickIndex, bestProspect.id, pick.teamId);
+    // _executeDraftPick increments draftState.currentPickIndex inside setMeta;
+    // read the updated value from the live meta reference
+    currentPickIndex = cache.getMeta().draftState.currentPickIndex;
+
+    await yieldFrame();
+  }
+
+  await flushDirty();
+  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+}
+
+// ── Handler: ADVANCE_OFFSEASON ────────────────────────────────────────────────
+
+/**
+ * Run yearly player progression and retirement loop:
+ *  - Age < 26  → improve OVR by 0–3
+ *  - Age 30–32 → decline OVR by 0–2
+ *  - Age 33+   → decline OVR by 1–3
+ *  - Age 34+   → increasing retirement chance
+ */
+async function handleAdvanceOffseason(payload, id) {
+  const meta = cache.getMeta();
+  if (!meta || meta.phase !== 'offseason') {
+    post(toUI.ERROR, { message: 'Not in offseason phase' }, id);
+    return;
+  }
+
+  const retired = [];
+
+  for (const player of cache.getAllPlayers()) {
+    if (player.status === 'draft_eligible') continue; // skip draft prospects
+
+    const age = player.age ?? 22;
+    let ovrDelta = 0;
+
+    if (age < 26) {
+      ovrDelta = Utils.rand(0, 3);
+    } else if (age >= 30 && age < 33) {
+      ovrDelta = -Utils.rand(0, 2);
+    } else if (age >= 33) {
+      ovrDelta = -Utils.rand(1, 3);
+    }
+    // Ages 26–29: prime — no change
+
+    const newOvr = Utils.clamp((player.ovr ?? 70) + ovrDelta, 40, 99);
+
+    // Retirement: 20 % base at 34, +15 % per year after, capped at 85 %
+    let willRetire = false;
+    if (age >= 34) {
+      const retireChance = Math.min(0.85, 0.20 + (age - 34) * 0.15);
+      willRetire = Utils.random() < retireChance;
+    }
+
+    if (willRetire) {
+      retired.push({ id: player.id, name: player.name, pos: player.pos, age, ovr: player.ovr });
+      if (player.teamId != null) _updateTeamCap(player.teamId);
+      cache.removePlayer(player.id);
+    } else {
+      cache.updatePlayer(player.id, { age: age + 1, ovr: newOvr });
+    }
+  }
+
+  cache.setMeta({ offseasonProgressionDone: true });
+  await flushDirty();
+
+  post(toUI.OFFSEASON_PHASE, {
+    phase:   'progression_complete',
+    retired,
+    message: `Offseason: ${retired.length} player(s) retired.`,
+  }, id);
+  post(toUI.STATE_UPDATE, buildViewState());
+}
+
+// ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
+
+async function handleStartNewSeason(payload, id) {
+  const meta = cache.getMeta();
+  if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  const newYear     = (meta.year   ?? 2025) + 1;
+  const newSeason   = (meta.season ?? 1)    + 1;
+  const newSeasonId = `s${newSeason}`;
+
+  // Reset all team win/loss records
+  for (const team of cache.getAllTeams()) {
+    cache.updateTeam(team.id, { wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0 });
+  }
+
+  // Generate a fresh schedule
+  const makeScheduleFn = makeAccurateSchedule || (Scheduler && Scheduler.makeAccurateSchedule);
+  if (!makeScheduleFn) { post(toUI.ERROR, { message: 'Cannot generate schedule' }, id); return; }
+
+  const teamDefs = cache.getAllTeams();
+  const rawSchedule  = makeScheduleFn(teamDefs);
+  const slimSchedule = slimifySchedule(rawSchedule, teamDefs);
+
+  cache.setMeta({
+    year:                    newYear,
+    season:                  newSeason,
+    currentSeasonId:         newSeasonId,
+    currentWeek:             1,
+    phase:                   'regular',
+    schedule:                slimSchedule,
+    playoffSeeds:            null,
+    draftState:              null,
+    championTeamId:          null,
+    offseasonProgressionDone:false,
+  });
+
+  await flushDirty();
+  post(toUI.FULL_STATE, buildViewState(), id);
+}
+
 // ── Main message router ───────────────────────────────────────────────────────
 
 self.onmessage = async (event) => {
@@ -1179,6 +1559,14 @@ self.onmessage = async (event) => {
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
+
+      // ── Draft & Offseason ──────────────────────────────────────────────────
+      case toWorker.GET_DRAFT_STATE:    return await handleGetDraftState(payload, id);
+      case toWorker.START_DRAFT:        return await handleStartDraft(payload, id);
+      case toWorker.MAKE_DRAFT_PICK:    return await handleMakeDraftPick(payload, id);
+      case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
+      case toWorker.ADVANCE_OFFSEASON:  return await handleAdvanceOffseason(payload, id);
+      case toWorker.START_NEW_SEASON:   return await handleStartNewSeason(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);
