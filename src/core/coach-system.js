@@ -1,5 +1,6 @@
 // coach-system.js
 import { Utils } from './utils.js';
+import { Constants } from './constants.js';
 
 // --- RPG Skill Trees ---
 export const COACH_SKILL_TREES = {
@@ -455,6 +456,86 @@ export function initializeCoachingStats(coach) {
   return coach;
 }
 
+/**
+ * Generates a new coach.
+ * @param {string} role - 'HC', 'OC', 'DC'
+ * @returns {Object} Coach object
+ */
+export function makeCoach(role) {
+    const roles = role ? [role] : ['HC', 'OC', 'DC'];
+    const selectedRole = role || Utils.choice(roles);
+
+    // Generate Name
+    const name = Utils.choice(Constants.FIRST_NAMES) + ' ' + Utils.choice(Constants.LAST_NAMES);
+
+    // Generate Rating (1-5, weighted towards average)
+    // Utils.weightedChoice takes items and weights.
+    // If Utils.weightedChoice isn't available, we use a simple fallback.
+    // Assuming Utils.weightedChoice exists based on previous file usage, or we implement simple logic.
+    let level = 3;
+    if (Utils.weightedChoice) {
+         level = Utils.weightedChoice([1, 2, 3, 4, 5], [10, 30, 40, 15, 5]);
+    } else {
+         level = Utils.rand(1, 5);
+    }
+
+    // Generate Schemes/Archetypes
+    let archetype = null;
+    let offScheme = null;
+    let defScheme = null;
+
+    if (selectedRole === 'HC') {
+        // HCs have both schemes
+        const offSchemes = Object.keys(Constants.OFFENSIVE_SCHEMES || {});
+        const defSchemes = Object.keys(Constants.DEFENSIVE_SCHEMES || {});
+        offScheme = Utils.choice(offSchemes) || 'Balanced';
+        defScheme = Utils.choice(defSchemes) || '4-3';
+        // Archetype for HC is usually a perk or focus
+        archetype = Utils.choice(['Strategist', 'Motivator', 'Team Builder', 'Disciplinarian']);
+    } else if (selectedRole === 'OC') {
+        const schemes = Object.keys(Constants.OFFENSIVE_SCHEMES || {});
+        offScheme = Utils.choice(schemes) || 'Balanced';
+        archetype = offScheme; // For coordinators, scheme IS the archetype usually
+    } else if (selectedRole === 'DC') {
+        const schemes = Object.keys(Constants.DEFENSIVE_SCHEMES || {});
+        defScheme = Utils.choice(schemes) || '4-3';
+        archetype = defScheme;
+    }
+
+    // Age
+    const age = Utils.rand(35, 65);
+
+    const coach = {
+        id: Utils.id(),
+        name,
+        position: selectedRole,
+        age,
+        level, // 1-5 star rating
+        rating: Math.round(50 + (level * 10) + Utils.rand(-5, 5)), // 0-100 scale for UI
+        archetype,
+        offScheme,
+        defScheme,
+        years: Utils.rand(1, 5), // Contract years
+        salary: Math.round((0.5 + (level * 0.5) + (selectedRole === 'HC' ? 2 : 0)) * 10) / 10, // $M
+        xp: 0,
+        history: []
+    };
+
+    return initializeCoachingStats(coach);
+}
+
+/**
+ * Generates a full initial staff for a team.
+ * @returns {Object} Staff object { headCoach, offCoordinator, defCoordinator }
+ */
+export function generateInitialStaff() {
+    return {
+        headCoach: makeCoach('HC'),
+        offCoordinator: makeCoach('OC'),
+        defCoordinator: makeCoach('DC')
+    };
+}
+
 if (typeof window !== 'undefined') {
     window.Coach = Coach;
     window.CoachMarket = CoachMarket;
@@ -465,4 +546,6 @@ if (typeof window !== 'undefined') {
     window.processStaffPoaching = processStaffPoaching;
     window.COACH_SKILL_TREES = COACH_SKILL_TREES;
     window.initializeCoachingStats = initializeCoachingStats;
+    window.makeCoach = makeCoach;
+    window.generateInitialStaff = generateInitialStaff;
 }

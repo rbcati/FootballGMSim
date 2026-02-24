@@ -6,7 +6,7 @@
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
-import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
+import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
 import { getEffectiveRating, canPlayerPlay } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
@@ -1008,6 +1008,33 @@ export function simGameStats(home, away, options = {}) {
 
         if (verbose) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
     }
+
+    // --- MORALE IMPACT ---
+    const calculateTeamMorale = (activeRoster, team) => {
+        if (!activeRoster || !activeRoster.length) return 75;
+        let totalMorale = 0;
+        activeRoster.forEach(p => {
+             // Assuming active players are happy to be playing (treated as starters for calculation simplicity)
+             const morale = calculateMorale(p, team, true);
+             totalMorale += morale;
+        });
+        return totalMorale / activeRoster.length;
+    };
+
+    const homeMorale = calculateTeamMorale(homeActive, home);
+    const awayMorale = calculateTeamMorale(awayActive, away);
+
+    // Morale Mod: 50 is neutral. 100 is +2%, 0 is -2% strength impact
+    // Formula: 1.0 + ((morale - 50) / 50) * 0.02
+    const getMoraleMod = (m) => 1.0 + ((m - 50) / 50) * 0.02;
+
+    const homeMoraleMod = getMoraleMod(homeMorale);
+    const awayMoraleMod = getMoraleMod(awayMorale);
+
+    homeStrength *= homeMoraleMod;
+    awayStrength *= awayMoraleMod;
+
+    if (verbose) console.log(`[SIM-DEBUG] Morale Mods: Home ${homeMoraleMod.toFixed(3)} (${Math.round(homeMorale)}), Away ${awayMoraleMod.toFixed(3)} (${Math.round(awayMorale)})`);
 
     // =================================================================
     // REALISTIC NFL SCORING ENGINE

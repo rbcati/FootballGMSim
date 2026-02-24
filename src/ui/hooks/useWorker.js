@@ -295,6 +295,15 @@ export function useWorker() {
     /** Fetch the free agent pool (returns a Promise — does NOT set busy). */
     getFreeAgents: () => request(toWorker.GET_FREE_AGENTS, {}, { silent: true }),
 
+    /** Fetch available coaches (returns a Promise — does NOT set busy). */
+    getAvailableCoaches: () => request(toWorker.GET_AVAILABLE_COACHES, {}, { silent: true }),
+
+    /** Hire a coach (replaces existing). */
+    hireCoach: (payload) => send(toWorker.HIRE_COACH, payload),
+
+    /** Fire a coach. */
+    fireCoach: (payload) => send(toWorker.FIRE_COACH, payload),
+
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
       request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),

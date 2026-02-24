@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo, Component } from 'react';
 import Roster          from './Roster.jsx';
+import Coaches         from './Coaches.jsx';
 import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
 import BoxScore        from './BoxScore.jsx';
@@ -76,7 +77,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Leaders', 'Roster', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Leaders', 'Roster', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -611,6 +612,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Roster' && (
         <TabErrorBoundary label="Roster">
           <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Coaches' && (
+        <TabErrorBoundary label="Coaches">
+          <Coaches league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Free Agency' && (

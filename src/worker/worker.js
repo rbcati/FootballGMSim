@@ -30,7 +30,9 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
-import { makePlayer, generateDraftClass }  from '../core/player.js';
+import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player.js';
+import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
+import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -113,14 +115,41 @@ function buildViewState() {
  * Build a compact player list for a single team roster view.
  */
 function buildRosterView(teamId) {
-  return cache.getPlayersByTeam(teamId).map(p => ({
-    id:       p.id,
-    name:     p.name,
-    pos:      p.pos,
-    age:      p.age,
-    ovr:      p.ovr,
-    contract: p.contract ?? null,
-  }));
+  const team = cache.getTeam(teamId);
+  const players = cache.getPlayersByTeam(teamId);
+
+  // Sort players by OVR to determine starters (simple heuristic for morale)
+  // Group by pos? Or just global OVR rank?
+  // Let's just assume top N players are starters for morale boost.
+  // Actually, calculateMorale takes isStarter.
+  // For RosterView, we just need to return the data.
+
+  return players.map(p => {
+    let fit = 50;
+    if (team && team.staff && team.staff.headCoach) {
+        const hc = team.staff.headCoach;
+        const isOff = ['QB','RB','WR','TE','OL','K'].includes(p.pos);
+        const isDef = ['DL','LB','CB','S','P'].includes(p.pos);
+
+        if (isOff) fit = calculateOffensiveSchemeFit(p, hc.offScheme || 'Balanced');
+        else if (isDef) fit = calculateDefensiveSchemeFit(p, hc.defScheme || '4-3');
+    }
+
+    // Heuristic: Active roster players are generally 'Starters' or key backups
+    // We can refine this later with depth chart awareness
+    const morale = calculateMorale(p, team, true);
+
+    return {
+        id:       p.id,
+        name:     p.name,
+        pos:      p.pos,
+        age:      p.age,
+        ovr:      p.ovr,
+        contract: p.contract ?? null,
+        schemeFit: fit,
+        morale:    morale
+    };
+  });
 }
 
 // ── DB flush ─────────────────────────────────────────────────────────────────
@@ -251,7 +280,10 @@ async function handleNewLeague(payload, id) {
     }
 
     // Generate via existing core logic
-    const league = makeLeague(teamDefs, options, { makeSchedule: makeScheduleFn });
+    const league = makeLeague(teamDefs, options, {
+        makeSchedule: makeScheduleFn,
+        generateInitialStaff: generateInitialStaff
+    });
 
     // Validate schedule
     if (!league.schedule || !Array.isArray(league.schedule.weeks) || league.schedule.weeks.length === 0) {
@@ -997,16 +1029,30 @@ async function handleGetRoster({ teamId }, id) {
   const team  = cache.getTeam(numId);
   if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
 
-  const players = cache.getPlayersByTeam(numId).map(p => ({
-    id:        p.id,
-    name:      p.name,
-    pos:       p.pos,
-    age:       p.age,
-    ovr:       p.ovr,
-    potential: p.potential ?? null,
-    status:    p.status ?? 'active',
-    contract:  p.contract ?? null,
-  }));
+  const players = cache.getPlayersByTeam(numId).map(p => {
+      let fit = 50;
+      if (team && team.staff && team.staff.headCoach) {
+          const hc = team.staff.headCoach;
+          const isOff = ['QB','RB','WR','TE','OL','K'].includes(p.pos);
+          const isDef = ['DL','LB','CB','S','P'].includes(p.pos);
+
+          if (isOff) fit = calculateOffensiveSchemeFit(p, hc.offScheme || 'Balanced');
+          else if (isDef) fit = calculateDefensiveSchemeFit(p, hc.defScheme || '4-3');
+      }
+
+      return {
+        id:        p.id,
+        name:      p.name,
+        pos:       p.pos,
+        age:       p.age,
+        ovr:       p.ovr,
+        potential: p.potential ?? null,
+        status:    p.status ?? 'active',
+        contract:  p.contract ?? null,
+        schemeFit: fit,
+        morale:    calculateMorale(p, team, true)
+      };
+  });
 
   post(toUI.ROSTER_DATA, {
     teamId: numId,
@@ -1017,6 +1063,7 @@ async function handleGetRoster({ teamId }, id) {
       capUsed: team.capUsed ?? 0,
       capRoom: team.capRoom ?? 0,
       capTotal:team.capTotal ?? 255,
+      staff:   team.staff // Send staff data
     },
     players,
   }, id);
@@ -1038,6 +1085,61 @@ async function handleGetFreeAgents(payload, id) {
     }));
 
   post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
+}
+
+// ── Handler: COACHING ACTIONS ────────────────────────────────────────────────
+
+async function handleGetAvailableCoaches(payload, id) {
+    // Generate a fresh pool of candidates
+    const coaches = [];
+    // Generate 5 HC, 5 OC, 5 DC
+    for (let i = 0; i < 5; i++) coaches.push(makeCoach('HC'));
+    for (let i = 0; i < 5; i++) coaches.push(makeCoach('OC'));
+    for (let i = 0; i < 5; i++) coaches.push(makeCoach('DC'));
+
+    // Sort by rating
+    coaches.sort((a, b) => b.rating - a.rating);
+
+    post(toUI.AVAILABLE_COACHES, { coaches }, id);
+}
+
+async function handleHireCoach({ teamId, coach, role }, id) {
+    const team = cache.getTeam(Number(teamId));
+    if (!team) {
+        post(toUI.ERROR, { message: 'Team not found' }, id);
+        return;
+    }
+
+    if (!team.staff) team.staff = {};
+
+    // Assign coach to slot
+    if (role === 'HC') team.staff.headCoach = coach;
+    else if (role === 'OC') team.staff.offCoordinator = coach;
+    else if (role === 'DC') team.staff.defCoordinator = coach;
+
+    // If HC, update strategies to match their schemes
+    if (role === 'HC') {
+        if (!team.strategies) team.strategies = {};
+        team.strategies.offense = coach.offScheme;
+        team.strategies.defense = coach.defScheme;
+    }
+
+    await flushDirty(); // Should trigger update of team record
+
+    // Return updated roster data which includes staff
+    await handleGetRoster({ teamId }, id);
+}
+
+async function handleFireCoach({ teamId, role }, id) {
+    const team = cache.getTeam(Number(teamId));
+    if (!team || !team.staff) return;
+
+    if (role === 'HC') team.staff.headCoach = null;
+    else if (role === 'OC') team.staff.offCoordinator = null;
+    else if (role === 'DC') team.staff.defCoordinator = null;
+
+    await flushDirty();
+    await handleGetRoster({ teamId }, id);
 }
 
 // ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
@@ -1714,6 +1816,9 @@ self.onmessage = async (event) => {
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
+      case toWorker.GET_AVAILABLE_COACHES: return await handleGetAvailableCoaches(payload, id);
+      case toWorker.HIRE_COACH:         return await handleHireCoach(payload, id);
+      case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
 
