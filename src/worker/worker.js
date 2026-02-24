@@ -543,9 +543,29 @@ async function handleAdvanceWeek(payload, id) {
     const batchResults = simulateBatch(batch, { league });
     results.push(...batchResults);
 
-    // Apply each game result to cache
+    // Apply each game result to cache and emit GAME_EVENT per game
     for (const res of batchResults) {
       applyGameResultToCache(res, week, seasonId);
+
+      // Emit GAME_EVENT so the LiveGame viewer can update the scoreboard in real-time
+      const rawH   = res.home      ?? res.homeTeamId;
+      const rawA   = res.away      ?? res.awayTeamId;
+      const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+      const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+      if (!isNaN(homeId) && !isNaN(awayId)) {
+        post(toUI.GAME_EVENT, {
+          gameId:    `${seasonId}_w${week}_${homeId}_${awayId}`,
+          week,
+          homeId,
+          awayId,
+          homeName:  res.homeTeamName ?? cache.getTeam(homeId)?.name ?? '?',
+          awayName:  res.awayTeamName ?? cache.getTeam(awayId)?.name ?? '?',
+          homeAbbr:  res.homeTeamAbbr ?? cache.getTeam(homeId)?.abbr ?? '???',
+          awayAbbr:  res.awayTeamAbbr ?? cache.getTeam(awayId)?.abbr ?? '???',
+          homeScore: res.scoreHome ?? res.homeScore ?? 0,
+          awayScore: res.scoreAway ?? res.awayScore ?? 0,
+        });
+      }
     }
 
     post(toUI.SIM_PROGRESS, { done: i + batch.length, total: gamesToSim.length }, id);
@@ -857,6 +877,49 @@ async function handleGetPlayerCareer({ playerId }, id) {
   }, id);
 }
 
+// ── Handler: GET_BOX_SCORE ────────────────────────────────────────────────────
+
+async function handleGetBoxScore({ gameId }, id) {
+  if (!gameId) {
+    post(toUI.BOX_SCORE, { gameId: null, game: null, error: 'No gameId provided' }, id);
+    return;
+  }
+
+  try {
+    // Look for the game in the current week's hot cache first
+    const hotGame = cache.getWeekGames().find(g => g.id === gameId);
+    const game    = hotGame ?? await Games.load(gameId);
+
+    if (!game) {
+      post(toUI.BOX_SCORE, { gameId, game: null, error: 'Game not found' }, id);
+      return;
+    }
+
+    const homeTeam = cache.getTeam(game.homeId);
+    const awayTeam = cache.getTeam(game.awayId);
+
+    post(toUI.BOX_SCORE, {
+      gameId,
+      game: {
+        id:        game.id,
+        seasonId:  game.seasonId,
+        week:      game.week,
+        homeId:    game.homeId,
+        awayId:    game.awayId,
+        homeScore: game.homeScore,
+        awayScore: game.awayScore,
+        homeName:  homeTeam?.name ?? '?',
+        homeAbbr:  homeTeam?.abbr ?? '???',
+        awayName:  awayTeam?.name ?? '?',
+        awayAbbr:  awayTeam?.abbr ?? '???',
+        stats:     game.stats ?? null,
+      },
+    }, id);
+  } catch (err) {
+    post(toUI.BOX_SCORE, { gameId, game: null, error: err.message }, id);
+  }
+}
+
 // ── Handler: SAVE_NOW ─────────────────────────────────────────────────────────
 
 async function handleSaveNow(payload, id) {
@@ -1115,6 +1178,7 @@ self.onmessage = async (event) => {
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
+      case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

@@ -17,6 +17,7 @@ import React, { useState, useMemo, Component } from 'react';
 import Roster          from './Roster.jsx';
 import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
+import BoxScore        from './BoxScore.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -304,7 +305,7 @@ function StandingsTab({ teams, userTeamId }) {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 
-function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes }) {
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   const teamById = useMemo(() => {
@@ -343,12 +344,20 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes 
           const away      = teamById[game.away] ?? { name: `Team ${game.away}`, abbr: '???', wins: 0, losses: 0, ties: 0 };
           const isUserGame = home.id === userTeamId || away.id === userTeamId;
           const showStakes = isUserGame && !game.played && nextGameStakes > 50 && selectedWeek === currentWeek;
+          const isClickable = game.played && onGameSelect && seasonId;
+          const handleCardClick = isClickable
+            ? () => onGameSelect(`${seasonId}_w${selectedWeek}_${game.home}_${game.away}`)
+            : undefined;
 
           return (
             <div
               key={idx}
               className="matchup-card"
-              style={isUserGame ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent), var(--shadow-lg)' } : {}}
+              onClick={handleCardClick}
+              style={{
+                ...(isUserGame ? { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent), var(--shadow-lg)' } : {}),
+                ...(isClickable ? { cursor: 'pointer' } : {}),
+              }}
             >
               {/* Card header */}
               <div className="matchup-header">
@@ -377,19 +386,26 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes 
 
               {/* Final score display */}
               {game.played && game.homeScore !== undefined && (
-                <div style={{
-                  display: 'flex', justifyContent: 'center', alignItems: 'baseline',
-                  gap: 'var(--space-3)', padding: 'var(--space-1) 0',
-                  fontSize: 'var(--text-xl)', fontWeight: 800,
-                }}>
-                  <span style={{ color: game.awayScore > game.homeScore ? 'var(--text)' : 'var(--text-muted)' }}>
-                    {away.abbr} {game.awayScore}
-                  </span>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)', fontWeight: 400 }}>–</span>
-                  <span style={{ color: game.homeScore > game.awayScore ? 'var(--text)' : 'var(--text-muted)' }}>
-                    {game.homeScore} {home.abbr}
-                  </span>
-                </div>
+                <>
+                  <div style={{
+                    display: 'flex', justifyContent: 'center', alignItems: 'baseline',
+                    gap: 'var(--space-3)', padding: 'var(--space-1) 0',
+                    fontSize: 'var(--text-xl)', fontWeight: 800,
+                  }}>
+                    <span style={{ color: game.awayScore > game.homeScore ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {away.abbr} {game.awayScore}
+                    </span>
+                    <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)', fontWeight: 400 }}>–</span>
+                    <span style={{ color: game.homeScore > game.awayScore ? 'var(--text)' : 'var(--text-muted)' }}>
+                      {game.homeScore} {home.abbr}
+                    </span>
+                  </div>
+                  {isClickable && (
+                    <div style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--accent)', marginBottom: 'var(--space-1)' }}>
+                      View Box Score →
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Teams */}
@@ -475,7 +491,8 @@ function LeadersTab({ teams }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function LeagueDashboard({ league, busy, actions }) {
-  const [activeTab, setActiveTab] = useState('Standings');
+  const [activeTab, setActiveTab]       = useState('Standings');
+  const [selectedGameId, setSelectedGameId] = useState(null);
 
   if (!league) return null;
 
@@ -578,6 +595,8 @@ export default function LeagueDashboard({ league, busy, actions }) {
             currentWeek={league.week}
             userTeamId={league.userTeamId}
             nextGameStakes={league.nextGameStakes}
+            seasonId={league.seasonId}
+            onGameSelect={setSelectedGameId}
           />
         </TabErrorBoundary>
       )}
@@ -599,6 +618,17 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Trades' && (
         <TabErrorBoundary label="Trades">
           <TradeCenter league={league} actions={actions} />
+        </TabErrorBoundary>
+      )}
+
+      {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
+      {selectedGameId && (
+        <TabErrorBoundary label="Box Score">
+          <BoxScore
+            gameId={selectedGameId}
+            actions={actions}
+            onClose={() => setSelectedGameId(null)}
+          />
         </TabErrorBoundary>
       )}
     </div>

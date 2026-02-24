@@ -36,6 +36,13 @@ const INITIAL_STATE = {
   league:       null,   // { seasonId, year, week, phase, userTeamId, teams[] }
   /** results from the last simulated week */
   lastResults:  null,
+  /**
+   * Live game events received during the current simulation.
+   * Each entry: { gameId, week, homeId, awayId, homeName, awayName,
+   *               homeAbbr, awayAbbr, homeScore, awayScore }
+   * Cleared when a new simulation starts.
+   */
+  gameEvents:   [],
   /** last error message */
   error:        null,
   /** notification queue */
@@ -61,7 +68,7 @@ function reducer(state, action) {
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
     case 'SIM_START':
-      return { ...state, simulating: true, simProgress: 0 };
+      return { ...state, simulating: true, simProgress: 0, gameEvents: [] };
     case 'SIM_PROGRESS':
       return {
         ...state,
@@ -83,6 +90,8 @@ function reducer(state, action) {
           teams: action.standings ?? state.league?.teams,
         },
       };
+    case 'GAME_EVENT':
+      return { ...state, gameEvents: [...state.gameEvents, action.event] };
     case 'ERROR':
       return { ...state, busy: false, simulating: false, error: action.message };
     case 'NOTIFY':
@@ -175,11 +184,14 @@ export function useWorker() {
             reject(new Error(payload.message));
           }
           break;
+        case toUI.GAME_EVENT:
+          dispatch({ type: 'GAME_EVENT', event: payload });
+          break;
         case toUI.NOTIFICATION:
           dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message });
           break;
         default:
-          // Other message types (draft, career stats, history) are handled
+          // Other message types (draft, career stats, history, box score) are handled
           // exclusively via the pending promise map — no extra dispatch needed.
           break;
       }
@@ -281,6 +293,10 @@ export function useWorker() {
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
       request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),
+
+    /** Fetch the full box score for a completed game (returns a Promise). */
+    getBoxScore: (gameId) =>
+      request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),
 
     /** Dismiss a notification. */
     dismissNotification: (id) =>
