@@ -34,8 +34,24 @@ import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
+import * as AiLogic from '../core/ai-logic.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Update the AI logic state (Contending vs Rebuilding) for every team.
+ * Persists directly to cache (will be flushed on next cycle).
+ */
+function _updateAllTeamStates() {
+  const teams = cache.getAllTeams();
+  for (const team of teams) {
+    const roster = cache.getPlayersByTeam(team.id);
+    const state  = AiLogic.determineTeamState(team, roster);
+    if (team.aiState !== state) {
+      cache.updateTeam(team.id, { aiState: state });
+    }
+  }
+}
 
 /** Send a typed message to the UI thread. */
 function post(type, payload = {}, id = null) {
@@ -440,6 +456,10 @@ async function handleNewLeague(payload, id) {
     // Clear dirty flags after explicit save
     cache.drainDirty();
 
+    // Initialize AI states
+    _updateAllTeamStates();
+    await flushDirty();
+
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (err) {
     console.error('[Worker] NEW_LEAGUE error:', err);
@@ -702,6 +722,10 @@ async function handleAdvanceWeek(payload, id) {
   const TOTAL_REG_WEEKS    = 18;
   const isRegSeasonEnd     = meta.phase === 'regular' && week >= TOTAL_REG_WEEKS;
   const isPlayoffWeek      = meta.phase === 'playoffs';
+
+  // Periodically update AI team states (e.g. every week or every 4 weeks)
+  // Doing it every week is fine performance-wise
+  _updateAllTeamStates();
   const isSuperbowl        = isPlayoffWeek && week === 22;
 
   // Mark all games in the just-simulated week as played
@@ -1155,7 +1179,8 @@ async function handleGetRoster({ teamId }, id) {
       capUsed: team.capUsed ?? 0,
       capRoom: team.capRoom ?? 0,
       capTotal:team.capTotal ?? 255,
-      staff:   team.staff // Send staff data
+      staff:   team.staff, // Send staff data
+      aiState: team.aiState, // Send AI state (Rebuilding/Contending)
     },
     players,
   }, id);
@@ -1237,61 +1262,50 @@ async function handleFireCoach({ teamId, role }, id) {
 
 // ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
 
-/**
- * Simple OVR-based trade value: value = OVR^1.8 × positionMultiplier × ageFactor
- * A deal is accepted by the AI if the receiving side value is ≥ 85 % of the
- * offering side value (15 % discount for uncertainty / home-team premium).
- */
-function _tradeValue(player) {
-  if (!player) return 0;
-  const POS_MULT = { QB: 2.0, WR: 1.2, RB: 0.9, TE: 1.1, OL: 1.0,
-                     DL: 1.0, LB: 0.95, CB: 1.05, S: 0.9 };
-  const ovr = player.ovr ?? 70;
-  const age = player.age ?? 27;
-  const posMult = POS_MULT[player.pos] ?? 1.0;
-  // Age curve: peak at 26, -3 % per year over 30, premium for youth
-  const ageFactor = age <= 26 ? 1.0 + (26 - age) * 0.02
-                 : age <= 30 ? 1.0
-                 :             Math.max(0.5, 1.0 - (age - 30) * 0.06);
-  return Math.pow(ovr, 1.8) * posMult * ageFactor;
-}
-
 async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, id) {
-  // offering  = { playerIds: [], pickIds: [] }  (what fromTeam gives)
-  // receiving = { playerIds: [], pickIds: [] }  (what fromTeam gets back)
-
   const from = cache.getTeam(Number(fromTeamId));
   const to   = cache.getTeam(Number(toTeamId));
+
   if (!from || !to) {
     post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Team not found' }, id);
     return;
   }
 
-  // Calculate value on each side
-  const calcSideValue = ({ playerIds = [], pickIds = [] }) => {
-    const playerVal = playerIds.reduce((sum, pid) => {
-      const p = cache.getPlayer(Number(pid));
-      return sum + _tradeValue(p);
-    }, 0);
-    // Draft picks: rough round-based flat value (R1=800, R2=300, R3=150 …)
-    const PICK_VALUES = [0, 800, 300, 150, 60, 25, 10, 3];
-    const pickVal = pickIds.reduce((sum, pid) => {
-      const pk = cache.getDraftPick ? cache.getDraftPick(pid) : null;
-      const round = pk?.round ?? 3;
-      return sum + (PICK_VALUES[round] ?? 10);
-    }, 0);
-    return playerVal + pickVal;
-  };
+  // Hydrate full objects for logic
+  const resolveSide = ({ playerIds = [], pickIds = [] }) => ({
+    players: playerIds.map(pid => cache.getPlayer(Number(pid))).filter(Boolean),
+    picks:   pickIds.map(pid => cache.getDraftPick(pid)).filter(Boolean)
+  });
 
-  const offerVal    = calcSideValue(offering);
-  const receiveVal  = calcSideValue(receiving);
+  const offerAssets = resolveSide(offering);   // What they give (AI receives)
+  const receiveAssets = resolveSide(receiving); // What they want (AI gives)
 
-  // AI accepts if it gets at least 85 % of what it gives
-  const threshold   = offerVal * 0.85;
-  const accepted    = receiveVal >= threshold;
+  // Determine AI state if not set
+  if (!to.aiState) {
+      const roster = cache.getPlayersByTeam(to.id);
+      to.aiState = AiLogic.determineTeamState(to, roster);
+      cache.updateTeam(to.id, { aiState: to.aiState });
+  }
 
-  if (accepted) {
-    // Execute the trade: swap players
+  // Evaluate
+  const result = AiLogic.evaluateTradeProposal(offerAssets, receiveAssets, to.aiState);
+
+  // Check salary cap:
+  // We need to check if the AI team (toTeam) stays under cap after this swap
+  // (AI receives offerAssets, Gives receiveAssets)
+  const salaryAdded = offerAssets.players.reduce((sum, p) => sum + (p.contract?.baseAnnual || 0), 0);
+  const salaryRemoved = receiveAssets.players.reduce((sum, p) => sum + (p.contract?.baseAnnual || 0), 0);
+  const capImpact = salaryAdded - salaryRemoved;
+
+  if (result.accepted) {
+      if ((to.capUsed + capImpact) > to.capTotal) {
+          result.accepted = false;
+          result.reason = 'This trade would put us over the salary cap.';
+      }
+  }
+
+  if (result.accepted) {
+    // Execute trade
     (offering.playerIds ?? []).forEach(pid => {
       cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
     });
@@ -1299,7 +1313,23 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
     });
 
-    // Recalculate caps for both teams
+    // Transfer Picks
+    (offering.pickIds ?? []).forEach(pid => {
+       const pk = cache.getDraftPick(pid);
+       if (pk) {
+           pk.teamId = Number(toTeamId);
+           cache.setDraftPick(pk);
+       }
+    });
+    (receiving.pickIds ?? []).forEach(pid => {
+       const pk = cache.getDraftPick(pid);
+       if (pk) {
+           pk.teamId = Number(fromTeamId);
+           cache.setDraftPick(pk);
+       }
+    });
+
+    // Recalculate caps
     _updateTeamCap(Number(fromTeamId));
     _updateTeamCap(Number(toTeamId));
 
@@ -1317,13 +1347,13 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
 
   post(toUI.TRADE_RESPONSE, {
-    accepted,
-    offerValue:   Math.round(offerVal),
-    receiveValue: Math.round(receiveVal),
-    reason: accepted ? 'Deal accepted' : 'Offer undervalues the return',
+    accepted: result.accepted,
+    offerValue:   Math.round(result.receiveValue),
+    receiveValue: Math.round(result.giveValue),
+    reason: result.reason,
   }, id);
 
-  if (accepted) {
+  if (result.accepted) {
     post(toUI.STATE_UPDATE, buildViewState());
   }
 }
@@ -1883,6 +1913,7 @@ async function handleStartNewSeason(payload, id) {
     offseasonProgressionDone:false,
   });
 
+  _updateAllTeamStates();
   await flushDirty();
   post(toUI.FULL_STATE, buildViewState(), id);
 }
