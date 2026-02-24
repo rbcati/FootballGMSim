@@ -88,6 +88,9 @@ export const toWorker = Object.freeze({
   /** Franchise / analytics data */
   GET_TEAM_PROFILE:   'GET_TEAM_PROFILE',     // { teamId }
   GET_LEAGUE_LEADERS: 'GET_LEAGUE_LEADERS',   // { mode: 'season'|'alltime' }
+
+  /** Mid-season award races & All-Pro projections */
+  GET_AWARD_RACES:    'GET_AWARD_RACES',      // {}
 });
 
 // ─────────────────────────────────────────────
@@ -145,6 +148,7 @@ export const toUI = Object.freeze({
   /** Franchise / analytics responses */
   TEAM_PROFILE:       'TEAM_PROFILE',         // { team, franchise, currentPlayers }
   LEAGUE_LEADERS:     'LEAGUE_LEADERS',       // { mode, categories }
+  AWARD_RACES:        'AWARD_RACES',          // { week, year, awards, allPro }
 
   /** Non-fatal notices */
   NOTIFICATION:       'NOTIFICATION',         // { level: 'info'|'warn', message }

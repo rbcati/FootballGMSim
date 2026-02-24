@@ -23,6 +23,7 @@ import LeagueHistory   from './LeagueHistory.jsx';
 import PlayerProfile   from './PlayerProfile.jsx';
 import TeamProfile     from './TeamProfile.jsx';
 import Leaders         from './Leaders.jsx';
+import AwardRaces      from './AwardRaces.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -79,7 +80,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Leaders', 'Roster', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Leaders', 'Award Races', 'Roster', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -636,6 +637,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Leaders' && (
         <TabErrorBoundary label="Leaders">
           <Leaders onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Award Races' && (
+        <TabErrorBoundary label="Award Races">
+          <AwardRaces onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Roster' && (
