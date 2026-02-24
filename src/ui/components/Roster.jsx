@@ -201,7 +201,7 @@ function PosBadge({ pos }) {
 
 // ── Roster Table View ─────────────────────────────────────────────────────────
 
-function RosterTable({ players, actions, teamId, onRefetch }) {
+function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
   const [posFilter, setPosFilter] = useState('ALL');
   const [sortKey,   setSortKey]   = useState('ovr');
   const [sortDir,   setSortDir]   = useState('desc');
@@ -284,7 +284,10 @@ function RosterTable({ players, actions, teamId, onRefetch }) {
                     {/* POS */}
                     <td><PosBadge pos={player.pos} /></td>
                     {/* Name */}
-                    <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                    <td
+                      onClick={() => onPlayerSelect && onPlayerSelect(player.id)}
+                      style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                    >
                       {player.name}
                     </td>
                     {/* OVR */}
@@ -519,7 +522,7 @@ function DepthChartView({ players }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Roster({ league, actions }) {
+export default function Roster({ league, actions, onPlayerSelect }) {
   const teamId = league?.userTeamId;
 
   const [loading,  setLoading]  = useState(false);
@@ -643,6 +646,7 @@ export default function Roster({ league, actions }) {
           actions={actions}
           teamId={teamId}
           onRefetch={fetchRoster}
+          onPlayerSelect={onPlayerSelect}
         />
       )}
 

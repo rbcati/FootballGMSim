@@ -1432,6 +1432,94 @@ async function handleSimDraftPick(payload, id) {
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
 }
 
+// ── Stats / Awards Helpers ────────────────────────────────────────────────────
+
+/**
+ * Calculate statistical leaders for the season.
+ * @param {Array} stats - Array of enriched player stats objects (with name, pos, teamId).
+ */
+function calculateLeaders(stats) {
+  const getTop = (key, n = 5) => stats
+    .filter(s => s.totals && s.totals[key] > 0)
+    .sort((a, b) => (b.totals[key] || 0) - (a.totals[key] || 0))
+    .slice(0, n)
+    .map(s => ({ playerId: s.playerId, name: s.name, value: s.totals[key] || 0, teamId: s.teamId }));
+
+  return {
+    passingYards:   getTop('passingYards'),
+    rushingYards:   getTop('rushingYards'),
+    receivingYards: getTop('receivingYards'),
+    sacks:          getTop('sacks'),
+    interceptions:  getTop('interceptions'),
+    touchdowns:     getTop('touchdowns'),
+  };
+}
+
+/**
+ * determine MVP and other awards based on stats and team performance.
+ * @param {Array} stats - Enriched player stats.
+ * @param {Array} teams - Team objects (for record weighting).
+ */
+function calculateAwards(stats, teams) {
+  // Helper: Get team wins by ID
+  const teamWins = {};
+  teams.forEach(t => { teamWins[t.id] = t.wins || 0; });
+
+  // MVP Score formula (approximate)
+  // Weighted by position impact and team success
+  const getMVPScore = (s) => {
+    const t = s.totals || {};
+    let score = 0;
+
+    // Base stats
+    score += (t.passingYards || 0) / 25;
+    score += (t.rushingYards || 0) / 10;
+    score += (t.receivingYards || 0) / 10;
+    score += (t.touchdowns || 0) * 6;
+    score += (t.sacks || 0) * 4;
+    score += (t.interceptions || 0) * 4;
+
+    // Team success multiplier (1.0 to 1.5 based on wins)
+    const wins = teamWins[s.teamId] || 0;
+    const winMult = 1.0 + (wins / 17) * 0.5;
+
+    return score * winMult;
+  };
+
+  // Safe reduce with initial null check
+  const bestBy = (arr, scoreFn) => {
+      if (!arr || arr.length === 0) return null;
+      return arr.reduce((best, s) => (scoreFn(s) > scoreFn(best) ? s : best), arr[0]);
+  };
+
+  const mvp = bestBy(stats, getMVPScore);
+
+  // Offensive Player of the Year (similar to MVP but less team weight)
+  const getOPOYScore = (s) => {
+    const t = s.totals || {};
+    return (t.passingYards||0)/20 + (t.rushingYards||0)/10 + (t.receivingYards||0)/10 + (t.touchdowns||0)*6;
+  };
+  const opoy = bestBy(stats, getOPOYScore);
+
+  // Defensive Player of the Year
+  const getDPOYScore = (s) => {
+    const t = s.totals || {};
+    return (t.sacks||0)*5 + (t.interceptions||0)*6 + (t.tackles||0)*1;
+  };
+  const dpoy = bestBy(stats, getDPOYScore);
+
+  // Rookie of the Year (check s.isRookie? We don't track rookie status explicitly yet, maybe checking age <= 22?)
+  // For now, skip ROTY or just use age.
+  const roty = bestBy(stats.filter(s => s.age <= 22), getMVPScore);
+
+  return {
+    mvp:  mvp  ? { playerId: mvp.playerId,  name: mvp.name,  teamId: mvp.teamId,  pos: mvp.pos, value: Math.round(getMVPScore(mvp)) } : null,
+    opoy: opoy ? { playerId: opoy.playerId, name: opoy.name, teamId: opoy.teamId, pos: opoy.pos } : null,
+    dpoy: dpoy ? { playerId: dpoy.playerId, name: dpoy.name, teamId: dpoy.teamId, pos: dpoy.pos } : null,
+    roty: roty ? { playerId: roty.playerId, name: roty.name, teamId: roty.teamId, pos: roty.pos } : null,
+  };
+}
+
 // ── Handler: ADVANCE_OFFSEASON ────────────────────────────────────────────────
 
 /**
@@ -1494,11 +1582,80 @@ async function handleAdvanceOffseason(payload, id) {
   post(toUI.STATE_UPDATE, buildViewState());
 }
 
+/**
+ * Archive the current season into history.
+ * - Saves a season summary to the 'seasons' store.
+ * - Clears in-memory season stats.
+ */
+async function archiveSeason(seasonId) {
+  const meta = cache.getMeta();
+  const teams = cache.getAllTeams();
+
+  // 1. Ensure DB is up to date
+  await flushDirty();
+
+  // 2. Get all season stats and CLEAR them from cache
+  const seasonStats = cache.archiveSeasonStats();
+
+  // Helper to resolve player info (active or retired/db)
+  const resolvePlayer = async (pid) => {
+    let p = cache.getPlayer(pid);
+    if (!p) {
+        // Player might have retired in the offseason phase
+        p = await Players.load(pid);
+    }
+    return p;
+  };
+
+  // 3. Populate stats with player details
+  const populatedStats = [];
+  // Use Promise.all to fetch potentially retired players in parallel
+  await Promise.all(seasonStats.map(async (s) => {
+    const p = await resolvePlayer(s.playerId);
+    if (p) {
+      populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age });
+    }
+  }));
+
+  // 4. Determine Champion
+  const championId = meta.championTeamId;
+  const champion = teams.find(t => t.id === championId);
+
+  // 5. Standings (snapshot before reset)
+  const standings = buildStandings();
+
+  // 6. Leaders
+  const leaders = calculateLeaders(populatedStats);
+
+  // 7. Awards
+  const awards = calculateAwards(populatedStats, teams);
+
+  const seasonSummary = {
+    id: seasonId,
+    year: meta.year,
+    champion: champion ? { id: champion.id, name: champion.name, abbr: champion.abbr } : null,
+    mvp: awards.mvp,
+    standings: standings.map(s => ({
+        id: s.id, name: s.name, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct,
+        pf: s.pf, pa: s.pa
+    })),
+    leaders,
+    awards
+  };
+
+  await Seasons.save(seasonSummary);
+}
+
 // ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
 
 async function handleStartNewSeason(payload, id) {
   const meta = cache.getMeta();
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  // Archive the completed season (if any) before resetting
+  if (meta.currentSeasonId) {
+    await archiveSeason(meta.currentSeasonId);
+  }
 
   const newYear     = (meta.year   ?? 2025) + 1;
   const newSeason   = (meta.season ?? 1)    + 1;

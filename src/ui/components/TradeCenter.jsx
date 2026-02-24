@@ -87,7 +87,7 @@ function OvrBadge({ ovr }) {
 
 // ── PlayerCheckRow ────────────────────────────────────────────────────────────
 
-function PlayerCheckRow({ player, checked, onChange }) {
+function PlayerCheckRow({ player, checked, onChange, onNameClick }) {
   return (
     <label style={{
       display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
@@ -115,7 +115,20 @@ function PlayerCheckRow({ player, checked, onChange }) {
         {player.pos}
       </span>
       {/* Name */}
-      <span style={{ flex: 1, fontSize: 'var(--text-sm)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      <span
+        onClick={(e) => {
+          if (onNameClick) {
+            e.preventDefault();
+            onNameClick(player.id);
+          }
+        }}
+        style={{
+          flex: 1, fontSize: 'var(--text-sm)', color: 'var(--text)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          cursor: onNameClick ? 'pointer' : 'default', textDecoration: onNameClick ? 'underline' : 'none',
+          textDecorationColor: 'var(--hairline)'
+        }}
+      >
         {player.name}
       </span>
       {/* Salary */}
@@ -402,7 +415,7 @@ function TradeBlockSummary({ myRoster, theirRoster, offering, receiving, myPicks
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function TradeCenter({ league, actions }) {
+export default function TradeCenter({ league, actions, onPlayerSelect }) {
   const myTeamId = league?.userTeamId;
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -664,6 +677,7 @@ export default function TradeCenter({ league, actions }) {
                     key={p.id} player={p}
                     checked={offering.has(p.id)}
                     onChange={toggleOffering}
+                    onNameClick={onPlayerSelect}
                   />
                 ))}
                 {myFiltered.length === 0 && (
@@ -711,6 +725,7 @@ export default function TradeCenter({ league, actions }) {
                     key={p.id} player={p}
                     checked={receiving.has(p.id)}
                     onChange={toggleReceiving}
+                    onNameClick={onPlayerSelect}
                   />
                 ))}
                 {theirFiltered.length === 0 && (

@@ -307,7 +307,7 @@ function SignForm({ player, capRoom, onSubmit, onCancel }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function FreeAgency({ league, actions }) {
+export default function FreeAgency({ league, actions, onPlayerSelect }) {
   const teamId   = league?.userTeamId;
   const userTeam = useMemo(
     () => league?.teams?.find(t => t.id === teamId),
@@ -515,7 +515,10 @@ export default function FreeAgency({ league, actions }) {
                             {idx + 1}
                           </td>
                           <td><PosBadge pos={player.pos} /></td>
-                          <td style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                          <td
+                            onClick={() => onPlayerSelect && onPlayerSelect(player.id)}
+                            style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                          >
                             {player.name}
                           </td>
                           <td style={{ textAlign: 'right', paddingRight: 'var(--space-4)' }}>
@@ -558,7 +561,10 @@ export default function FreeAgency({ league, actions }) {
                         {idx + 1}
                       </td>
                       <td><PosBadge pos={player.pos} /></td>
-                      <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap' }}>
+                      <td
+                        onClick={() => onPlayerSelect && onPlayerSelect(player.id)}
+                        style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                      >
                         {player.name}
                       </td>
                       <td style={{ textAlign: 'right', paddingRight: 'var(--space-4)' }}>

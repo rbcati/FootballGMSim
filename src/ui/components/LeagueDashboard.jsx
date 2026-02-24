@@ -18,6 +18,8 @@ import Roster          from './Roster.jsx';
 import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
 import BoxScore        from './BoxScore.jsx';
+import LeagueHistory   from './LeagueHistory.jsx';
+import PlayerProfile   from './PlayerProfile.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -74,7 +76,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Leaders', 'Roster', 'Free Agency', 'Trades'];
+const TABS = ['Standings', 'Schedule', 'Leaders', 'Roster', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -493,6 +495,7 @@ function LeadersTab({ teams }) {
 export default function LeagueDashboard({ league, busy, actions }) {
   const [activeTab, setActiveTab]       = useState('Standings');
   const [selectedGameId, setSelectedGameId] = useState(null);
+  const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   if (!league) return null;
 
@@ -607,17 +610,22 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Roster' && (
         <TabErrorBoundary label="Roster">
-          <Roster league={league} actions={actions} />
+          <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Free Agency' && (
         <TabErrorBoundary label="Free Agency">
-          <FreeAgency league={league} actions={actions} />
+          <FreeAgency league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Trades' && (
         <TabErrorBoundary label="Trades">
-          <TradeCenter league={league} actions={actions} />
+          <TradeCenter league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'History' && (
+        <TabErrorBoundary label="History">
+          <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
 
@@ -628,6 +636,16 @@ export default function LeagueDashboard({ league, busy, actions }) {
             gameId={selectedGameId}
             actions={actions}
             onClose={() => setSelectedGameId(null)}
+          />
+        </TabErrorBoundary>
+      )}
+
+      {/* ── Player Profile modal ── */}
+      {selectedPlayerId && (
+        <TabErrorBoundary label="Player Profile">
+          <PlayerProfile
+            playerId={selectedPlayerId}
+            onClose={() => setSelectedPlayerId(null)}
           />
         </TabErrorBoundary>
       )}
