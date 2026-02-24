@@ -179,7 +179,9 @@ export const cache = {
 
   // --- Season stats ---
 
-  getSeasonStat: (playerId) => _seasonStats.get(playerId) ?? null,
+  getSeasonStat:    (playerId) => _seasonStats.get(playerId) ?? null,
+  /** Non-destructive read of all current-season stat entries. */
+  getAllSeasonStats: ()        => [..._seasonStats.values()],
   updateSeasonStat: (playerId, teamId, partialTotals) => {
     const seasonId = _meta?.currentSeasonId;
     if (!seasonId) return;

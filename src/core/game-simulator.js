@@ -567,7 +567,16 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
     ? Math.max(12, Math.round(avgYPC * U.rand(2.0, 3.5)))
     : 0;
 
+  // NFL Passer Rating formula
+  const att = Math.max(1, attempts);
+  const _a = Math.max(0, Math.min(2.375, ((completions / att) - 0.3) / 0.2));
+  const _b = Math.max(0, Math.min(2.375, ((yards / att) - 3) / 4));
+  const _c = Math.max(0, Math.min(2.375, (touchdowns / att) / 0.05));
+  const _d = Math.max(0, Math.min(2.375, 2.375 - (interceptions / att) / 0.04));
+  const passerRating = Math.round(((_a + _b + _c + _d) / 6) * 100 * 10) / 10;
+
   return {
+    gamesPlayed: 1,
     passAtt: attempts,
     passComp: completions,
     passYd: yards,
@@ -576,7 +585,8 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
     sacks: sacks,
     dropbacks: attempts + sacks,
     longestPass: longestPass,
-    completionPct: Math.round((completions / Math.max(1, attempts)) * 1000) / 10
+    completionPct: Math.round((completions / Math.max(1, attempts)) * 1000) / 10,
+    passerRating,
   };
 }
 
@@ -633,6 +643,7 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   const targetsWithSeparation = Math.round(targets * separationChance);
 
   return {
+    gamesPlayed: 1,
     rushAtt: carries,
     rushYd: Math.max(0, rushYd),
     rushTD: touchdowns,
@@ -647,7 +658,7 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
     yardsAfterCatch: yardsAfterCatch,
     longestCatch: receptions > 0 ? Math.max(5, Math.round(recYd / receptions * U.rand(1.2, 2.5))) : 0,
     routesRun: routesRun,
-    targetsWithSeparation: targetsWithSeparation
+    targetsWithSeparation: targetsWithSeparation,
   };
 }
 
@@ -710,6 +721,7 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   const targetsWithSeparation = Math.round(targets * separationChance);
 
   return {
+    gamesPlayed: 1,
     targets: targets,
     receptions: receptions,
     recYd: recYd,
@@ -718,7 +730,7 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
     yardsAfterCatch: yardsAfterCatch,
     longestCatch: longestCatch,
     routesRun: routesRun,
-    targetsWithSeparation: targetsWithSeparation
+    targetsWithSeparation: targetsWithSeparation,
   };
 }
 
@@ -750,6 +762,7 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
   const tdsAllowed = U.rand(0, 100) < (100 - coverage) ? 1 : 0;
 
   return {
+    gamesPlayed: 1,
     coverageRating: Math.max(0, Math.min(100, coverageRating)),
     tackles: tackles,
     interceptions: interceptions,
@@ -757,7 +770,7 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
     targetsAllowed: targetsAllowed,
     completionsAllowed: completionsAllowed,
     yardsAllowed: yardsAllowed,
-    tdsAllowed: tdsAllowed
+    tdsAllowed: tdsAllowed,
   };
 }
 
@@ -784,19 +797,22 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   const tacklesForLoss = Math.max(0, Math.min(3, Math.round(tflCount)));
 
   const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
+  const fumbleRecoveries = Math.max(0, U.random() < 0.08 ? 1 : 0);
 
   const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed)/5);
   const pressureChance = (passRushPower + passRushSpeed) / 300;
   const pressures = Math.round(passRushSnaps * pressureChance);
 
   return {
+    gamesPlayed: 1,
     pressureRating: Math.max(0, Math.min(100, pressureRating)),
     sacks: sacks,
     tackles: tackles,
     tacklesForLoss: tacklesForLoss,
     forcedFumbles: forcedFumbles,
+    fumbleRecoveries: fumbleRecoveries,
     passRushSnaps: passRushSnaps,
-    pressures: pressures
+    pressures: pressures,
   };
 }
 
@@ -814,10 +830,18 @@ function generateOLStats(ol, defenseStrength, U) {
 
   const protectionGrade = Math.round((passBlock + runBlock + awareness) / 3 + U.rand(-5, 5));
 
+  const passBlockSnaps = Math.round(30 + (passBlock / 5) + U.rand(-5, 5));
+  const runBlockSnaps  = Math.round(25 + (runBlock  / 5) + U.rand(-5, 5));
+  const blocksWon = Math.max(0, Math.round((passBlockSnaps + runBlockSnaps) * (passBlock + runBlock) / 20000));
+
   return {
+    gamesPlayed: 1,
     sacksAllowed: sacksAllowed,
     tacklesForLossAllowed: tflAllowed,
-    protectionGrade: Math.max(0, Math.min(100, protectionGrade))
+    protectionGrade: Math.max(0, Math.min(100, protectionGrade)),
+    passBlockSnaps: passBlockSnaps,
+    runBlockSnaps: runBlockSnaps,
+    blocksWon: blocksWon,
   };
 }
 
@@ -842,6 +866,7 @@ function generateKickerStats(kicker, teamScore, U) {
   const avgKickYards = Math.round(60 + (kickPower / 3) + U.rand(-5, 5));
 
   return {
+    gamesPlayed: 1,
     fgAttempts: fgAttempts,
     fgMade: fgMade,
     fgMissed: fgAttempts - fgMade,
@@ -850,7 +875,7 @@ function generateKickerStats(kicker, teamScore, U) {
     xpMade: xpMade,
     xpMissed: xpAttempts - xpMade,
     successPct: successPct,
-    avgKickYards: avgKickYards
+    avgKickYards: avgKickYards,
   };
 }
 
@@ -866,10 +891,11 @@ function generatePunterStats(punter, teamScore, U) {
   const longestPunt = Math.max(30, Math.min(70, Math.round(avgPuntYards * U.rand(1.2, 1.8))));
 
   return {
+    gamesPlayed: 1,
     punts: punts,
     puntYards: totalPuntYards,
     avgPuntYards: punts > 0 ? Math.round((totalPuntYards / punts) * 10) / 10 : 0,
-    longestPunt: longestPunt
+    longestPunt: longestPunt,
   };
 }
 
@@ -1496,7 +1522,7 @@ const DERIVED_STAT_KEYS = new Set([
     'avgKickYards', 'successPct', 'passerRating', 'sackPct',
     'dropRate', 'separationRate', 'pressureRate',
     'coverageRating', 'pressureRating', 'protectionGrade',
-    'ratingWhenTargeted'
+    'ratingWhenTargeted',
 ]);
 
 export function accumulateStats(source, target) {

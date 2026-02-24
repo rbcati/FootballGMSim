@@ -997,12 +997,21 @@ async function handleGetAllSeasons(payload, id) {
 // ── Handler: GET_PLAYER_CAREER ────────────────────────────────────────────────
 
 async function handleGetPlayerCareer({ playerId }, id) {
-  const stats = await PlayerStats.byPlayer(playerId);
-  const player = cache.getPlayer(playerId) ?? await Players.load(playerId);
+  const numId = Number(playerId);
+  const archivedStats = await PlayerStats.byPlayer(numId);
+  const player = cache.getPlayer(numId) ?? await Players.load(numId);
+
+  // Also include current-season in-memory stats (not yet archived)
+  const currentSeasonStat = cache.getSeasonStat(numId);
+  const allStats = [...(archivedStats ?? [])];
+  if (currentSeasonStat && !allStats.find(s => s.seasonId === currentSeasonStat.seasonId)) {
+    allStats.push(currentSeasonStat);
+  }
+
   post(toUI.PLAYER_CAREER, {
-    playerId,
+    playerId: numId,
     player: player ?? null,
-    stats:  stats  ?? [],
+    stats:  allStats,
   }, id);
 }
 
@@ -1661,18 +1670,28 @@ async function handleSimDraftPick(payload, id) {
  */
 function calculateLeaders(stats) {
   const getTop = (key, n = 5) => stats
-    .filter(s => s.totals && s.totals[key] > 0)
+    .filter(s => s.totals && (s.totals[key] || 0) > 0)
     .sort((a, b) => (b.totals[key] || 0) - (a.totals[key] || 0))
     .slice(0, n)
-    .map(s => ({ playerId: s.playerId, name: s.name, value: s.totals[key] || 0, teamId: s.teamId }));
+    .map(s => ({ playerId: s.playerId, name: s.name, pos: s.pos, value: s.totals[key] || 0, teamId: s.teamId }));
+
+  // Compute total TDs per player (pass + rush + receiving)
+  const withTDs = stats.map(s => {
+    const t = s.totals || {};
+    return { ...s, _td: (t.passTD || 0) + (t.rushTD || 0) + (t.recTD || 0) };
+  });
 
   return {
-    passingYards:   getTop('passingYards'),
-    rushingYards:   getTop('rushingYards'),
-    receivingYards: getTop('receivingYards'),
+    passingYards:   getTop('passYd'),
+    rushingYards:   getTop('rushYd'),
+    receivingYards: getTop('recYd'),
     sacks:          getTop('sacks'),
     interceptions:  getTop('interceptions'),
-    touchdowns:     getTop('touchdowns'),
+    touchdowns:     withTDs
+      .filter(s => s._td > 0)
+      .sort((a, b) => b._td - a._td)
+      .slice(0, 5)
+      .map(s => ({ playerId: s.playerId, name: s.name, pos: s.pos, value: s._td, teamId: s.teamId })),
   };
 }
 
@@ -1692,11 +1711,11 @@ function calculateAwards(stats, teams) {
     const t = s.totals || {};
     let score = 0;
 
-    // Base stats
-    score += (t.passingYards || 0) / 25;
-    score += (t.rushingYards || 0) / 10;
-    score += (t.receivingYards || 0) / 10;
-    score += (t.touchdowns || 0) * 6;
+    // Base stats (using correct accumulated key names)
+    score += (t.passYd || 0) / 25;
+    score += (t.rushYd || 0) / 10;
+    score += (t.recYd  || 0) / 10;
+    score += ((t.passTD || 0) + (t.rushTD || 0) + (t.recTD || 0)) * 6;
     score += (t.sacks || 0) * 4;
     score += (t.interceptions || 0) * 4;
 
@@ -1718,7 +1737,8 @@ function calculateAwards(stats, teams) {
   // Offensive Player of the Year (similar to MVP but less team weight)
   const getOPOYScore = (s) => {
     const t = s.totals || {};
-    return (t.passingYards||0)/20 + (t.rushingYards||0)/10 + (t.receivingYards||0)/10 + (t.touchdowns||0)*6;
+    return (t.passYd||0)/20 + (t.rushYd||0)/10 + (t.recYd||0)/10
+         + ((t.passTD||0) + (t.rushTD||0) + (t.recTD||0)) * 6;
   };
   const opoy = bestBy(stats, getOPOYScore);
 
@@ -1821,6 +1841,7 @@ async function handleAdvanceOffseason(payload, id) {
 /**
  * Archive the current season into history.
  * - Saves a season summary to the 'seasons' store.
+ * - Writes accolades (MVP, OPOY, DPOY, SB Ring, SB MVP) to player objects.
  * - Clears in-memory season stats.
  */
 async function archiveSeason(seasonId) {
@@ -1836,16 +1857,21 @@ async function archiveSeason(seasonId) {
   // Helper to resolve player info (active or retired/db)
   const resolvePlayer = async (pid) => {
     let p = cache.getPlayer(pid);
-    if (!p) {
-        // Player might have retired in the offseason phase
-        p = await Players.load(pid);
-    }
+    if (!p) p = await Players.load(pid);
     return p;
+  };
+
+  // Helper to write an accolade to a player
+  const grantAccolade = (playerId, accolade) => {
+    const p = cache.getPlayer(playerId);
+    if (!p) return;
+    const accolades = Array.isArray(p.accolades) ? [...p.accolades] : [];
+    accolades.push(accolade);
+    cache.updatePlayer(playerId, { accolades });
   };
 
   // 3. Populate stats with player details
   const populatedStats = [];
-  // Use Promise.all to fetch potentially retired players in parallel
   await Promise.all(seasonStats.map(async (s) => {
     const p = await resolvePlayer(s.playerId);
     if (p) {
@@ -1866,9 +1892,52 @@ async function archiveSeason(seasonId) {
   // 7. Awards
   const awards = calculateAwards(populatedStats, teams);
 
+  // 8. Write accolades to player objects
+  const year = meta.year;
+
+  if (awards.mvp?.playerId != null) {
+    grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
+  }
+  if (awards.opoy?.playerId != null) {
+    grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
+  }
+  if (awards.dpoy?.playerId != null) {
+    grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
+  }
+  if (awards.roty?.playerId != null) {
+    grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
+  }
+
+  // SB Rings: all players on champion team
+  if (championId != null) {
+    const champPlayers = cache.getPlayersByTeam(championId);
+    for (const p of champPlayers) {
+      grantAccolade(p.id, { type: 'SB_RING', year, seasonId });
+    }
+
+    // SB MVP: highest-scoring player on champion team
+    const champStats = populatedStats.filter(s => s.teamId === championId);
+    if (champStats.length > 0) {
+      const getMVPScore = (s) => {
+        const t = s.totals || {};
+        return (t.passYd||0)/25 + (t.rushYd||0)/10 + (t.recYd||0)/10
+             + ((t.passTD||0) + (t.rushTD||0) + (t.recTD||0)) * 6
+             + (t.sacks||0) * 4 + (t.interceptions||0) * 4;
+      };
+      const sbMvp = champStats.reduce((best, s) => getMVPScore(s) > getMVPScore(best) ? s : best, champStats[0]);
+      if (sbMvp?.playerId != null) {
+        grantAccolade(sbMvp.playerId, { type: 'SB_MVP', year, seasonId });
+        awards.sbMvp = { playerId: sbMvp.playerId, name: sbMvp.name, teamId: sbMvp.teamId, pos: sbMvp.pos };
+      }
+    }
+  }
+
+  // Flush accolade writes to DB
+  await flushDirty();
+
   const seasonSummary = {
     id: seasonId,
-    year: meta.year,
+    year,
     champion: champion ? { id: champion.id, name: champion.name, abbr: champion.abbr } : null,
     mvp: awards.mvp,
     standings: standings.map(s => ({
@@ -1876,7 +1945,7 @@ async function archiveSeason(seasonId) {
         pf: s.pf, pa: s.pa
     })),
     leaders,
-    awards
+    awards,
   };
 
   await Seasons.save(seasonSummary);
@@ -1927,6 +1996,228 @@ async function handleStartNewSeason(payload, id) {
   post(toUI.FULL_STATE, buildViewState(), id);
 }
 
+// ── Handler: GET_TEAM_PROFILE ─────────────────────────────────────────────────
+
+async function handleGetTeamProfile({ teamId }, id) {
+  const numId = Number(teamId);
+  const team  = cache.getTeam(numId);
+  if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
+
+  // Build a conf+div lookup from current cache so we can identify division titles
+  const allTeams = cache.getAllTeams();
+  const teamDivInfo = {};
+  allTeams.forEach(t => { teamDivInfo[t.id] = { conf: t.conf, div: t.div }; });
+
+  const seasons = await Seasons.loadRecent(200);
+
+  let allTimeWins = 0, allTimeLosses = 0, allTimeTies = 0;
+  let sbTitles = 0, divTitles = 0;
+  const seasonHistory = [];
+
+  for (const season of seasons) {
+    if (!season.standings) continue;
+    const standing = season.standings.find(s => s.id === numId);
+    if (!standing) continue;
+
+    allTimeWins   += standing.wins   || 0;
+    allTimeLosses += standing.losses || 0;
+    allTimeTies   += standing.ties   || 0;
+
+    const isSBChamp = season.champion?.id === numId;
+    if (isSBChamp) sbTitles++;
+
+    // Division title: top record in same conf + div
+    const myDiv = teamDivInfo[numId];
+    let isDivChamp = false;
+    if (myDiv) {
+      const divStandings = season.standings.filter(s => {
+        const sd = teamDivInfo[s.id];
+        return sd && sd.conf === myDiv.conf && sd.div === myDiv.div;
+      });
+      divStandings.sort((a, b) => (b.pct || 0) - (a.pct || 0) || (b.wins || 0) - (a.wins || 0));
+      isDivChamp = divStandings.length > 0 && divStandings[0].id === numId;
+      if (isDivChamp) divTitles++;
+    }
+
+    seasonHistory.push({
+      year:      season.year,
+      seasonId:  season.id,
+      wins:      standing.wins   || 0,
+      losses:    standing.losses || 0,
+      ties:      standing.ties   || 0,
+      pf:        standing.pf     || 0,
+      pa:        standing.pa     || 0,
+      champion:  isSBChamp,
+      divTitle:  isDivChamp,
+    });
+  }
+
+  // Top current players (for quick roster preview)
+  const currentPlayers = cache.getPlayersByTeam(numId)
+    .map(p => ({ id: p.id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr }))
+    .sort((a, b) => b.ovr - a.ovr)
+    .slice(0, 12);
+
+  post(toUI.TEAM_PROFILE, {
+    team: {
+      id:          team.id,
+      name:        team.name,
+      abbr:        team.abbr,
+      conf:        team.conf,
+      div:         team.div,
+      wins:        team.wins        || 0,
+      losses:      team.losses      || 0,
+      ties:        team.ties        || 0,
+      ptsFor:      team.ptsFor      || 0,
+      ptsAgainst:  team.ptsAgainst  || 0,
+      ovr:         team.ovr         || 75,
+      capUsed:     team.capUsed     || 0,
+      capRoom:     team.capRoom     || 0,
+      capTotal:    team.capTotal    || 255,
+    },
+    franchise: {
+      allTimeWins,
+      allTimeLosses,
+      allTimeTies,
+      sbTitles,
+      divTitles,
+      seasonsPlayed: seasonHistory.length,
+      seasonHistory: seasonHistory.slice(0, 25),
+    },
+    currentPlayers,
+  }, id);
+}
+
+// ── Handler: GET_LEAGUE_LEADERS ───────────────────────────────────────────────
+
+async function handleGetLeagueLeaders({ mode = 'season' }, id) {
+  const meta = cache.getMeta();
+
+  // Helper: build display-ready top-N list for a stat key
+  const topN = (entries, key, n = 10) => {
+    const playerMap = {};
+    allTeamsByIdRef.forEach(t => { playerMap[t.id] = t.abbr; });
+
+    return entries
+      .filter(e => (e.totals?.[key] || 0) > 0)
+      .sort((a, b) => (b.totals[key] || 0) - (a.totals[key] || 0))
+      .slice(0, n)
+      .map(e => ({
+        playerId: e.playerId,
+        name:     e.name     || `Player ${e.playerId}`,
+        pos:      e.pos      || '?',
+        teamId:   e.teamId,
+        value:    e.totals[key] || 0,
+      }));
+  };
+
+  // Computed-stat helpers
+  const passerRating = (totals) => {
+    const att = totals.passAtt || 0;
+    if (att === 0) return 0;
+    const a = Math.max(0, Math.min(2.375, ((totals.passComp || 0) / att - 0.3) / 0.2));
+    const b = Math.max(0, Math.min(2.375, ((totals.passYd   || 0) / att - 3) / 4));
+    const c = Math.max(0, Math.min(2.375, ((totals.passTD   || 0) / att) / 0.05));
+    const d = Math.max(0, Math.min(2.375, 2.375 - ((totals.interceptions || 0) / att) / 0.04));
+    return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
+  };
+
+  const allTeamsByIdRef = cache.getAllTeams();
+
+  let entries = [];
+
+  if (mode === 'season') {
+    // Current season: use in-memory stats
+    const currentStats = cache.getAllSeasonStats();
+    await Promise.all(currentStats.map(async s => {
+      const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
+      if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId });
+    }));
+  } else {
+    // All-time: load all archived player stats, aggregate by player
+    const allStats = await PlayerStats.loadAll();
+    const byPlayer = new Map();
+    for (const s of allStats) {
+      const pid = s.playerId;
+      if (!byPlayer.has(pid)) {
+        byPlayer.set(pid, { playerId: pid, totals: {}, name: null, pos: null, teamId: null });
+      }
+      const agg = byPlayer.get(pid);
+      for (const [k, v] of Object.entries(s.totals || {})) {
+        if (typeof v === 'number') agg.totals[k] = (agg.totals[k] || 0) + v;
+      }
+      // Keep latest name/pos/team
+      if (s.name) agg.name = s.name;
+      if (s.pos)  agg.pos  = s.pos;
+      if (s.teamId != null) agg.teamId = s.teamId;
+    }
+    // Also merge current season in-memory stats
+    const currentStats = cache.getAllSeasonStats();
+    for (const s of currentStats) {
+      const pid = s.playerId;
+      if (!byPlayer.has(pid)) {
+        byPlayer.set(pid, { playerId: pid, totals: {}, name: null, pos: null, teamId: null });
+      }
+      const agg = byPlayer.get(pid);
+      for (const [k, v] of Object.entries(s.totals || {})) {
+        if (typeof v === 'number') agg.totals[k] = (agg.totals[k] || 0) + v;
+      }
+    }
+    // Resolve names/pos for all-time entries
+    await Promise.all([...byPlayer.values()].map(async agg => {
+      if (!agg.name) {
+        const p = cache.getPlayer(agg.playerId) ?? await Players.load(agg.playerId);
+        if (p) { agg.name = p.name; agg.pos = p.pos; agg.teamId = p.teamId ?? agg.teamId; }
+      }
+    }));
+    entries = [...byPlayer.values()].filter(e => e.name);
+  }
+
+  // Build categories
+  const topRated = (list, rateFn, minAtt, attKey, n = 10) =>
+    list
+      .filter(e => (e.totals[attKey] || 0) >= minAtt)
+      .map(e => ({ ...e, _rate: rateFn(e.totals) }))
+      .sort((a, b) => b._rate - a._rate)
+      .slice(0, n)
+      .map(({ _rate, ...rest }) => ({ ...rest, value: _rate }));
+
+  const qbs = entries.filter(e => e.pos === 'QB');
+  const rbs = entries.filter(e => e.pos === 'RB');
+  const wrs = entries.filter(e => ['WR', 'TE', 'RB'].includes(e.pos));
+  const def = entries.filter(e => ['DL', 'LB', 'DE', 'DT', 'EDGE'].includes(e.pos));
+  const dbs = entries.filter(e => ['CB', 'S', 'SS', 'FS'].includes(e.pos));
+
+  const categories = {
+    passing: {
+      passYards:    topN(qbs, 'passYd'),
+      passTDs:      topN(qbs, 'passTD'),
+      passerRating: topRated(qbs, passerRating, mode === 'season' ? 100 : 500, 'passAtt'),
+      completions:  topN(qbs, 'passComp'),
+    },
+    rushing: {
+      rushYards:    topN(rbs, 'rushYd'),
+      rushTDs:      topN(rbs, 'rushTD'),
+      rushAttempts: topN(rbs, 'rushAtt'),
+    },
+    receiving: {
+      recYards:     topN(wrs, 'recYd'),
+      recTDs:       topN(wrs, 'recTD'),
+      receptions:   topN(wrs, 'receptions'),
+      yac:          topN(wrs, 'yardsAfterCatch'),
+    },
+    defense: {
+      sacks:         topN(def, 'sacks'),
+      tackles:       topN([...def, ...dbs], 'tackles'),
+      interceptions: topN(dbs, 'interceptions'),
+      forcedFumbles: topN([...def, ...dbs], 'forcedFumbles'),
+      pressures:     topN(def, 'pressures'),
+    },
+  };
+
+  post(toUI.LEAGUE_LEADERS, { mode, categories, year: meta?.year, seasonId: meta?.currentSeasonId }, id);
+}
+
 // ── Main message router ───────────────────────────────────────────────────────
 
 self.onmessage = async (event) => {
@@ -1966,6 +2257,10 @@ self.onmessage = async (event) => {
       case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
       case toWorker.ADVANCE_OFFSEASON:  return await handleAdvanceOffseason(payload, id);
       case toWorker.START_NEW_SEASON:   return await handleStartNewSeason(payload, id);
+
+      // ── Analytics ─────────────────────────────────────────────────────────
+      case toWorker.GET_TEAM_PROFILE:   return await handleGetTeamProfile(payload, id);
+      case toWorker.GET_LEAGUE_LEADERS: return await handleGetLeagueLeaders(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

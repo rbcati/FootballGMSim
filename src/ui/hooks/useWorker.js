@@ -332,6 +332,14 @@ export function useWorker() {
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),
 
+    /** Fetch franchise history for a team (returns a Promise). */
+    getTeamProfile: (teamId) =>
+      request(toWorker.GET_TEAM_PROFILE, { teamId }, { silent: true }),
+
+    /** Fetch league leaders (returns a Promise). mode: 'season' | 'alltime' */
+    getLeagueLeaders: (mode = 'season') =>
+      request(toWorker.GET_LEAGUE_LEADERS, { mode }, { silent: true }),
+
     // ── Draft & Offseason ────────────────────────────────────────────────────
 
     /** Fetch the current draft state without initialising (returns a Promise). */
