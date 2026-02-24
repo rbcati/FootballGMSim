@@ -543,12 +543,13 @@ export default function Roster({ league, actions }) {
     }
   }, [teamId, actions]);
 
-  // Fetch on mount and whenever the user's team changes
+  // Fetch on mount and whenever the user's team or week changes.
+  // fetchRoster is stable as long as teamId and actions don't change.
+  // Do NOT add league?.teams here — it's a new array reference on every
+  // STATE_UPDATE dispatch and would cause a fetch cascade.
+  // Post-release refreshes are handled by the explicit onRefetch() callback
+  // passed to RosterTable.
   useEffect(() => { fetchRoster(); }, [fetchRoster]);
-
-  // Re-fetch when league.teams updates (sign / release resolved)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchRoster(); }, [league?.teams]);
 
   if (teamId == null) {
     return (

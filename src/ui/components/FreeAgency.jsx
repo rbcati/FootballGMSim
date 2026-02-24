@@ -22,7 +22,7 @@
  *  confirming; cap validation fires on confirm.
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -346,15 +346,30 @@ export default function FreeAgency({ league, actions }) {
     } finally {
       setLoading(false);
     }
+  // actions is wrapped in useMemo inside useWorker so its reference is stable.
   }, [actions]);
 
-  // Fetch on mount
+  // Fetch on mount (and if the user's team changes, which is caught by actions
+  // being stable and fetchFA not changing).
   useEffect(() => { fetchFA(); }, [fetchFA]);
 
-  // Re-fetch when cap changes — means a sign/release resolved in the worker
-  const capUsed = userTeam?.capUsed;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (capUsed !== undefined) fetchFA(); }, [capUsed]);
+  // Re-fetch when cap changes — means a sign/release resolved in the worker.
+  // We track the *previous* capUsed so we skip the very first time the league
+  // loads (capUsed going undefined → a number).  Without this guard the
+  // component would double-fetch on mount causing a loading → data → loading
+  // → data flash.
+  const capUsed        = userTeam?.capUsed;
+  const prevCapUsedRef = useRef(undefined);
+  useEffect(() => {
+    if (capUsed === undefined) return;           // league not loaded yet
+    if (prevCapUsedRef.current === undefined) {  // first observed value — skip
+      prevCapUsedRef.current = capUsed;
+      return;
+    }
+    if (prevCapUsedRef.current === capUsed) return; // no actual change
+    prevCapUsedRef.current = capUsed;
+    fetchFA();
+  }, [capUsed, fetchFA]);
 
   // ── Sorting / filtering ────────────────────────────────────────────────────
 
