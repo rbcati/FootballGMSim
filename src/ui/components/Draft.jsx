@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import TraitBadge from './TraitBadge';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -451,6 +452,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                   {[
                     { key: 'pos',       label: 'POS' },
                     { key: 'name',      label: 'NAME' },
+                    { key: 'traits',    label: 'TRAITS' },
                     { key: 'age',       label: 'AGE' },
                     { key: 'ovr',       label: 'OVR' },
                     { key: 'potential', label: 'POT' },
@@ -500,6 +502,9 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                       </span>
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</td>
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {(p.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
+                    </td>
                     <td style={{ color: 'var(--text-muted)' }}>{p.age}</td>
                     <td><OvrBadge ovr={p.ovr} /></td>
                     <td style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>

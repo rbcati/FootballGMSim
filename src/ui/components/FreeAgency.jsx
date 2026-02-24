@@ -23,6 +23,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import TraitBadge from './TraitBadge';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -485,6 +486,9 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                   <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Yrs
                   </th>
+                  <th style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Traits
+                  </th>
                   <th style={{ textAlign: 'center', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Action
                   </th>
@@ -584,6 +588,9 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                       </td>
                       <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                         {askYrs}yr
+                      </td>
+                      <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {(player.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
                       </td>
                       <td style={{ textAlign: 'center', paddingRight: 'var(--space-3)' }}>
                         {capRoom < 2 ? (

@@ -4,6 +4,7 @@
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateWAR as calculateWARImpl } from './war-calculator.js';
+import { generateTraits } from './traits.js';
 
 // ============================================================================
 // PLAYER PROGRESSION & SKILL TREES
@@ -369,6 +370,7 @@ function makePlayer(pos, age = null, ovr = null) {
         devTrait: U.choice(['Normal', 'Star', 'Superstar', 'X-Factor']),
         potential: Math.min(99, playerOvr + U.rand(0, 30)),
         isFollowed: false,
+        traits: generateTraits(pos, playerOvr),
         abilities: [],
         awards: [],
         personality: generatePersonality(),

@@ -147,6 +147,7 @@ function buildRosterView(teamId) {
         age:      p.age,
         ovr:      p.ovr,
         contract: p.contract ?? null,
+        traits:   p.traits ?? [],
         schemeFit: fit,
         morale:    morale
     };
@@ -1139,6 +1140,7 @@ async function handleGetRoster({ teamId }, id) {
         potential: p.potential ?? null,
         status:    p.status ?? 'active',
         contract:  p.contract ?? null,
+        traits:    p.traits ?? [],
         schemeFit: fit,
         morale:    calculateMorale(p, team, true)
       };
@@ -1172,6 +1174,7 @@ async function handleGetFreeAgents(payload, id) {
       ovr:       p.ovr,
       potential: p.potential ?? null,
       contract:  p.contract ?? null,   // last known contract (asking price reference)
+      traits:    p.traits ?? [],
     }));
 
   post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
@@ -1424,6 +1427,7 @@ function buildDraftStateView() {
       ovr:       p.ovr,
       potential: p.potential ?? null,
       college:   p.college   ?? null,
+      traits:    p.traits    ?? [],
     }));
 
   return {
