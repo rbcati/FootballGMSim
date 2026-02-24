@@ -22,6 +22,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import TraitBadge from './TraitBadge';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -337,6 +338,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                 <SortTh label="Age"    sortKey="age"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
                 <SortTh label="$/yr"   sortKey="salary" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
                 <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yrs</th>
+                <th style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Traits</th>
                 <SortTh label="Fit"    sortKey="fit"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
                 <SortTh label="Morale" sortKey="morale" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
                 <th style={{ textAlign: 'center', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action</th>
@@ -387,6 +389,10 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                     {/* Years */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                       {fmtYears(player.contract)}
+                    </td>
+                    {/* Traits */}
+                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      {(player.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
                     </td>
                     {/* Scheme Fit */}
                     <td style={{ textAlign: 'center', padding: '0 var(--space-2)' }}>

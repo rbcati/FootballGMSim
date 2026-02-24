@@ -8,8 +8,9 @@ import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
-import { getEffectiveRating, canPlayerPlay } from './injury-core.js';
+import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
+import { TRAITS } from './traits.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -557,9 +558,10 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   ));
 
   // Sacks: NFL average ~2.4/game. Awareness and OL protection matter.
-  const sacks = Math.max(0, Math.min(7,
-    Math.round(2.4 + (70 - awareness) * 0.04 + U.rand(-1, 2))
-  ));
+  let sackCount = 2.4 + (70 - awareness) * 0.04 + U.rand(-1, 2);
+  if (qb.traits && qb.traits.includes(TRAITS.POCKET_PRESENCE.id)) sackCount *= 0.8;
+
+  const sacks = Math.max(0, Math.min(7, Math.round(sackCount)));
 
   const longestPass = completions > 0
     ? Math.max(12, Math.round(avgYPC * U.rand(2.0, 3.5)))
@@ -613,7 +615,9 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
     Math.round(rushTdRate + U.rand(-0.3, 0.8))
   ));
 
-  const fumbles = Math.max(0, Math.min(2, Math.round((100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5))));
+  let fumbleCount = (100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5);
+  if (rb.traits && rb.traits.includes(TRAITS.WORKHORSE.id)) fumbleCount *= 0.7;
+  const fumbles = Math.max(0, Math.min(2, Math.round(fumbleCount)));
 
   const longestRun = Math.max(5, Math.round(rushYd / Math.max(1, carries) * U.rand(1.5, 3.5)));
 
@@ -675,12 +679,16 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   const catchRate = (catching + catchInTraffic) / 2;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
   // Lowered catch rate to realistic ~60%
-  const receptionPct = Math.max(40, Math.min(90, catchRate - 15 + defenseFactor * 20));
+  let receptionPct = Math.max(40, Math.min(90, catchRate - 15 + defenseFactor * 20));
+  if (receiver.traits && receiver.traits.includes(TRAITS.ROUTE_RUNNER.id)) receptionPct *= 1.1;
+
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (receptionPct / 100) + U.rand(-1, 1))));
 
   // Adjusted YPC to match QB output ~11.0
   // Gaussian distribution for Yards Per Catch
-  const meanYPR = 11.0 + (speed - 70) * 0.15;
+  let meanYPR = 11.0 + (speed - 70) * 0.15;
+  if (receiver.traits && receiver.traits.includes(TRAITS.DEEP_THREAT.id)) meanYPR *= 1.1;
+
   const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.5, 4.0, 30.0);
   const recYd = Math.round(receptions * avgYardsPerCatch);
 
@@ -694,7 +702,8 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
 
   const yardsAfterCatch = Math.max(0, Math.round(recYd * (0.3 + speed / 200) + U.rand(-10, 20)));
 
-  const longestCatch = receptions > 0 ? Math.max(10, Math.round(recYd / receptions * U.rand(1.5, 3.5))) : 0;
+  let longestCatch = receptions > 0 ? Math.max(10, Math.round(recYd / receptions * U.rand(1.5, 3.5))) : 0;
+  if (receiver.traits && receiver.traits.includes(TRAITS.DEEP_THREAT.id)) longestCatch *= 1.15;
 
   const routesRun = Math.round(targets * 4 + U.rand(10, 20));
   const separationChance = ((ratings.agility || 70) + (ratings.speed || 70)) / 250;
@@ -726,13 +735,16 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
 
   let intChance = (coverage + awareness) / 200;
   if (modifiers.intChance) intChance *= modifiers.intChance;
+  if (db.traits && db.traits.includes(TRAITS.BALLHAWK.id)) intChance *= 1.25;
 
   const interceptions = Math.max(0, Math.min(3, Math.round(intChance * 2 + U.rand(-0.5, 1.5))));
 
   const passesDefended = Math.max(0, Math.min(5, Math.round((coverage / 30) + U.rand(-0.5, 1.5))));
 
   const targetsAllowed = Math.round(5 + (100 - coverage) / 10 + U.rand(-1, 2));
-  const completionPctAllowed = Math.max(0.4, (100 - coverage) / 100);
+  let completionPctAllowed = Math.max(0.4, (100 - coverage) / 100);
+  if (db.traits && db.traits.includes(TRAITS.SHUTDOWN.id)) completionPctAllowed *= 0.9;
+
   const completionsAllowed = Math.round(targetsAllowed * completionPctAllowed);
   const yardsAllowed = Math.round(completionsAllowed * (10 + (100 - speed)/10));
   const tdsAllowed = U.rand(0, 100) < (100 - coverage) ? 1 : 0;
@@ -760,13 +772,16 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
 
   let sackChance = (passRushPower + passRushSpeed) / 200;
   if (modifiers.sackChance) sackChance *= modifiers.sackChance;
+  if (defender.traits && defender.traits.includes(TRAITS.SPEED_RUSHER.id)) sackChance *= 1.2;
 
   const sacks = Math.max(0, Math.min(4, Math.round(sackChance * 3 + U.rand(-0.5, 1.5))));
 
   const baseTackles = defender.pos === 'LB' ? 8 : 5;
   const tackles = Math.max(0, Math.min(15, Math.round(baseTackles + (runStop / 20) + U.rand(-1, 3))));
 
-  const tacklesForLoss = Math.max(0, Math.min(3, Math.round((runStop / 50) + U.rand(-0.5, 1.5))));
+  let tflCount = (runStop / 50) + U.rand(-0.5, 1.5);
+  if (defender.traits && defender.traits.includes(TRAITS.RUN_STUFFER.id)) tflCount *= 1.2;
+  const tacklesForLoss = Math.max(0, Math.min(3, Math.round(tflCount)));
 
   const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
 
@@ -791,7 +806,8 @@ function generateOLStats(ol, defenseStrength, U) {
   const runBlock = ratings.runBlock || 70;
   const awareness = ratings.awareness || 70;
 
-  const sackChance = (100 - passBlock) / 200 + (defenseStrength / 300);
+  let sackChance = (100 - passBlock) / 200 + (defenseStrength / 300);
+  if (ol.traits && ol.traits.includes(TRAITS.STONE_WALL.id)) sackChance *= 0.75;
   const sacksAllowed = Math.max(0, Math.min(3, Math.round(sackChance * 2 + U.rand(-0.5, 1.5))));
 
   const tflAllowed = Math.max(0, Math.min(2, Math.round((100 - runBlock) / 100 + U.rand(-0.3, 0.5))));
@@ -812,7 +828,8 @@ function generateKickerStats(kicker, teamScore, U) {
 
   const fgAttempts = Math.max(0, Math.min(5, Math.round(teamScore / 7 + U.rand(-1, 2))));
 
-  const makeRate = kickAccuracy / 100;
+  let makeRate = kickAccuracy / 100;
+  if (kicker.traits && kicker.traits.includes(TRAITS.CLUTCH_KICKER.id)) makeRate *= 1.1;
   const fgMade = Math.max(0, Math.min(fgAttempts, Math.round(fgAttempts * makeRate + U.rand(-0.5, 0.5))));
 
   const longestFG = Math.max(20, Math.min(65, Math.round(30 + (kickPower / 2) + U.rand(-5, 10))));
@@ -1407,6 +1424,26 @@ export function simGameStats(home, away, options = {}) {
           qb.stats.game.passTD = totalRecTDs;
           // QB doesn't get 2PT stats in standard box scores usually (unless rushing/catching),
           // but sometimes passing 2PTs are tracked. For simplicity, we track it on the scorer.
+      }
+
+      // --- INJURY GENERATION ---
+      // Check for injuries for all active players in this game
+      if (generateInjury) {
+          team.roster.forEach(player => {
+              if (canPlayerPlay(player)) {
+                  // Only check for players who actually played (simple check: has stats)
+                  // or just check everyone active. Let's check everyone active.
+                  const injury = generateInjury(player);
+                  if (injury) {
+                      if (!player.injuries) player.injuries = [];
+                      player.injuries.push(injury);
+                      player.injured = true;
+                      // Update max weeks remaining
+                      player.injuryWeeks = Math.max(player.injuryWeeks || 0, injury.weeksRemaining);
+                      if (injury.seasonEnding) player.seasonEndingInjury = true;
+                  }
+              }
+          });
       }
     };
 
