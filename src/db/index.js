@@ -251,6 +251,7 @@ export const Rosters = {
 // --- Games ---
 
 export const Games = {
+  load:         (id)       => dbGet(STORES.GAMES, id),
   save:         (game)     => dbPut(STORES.GAMES, game),
   saveBulk:     (games)    => dbPutBulk(STORES.GAMES, games),
   bySeason:     (seasonId) => dbGetAllByIndex(STORES.GAMES, 'seasonId', seasonId),

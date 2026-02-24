@@ -11,7 +11,7 @@
 import React, { useEffect, useCallback, useRef, useState, Component } from 'react';
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
-import LiveGameViewer      from './components/LiveGameViewer.jsx';
+import LiveGame            from './components/LiveGame.jsx';
 import { toWorker }        from '../worker/protocol.js';
 
 // Canonical 32-team set — conf: 0=AFC 1=NFC, div: 0=East 1=North 2=South 3=West.
@@ -67,7 +67,7 @@ export default function App() {
   const {
     busy, simulating, simProgress,
     workerReady, hasSave,
-    league, lastResults,
+    league, lastResults, gameEvents,
     error, notifications,
   } = state;
 
@@ -326,11 +326,12 @@ export default function App() {
       )}
 
       {/* ── Live game viewer (visible during simulation + results) ────── */}
-      <LiveGameViewer
+      <LiveGame
         simulating={simulating}
         simProgress={simProgress}
         league={league}
         lastResults={lastResults}
+        gameEvents={gameEvents}
       />
 
       {/* ── Last results ticker ────────────────────────────────────────── */}

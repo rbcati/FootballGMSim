@@ -70,6 +70,9 @@ export const toWorker = Object.freeze({
   /** Roster / Free Agency */
   GET_ROSTER:         'GET_ROSTER',           // { teamId }
   GET_FREE_AGENTS:    'GET_FREE_AGENTS',      // {}
+
+  /** Box score retrieval */
+  GET_BOX_SCORE:      'GET_BOX_SCORE',        // { gameId }
 });
 
 // ─────────────────────────────────────────────
@@ -116,6 +119,9 @@ export const toUI = Object.freeze({
   /** Roster / FA data responses */
   ROSTER_DATA:        'ROSTER_DATA',          // { teamId, team, players[] }
   FREE_AGENT_DATA:    'FREE_AGENT_DATA',      // { freeAgents[] }
+
+  /** Box score response */
+  BOX_SCORE:          'BOX_SCORE',            // { gameId, game }
 
   /** Non-fatal notices */
   NOTIFICATION:       'NOTIFICATION',         // { level: 'info'|'warn', message }
