@@ -289,6 +289,11 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                       style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
                     >
                       {player.name}
+                      {player.injuries?.some(i=>i.weeksRemaining>0) && (
+                        <span style={{color:'var(--danger)', marginLeft:4, fontSize:'var(--text-xs)'}}>
+                           [+] ({Math.max(...player.injuries.map(i=>i.weeksRemaining))}w)
+                        </span>
+                      )}
                     </td>
                     {/* OVR */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
@@ -397,6 +402,7 @@ function DepthCard({ player, isStarter }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 4 }}>
         <span style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
           {player.name}
+          {player.injuries?.some(i=>i.weeksRemaining>0) && <span style={{color:'var(--danger)', marginLeft:2}}>[+]</span>}
         </span>
         <OvrBadge ovr={player.ovr} />
       </div>
@@ -419,9 +425,15 @@ function DepthChartView({ players }) {
       const row = DEPTH_ROWS.find(r => r.match.includes(player.pos));
       if (row) map[row.key].push(player);
     });
-    // Sort each group by OVR desc so the best player is always Starter
+    // Sort each group by Health > OVR desc so the best player is always Starter
     Object.keys(map).forEach(key => {
-      map[key].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+      map[key].sort((a, b) => {
+        const aInj = (a.injuries && a.injuries.some(i => i.weeksRemaining > 0));
+        const bInj = (b.injuries && b.injuries.some(i => i.weeksRemaining > 0));
+        if (!aInj && bInj) return -1;
+        if (aInj && !bInj) return 1;
+        return (b.ovr ?? 0) - (a.ovr ?? 0);
+      });
     });
     return map;
   }, [players]);

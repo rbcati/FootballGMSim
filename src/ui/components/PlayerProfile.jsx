@@ -46,6 +46,16 @@ export default function PlayerProfile({ playerId, onClose }) {
         display: 'flex', flexDirection: 'column'
       }}>
 
+        {/* Injury Banner */}
+        {data?.player?.injuries?.some(i => i.weeksRemaining > 0) && (
+          <div style={{
+            background: 'var(--danger)', color: '#fff', padding: 'var(--space-2) var(--space-5)',
+            fontSize: 'var(--text-sm)', fontWeight: 700, textAlign: 'center'
+          }}>
+            INJURED: {data.player.injuries.find(i => i.weeksRemaining > 0).type} ({Math.max(...data.player.injuries.map(i=>i.weeksRemaining))} weeks remaining)
+          </div>
+        )}
+
         {/* Header */}
         <div style={{
           padding: 'var(--space-5)', borderBottom: '1px solid var(--hairline)',

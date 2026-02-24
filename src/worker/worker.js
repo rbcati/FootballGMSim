@@ -31,6 +31,7 @@ import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass }  from '../core/player.js';
+import { autoSortDepthChart } from '../core/depth-chart.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -530,8 +531,50 @@ async function handleAdvanceWeek(payload, id) {
 
   if (!schedule) { post(toUI.ERROR, { message: 'No schedule found' }, id); return; }
 
+  // --- INJURY MANAGEMENT: Healing ---
+  // 1. Healing Loop
+  const allTeams = cache.getAllTeams();
+  for (const team of allTeams) {
+      const roster = cache.getPlayersByTeam(team.id);
+
+      for (const p of roster) {
+          if (p.injuries && p.injuries.length > 0) {
+              const healed = [];
+              p.injuries.forEach((inj, idx) => {
+                  inj.weeksRemaining--;
+                  if (inj.weeksRemaining <= 0) {
+                      healed.push(idx);
+                  }
+              });
+
+              // Remove healed injuries
+              if (healed.length > 0) {
+                  // Sort descending to splice correctly
+                  healed.sort((a, b) => b - a).forEach(idx => p.injuries.splice(idx, 1));
+
+                  // Clear legacy flag if no injuries left
+                  if (p.injuries.length === 0) {
+                      p.injured = false;
+                      p.injuryWeeks = 0;
+                  }
+
+                  cache.updatePlayer(p.id, { injuries: p.injuries, injured: p.injured, injuryWeeks: p.injuryWeeks });
+              } else {
+                  // Update progress (decrement)
+                  cache.updatePlayer(p.id, { injuries: p.injuries });
+              }
+          }
+      }
+  }
+
   // Build a temporary league-style object for GameRunner (read-only view of cache)
   const league = buildLeagueForSim(schedule, week, seasonId);
+
+  // 2. Auto-Sort Depth Chart (Pre-Sim)
+  // Ensure injured players are deprioritized in the sim data
+  league.teams.forEach(t => {
+      autoSortDepthChart(t);
+  });
 
   post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
 
@@ -549,6 +592,25 @@ async function handleAdvanceWeek(payload, id) {
     // Apply each game result to cache and emit GAME_EVENT per game
     for (const res of batchResults) {
       applyGameResultToCache(res, week, seasonId);
+
+      // Handle Injuries
+      if (res.injuries && res.injuries.length > 0) {
+          for (const injRec of res.injuries) {
+              const p = cache.getPlayer(injRec.playerId);
+              if (p) {
+                  if (!p.injuries) p.injuries = [];
+                  p.injuries.push(injRec.injury);
+                  p.injured = true;
+                  p.injuryWeeks = Math.max(p.injuryWeeks || 0, injRec.injury.weeksOut);
+
+                  cache.updatePlayer(p.id, {
+                      injuries: p.injuries,
+                      injured: true,
+                      injuryWeeks: p.injuryWeeks
+                  });
+              }
+          }
+      }
 
       // Emit GAME_EVENT so the LiveGame viewer can update the scoreboard in real-time
       const rawH   = res.home      ?? res.homeTeamId;

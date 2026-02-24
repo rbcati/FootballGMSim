@@ -399,6 +399,7 @@ export default function FreeAgencyPanel({ league, actions }) {
                       </td>
                       <td style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)' }}>
                         {player.name}
+                        {player.injuries?.some(i=>i.weeksRemaining>0) && <span style={{color:'var(--danger)', marginLeft:2}}>[+]</span>}
                       </td>
                       <td style={{ textAlign: 'right', paddingRight: 'var(--space-4)' }}>
                         <span style={{

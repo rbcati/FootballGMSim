@@ -130,6 +130,7 @@ function PlayerCheckRow({ player, checked, onChange, onNameClick }) {
         }}
       >
         {player.name}
+      {player.injuries?.some(i=>i.weeksRemaining>0) && <span style={{color:'var(--danger)', marginLeft:4}}>[+]</span>}
       </span>
       {/* Salary */}
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', flexShrink: 0 }}>

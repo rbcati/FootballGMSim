@@ -8,7 +8,7 @@ import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
-import { getEffectiveRating, canPlayerPlay } from './injury-core.js';
+import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
 
 /**
@@ -24,9 +24,15 @@ export function groupPlayersByPosition(roster) {
     if (!groups[pos]) groups[pos] = [];
     groups[pos].push(player);
   }
-  // Sort by OVR descending
+  // Sort by Healthy > Injured, then OVR descending
   for (const pos in groups) {
-    groups[pos].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    groups[pos].sort((a, b) => {
+      const aPlay = canPlayerPlay(a);
+      const bPlay = canPlayerPlay(b);
+      if (aPlay && !bPlay) return -1;
+      if (!aPlay && bPlay) return 1;
+      return (b.ovr || 0) - (a.ovr || 0);
+    });
   }
   return groups;
 }
@@ -1412,7 +1418,40 @@ export function simGameStats(home, away, options = {}) {
     generateTeamStats(home, homeScore, homeStrength, awayStrength);
     generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
-    return { homeScore, awayScore, schemeNote };
+    // --- INJURY SIMULATION ---
+    const newInjuries = [];
+    const rollForInjury = (player) => {
+        if (!canPlayerPlay(player)) return; // Already injured/out
+
+        // Base injury chance per game ~1-2% for starters depending on position
+        // RBs higher risk, Kickers lower
+        let chance = 1.5;
+        if (player.pos === 'RB' || player.pos === 'HB') chance = 2.5;
+        if (player.pos === 'K' || player.pos === 'P') chance = 0.2;
+        if (player.pos === 'QB') chance = 1.0;
+        if (player.pos === 'OL' || player.pos.includes('L')) chance = 1.2;
+
+        // Fatigue modifier (if implemented)
+        if (player.fatigue && player.fatigue > 50) chance *= 1.5;
+
+        if (U.rand(0, 1000) < (chance * 10)) { // chance is %, so chance*10 out of 1000
+            const injury = generateInjury(player.pos);
+            newInjuries.push({ playerId: player.id, injury, teamId: player.teamId });
+        }
+    };
+
+    // Check injuries for players who accumulated stats (played)
+    // We iterate active roster or stats objects.
+    // Simplified: iterate active groups we used.
+    [...homeActive, ...awayActive].forEach(p => {
+        // Only check players who actually played (has stats)
+        // Checking stats.game is a good proxy
+        if (p.stats && p.stats.game && Object.keys(p.stats.game).length > 0) {
+             rollForInjury(p);
+        }
+    });
+
+    return { homeScore, awayScore, schemeNote, injuries: newInjuries };
 
   } catch (error) {
     console.error('[SIM-DEBUG] Error in simGameStats:', error);

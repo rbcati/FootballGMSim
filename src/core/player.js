@@ -362,6 +362,7 @@ function makePlayer(pos, age = null, ovr = null) {
         signingBonus: contractDetails.signingBonus,
         guaranteedPct: contractDetails.guaranteedPct,
         injuryWeeks: 0,
+        injuries: [],
         fatigue: 0,
         morale: U.rand(70, 95),
         negotiationStatus: 'OPEN',
