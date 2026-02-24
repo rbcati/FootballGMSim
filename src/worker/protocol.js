@@ -39,6 +39,8 @@ export const toWorker = Object.freeze({
 
   /** Free agency */
   SIGN_PLAYER:        'SIGN_PLAYER',       // { playerId, teamId, contract }
+  SUBMIT_OFFER:       'SUBMIT_OFFER',      // { playerId, teamId, contract }
+  ADVANCE_FREE_AGENCY_DAY: 'ADVANCE_FREE_AGENCY_DAY', // {}
   RELEASE_PLAYER:     'RELEASE_PLAYER',    // { playerId, teamId }
   PROCESS_FA_WAVE:    'PROCESS_FA_WAVE',   // AI teams act in FA
 

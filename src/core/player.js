@@ -372,6 +372,7 @@ function makePlayer(pos, age = null, ovr = null) {
         isFollowed: false,
         traits: generateTraits(pos, playerOvr),
         abilities: [],
+        offers: [], // FA offers
         awards: [],
         personality: generatePersonality(),
         stats: {

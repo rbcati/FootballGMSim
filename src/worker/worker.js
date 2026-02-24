@@ -107,6 +107,7 @@ function buildViewState() {
     userTeamId: meta?.userTeamId  ?? null,
     schedule:   meta?.schedule    ?? null,
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
+    freeAgencyState: meta?.freeAgencyState ?? null,
     draftStarted: !!(meta?.draftState),
     nextGameStakes,
     teams,
@@ -1079,7 +1080,7 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const oldTeamId = player.teamId;
-  cache.updatePlayer(playerId, { teamId, contract, status: 'active' });
+  cache.updatePlayer(playerId, { teamId, contract, status: 'active', offers: [] });
 
   // Update cap
   _updateTeamCap(teamId);
@@ -1093,6 +1094,50 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
 
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+}
+
+// ── Handler: SUBMIT_OFFER ─────────────────────────────────────────────────────
+
+async function handleSubmitOffer({ playerId, teamId, contract }, id) {
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const team = cache.getTeam(teamId);
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  // Cap check
+  const capHit = contract.baseAnnual + (contract.signingBonus / contract.yearsTotal);
+  if (team.capRoom < capHit) {
+      post(toUI.ERROR, { message: 'Not enough cap room' }, id);
+      return;
+  }
+
+  // Add/Update offer
+  if (!player.offers) player.offers = [];
+
+  // Remove existing offer from this team if any
+  const existingIdx = player.offers.findIndex(o => o.teamId === teamId);
+  if (existingIdx > -1) player.offers.splice(existingIdx, 1);
+
+  player.offers.push({
+      teamId,
+      teamName: team.name,
+      contract,
+      timestamp: Date.now()
+  });
+
+  // We strictly don't save "offers" to DB in this simplified model unless we updated schema.
+  // But cache.updatePlayer marks it dirty.
+  // IMPORTANT: Player object schema in DB needs to support 'offers'.
+  // IndexedDB 'put' will handle extra fields fine.
+  cache.updatePlayer(playerId, { offers: player.offers });
+
+  await flushDirty();
+
+  // Return updated FA data view so UI reflects the offer immediately
+  // Also state update
+  await handleGetFreeAgents({}, null); // Broadcast FA update if needed, but easier to just reply success
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: RELEASE_PLAYER ───────────────────────────────────────────────────
@@ -1165,18 +1210,42 @@ async function handleGetRoster({ teamId }, id) {
 // ── Handler: GET_FREE_AGENTS ──────────────────────────────────────────────────
 
 async function handleGetFreeAgents(payload, id) {
+  const meta = cache.getMeta();
+  const userTeamId = meta.userTeamId;
+
   const freeAgents = cache.getAllPlayers()
     .filter(p => !p.teamId || p.status === 'free_agent')
-    .map(p => ({
-      id:        p.id,
-      name:      p.name,
-      pos:       p.pos,
-      age:       p.age,
-      ovr:       p.ovr,
-      potential: p.potential ?? null,
-      contract:  p.contract ?? null,   // last known contract (asking price reference)
-      traits:    p.traits ?? [],
-    }));
+    .map(p => {
+        // Summarize offers for UI
+        const offers = p.offers || [];
+        const userOffer = offers.find(o => o.teamId === userTeamId);
+
+        // Calculate max offer value
+        let topOfferValue = 0;
+        if (offers.length > 0) {
+            topOfferValue = offers.reduce((max, o) => {
+                const c = o.contract;
+                const val = (c.baseAnnual * c.yearsTotal) + c.signingBonus;
+                return val > max ? val : max;
+            }, 0);
+        }
+
+        return {
+          id:        p.id,
+          name:      p.name,
+          pos:       p.pos,
+          age:       p.age,
+          ovr:       p.ovr,
+          potential: p.potential ?? null,
+          contract:  p.contract ?? null,   // last known contract (asking price reference)
+          traits:    p.traits ?? [],
+          offers: {
+              count: offers.length,
+              userOffered: !!userOffer,
+              topOfferValue: Math.round(topOfferValue * 10) / 10
+          }
+        };
+    });
 
   post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
 }
@@ -1800,22 +1869,62 @@ async function handleAdvanceOffseason(payload, id) {
     }
   }
 
-  // AI: Free Agency (fill holes after retirements)
-  for (const team of allTeams) {
-      if (team.id !== meta.userTeamId) {
-          await AiLogic.executeAIFreeAgency(team.id);
-      }
-  }
+  // Initialize Free Agency Phase
+  // DO NOT RUN executeAIFreeAgency instantly anymore.
+  cache.setMeta({
+      offseasonProgressionDone: true,
+      freeAgencyState: { day: 1, maxDays: 5, complete: false }
+  });
 
-  cache.setMeta({ offseasonProgressionDone: true });
   await flushDirty();
 
   post(toUI.OFFSEASON_PHASE, {
     phase:   'progression_complete',
     retired,
-    message: `Offseason: ${retired.length} player(s) retired.`,
+    message: `Offseason: ${retired.length} player(s) retired. Free Agency Begins!`,
   }, id);
   post(toUI.STATE_UPDATE, buildViewState());
+}
+
+// ── Handler: ADVANCE_FREE_AGENCY_DAY ──────────────────────────────────────────
+
+async function handleAdvanceFreeAgencyDay(payload, id) {
+    const meta = cache.getMeta();
+    if (!meta || !meta.freeAgencyState) {
+        post(toUI.ERROR, { message: 'Not in Free Agency' }, id);
+        return;
+    }
+
+    const { day, maxDays } = meta.freeAgencyState;
+
+    if (day > maxDays) {
+        post(toUI.NOTIFICATION, { level: 'info', message: 'Free Agency period is over.' });
+        return;
+    }
+
+    // Process Day
+    await AiLogic.processFreeAgencyDay(day);
+
+    // Increment Day
+    const nextDay = day + 1;
+    const isComplete = nextDay > maxDays;
+
+    cache.setMeta({
+        freeAgencyState: {
+            ...meta.freeAgencyState,
+            day: nextDay,
+            complete: isComplete
+        }
+    });
+
+    await flushDirty();
+
+    post(toUI.NOTIFICATION, { level: 'info', message: `Free Agency Day ${day} Complete.` });
+
+    // Refresh views
+    post(toUI.STATE_UPDATE, buildViewState());
+    // Also trigger FA list refresh
+    await handleGetFreeAgents({}, null);
 }
 
 /**
@@ -1919,6 +2028,7 @@ async function handleStartNewSeason(payload, id) {
     schedule:                slimSchedule,
     playoffSeeds:            null,
     draftState:              null,
+    freeAgencyState:         null, // Reset FA state
     championTeamId:          null,
     offseasonProgressionDone:false,
   });
@@ -1949,6 +2059,7 @@ self.onmessage = async (event) => {
       case toWorker.RESET_LEAGUE:       return await handleResetLeague(payload, id);
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
+      case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
@@ -1965,6 +2076,7 @@ self.onmessage = async (event) => {
       case toWorker.MAKE_DRAFT_PICK:    return await handleMakeDraftPick(payload, id);
       case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
       case toWorker.ADVANCE_OFFSEASON:  return await handleAdvanceOffseason(payload, id);
+      case toWorker.ADVANCE_FREE_AGENCY_DAY: return await handleAdvanceFreeAgencyDay(payload, id);
       case toWorker.START_NEW_SEASON:   return await handleStartNewSeason(payload, id);
 
       default:

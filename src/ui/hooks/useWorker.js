@@ -297,6 +297,10 @@ export function useWorker() {
     signPlayer: (playerId, teamId, contract) =>
       send(toWorker.SIGN_PLAYER, { playerId, teamId, contract }),
 
+    /** Submit an offer to a free agent. */
+    submitOffer: (playerId, teamId, contract) =>
+      send(toWorker.SUBMIT_OFFER, { playerId, teamId, contract }),
+
     /** Release a player. */
     releasePlayer: (playerId, teamId) =>
       send(toWorker.RELEASE_PLAYER, { playerId, teamId }),
@@ -360,6 +364,10 @@ export function useWorker() {
      */
     advanceOffseason: () =>
       request(toWorker.ADVANCE_OFFSEASON, {}),
+
+    /** Advance to the next day of Free Agency. */
+    advanceFreeAgencyDay: () =>
+      send(toWorker.ADVANCE_FREE_AGENCY_DAY),
 
     /** Finalise offseason → generate new schedule → Week 1. */
     startNewSeason: () => send(toWorker.START_NEW_SEASON),

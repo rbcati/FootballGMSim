@@ -316,6 +316,8 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
   );
   const capRoom = userTeam?.capRoom ?? 0;
 
+  const faState = league?.freeAgencyState; // { day, maxDays, complete }
+
   const [loading,   setLoading]   = useState(false);
   const [faPool,    setFaPool]    = useState([]);
   const [posFilter, setPosFilter] = useState('ALL');
@@ -395,10 +397,9 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
 
   const handleSign = (player, contract) => {
     setSigning(null);
-    // Optimistic: remove from local list immediately
-    setSignedIds(prev => new Set([...prev, player.id]));
-    actions.signPlayer(player.id, teamId, contract);
-    setFlash(`${player.name} signed — ${fmtSalary(contract.baseAnnual)} / ${contract.yearsTotal}yr`);
+    // Use submitOffer instead of signPlayer
+    actions.submitOffer(player.id, teamId, contract);
+    setFlash(`Offer submitted to ${player.name} — ${fmtSalary(contract.baseAnnual)} / ${contract.yearsTotal}yr`);
     setTimeout(() => setFlash(null), 3000);
   };
 
@@ -406,6 +407,28 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
 
   return (
     <div>
+      {/* Free Agency Status Banner */}
+      {faState && (
+        <div className="card" style={{ marginBottom: 'var(--space-4)', padding: 'var(--space-4)', background: 'var(--surface-strong)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)' }}>
+              Free Agency Status
+            </div>
+            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--accent)' }}>
+              {faState.complete ? 'Period Complete' : `Day ${faState.day} of ${faState.maxDays}`}
+            </div>
+          </div>
+          {!faState.complete && (
+            <button
+              className="btn btn-primary"
+              onClick={() => actions.advanceFreeAgencyDay()}
+            >
+              Advance to Day {faState.day + 1}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Cap banner */}
       <CapBanner userTeam={userTeam} />
 
@@ -485,6 +508,9 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                   <SortTh label="Ask $/yr" sortKey="salary" current={sortKey} dir={sortDir} onSort={handleSort} right />
                   <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Yrs
+                  </th>
+                  <th style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Offers
                   </th>
                   <th style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Traits
@@ -589,6 +615,16 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                       <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                         {askYrs}yr
                       </td>
+                      <td style={{ textAlign: 'center', fontSize: 'var(--text-xs)' }}>
+                        {player.offers?.count > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 700, color: 'var(--text)' }}>{player.offers.count} Offers</span>
+                                <span style={{ color: 'var(--text-muted)' }}>Top: {fmtSalary(player.offers.topOfferValue)}</span>
+                            </div>
+                        ) : (
+                            <span style={{ color: 'var(--text-subtle)' }}>—</span>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {(player.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
                       </td>
@@ -599,11 +635,11 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                           </span>
                         ) : (
                           <button
-                            className={`btn${canAfford ? ' btn-primary' : ''}`}
+                            className={`btn${player.offers?.userOffered ? '' : (canAfford ? ' btn-primary' : '')}`}
                             style={{ fontSize: 'var(--text-xs)', padding: '2px 12px' }}
                             onClick={() => setSigning(player.id)}
                           >
-                            Sign
+                            {player.offers?.userOffered ? 'Update' : 'Offer'}
                           </button>
                         )}
                       </td>
