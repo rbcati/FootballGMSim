@@ -332,7 +332,14 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
     if (!actions?.getFreeAgents) return;
     setLoading(true);
     try {
-      const resp = await actions.getFreeAgents();
+      // Race fetch against a 5-second timeout to prevent stuck loading state
+      const fetchPromise = actions.getFreeAgents();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Fetch timeout')), 5000)
+      );
+
+      const resp = await Promise.race([fetchPromise, timeoutPromise]);
+
       if (resp?.payload?.freeAgents) {
         const enriched = resp.payload.freeAgents.map(p => ({
           ...p,

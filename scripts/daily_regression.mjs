@@ -180,12 +180,14 @@ async function runRegression() {
     // Force a rivalry
     userTeam.rivalries = { [rival.id]: { score: 80 } };
 
-    const stakes = GameRunner.calculateContextualStakes(league, userTeam, rival, { enabled: true, fanSatisfaction: 50 });
+    const stakesObj = GameRunner.calculateContextualStakes(league, userTeam, rival, { enabled: true, fanSatisfaction: 50 });
+    const stakes = stakesObj.score;
+    const reason = stakesObj.reason;
 
     if (stakes < 50) {
         console.warn(`[WARN] High rivalry didn't trigger high stakes. Score: ${stakes}`);
     } else {
-        pass(`Rivalry Game Context Triggered Stakes: ${stakes}/100`);
+        pass(`Rivalry Game Context Triggered Stakes: ${stakes}/100. Reason: ${reason}`);
     }
 
 
