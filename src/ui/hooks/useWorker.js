@@ -16,7 +16,7 @@
  * view-model slices the worker sends back (buildViewState shape).
  */
 
-import { useEffect, useRef, useCallback, useReducer } from 'react';
+import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
 
 // ── State shape ───────────────────────────────────────────────────────────────
@@ -235,8 +235,13 @@ export function useWorker() {
   }, []);
 
   // ── Convenience action wrappers ────────────────────────────────────────────
+  // IMPORTANT: wrapped in useMemo so the returned object reference is stable
+  // across re-renders.  send/request are useCallback([]) and dispatch from
+  // useReducer is always stable, so this object is created exactly once for the
+  // lifetime of the hook.  Any child useEffect that lists `actions` as a
+  // dependency will therefore NOT re-fire on ordinary state updates.
 
-  const actions = {
+  const actions = useMemo(() => ({
     /** Load existing save or show new-league screen. */
     init: ()                   => send(toWorker.INIT),
 
@@ -301,7 +306,9 @@ export function useWorker() {
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),
-  };
+  // send/request are useCallback([]) — stable for life of hook.
+  // dispatch from useReducer is guaranteed stable by React.
+  }), [send, request, dispatch]);
 
   return { state, actions };
 }
