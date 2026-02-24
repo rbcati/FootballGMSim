@@ -4,6 +4,7 @@
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateWAR as calculateWARImpl } from './war-calculator.js';
+import { TRAITS } from '../data/traits.js';
 
 // ============================================================================
 // PLAYER PROGRESSION & SKILL TREES
@@ -336,6 +337,66 @@ function generateName() {
     return U.choice(C.FIRST_NAMES) + ' ' + U.choice(C.LAST_NAMES);
 }
 
+function generateTraits(pos, ovr) {
+    // Determine number of traits based on OVR
+    // >= 90: High chance of 2-3
+    // 80-89: Chance of 1-2
+    // 70-79: Chance of 0-1
+    // < 70: Very low chance of 1
+
+    let numTraits = 0;
+    const roll = U.random();
+
+    if (ovr >= 95) {
+        if (roll < 0.4) numTraits = 3;
+        else if (roll < 0.9) numTraits = 2;
+        else numTraits = 1;
+    } else if (ovr >= 85) {
+        if (roll < 0.2) numTraits = 3;
+        else if (roll < 0.6) numTraits = 2;
+        else numTraits = 1;
+    } else if (ovr >= 75) {
+        if (roll < 0.4) numTraits = 2;
+        else if (roll < 0.9) numTraits = 1;
+        else numTraits = 0;
+    } else if (ovr >= 65) {
+        if (roll < 0.3) numTraits = 1;
+        else numTraits = 0;
+    } else {
+        if (roll < 0.05) numTraits = 1;
+        else numTraits = 0;
+    }
+
+    const available = Object.values(TRAITS).filter(t => {
+        return t.pos.includes('ALL') || t.pos.includes(pos);
+    });
+
+    const assigned = [];
+
+    for (let i = 0; i < numTraits; i++) {
+        if (available.length === 0) break;
+
+        const idx = U.rand(0, available.length - 1);
+        const trait = available[idx];
+
+        // Check conflicts
+        const hasConflict = assigned.some(t =>
+            (t.conflicts && t.conflicts.includes(trait.id)) ||
+            (trait.conflicts && trait.conflicts.includes(t.id))
+        );
+
+        if (!hasConflict) {
+            assigned.push(trait);
+        }
+
+        // Remove from available to avoid duplicates
+        available.splice(idx, 1);
+    }
+
+    // Return just IDs for storage efficiency
+    return assigned.map(t => t.id);
+}
+
 // ============================================================================
 // MAIN PLAYER FUNCTIONS
 // ============================================================================
@@ -370,6 +431,7 @@ function makePlayer(pos, age = null, ovr = null) {
         potential: Math.min(99, playerOvr + U.rand(0, 30)),
         isFollowed: false,
         abilities: [],
+        traits: generateTraits(pos, playerOvr),
         awards: [],
         personality: generatePersonality(),
         stats: {
@@ -470,6 +532,7 @@ export {
     generateContract,
     generatePlayerRatings,
     tagAbilities,
+    generateTraits,
     calculateMorale,
     calculateExtensionDemand
 };

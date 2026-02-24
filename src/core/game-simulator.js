@@ -8,8 +8,9 @@ import { Constants as C } from './constants.js';
 import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
-import { getEffectiveRating, canPlayerPlay } from './injury-core.js';
+import { getEffectiveRating, canPlayerPlay, calculateInjuryChance, generateInjury } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
+import { TRAITS } from '../data/traits.js';
 
 /**
  * Helper to group players by position and sort by OVR descending.
@@ -557,9 +558,11 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   ));
 
   // Sacks: NFL average ~2.4/game. Awareness and OL protection matter.
-  const sacks = Math.max(0, Math.min(7,
-    Math.round(2.4 + (70 - awareness) * 0.04 + U.rand(-1, 2))
-  ));
+  let sackCount = 2.4 + (70 - awareness) * 0.04 + U.rand(-1, 2);
+  if (qb.traits && qb.traits.includes(TRAITS.POCKET_PRESENCE.id)) {
+      sackCount *= 0.8; // 20% reduction
+  }
+  const sacks = Math.max(0, Math.min(7, Math.round(sackCount)));
 
   const longestPass = completions > 0
     ? Math.max(12, Math.round(avgYPC * U.rand(2.0, 3.5)))
@@ -613,7 +616,11 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
     Math.round(rushTdRate + U.rand(-0.3, 0.8))
   ));
 
-  const fumbles = Math.max(0, Math.min(2, Math.round((100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5))));
+  let fumbleCount = (100 - (ratings.awareness || 70)) / 150 + U.rand(-0.3, 0.5);
+  if (rb.traits && rb.traits.includes(TRAITS.WORKHORSE.id)) {
+      fumbleCount *= 0.7; // 30% reduction
+  }
+  const fumbles = Math.max(0, Math.min(2, Math.round(fumbleCount)));
 
   const longestRun = Math.max(5, Math.round(rushYd / Math.max(1, carries) * U.rand(1.5, 3.5)));
 
@@ -680,7 +687,10 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
 
   // Adjusted YPC to match QB output ~11.0
   // Gaussian distribution for Yards Per Catch
-  const meanYPR = 11.0 + (speed - 70) * 0.15;
+  let meanYPR = 11.0 + (speed - 70) * 0.15;
+  if (receiver.traits && receiver.traits.includes(TRAITS.DEEP_THREAT.id)) {
+      meanYPR += 1.5; // Significant boost to YPC
+  }
   const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.5, 4.0, 30.0);
   const recYd = Math.round(receptions * avgYardsPerCatch);
 
@@ -726,6 +736,7 @@ function generateDBStats(db, offenseStrength, U, modifiers = {}) {
 
   let intChance = (coverage + awareness) / 200;
   if (modifiers.intChance) intChance *= modifiers.intChance;
+  if (db.traits && db.traits.includes(TRAITS.BALLHAWK.id)) intChance *= 1.3;
 
   const interceptions = Math.max(0, Math.min(3, Math.round(intChance * 2 + U.rand(-0.5, 1.5))));
 
@@ -760,6 +771,7 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
 
   let sackChance = (passRushPower + passRushSpeed) / 200;
   if (modifiers.sackChance) sackChance *= modifiers.sackChance;
+  if (defender.traits && defender.traits.includes(TRAITS.SPEED_RUSHER.id)) sackChance *= 1.25;
 
   const sacks = Math.max(0, Math.min(4, Math.round(sackChance * 3 + U.rand(-0.5, 1.5))));
 
@@ -1408,6 +1420,40 @@ export function simGameStats(home, away, options = {}) {
           // QB doesn't get 2PT stats in standard box scores usually (unless rushing/catching),
           // but sometimes passing 2PTs are tracked. For simplicity, we track it on the scorer.
       }
+
+      // --- INJURY CHECK ---
+      // Check for injuries among active players (anyone with snapCount > 0 or participated)
+      // For simplicity, we check key positions who likely played.
+      const activePlayers = [
+          ...(groups['QB'] || []).slice(0, 1),
+          ...(groups['RB'] || []).slice(0, 2),
+          ...(groups['WR'] || []).slice(0, 4),
+          ...(groups['TE'] || []).slice(0, 2),
+          ...(groups['OL'] || []).slice(0, 5),
+          ...(groups['DL'] || []).slice(0, 4),
+          ...(groups['LB'] || []).slice(0, 3),
+          ...(groups['CB'] || []).slice(0, 3),
+          ...(groups['S'] || []).slice(0, 2),
+          ...(groups['K'] || []),
+          ...(groups['P'] || [])
+      ];
+
+      activePlayers.forEach(p => {
+          if (!p) return;
+          // Skip if already injured (unless re-injury logic desired, but let's keep simple)
+          if (p.injured) return;
+
+          const chance = calculateInjuryChance(p);
+          if (U.random() < chance) {
+              const injury = generateInjury(p);
+              if (!p.injuries) p.injuries = [];
+              p.injuries.push(injury);
+              p.injured = true;
+              p.injuryWeeks = Math.max(p.injuryWeeks || 0, injury.weeksRemaining);
+              // Note: This modifies the player object in-memory (cache reference).
+              // The worker will persist these changes when flushing dirty players.
+          }
+      });
     };
 
     // Pass the mods to the team generation

@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useWorker } from '../hooks/useWorker.js';
+import TraitBadge from './TraitBadge.jsx';
 
 function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
   const [ask, setAsk] = useState(null);
@@ -139,6 +140,9 @@ export default function PlayerProfile({ playerId, onClose }) {
                       Pot: {data.player.potential}
                     </span>
                   )}
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  {data.player.traits && data.player.traits.map(tid => <TraitBadge key={tid} traitId={tid} />)}
                 </div>
                 {data.player.status === 'active' && data.player.contract?.years === 1 && (
                   <div style={{ marginTop: 'var(--space-3)' }}>

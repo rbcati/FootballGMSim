@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import TraitBadge from './TraitBadge.jsx';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -227,8 +228,16 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
     if (filterPos)   list = list.filter(p => p.pos === filterPos);
     if (nameFilter)  list = list.filter(p => p.name.toLowerCase().includes(nameFilter.toLowerCase()));
     list.sort((a, b) => {
-      const av = a[sortKey] ?? 0;
-      const bv = b[sortKey] ?? 0;
+      let av = a[sortKey];
+      let bv = b[sortKey];
+      if (sortKey === 'traits') {
+          av = a.traits?.length ?? 0;
+          bv = b.traits?.length ?? 0;
+      } else {
+          av = av ?? 0;
+          bv = bv ?? 0;
+      }
+
       if (typeof av === 'string') return sortDir * av.localeCompare(bv);
       return sortDir * ((bv ?? 0) - (av ?? 0));
     });
@@ -454,6 +463,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                     { key: 'age',       label: 'AGE' },
                     { key: 'ovr',       label: 'OVR' },
                     { key: 'potential', label: 'POT' },
+                    { key: 'traits',    label: 'TRAITS' },
                     { key: 'college',   label: 'COLLEGE' },
                   ].map(col => (
                     <th
@@ -504,6 +514,11 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                     <td><OvrBadge ovr={p.ovr} /></td>
                     <td style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
                       {p.potential ?? '—'}
+                    </td>
+                    <td>
+                      {p.traits && p.traits.length > 0 ? (
+                        p.traits.map(tid => <TraitBadge key={tid} traitId={tid} small showName={false} />)
+                      ) : <span style={{ color: 'var(--text-subtle)', fontSize: '10px' }}>—</span>}
                     </td>
                     <td style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {p.college ?? '—'}

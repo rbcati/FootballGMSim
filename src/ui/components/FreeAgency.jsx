@@ -23,6 +23,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import TraitBadge from './TraitBadge.jsx';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ function sortFA(players, sortKey, sortDir) {
       case 'ovr':    va = a.ovr  ?? 0;  vb = b.ovr  ?? 0;  break;
       case 'age':    va = a.age  ?? 0;  vb = b.age  ?? 0;  break;
       case 'salary': va = a._ask ?? 0;  vb = b._ask ?? 0;  break;
+      case 'traits': va = a.traits?.length ?? 0; vb = b.traits?.length ?? 0; break;
       case 'pos':    va = a.pos  ?? ''; vb = b.pos  ?? ''; break;
       case 'name':   va = a.name ?? ''; vb = b.name ?? ''; break;
       default:       va = 0;            vb = 0;
@@ -231,7 +233,7 @@ function SignForm({ player, capRoom, onSubmit, onCancel }) {
   };
 
   return (
-    <td colSpan={7} style={{ padding: 'var(--space-3) var(--space-5)', background: 'var(--surface-strong)' }}>
+    <td colSpan={8} style={{ padding: 'var(--space-3) var(--space-5)', background: 'var(--surface-strong)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
 
         {/* Player demand label */}
@@ -485,6 +487,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                   <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Yrs
                   </th>
+                  <SortTh label="Traits" sortKey="traits" current={sortKey} dir={sortDir} onSort={handleSort} right />
                   <th style={{ textAlign: 'center', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     Action
                   </th>
@@ -494,7 +497,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                 {/* Empty state */}
                 {displayed.length === 0 && (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
+                    <td colSpan={9} style={{ textAlign: 'center', padding: 'var(--space-8)', color: 'var(--text-muted)' }}>
                       No free agents match your filters.
                     </td>
                   </tr>
@@ -532,6 +535,11 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                           </td>
                           <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                             {askYrs}yr
+                          </td>
+                          <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
+                            {player.traits && player.traits.length > 0 ? (
+                              player.traits.map(tid => <TraitBadge key={tid} traitId={tid} small showName={false} />)
+                            ) : '—'}
                           </td>
                           <td />
                         </tr>
@@ -584,6 +592,11 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                       </td>
                       <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                         {askYrs}yr
+                      </td>
+                      <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
+                        {player.traits && player.traits.length > 0 ? (
+                          player.traits.map(tid => <TraitBadge key={tid} traitId={tid} small showName={false} />)
+                        ) : '—'}
                       </td>
                       <td style={{ textAlign: 'center', paddingRight: 'var(--space-3)' }}>
                         {capRoom < 2 ? (

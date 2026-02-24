@@ -22,6 +22,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import TraitBadge from './TraitBadge.jsx';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -103,6 +104,7 @@ function sortPlayers(players, sortKey, sortDir) {
       case 'ovr':    va = a.ovr ?? 0;                      vb = b.ovr ?? 0;                     break;
       case 'age':    va = a.age ?? 0;                      vb = b.age ?? 0;                     break;
       case 'salary': va = a.contract?.baseAnnual ?? 0;     vb = b.contract?.baseAnnual ?? 0;    break;
+      case 'traits': va = a.traits?.length ?? 0;           vb = b.traits?.length ?? 0;          break;
       case 'fit':    va = a.schemeFit ?? 50;               vb = b.schemeFit ?? 50;              break;
       case 'morale': va = a.morale ?? 75;                  vb = b.morale ?? 75;                 break;
       case 'name':   va = a.name ?? '';                    vb = b.name ?? '';                   break;
@@ -337,6 +339,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                 <SortTh label="Age"    sortKey="age"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
                 <SortTh label="$/yr"   sortKey="salary" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
                 <th style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Yrs</th>
+                <SortTh label="Traits" sortKey="traits" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
                 <SortTh label="Fit"    sortKey="fit"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
                 <SortTh label="Morale" sortKey="morale" currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'center' }} />
                 <th style={{ textAlign: 'center', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action</th>
@@ -387,6 +390,14 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                     {/* Years */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                       {fmtYears(player.contract)}
+                    </td>
+                    {/* Traits */}
+                    <td style={{ textAlign: 'center', padding: '0 var(--space-2)', whiteSpace: 'nowrap' }}>
+                      {player.traits && player.traits.length > 0 ? (
+                        player.traits.map(tid => <TraitBadge key={tid} traitId={tid} small showName={false} />)
+                      ) : (
+                        <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>—</span>
+                      )}
                     </td>
                     {/* Scheme Fit */}
                     <td style={{ textAlign: 'center', padding: '0 var(--space-2)' }}>
