@@ -96,14 +96,15 @@ class GameRunner {
                      matchupStr = "Tough matchup for Offense";
                 }
 
-                const stakesVal = GameRunner.calculateContextualStakes(league, userTeam, oppTeam, options.ownerMode);
+                const stakesObj = GameRunner.calculateContextualStakes(league, userTeam, oppTeam, options.ownerMode);
 
                 gameObj.preGameContext = {
                     matchup: matchupStr,
                     offPlanId: plan.offPlanId,
                     defPlanId: plan.defPlanId,
                     riskId: plan.riskId,
-                    stakes: stakesVal,
+                    stakes: stakesObj.score,
+                    stakesReason: stakesObj.reason,
                     userIsHome: isHome
                 };
             }
@@ -128,12 +129,13 @@ class GameRunner {
      * @param {Object} team - Team object (User team)
      * @param {Object} opponent - Opponent team object
      * @param {Object} ownerMode - Owner mode settings/status
-     * @returns {number} Stakes score (0-100)
+     * @returns {Object} { score: number, reason: string }
      */
     static calculateContextualStakes(league, team, opponent, ownerMode) {
-        if (!league || !team || !opponent) return 0;
+        if (!league || !team || !opponent) return { score: 0, reason: '' };
         const week = league.week;
-        let stakes = 0;
+        let score = 0;
+        let reasons = [];
 
         // 1. Division Clinch Scenario
         if (week >= 14 && team.conf === opponent.conf && team.div === opponent.div) {
@@ -147,38 +149,53 @@ class GameRunner {
                 if (secondPlace) {
                     const lead = (team.wins || team.record?.w || 0) - (secondPlace.wins || secondPlace.record?.w || 0);
                     if (lead >= gamesRemaining && lead <= gamesRemaining + 1) {
-                         stakes = 95;
+                         score = Math.max(score, 95);
+                         reasons.push('CLINCH SCENARIO');
                     }
+                }
+            } else if (rank === 1) {
+                const firstPlace = divTeams[0];
+                const deficit = (firstPlace.wins || firstPlace.record?.w || 0) - (team.wins || team.record?.w || 0);
+                if (deficit <= 1) {
+                    score = Math.max(score, 90);
+                    reasons.push('DIVISION TITLE RACE');
                 }
             }
         }
 
         // 2. Playoff Bubble
-        if (stakes === 0 && week >= 13) {
+        if (week >= 13) {
             const confTeams = league.teams.filter(t => t.conf === team.conf).sort((a, b) => ((b.wins || b.record?.w || 0) - (a.wins || a.record?.w || 0)));
             const confRank = confTeams.findIndex(t => t.id === team.id) + 1;
+            // Top 7 make playoffs. Bubble is 6-9 range.
             if (confRank >= 6 && confRank <= 9) {
-                stakes = 85;
+                score = Math.max(score, 85);
+                reasons.push('PLAYOFF PUSH');
             }
         }
 
         // 3. Coach Hot Seat
-        if (stakes === 0 && ownerMode?.enabled) {
+        if (ownerMode?.enabled) {
             const satisfaction = ownerMode.fanSatisfaction;
             if (satisfaction < 35) {
-                stakes = 90;
+                score = Math.max(score, 90);
+                reasons.push('JOB ON THE LINE');
             }
         }
 
         // 4. Rivalry
-        if (stakes === 0 && team.rivalries && team.rivalries[opponent.id]) {
+        if (team.rivalries && team.rivalries[opponent.id]) {
             const rivScore = team.rivalries[opponent.id].score;
             if (rivScore > 60) {
-                stakes = 70 + (rivScore/5);
+                const rivVal = 70 + (rivScore/5);
+                if (rivVal >= score) {
+                    score = rivVal;
+                    reasons.unshift('RIVALRY GAME'); // Prioritize rivalry label if scores are close
+                }
             }
         }
 
-        return stakes;
+        return { score: Math.round(score), reason: reasons[0] || '' };
     }
 
     /**

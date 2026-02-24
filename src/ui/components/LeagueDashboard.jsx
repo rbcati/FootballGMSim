@@ -308,7 +308,7 @@ function StandingsTab({ teams, userTeamId }) {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 
-function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect }) {
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, nextGameStakesReason, seasonId, onGameSelect }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   const teamById = useMemo(() => {
@@ -352,6 +352,22 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
             ? () => onGameSelect(`${seasonId}_w${selectedWeek}_${game.home}_${game.away}`)
             : undefined;
 
+          // Stakes Badge Logic
+          let badgeText = '⚠️ STAKES';
+          let badgeColor = 'var(--warning)';
+
+          if (nextGameStakesReason) {
+              badgeText = nextGameStakesReason.toUpperCase();
+              if (badgeText.includes('RIVALRY')) { badgeText = '🔥 ' + badgeText; badgeColor = 'var(--danger)'; }
+              else if (badgeText.includes('CLINCH')) { badgeText = '🏆 ' + badgeText; badgeColor = 'var(--success)'; }
+              else if (badgeText.includes('PLAYOFF')) { badgeText = '⚡ ' + badgeText; badgeColor = 'var(--accent)'; }
+              else if (badgeText.includes('JOB')) { badgeText = '💼 ' + badgeText; badgeColor = 'var(--danger)'; }
+              else if (badgeText.includes('DIVISION')) { badgeText = '⚔️ ' + badgeText; badgeColor = 'var(--warning)'; }
+          } else if (nextGameStakes > 80) {
+              badgeText = '🔥 RIVALRY';
+              badgeColor = 'var(--danger)';
+          }
+
           return (
             <div
               key={idx}
@@ -369,11 +385,11 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
                   {showStakes && (
                     <span style={{
                       padding: '2px 8px', borderRadius: 'var(--radius-pill)',
-                      background: nextGameStakes > 80 ? 'var(--danger)' : 'var(--warning)',
+                      background: badgeColor,
                       color: '#fff', fontWeight: 700, fontSize: 'var(--text-xs)',
                       letterSpacing: '0.5px', display: 'inline-flex', alignItems: 'center', gap: 4,
                     }}>
-                      {nextGameStakes > 80 ? '🔥 RIVALRY' : '⚠️ STAKES'}
+                      {badgeText}
                     </span>
                   )}
                 </div>
@@ -622,6 +638,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
             currentWeek={league.week}
             userTeamId={league.userTeamId}
             nextGameStakes={league.nextGameStakes}
+            nextGameStakesReason={league.nextGameStakesReason}
             seasonId={league.seasonId}
             onGameSelect={setSelectedGameId}
           />

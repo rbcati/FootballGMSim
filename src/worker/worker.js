@@ -74,6 +74,7 @@ function buildViewState() {
 
   // Calculate tension/stakes for the user's next game
   let nextGameStakes = 0;
+  let nextGameStakesReason = '';
   if (meta?.userTeamId != null && meta?.schedule?.weeks && meta.phase === 'regular') {
     const weekData = meta.schedule.weeks.find(w => w.week === meta.currentWeek);
     if (weekData && weekData.games) {
@@ -92,7 +93,9 @@ function buildViewState() {
             userTeamId: meta.userTeamId
           };
           // Assume owner mode enabled for max stakes calculation (fanSatisfaction defaults to 50 if missing)
-          nextGameStakes = GameRunner.calculateContextualStakes(leagueCtx, userTeam, oppTeam, { enabled: true, fanSatisfaction: 50 });
+          const stakesObj = GameRunner.calculateContextualStakes(leagueCtx, userTeam, oppTeam, { enabled: true, fanSatisfaction: 50 });
+          nextGameStakes = stakesObj.score;
+          nextGameStakesReason = stakesObj.reason;
         }
       }
     }
@@ -108,6 +111,7 @@ function buildViewState() {
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
     draftStarted: !!(meta?.draftState),
     nextGameStakes,
+    nextGameStakesReason,
     teams,
   };
 }
