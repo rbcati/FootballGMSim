@@ -170,6 +170,15 @@ function buildRosterView(teamId) {
  */
 async function flushDirty() {
   if (!cache.isDirty()) return;
+
+  // SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
+  if (!cache.isLoaded()) {
+      console.warn('[Worker] flushDirty called but cache is not loaded. Aborting DB write.');
+      // Do NOT drain dirty flags so we don't lose pending changes if it's just a timing issue,
+      // though typically this means we shouldn't have mutated cache at all.
+      return;
+  }
+
   const dirty = cache.drainDirty();
 
   // Resolve dirty IDs → full objects, dropping any that are null (already deleted).
@@ -1341,6 +1350,11 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 // ── Handler: UPDATE_SETTINGS ─────────────────────────────────────────────────
 
 async function handleUpdateSettings({ settings }, id) {
+  if (!cache.isLoaded()) {
+    // If no league loaded, we can't update league settings.
+    post(toUI.ERROR, { message: 'No league loaded' }, id);
+    return;
+  }
   const current = cache.getMeta();
   cache.setMeta({ settings: { ...(current?.settings ?? {}), ...settings } });
   await flushDirty();
@@ -2220,7 +2234,24 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
 
 // ── Main message router ───────────────────────────────────────────────────────
 
-self.onmessage = async (event) => {
+/**
+ * Sequential Message Queue.
+ * Ensures that messages are processed one at a time, preventing race conditions
+ * (e.g., UPDATE_SETTINGS arriving while LOAD_SAVE is yielding).
+ */
+let messageQueue = Promise.resolve();
+
+self.onmessage = (event) => {
+  // Chain the next message handler to the end of the current queue
+  messageQueue = messageQueue
+    .then(() => handleMessage(event))
+    .catch(err => {
+      console.error('[Worker] Fatal error in message queue:', err);
+      post(toUI.ERROR, { message: 'Worker crashed: ' + err.message });
+    });
+};
+
+async function handleMessage(event) {
   const { type, payload = {}, id } = event.data;
 
   try {
@@ -2270,7 +2301,17 @@ self.onmessage = async (event) => {
     console.error(`[Worker] Unhandled error in handler for "${type}":`, err);
     post(toUI.ERROR, { message: err.message, stack: err.stack }, id);
   }
-};
+}
 
-// Signal to UI that the worker script has loaded and is ready
-post(toUI.READY, { hasSave: false });
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+(async function bootWorker() {
+  try {
+    await openGlobalDB();
+    // Signal readiness ONLY after DB is ready
+    post(toUI.READY, { hasSave: false });
+  } catch (err) {
+    console.error('[Worker] Boot failed:', err);
+    post(toUI.ERROR, { message: 'Worker boot failed: ' + err.message });
+  }
+})();

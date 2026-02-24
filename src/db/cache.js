@@ -247,6 +247,14 @@ export const cache = {
     );
   },
 
+  /**
+   * Returns true if a league is currently loaded in memory.
+   * Used to prevent accidental DB overwrites if flushDirty() is called prematurely.
+   */
+  isLoaded() {
+    return !!(_meta && _meta.id);
+  },
+
   // ── Bootstrap / archive helpers ────────────────────────────────────────────
 
   /**
