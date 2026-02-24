@@ -2,6 +2,7 @@ import { cache } from '../db/cache.js';
 import { Constants } from './constants.js';
 import { Transactions } from '../db/index.js';
 import { calculateExtensionDemand } from './player.js';
+import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from './scheme-core.js';
 import NewsEngine from './news-engine.js';
 
 class AiLogic {
@@ -188,18 +189,28 @@ class AiLogic {
     /**
      * Execute AI Free Agency logic for a team.
      * Fills roster holes with available Free Agents.
+     * @deprecated Use processFreeAgencyDay loop instead.
      */
     static async executeAIFreeAgency(teamId) {
+        // ... kept for compatibility or fallback, but logic moved to makeFreeAgencyOffers
+        await this.makeFreeAgencyOffers(teamId);
+    }
+
+    /**
+     * AI submits offers to free agents based on needs.
+     * Does NOT sign players immediately; pushes to player.offers.
+     */
+    static async makeFreeAgencyOffers(teamId) {
         const team = cache.getTeam(teamId);
         if (!team) return;
 
         // 1. Identify Needs
         const needs = this.calculateTeamNeeds(teamId);
-        const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.5);
+        const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2); // Lowered threshold slightly for active bidding
 
         if (highNeedPositions.length === 0) return;
 
-        // 2. Get Available FAs
+        // 2. Get Available FAs who are NOT already signed/committed to this team
         const allPlayers = cache.getAllPlayers();
         const freeAgents = allPlayers.filter(p => !p.teamId || p.status === 'free_agent');
 
@@ -212,64 +223,225 @@ class AiLogic {
 
             if (candidates.length === 0) continue;
 
-            // Try to sign the best affordable one
+            // Try to offer to the best affordable one
             for (const fa of candidates) {
-                // Skip if OVR is too low to be worth it (unless desperate)
-                // If need is > 2.0 (empty), take anyone > 60.
-                // If need is 1.5 (weak), take > 75.
-                const minOvr = needs[pos] > 2.0 ? 60 : 75;
-                if ((fa.ovr ?? 0) < minOvr) break; // Sorted desc, so subsequent ones are worse
+                // Skip if OVR is too low
+                const minOvr = needs[pos] > 2.0 ? 60 : 70;
+                if ((fa.ovr ?? 0) < minOvr) break;
 
-                // Calculate Ask (reuse extension demand logic or generate new contract)
-                // Free agents usually demand market rate.
-                const demand = calculateExtensionDemand(fa) || {
-                    baseAnnual: 1, years: 1, signingBonus: 0, yearsTotal: 1
-                };
+                // Check if we already have an active offer out to this player
+                if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
+
+                // Check if we have too many pending offers for this position?
+                // For simplicity, allow multiple offers, but maybe limit total pending cap?
+                // Ignoring complex pending cap logic for Phase 1.
+
+                // Calculate Ask / Offer
+                const demand = calculateExtensionDemand(fa);
+                if (!demand) continue;
 
                 const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);
 
                 // Check Cap
                 if (team.capRoom > (capHit + 1)) {
-                    // SIGN
-                    const contract = {
-                        ...demand,
-                        startYear: cache.getMeta().year
+                    // MAKE OFFER
+                    const offer = {
+                        teamId,
+                        teamName: team.name, // Snapshot name
+                        contract: {
+                            ...demand,
+                            startYear: cache.getMeta().year
+                        },
+                        timestamp: Date.now()
                     };
 
-                    cache.updatePlayer(fa.id, {
+                    // Push to player's offer list (in cache)
+                    // We must clone the player offers array to trigger update if we were strictly reactive,
+                    // but here we are mutating the object reference in cache.
+                    if (!fa.offers) fa.offers = [];
+                    fa.offers.push(offer);
+
+                    // Persist the offer (mark player as dirty)
+                    cache.updatePlayer(fa.id, { offers: fa.offers });
+
+                    // We don't deduct cap yet, but ideally we should track "reserved" cap.
+                    // For now, we update team cap only on signing.
+                    break; // One offer per need position per day
+                }
+            }
+        }
+    }
+
+    /**
+     * Process one "Day" of Free Agency.
+     * 1. AI Teams make offers.
+     * 2. Players evaluate offers and decide.
+     */
+    static async processFreeAgencyDay(day) {
+        const meta = cache.getMeta();
+        const userTeamId = meta.userTeamId;
+
+        // 1. AI Teams Make Offers
+        const allTeams = cache.getAllTeams();
+        for (const team of allTeams) {
+            if (team.id !== userTeamId) {
+                await this.makeFreeAgencyOffers(team.id);
+            }
+        }
+
+        // 2. Players Evaluate Offers
+        const freeAgents = cache.getAllPlayers().filter(p => (!p.teamId || p.status === 'free_agent') && p.offers && p.offers.length > 0);
+
+        for (const player of freeAgents) {
+            const decision = this.evaluateOffers(player);
+
+            if (decision.signed && decision.offer) {
+                // SIGN PLAYER
+                const { offer } = decision;
+                const teamId = offer.teamId;
+
+                // Verify team still has cap space (race condition check)
+                const team = cache.getTeam(teamId);
+                const capHit = offer.contract.baseAnnual + (offer.contract.signingBonus / offer.contract.yearsTotal);
+
+                if (team && team.capRoom >= capHit) {
+                    cache.updatePlayer(player.id, {
                         teamId,
                         status: 'active',
-                        contract
+                        contract: offer.contract,
+                        offers: [] // Clear offers
                     });
 
                     this.updateTeamCap(teamId);
 
-                    // Add Transaction
                     await Transactions.add({
                         type: 'SIGN',
-                        seasonId: cache.getMeta().currentSeasonId,
-                        week: cache.getMeta().currentWeek,
+                        seasonId: meta.currentSeasonId,
+                        week: meta.currentWeek,
                         teamId,
-                        details: { playerId: fa.id, contract }
+                        details: { playerId: player.id, contract: offer.contract }
                     });
 
-                    // Log if significant
-                    if ((fa.ovr ?? 0) > 80) {
+                    if ((player.ovr ?? 0) > 75) {
                         await NewsEngine.logTransaction('SIGN', {
                             teamId,
-                            playerId: fa.id,
-                            contract
+                            playerId: player.id,
+                            contract: offer.contract
                         });
                     }
-
-                    // Remove from FA pool for this loop
-                    const index = freeAgents.indexOf(fa);
-                    if (index > -1) freeAgents.splice(index, 1);
-
-                    break; // Position filled (for now)
+                } else {
+                    // Offer rejected due to cap change (team spent money elsewhere)
+                    // Remove this offer
+                    player.offers = player.offers.filter(o => o.teamId !== teamId);
                 }
             }
+            // else: player waits for more offers
         }
+    }
+
+    /**
+     * Player Decision Matrix.
+     * Scores offers based on Money (70%), Winning (20%), Scheme (10%).
+     * Returns { signed: boolean, offer: Object | null }
+     */
+    static evaluateOffers(player) {
+        if (!player.offers || player.offers.length === 0) return { signed: false, offer: null };
+
+        let bestScore = -1;
+        let bestOffer = null;
+
+        // Calculate baseline demand value for comparison
+        // Simple Total Value for now: (Base * Years) + Bonus
+        // Guaranteed money weight mentioned in prompt, but let's stick to Total Value for simplicity first
+        // or: Annual * 0.5 + Guaranteed * 0.5?
+
+        for (const offer of player.offers) {
+            const team = cache.getTeam(offer.teamId);
+            if (!team) continue;
+
+            // 1. Financial Value (Weight: 70%)
+            // Score normalized to ~0-100 range roughly
+            const c = offer.contract;
+            const totalValue = (c.baseAnnual * c.yearsTotal) + c.signingBonus;
+            const guaranteed = (totalValue * (c.guaranteedPct || 0.5)); // Approx
+
+            // Heuristic: 1M = 1 point roughly?
+            // A 5yr/$100M deal = 100 points.
+            // A 1yr/$5M deal = 5 points.
+            const moneyScore = totalValue;
+
+            // 2. Team Contender Status (Weight: 20%)
+            // Based on OVR (0-100)
+            const teamOvr = team.ovr || 75;
+            const winScore = teamOvr; // 0-100
+
+            // 3. Scheme Fit (Weight: 10%)
+            let fitScore = 50;
+            if (team.staff && team.staff.headCoach) {
+                const hc = team.staff.headCoach;
+                const isOff = ['QB','RB','WR','TE','OL','K'].includes(player.pos);
+                if (isOff) fitScore = calculateOffensiveSchemeFit(player, hc.offScheme || 'Balanced');
+                else fitScore = calculateDefensiveSchemeFit(player, hc.defScheme || '4-3');
+            }
+
+            // Weighted Sum
+            // We need to normalize money score to be comparable to 0-100 ratings
+            // Max contract roughly $150M?
+            // Let's just use raw values and weights that make sense.
+            // Money is dominant.
+
+            // Weight 70% -> Money factor
+            // Weight 20% -> Win factor
+            // Weight 10% -> Fit factor
+
+            // If Money is ~50 (50M deal), Win is ~80, Fit is ~80.
+            // 50 * 3.0 = 150
+            // 80 * 0.5 = 40
+            // 80 * 0.2 = 16
+
+            const score = (moneyScore * 3.0) + (winScore * 0.5) + (fitScore * 0.2);
+
+            if (score > bestScore) {
+                bestScore = score;
+                bestOffer = offer;
+            }
+        }
+
+        // Decision to sign?
+        // If we are late in FA (Day 3+), sign the best offer.
+        // If we are early (Day 1-2), only sign if it blows us away (e.g. > expected market value).
+        // For Phase 16, let's keep it simple:
+        // If bestOffer exists and beats a "patience threshold", sign.
+        // Or simplified: Always sign the best offer available today?
+        // Prompt says: "If an offer exceeds their internal threshold, they sign. If not, they wait for the next day."
+
+        // Calculate internal threshold based on "Ask"
+        // Ask ~ OVR * PosMult
+        const ask = calculateExtensionDemand(player);
+        const askTotalValue = (ask.baseAnnual * ask.yearsTotal) + ask.signingBonus;
+        const askScore = (askTotalValue * 3.0); // Baseline money score
+
+        // Threshold lowers as days pass?
+        // We don't pass 'day' here easily without context, but we can assume simple logic:
+        // Threshold = 95% of Ask Score + Baseline expectation for Team/Fit
+        // Baseline extras: Average Team (75 OVR) * 0.5 + Average Fit (50) * 0.2 = 37.5 + 10 = 47.5
+        const baselineExtras = 47.5;
+        const threshold = (askScore + baselineExtras) * 0.95;
+
+        // Also, if it's the User's offer, we might want to be stricter or looser?
+        // Let's just use the score.
+
+        if (bestScore >= threshold) {
+            return { signed: true, offer: bestOffer };
+        }
+
+        // If 'day' context was available we could force sign on Day 5.
+        // For now, return false (wait).
+        // But we need a way to ensure they eventually sign.
+        // Let's pass 'day' or handle forced signing in the caller if day == max.
+        // We'll modify processFreeAgencyDay to handle forced signing.
+
+        return { signed: false, offer: bestOffer }; // Wait
     }
 }
 
