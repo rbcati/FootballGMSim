@@ -1,31 +1,102 @@
 /**
  * LiveGame.jsx
  *
- * Phase-4 live game viewer.  Shown as a panel when the worker is
- * simulating a week; stays visible after simulation ends to show results.
- *
- * Architecture:
- *  - Receives `gameEvents` — an array of GAME_EVENT payloads emitted by the
- *    worker after each individual game finishes.  One entry per game.
- *  - Each event: { gameId, week, homeId, awayId, homeName, awayName,
- *                  homeAbbr, awayAbbr, homeScore, awayScore }
- *  - The user's own game is identified via `league.userTeamId`.
- *  - Synthetic play-by-play runs on an interval while simulating; text is
- *    generated from team abbreviations so it's always plausible.
- *  - "Skip to End" sets a local flag that suppresses new play lines and
- *    waits quietly for WEEK_COMPLETE.
- *
- * Layout:
- *   ┌──────────────── Header (LIVE dot / title / Skip button) ──────────────┐
- *   │ Progress bar                                                           │
- *   ├───────────────────────────────┬───────────────────────────────────────┤
- *   │  Scoreboard (left column)     │  Play-by-play log (right column)      │
- *   │  • All matchup cards          │  • Scrolling text for user's game     │
- *   │  • User game highlighted      │  • Auto-scroll to bottom              │
- *   └───────────────────────────────┴───────────────────────────────────────┘
+ * Handles both the passive simulation ticker (SimTicker) and the interactive
+ * live game viewer (InteractiveLiveGame) when the user plays a game.
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+
+// ── Interactive Live Game Viewer ─────────────────────────────────────────────
+
+function InteractiveLiveGame({ game, league, onFinish, onExit }) {
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    if (!game || !league || !window.liveGameViewer) return;
+
+    // 1. Setup simulated environment
+    // Clone league to allow local mutation by the viewer without affecting React props
+    // We only need the structure relevant for the game
+    const leagueClone = JSON.parse(JSON.stringify(league));
+    window.state = { league: leagueClone };
+
+    // Resolve teams from the clone
+    const homeTeam = leagueClone.teams.find(t => t.id === Number(game.home));
+    const awayTeam = leagueClone.teams.find(t => t.id === Number(game.away));
+
+    if (!homeTeam || !awayTeam) {
+        console.error("Teams not found for live game");
+        return;
+    }
+
+    // 2. Initialize Viewer
+    const viewer = window.liveGameViewer;
+    viewer.initGame(homeTeam, awayTeam, league.userTeamId);
+
+    // 3. Render & Start
+    viewer.renderToView('#game-sim-container');
+    viewer.startSim();
+
+    // 4. Hook Callback
+    viewer.onGameEndCallback = (gameState) => {
+        // The viewer calls finalizeGame() internally which calls commitGameResult().
+        // commitGameResult updates the league object (our clone) with resultsByWeek.
+
+        // Find the result in our local clone to send back to the worker
+        const weekIndex = (leagueClone.week || 1) - 1;
+        const results = leagueClone.resultsByWeek?.[weekIndex] || [];
+
+        // Find result matching this game
+        const result = results.find(r =>
+            (r.home === homeTeam.id && r.away === awayTeam.id)
+        );
+
+        if (result) {
+            // Send the result back to App -> Worker
+            // Delay slightly to let the user see the "VICTORY" screen
+            // actually, we wait for user to click "Continue" or "Close" in the viewer UI?
+            // The viewer UI shows a "Close" button in .final-stats or overlay
+            // We can override the "Close" button behavior or just wait.
+
+            // Current Viewer implementation: onGameEndCallback is called immediately when clock hits 0.
+            // But the UI shows an overlay.
+            // We should NOT auto-close. We should let the user inspect stats.
+
+            // We simply report the result now so it's safe.
+            // The exit is handled by the "Close" button in the viewer or a manual "Back" button we provide.
+            if (onFinish) onFinish(result);
+        } else {
+            console.error("Game result not found in local state after finish");
+        }
+    };
+
+    return () => {
+        if (viewer) viewer.destroy();
+        window.state = null;
+    };
+  }, [game, league]); // Run once on mount
+
+  return (
+    <div className="interactive-game-wrapper" style={{
+        position: 'fixed', inset: 0, zIndex: 2000, background: '#000', overflow: 'hidden'
+    }}>
+      <div id="game-sim-container" ref={containerRef} style={{ width: '100%', height: '100%' }}></div>
+
+      {/* Fallback Exit Button (in case Viewer UI fails or user gets stuck) */}
+      <button
+        onClick={onExit}
+        style={{
+            position: 'absolute', top: 10, right: 10, zIndex: 2001,
+            background: 'rgba(255,0,0,0.7)', color: 'white', border: 'none',
+            padding: '5px 10px', borderRadius: '4px', cursor: 'pointer'
+        }}
+      >
+        Exit / Back
+      </button>
+    </div>
+  );
+}
 
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
@@ -197,7 +268,10 @@ function generatePlay(homeAbbr, awayAbbr, seed = 0) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function LiveGame({ simulating, simProgress, league, lastResults, gameEvents }) {
+export default function LiveGame({
+  simulating, simProgress, league, lastResults, gameEvents,
+  viewingGame, userGame, onGameFinished, onExit
+}) {
   const [visible, setVisible]       = useState(false);
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
@@ -222,7 +296,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   }, [league?.schedule, league?.week]);
 
   // The user's team's game from the current week schedule
-  const userGame = useMemo(() => {
+  const userGameInfo = useMemo(() => {
     if (!league?.userTeamId) return null;
     return weekGames.find(
       g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId
@@ -238,9 +312,9 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   }, [gameEvents, league?.userTeamId]);
 
   const userHomeAbbr = userEvent?.homeAbbr
-    ?? (userGame ? teamById[userGame.home]?.abbr : null) ?? '???';
+    ?? (userGameInfo ? teamById[userGameInfo.home]?.abbr : null) ?? '???';
   const userAwayAbbr = userEvent?.awayAbbr
-    ?? (userGame ? teamById[userGame.away]?.abbr : null) ?? '???';
+    ?? (userGameInfo ? teamById[userGameInfo.away]?.abbr : null) ?? '???';
 
   // ── Show / hide logic ────────────────────────────────────────────────────
 
@@ -272,13 +346,13 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       return;
     }
     // Only generate plays when the user has a game this week
-    if (!userGame && !userEvent) {
+    if (!userGameInfo && !userEvent) {
       clearInterval(intervalRef.current);
       return;
     }
     intervalRef.current = setInterval(addPlay, 700);
     return () => clearInterval(intervalRef.current);
-  }, [simulating, skipping, addPlay, userGame, userEvent]);
+  }, [simulating, skipping, addPlay, userGameInfo, userEvent]);
 
   // Stop ticker when simulation finishes
   useEffect(() => {
@@ -314,6 +388,19 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   // Final results to show when sim is done
   const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
+
+  // If viewing a game interactively, render the full viewer
+  // (This check must happen after hooks)
+  if (viewingGame && userGame) {
+      return (
+          <InteractiveLiveGame
+              game={userGame}
+              league={league}
+              onFinish={onGameFinished}
+              onExit={onExit}
+          />
+      );
+  }
 
   if (!visible) return null;
 
@@ -485,7 +572,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
           >
             {plays.length === 0 && simulating && !skipping && (
               <p style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', margin: 0, padding: 'var(--space-2) 0' }}>
-                {userGame || userEvent ? 'Simulation starting…' : 'Your team is on a bye this week.'}
+                {userGameInfo || userEvent ? 'Simulation starting…' : 'Your team is on a bye this week.'}
               </p>
             )}
             {skipping && (

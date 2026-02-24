@@ -79,6 +79,9 @@ export const toWorker = Object.freeze({
 
   /** Box score retrieval */
   GET_BOX_SCORE:      'GET_BOX_SCORE',        // { gameId }
+
+  /** Live Game Reporting */
+  REPORT_GAME_RESULT: 'REPORT_GAME_RESULT',   // { gameResult }
 });
 
 // ─────────────────────────────────────────────

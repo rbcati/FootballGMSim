@@ -914,6 +914,46 @@ async function handleGetPlayerCareer({ playerId }, id) {
   }, id);
 }
 
+// ── Handler: REPORT_GAME_RESULT ───────────────────────────────────────────────
+
+async function handleReportGameResult({ gameResult }, id) {
+  try {
+    const meta = cache.getMeta();
+    if (!meta) {
+      post(toUI.ERROR, { message: 'No league loaded' }, id);
+      return;
+    }
+
+    // Apply to cache (updates standings, player stats, team records)
+    applyGameResultToCache(gameResult, meta.currentWeek, meta.currentSeasonId);
+
+    // Mark as played in slim schedule
+    const slimSchedule = meta.schedule;
+    if (slimSchedule?.weeks) {
+      const weekData = slimSchedule.weeks.find(w => w.week === meta.currentWeek);
+      if (weekData) {
+        const game = weekData.games.find(g =>
+          (Number(g.home) === Number(gameResult.home) && Number(g.away) === Number(gameResult.away)) ||
+          (g.home?.id === Number(gameResult.home) && g.away?.id === Number(gameResult.away))
+        );
+        if (game) {
+          game.played = true;
+          game.homeScore = gameResult.scoreHome;
+          game.awayScore = gameResult.scoreAway;
+        }
+      }
+      cache.setMeta({ schedule: slimSchedule });
+    }
+
+    await flushDirty();
+    post(toUI.STATE_UPDATE, buildViewState(), id);
+
+  } catch (err) {
+    console.error('[Worker] REPORT_GAME_RESULT error:', err);
+    post(toUI.ERROR, { message: err.message }, id);
+  }
+}
+
 // ── Handler: GET_BOX_SCORE ────────────────────────────────────────────────────
 
 async function handleGetBoxScore({ gameId }, id) {
@@ -1821,6 +1861,7 @@ self.onmessage = async (event) => {
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
+      case toWorker.REPORT_GAME_RESULT: return await handleReportGameResult(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────
       case toWorker.GET_DRAFT_STATE:    return await handleGetDraftState(payload, id);

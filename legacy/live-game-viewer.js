@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from '../src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';

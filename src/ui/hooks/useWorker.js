@@ -320,6 +320,10 @@ export function useWorker() {
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),
 
+    /** Report a client-simulated game result to the worker. */
+    reportGameResult: (gameResult) =>
+      send(toWorker.REPORT_GAME_RESULT, { gameResult }),
+
     // ── Draft & Offseason ────────────────────────────────────────────────────
 
     /** Fetch the current draft state without initialising (returns a Promise). */

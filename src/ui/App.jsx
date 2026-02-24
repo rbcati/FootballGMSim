@@ -71,6 +71,9 @@ export default function App() {
     error, notifications,
   } = state;
 
+  // Track if user is watching their game live
+  const [viewingGame, setViewingGame] = useState(false);
+
   // ── Service-Worker update detection ───────────────────────────────────────
   const [swUpdateReady, setSwUpdateReady] = useState(false);
   const swRegRef = useRef(null);
@@ -137,11 +140,38 @@ export default function App() {
     if (!busy && !simulating) actions.advanceWeek();
   }, [busy, simulating, actions]);
 
+  const handlePlayGame = useCallback(() => {
+    setViewingGame(true);
+  }, []);
+
+  const handleGameFinished = useCallback((result) => {
+    actions.reportGameResult(result);
+    setViewingGame(false);
+  }, [actions]);
+
   const handleReset = useCallback(() => {
     if (window.confirm('Reset your save? This cannot be undone.')) {
       actions.reset();
     }
   }, [actions]);
+
+  // Detect unplayed user game (Hook must be top-level)
+  const userGame = React.useMemo(() => {
+    if (!league?.schedule?.weeks || !league?.week || league?.userTeamId === undefined) return null;
+    const weekData = league.schedule.weeks.find(w => w.week === league.week);
+    if (!weekData) return null;
+    const game = weekData.games.find(g =>
+      (Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId) &&
+      !g.played
+    );
+    console.log('[App] Checking user game:', {
+        week: league.week,
+        userTeamId: league.userTeamId,
+        gameFound: !!game,
+        scheduleGames: weekData.games.length
+    });
+    return game;
+  }, [league]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -193,10 +223,26 @@ export default function App() {
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          {!simulating && userGame && !viewingGame && (
+            <button
+              className="btn watch-live-btn"
+              onClick={handlePlayGame}
+              style={{
+                background: 'linear-gradient(135deg, #FFD700, #FFA500)',
+                color: '#000',
+                border: 'none',
+                fontWeight: 'bold',
+                boxShadow: '0 0 10px rgba(255, 215, 0, 0.3)'
+              }}
+            >
+              📺 Play Game
+            </button>
+          )}
+
           <button
             className="btn btn-primary"
             onClick={handleAdvanceWeek}
-            disabled={busy || simulating}
+            disabled={busy || simulating || viewingGame}
           >
             {simulating
               ? `Simulating… ${simProgress}%`
@@ -332,6 +378,10 @@ export default function App() {
         league={league}
         lastResults={lastResults}
         gameEvents={gameEvents}
+        viewingGame={viewingGame}
+        userGame={userGame}
+        onGameFinished={handleGameFinished}
+        onExit={() => setViewingGame(false)}
       />
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
