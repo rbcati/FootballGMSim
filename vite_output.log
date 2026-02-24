@@ -1,0 +1,22 @@
+
+> dev
+> vite
+
+
+  VITE v7.3.1  ready in 363 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+4:45:30 PM [vite] (client) Pre-transform error: Failed to resolve import "./game-simulator.js" from "legacy/live-game-viewer.js". Does the file exist?
+  Plugin: vite:import-analysis
+  File: /app/legacy/live-game-viewer.js:1:34
+  1  |  import { commitGameResult } from './game-simulator.js';
+     |                                    ^
+  2  |  import soundManager from './sound-manager.js';
+  3  |  import { launchConfetti } from './confetti.js';
+4:46:03 PM [vite] (client) page reload legacy/live-game-viewer.js
+4:49:15 PM [vite] (client) hmr update /src/ui/App.jsx
+4:49:16 PM [vite] (client) hmr update /src/ui/App.jsx
+4:50:08 PM [vite] (client) hmr update /src/ui/App.jsx
+4:50:53 PM [vite] (client) hmr update /src/ui/components/LiveGame.jsx
+4:50:53 PM [vite] (client) hmr update /src/ui/components/LiveGame.jsx
