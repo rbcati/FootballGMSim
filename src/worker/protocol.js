@@ -61,6 +61,9 @@ export const toWorker = Object.freeze({
   GET_GAME_LOG:       'GET_GAME_LOG',         // { seasonId, teamId? }
 
   /** Save management */
+  GET_ALL_SAVES:      'GET_ALL_SAVES',        // list all available leagues
+  LOAD_SAVE:          'LOAD_SAVE',            // { leagueId }
+  DELETE_SAVE:        'DELETE_SAVE',          // { leagueId }
   SAVE_NOW:           'SAVE_NOW',             // force immediate DB flush
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
 
@@ -118,6 +121,7 @@ export const toUI = Object.freeze({
   PLAYER_CAREER:      'PLAYER_CAREER',        // { playerId, data }
   ALL_SEASONS:        'ALL_SEASONS',          // { seasons[] }
   GAME_LOG:           'GAME_LOG',             // { games[] }
+  ALL_SAVES:          'ALL_SAVES',            // { saves[] }
 
   /** Trade response from AI */
   TRADE_RESPONSE:     'TRADE_RESPONSE',       // { accepted, offerValue, receiveValue, reason }

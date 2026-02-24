@@ -60,7 +60,7 @@ function reducer(state, action) {
     case 'IDLE':
       return { ...state, busy: false, simulating: false, simProgress: 0 };
     case 'WORKER_READY':
-      return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false };
+      return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false, league: null };
     case 'FULL_STATE':
       return { ...state, busy: false, simulating: false, league: action.payload };
     case 'STATE_UPDATE':
@@ -244,6 +244,18 @@ export function useWorker() {
   const actions = useMemo(() => ({
     /** Load existing save or show new-league screen. */
     init: ()                   => send(toWorker.INIT),
+
+    /** Fetch all saved leagues (returns Promise). */
+    getAllSaves: ()            => request(toWorker.GET_ALL_SAVES, {}, { silent: true }),
+
+    /** Load a specific save. */
+    loadSave: (leagueId)       => {
+      dispatch({ type: 'BUSY' });
+      send(toWorker.LOAD_SAVE, { leagueId });
+    },
+
+    /** Delete a save (returns Promise with updated list). */
+    deleteSave: (leagueId)     => request(toWorker.DELETE_SAVE, { leagueId }, { silent: true }),
 
     /** Generate a new league. teams = array of team definitions. */
     newLeague: (teams, options) => {
