@@ -344,6 +344,10 @@ export function useWorker() {
     getLeagueLeaders: (mode = 'season') =>
       request(toWorker.GET_LEAGUE_LEADERS, { mode }, { silent: true }),
 
+    /** Fetch mid-season award races & All-Pro projections (returns a Promise). */
+    getAwardRaces: () =>
+      request(toWorker.GET_AWARD_RACES, {}, { silent: true }),
+
     // ── Draft & Offseason ────────────────────────────────────────────────────
 
     /** Fetch the current draft state without initialising (returns a Promise). */

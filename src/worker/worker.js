@@ -35,6 +35,7 @@ import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
+import { calculateAwardRaces } from '../core/awards-logic.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1011,17 +1012,26 @@ async function handleGetPlayerCareer({ playerId }, id) {
   const archivedStats = await PlayerStats.byPlayer(numId);
   const player = cache.getPlayer(numId) ?? await Players.load(numId);
 
-  // Also include current-season in-memory stats (not yet archived)
-  const currentSeasonStat = cache.getSeasonStat(numId);
-  const allStats = [...(archivedStats ?? [])];
-  if (currentSeasonStat && !allStats.find(s => s.seasonId === currentSeasonStat.seasonId)) {
-    allStats.push(currentSeasonStat);
-  }
+  // The in-memory stat is always the freshest version for the current season.
+  // When stats have been partially flushed to the DB mid-season, both the DB
+  // record AND the in-memory accumulator exist for the same seasonId.  We must
+  // use the in-memory version (more up-to-date) and discard the DB copy to
+  // prevent double-counting and stale data in the Player Profile.
+  const liveSeasonStat  = cache.getSeasonStat(numId);
+  const currentSeasonId = cache.getMeta()?.currentSeasonId;
+
+  // Strip any DB entry for the current season when we have a live version.
+  const historicalStats = (archivedStats ?? []).filter(
+    s => !(liveSeasonStat && currentSeasonId && s.seasonId === currentSeasonId)
+  );
+
+  const allStats = [...historicalStats];
+  if (liveSeasonStat) allStats.push(liveSeasonStat);
 
   post(toUI.PLAYER_CAREER, {
     playerId: numId,
-    player: player ?? null,
-    stats:  allStats,
+    player:   player ?? null,
+    stats:    allStats,
   }, id);
 }
 
@@ -2251,9 +2261,17 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   let entries = [];
 
   if (mode === 'season') {
-    // Current season: use in-memory stats
-    const currentStats = cache.getAllSeasonStats();
-    await Promise.all(currentStats.map(async s => {
+    // Build a map seeded from in-memory stats (always the freshest source).
+    // Then backfill with DB-flushed stats for any player NOT yet in memory —
+    // this covers the post-save/load case where _seasonStats has been cleared.
+    const liveMap = new Map(cache.getAllSeasonStats().map(s => [s.playerId, s]));
+    if (meta?.currentSeasonId) {
+      const dbStats = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+      for (const s of dbStats) {
+        if (!liveMap.has(s.playerId)) liveMap.set(s.playerId, s);
+      }
+    }
+    await Promise.all([...liveMap.values()].map(async s => {
       const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
       if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId });
     }));
@@ -2342,6 +2360,56 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   post(toUI.LEAGUE_LEADERS, { mode, categories, year: meta?.year, seasonId: meta?.currentSeasonId }, id);
 }
 
+// ── Handler: GET_AWARD_RACES ──────────────────────────────────────────────────
+
+async function handleGetAwardRaces(_payload, id) {
+  const meta = cache.getMeta();
+
+  // Build enriched stat entries exactly like season-mode league leaders:
+  // prefer in-memory stats, backfill from DB if needed (post save/load).
+  const liveMap = new Map(cache.getAllSeasonStats().map(s => [s.playerId, s]));
+  if (meta?.currentSeasonId) {
+    const dbStats = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+    for (const s of dbStats) {
+      if (!liveMap.has(s.playerId)) liveMap.set(s.playerId, s);
+    }
+  }
+
+  // Resolve player metadata and attach team abbreviation for display
+  const allTeams  = cache.getAllTeams();
+  const teamById  = new Map(allTeams.map(t => [t.id, t]));
+
+  const allEntries = [];
+  await Promise.all([...liveMap.values()].map(async s => {
+    const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
+    if (!p) return;
+    const team = teamById.get(p.teamId ?? s.teamId);
+    allEntries.push({
+      ...s,
+      name:     p.name,
+      pos:      p.pos,
+      teamId:   p.teamId ?? s.teamId,
+      teamAbbr: team?.abbr ?? '???',
+      ovr:      p.ovr,
+    });
+  }));
+
+  // Build a playerId→playerObject map for rookie detection
+  const playerMap = new Map(cache.getAllPlayers().map(p => [p.id, p]));
+
+  const currentYear = meta?.year ?? 2025;
+  const { awards, allPro } = calculateAwardRaces(allEntries, playerMap, allTeams, currentYear);
+
+  post(toUI.AWARD_RACES, {
+    week:     meta?.currentWeek  ?? 0,
+    year:     currentYear,
+    seasonId: meta?.currentSeasonId,
+    phase:    meta?.phase,
+    awards,
+    allPro,
+  }, id);
+}
+
 // ── Main message router ───────────────────────────────────────────────────────
 
 /**
@@ -2404,6 +2472,7 @@ async function handleMessage(event) {
       // ── Analytics ─────────────────────────────────────────────────────────
       case toWorker.GET_TEAM_PROFILE:   return await handleGetTeamProfile(payload, id);
       case toWorker.GET_LEAGUE_LEADERS: return await handleGetLeagueLeaders(payload, id);
+      case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);
