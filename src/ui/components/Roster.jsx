@@ -70,27 +70,6 @@ function fmtYears(contract) {
   return `${rem}yr`;
 }
 
-/**
- * Deterministic Scheme Fit mock (0-100).
- * Derived from OVR and player id so the value is stable across renders.
- * Replace with real `player.schemeFit` when the worker exposes it.
- */
-function mockSchemeFit(player) {
-  const base    = Math.min(98, Math.max(48, player.ovr + 8));
-  const jitter  = ((player.id ?? 0) * 7 + 3) % 22 - 11;   // -11 to +10
-  return Math.max(40, Math.min(99, base + jitter));
-}
-
-/**
- * Deterministic Morale mock (50-100).
- * Replace with real `player.morale` when the worker exposes it.
- */
-function mockMorale(player) {
-  const base   = 80;
-  const jitter = ((player.id ?? 0) * 13 + 5) % 26 - 13;  // -13 to +12
-  return Math.max(50, Math.min(100, base + jitter));
-}
-
 function indicatorColor(val) {
   if (val >= 85) return '#34C759';
   if (val >= 70) return '#FF9F0A';
@@ -124,8 +103,8 @@ function sortPlayers(players, sortKey, sortDir) {
       case 'ovr':    va = a.ovr ?? 0;                      vb = b.ovr ?? 0;                     break;
       case 'age':    va = a.age ?? 0;                      vb = b.age ?? 0;                     break;
       case 'salary': va = a.contract?.baseAnnual ?? 0;     vb = b.contract?.baseAnnual ?? 0;    break;
-      case 'fit':    va = mockSchemeFit(a);                vb = mockSchemeFit(b);               break;
-      case 'morale': va = mockMorale(a);                   vb = mockMorale(b);                  break;
+      case 'fit':    va = a.schemeFit ?? 50;               vb = b.schemeFit ?? 50;              break;
+      case 'morale': va = a.morale ?? 75;                  vb = b.morale ?? 75;                 break;
       case 'name':   va = a.name ?? '';                    vb = b.name ?? '';                   break;
       default:       va = 0;                               vb = 0;
     }
@@ -270,8 +249,8 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
               )}
               {displayed.map((player, idx) => {
                 const isReleasing = releasing === player.id;
-                const fit    = mockSchemeFit(player);
-                const morale = mockMorale(player);
+                const fit    = player.schemeFit ?? 50;
+                const morale = player.morale ?? 75;
                 const fitCol    = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
 
@@ -380,7 +359,7 @@ function DepthCard({ player, isStarter }) {
     );
   }
 
-  const fit         = mockSchemeFit(player);
+  const fit         = player.schemeFit ?? 50;
   const fitCol      = indicatorColor(fit);
   const borderStyle = isStarter
     ? `1px solid var(--accent)`
@@ -622,12 +601,12 @@ export default function Roster({ league, actions, onPlayerSelect }) {
         {/* Cap bar */}
         <CapBar capUsed={capUsed} capTotal={capTotal} />
 
-        {/* Legend for mocked indicators */}
+        {/* Legend for indicators */}
         <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-5)', flexWrap: 'wrap' }}>
           <span style={{ fontSize: 10, color: 'var(--text-subtle)' }}>
-            <span style={{ color: '#34C759', fontWeight: 700 }}>◆</span> Scheme Fit (mocked) &nbsp;
+            <span style={{ color: '#34C759', fontWeight: 700 }}>◆</span> Scheme Fit &nbsp;
             <span style={{ color: 'var(--text-subtle)' }}>|</span>&nbsp;
-            <span style={{ color: '#0A84FF', fontWeight: 700 }}>●</span> Morale (mocked) — will auto-update when worker exposes real values
+            <span style={{ color: '#0A84FF', fontWeight: 700 }}>●</span> Morale
           </span>
         </div>
       </div>

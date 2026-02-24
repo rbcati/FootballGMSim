@@ -469,5 +469,54 @@ export {
     calculateOvr,
     generateContract,
     generatePlayerRatings,
-    tagAbilities
+    tagAbilities,
+    calculateMorale
 };
+
+/**
+ * Calculates a player's morale based on team performance and their role.
+ * @param {Object} player - Player object.
+ * @param {Object} team - Team object (must have wins/losses).
+ * @param {boolean} isStarter - Whether the player is a starter.
+ * @returns {number} Morale value (0-100).
+ */
+function calculateMorale(player, team, isStarter = true) {
+    if (!player || !team) return 50;
+
+    // 1. Team Performance (Weight: 40%)
+    const games = (team.wins || 0) + (team.losses || 0);
+    const winPct = games > 0 ? team.wins / games : 0.5; // Default to .500 for new season
+
+    // 0.0 -> -20, 1.0 -> +20
+    let teamFactor = (winPct - 0.5) * 40;
+
+    // 2. Personal/Role (Weight: 30%)
+    // Deterministic base component (Player personality)
+    const baseMorale = 75;
+
+    // Personality Trait Check
+    let traitFactor = 0;
+    if (player.personality && player.personality.traits) {
+        if (player.personality.traits.includes('Winner')) {
+             // Winners care MORE about winning
+             traitFactor = (winPct - 0.5) * 20;
+        } else if (player.personality.traits.includes('Loyal')) {
+             traitFactor = 5; // Always happier
+        }
+    }
+
+    // Role Satisfaction
+    // Starters are happier (+10), Bench players (-5)
+    const roleFactor = isStarter ? 10 : -5;
+
+    // Calculate final
+    let morale = baseMorale + teamFactor + traitFactor + roleFactor;
+
+    // Jitter (Deterministic based on ID to avoid flickering)
+    // Use player.id as seed
+    const idNum = parseInt(player.id, 36) || 0;
+    const jitter = (idNum % 11) - 5; // -5 to +5
+    morale += jitter;
+
+    return Math.max(0, Math.min(100, Math.round(morale)));
+}
