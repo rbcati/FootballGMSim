@@ -470,7 +470,8 @@ export {
     generateContract,
     generatePlayerRatings,
     tagAbilities,
-    calculateMorale
+    calculateMorale,
+    calculateExtensionDemand
 };
 
 /**
@@ -519,4 +520,47 @@ function calculateMorale(player, team, isStarter = true) {
     morale += jitter;
 
     return Math.max(0, Math.min(100, Math.round(morale)));
+}
+
+/**
+ * Calculate contract extension demand for a player.
+ * @param {Object} player
+ * @returns {Object} { years, baseAnnual, signingBonus, guaranteedPct }
+ */
+function calculateExtensionDemand(player) {
+    if (!player) return null;
+
+    // Determine years based on age
+    let years = 1;
+    const age = player.age;
+    if (age < 26) years = U.rand(4, 5);
+    else if (age < 30) years = U.rand(3, 4);
+    else if (age < 33) years = U.rand(2, 3);
+    else years = 1;
+
+    // Use generateContract logic but override years
+    // generateContract uses U.rand heavily. Extension should be slightly higher (retention premium).
+    // We can call generateContract to get a baseline market value for their OVR.
+    const baseline = generateContract(player.ovr, player.pos);
+
+    // Apply Extension Premium (10-15%)
+    const premiumMult = 1.15;
+    const baseAnnual = Math.round(baseline.baseAnnual * premiumMult * 10) / 10;
+
+    // Recalculate signing bonus based on new annual
+    // Maintain similar bonus ratio as baseline
+    const bonusRatio = (baseline.signingBonus / (baseline.baseAnnual * baseline.yearsTotal)) || 0.15;
+
+    // Cap bonus ratio
+    const safeBonusRatio = Math.min(bonusRatio, 0.4);
+
+    const signingBonus = Math.round(baseAnnual * years * safeBonusRatio * 10) / 10;
+
+    return {
+        years,
+        yearsTotal: years,
+        baseAnnual,
+        signingBonus,
+        guaranteedPct: baseline.guaranteedPct || 0.5
+    };
 }
