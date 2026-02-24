@@ -700,8 +700,19 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
                 display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
               }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
-                    {theirTeam?.name ?? 'Their Team'} · You Receive
+                  <div style={{ fontWeight: 800, fontSize: 'var(--text-sm)', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                    <span>{theirTeam?.name ?? 'Their Team'}</span>
+                    {theirTeam?.aiState && (
+                      <span style={{
+                        fontSize: '10px', textTransform: 'uppercase', padding: '1px 4px',
+                        borderRadius: 'var(--radius-pill)', border: '1px solid currentColor',
+                        color: theirTeam.aiState === 'Contending' ? 'var(--success)' : theirTeam.aiState === 'Rebuilding' ? 'var(--accent)' : 'var(--text-muted)',
+                        opacity: 0.8
+                      }}>
+                        {theirTeam.aiState}
+                      </span>
+                    )}
+                    <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>· You Receive</span>
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     {receiving.size} player{receiving.size !== 1 ? 's' : ''} + {theirPicks.length} pick{theirPicks.length !== 1 ? 's' : ''} selected
