@@ -15,7 +15,7 @@
 
 import React, { useState, useMemo, Component } from 'react';
 import Roster          from './Roster.jsx';
-import FreeAgencyPanel from './FreeAgencyPanel.jsx';
+import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
@@ -593,7 +593,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Free Agency' && (
         <TabErrorBoundary label="Free Agency">
-          <FreeAgencyPanel league={league} actions={actions} />
+          <FreeAgency league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Trades' && (
