@@ -526,6 +526,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
     ? Math.round(league.teams.reduce((s, t) => s + t.ovr, 0) / league.teams.length)
     : 75;
 
+  const capTotal = userTeam?.capTotal ?? 255;
+  const capUsed  = userTeam?.capUsed ?? 0;
+  const deadCap  = userTeam?.deadCap ?? 0;
+  const capRoom  = userTeam?.capRoom ?? (capTotal - capUsed);
+
   return (
     <div>
       {/* ── Hub Header ── */}
@@ -567,6 +572,24 @@ export default function LeagueDashboard({ league, busy, actions }) {
             <div className="stat-value-large">{value}</div>
             <div className="stat-bar-container">
               <div className="stat-bar-fill" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Financial Status ── */}
+      <div className="status-grid" style={{ marginTop: 'var(--space-4)' }}>
+        {[
+          { label: 'Total Cap',       value: `$${capTotal.toFixed(1)}M`, pct: 100, color: 'var(--text-muted)' },
+          { label: 'Cap Used',        value: `$${capUsed.toFixed(1)}M`,  pct: Math.min(100, (capUsed/capTotal)*100), color: 'var(--accent)' },
+          { label: 'Dead Cap',        value: `$${deadCap.toFixed(1)}M`,  pct: Math.min(100, (deadCap/capTotal)*100), color: 'var(--text-subtle)' },
+          { label: 'Cap Space',       value: `$${capRoom.toFixed(1)}M`,  pct: Math.min(100, (capRoom/capTotal)*100), color: capRoom > 10 ? 'var(--success)' : 'var(--danger)' },
+        ].map(({ label, value, pct, color }) => (
+          <div key={label} className="stat-box">
+            <div className="stat-label">{label}</div>
+            <div className="stat-value-large" style={{ color: color || 'var(--text)' }}>{value}</div>
+            <div className="stat-bar-container">
+              <div className="stat-bar-fill" style={{ width: `${pct}%`, background: color || 'var(--accent)' }} />
             </div>
           </div>
         ))}

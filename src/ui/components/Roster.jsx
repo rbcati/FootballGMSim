@@ -116,17 +116,97 @@ function sortPlayers(players, sortKey, sortDir) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function CapBar({ capUsed, capTotal }) {
-  const pct   = capTotal > 0 ? Math.min(100, (capUsed / capTotal) * 100) : 0;
-  const color = pct > 90 ? 'var(--danger)' : pct > 75 ? 'var(--warning)' : 'var(--success)';
+function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
+  const [ask, setAsk] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch ask on mount
+    actions.getExtensionAsk(player.id).then(resp => {
+      if (resp.payload?.ask) setAsk(resp.payload.ask);
+      setLoading(false);
+    }).catch(err => {
+      console.error(err);
+      setLoading(false);
+    });
+  }, [player.id, actions]);
+
+  const handleAccept = async () => {
+    if (!ask) return;
+    setLoading(true);
+    await actions.extendContract(player.id, teamId, ask);
+    onComplete();
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000
+    }}>
+      <div className="card" style={{ width: 400, padding: 'var(--space-6)', boxShadow: 'var(--shadow-lg)' }}>
+        <h3 style={{ marginTop: 0 }}>Extend {player.name}</h3>
+        {loading ? (
+          <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>Negotiating...</div>
+        ) : ask ? (
+          <div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Agent Demand:</p>
+            <div style={{
+              fontSize: '1.5em', fontWeight: 800, margin: 'var(--space-4) 0',
+              color: 'var(--accent)', textAlign: 'center',
+              background: 'var(--surface-strong)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)'
+            }}>
+              {ask.years} Years<br/>
+              <span style={{ fontSize: '0.6em', color: 'var(--text)' }}>${ask.baseAnnual}M / yr</span>
+            </div>
+            <div style={{ fontSize: '0.85em', color: 'var(--text-subtle)', textAlign: 'center', marginBottom: 'var(--space-6)' }}>
+              Includes ${ask.signingBonus}M Signing Bonus
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={onClose}>Reject</button>
+              <button className="btn btn-primary" onClick={handleAccept} style={{ background: 'var(--success)', borderColor: 'var(--success)', color: '#fff' }}>
+                Accept Deal
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p>Player refuses to negotiate at this time.</p>
+            <button className="btn" onClick={onClose}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CapBar({ capUsed, capTotal, deadCap = 0 }) {
+  const usedPct = capTotal > 0 ? Math.min(100, ((capUsed - deadCap) / capTotal) * 100) : 0;
+  const deadPct = capTotal > 0 ? Math.min(100, (deadCap / capTotal) * 100) : 0;
+
+  const totalPct = usedPct + deadPct;
+  const color = totalPct > 90 ? 'var(--danger)' : totalPct > 75 ? 'var(--warning)' : 'var(--success)';
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-      <div style={{ flex: 1, height: 6, background: 'var(--hairline)', borderRadius: 3, overflow: 'hidden' }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: color, transition: 'width .3s' }} />
+      <div style={{ flex: 1, height: 8, background: 'var(--hairline)', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+        {/* Active Cap */}
+        <div style={{ height: '100%', width: `${usedPct}%`, background: color, transition: 'width .3s' }} />
+        {/* Dead Cap */}
+        {deadPct > 0 && (
+          <div style={{ height: '100%', width: `${deadPct}%`, background: 'var(--text-subtle)', transition: 'width .3s' }} />
+        )}
       </div>
-      <span style={{ fontSize: 'var(--text-xs)', color, fontWeight: 700, whiteSpace: 'nowrap' }}>
-        ${capUsed?.toFixed(1)}M / ${capTotal?.toFixed(0)}M
-      </span>
+      <div style={{ textAlign: 'right', lineHeight: 1 }}>
+        <span style={{ fontSize: 'var(--text-xs)', color, fontWeight: 700, whiteSpace: 'nowrap' }}>
+          ${capUsed?.toFixed(1)}M / ${capTotal?.toFixed(0)}M
+        </span>
+        {deadCap > 0 && (
+          <div style={{ fontSize: 9, color: 'var(--text-subtle)', marginTop: 2 }}>
+            (${deadCap.toFixed(1)}M Dead)
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -185,6 +265,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
   const [sortKey,   setSortKey]   = useState('ovr');
   const [sortDir,   setSortDir]   = useState('desc');
   const [releasing, setReleasing] = useState(null);
+  const [extending, setExtending] = useState(null);
 
   const displayed = useMemo(() => {
     const filtered = posFilter === 'ALL'
@@ -200,6 +281,19 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
 
   const handleRelease = async (player) => {
     if (releasing !== player.id) { setReleasing(player.id); return; }
+
+    // Check dead cap
+    const c = player.contract;
+    const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
+    const deadCap = annualBonus * (c?.years || 1);
+
+    if (deadCap > 0.5) {
+        if (!window.confirm(`Release ${player.name}?\n\nThis will accelerate $${deadCap.toFixed(1)}M of dead cap against your budget.`)) {
+            setReleasing(null);
+            return;
+        }
+    }
+
     setReleasing(null);
     actions.releasePlayer(player.id, teamId);
     onRefetch();
@@ -207,6 +301,15 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
 
   return (
     <>
+      {extending && (
+        <ExtensionModal
+          player={extending}
+          actions={actions}
+          teamId={teamId}
+          onClose={() => setExtending(null)}
+          onComplete={() => { setExtending(null); onRefetch(); }}
+        />
+      )}
       {/* Position filter pills */}
       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
         {POSITIONS.map(pos => (
@@ -299,7 +402,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                         <span style={{ fontSize: 10, color: moraleCol, fontWeight: 700, lineHeight: 1 }}>{morale}</span>
                       </div>
                     </td>
-                    {/* Release */}
+                    {/* Release / Extend */}
                     <td style={{ textAlign: 'center', paddingRight: 'var(--space-3)' }}>
                       {isReleasing ? (
                         <div style={{ display: 'flex', gap: 'var(--space-1)', justifyContent: 'center' }}>
@@ -319,13 +422,24 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          className="btn"
-                          style={{ fontSize: 'var(--text-xs)', padding: '2px 10px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
-                          onClick={() => handleRelease(player)}
-                        >
-                          Release
-                        </button>
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                            {player.contract?.years === 1 && (
+                                <button
+                                    className="btn"
+                                    style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', color: 'var(--success)', borderColor: 'var(--success)' }}
+                                    onClick={() => setExtending(player)}
+                                >
+                                    Ext
+                                </button>
+                            )}
+                            <button
+                            className="btn"
+                            style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                            onClick={() => handleRelease(player)}
+                            >
+                            Cut
+                            </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -599,7 +713,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
         </div>
 
         {/* Cap bar */}
-        <CapBar capUsed={capUsed} capTotal={capTotal} />
+        <CapBar capUsed={capUsed} capTotal={capTotal} deadCap={team?.deadCap} />
 
         {/* Legend for indicators */}
         <div style={{ marginTop: 'var(--space-3)', display: 'flex', gap: 'var(--space-5)', flexWrap: 'wrap' }}>

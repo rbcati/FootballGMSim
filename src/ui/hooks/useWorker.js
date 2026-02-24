@@ -308,6 +308,14 @@ export function useWorker() {
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
       request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),
 
+    /** Get contract extension demand from AI (returns Promise). */
+    getExtensionAsk: (playerId) =>
+      request(toWorker.GET_EXTENSION_ASK, { playerId }, { silent: true }),
+
+    /** Extend contract (returns Promise with new state). */
+    extendContract: (playerId, teamId, contract) =>
+      request(toWorker.EXTEND_CONTRACT, { playerId, teamId, contract }),
+
     /** Fetch the full box score for a completed game (returns a Promise). */
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),

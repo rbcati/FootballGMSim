@@ -6,29 +6,91 @@
 import React, { useEffect, useState } from 'react';
 import { useWorker } from '../hooks/useWorker.js';
 
+function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
+  const [ask, setAsk] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    actions.getExtensionAsk(player.id).then(resp => {
+      if (resp.payload?.ask) setAsk(resp.payload.ask);
+      setLoading(false);
+    }).catch(err => {
+      console.error(err);
+      setLoading(false);
+    });
+  }, [player.id, actions]);
+
+  const handleAccept = async () => {
+    if (!ask) return;
+    setLoading(true);
+    await actions.extendContract(player.id, teamId, ask);
+    onComplete();
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 10000
+    }}>
+      <div className="card" style={{ width: 400, padding: 'var(--space-6)', boxShadow: 'var(--shadow-lg)', background: 'var(--surface)' }}>
+        <h3 style={{ marginTop: 0 }}>Extend {player.name}</h3>
+        {loading ? (
+          <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>Negotiating...</div>
+        ) : ask ? (
+          <div>
+            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Agent Demand:</p>
+            <div style={{
+              fontSize: '1.5em', fontWeight: 800, margin: 'var(--space-4) 0',
+              color: 'var(--accent)', textAlign: 'center',
+              background: 'var(--surface-strong)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)'
+            }}>
+              {ask.years} Years<br/>
+              <span style={{ fontSize: '0.6em', color: 'var(--text)' }}>${ask.baseAnnual}M / yr</span>
+            </div>
+            <div style={{ fontSize: '0.85em', color: 'var(--text-subtle)', textAlign: 'center', marginBottom: 'var(--space-6)' }}>
+              Includes ${ask.signingBonus}M Signing Bonus
+            </div>
+            <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={onClose}>Reject</button>
+              <button className="btn btn-primary" onClick={handleAccept} style={{ background: 'var(--success)', borderColor: 'var(--success)', color: '#fff' }}>
+                Accept Deal
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p>Player refuses to negotiate at this time.</p>
+            <button className="btn" onClick={onClose}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PlayerProfile({ playerId, onClose }) {
   const { actions } = useWorker();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [extending, setExtending] = useState(false);
 
-  useEffect(() => {
+  const fetchProfile = () => {
     if (!playerId) return;
-    let mounted = true;
     setLoading(true);
-
     actions.getPlayerCareer(playerId)
       .then(response => {
-        if (mounted) {
-          setData(response);
-          setLoading(false);
-        }
+        setData(response);
+        setLoading(false);
       })
       .catch(err => {
         console.error('Failed to load player profile:', err);
-        if (mounted) setLoading(false);
+        setLoading(false);
       });
+  };
 
-    return () => { mounted = false; };
+  useEffect(() => {
+    fetchProfile();
   }, [playerId, actions]);
 
   if (!playerId) return null;
@@ -78,6 +140,17 @@ export default function PlayerProfile({ playerId, onClose }) {
                     </span>
                   )}
                 </div>
+                {data.player.status === 'active' && data.player.contract?.years === 1 && (
+                  <div style={{ marginTop: 'var(--space-3)' }}>
+                    <button
+                      className="btn"
+                      onClick={() => setExtending(true)}
+                      style={{ fontSize: 'var(--text-xs)', padding: '4px 12px', background: 'var(--surface)', border: '1px solid var(--accent)', color: 'var(--accent)' }}
+                    >
+                      Negotiate Extension
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -147,6 +220,15 @@ export default function PlayerProfile({ playerId, onClose }) {
         </div>
 
       </div>
+      {extending && data?.player && (
+        <ExtensionModal
+          player={data.player}
+          actions={actions}
+          teamId={data.player.teamId}
+          onClose={() => setExtending(false)}
+          onComplete={() => { setExtending(false); fetchProfile(); }}
+        />
+      )}
       <style>{`
         .rating-pill {
           display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
