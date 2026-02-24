@@ -34,6 +34,7 @@ import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
+import AiLogic from '../core/ai-logic.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1603,16 +1604,35 @@ async function handleSimDraftPick(payload, id) {
   let currentPickIndex = meta.draftState.currentPickIndex;
   const picks = meta.draftState.picks;
 
+  // Optimisation: Filter draft pool once
+  const draftPool = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+
   while (currentPickIndex < picks.length) {
     const pick = picks[currentPickIndex];
 
     // Pause at user's pick
     if (pick.teamId === userTeamId) break;
 
-    // AI selects best available prospect by OVR
-    const bestProspect = cache.getAllPlayers()
-      .filter(p => p.status === 'draft_eligible')
-      .reduce((best, p) => (!best || (p.ovr ?? 0) > (best.ovr ?? 0)) ? p : best, null);
+    // AI selects best available prospect by Value (Need * OVR)
+    const needs = AiLogic.calculateTeamNeeds(pick.teamId);
+    let bestProspect = null;
+    let bestValue = -1;
+    let bestIdx = -1;
+
+    for (let i = 0; i < draftPool.length; i++) {
+        const p = draftPool[i];
+        const mult = needs[p.pos] || 1.0;
+        const val = (p.ovr ?? 0) * mult;
+
+        if (val > bestValue) {
+            bestValue = val;
+            bestProspect = p;
+            bestIdx = i;
+        } else if (val === bestValue && (!bestProspect || (p.ovr > bestProspect.ovr))) {
+            bestProspect = p;
+            bestIdx = i;
+        }
+    }
 
     if (!bestProspect) break; // pool exhausted
 
@@ -1620,6 +1640,11 @@ async function handleSimDraftPick(payload, id) {
     // _executeDraftPick increments draftState.currentPickIndex inside setMeta;
     // read the updated value from the live meta reference
     currentPickIndex = cache.getMeta().draftState.currentPickIndex;
+
+    // Remove from local pool
+    if (bestIdx > -1) {
+        draftPool.splice(bestIdx, 1);
+    }
 
     await yieldFrame();
   }
@@ -1732,6 +1757,14 @@ async function handleAdvanceOffseason(payload, id) {
     return;
   }
 
+  // AI: Process Extensions
+  const allTeams = cache.getAllTeams();
+  for (const team of allTeams) {
+      if (team.id !== meta.userTeamId) {
+          await AiLogic.processExtensions(team.id);
+      }
+  }
+
   const retired = [];
 
   for (const player of cache.getAllPlayers()) {
@@ -1765,6 +1798,13 @@ async function handleAdvanceOffseason(payload, id) {
     } else {
       cache.updatePlayer(player.id, { age: age + 1, ovr: newOvr });
     }
+  }
+
+  // AI: Free Agency (fill holes after retirements)
+  for (const team of allTeams) {
+      if (team.id !== meta.userTeamId) {
+          await AiLogic.executeAIFreeAgency(team.id);
+      }
   }
 
   cache.setMeta({ offseasonProgressionDone: true });
