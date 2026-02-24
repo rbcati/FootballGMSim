@@ -24,6 +24,7 @@ import {
   Meta, Teams, Players, Rosters, Games,
   Seasons, PlayerStats, Transactions, DraftPicks,
   clearAllData, openDB, bulkWrite,
+  Saves, configureActiveLeague, deleteLeagueDB, openGlobalDB, getActiveLeagueId,
 } from '../db/index.js';
 import { makeLeague }     from '../core/league.js';
 import GameRunner         from '../core/game-runner.js';
@@ -214,6 +215,23 @@ async function flushDirty() {
     if (toSave.length) await DraftPicks.saveBulk(toSave);
   }
 
+  // Update Global Save Metadata if league meta changed
+  if (dirty.meta) {
+    const meta = cache.getMeta();
+    const leagueId = getActiveLeagueId();
+    if (leagueId) {
+      const userTeam = cache.getTeam(meta.userTeamId);
+      await Saves.save({
+        id: leagueId,
+        name: meta.name || `League ${leagueId}`,
+        year: meta.year,
+        teamId: meta.userTeamId,
+        teamAbbr: userTeam?.abbr || '???',
+        lastPlayed: Date.now()
+      });
+    }
+  }
+
   // bulkWrite itself also validates before each put — belt-and-suspenders.
   await bulkWrite({
     meta:          dirty.meta ? cache.getMeta() : null,
@@ -249,16 +267,70 @@ async function loadSave() {
 
 async function handleInit(payload, id) {
   try {
-    await openDB(); // ensure DB is open
-    const found = await loadSave();
-
-    if (found) {
-      post(toUI.FULL_STATE, buildViewState(), id);
-    } else {
-      post(toUI.READY, { hasSave: false }, id);
-    }
+    await openGlobalDB();
+    // We are ready, but we don't auto-load a save anymore.
+    // The UI should verify worker readiness and then ask for save list.
+    post(toUI.READY, {}, id);
   } catch (err) {
     post(toUI.ERROR, { message: err.message, stack: err.stack }, id);
+  }
+}
+
+// ── Handler: GET_ALL_SAVES ────────────────────────────────────────────────────
+
+async function handleGetAllSaves(payload, id) {
+  try {
+    const saves = await Saves.loadAll();
+    saves.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+    post(toUI.ALL_SAVES, { saves }, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err.message }, id);
+  }
+}
+
+// ── Handler: LOAD_SAVE ────────────────────────────────────────────────────────
+
+async function handleLoadSave({ leagueId }, id) {
+  if (!leagueId) { post(toUI.ERROR, { message: "No leagueId provided" }, id); return; }
+
+  try {
+    configureActiveLeague(leagueId);
+    await openDB(); // Ensure DB is open
+    const found = await loadSave(); // Loads into cache
+
+    if (found) {
+      // Update lastPlayed in Global DB
+      const meta = cache.getMeta();
+      const userTeam = cache.getTeam(meta.userTeamId);
+      const saveEntry = {
+        id: leagueId,
+        name: meta.name || `League ${leagueId}`,
+        year: meta.year,
+        teamId: meta.userTeamId,
+        teamAbbr: userTeam?.abbr || '???',
+        lastPlayed: Date.now()
+      };
+      await Saves.save(saveEntry);
+
+      post(toUI.FULL_STATE, buildViewState(), id);
+    } else {
+      post(toUI.ERROR, { message: "Save not found" }, id);
+    }
+  } catch (e) {
+    post(toUI.ERROR, { message: e.message, stack: e.stack }, id);
+  }
+}
+
+// ── Handler: DELETE_SAVE ──────────────────────────────────────────────────────
+
+async function handleDeleteSave({ leagueId }, id) {
+  try {
+    await Saves.delete(leagueId);
+    await deleteLeagueDB(leagueId);
+    // Return updated list
+    await handleGetAllSaves({}, id);
+  } catch (e) {
+    post(toUI.ERROR, { message: e.message }, id);
   }
 }
 
@@ -267,8 +339,13 @@ async function handleInit(payload, id) {
 async function handleNewLeague(payload, id) {
   try {
     const { teams: teamDefs, options = {} } = payload;
+    const userTeamId = options.userTeamId ?? 0;
 
-    // Wipe any existing save
+    // Generate new League ID
+    const leagueId = Utils.id();
+    configureActiveLeague(leagueId);
+
+    // Wipe any existing data in this new DB (should be empty but good practice)
     await clearAllData();
     cache.reset();
 
@@ -293,7 +370,8 @@ async function handleNewLeague(payload, id) {
     const seasonId = `s${league.season ?? 1}`;
     const meta = {
       id:              'league',
-      userTeamId:      options.userTeamId ?? 0,
+      name:            `League ${leagueId}`, // Store name in league meta too
+      userTeamId:      userTeamId,
       currentSeasonId: seasonId,
       currentWeek:     1,
       year:            league.year,
@@ -301,6 +379,18 @@ async function handleNewLeague(payload, id) {
       phase:           'regular',
       settings:        options.settings ?? {},
     };
+
+    // Create Save Entry
+    const userTeam = teamDefs.find(t => t.id === userTeamId);
+    const saveEntry = {
+        id: leagueId,
+        name: meta.name,
+        year: meta.year,
+        teamId: userTeamId,
+        teamAbbr: userTeam?.abbr || '???',
+        lastPlayed: Date.now()
+    };
+    await Saves.save(saveEntry);
 
     // Separate flat data from the league blob
     // Teams — strip rosters (players stored separately)
@@ -1801,6 +1891,9 @@ self.onmessage = async (event) => {
   try {
     switch (type) {
       case toWorker.INIT:               return await handleInit(payload, id);
+      case toWorker.GET_ALL_SAVES:      return await handleGetAllSaves(payload, id);
+      case toWorker.LOAD_SAVE:          return await handleLoadSave(payload, id);
+      case toWorker.DELETE_SAVE:        return await handleDeleteSave(payload, id);
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);

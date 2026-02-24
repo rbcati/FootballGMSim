@@ -2,29 +2,17 @@
  * db/index.js
  *
  * IndexedDB abstraction layer for Football GM.
- *
- * Schema design goals:
- *  - Separate stores so we never read/write the full league blob
- *  - Historical seasons are only touched when the user browses history
- *  - Current-season data is mirrored in worker memory (cache.js) and
- *    flushed to DB at end of each week / phase boundary
- *  - Supports 200+ seasons without noticeable size growth in hot paths
- *
- * Store layout:
- *
- *  meta          { id, userTeamId, currentSeasonId, currentWeek, phase, settings }
- *  teams         { id, name, abbr, conf, div, ovr, strategy, history[] }
- *  players       { id, name, pos, age, ovr, potential, attributes, contract, teamId }
- *  rosters       { id=`${seasonId}_${teamId}`, seasonId, teamId, playerIds[], capUsed }
- *  games         { id, seasonId, week, homeId, awayId, homeScore, awayScore, stats }
- *  seasons       { id=seasonId, year, champion, mvp, standings[], awards, leagueLeaders }
- *  playerStats   { id=`${seasonId}_${playerId}`, seasonId, playerId, teamId, totals{} }
- *  transactions  { id, seasonId, week, type, teamId, details }
- *  draftPicks    { id, originalOwner, currentOwner, round, year, playerId? }
+ * Supports multiple league databases and a global meta database for save management.
  */
 
-const DB_NAME    = 'FootballGM_v1';
-const DB_VERSION = 3;
+// ── Configuration ────────────────────────────────────────────────────────────
+
+const GLOBAL_DB_NAME    = 'FootballGM_Meta';
+const GLOBAL_DB_VERSION = 1;
+
+// Legacy/Default DB name pattern (will be suffixed with leagueId)
+const LEAGUE_DB_PREFIX  = 'FootballGM_League_';
+const LEAGUE_DB_VERSION = 3;
 
 const STORES = {
   META:          'meta',
@@ -39,66 +27,90 @@ const STORES = {
   NEWS:          'news',
 };
 
-// ── Open / upgrade ───────────────────────────────────────────────────────────
+const GLOBAL_STORES = {
+  SAVES: 'saves',
+};
 
-/** Persistent singleton — never closed except on versionchange or unexpected disconnect. */
-let _db = null;
-/** In-flight open promise — prevents concurrent indexedDB.open() races. */
-let _opening = null;
+// ── State ────────────────────────────────────────────────────────────────────
+
+/** currently active league ID (null if none selected) */
+let _activeLeagueId = null;
+
+/** Singletons for the active league DB */
+let _leagueDB      = null;
+let _leagueOpening = null;
+
+/** Singletons for the global meta DB */
+let _globalDB      = null;
+let _globalOpening = null;
+
+/**
+ * Configure which league database is active.
+ * Closes any existing connection to a different league.
+ */
+export function configureActiveLeague(leagueId) {
+  if (_activeLeagueId === leagueId) return;
+
+  if (_leagueDB) {
+    _leagueDB.close();
+    _leagueDB = null;
+  }
+  _activeLeagueId = leagueId;
+}
+
+export function getActiveLeagueId() {
+  return _activeLeagueId;
+}
+
+// ── Open / Upgrade: League DB ────────────────────────────────────────────────
 
 export function openDB() {
-  // Fast path: connection is already open and healthy.
-  if (_db) return Promise.resolve(_db);
-  // If a previous call is already opening, return the same promise so all
-  // concurrent callers share a single IDBOpenDBRequest.
-  if (_opening) return _opening;
+  if (!_activeLeagueId) {
+    return Promise.reject(new Error("No active league configured. Call configureActiveLeague(id) first."));
+  }
 
-  _opening = new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+  // Fast path
+  if (_leagueDB) return Promise.resolve(_leagueDB);
+  if (_leagueOpening) return _leagueOpening;
+
+  const dbName = `${LEAGUE_DB_PREFIX}${_activeLeagueId}`;
+
+  _leagueOpening = new Promise((resolve, reject) => {
+    const req = indexedDB.open(dbName, LEAGUE_DB_VERSION);
 
     req.onerror = () => {
-      _opening = null;
+      _leagueOpening = null;
       reject(req.error);
     };
+
     req.onsuccess = () => {
-      _db      = req.result;
-      _opening = null;
-      // Another context (tab) requested a version upgrade — yield gracefully.
-      _db.onversionchange = () => { _db.close(); _db = null; };
-      // Null out the singleton whenever the connection is closed for any reason
-      // so the next openDB() call transparently re-establishes it.
-      _db.onclose = () => { _db = null; };
-      resolve(_db);
+      _leagueDB = req.result;
+      _leagueOpening = null;
+      _leagueDB.onversionchange = () => { _leagueDB.close(); _leagueDB = null; };
+      _leagueDB.onclose = () => { _leagueDB = null; };
+      resolve(_leagueDB);
     };
 
     req.onupgradeneeded = (event) => {
       const db = event.target.result;
 
-      // meta — single row keyed by 'league'
+      // Ensure all stores exist
       if (!db.objectStoreNames.contains(STORES.META)) {
         db.createObjectStore(STORES.META, { keyPath: 'id' });
       }
-
-      // teams — keyed by team id
       if (!db.objectStoreNames.contains(STORES.TEAMS)) {
         db.createObjectStore(STORES.TEAMS, { keyPath: 'id' });
       }
-
-      // players — keyed by player id
       if (!db.objectStoreNames.contains(STORES.PLAYERS)) {
         const ps = db.createObjectStore(STORES.PLAYERS, { keyPath: 'id' });
         ps.createIndex('teamId',   'teamId',   { unique: false });
         ps.createIndex('position', 'pos',      { unique: false });
       }
-
-      // rosters — keyed by `${seasonId}_${teamId}`, indexed by seasonId
       if (!db.objectStoreNames.contains(STORES.ROSTERS)) {
         const rs = db.createObjectStore(STORES.ROSTERS, { keyPath: 'id' });
         rs.createIndex('seasonId', 'seasonId', { unique: false });
         rs.createIndex('teamId',   'teamId',   { unique: false });
       }
-
-      // games — keyed by game id, indexed by season + week
       if (!db.objectStoreNames.contains(STORES.GAMES)) {
         const gs = db.createObjectStore(STORES.GAMES, { keyPath: 'id' });
         gs.createIndex('seasonId', 'seasonId', { unique: false });
@@ -106,35 +118,25 @@ export function openDB() {
         gs.createIndex('homeId',   'homeId',   { unique: false });
         gs.createIndex('awayId',   'awayId',   { unique: false });
       }
-
-      // seasons — one summary row per completed season
       if (!db.objectStoreNames.contains(STORES.SEASONS)) {
         const ss = db.createObjectStore(STORES.SEASONS, { keyPath: 'id' });
         ss.createIndex('year', 'year', { unique: false });
       }
-
-      // playerStats — keyed by `${seasonId}_${playerId}`
       if (!db.objectStoreNames.contains(STORES.PLAYER_STATS)) {
         const pss = db.createObjectStore(STORES.PLAYER_STATS, { keyPath: 'id' });
         pss.createIndex('seasonId', 'seasonId', { unique: false });
         pss.createIndex('playerId', 'playerId', { unique: false });
       }
-
-      // transactions
       if (!db.objectStoreNames.contains(STORES.TRANSACTIONS)) {
         const ts = db.createObjectStore(STORES.TRANSACTIONS, { keyPath: 'id', autoIncrement: true });
         ts.createIndex('seasonId', 'seasonId', { unique: false });
         ts.createIndex('teamId',   'teamId',   { unique: false });
       }
-
-      // draftPicks
       if (!db.objectStoreNames.contains(STORES.DRAFT_PICKS)) {
         const dp = db.createObjectStore(STORES.DRAFT_PICKS, { keyPath: 'id' });
         dp.createIndex('currentOwner', 'currentOwner', { unique: false });
         dp.createIndex('year',         'year',         { unique: false });
       }
-
-      // news
       if (!db.objectStoreNames.contains(STORES.NEWS)) {
         const ns = db.createObjectStore(STORES.NEWS, { keyPath: 'id', autoIncrement: true });
         ns.createIndex('seasonId', 'seasonId', { unique: false });
@@ -145,12 +147,46 @@ export function openDB() {
     };
   });
 
-  return _opening;
+  return _leagueOpening;
 }
 
-// ── Generic helpers ──────────────────────────────────────────────────────────
+// ── Open / Upgrade: Global DB ────────────────────────────────────────────────
 
-/** Execute a transaction and return a promise that resolves with the result. */
+export function openGlobalDB() {
+  if (_globalDB) return Promise.resolve(_globalDB);
+  if (_globalOpening) return _globalOpening;
+
+  _globalOpening = new Promise((resolve, reject) => {
+    const req = indexedDB.open(GLOBAL_DB_NAME, GLOBAL_DB_VERSION);
+
+    req.onerror = () => {
+      _globalOpening = null;
+      reject(req.error);
+    };
+
+    req.onsuccess = () => {
+      _globalDB = req.result;
+      _globalOpening = null;
+      _globalDB.onversionchange = () => { _globalDB.close(); _globalDB = null; };
+      _globalDB.onclose = () => { _globalDB = null; };
+      resolve(_globalDB);
+    };
+
+    req.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(GLOBAL_STORES.SAVES)) {
+        // id: leagueId
+        db.createObjectStore(GLOBAL_STORES.SAVES, { keyPath: 'id' });
+      }
+    };
+  });
+
+  return _globalOpening;
+}
+
+// ── Transaction Helpers ──────────────────────────────────────────────────────
+
+/** Execute transaction on Active League DB */
 function txOp(storeName, mode, fn) {
   return openDB().then(db => new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], mode);
@@ -159,6 +195,18 @@ function txOp(storeName, mode, fn) {
     fn(store, resolve, reject);
   }));
 }
+
+/** Execute transaction on Global Meta DB */
+function txOpGlobal(storeName, mode, fn) {
+  return openGlobalDB().then(db => new Promise((resolve, reject) => {
+    const transaction = db.transaction([storeName], mode);
+    const store = transaction.objectStore(storeName);
+    transaction.onerror = () => reject(transaction.error);
+    fn(store, resolve, reject);
+  }));
+}
+
+// ── Generic Helpers (League DB) ──────────────────────────────────────────────
 
 function dbGet(storeName, key) {
   return txOp(storeName, 'readonly', (store, resolve, reject) => {
@@ -184,7 +232,6 @@ function dbDel(storeName, key) {
   });
 }
 
-/** Get all records from a store (use sparingly – for small stores only) */
 function dbGetAll(storeName) {
   return txOp(storeName, 'readonly', (store, resolve, reject) => {
     const req = store.getAll();
@@ -193,7 +240,6 @@ function dbGetAll(storeName) {
   });
 }
 
-/** Get all records matching an index value */
 function dbGetAllByIndex(storeName, indexName, value) {
   return openDB().then(db => new Promise((resolve, reject) => {
     const transaction = db.transaction([storeName], 'readonly');
@@ -205,10 +251,6 @@ function dbGetAllByIndex(storeName, indexName, value) {
   }));
 }
 
-/**
- * Bulk-put an array of records in a single transaction.
- * Much faster than calling put() in a loop.
- */
 function dbPutBulk(storeName, records) {
   if (!records || records.length === 0) return Promise.resolve();
   return openDB().then(db => new Promise((resolve, reject) => {
@@ -222,9 +264,43 @@ function dbPutBulk(storeName, records) {
   }));
 }
 
-// ── Public API ───────────────────────────────────────────────────────────────
+// ── Generic Helpers (Global DB) ──────────────────────────────────────────────
 
-// --- Meta ---
+function dbGetAllGlobal(storeName) {
+  return txOpGlobal(storeName, 'readonly', (store, resolve, reject) => {
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+function dbPutGlobal(storeName, value) {
+  return txOpGlobal(storeName, 'readwrite', (store, resolve, reject) => {
+    const req = store.put(value);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+function dbDelGlobal(storeName, key) {
+  return txOpGlobal(storeName, 'readwrite', (store, resolve, reject) => {
+    const req = store.delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror   = () => reject(req.error);
+  });
+}
+
+// ── Public API (Repositories) ────────────────────────────────────────────────
+
+// --- Global Saves ---
+
+export const Saves = {
+  loadAll: ()   => dbGetAllGlobal(GLOBAL_STORES.SAVES),
+  save:    (s)  => dbPutGlobal(GLOBAL_STORES.SAVES, s),
+  delete:  (id) => dbDelGlobal(GLOBAL_STORES.SAVES, id),
+};
+
+// --- Meta (League Specific) ---
 
 export const Meta = {
   load: ()     => dbGet(STORES.META, 'league'),
@@ -325,38 +401,12 @@ export const News = {
 
 // ── Atomic multi-store flush ──────────────────────────────────────────────────
 
-/**
- * Validate that a record has a defined, non-null value for the given keyPath
- * before attempting an IDB put().  Returns true if the record is safe to write.
- *
- * Background: Safari / WebKit IDB throws
- *   "Failed to store record in an IDBObjectStore: Evaluating the object store's
- *    key path did not yield a value."
- * whenever the keyPath field is undefined or absent — even if the value is 0.
- * Strict validation here prevents the entire transaction from aborting due to a
- * single bad record.
- */
 function _hasValidKey(record, keyPath) {
   if (!record || typeof record !== 'object') return false;
   const val = record[keyPath];
   return val !== undefined && val !== null;
 }
 
-/**
- * Write all dirty data in a SINGLE multi-store readwrite transaction.
- *
- * Using one transaction instead of parallel per-store transactions eliminates
- * the "database connection is closing" race that occurs when several
- * concurrent readwrite transactions compete on the same IDBDatabase handle.
- *
- * @param {object} opts
- * @param {object|null}  opts.meta          - Raw meta object (will have id:'league' forced)
- * @param {Array}        opts.teams         - Team records to put
- * @param {Array}        opts.players       - Player records to put
- * @param {Array}        opts.playerDeletes - Player IDs to delete
- * @param {Array}        opts.games         - Game records to put
- * @param {Array}        opts.seasonStats   - PlayerStat records to put
- */
 export async function bulkWrite({
   meta          = null,
   teams         = [],
@@ -365,12 +415,7 @@ export async function bulkWrite({
   games         = [],
   seasonStats   = [],
 } = {}) {
-  // ── Pre-flight key validation ────────────────────────────────────────────
-  // Strip any record that is missing its required keyPath value BEFORE we open
-  // the IDB transaction.  A single bad record aborts the entire transaction on
-  // WebKit, causing the mobile "Evaluating the object store's key path did not
-  // yield a value" crash.
-
+  // Validate records
   const validTeams = teams.filter(t => {
     if (_hasValidKey(t, 'id')) return true;
     console.error('[bulkWrite] Dropping team with missing id:', t);
@@ -389,15 +434,12 @@ export async function bulkWrite({
     return false;
   });
 
-  // seasonStats: the id is assembled from seasonId + playerId at write time.
-  // Both must be defined and non-null for the resulting composite key to be valid.
   const validSeasonStats = seasonStats.filter(s => {
     if (s && s.seasonId != null && s.playerId != null) return true;
     console.error('[bulkWrite] Dropping season stat with missing seasonId/playerId:', s);
     return false;
   });
 
-  // Determine which stores we actually need; avoid opening stores unnecessarily.
   const needed = new Set();
   if (meta)                                           needed.add(STORES.META);
   if (validTeams.length)                              needed.add(STORES.TEAMS);
@@ -405,7 +447,7 @@ export async function bulkWrite({
   if (validGames.length)                              needed.add(STORES.GAMES);
   if (validSeasonStats.length)                        needed.add(STORES.PLAYER_STATS);
 
-  if (needed.size === 0) return; // nothing to do
+  if (needed.size === 0) return;
 
   const db = await openDB();
 
@@ -439,7 +481,7 @@ export async function bulkWrite({
   });
 }
 
-// ── Wipe helpers (for reset) ─────────────────────────────────────────────────
+// ── Wipe helpers ─────────────────────────────────────────────────────────────
 
 export async function clearAllData() {
   const db = await openDB();
@@ -454,4 +496,22 @@ export async function clearAllData() {
   });
 }
 
-export { STORES };
+/**
+ * Completely delete the current league database.
+ */
+export function deleteLeagueDB(leagueId) {
+  if (_activeLeagueId === leagueId && _leagueDB) {
+    _leagueDB.close();
+    _leagueDB = null;
+    _activeLeagueId = null;
+  }
+
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(`${LEAGUE_DB_PREFIX}${leagueId}`);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    req.onblocked = () => console.warn(`Delete blocked for league ${leagueId}`);
+  });
+}
+
+export { STORES, GLOBAL_STORES };
