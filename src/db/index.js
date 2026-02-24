@@ -24,7 +24,7 @@
  */
 
 const DB_NAME    = 'FootballGM_v1';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 const STORES = {
   META:          'meta',
@@ -36,6 +36,7 @@ const STORES = {
   PLAYER_STATS:  'playerStats',
   TRANSACTIONS:  'transactions',
   DRAFT_PICKS:   'draftPicks',
+  NEWS:          'news',
 };
 
 // ── Open / upgrade ───────────────────────────────────────────────────────────
@@ -132,8 +133,19 @@ export function openDB() {
         dp.createIndex('currentOwner', 'currentOwner', { unique: false });
         dp.createIndex('year',         'year',         { unique: false });
       }
+
+      // news
+      if (!db.objectStoreNames.contains(STORES.NEWS)) {
+        const ns = db.createObjectStore(STORES.NEWS, { keyPath: 'id', autoIncrement: true });
+        ns.createIndex('seasonId', 'seasonId', { unique: false });
+        ns.createIndex('week',     'week',     { unique: false });
+        ns.createIndex('type',     'type',     { unique: false });
+        ns.createIndex('teamId',   'teamId',   { unique: false });
+      }
     };
   });
+
+  return _opening;
 }
 
 // ── Generic helpers ──────────────────────────────────────────────────────────
@@ -299,6 +311,16 @@ export const DraftPicks = {
   saveBulk: (picks)  => dbPutBulk(STORES.DRAFT_PICKS, picks),
   byOwner:  (teamId) => dbGetAllByIndex(STORES.DRAFT_PICKS, 'currentOwner', teamId),
   byYear:   (year)   => dbGetAllByIndex(STORES.DRAFT_PICKS, 'year',         year),
+};
+
+// --- News ---
+
+export const News = {
+  add:      (item)   => dbPut(STORES.NEWS, item),
+  getRecent:(limit)  => dbGetAll(STORES.NEWS).then(all =>
+    all.sort((a, b) => b.timestamp - a.timestamp).slice(0, limit || 50)
+  ),
+  byTeam:   (teamId) => dbGetAllByIndex(STORES.NEWS, 'teamId', teamId),
 };
 
 // ── Atomic multi-store flush ──────────────────────────────────────────────────
