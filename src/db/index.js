@@ -12,7 +12,8 @@ const GLOBAL_DB_VERSION = 1;
 
 // Legacy/Default DB name pattern (will be suffixed with leagueId)
 const LEAGUE_DB_PREFIX  = 'FootballGM_League_';
-const LEAGUE_DB_VERSION = 3;
+// Version 4: Ensure 'news' and 'advancedStats' stores exist (idempotent upgrade)
+const LEAGUE_DB_VERSION = 4;
 
 const STORES = {
   META:          'meta',
@@ -94,7 +95,7 @@ export function openDB() {
     req.onupgradeneeded = (event) => {
       const db = event.target.result;
 
-      // Ensure all stores exist
+      // Ensure all stores exist (IDEMPOTENT CHECK: Do NOT drop/recreate)
       if (!db.objectStoreNames.contains(STORES.META)) {
         db.createObjectStore(STORES.META, { keyPath: 'id' });
       }
