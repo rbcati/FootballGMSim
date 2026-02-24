@@ -82,6 +82,10 @@ export const toWorker = Object.freeze({
 
   /** Box score retrieval */
   GET_BOX_SCORE:      'GET_BOX_SCORE',        // { gameId }
+
+  /** Franchise / analytics data */
+  GET_TEAM_PROFILE:   'GET_TEAM_PROFILE',     // { teamId }
+  GET_LEAGUE_LEADERS: 'GET_LEAGUE_LEADERS',   // { mode: 'season'|'alltime' }
 });
 
 // ─────────────────────────────────────────────
@@ -135,6 +139,10 @@ export const toUI = Object.freeze({
 
   /** Box score response */
   BOX_SCORE:          'BOX_SCORE',            // { gameId, game }
+
+  /** Franchise / analytics responses */
+  TEAM_PROFILE:       'TEAM_PROFILE',         // { team, franchise, currentPlayers }
+  LEAGUE_LEADERS:     'LEAGUE_LEADERS',       // { mode, categories }
 
   /** Non-fatal notices */
   NOTIFICATION:       'NOTIFICATION',         // { level: 'info'|'warn', message }

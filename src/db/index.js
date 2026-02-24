@@ -365,6 +365,7 @@ export const PlayerStats = {
   load:     (seasonId, playerId) => dbGet(STORES.PLAYER_STATS, `${seasonId}_${playerId}`),
   bySeason: (seasonId)           => dbGetAllByIndex(STORES.PLAYER_STATS, 'seasonId', seasonId),
   byPlayer: (playerId)           => dbGetAllByIndex(STORES.PLAYER_STATS, 'playerId', playerId),
+  loadAll:  ()                   => dbGetAll(STORES.PLAYER_STATS),
   save:     (stat)               => dbPut(STORES.PLAYER_STATS, {
     ...stat, id: `${stat.seasonId}_${stat.playerId}`
   }),

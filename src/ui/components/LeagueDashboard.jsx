@@ -21,6 +21,8 @@ import TradeCenter     from './TradeCenter.jsx';
 import BoxScore        from './BoxScore.jsx';
 import LeagueHistory   from './LeagueHistory.jsx';
 import PlayerProfile   from './PlayerProfile.jsx';
+import TeamProfile     from './TeamProfile.jsx';
+import Leaders         from './Leaders.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -183,7 +185,7 @@ function OvrPill({ ovr }) {
 
 // ── Standings Tab ─────────────────────────────────────────────────────────────
 
-function StandingsTab({ teams, userTeamId }) {
+function StandingsTab({ teams, userTeamId, onTeamSelect }) {
   const [activeConf, setActiveConf] = useState('AFC');
 
   // Normalise activeConf label → numeric index for comparison
@@ -269,7 +271,10 @@ function StandingsTab({ teams, userTeamId }) {
                             </span>
                             <TeamLogo abbr={team.abbr} size={32} isUser={isUser} />
                             <div>
-                              <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)' }}>
+                              <div
+                                style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', cursor: 'pointer' }}
+                                onClick={() => onTeamSelect?.(team.id)}
+                              >
                                 {team.name}
                                 {isUser && <span style={{ marginLeft: 6, fontSize: 'var(--text-xs)', color: 'var(--accent)', fontWeight: 700 }}>★</span>}
                               </div>
@@ -494,9 +499,10 @@ function LeadersTab({ teams }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function LeagueDashboard({ league, busy, actions }) {
-  const [activeTab, setActiveTab]       = useState('Standings');
+  const [activeTab, setActiveTab]           = useState('Standings');
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
 
   if (!league) return null;
 
@@ -611,7 +617,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       {activeTab === 'Standings' && (
         <TabErrorBoundary label="Standings">
-          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} />
+          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Schedule' && (
@@ -629,7 +635,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Leaders' && (
         <TabErrorBoundary label="Leaders">
-          <LeadersTab teams={league.teams} />
+          <Leaders onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Roster' && (
@@ -675,6 +681,17 @@ export default function LeagueDashboard({ league, busy, actions }) {
           <PlayerProfile
             playerId={selectedPlayerId}
             onClose={() => setSelectedPlayerId(null)}
+          />
+        </TabErrorBoundary>
+      )}
+
+      {/* ── Team Profile modal ── */}
+      {selectedTeamId != null && (
+        <TabErrorBoundary label="Team Profile">
+          <TeamProfile
+            teamId={selectedTeamId}
+            onClose={() => setSelectedTeamId(null)}
+            onPlayerSelect={id => { setSelectedTeamId(null); setSelectedPlayerId(id); }}
           />
         </TabErrorBoundary>
       )}
