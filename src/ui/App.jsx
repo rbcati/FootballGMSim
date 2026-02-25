@@ -88,8 +88,16 @@ export default function App() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleAdvanceWeek = useCallback(() => {
-    if (!busy && !simulating) actions.advanceWeek();
-  }, [busy, simulating, actions]);
+    if (busy || simulating) return;
+
+    if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
+      actions.advanceWeek();
+    } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
+      actions.advanceOffseason();
+    } else if (league.phase === 'free_agency') {
+      actions.advanceFreeAgencyDay();
+    }
+  }, [busy, simulating, actions, league]);
 
   const handleReset = useCallback(() => {
     if (window.confirm('Reset/Delete your active save? This cannot be undone.')) {
@@ -170,6 +178,12 @@ export default function App() {
               ? `Cut to 53 (${userTeam?.rosterCount})`
               : league.phase === 'preseason'
               ? 'Start Regular Season'
+              : ['offseason_resign', 'offseason'].includes(league.phase)
+              ? 'Advance Offseason'
+              : league.phase === 'free_agency'
+              ? 'Next FA Day'
+              : league.phase === 'draft'
+              ? 'Draft Active'
               : `Advance Week ${league.week}`}
           </button>
           <button className="btn" onClick={() => actions.save()} disabled={busy}>

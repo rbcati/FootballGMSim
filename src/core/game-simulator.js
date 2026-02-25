@@ -1467,6 +1467,16 @@ export function simGameStats(home, away, options = {}) {
                       // Update max weeks remaining
                       player.injuryWeeks = Math.max(player.injuryWeeks || 0, injury.weeksRemaining);
                       if (injury.seasonEnding) player.seasonEndingInjury = true;
+
+                      // Collect for return
+                      gameInjuries.push({
+                          playerId: player.id,
+                          name: player.name,
+                          teamId: team.id,
+                          type: injury.name,
+                          duration: injury.weeksRemaining,
+                          seasonEnding: injury.seasonEnding
+                      });
                   }
               }
           });
@@ -1477,6 +1487,9 @@ export function simGameStats(home, away, options = {}) {
     // Pass actualTwoPts (homeRes.twoPtMade / awayRes.twoPtMade)
     const homeTwoPts = homeRes.twoPtMade || 0;
     const awayTwoPts = awayRes.twoPtMade || 0;
+
+    // Collect all injuries for this game
+    const gameInjuries = [];
 
     generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs, homeTwoPts);
     generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs, awayTwoPts);
@@ -1502,7 +1515,7 @@ export function simGameStats(home, away, options = {}) {
     generateTeamStats(home, homeScore, homeStrength, awayStrength);
     generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
-    return { homeScore, awayScore, schemeNote };
+    return { homeScore, awayScore, schemeNote, injuries: gameInjuries };
 
   } catch (error) {
     console.error('[SIM-DEBUG] Error in simGameStats:', error);
@@ -1552,7 +1565,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         throw new Error("Invalid arguments: league or gameData missing");
     }
 
-    const { homeTeamId, awayTeamId, homeScore, awayScore, stats } = gameData;
+    const { homeTeamId, awayTeamId, homeScore, awayScore, stats, injuries } = gameData;
     const home = league.teams.find(t => t && t.id === homeTeamId);
     const away = league.teams.find(t => t && t.id === awayTeamId);
 
@@ -1702,6 +1715,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             home: transformStatsForBoxScore(stats?.home?.players, home.roster),
             away: transformStatsForBoxScore(stats?.away?.players, away.roster)
         },
+        injuries: injuries || [],
         week: league.week,
         year: league.year,
         isPlayoff: isPlayoff
@@ -1823,6 +1837,7 @@ export function simulateBatch(games, options = {}) {
             let awayPlayerStats = {};
 
             let schemeNote = null;
+            let gameInjuries = [];
 
             if (overrideResult) {
                 sH = overrideResult.scoreHome;
@@ -1849,6 +1864,7 @@ export function simulateBatch(games, options = {}) {
                 sH = gameScores.homeScore;
                 sA = gameScores.awayScore;
                 schemeNote = gameScores.schemeNote;
+                if (gameScores.injuries) gameInjuries = gameScores.injuries;
 
                 // Capture stats for box score
                 const capturePlayerStats = (roster) => {
@@ -1880,7 +1896,8 @@ export function simulateBatch(games, options = {}) {
                 stats: {
                     home: { players: homePlayerStats },
                     away: { players: awayPlayerStats }
-                }
+                },
+                injuries: gameInjuries
             };
 
             const resultObj = commitGameResult(league, gameData, { persist: false });

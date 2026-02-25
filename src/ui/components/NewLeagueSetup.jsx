@@ -73,37 +73,39 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                 ))}
             </div>
 
+            <div style={{ height: 100 }} />
             <div style={{
-                position: 'sticky',
-                bottom: 'var(--space-6)',
+                position: 'fixed',
+                bottom: 0,
+                left: 0,
+                right: 0,
                 background: 'var(--surface-elevated)',
-                padding: 'var(--space-4)',
-                borderRadius: 'var(--radius-xl)',
-                border: '1px solid var(--hairline)',
+                padding: 'var(--space-6) var(--space-4)',
+                borderTop: '1px solid var(--hairline)',
                 backdropFilter: 'blur(10px)',
                 display: 'flex',
-                gap: 'var(--space-4)',
                 justifyContent: 'center',
                 boxShadow: 'var(--shadow-xl)',
-                maxWidth: 600,
-                margin: '0 auto'
+                zIndex: 100
             }}>
-                <button
-                    className="btn"
-                    onClick={onCancel}
-                    disabled={creating}
-                    style={{ flex: 1, fontSize: 'var(--text-lg)' }}
-                >
-                    Back
-                </button>
-                <button
-                    className="btn primary"
-                    onClick={handleStart}
-                    disabled={selectedTeam === null || creating}
-                    style={{ flex: 2, fontSize: 'var(--text-lg)' }}
-                >
-                    {creating ? 'Creating League...' : 'Start Career'}
-                </button>
+                <div style={{ display: 'flex', gap: 'var(--space-4)', width: '100%', maxWidth: 600 }}>
+                    <button
+                        className="btn"
+                        onClick={onCancel}
+                        disabled={creating}
+                        style={{ flex: 1, fontSize: 'var(--text-lg)' }}
+                    >
+                        Back
+                    </button>
+                    <button
+                        className="btn primary"
+                        onClick={handleStart}
+                        disabled={selectedTeam === null || creating}
+                        style={{ flex: 2, fontSize: 'var(--text-lg)' }}
+                    >
+                        {creating ? 'Creating League...' : 'Start Career'}
+                    </button>
+                </div>
             </div>
         </div>
     </div>

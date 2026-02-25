@@ -194,7 +194,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
 
   const grouped = useMemo(() => {
     const confTeams = teams.filter(t => confIdx(t.conf) === activeConfIdx);
-    return DIVS.map(({ name, idx }) => ({
+    const groups = DIVS.map(({ name, idx }) => ({
       div: name,
       teams: confTeams
         .filter(t => divIdx(t.div) === idx)
@@ -204,7 +204,19 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
           return pb - pa || b.wins - a.wins;
         }),
     })).filter(g => g.teams.length > 0);
-  }, [teams, activeConfIdx]);
+
+    // Sort groups so the user's division is first
+    if (userTeamId) {
+      groups.sort((a, b) => {
+        const aHasUser = a.teams.some(t => t.id === userTeamId);
+        const bHasUser = b.teams.some(t => t.id === userTeamId);
+        if (aHasUser && !bHasUser) return -1;
+        if (!aHasUser && bHasUser) return 1;
+        return 0;
+      });
+    }
+    return groups;
+  }, [teams, activeConfIdx, userTeamId]);
 
   return (
     <div>
@@ -589,7 +601,6 @@ export default function LeagueDashboard({ league, busy, actions }) {
       <div className="status-grid">
         {[
           { label: 'Teams',           value: league.teams.length,    pct: 100 },
-          { label: 'Games Played',    value: Math.round(totalGames), pct: Math.min(100, Math.round((totalGames / (league.teams.length * 9)) * 100)) },
           { label: 'Avg Score / Game', value: avgScore,              pct: Math.min(100, Math.round((avgScore / 45) * 100)) },
           { label: 'League Avg OVR',  value: avgOvr,                 pct: avgOvr },
         ].map(({ label, value, pct }) => (
