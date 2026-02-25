@@ -26,7 +26,7 @@ import TraitBadge from './TraitBadge';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const POSITIONS = ['ALL', 'QB', 'WR', 'RB', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
+const POSITIONS = ['ALL', 'EXPIRING', 'QB', 'WR', 'RB', 'TE', 'OL', 'DL', 'LB', 'CB', 'S'];
 
 // Depth chart layout — each entry defines one positional row.
 // `match` is the set of pos strings that map to this group.
@@ -261,17 +261,24 @@ function PosBadge({ pos }) {
 
 // ── Roster Table View ─────────────────────────────────────────────────────────
 
-function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
-  const [posFilter, setPosFilter] = useState('ALL');
+function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, initialFilter }) {
+  const [posFilter, setPosFilter] = useState(initialFilter || 'ALL');
   const [sortKey,   setSortKey]   = useState('ovr');
   const [sortDir,   setSortDir]   = useState('desc');
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
 
+  useEffect(() => {
+      if (initialFilter) setPosFilter(initialFilter);
+  }, [initialFilter]);
+
   const displayed = useMemo(() => {
-    const filtered = posFilter === 'ALL'
-      ? players
-      : players.filter(p => p.pos === posFilter || DEPTH_ROWS.find(r => r.key === posFilter)?.match.includes(p.pos));
+    let filtered = players;
+    if (posFilter === 'EXPIRING') {
+        filtered = players.filter(p => p.contract?.years === 1);
+    } else if (posFilter !== 'ALL') {
+        filtered = players.filter(p => p.pos === posFilter || DEPTH_ROWS.find(r => r.key === posFilter)?.match.includes(p.pos));
+    }
     return sortPlayers(filtered, sortKey, sortDir);
   }, [players, posFilter, sortKey, sortDir]);
 
@@ -752,6 +759,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           teamId={teamId}
           onRefetch={fetchRoster}
           onPlayerSelect={onPlayerSelect}
+          initialFilter={league?.phase === 'offseason_resign' ? 'EXPIRING' : null}
         />
       )}
 

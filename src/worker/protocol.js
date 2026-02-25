@@ -49,6 +49,7 @@ export const toWorker = Object.freeze({
   RESPOND_TRADE:      'RESPOND_TRADE',     // { tradeId, accepted }
 
   /** Contracts */
+  GET_EXTENSION_ASK:  'GET_EXTENSION_ASK', // { playerId }
   EXTEND_CONTRACT:    'EXTEND_CONTRACT',   // { playerId, teamId, contract }
   RESTRUCTURE_CONTRACT: 'RESTRUCTURE_CONTRACT',
 
@@ -134,6 +135,9 @@ export const toUI = Object.freeze({
 
   /** Trade response from AI */
   TRADE_RESPONSE:     'TRADE_RESPONSE',       // { accepted, offerValue, receiveValue, reason }
+
+  /** Contract response */
+  EXTENSION_ASK:      'EXTENSION_ASK',        // { ask }
 
   /** Roster / FA data responses */
   ROSTER_DATA:        'ROSTER_DATA',          // { teamId, team, players[] }

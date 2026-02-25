@@ -31,7 +31,7 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
-import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player.js';
+import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
@@ -1117,6 +1117,10 @@ async function handleGetPlayerCareer({ playerId }, id) {
     let archivedStats = [];
     try {
       archivedStats = (await PlayerStats.byPlayer(numId)) ?? [];
+      if (!archivedStats) {
+          console.warn(`[Worker] GET_PLAYER_CAREER: Undefined stats returned for player ${numId}`);
+          archivedStats = [];
+      }
     } catch (dbErr) {
       console.warn('[Worker] GET_PLAYER_CAREER: Could not load archived stats for', numId, dbErr.message);
       archivedStats = [];
@@ -1314,6 +1318,19 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
+  // Calculate Dead Cap Penalty
+  const c = player.contract;
+  if (c && c.yearsRemaining > 0 && c.signingBonus > 0) {
+      const annualBonus = (c.signingBonus / (c.yearsTotal || 1));
+      const deadMoney = annualBonus * c.yearsRemaining;
+
+      const team = cache.getTeam(teamId);
+      if (team) {
+          const currentDead = team.deadCap || 0;
+          cache.updateTeam(teamId, { deadCap: currentDead + deadMoney });
+      }
+  }
+
   cache.updatePlayer(playerId, { teamId: null, status: 'free_agent' });
   _updateTeamCap(teamId);
 
@@ -1323,6 +1340,71 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
     week: meta.currentWeek, teamId, details: { playerId },
   });
   await NewsEngine.logTransaction('RELEASE', { teamId, playerId });
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+}
+
+// ── Handler: EXTENSIONS ──────────────────────────────────────────────────────
+
+async function handleGetExtensionAsk({ playerId }, id) {
+    const player = cache.getPlayer(playerId);
+    if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+    const ask = calculateExtensionDemand(player);
+    post(toUI.EXTENSION_ASK, { ask }, id);
+}
+
+async function handleExtendContract({ playerId, teamId, contract }, id) {
+  const player = cache.getPlayer(playerId);
+  const team = cache.getTeam(teamId);
+  if (!player || !team) { post(toUI.ERROR, { message: 'Invalid data' }, id); return; }
+
+  // Cap check: new contract replaces old? Or is it extension?
+  // Extension usually adds years.
+  // "Extension" means current year remains, new years added?
+  // Or usually in these games, it tears up current deal and signs new one?
+  // `calculateExtensionDemand` returns { years, baseAnnual... }.
+  // If we just overwrite, it's simpler.
+  // Let's assume overwrite for simplicity unless "years" means additional years.
+  // `calculateExtensionDemand` returns `years`. `generateContract` returns `years`.
+  // If `years` is 4, it means a 4 year contract starting now?
+  // If player has 1 year left, does this replace it?
+  // "Re-Sign" usually implies replacing the expiring contract.
+  // Let's overwrite.
+
+  // Cap Check
+  const capHit = contract.baseAnnual + (contract.signingBonus / contract.yearsTotal);
+
+  // Calculate net change in cap?
+  // Current cap used includes this player's current contract.
+  // So we temporarily remove him, check if new one fits?
+  // Simplest: `team.capRoom + currentContractCapHit - newCapHit >= 0`.
+
+  let currentCapHit = 0;
+  if (player.contract) {
+      currentCapHit = (player.contract.baseAnnual || 0) + ((player.contract.signingBonus || 0) / (player.contract.yearsTotal || 1));
+  }
+
+  if (team.capRoom + currentCapHit < capHit) {
+      post(toUI.ERROR, { message: 'Not enough cap room for extension' }, id);
+      return;
+  }
+
+  // Execute
+  cache.updatePlayer(playerId, {
+      contract: contract,
+      teamId: teamId // ensure correct team
+  });
+
+  _updateTeamCap(teamId);
+
+  const meta = cache.getMeta();
+  await Transactions.add({
+      type: 'EXTEND', seasonId: meta.currentSeasonId,
+      week: meta.currentWeek, teamId, details: { playerId, contract }
+  });
+  await NewsEngine.logTransaction('EXTEND', { teamId, playerId });
 
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
@@ -1586,16 +1668,21 @@ async function handleUpdateSettings({ settings }, id) {
 
 function _updateTeamCap(teamId) {
   const players = cache.getPlayersByTeam(teamId);
-  const capUsed = players.reduce((sum, p) => {
+  const activeCap = players.reduce((sum, p) => {
     const c = p.contract;
     if (!c) return sum;
     return sum + (c.baseAnnual ?? 0) + ((c.signingBonus ?? 0) / (c.yearsTotal || 1));
   }, 0);
+
   const team = cache.getTeam(teamId);
   if (!team) return;
+
+  const deadCap = team.deadCap || 0;
+  const totalCapUsed = activeCap + deadCap;
+
   cache.updateTeam(teamId, {
-    capUsed: Math.round(capUsed * 100) / 100,
-    capRoom: Math.round((team.capTotal - capUsed) * 100) / 100,
+    capUsed: Math.round(totalCapUsed * 100) / 100,
+    capRoom: Math.round((team.capTotal - totalCapUsed) * 100) / 100,
   });
 }
 
@@ -2095,8 +2182,8 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
 
     const { day, maxDays } = meta.freeAgencyState;
 
+    // Guard: If we are already done, ensure phase is draft and exit
     if (day > maxDays) {
-        // FA is already over — ensure the phase advanced correctly (idempotent).
         if (meta.phase === 'free_agency') {
             cache.setMeta({ phase: 'draft' });
             await flushDirty();
@@ -2114,14 +2201,13 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     const isComplete = nextDay > maxDays;
 
     // ── Phase transition: free_agency → draft ────────────────────────────────
-    // When the last FA day completes, advance the phase so the UI gates
-    // correctly onto the draft screen.
     cache.setMeta({
         freeAgencyState: {
             ...meta.freeAgencyState,
             day: nextDay,
             complete: isComplete,
         },
+        // IMPORTANT: Explicitly set phase to 'draft' immediately upon completion
         ...(isComplete ? { phase: 'draft' } : {}),
     });
 
@@ -2151,6 +2237,11 @@ async function archiveSeason(seasonId) {
 
     // 2. Get all season stats and CLEAR them from cache
     const seasonStats = cache.archiveSeasonStats();
+
+    // 2b. PERSIST stats to DB immediately (Critical Fix)
+    if (seasonStats.length > 0) {
+      await PlayerStats.saveBulk(seasonStats);
+    }
 
     // Helper to resolve player info (active or retired/db)
     const resolvePlayer = async (pid) => {
@@ -2283,9 +2374,14 @@ async function handleStartNewSeason(payload, id) {
   const newSeason   = (meta.season ?? 1)    + 1;
   const newSeasonId = `s${newSeason}`;
 
-  // Reset all team win/loss records
+  // Reset all team win/loss records AND dead cap
   for (const team of cache.getAllTeams()) {
-    cache.updateTeam(team.id, { wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0 });
+    cache.updateTeam(team.id, {
+      wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0,
+      deadCap: 0 // Reset dead cap at start of new year
+    });
+    // Recalculate cap to reflect dead cap clearing
+    _updateTeamCap(team.id);
   }
 
   // Generate a fresh schedule
@@ -2635,6 +2731,8 @@ async function handleMessage(event) {
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
+      case toWorker.EXTEND_CONTRACT:    return await handleExtendContract(payload, id);
+      case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);

@@ -597,22 +597,41 @@ export default function LeagueDashboard({ league, busy, actions }) {
         </div>
       )}
 
-      {/* ── Status Grid ── */}
+      {/* ── Approval & Game Status (Mocked) ── */}
       <div className="status-grid">
-        {[
-          { label: 'Teams',           value: league.teams.length,    pct: 100 },
-          { label: 'Avg Score / Game', value: avgScore,              pct: Math.min(100, Math.round((avgScore / 45) * 100)) },
-          { label: 'League Avg OVR',  value: avgOvr,                 pct: avgOvr },
-        ].map(({ label, value, pct }) => (
-          <div key={label} className="stat-box">
-            <div className="stat-label">{label}</div>
-            <div className="stat-value-large">{value}</div>
-            <div className="stat-bar-container">
-              <div className="stat-bar-fill" style={{ width: `${pct}%` }} />
-            </div>
+        <div className="stat-box">
+          <div className="stat-label">Owner Approval</div>
+          <div className="stat-value-large" style={{ color: 'var(--success)' }}>85%</div>
+          <div className="stat-bar-container"><div className="stat-bar-fill" style={{ width: '85%', background: 'var(--success)' }} /></div>
+        </div>
+        <div className="stat-box">
+          <div className="stat-label">Fan Approval</div>
+          <div className="stat-value-large" style={{ color: '#FF9F0A' }}>72%</div>
+          <div className="stat-bar-container"><div className="stat-bar-fill" style={{ width: '72%', background: '#FF9F0A' }} /></div>
+        </div>
+        {/* Simplified Game Result Placeholder */}
+        <div className="stat-box">
+          <div className="stat-label">Last Game</div>
+          <div className="stat-value-large" style={{ fontSize: '1.1rem' }}>
+             {/* Dynamic lookup could go here, for now placeholder as requested */}
+             vs DAL <span style={{color:'var(--success)'}}>W 24-17</span>
           </div>
-        ))}
+        </div>
       </div>
+
+      {/* ── Expiring Contracts Alert ── */}
+      {league.phase === 'offseason_resign' && (
+        <div
+          onClick={() => setActiveTab('Roster')}
+          style={{
+            background: 'var(--accent)', color: '#fff', padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-6)',
+            cursor: 'pointer', textAlign: 'center', fontWeight: 700, boxShadow: 'var(--shadow-md)'
+          }}
+        >
+          ⚠️ Contracts Expiring! Click to Manage Extensions
+        </div>
+      )}
 
       {/* ── Financial Status ── */}
       <div className="status-grid" style={{ marginTop: 'var(--space-4)' }}>
