@@ -261,19 +261,26 @@ function PosBadge({ pos }) {
 
 // ── Roster Table View ─────────────────────────────────────────────────────────
 
-function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
-  const [posFilter, setPosFilter] = useState('ALL');
+function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phase }) {
+  const isResignPhase = phase === 'offseason_resign';
+  // Default to EXPIRING view in resign phase
+  const [posFilter, setPosFilter] = useState(isResignPhase ? 'EXPIRING' : 'ALL');
   const [sortKey,   setSortKey]   = useState('ovr');
   const [sortDir,   setSortDir]   = useState('desc');
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
 
   const displayed = useMemo(() => {
-    const filtered = posFilter === 'ALL'
-      ? players
-      : players.filter(p => p.pos === posFilter || DEPTH_ROWS.find(r => r.key === posFilter)?.match.includes(p.pos));
+    let filtered = players;
+    if (posFilter === 'EXPIRING') {
+      filtered = players.filter(p => (p.contract?.years || 0) <= 1);
+    } else if (posFilter !== 'ALL') {
+      filtered = players.filter(p => p.pos === posFilter || DEPTH_ROWS.find(r => r.key === posFilter)?.match.includes(p.pos));
+    }
     return sortPlayers(filtered, sortKey, sortDir);
   }, [players, posFilter, sortKey, sortDir]);
+
+  const activeFilters = isResignPhase ? ['EXPIRING', ...POSITIONS] : POSITIONS;
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -313,12 +320,15 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
       )}
       {/* Position filter pills */}
       <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
-        {POSITIONS.map(pos => (
+        {activeFilters.map(pos => (
           <button
             key={pos}
             className={`standings-tab${posFilter === pos ? ' active' : ''}`}
             onClick={() => setPosFilter(pos)}
-            style={{ minWidth: 36, padding: '4px 10px' }}
+            style={{
+                minWidth: 36, padding: '4px 10px',
+                ...(pos === 'EXPIRING' ? { borderColor: 'var(--success)', color: 'var(--success)' } : {})
+            }}
           >
             {pos}
           </button>
@@ -354,13 +364,19 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
               )}
               {displayed.map((player, idx) => {
                 const isReleasing = releasing === player.id;
+                const isExpiring  = (player.contract?.years || 0) <= 1;
                 const fit    = player.schemeFit ?? 50;
                 const morale = player.morale ?? 75;
                 const fitCol    = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
 
+                // Highlight row if expiring in resign phase
+                const rowStyle = isReleasing
+                    ? { background: 'rgba(255,69,58,0.07)' }
+                    : (isResignPhase && isExpiring ? { background: 'rgba(52, 199, 89, 0.05)' } : {});
+
                 return (
-                  <tr key={player.id} style={isReleasing ? { background: 'rgba(255,69,58,0.07)' } : {}}>
+                  <tr key={player.id} style={rowStyle}>
                     {/* # */}
                     <td style={{ paddingLeft: 'var(--space-5)', color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
                       {idx + 1}
@@ -387,7 +403,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect }) {
                       {fmtSalary(player.contract?.baseAnnual)}
                     </td>
                     {/* Years */}
-                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', fontSize: 'var(--text-xs)', color: isExpiring ? 'var(--danger)' : 'var(--text-muted)', fontWeight: isExpiring ? 700 : 400 }}>
                       {fmtYears(player.contract)}
                     </td>
                     {/* Traits */}
@@ -752,6 +768,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           teamId={teamId}
           onRefetch={fetchRoster}
           onPlayerSelect={onPlayerSelect}
+          phase={league?.phase}
         />
       )}
 
