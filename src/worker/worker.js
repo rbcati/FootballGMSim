@@ -36,6 +36,7 @@ import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
+import { Constants } from '../core/constants.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ function buildViewState() {
     capRoom:   t.capRoom   ?? 0,
     capTotal:  t.capTotal  ?? 255,
     ovr:       t.ovr       ?? 75,
+    rosterCount: cache.getPlayersByTeam(t.id).length,
   }));
 
   // Calculate tension/stakes for the user's next game
@@ -659,6 +661,37 @@ async function handleAdvanceWeek(payload, id) {
   const meta = cache.getMeta();
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
+  // ── Preseason Cutdown Check ──────────────────────────────────────────────
+  if (meta.phase === 'preseason') {
+    const userRoster = cache.getPlayersByTeam(meta.userTeamId);
+    const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+
+    if (userRoster.length > limit) {
+      post(toUI.ERROR, { message: `Roster limit exceeded! You have ${userRoster.length} players. Cut down to ${limit} to advance.` }, id);
+      return;
+    }
+
+    // Execute AI Cutdowns
+    await AiLogic.executeAICutdowns();
+
+    // Set phase to Regular Season, keep Week 1
+    cache.setMeta({ phase: 'regular', currentWeek: 1 });
+    await flushDirty();
+
+    // Return state update (no simulation)
+    post(toUI.WEEK_COMPLETE, {
+      week: 1,
+      results: [],
+      standings: buildStandings(),
+      nextWeek: 1,
+      phase: 'regular',
+      isSeasonOver: false,
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState());
+    return;
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   const week        = meta.currentWeek;
   const seasonId    = meta.currentSeasonId;
   const schedule    = expandSchedule(meta.schedule);
@@ -1104,6 +1137,17 @@ async function handleSetUserTeam({ teamId }, id) {
 // ── Handler: SIGN_PLAYER ──────────────────────────────────────────────────────
 
 async function handleSignPlayer({ playerId, teamId, contract }, id) {
+  const meta = cache.getMeta();
+  const limit = (meta.phase === 'offseason' || meta.phase === 'preseason')
+      ? Constants.ROSTER_LIMITS.OFFSEASON
+      : Constants.ROSTER_LIMITS.REGULAR_SEASON;
+
+  const roster = cache.getPlayersByTeam(teamId);
+  if (roster.length >= limit) {
+      post(toUI.ERROR, { message: `Roster limit (${limit}) reached. Release a player first.` }, id);
+      return;
+  }
+
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
@@ -1681,6 +1725,14 @@ async function handleMakeDraftPick({ playerId }, id) {
     return;
   }
 
+  // Check Roster Limit
+  const limit = Constants.ROSTER_LIMITS.OFFSEASON;
+  const roster = cache.getPlayersByTeam(meta.userTeamId);
+  if (roster.length >= limit) {
+      post(toUI.ERROR, { message: `Roster limit (${limit}) reached. Cannot draft.` }, id);
+      return;
+  }
+
   const player = cache.getPlayer(playerId);
   if (!player || player.status !== 'draft_eligible') {
     post(toUI.ERROR, { message: 'Player not available' }, id);
@@ -2117,7 +2169,7 @@ async function handleStartNewSeason(payload, id) {
     season:                  newSeason,
     currentSeasonId:         newSeasonId,
     currentWeek:             1,
-    phase:                   'regular',
+    phase:                   'preseason',
     schedule:                slimSchedule,
     playoffSeeds:            null,
     draftState:              null,

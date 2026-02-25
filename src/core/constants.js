@@ -381,6 +381,11 @@
     }
   };
 
+  const ROSTER_LIMITS = {
+    OFFSEASON: 90,
+    REGULAR_SEASON: 53
+  };
+
   // --- X. EXPORT EVERYTHING ---
   const Constants = {
     GAME_CONFIG,
@@ -407,6 +412,7 @@
     TRADE_LOGIC_CONFIG,
     DRAFT_LOGIC_CONFIG,
     LEAGUE_GEN_CONFIG,
+    ROSTER_LIMITS,
 
     // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
     get FIRST_NAMES() { return getFirstNames(); },

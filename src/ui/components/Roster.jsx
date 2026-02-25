@@ -668,6 +668,8 @@ export default function Roster({ league, actions, onPlayerSelect }) {
     ? Math.round(players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length)
     : 0;
 
+  const isOverLimit = league?.phase === 'preseason' && players.length > 53;
+
   return (
     <div>
       {/* ── Team cap header ── */}
@@ -681,8 +683,12 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             <span style={{ fontWeight: 800, fontSize: 'var(--text-lg)', color: 'var(--text)' }}>
               {team?.name ?? 'Roster'}
             </span>
-            <span style={{ marginLeft: 'var(--space-3)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              {players.length} players · Avg OVR {avgOvr}
+            <span style={{
+              marginLeft: 'var(--space-3)', fontSize: 'var(--text-sm)',
+              color: isOverLimit ? 'var(--danger)' : 'var(--text-muted)',
+              fontWeight: isOverLimit ? 700 : 400
+            }}>
+              {players.length} players {isOverLimit ? '/ 53 (Cut Required)' : ''} · Avg OVR {avgOvr}
             </span>
           </div>
 

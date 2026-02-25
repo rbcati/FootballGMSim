@@ -24,10 +24,72 @@ class AiLogic {
         if (!team) return;
 
         const capTotal = team.capTotal ?? 255;
+        const deadCap  = team.deadCap  ?? 0;
         cache.updateTeam(teamId, {
             capUsed: Math.round(capUsed * 100) / 100,
-            capRoom: Math.round((capTotal - capUsed) * 100) / 100,
+            capRoom: Math.round((capTotal - capUsed - deadCap) * 100) / 100,
         });
+    }
+
+    /**
+     * Execute AI Roster Cutdowns for Preseason.
+     * Forces all AI teams to cut down to 53 players.
+     */
+    static async executeAICutdowns() {
+        const meta = cache.getMeta();
+        const userTeamId = meta.userTeamId;
+        const allTeams = cache.getAllTeams();
+        const limit = Constants.ROSTER_LIMITS.REGULAR_SEASON;
+
+        for (const team of allTeams) {
+            // Skip user team (they must cut manually)
+            if (team.id === userTeamId) continue;
+
+            const roster = cache.getPlayersByTeam(team.id);
+            if (roster.length <= limit) continue;
+
+            // Score = OVR * 2 + Potential + (Age < 25 ? 10 : 0)
+            const scoredPlayers = roster.map(p => {
+                let score = (p.ovr ?? 0) * 2 + (p.potential ?? p.ovr ?? 0);
+                if ((p.age ?? 30) < 25) score += 10;
+                return { ...p, _cutScore: score };
+            });
+
+            // Sort ascending by score (lowest score = first to cut)
+            scoredPlayers.sort((a, b) => a._cutScore - b._cutScore);
+
+            const cutCount = roster.length - limit;
+            const toCut = scoredPlayers.slice(0, cutCount);
+
+            for (const p of toCut) {
+                // Calculate Dead Cap
+                const c = p.contract;
+                const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
+                const deadCap = annualBonus * (c?.years || 1);
+
+                // Update Cache (Release)
+                cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
+
+                // Update Team Dead Cap
+                if (deadCap > 0) {
+                    const freshTeam = cache.getTeam(team.id);
+                    const newDead = (freshTeam.deadCap ?? 0) + deadCap;
+                    cache.updateTeam(team.id, { deadCap: newDead });
+                }
+
+                // Log Transaction
+                await Transactions.add({
+                    type: 'RELEASE',
+                    seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek,
+                    teamId: team.id,
+                    details: { playerId: p.id, deadCap }
+                });
+            }
+
+            // Re-calc active cap (roster changed)
+            this.updateTeamCap(team.id);
+        }
     }
 
     /**

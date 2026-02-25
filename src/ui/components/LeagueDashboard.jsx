@@ -566,6 +566,25 @@ export default function LeagueDashboard({ league, busy, actions }) {
         </div>
       </div>
 
+      {/* ── Preseason Cutdown Banner ── */}
+      {league.phase === 'preseason' && (
+        <div style={{
+          background: 'rgba(255,159,10,0.15)', border: '1px solid var(--warning)',
+          color: 'var(--warning)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--space-6)', fontWeight: 700, textAlign: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)',
+          fontSize: 'var(--text-lg)'
+        }}>
+          <span>⚠️</span>
+          <span>
+            Roster Cutdown: <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? 'var(--danger)' : 'var(--success)' }}>{userTeam?.rosterCount ?? 0}</span> / 53
+          </span>
+          <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text-muted)' }}>
+            — You must release {(userTeam?.rosterCount ?? 0) > 53 ? (userTeam.rosterCount - 53) : 0} players to advance.
+          </span>
+        </div>
+      )}
+
       {/* ── Status Grid ── */}
       <div className="status-grid">
         {[
