@@ -12,7 +12,6 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { useWorker } from '../hooks/useWorker.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -389,8 +388,7 @@ const AWARD_TABS = [
   { key: 'allpro', label: 'All-Pro' },
 ];
 
-export default function AwardRaces({ onPlayerSelect }) {
-  const { actions } = useWorker();
+export default function AwardRaces({ onPlayerSelect, actions }) {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState(null);

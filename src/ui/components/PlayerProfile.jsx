@@ -4,7 +4,6 @@
  * Modal: accolades/legacy badges + position-aware career stats table.
  */
 import React, { useEffect, useState } from 'react';
-import { useWorker } from '../hooks/useWorker.js';
 import TraitBadge from './TraitBadge';
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
@@ -228,8 +227,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PlayerProfile({ playerId, onClose }) {
-  const { actions } = useWorker();
+export default function PlayerProfile({ playerId, onClose, actions }) {
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [extending, setExtending] = useState(false);
