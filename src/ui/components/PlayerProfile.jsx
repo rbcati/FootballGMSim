@@ -231,6 +231,7 @@ export default function PlayerProfile({ playerId, onClose, actions }) {
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [extending, setExtending] = useState(false);
+  const [draftState, setDraftState] = useState(null);
 
   const fetchProfile = () => {
     if (!playerId) return;
@@ -242,9 +243,19 @@ export default function PlayerProfile({ playerId, onClose, actions }) {
 
   useEffect(() => { fetchProfile(); }, [playerId]);
 
+  const player = data?.player;
+
+  // Fetch draft state if looking at a prospect
+  useEffect(() => {
+    if (player?.status === 'draft_eligible') {
+      actions.getDraftState()
+        .then(res => { if (res?.payload) setDraftState(res.payload); })
+        .catch(() => {});
+    }
+  }, [player?.status, actions]);
+
   if (!playerId) return null;
 
-  const player  = data?.player;
   const stats   = data?.stats ?? [];
   const columns = getColumns(player?.pos);
 
@@ -352,6 +363,30 @@ export default function PlayerProfile({ playerId, onClose, actions }) {
                     </button>
                   </div>
                 )}
+
+                {/* Draft button */}
+                {player?.status === 'draft_eligible' && draftState && !draftState.isDraftComplete && (
+                   <div style={{ marginTop: 'var(--space-3)' }}>
+                    {draftState.isUserPick ? (
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => {
+                          actions.makeDraftPick(player.id).then(() => onClose());
+                        }}
+                        style={{ padding: '6px 16px' }}
+                      >
+                        Draft Player
+                      </button>
+                    ) : (
+                      <div style={{
+                        fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+                        background: 'var(--surface-strong)', padding: '4px 8px', borderRadius: '4px', display: 'inline-block'
+                      }}>
+                        Waiting for user pick...
+                      </div>
+                    )}
+                   </div>
+                )}
               </div>
             </div>
           ) : (
@@ -374,7 +409,7 @@ export default function PlayerProfile({ playerId, onClose, actions }) {
             <p style={{ color: 'var(--text-muted)' }}>No career stats recorded yet.</p>
           ) : (
             <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-              <table className="standings-table" style={{ width: '100%', minWidth: 480 }}>
+              <table className="standings-table" style={{ width: '100%', minWidth: 600 }}>
                 <thead>
                   <tr>
                     <th style={{ paddingLeft: 'var(--space-4)', textAlign: 'left' }}>Year</th>

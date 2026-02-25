@@ -209,7 +209,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
   );
 }
 
-function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simming }) {
+function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onViewPlayer, simming }) {
   const [sortKey, setSortKey] = useState('ovr');
   const [sortDir, setSortDir] = useState(-1);   // -1 = descending
   const [filterPos, setFilterPos] = useState('');
@@ -445,7 +445,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
         {/* Prospects table */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-            <table className="standings-table" style={{ width: '100%', fontSize: 'var(--text-sm)' }}>
+            <table className="standings-table" style={{ width: '100%', minWidth: 600, fontSize: 'var(--text-sm)' }}>
               <thead>
                 <tr>
                   <th style={{ width: 36, textAlign: 'center', paddingLeft: 'var(--space-3)' }}>#</th>
@@ -483,7 +483,12 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                   </tr>
                 )}
                 {sortedProspects.map((p, i) => (
-                  <tr key={p.id}>
+                  <tr
+                    key={p.id}
+                    onClick={() => onViewPlayer && onViewPlayer(p.id)}
+                    style={{ cursor: onViewPlayer ? 'pointer' : 'default' }}
+                    className="clickable-row"
+                  >
                     <td style={{ textAlign: 'center', color: 'var(--text-subtle)', paddingLeft: 'var(--space-3)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
                       {i + 1}
                     </td>
@@ -518,7 +523,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                         <button
                           className="btn btn-primary"
                           style={{ padding: '3px 12px', fontSize: 'var(--text-xs)' }}
-                          onClick={() => onDraftPlayer(p.id)}
+                          onClick={(e) => { e.stopPropagation(); onDraftPlayer(p.id); }}
                         >
                           Draft
                         </button>
@@ -757,6 +762,7 @@ export default function Draft({ league, actions }) {
           userTeamId={league?.userTeamId}
           onSimToMyPick={handleSimToMyPick}
           onDraftPlayer={handleDraftPlayer}
+          onViewPlayer={actions.viewPlayer}
           simming={simming}
         />
       )}
