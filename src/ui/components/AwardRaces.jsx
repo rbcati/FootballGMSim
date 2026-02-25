@@ -78,9 +78,9 @@ function CandidateRow({ candidate, rank, onPlayerSelect, showConf = false }) {
       </div>
 
       {/* Key stats */}
-      <div style={{ display: 'flex', gap: 'var(--space-4)', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: 'var(--space-4)', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         {(keyStats ?? []).slice(0, 3).map((ks, i) => (
-          <div key={i} style={{ textAlign: 'center', minWidth: 36 }}>
+          <div key={i} style={{ textAlign: 'center', minWidth: 36, whiteSpace: 'nowrap' }}>
             <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{ks.label}</div>
             <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
               {typeof ks.value === 'number' ? ks.value.toLocaleString() : ks.value}
@@ -133,17 +133,19 @@ function AwardCard({ title, subtitle, candidates = [], onPlayerSelect, showConf 
 
 function ConferenceSplit({ awardLabel, afcCandidates = [], nfcCandidates = [], onPlayerSelect }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)' }}>
-      <AwardCard
-        title={`${awardLabel} — AFC`}
-        candidates={afcCandidates}
-        onPlayerSelect={onPlayerSelect}
-      />
-      <AwardCard
-        title={`${awardLabel} — NFC`}
-        candidates={nfcCandidates}
-        onPlayerSelect={onPlayerSelect}
-      />
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)', minWidth: 560 }}>
+        <AwardCard
+          title={`${awardLabel} — AFC`}
+          candidates={afcCandidates}
+          onPlayerSelect={onPlayerSelect}
+        />
+        <AwardCard
+          title={`${awardLabel} — NFC`}
+          candidates={nfcCandidates}
+          onPlayerSelect={onPlayerSelect}
+        />
+      </div>
     </div>
   );
 }
