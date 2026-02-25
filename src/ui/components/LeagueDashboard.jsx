@@ -539,12 +539,22 @@ export default function LeagueDashboard({ league, busy, actions }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
 
-  // Auto-navigate to Draft tab whenever the league phase transitions to 'draft'.
-  // This ensures clicking "Draft Active" in the top bar (which triggers a worker
-  // state refresh) or advancing through free agency lands directly on the Draft Board.
+  // Track the previous phase so we can detect transitions.
+  const prevPhaseRef = React.useRef(null);
+
+  // Auto-navigate based on phase transitions:
+  //  draft       → go to Draft tab (so the user sees the board immediately)
+  //  draft→preseason → new season started; leave Draft tab so the stale
+  //                    DraftComplete panel no longer shows.
   useEffect(() => {
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = league?.phase;
+
     if (league?.phase === 'draft') {
       setActiveTab('Draft');
+    } else if (prevPhase === 'draft' && league?.phase === 'preseason') {
+      // startNewSeason() just completed — clear the Draft tab.
+      setActiveTab('Standings');
     }
   }, [league?.phase]);
 
@@ -777,7 +787,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Award Races' && (
         <TabErrorBoundary label="Award Races">
-          <AwardRaces onPlayerSelect={setSelectedPlayerId} />
+          <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Roster' && (
@@ -828,6 +838,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
           <PlayerProfile
             playerId={selectedPlayerId}
             onClose={() => setSelectedPlayerId(null)}
+            actions={actions}
           />
         </TabErrorBoundary>
       )}

@@ -177,13 +177,28 @@ function buildRosterView(teamId) {
     // We can refine this later with depth chart awareness
     const morale = calculateMorale(p, team, true);
 
+    // Normalise contract: worker transactions store {baseAnnual, signingBonus, …}
+    // inside p.contract, but makePlayer() during league init writes those fields
+    // directly on the player object (legacy flat format).  Merge both so the UI
+    // always receives a properly-shaped contract object.
+    const contract = p.contract ?? (
+      p.baseAnnual != null ? {
+        years:        p.years        ?? 1,
+        yearsTotal:   p.yearsTotal   ?? p.years ?? 1,
+        yearsRemaining: p.years      ?? 1,
+        baseAnnual:   p.baseAnnual,
+        signingBonus: p.signingBonus ?? 0,
+        guaranteedPct:p.guaranteedPct ?? 0.5,
+      } : null
+    );
+
     return {
         id:       p.id,
         name:     p.name,
         pos:      p.pos,
         age:      p.age,
         ovr:      p.ovr,
-        contract: p.contract ?? null,
+        contract,
         traits:   p.traits ?? [],
         schemeFit: fit,
         morale:    morale
@@ -378,6 +393,13 @@ async function handleLoadSave({ leagueId }, id) {
       };
       await Saves.save(saveEntry);
 
+      // Recalculate cap for every team so legacy saves (where players stored
+      // salary as flat fields rather than inside a contract object) display
+      // the correct Cap Used / Cap Room values immediately on load.
+      for (const team of cache.getAllTeams()) {
+        recalculateTeamCap(team.id);
+      }
+
       post(toUI.FULL_STATE, buildViewState(), id);
     } else {
       post(toUI.ERROR, { message: "Save not found" }, id);
@@ -490,6 +512,13 @@ async function handleNewLeague(payload, id) {
 
     // Hydrate cache
     cache.hydrate({ meta, teams, players, draftPicks });
+
+    // Compute Cap Used / Cap Room for every team now that players are in cache.
+    // makePlayer() writes salary as flat fields (p.baseAnnual, p.signingBonus);
+    // recalculateTeamCap reads both formats so this handles legacy data correctly.
+    for (const team of cache.getAllTeams()) {
+      recalculateTeamCap(team.id);
+    }
 
     // Store schedule in meta (it's small: just matchup IDs, no objects)
     const slimSchedule = slimifySchedule(league.schedule, league.teams);
@@ -1460,6 +1489,18 @@ async function handleGetRoster({ teamId }, id) {
           else if (isDef) fit = calculateDefensiveSchemeFit(p, hc.defScheme || '4-3');
       }
 
+      // Normalise contract: handle both nested p.contract and legacy flat fields.
+      const contract = p.contract ?? (
+        p.baseAnnual != null ? {
+          years:         p.years        ?? 1,
+          yearsTotal:    p.yearsTotal   ?? p.years ?? 1,
+          yearsRemaining:p.years        ?? 1,
+          baseAnnual:    p.baseAnnual,
+          signingBonus:  p.signingBonus ?? 0,
+          guaranteedPct: p.guaranteedPct ?? 0.5,
+        } : null
+      );
+
       return {
         id:        p.id,
         name:      p.name,
@@ -1468,7 +1509,7 @@ async function handleGetRoster({ teamId }, id) {
         ovr:       p.ovr,
         potential: p.potential ?? null,
         status:    p.status ?? 'active',
-        contract:  p.contract ?? null,
+        contract,
         traits:    p.traits ?? [],
         schemeFit: fit,
         morale:    calculateMorale(p, team, true)
@@ -1757,10 +1798,14 @@ async function handleUpdateSettings({ settings }, id) {
 function recalculateTeamCap(teamId) {
   const players = cache.getPlayersByTeam(teamId);
   const activeCap = players.reduce((sum, p) => {
-    const c = p.contract;
-    if (!c) return sum;
+    // Support both nested contract object (p.contract.baseAnnual) produced by
+    // worker transactions (signPlayer, draftPick, etc.) AND legacy flat fields
+    // (p.baseAnnual, p.signingBonus) written by makePlayer() during league init.
+    const baseAnnual   = p.contract?.baseAnnual   ?? p.baseAnnual   ?? 0;
+    const signingBonus = p.contract?.signingBonus  ?? p.signingBonus ?? 0;
+    const yearsTotal   = p.contract?.yearsTotal    ?? p.yearsTotal   ?? 1;
     // Cap hit = Base + Prorated Bonus
-    return sum + (c.baseAnnual ?? 0) + ((c.signingBonus ?? 0) / (c.yearsTotal || 1));
+    return sum + baseAnnual + (signingBonus / (yearsTotal || 1));
   }, 0);
 
   const team = cache.getTeam(teamId);
