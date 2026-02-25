@@ -15,6 +15,7 @@ import LiveGame            from './components/LiveGame.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
+import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -78,6 +79,29 @@ export default function App() {
     }
   };
 
+  // Expose test helpers
+  useEffect(() => {
+    window.gameController = {
+      startNewLeague: async (teamId = 0) => {
+        actions.newLeague(DEFAULT_TEAMS, { userTeamId: teamId, year: 2025 });
+      },
+      advanceWeek: actions.advanceWeek,
+      simToWeek: actions.simToWeek,
+      simToPlayoffs: actions.simToPlayoffs,
+      startDraft: actions.startDraft,
+      simDraftPick: actions.simDraftPick,
+      makeDraftPick: actions.makeDraftPick,
+      advanceOffseason: actions.advanceOffseason,
+      advanceFreeAgencyDay: actions.advanceFreeAgencyDay,
+      startNewSeason: actions.startNewSeason,
+      save: actions.save,
+      reset: actions.reset,
+      loadSave: actions.loadSave
+    };
+
+    window.gameActions = actions;
+  }, [actions]);
+
   // Auto-save when user navigates away
   useEffect(() => {
     const handler = () => { if (league) actions.save(); };
@@ -131,13 +155,17 @@ export default function App() {
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary>
-          <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+          <div className="view-transition">
+            <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+          </div>
         </ErrorBoundary>
       );
     }
     return (
       <ErrorBoundary>
-        <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        <div className="view-transition">
+          <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        </div>
       </ErrorBoundary>
     );
   }
@@ -146,7 +174,7 @@ export default function App() {
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div className="view-transition" style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
