@@ -1158,7 +1158,6 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   _updateTeamCap(teamId);
   if (oldTeamId != null && oldTeamId !== teamId) _updateTeamCap(oldTeamId);
 
-  const meta = cache.getMeta();
   await Transactions.add({
     type: 'SIGN', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId, contract },
