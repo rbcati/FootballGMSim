@@ -337,8 +337,8 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-wrapper">
-          <table className="standings-table" style={{ width: '100%' }}>
+        <div className="table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table className="standings-table" style={{ width: '100%', minWidth: 700 }}>
             <thead>
               <tr>
                 <th style={{ paddingLeft: 'var(--space-5)', width: 32, color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>#</th>

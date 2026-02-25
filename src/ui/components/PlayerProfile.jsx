@@ -144,6 +144,10 @@ function fmt(t, col) {
   if (col.fmt) return col.fmt(t);
   const v = t[col.key];
   if (v === undefined || v === null) return '-';
+  // Format large integers with locale commas (e.g. 6122 → 6,122)
+  if (typeof v === 'number' && Number.isInteger(v) && Math.abs(v) >= 1000) {
+    return v.toLocaleString();
+  }
   return v;
 }
 
@@ -227,7 +231,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PlayerProfile({ playerId, onClose, actions }) {
+export default function PlayerProfile({ playerId, onClose, actions, isUserOnClock = false, onDraftPlayer = null }) {
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [extending, setExtending] = useState(false);
@@ -271,6 +275,32 @@ export default function PlayerProfile({ playerId, onClose, actions }) {
           display: 'flex', flexDirection: 'column',
         }}
       >
+        {/* ── Draft Banner (only when user is on the clock) ── */}
+        {isUserOnClock && onDraftPlayer && player && (
+          <div style={{
+            padding: 'var(--space-3) var(--space-5)',
+            background: 'var(--accent)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            gap: 'var(--space-4)',
+          }}>
+            <span style={{ fontWeight: 700, color: '#fff', fontSize: 'var(--text-sm)' }}>
+              ★ You're on the clock! Draft {player.name}?
+            </span>
+            <button
+              className="btn"
+              style={{
+                background: '#fff', color: 'var(--accent)',
+                border: 'none', fontWeight: 800,
+                padding: '6px 18px', fontSize: 'var(--text-sm)',
+                borderRadius: 'var(--radius-pill)', flexShrink: 0,
+              }}
+              onClick={() => onDraftPlayer(player.id)}
+            >
+              Draft This Player
+            </button>
+          </div>
+        )}
+
         {/* ── Header ── */}
         <div style={{
           padding: 'var(--space-5)', borderBottom: '1px solid var(--hairline)',

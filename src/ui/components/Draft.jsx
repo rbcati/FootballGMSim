@@ -17,6 +17,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import TraitBadge from './TraitBadge';
+import PlayerProfile from './PlayerProfile';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
   );
 }
 
-function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simming }) {
+function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPlayerClick, simming }) {
   const [sortKey, setSortKey] = useState('ovr');
   const [sortDir, setSortDir] = useState(-1);   // -1 = descending
   const [filterPos, setFilterPos] = useState('');
@@ -501,7 +502,15 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, simm
                         {p.pos}
                       </span>
                     </td>
-                    <td style={{ fontWeight: 600, color: 'var(--text)' }}>{p.name}</td>
+                    <td
+                      style={{ fontWeight: 600, color: 'var(--text)', cursor: onPlayerClick ? 'pointer' : 'default' }}
+                      onClick={() => onPlayerClick && onPlayerClick(p.id)}
+                      title={onPlayerClick ? `View ${p.name}'s profile` : undefined}
+                    >
+                      <span style={{ borderBottom: onPlayerClick ? '1px dotted var(--text-muted)' : 'none' }}>
+                        {p.name}
+                      </span>
+                    </td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                         {(p.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
                     </td>
@@ -618,6 +627,7 @@ export default function Draft({ league, actions }) {
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [simming, setSimming]       = useState(false);
+  const [profilePlayerId, setProfilePlayerId] = useState(null);
 
   // Enrich each pick with isUser flag for the completed-picks panel
   const enrichedDraftState = useMemo(() => {
@@ -757,6 +767,7 @@ export default function Draft({ league, actions }) {
           userTeamId={league?.userTeamId}
           onSimToMyPick={handleSimToMyPick}
           onDraftPlayer={handleDraftPlayer}
+          onPlayerClick={setProfilePlayerId}
           simming={simming}
         />
       )}
@@ -766,6 +777,20 @@ export default function Draft({ league, actions }) {
         <DraftCompletePanel
           actions={actions}
           draftState={enrichedDraftState}
+        />
+      )}
+
+      {/* Player profile modal — opened by clicking a prospect's name */}
+      {profilePlayerId && (
+        <PlayerProfile
+          playerId={profilePlayerId}
+          onClose={() => setProfilePlayerId(null)}
+          actions={actions}
+          isUserOnClock={enrichedDraftState?.isUserPick && !enrichedDraftState?.isDraftComplete}
+          onDraftPlayer={(pid) => {
+            handleDraftPlayer(pid);
+            setProfilePlayerId(null);
+          }}
         />
       )}
     </div>

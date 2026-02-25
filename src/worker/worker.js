@@ -1208,6 +1208,26 @@ async function handleGetPlayerCareer({ playerId }, id) {
       if (Number.isFinite(numId)) player = await Players.load(numId).catch(() => null);
     }
 
+    // ── 2b. Draft-prospect fallback ─────────────────────────────────────────
+    // Draft-eligible players live in the hot cache but may not be in the DB yet
+    // (they're flushed lazily).  Explicitly scan the draft pool so clicking a
+    // prospect in the Draft board never returns the "Unknown Player" skeleton.
+    if (!player) {
+      player = cache.getAllPlayers().find(
+        p => p.status === 'draft_eligible' && String(p.id) === strId
+      ) ?? null;
+      if (player) {
+        // Prospects have no career stats yet — return early with empty stats array.
+        post(toUI.PLAYER_CAREER, {
+          playerId: strId,
+          player,
+          stats: [],
+          isDraftProspect: true,
+        }, id);
+        return;
+      }
+    }
+
     if (!player) {
       console.warn(`[Worker] GET_PLAYER_CAREER: Player ${strId} not found in Cache or DB.`);
       const skeleton = {

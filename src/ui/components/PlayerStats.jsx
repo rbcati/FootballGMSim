@@ -238,7 +238,7 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="table-wrapper" style={{ maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
+        <div className="table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 'calc(100vh - 250px)', overflowY: 'auto' }}>
           <table className="standings-table" style={{ width: '100%', minWidth: 800 }}>
             <thead style={{ position: 'sticky', top: 0, background: 'var(--surface)', zIndex: 10 }}>
               <tr>
@@ -287,6 +287,9 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
                     }
                     else if (typeof content === 'number' && content % 1 !== 0) {
                         content = content.toFixed(1); // Format ratings/averages
+                    }
+                    else if (typeof content === 'number' && Number.isInteger(content) && Math.abs(content) >= 1000) {
+                        content = content.toLocaleString(); // Add commas to large integers
                     }
 
                     return (
