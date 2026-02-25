@@ -29,6 +29,14 @@ export default function App() {
 
   const [activeView, setActiveView] = useState('saves');
 
+  // Local guard to prevent rapid-click double submission before 'busy' propagates
+  const advancingRef = useRef(false);
+
+  // Reset guard when busy goes back to false
+  useEffect(() => {
+    if (!busy) advancingRef.current = false;
+  }, [busy]);
+
   // ── Service-Worker update detection ───────────────────────────────────────
   const [swUpdateReady, setSwUpdateReady] = useState(false);
   const swRegRef = useRef(null);
@@ -88,16 +96,20 @@ export default function App() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleAdvanceWeek = useCallback(() => {
-    if (busy || simulating) return;
+    if (busy || simulating || advancingRef.current) return;
 
     if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
+      advancingRef.current = true;
       actions.advanceWeek();
     } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
+      advancingRef.current = true;
       actions.advanceOffseason();
     } else if (league.phase === 'free_agency') {
+      advancingRef.current = true;
       actions.advanceFreeAgencyDay();
     } else if (league.phase === 'draft') {
       // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
+      // Note: getDraftState is silent, so busy won't toggle. We don't lock for this.
       actions.getDraftState();
     }
   }, [busy, simulating, actions, league]);

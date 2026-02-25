@@ -261,8 +261,8 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const line = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), line];   // keep last 50 entries
+      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
+      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
 
@@ -408,13 +408,18 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
       {/* ── Body: split scoreboard / play-by-play ── */}
       <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 280px',
+        display: 'flex',
+        flexWrap: 'wrap',
         gap: 0,
         minHeight: 200,
       }}>
         {/* ── Left: Scoreboard ── */}
-        <div style={{ padding: 'var(--space-4)', borderRight: '1px solid var(--hairline)' }}>
+        <div style={{
+           flex: '999 1 300px',
+           padding: 'var(--space-4)',
+           borderRight: '1px solid var(--hairline)',
+           borderBottom: '1px solid var(--hairline)', // fallback for wrapping
+        }}>
           <div style={{
             fontSize: 'var(--text-xs)', fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -475,7 +480,12 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         </div>
 
         {/* ── Right: Play-by-play log ── */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+           flex: '1 1 280px',
+           display: 'flex', flexDirection: 'column',
+           borderTop: '1px solid var(--hairline)', // for wrapping
+           marginTop: -1, // collapse double border if wrapped
+        }}>
           <div style={{
             padding: 'var(--space-3) var(--space-4)',
             borderBottom: '1px solid var(--hairline)',
@@ -489,7 +499,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
           <div
             ref={playLogRef}
             style={{
-              flex: 1, overflowY: 'auto', maxHeight: 280,
+              flex: 1, overflowY: 'auto', maxHeight: 280, minHeight: 150,
               padding: 'var(--space-2) var(--space-3)',
               display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
             }}
@@ -509,17 +519,17 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 Simulation complete.
               </p>
             )}
-            {plays.map((line, i) => (
+            {plays.map((p) => (
               <div
-                key={i}
+                key={p.id}
                 style={{
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
                   paddingBottom: 'var(--space-1)',
-                  animation: i === plays.length - 1 ? 'lgFadeIn 0.22s ease' : 'none',
+                  animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
                 }}
               >
-                {line}
+                {p.text}
               </div>
             ))}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
