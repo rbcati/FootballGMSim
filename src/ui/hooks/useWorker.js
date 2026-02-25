@@ -344,6 +344,10 @@ export function useWorker() {
     getLeagueLeaders: (mode = 'season') =>
       request(toWorker.GET_LEAGUE_LEADERS, { mode }, { silent: true }),
 
+    /** Fetch all player stats (returns a Promise). */
+    getAllPlayerStats: (payload) =>
+      request(toWorker.GET_ALL_PLAYER_STATS, payload, { silent: true }),
+
     /** Fetch mid-season award races & All-Pro projections (returns a Promise). */
     getAwardRaces: () =>
       request(toWorker.GET_AWARD_RACES, {}, { silent: true }),
