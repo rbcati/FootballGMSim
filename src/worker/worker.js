@@ -1113,7 +1113,24 @@ async function handleGetPlayerCareer({ playerId }, id) {
     }
 
     if (!player) {
+        // Fallback skeleton to prevent UI crash
         console.warn(`[Worker] GET_PLAYER_CAREER: Player ${numId} not found in Cache or DB.`);
+        const skeleton = {
+          id: numId,
+          name: 'Unknown Player',
+          pos: '?',
+          ovr: 0,
+          teamId: null,
+          ratings: {},
+          stats: { career: { gamesPlayed: 0 } }
+        };
+        post(toUI.PLAYER_CAREER, {
+            playerId: numId,
+            player: skeleton,
+            stats: [],
+            error: 'Player not found'
+        }, id);
+        return;
     }
 
     // Fetch historical (archived) stats from DB.
@@ -2651,6 +2668,63 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   post(toUI.LEAGUE_LEADERS, { mode, categories, year: meta?.year, seasonId: meta?.currentSeasonId }, id);
 }
 
+// ── Handler: GET_ALL_PLAYER_STATS ─────────────────────────────────────────────
+
+async function handleGetAllPlayerStats(_payload, id) {
+  // Return a flat list of ALL active players with their current season stats attached.
+  // This powers the dedicated "Stats" tab.
+  const allPlayers = cache.getAllPlayers();
+  const allTeams = cache.getAllTeams();
+  const teamMap = new Map();
+  allTeams.forEach(t => teamMap.set(t.id, t.abbr));
+
+  const stats = allPlayers.map(p => {
+    // 1. Get live season stats if available
+    const seasonStats = cache.getSeasonStat(p.id);
+    const totals = seasonStats ? seasonStats.totals : {};
+
+    // 2. Flatten relevant data
+    return {
+        id:          p.id,
+        name:        p.name,
+        pos:         p.pos,
+        teamId:      p.teamId,
+        teamAbbr:    p.teamId != null ? (teamMap.get(p.teamId) || '???') : 'FA',
+        ovr:         p.ovr,
+        age:         p.age,
+        gamesPlayed: totals.gamesPlayed || 0,
+
+        // Passing
+        passYards:    totals.passYd || 0,
+        passTDs:      totals.passTD || 0,
+        int:          totals.interceptions || 0,
+        passerRating: totals.passerRating || 0,
+
+        // Rushing
+        rushYards:    totals.rushYd || 0,
+        rushTDs:      totals.rushTD || 0,
+        rushAtt:      totals.rushAtt || 0,
+
+        // Receiving
+        receptions:   totals.receptions || 0,
+        recYards:     totals.recYd || 0,
+        recTDs:       totals.recTD || 0,
+
+        // Defense
+        tackles:      totals.tackles || 0,
+        sacks:        totals.sacks || 0,
+        tfl:          totals.tacklesForLoss || 0,
+        defInt:       totals.interceptions || 0, // Same field as offensive INTs usually, context matters
+
+        // Kicking
+        fgMade:       totals.fgMade || 0,
+        fgAtt:        totals.fgAttempts || 0,
+    };
+  });
+
+  post(toUI.ALL_PLAYER_STATS, { stats }, id);
+}
+
 // ── Handler: GET_AWARD_RACES ──────────────────────────────────────────────────
 
 async function handleGetAwardRaces(_payload, id) {
@@ -2765,6 +2839,7 @@ async function handleMessage(event) {
       // ── Analytics ─────────────────────────────────────────────────────────
       case toWorker.GET_TEAM_PROFILE:   return await handleGetTeamProfile(payload, id);
       case toWorker.GET_LEAGUE_LEADERS: return await handleGetLeagueLeaders(payload, id);
+      case toWorker.GET_ALL_PLAYER_STATS: return await handleGetAllPlayerStats(payload, id);
       case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
 
       default:
