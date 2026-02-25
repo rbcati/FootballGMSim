@@ -82,6 +82,28 @@ function MatchupCard({ event, userTeamId, pending }) {
   const isUser   = homeId === userTeamId || awayId === userTeamId;
   const finished = !pending;
 
+  // Track previous scores to trigger pulse animation
+  const prevHomeScore = useRef(homeScore);
+  const prevAwayScore = useRef(awayScore);
+  const [pulseHome, setPulseHome] = useState(false);
+  const [pulseAway, setPulseAway] = useState(false);
+
+  useEffect(() => {
+    if (homeScore > prevHomeScore.current) {
+      setPulseHome(true);
+      setTimeout(() => setPulseHome(false), 300);
+    }
+    prevHomeScore.current = homeScore;
+  }, [homeScore]);
+
+  useEffect(() => {
+    if (awayScore > prevAwayScore.current) {
+      setPulseAway(true);
+      setTimeout(() => setPulseAway(false), 300);
+    }
+    prevAwayScore.current = awayScore;
+  }, [awayScore]);
+
   return (
     <div style={{
       background: 'var(--surface)',
@@ -102,10 +124,14 @@ function MatchupCard({ event, userTeamId, pending }) {
         }}>
           {awayAbbr}
         </div>
-        <div style={{
-          fontSize: 'var(--text-xl)', fontWeight: 800, lineHeight: 1.1,
-          color: finished && awayScore > homeScore ? 'var(--text)' : 'var(--text-muted)',
-        }}>
+        <div
+          className={pulseAway ? 'pulse-score' : ''}
+          style={{
+            fontSize: 'var(--text-xl)', fontWeight: 800, lineHeight: 1.1,
+            color: finished && awayScore > homeScore ? 'var(--text)' : 'var(--text-muted)',
+            transition: 'color 0.2s',
+          }}
+        >
           {awayScore}
         </div>
       </div>
@@ -125,10 +151,14 @@ function MatchupCard({ event, userTeamId, pending }) {
         }}>
           {homeAbbr}
         </div>
-        <div style={{
-          fontSize: 'var(--text-xl)', fontWeight: 800, lineHeight: 1.1,
-          color: finished && homeScore > awayScore ? 'var(--text)' : 'var(--text-muted)',
-        }}>
+        <div
+          className={pulseHome ? 'pulse-score' : ''}
+          style={{
+            fontSize: 'var(--text-xl)', fontWeight: 800, lineHeight: 1.1,
+            color: finished && homeScore > awayScore ? 'var(--text)' : 'var(--text-muted)',
+            transition: 'color 0.2s',
+          }}
+        >
           {homeScore}
         </div>
       </div>
@@ -166,24 +196,24 @@ function PendingCard({ game, teamById, userTeamId }) {
 // These are entirely synthetic — the simulator doesn't produce play logs.
 
 const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
+  (o, d, g) => ({ text: `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`, type: g >= 20 ? 'BIG-PLAY' : 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — QB scrambles for ${g} yds`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — run up the middle, ${g} yds`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — stretch run to the outside, ${g} yds`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`, type: 'SACK' }),
+  (o, d, g) => ({ text: `${o} — pass incomplete, ${d} breaks it up`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — TOUCHDOWN! 6 pts`, type: 'TOUCHDOWN' }),
+  (o, d, g) => ({ text: `${o} — field goal attempt... GOOD! 3 pts`, type: 'FIELD-GOAL' }),
+  (o, d, g) => ({ text: `${d} — INTERCEPTION! Ball at the ${g} yd line`, type: 'TURNOVER' }),
+  (o, d, g) => ({ text: `${o} — punt, ${d} fair catch at their ${g} yd line`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — penalty: false start, 5 yd loss`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — 4th-and-short: QB sneak, 1st down`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${d} — pass interference called, ${g} yds`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — play-action fake, ${g} yd gain`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — screen pass, ${g} yds after catch`, type: 'NORMAL' }),
+  (o, d, g) => ({ text: `${o} — FUMBLE recovered by ${d}!`, type: 'TURNOVER' }),
+  (o, d, g) => ({ text: `${o} — 3rd-and-long conversion, ${g} yds`, type: 'BIG-PLAY' }),
+  (o, d, g) => ({ text: `${d} — safety! 2 pts`, type: 'TURNOVER' }),
 ];
 
 function generatePlay(homeAbbr, awayAbbr, seed = 0) {
@@ -202,6 +232,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [shake, setShake]           = useState(false);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
@@ -261,8 +292,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const line = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), line];   // keep last 50 entries
+      const play = generatePlay(userHomeAbbr, userAwayAbbr, n);
+
+      // Trigger shake effect on turnovers
+      if (play.type === 'TURNOVER') {
+        setShake(true);
+        setTimeout(() => setShake(false), 500);
+      }
+
+      return [...prev.slice(-49), play];   // keep last 50 entries
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
 
@@ -329,13 +367,16 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   if (!visible) return null;
 
   return (
-    <div style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--hairline)',
-      borderRadius: 'var(--radius-lg)',
-      marginBottom: 'var(--space-6)',
-      overflow: 'hidden',
-    }}>
+    <div
+      className={shake ? 'shake' : ''}
+      style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--hairline)',
+        borderRadius: 'var(--radius-lg)',
+        marginBottom: 'var(--space-6)',
+        overflow: 'hidden',
+      }}
+    >
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
@@ -407,14 +448,20 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       )}
 
       {/* ── Body: split scoreboard / play-by-play ── */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 280px',
-        gap: 0,
-        minHeight: 200,
-      }}>
+      <div
+        className="live-game-content-wrapper"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 280px',
+          gap: 0,
+          minHeight: 200,
+        }}
+      >
         {/* ── Left: Scoreboard ── */}
-        <div style={{ padding: 'var(--space-4)', borderRight: '1px solid var(--hairline)' }}>
+        <div
+          className="live-game-scoreboard"
+          style={{ padding: 'var(--space-4)', borderRight: '1px solid var(--hairline)' }}
+        >
           <div style={{
             fontSize: 'var(--text-xs)', fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -475,7 +522,10 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         </div>
 
         {/* ── Right: Play-by-play log ── */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div
+          className="live-game-play-log"
+          style={{ display: 'flex', flexDirection: 'column' }}
+        >
           <div style={{
             padding: 'var(--space-3) var(--space-4)',
             borderBottom: '1px solid var(--hairline)',
@@ -509,17 +559,19 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 Simulation complete.
               </p>
             )}
-            {plays.map((line, i) => (
+            {plays.map((play, i) => (
               <div
                 key={i}
+                className={`play-item ${play.type ? `play-${play.type.toLowerCase()}` : ''}`}
                 style={{
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
                   paddingBottom: 'var(--space-1)',
+                  paddingLeft: play.type && play.type !== 'NORMAL' ? 'var(--space-2)' : 0,
                   animation: i === plays.length - 1 ? 'lgFadeIn 0.22s ease' : 'none',
                 }}
               >
-                {line}
+                {play.text}
               </div>
             ))}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>

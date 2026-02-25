@@ -1,0 +1,148 @@
+/*
+ * Polish CSS - Enhancements for Visual Feedback and Smooth Transitions
+ */
+
+/* ============================================================================
+   ANIMATIONS
+   ============================================================================ */
+
+/* Fade In */
+.fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Slide Up */
+.slideUp {
+  animation: slideUp 0.3s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Flash (White Overlay) */
+.flash {
+  position: relative;
+}
+
+.flash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.8);
+  pointer-events: none;
+  animation: flashAnim 0.5s ease-out forwards;
+}
+
+@keyframes flashAnim {
+  0% { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+/* Shake (Impact) */
+.shake {
+  animation: shakeAnim 0.5s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+@keyframes shakeAnim {
+  10%, 90% { transform: translate3d(-1px, 0, 0); }
+  20%, 80% { transform: translate3d(2px, 0, 0); }
+  30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+  40%, 60% { transform: translate3d(4px, 0, 0); }
+}
+
+/* Pulse (Score Update) */
+.pulse-score {
+  animation: pulseAnim 0.3s ease-in-out;
+  color: var(--accent) !important;
+  text-shadow: 0 0 10px var(--accent-muted);
+}
+
+@keyframes pulseAnim {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* View Transition Container */
+.view-transition {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* ============================================================================
+   BUTTON POLISH
+   ============================================================================ */
+
+.btn:active {
+  transform: scale(0.98) !important;
+}
+
+/* ============================================================================
+   PLAY TYPE STYLES (LiveGame)
+   ============================================================================ */
+
+.play-item {
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.play-touchdown {
+  background: rgba(52, 199, 89, 0.1);
+  border-left-color: var(--success);
+}
+
+.play-field-goal {
+  background: rgba(52, 199, 89, 0.05);
+  border-left-color: var(--success);
+}
+
+.play-turnover {
+  background: rgba(255, 59, 48, 0.1);
+  border-left-color: var(--danger);
+}
+
+.play-sack {
+  background: rgba(255, 159, 10, 0.1);
+  border-left-color: var(--warning);
+}
+
+.play-big-play {
+  background: rgba(10, 132, 255, 0.1);
+  border-left-color: var(--accent);
+}
+
+/* ============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================ */
+
+@media (max-width: 768px) {
+  /* Stack LiveGame content */
+  .live-game-content-wrapper {
+    grid-template-columns: 1fr !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Ensure play log has a fixed height when stacked */
+  .live-game-play-log {
+    max-height: 300px;
+    border-top: 1px solid var(--hairline);
+  }
+
+  .live-game-scoreboard {
+    border-right: none !important;
+    border-bottom: 1px solid var(--hairline);
+  }
+}

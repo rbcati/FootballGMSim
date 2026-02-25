@@ -747,68 +747,90 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       {activeTab === 'Standings' && (
-        <TabErrorBoundary label="Standings">
-          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Standings">
+            <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Schedule' && (
-        <TabErrorBoundary label="Schedule">
-          <ScheduleTab
-            schedule={league.schedule}
-            teams={league.teams}
-            currentWeek={league.week}
-            userTeamId={league.userTeamId}
-            nextGameStakes={league.nextGameStakes}
-            seasonId={league.seasonId}
-            onGameSelect={setSelectedGameId}
-            playoffSeeds={league.playoffSeeds}
-          />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Schedule">
+            <ScheduleTab
+              schedule={league.schedule}
+              teams={league.teams}
+              currentWeek={league.week}
+              userTeamId={league.userTeamId}
+              nextGameStakes={league.nextGameStakes}
+              seasonId={league.seasonId}
+              onGameSelect={setSelectedGameId}
+              playoffSeeds={league.playoffSeeds}
+            />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Stats' && (
-        <TabErrorBoundary label="Stats">
-          <PlayerStats actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Stats">
+            <PlayerStats actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Leaders' && (
-        <TabErrorBoundary label="Leaders">
-          <Leaders onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Leaders">
+            <Leaders onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Award Races' && (
-        <TabErrorBoundary label="Award Races">
-          <AwardRaces onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Award Races">
+            <AwardRaces onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Roster' && (
-        <TabErrorBoundary label="Roster">
-          <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Roster">
+            <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Draft' && (
-        <TabErrorBoundary label="Draft">
-          <Draft league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Draft">
+            <Draft league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Coaches' && (
-        <TabErrorBoundary label="Coaches">
-          <Coaches league={league} actions={actions} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Coaches">
+            <Coaches league={league} actions={actions} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Free Agency' && (
-        <TabErrorBoundary label="Free Agency">
-          <FreeAgency league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Free Agency">
+            <FreeAgency league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'Trades' && (
-        <TabErrorBoundary label="Trades">
-          <TradeCenter league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="Trades">
+            <TradeCenter league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
       {activeTab === 'History' && (
-        <TabErrorBoundary label="History">
-          <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
+        <div className="fadeIn">
+          <TabErrorBoundary label="History">
+            <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        </div>
       )}
 
       {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
