@@ -574,9 +574,37 @@ export default function LeagueDashboard({ league, busy, actions }) {
           <div className="season-context">
             <div className="current-week-large">Week {league.week}</div>
             <div className="season-year-large">{league.year ?? 2025} Season · {league.phase}</div>
+            <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
+               <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
+                 Owner: <span style={{ color: 'var(--success)' }}>85%</span>
+               </div>
+               <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
+                 Fan: <span style={{ color: 'var(--warning)' }}>72%</span>
+               </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* ── Expiring Contracts Banner ── */}
+      {league.phase === 'offseason_resign' && (
+        <div
+          onClick={() => setActiveTab('Roster')}
+          style={{
+          background: 'rgba(52, 199, 89, 0.15)', border: '1px solid var(--success)',
+          color: 'var(--success)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+          marginBottom: 'var(--space-6)', fontWeight: 700, textAlign: 'center',
+          cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)',
+          fontSize: 'var(--text-lg)'
+        }}>
+          <span>✍️</span>
+          <span>Expiring Contracts</span>
+          <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text)' }}>
+            — Review and extend players before Free Agency.
+          </span>
+        </div>
+      )}
 
       {/* ── Preseason Cutdown Banner ── */}
       {league.phase === 'preseason' && (
@@ -597,25 +625,41 @@ export default function LeagueDashboard({ league, busy, actions }) {
         </div>
       )}
 
-      {/* ── Status Grid ── */}
+      {/* ── Status Grid (Financials + Last Game) ── */}
       <div className="status-grid">
-        {[
-          { label: 'Teams',           value: league.teams.length,    pct: 100 },
-          { label: 'Avg Score / Game', value: avgScore,              pct: Math.min(100, Math.round((avgScore / 45) * 100)) },
-          { label: 'League Avg OVR',  value: avgOvr,                 pct: avgOvr },
-        ].map(({ label, value, pct }) => (
-          <div key={label} className="stat-box">
-            <div className="stat-label">{label}</div>
-            <div className="stat-value-large">{value}</div>
-            <div className="stat-bar-container">
-              <div className="stat-bar-fill" style={{ width: `${pct}%` }} />
-            </div>
-          </div>
-        ))}
-      </div>
+        {/* Last Game Widget */}
+        {(() => {
+          const prevWeek = (league.week || 1) - 1;
+          const weekData = league.schedule?.weeks?.find(w => w.week === prevWeek);
+          const game = weekData?.games?.find(g =>
+              (g.home === league.userTeamId || (typeof g.home === 'object' && g.home.id === league.userTeamId)) ||
+              (g.away === league.userTeamId || (typeof g.away === 'object' && g.away.id === league.userTeamId))
+          );
 
-      {/* ── Financial Status ── */}
-      <div className="status-grid" style={{ marginTop: 'var(--space-4)' }}>
+          if (game && game.played) {
+              const homeId = typeof game.home === 'object' ? game.home.id : game.home;
+              const isHome = homeId === league.userTeamId;
+              const userScore = isHome ? game.homeScore : game.awayScore;
+              const oppScore  = isHome ? game.awayScore : game.homeScore;
+              const win = userScore > oppScore;
+              const resultChar = win ? 'W' : (userScore === oppScore ? 'T' : 'L');
+              const resultColor = win ? 'var(--success)' : (userScore === oppScore ? 'var(--text-muted)' : 'var(--danger)');
+
+              return (
+                  <div className="stat-box">
+                      <div className="stat-label">Last Game</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                          <span style={{ fontSize: '1.5rem', fontWeight: 800, color: resultColor }}>{resultChar}</span>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
+                              {userScore}-{oppScore}
+                          </div>
+                      </div>
+                  </div>
+              );
+          }
+          return null;
+        })()}
+
         {[
           { label: 'Total Cap',       value: `$${capTotal.toFixed(1)}M`, pct: 100, color: 'var(--text-muted)' },
           { label: 'Cap Used',        value: `$${capUsed.toFixed(1)}M`,  pct: Math.min(100, (capUsed/capTotal)*100), color: 'var(--accent)' },

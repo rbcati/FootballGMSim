@@ -31,7 +31,7 @@ import GameRunner         from '../core/game-runner.js';
 import { simulateBatch }  from '../core/game-simulator.js';
 import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
-import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player.js';
+import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
@@ -1112,6 +1112,10 @@ async function handleGetPlayerCareer({ playerId }, id) {
       player = await Players.load(numId).catch(() => null);
     }
 
+    if (!player) {
+        console.warn(`[Worker] GET_PLAYER_CAREER: Player ${numId} not found in Cache or DB.`);
+    }
+
     // Fetch historical (archived) stats from DB.
     // For rookies this is an empty array — that is fine.
     let archivedStats = [];
@@ -1250,8 +1254,8 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   cache.updatePlayer(playerId, { teamId, contract, status: 'active', offers: [] });
 
   // Update cap
-  _updateTeamCap(teamId);
-  if (oldTeamId != null && oldTeamId !== teamId) _updateTeamCap(oldTeamId);
+  recalculateTeamCap(teamId);
+  if (oldTeamId != null && oldTeamId !== teamId) recalculateTeamCap(oldTeamId);
 
   const txDetails = { playerId, contract };
   await Transactions.add({
@@ -1314,8 +1318,27 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  cache.updatePlayer(playerId, { teamId: null, status: 'free_agent' });
-  _updateTeamCap(teamId);
+  // Calculate Dead Cap: Remaining prorated bonus
+  const team = cache.getTeam(teamId);
+  if (team && player.contract) {
+    const yearsRemaining = player.contract.years || 1;
+    const yearsTotal = player.contract.yearsTotal || 1;
+    const totalBonus = player.contract.signingBonus || 0;
+
+    // Prorated amount per year
+    const annualBonus = totalBonus / yearsTotal;
+
+    // Dead cap is the acceleration of all remaining bonus money
+    const deadMoney = annualBonus * yearsRemaining;
+
+    if (deadMoney > 0) {
+       const currentDead = team.deadCap || 0;
+       cache.updateTeam(teamId, { deadCap: currentDead + deadMoney });
+    }
+  }
+
+  cache.updatePlayer(playerId, { teamId: null, status: 'free_agent', offers: [] });
+  recalculateTeamCap(teamId);
 
   const meta = cache.getMeta();
   await Transactions.add({
@@ -1474,6 +1497,62 @@ async function handleFireCoach({ teamId, role }, id) {
     await handleGetRoster({ teamId }, id);
 }
 
+// ── Handler: EXTENSION ──────────────────────────────────────────────────────
+
+async function handleGetExtensionAsk({ playerId }, id) {
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  // Generate ask based on market value
+  const ask = calculateExtensionDemand(player);
+  post(toUI.EXTENSION_ASK, { ask }, id);
+}
+
+async function handleExtendContract({ playerId, teamId, contract }, id) {
+  const player = cache.getPlayer(playerId);
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const team = cache.getTeam(teamId);
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  // Cap Check
+  // Calculate impact: new hit vs old hit
+  const newCapHit = (contract.baseAnnual || 0) + ((contract.signingBonus || 0) / (contract.yearsTotal || 1));
+  const currentCapHit = player.contract
+      ? ((player.contract.baseAnnual || 0) + ((player.contract.signingBonus || 0) / (player.contract.yearsTotal || 1)))
+      : 0;
+
+  const diff = newCapHit - currentCapHit;
+
+  if (diff > (team.capRoom || 0)) {
+      post(toUI.ERROR, { message: `Not enough cap room ($${diff.toFixed(1)}M needed)` }, id);
+      return;
+  }
+
+  // Update Player Contract
+  // Extensions effectively replace the current contract logic in this simplified model
+  cache.updatePlayer(playerId, { contract });
+
+  // Update Team Cap
+  recalculateTeamCap(teamId);
+
+  // Log Transaction
+  const meta = cache.getMeta();
+  await Transactions.add({
+      type: 'EXTEND',
+      seasonId: meta.currentSeasonId,
+      week: meta.currentWeek,
+      teamId,
+      details: { playerId, contract }
+  });
+  await NewsEngine.logTransaction('EXTEND', { teamId, playerId, contract });
+
+  await flushDirty();
+
+  // Return updated roster and state
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+}
+
 // ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
 
 /**
@@ -1539,8 +1618,8 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     });
 
     // Recalculate caps for both teams
-    _updateTeamCap(Number(fromTeamId));
-    _updateTeamCap(Number(toTeamId));
+    recalculateTeamCap(Number(fromTeamId));
+    recalculateTeamCap(Number(toTeamId));
 
     // Log transaction
     const meta = cache.getMeta();
@@ -1584,20 +1663,29 @@ async function handleUpdateSettings({ settings }, id) {
 
 // ── Cap helper ────────────────────────────────────────────────────────────────
 
-function _updateTeamCap(teamId) {
+function recalculateTeamCap(teamId) {
   const players = cache.getPlayersByTeam(teamId);
-  const capUsed = players.reduce((sum, p) => {
+  const activeCap = players.reduce((sum, p) => {
     const c = p.contract;
     if (!c) return sum;
+    // Cap hit = Base + Prorated Bonus
     return sum + (c.baseAnnual ?? 0) + ((c.signingBonus ?? 0) / (c.yearsTotal || 1));
   }, 0);
+
   const team = cache.getTeam(teamId);
   if (!team) return;
+
+  const deadCap = team.deadCap || 0;
+  const totalCapUsed = activeCap + deadCap;
+
   cache.updateTeam(teamId, {
-    capUsed: Math.round(capUsed * 100) / 100,
-    capRoom: Math.round((team.capTotal - capUsed) * 100) / 100,
+    capUsed: Math.round(totalCapUsed * 100) / 100,
+    capRoom: Math.round((team.capTotal - totalCapUsed) * 100) / 100,
+    deadCap: Math.round(deadCap * 100) / 100 // Ensure it's set/rounded
   });
 }
+// Alias for backward compatibility if needed, but we should replace calls.
+const _updateTeamCap = recalculateTeamCap;
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
 
@@ -1719,7 +1807,7 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
     },
   });
 
-  _updateTeamCap(teamId);
+  recalculateTeamCap(teamId);
 
   // Emit per-pick event (UI can display a ticker)
   const team = cache.getTeam(teamId);
@@ -2058,7 +2146,7 @@ async function handleAdvanceOffseason(payload, id) {
 
     if (willRetire) {
       retired.push({ id: player.id, name: player.name, pos: player.pos, age, ovr: player.ovr });
-      if (player.teamId != null) _updateTeamCap(player.teamId);
+      if (player.teamId != null) recalculateTeamCap(player.teamId);
       cache.removePlayer(player.id);
     } else {
       cache.updatePlayer(player.id, { age: age + 1, ovr: newOvr });
@@ -2116,18 +2204,28 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     // ── Phase transition: free_agency → draft ────────────────────────────────
     // When the last FA day completes, advance the phase so the UI gates
     // correctly onto the draft screen.
-    cache.setMeta({
+    const updates = {
         freeAgencyState: {
             ...meta.freeAgencyState,
             day: nextDay,
             complete: isComplete,
-        },
-        ...(isComplete ? { phase: 'draft' } : {}),
-    });
+        }
+    };
+
+    if (isComplete) {
+        updates.phase = 'draft';
+    }
+
+    cache.setMeta(updates);
 
     await flushDirty();
 
     post(toUI.NOTIFICATION, { level: 'info', message: `Free Agency Day ${day} Complete.` });
+
+    if (isComplete) {
+        // Explicitly signal phase change so UI can redirect
+        post(toUI.OFFSEASON_PHASE, { phase: 'draft', message: 'Free Agency Complete. Draft is now open.' });
+    }
 
     // Refresh views
     post(toUI.STATE_UPDATE, buildViewState());
@@ -2151,6 +2249,15 @@ async function archiveSeason(seasonId) {
 
     // 2. Get all season stats and CLEAR them from cache
     const seasonStats = cache.archiveSeasonStats();
+
+    // Persist detailed stats to PlayerStats DB (Fix for missing history)
+    if (seasonStats.length > 0) {
+        const statsToSave = seasonStats.map(s => ({
+            ...s,
+            id: `${s.seasonId}_${s.playerId}`
+        }));
+        await PlayerStats.saveBulk(statsToSave);
+    }
 
     // Helper to resolve player info (active or retired/db)
     const resolvePlayer = async (pid) => {
@@ -2642,6 +2749,8 @@ async function handleMessage(event) {
       case toWorker.HIRE_COACH:         return await handleHireCoach(payload, id);
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
+      case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
+      case toWorker.EXTEND_CONTRACT:    return await handleExtendContract(payload, id);
       case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────
