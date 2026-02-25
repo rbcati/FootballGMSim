@@ -96,6 +96,9 @@ export default function App() {
       actions.advanceOffseason();
     } else if (league.phase === 'free_agency') {
       actions.advanceFreeAgencyDay();
+    } else if (league.phase === 'draft') {
+      // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
+      actions.getDraftState();
     }
   }, [busy, simulating, actions, league]);
 
