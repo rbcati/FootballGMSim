@@ -771,7 +771,10 @@ async function handleAdvanceWeek(payload, id) {
 
   for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
     const batch = gamesToSim.slice(i, i + BATCH_SIZE);
-    const batchResults = simulateBatch(batch, { league });
+    const batchResults = simulateBatch(batch, {
+      league,
+      isPlayoff: meta.phase === 'playoffs'
+    });
     results.push(...batchResults);
 
     // Apply each game result to cache and emit GAME_EVENT per game
