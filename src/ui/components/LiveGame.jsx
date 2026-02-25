@@ -302,18 +302,29 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   // ── Build scoreboard data ────────────────────────────────────────────────
 
-  // Resolved game events (GAME_EVENT payloads from the worker)
-  const resolvedEvents = gameEvents ?? [];
+  const userTeamId = league?.userTeamId;
 
-  // Games still pending (not yet in gameEvents)
+  // All resolved game events — then filtered to user's game only for the scoreboard.
+  const resolvedEvents = gameEvents ?? [];
+  const userResolvedEvents = resolvedEvents.filter(
+    e => e.homeId === userTeamId || e.awayId === userTeamId
+  );
+
+  // Games still pending (not yet in gameEvents) — show only user's game.
   const resolvedGameIds = new Set(resolvedEvents.map(e => e.gameId));
   const pendingGames = weekGames.filter(g => {
     const id = `${league?.seasonId}_w${league?.week}_${g.home}_${g.away}`;
     return !resolvedGameIds.has(id);
   });
+  const userPendingGames = pendingGames.filter(
+    g => Number(g.home) === userTeamId || Number(g.away) === userTeamId
+  );
 
-  // Final results to show when sim is done
+  // Final results to show when sim is done — user's game only.
   const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
+  const userLastResults = (lastResults ?? []).filter(
+    r => r.homeId === userTeamId || r.awayId === userTeamId
+  );
 
   if (!visible) return null;
 
@@ -417,28 +428,28 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
             gap: 'var(--space-2)',
           }}>
-            {/* Finished games (GAME_EVENT received) */}
-            {resolvedEvents.map((ev, i) => (
+            {/* User's finished game (GAME_EVENT received) */}
+            {userResolvedEvents.map((ev, i) => (
               <MatchupCard
                 key={ev.gameId ?? i}
                 event={ev}
-                userTeamId={league?.userTeamId}
+                userTeamId={userTeamId}
                 pending={false}
               />
             ))}
 
-            {/* Pending games (still in progress during sim) */}
-            {simulating && pendingGames.map((g, i) => (
+            {/* User's pending game (still in progress during sim) */}
+            {simulating && userPendingGames.map((g, i) => (
               <PendingCard
                 key={i}
                 game={g}
                 teamById={teamById}
-                userTeamId={league?.userTeamId}
+                userTeamId={userTeamId}
               />
             ))}
 
-            {/* Post-sim fallback: show lastResults if no events (e.g. skip was used) */}
-            {isFinished && resolvedEvents.length === 0 && (lastResults ?? []).map((r, i) => (
+            {/* Post-sim fallback: show user's lastResult if no events (e.g. skip was used) */}
+            {isFinished && userResolvedEvents.length === 0 && userLastResults.map((r, i) => (
               <MatchupCard
                 key={i}
                 event={{
@@ -450,12 +461,12 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                   homeScore: r.homeScore,
                   awayScore: r.awayScore,
                 }}
-                userTeamId={league?.userTeamId}
+                userTeamId={userTeamId}
                 pending={false}
               />
             ))}
 
-            {resolvedEvents.length === 0 && !simulating && (
+            {userResolvedEvents.length === 0 && !simulating && (
               <p style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', margin: 0 }}>
                 No games to display.
               </p>

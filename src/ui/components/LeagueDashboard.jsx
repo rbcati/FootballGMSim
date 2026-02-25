@@ -13,8 +13,9 @@
  *  - Trades      — Side-by-side roster trade interface
  */
 
-import React, { useState, useMemo, Component } from 'react';
+import React, { useState, useMemo, useEffect, Component } from 'react';
 import Roster          from './Roster.jsx';
+import Draft           from './Draft.jsx';
 import Coaches         from './Coaches.jsx';
 import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
@@ -81,7 +82,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Roster', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Roster', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -327,7 +328,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 
-function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect }) {
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect, playoffSeeds }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   const teamById = useMemo(() => {
@@ -335,6 +336,20 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
     teams.forEach(t => { map[t.id] = t; });
     return map;
   }, [teams]);
+
+  // Build a fast teamId → seed lookup from the playoff seeds structure.
+  const seedByTeam = useMemo(() => {
+    if (!playoffSeeds) return {};
+    const map = {};
+    for (const confSeeds of Object.values(playoffSeeds)) {
+      for (const s of confSeeds) {
+        map[s.teamId] = s.seed;
+      }
+    }
+    return map;
+  }, [playoffSeeds]);
+
+  const isPlayoffs = selectedWeek >= 19;
 
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData   = schedule?.weeks?.find(w => w.week === selectedWeek);
@@ -415,11 +430,11 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
                     fontSize: 'var(--text-xl)', fontWeight: 800,
                   }}>
                     <span style={{ color: game.awayScore > game.homeScore ? 'var(--text)' : 'var(--text-muted)' }}>
-                      {away.abbr} {game.awayScore}
+                      {isPlayoffs && seedByTeam[away.id] ? `(${seedByTeam[away.id]}) ` : ''}{away.abbr} {game.awayScore}
                     </span>
                     <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)', fontWeight: 400 }}>–</span>
                     <span style={{ color: game.homeScore > game.awayScore ? 'var(--text)' : 'var(--text-muted)' }}>
-                      {game.homeScore} {home.abbr}
+                      {game.homeScore} {home.abbr}{isPlayoffs && seedByTeam[home.id] ? ` (${seedByTeam[home.id]})` : ''}
                     </span>
                   </div>
                   {isClickable && (
@@ -434,7 +449,10 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
               <div className="matchup-content">
                 <div className="matchup-team away">
                   <TeamLogo abbr={away.abbr} size={64} isUser={away.id === userTeamId} />
-                  <div className="team-name-matchup">{away.abbr}</div>
+                  <div className="team-name-matchup">
+                    {isPlayoffs && seedByTeam[away.id] ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginRight: 3 }}>({seedByTeam[away.id]})</span> : null}
+                    {away.abbr}
+                  </div>
                   <div className="team-record-matchup">{away.wins}-{away.losses}{away.ties > 0 ? `-${away.ties}` : ''}</div>
                 </div>
                 <div className="matchup-vs">
@@ -443,7 +461,10 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
                 </div>
                 <div className="matchup-team home">
                   <TeamLogo abbr={home.abbr} size={64} isUser={home.id === userTeamId} />
-                  <div className="team-name-matchup">{home.abbr}</div>
+                  <div className="team-name-matchup">
+                    {isPlayoffs && seedByTeam[home.id] ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginRight: 3 }}>({seedByTeam[home.id]})</span> : null}
+                    {home.abbr}
+                  </div>
                   <div className="team-record-matchup">{home.wins}-{home.losses}{home.ties > 0 ? `-${home.ties}` : ''}</div>
                 </div>
               </div>
@@ -518,6 +539,15 @@ export default function LeagueDashboard({ league, busy, actions }) {
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
 
+  // Auto-navigate to Draft tab whenever the league phase transitions to 'draft'.
+  // This ensures clicking "Draft Active" in the top bar (which triggers a worker
+  // state refresh) or advancing through free agency lands directly on the Draft Board.
+  useEffect(() => {
+    if (league?.phase === 'draft') {
+      setActiveTab('Draft');
+    }
+  }, [league?.phase]);
+
   if (!league) return null;
 
   if (!league.schedule?.weeks) {
@@ -577,10 +607,14 @@ export default function LeagueDashboard({ league, busy, actions }) {
             <div className="season-year-large">{league.year ?? 2025} Season · {league.phase}</div>
             <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
-                 Owner: <span style={{ color: 'var(--success)' }}>85%</span>
+                 Owner: <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? 'var(--success)' : (league.ownerApproval ?? 75) >= 50 ? 'var(--warning)' : 'var(--danger)' }}>
+                   {league.ownerApproval ?? 75}%
+                 </span>
                </div>
                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
-                 Fan: <span style={{ color: 'var(--warning)' }}>72%</span>
+                 Fan: <span style={{ color: (league.fanApproval ?? 65) >= 70 ? 'var(--success)' : (league.fanApproval ?? 65) >= 50 ? 'var(--warning)' : 'var(--danger)' }}>
+                   {league.fanApproval ?? 65}%
+                 </span>
                </div>
             </div>
           </div>
@@ -622,6 +656,27 @@ export default function LeagueDashboard({ league, busy, actions }) {
           </span>
           <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text-muted)' }}>
             — You must release {(userTeam?.rosterCount ?? 0) > 53 ? (userTeam.rosterCount - 53) : 0} players to advance.
+          </span>
+        </div>
+      )}
+
+      {/* ── Draft Active Banner ── */}
+      {league.phase === 'draft' && activeTab !== 'Draft' && (
+        <div
+          onClick={() => setActiveTab('Draft')}
+          style={{
+            background: 'rgba(10,132,255,0.15)', border: '1px solid var(--accent)',
+            color: 'var(--accent)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-6)', fontWeight: 700, textAlign: 'center',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)',
+            fontSize: 'var(--text-lg)'
+          }}
+        >
+          <span>🏈</span>
+          <span>Draft Board is Open</span>
+          <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text)' }}>
+            — Click here to make your picks.
           </span>
         </div>
       )}
@@ -706,6 +761,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
             nextGameStakes={league.nextGameStakes}
             seasonId={league.seasonId}
             onGameSelect={setSelectedGameId}
+            playoffSeeds={league.playoffSeeds}
           />
         </TabErrorBoundary>
       )}
@@ -727,6 +783,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Roster' && (
         <TabErrorBoundary label="Roster">
           <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Draft' && (
+        <TabErrorBoundary label="Draft">
+          <Draft league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Coaches' && (
