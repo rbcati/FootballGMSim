@@ -1209,6 +1209,34 @@ async function handleGetPlayerCareer({ playerId }, id) {
     }
 
     if (!player) {
+      // Emergency Draft Prospect Lookup:
+      // If the player is part of the active draft class but somehow missing from the main map,
+      // try to reconstruct a partial profile from the draft state.
+      const meta = cache.getMeta();
+      if (meta?.draftState) {
+          // Check completed picks
+          const pick = meta.draftState.picks.find(p => String(p.playerId) === strId);
+          if (pick) {
+              player = {
+                  id: pick.playerId,
+                  name: pick.playerName,
+                  pos: pick.playerPos,
+                  ovr: pick.playerOvr,
+                  teamId: pick.teamId,
+                  status: 'active',
+                  contract: { years: 4, baseAnnual: 0.7, signingBonus: 0.1 } // Rookie default
+              };
+          } else {
+             // Check if it's a prospect ID that we can find in the raw cache scan one last time
+             // (though the loop above should have caught it).
+             player = cache.getAllPlayers().find(p =>
+                 p.status === 'draft_eligible' && String(p.id) === strId
+             );
+          }
+      }
+    }
+
+    if (!player) {
       console.warn(`[Worker] GET_PLAYER_CAREER: Player ${strId} not found in Cache or DB.`);
       const skeleton = {
         id: strId,
