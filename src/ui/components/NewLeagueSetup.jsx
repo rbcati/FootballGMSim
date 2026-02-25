@@ -49,7 +49,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                     <button
                         key={team.id}
                         onClick={() => setSelectedTeam(team.id)}
-                        className={`btn ${selectedTeam === team.id ? 'selected' : ''}`}
+                        className={`btn team-select-btn ${selectedTeam === team.id ? 'selected' : ''}`}
                         style={{
                             padding: 'var(--space-4)',
                             border: selectedTeam === team.id ? '2px solid var(--accent)' : '1px solid var(--hairline)',
@@ -98,6 +98,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                         Back
                     </button>
                     <button
+                        id="start-career-btn"
                         className="btn primary"
                         onClick={handleStart}
                         disabled={selectedTeam === null || creating}

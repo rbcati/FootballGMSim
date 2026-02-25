@@ -395,10 +395,11 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
 
   // ── Sign handler ───────────────────────────────────────────────────────────
 
-  const handleSign = (player, contract) => {
+  const handleSign = async (player, contract) => {
     setSigning(null);
     // Use submitOffer instead of signPlayer
-    actions.submitOffer(player.id, teamId, contract);
+    await actions.submitOffer(player.id, teamId, contract);
+    fetchFA(); // Refresh list to show updated status
     setFlash(`Offer submitted to ${player.name} — ${fmtSalary(contract.baseAnnual)} / ${contract.yearsTotal}yr`);
     setTimeout(() => setFlash(null), 3000);
   };
