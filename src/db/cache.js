@@ -179,16 +179,22 @@ export const cache = {
 
   // --- Season stats ---
 
-  getSeasonStat:    (playerId) => _seasonStats.get(playerId) ?? null,
+  // Always try String key first (that's what updateSeasonStat stores under),
+  // then fall back to the raw key for any pre-existing entries.
+  getSeasonStat:    (playerId) => _seasonStats.get(String(playerId))
+                                ?? _seasonStats.get(playerId)
+                                ?? null,
   /** Non-destructive read of all current-season stat entries. */
   getAllSeasonStats: ()        => [..._seasonStats.values()],
   updateSeasonStat: (playerId, teamId, partialTotals) => {
     const seasonId = _meta?.currentSeasonId;
     if (!seasonId) return;
-    let entry = _seasonStats.get(playerId);
+    // Always store under a String key so lookups with String(player.id) always hit.
+    const key = String(playerId);
+    let entry = _seasonStats.get(key);
     if (!entry) {
-      entry = { seasonId, playerId, teamId, totals: {} };
-      _seasonStats.set(playerId, entry);
+      entry = { seasonId, playerId: key, teamId, totals: {} };
+      _seasonStats.set(key, entry);
     }
     // Merge totals (numeric accumulation)
     for (const [k, v] of Object.entries(partialTotals)) {

@@ -734,6 +734,21 @@ async function handleAdvanceWeek(payload, id) {
     // Execute AI Cutdowns
     await AiLogic.executeAICutdowns();
 
+    // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
+    // on EVERY team before the first game is simulated. This guarantees that:
+    //   (a) Players who never appear in a box score still show gamesPlayed: 0
+    //       instead of returning nothing from the stats viewer.
+    //   (b) The stat cache keys are always String(player.id) so the Map lookups
+    //       in applyGameResultToCache and handleGetAllPlayerStats always match.
+    for (const team of cache.getAllTeams()) {
+      for (const player of cache.getPlayersByTeam(team.id)) {
+        const pid = String(player.id);
+        if (!cache.getSeasonStat(pid)) {
+          cache.updateSeasonStat(pid, team.id, { gamesPlayed: 0 });
+        }
+      }
+    }
+
     // Set phase to Regular Season, keep Week 1
     cache.setMeta({ phase: 'regular', currentWeek: 1 });
     await flushDirty();
@@ -1317,11 +1332,14 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
       return;
   }
 
-  const player = cache.getPlayer(playerId);
+  // Normalize the incoming playerId: Map lookup first, then string-comparison scan.
+  let player = cache.getPlayer(playerId);
+  if (!player) player = cache.getPlayer(String(playerId));
+  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const oldTeamId = player.teamId;
-  cache.updatePlayer(playerId, { teamId, contract, status: 'active', offers: [] });
+  cache.updatePlayer(player.id, { teamId, contract, status: 'active', offers: [] });
 
   // Update cap
   recalculateTeamCap(teamId);
@@ -1385,7 +1403,9 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
 // ── Handler: RELEASE_PLAYER ───────────────────────────────────────────────────
 
 async function handleReleasePlayer({ playerId, teamId }, id) {
-  const player = cache.getPlayer(playerId);
+  let player = cache.getPlayer(playerId);
+  if (!player) player = cache.getPlayer(String(playerId));
+  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // Calculate Dead Cap: Remaining prorated bonus
@@ -1407,15 +1427,16 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
     }
   }
 
-  cache.updatePlayer(playerId, { teamId: null, status: 'free_agent', offers: [] });
+  // Use player.id (the canonical key from the cache) for all subsequent writes.
+  cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
   const meta = cache.getMeta();
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId, details: { playerId },
+    week: meta.currentWeek, teamId, details: { playerId: player.id },
   });
-  await NewsEngine.logTransaction('RELEASE', { teamId, playerId });
+  await NewsEngine.logTransaction('RELEASE', { teamId, playerId: player.id });
 
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
@@ -1854,7 +1875,10 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   const draftState = meta?.draftState;
   if (!draftState) return;
 
-  const player = cache.getPlayer(playerId);
+  // Normalize the ID: try Map lookup first, then a string-comparison scan.
+  let player = cache.getPlayer(playerId);
+  if (!player) player = cache.getPlayer(String(playerId));
+  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) return;
 
   const pk = draftState.picks[pickIndex];
@@ -1990,14 +2014,29 @@ async function handleMakeDraftPick({ playerId }, id) {
       return;
   }
 
-  const player = cache.getPlayer(playerId);
+  // Normalize the incoming playerId to avoid type-mismatch misses (string vs number keys).
+  let player = cache.getPlayer(playerId);
+  if (!player) player = cache.getPlayer(String(playerId));
+  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player || player.status !== 'draft_eligible') {
     post(toUI.ERROR, { message: 'Player not available' }, id);
     return;
   }
 
-  _executeDraftPick(currentPickIndex, playerId, currentPick.teamId);
+  _executeDraftPick(currentPickIndex, player.id, currentPick.teamId);
   await flushDirty();
+
+  // Priority 3: Auto-transition when the last pick is made.
+  // If every pick slot is filled, skip the manual "Start New Season" button
+  // and advance directly to preseason so the game never gets stuck.
+  const postPickMeta = cache.getMeta();
+  if (
+    postPickMeta.draftState &&
+    postPickMeta.draftState.currentPickIndex >= postPickMeta.draftState.picks.length
+  ) {
+    return await handleStartNewSeason({}, id);
+  }
+
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
 }
 
@@ -2061,6 +2100,17 @@ async function handleSimDraftPick(payload, id) {
   }
 
   await flushDirty();
+
+  // Priority 3: If every pick slot has been filled (AI picked through to the end),
+  // auto-transition to preseason so the draft never gets permanently stuck.
+  const postSimMeta = cache.getMeta();
+  if (
+    postSimMeta.draftState &&
+    postSimMeta.draftState.currentPickIndex >= postSimMeta.draftState.picks.length
+  ) {
+    return await handleStartNewSeason({}, id);
+  }
+
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
 }
 
@@ -2726,14 +2776,31 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
 async function handleGetAllPlayerStats(_payload, id) {
   // Return a flat list of ALL active players with their current season stats attached.
   // This powers the dedicated "Stats" tab.
+  const meta = cache.getMeta();
   const allPlayers = cache.getAllPlayers();
   const allTeams = cache.getAllTeams();
   const teamMap = new Map();
   allTeams.forEach(t => teamMap.set(t.id, t.abbr));
 
+  // Priority 4: Build a merged stat map that includes both in-memory stats
+  // AND DB-persisted stats from the current season. After a save/load cycle,
+  // _seasonStats is cleared, so we must backfill from IndexedDB to avoid
+  // showing 0 for every player's stats.
+  const liveStatMap = new Map(
+    cache.getAllSeasonStats().map(s => [String(s.playerId), s])
+  );
+  if (meta?.currentSeasonId) {
+    const dbStats = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+    for (const s of dbStats) {
+      const key = String(s.playerId);
+      if (!liveStatMap.has(key)) liveStatMap.set(key, s);
+    }
+  }
+
   const stats = allPlayers.map(p => {
-    // 1. Get live season stats if available
-    const seasonStats = cache.getSeasonStat(p.id);
+    // 1. Get live season stats — prefer in-memory (freshest) then DB backfill.
+    const pid = String(p.id);
+    const seasonStats = liveStatMap.get(pid) ?? cache.getSeasonStat(p.id);
     const totals = seasonStats ? seasonStats.totals : {};
 
     // 2. Flatten relevant data

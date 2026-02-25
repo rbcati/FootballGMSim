@@ -1643,7 +1643,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         const updateRosterStats = (team, teamStats) => {
             if (!teamStats || !teamStats.players) return;
             team.roster.forEach(p => {
-                const pStats = teamStats.players[p.id];
+                // Use String(p.id) to match the stringified keys written by capturePlayerStats.
+                const pid = String(p.id);
+                const pStats = teamStats.players[pid] ?? teamStats.players[p.id];
                 if (pStats) {
                     initializePlayerStats(p);
                     p.stats.game = { ...pStats };
@@ -1866,12 +1868,15 @@ export function simulateBatch(games, options = {}) {
                 schemeNote = gameScores.schemeNote;
                 if (gameScores.injuries) gameInjuries = gameScores.injuries;
 
-                // Capture stats for box score
+                // Capture stats for box score.
+                // Always key by String(player.id) so numeric and string IDs
+                // (legacy saves vs. new base-36 IDs) produce consistent keys.
                 const capturePlayerStats = (roster) => {
                     const playerStats = {};
                     roster.forEach(player => {
                         if (player && player.stats && player.stats.game) {
-                            playerStats[player.id] = {
+                            const pid = String(player.id);
+                            playerStats[pid] = {
                                 name: player.name,
                                 pos: player.pos,
                                 ...player.stats.game
