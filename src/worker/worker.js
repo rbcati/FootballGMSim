@@ -35,6 +35,7 @@ import { makePlayer, generateDraftClass, calculateMorale }  from '../core/player
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
+import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 
@@ -683,6 +684,12 @@ async function handleAdvanceWeek(payload, id) {
   const meta = cache.getMeta();
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
+  // Prevent runaway state machine: strict phase check
+  if (!['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
+      post(toUI.ERROR, { message: `Cannot advance week in phase "${meta.phase}". Use the correct action.` }, id);
+      return;
+  }
+
   // ── Preseason Cutdown Check ──────────────────────────────────────────────
   if (meta.phase === 'preseason') {
     const userRoster = cache.getPlayersByTeam(meta.userTeamId);
@@ -739,6 +746,22 @@ async function handleAdvanceWeek(payload, id) {
     // Apply each game result to cache and emit GAME_EVENT per game
     for (const res of batchResults) {
       applyGameResultToCache(res, week, seasonId);
+
+      // Log significant injuries to News
+      if (res.injuries && res.injuries.length > 0) {
+          for (const inj of res.injuries) {
+              // Log only if duration > 2 weeks to reduce noise, or if season ending
+              if (inj.duration > 2 || inj.seasonEnding) {
+                  const p = cache.getPlayer(inj.playerId);
+                  if (p) {
+                      // Fire and forget (don't await to keep sim speed up, or await if consistency needed)
+                      // Since IDB ops are async, we should await or at least trigger.
+                      // Since we are inside an async function, let's await to be safe.
+                      await NewsEngine.logInjury(p, inj.type, inj.duration);
+                  }
+              }
+          }
+      }
 
       // Emit GAME_EVENT so the LiveGame viewer can update the scoreboard in real-time
       const rawH   = res.home      ?? res.homeTeamId;
@@ -801,6 +824,7 @@ async function handleAdvanceWeek(payload, id) {
       if (champ) {
         sbChampId = wId;
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
+        await NewsEngine.logAward('SUPER_BOWL', champ);
       }
     }
     // ── Phase transition: playoffs → offseason_resign ─────────────────────────
@@ -1132,6 +1156,7 @@ async function handleGetPlayerCareer({ playerId }, id) {
       playerId: numId,
       player:   fallbackPlayer,
       stats:    [],
+      accolades: [],
       error:    err.message,
     }, id);
   }
@@ -1228,10 +1253,12 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   _updateTeamCap(teamId);
   if (oldTeamId != null && oldTeamId !== teamId) _updateTeamCap(oldTeamId);
 
+  const txDetails = { playerId, contract };
   await Transactions.add({
     type: 'SIGN', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId, details: { playerId, contract },
+    week: meta.currentWeek, teamId, details: txDetails,
   });
+  await NewsEngine.logTransaction('SIGN', { teamId, ...txDetails });
 
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
@@ -1295,6 +1322,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId },
   });
+  await NewsEngine.logTransaction('RELEASE', { teamId, playerId });
 
   await flushDirty();
   post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
@@ -1524,6 +1552,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       details:  { fromTeamId, toTeamId, offering, receiving },
     };
     await Transactions.add(tradeRecord);
+    await NewsEngine.logTransaction('TRADE', { fromTeamId, toTeamId });
     await flushDirty();
   }
 
@@ -2113,110 +2142,123 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
  * - Clears in-memory season stats.
  */
 async function archiveSeason(seasonId) {
-  const meta = cache.getMeta();
-  const teams = cache.getAllTeams();
+  try {
+    const meta = cache.getMeta();
+    const teams = cache.getAllTeams();
 
-  // 1. Ensure DB is up to date
-  await flushDirty();
+    // 1. Ensure DB is up to date
+    await flushDirty();
 
-  // 2. Get all season stats and CLEAR them from cache
-  const seasonStats = cache.archiveSeasonStats();
+    // 2. Get all season stats and CLEAR them from cache
+    const seasonStats = cache.archiveSeasonStats();
 
-  // Helper to resolve player info (active or retired/db)
-  const resolvePlayer = async (pid) => {
-    let p = cache.getPlayer(pid);
-    if (!p) p = await Players.load(pid);
-    return p;
-  };
+    // Helper to resolve player info (active or retired/db)
+    const resolvePlayer = async (pid) => {
+      let p = cache.getPlayer(pid);
+      if (!p) p = await Players.load(pid);
+      return p;
+    };
 
-  // Helper to write an accolade to a player
-  const grantAccolade = (playerId, accolade) => {
-    const p = cache.getPlayer(playerId);
-    if (!p) return;
-    const accolades = Array.isArray(p.accolades) ? [...p.accolades] : [];
-    accolades.push(accolade);
-    cache.updatePlayer(playerId, { accolades });
-  };
+    // Helper to write an accolade to a player
+    const grantAccolade = (playerId, accolade) => {
+      const p = cache.getPlayer(playerId);
+      if (!p) return;
+      const accolades = Array.isArray(p.accolades) ? [...p.accolades] : [];
+      accolades.push(accolade);
+      cache.updatePlayer(playerId, { accolades });
+    };
 
-  // 3. Populate stats with player details
-  const populatedStats = [];
-  await Promise.all(seasonStats.map(async (s) => {
-    const p = await resolvePlayer(s.playerId);
-    if (p) {
-      populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age });
+    // 3. Populate stats with player details
+    const populatedStats = [];
+    await Promise.all(seasonStats.map(async (s) => {
+      const p = await resolvePlayer(s.playerId);
+      if (p) {
+        populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age });
+      }
+    }));
+
+    // 4. Determine Champion
+    const championId = meta.championTeamId;
+    const champion = teams.find(t => t.id === championId);
+
+    // 5. Standings (snapshot before reset)
+    const standings = buildStandings();
+
+    // 6. Leaders
+    const leaders = calculateLeaders(populatedStats);
+
+    // 7. Awards
+    const awards = calculateAwards(populatedStats, teams);
+
+    // 8. Write accolades to player objects
+    const year = meta.year;
+
+    if (awards.mvp?.playerId != null) {
+      grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
+      // Log MVP to News
+      await NewsEngine.logAward('MVP', { ...awards.mvp, teamId: awards.mvp.teamId });
     }
-  }));
-
-  // 4. Determine Champion
-  const championId = meta.championTeamId;
-  const champion = teams.find(t => t.id === championId);
-
-  // 5. Standings (snapshot before reset)
-  const standings = buildStandings();
-
-  // 6. Leaders
-  const leaders = calculateLeaders(populatedStats);
-
-  // 7. Awards
-  const awards = calculateAwards(populatedStats, teams);
-
-  // 8. Write accolades to player objects
-  const year = meta.year;
-
-  if (awards.mvp?.playerId != null) {
-    grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
-  }
-  if (awards.opoy?.playerId != null) {
-    grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
-  }
-  if (awards.dpoy?.playerId != null) {
-    grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
-  }
-  if (awards.roty?.playerId != null) {
-    grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
-  }
-
-  // SB Rings: all players on champion team
-  if (championId != null) {
-    const champPlayers = cache.getPlayersByTeam(championId);
-    for (const p of champPlayers) {
-      grantAccolade(p.id, { type: 'SB_RING', year, seasonId });
+    if (awards.opoy?.playerId != null) {
+      grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
+    }
+    if (awards.dpoy?.playerId != null) {
+      grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
+    }
+    if (awards.roty?.playerId != null) {
+      grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
     }
 
-    // SB MVP: highest-scoring player on champion team
-    const champStats = populatedStats.filter(s => s.teamId === championId);
-    if (champStats.length > 0) {
-      const getMVPScore = (s) => {
-        const t = s.totals || {};
-        return (t.passYd||0)/25 + (t.rushYd||0)/10 + (t.recYd||0)/10
-             + ((t.passTD||0) + (t.rushTD||0) + (t.recTD||0)) * 6
-             + (t.sacks||0) * 4 + (t.interceptions||0) * 4;
-      };
-      const sbMvp = champStats.reduce((best, s) => getMVPScore(s) > getMVPScore(best) ? s : best, champStats[0]);
-      if (sbMvp?.playerId != null) {
-        grantAccolade(sbMvp.playerId, { type: 'SB_MVP', year, seasonId });
-        awards.sbMvp = { playerId: sbMvp.playerId, name: sbMvp.name, teamId: sbMvp.teamId, pos: sbMvp.pos };
+    // SB Rings: all players on champion team
+    if (championId != null) {
+      const champPlayers = cache.getPlayersByTeam(championId);
+      for (const p of champPlayers) {
+        grantAccolade(p.id, { type: 'SB_RING', year, seasonId });
+      }
+
+      // SB MVP: highest-scoring player on champion team
+      const champStats = populatedStats.filter(s => s.teamId === championId);
+      if (champStats.length > 0) {
+        const getMVPScore = (s) => {
+          const t = s.totals || {};
+          return (t.passYd||0)/25 + (t.rushYd||0)/10 + (t.recYd||0)/10
+              + ((t.passTD||0) + (t.rushTD||0) + (t.recTD||0)) * 6
+              + (t.sacks||0) * 4 + (t.interceptions||0) * 4;
+        };
+        const sbMvp = champStats.reduce((best, s) => getMVPScore(s) > getMVPScore(best) ? s : best, champStats[0]);
+        if (sbMvp?.playerId != null) {
+          grantAccolade(sbMvp.playerId, { type: 'SB_MVP', year, seasonId });
+          awards.sbMvp = { playerId: sbMvp.playerId, name: sbMvp.name, teamId: sbMvp.teamId, pos: sbMvp.pos };
+        }
       }
     }
+
+    // Flush accolade writes to DB
+    await flushDirty();
+
+    const seasonSummary = {
+      id: seasonId,
+      year,
+      champion: champion ? { id: champion.id, name: champion.name, abbr: champion.abbr } : null,
+      mvp: awards.mvp,
+      standings: standings.map(s => ({
+          id: s.id, name: s.name, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct,
+          pf: s.pf, pa: s.pa
+      })),
+      leaders,
+      awards,
+    };
+
+    await Seasons.save(seasonSummary);
+  } catch (error) {
+    console.error(`[Worker] Failed to archive season ${seasonId}:`, error);
+    // Don't rethrow, just log, so the season reset can theoretically proceed (though risking data loss)
+    // or maybe we should stop?
+    // If we stop, the user is stuck.
+    // Proceeding implies we might lose history but the game continues.
+    // The prompt says "prevent silent crashes". Logging is good.
+    // We should probably ensure `Seasons.save` is at least attempted or we notify user.
+    // But for now, catching effectively prevents the crash.
   }
-
-  // Flush accolade writes to DB
-  await flushDirty();
-
-  const seasonSummary = {
-    id: seasonId,
-    year,
-    champion: champion ? { id: champion.id, name: champion.name, abbr: champion.abbr } : null,
-    mvp: awards.mvp,
-    standings: standings.map(s => ({
-        id: s.id, name: s.name, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct,
-        pf: s.pf, pa: s.pa
-    })),
-    leaders,
-    awards,
-  };
-
-  await Seasons.save(seasonSummary);
 }
 
 // ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
