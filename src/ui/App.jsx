@@ -131,6 +131,9 @@ export default function App() {
     );
   }
 
+  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
+
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
 
@@ -155,12 +158,18 @@ export default function App() {
           <button
             className="btn btn-primary"
             onClick={handleAdvanceWeek}
-            disabled={busy || simulating}
+            disabled={busy || simulating || isCutdownRequired}
+            title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
+            style={isCutdownRequired ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
           >
             {simulating
               ? `Simulating… ${simProgress}%`
               : busy
               ? 'Working…'
+              : isCutdownRequired
+              ? `Cut to 53 (${userTeam?.rosterCount})`
+              : league.phase === 'preseason'
+              ? 'Start Regular Season'
               : `Advance Week ${league.week}`}
           </button>
           <button className="btn" onClick={() => actions.save()} disabled={busy}>
