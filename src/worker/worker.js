@@ -159,6 +159,17 @@ function buildRosterView(teamId) {
   });
 }
 
+// ── iOS PWA save-wipe guard ───────────────────────────────────────────────────
+//
+// On iOS Safari PWA, the worker can restart after the app is backgrounded.
+// The new worker instance starts with an empty cache.  If flushDirty() were
+// allowed to run before a save is explicitly loaded (via LOAD_SAVE or NEW_LEAGUE),
+// it would write an empty state to IndexedDB, wiping the player's save.
+//
+// _saveIsExplicitlyLoaded is ONLY set to true by handleLoadSave / handleNewLeague.
+// Every other path that might call flushDirty() is therefore safely blocked.
+let _saveIsExplicitlyLoaded = false;
+
 // ── DB flush ─────────────────────────────────────────────────────────────────
 
 /**
@@ -173,13 +184,18 @@ function buildRosterView(teamId) {
  *    key path did not yield a value."
  */
 async function flushDirty() {
+  // PRIMARY iOS GUARD: Never flush until a save has been explicitly loaded or created.
+  // This is the bootloader protection — the worker must never write an empty state.
+  if (!_saveIsExplicitlyLoaded) {
+    console.warn('[Worker] flushDirty blocked: no save explicitly loaded/created yet. Aborting DB write.');
+    return;
+  }
+
   if (!cache.isDirty()) return;
 
-  // SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
+  // SECONDARY SAFETY CHECK: Never flush if cache isn't fully loaded (prevent empty overwrite)
   if (!cache.isLoaded()) {
       console.warn('[Worker] flushDirty called but cache is not loaded. Aborting DB write.');
-      // Do NOT drain dirty flags so we don't lose pending changes if it's just a timing issue,
-      // though typically this means we shouldn't have mutated cache at all.
       return;
   }
 
@@ -314,6 +330,9 @@ async function handleLoadSave({ leagueId }, id) {
     const found = await loadSave(); // Loads into cache
 
     if (found) {
+      // Arm the flush guard — save is now confirmed loaded.
+      _saveIsExplicitlyLoaded = true;
+
       // Update lastPlayed in Global DB
       const meta = cache.getMeta();
       const userTeam = cache.getTeam(meta.userTeamId);
@@ -443,6 +462,9 @@ async function handleNewLeague(payload, id) {
     // Store schedule in meta (it's small: just matchup IDs, no objects)
     const slimSchedule = slimifySchedule(league.schedule, league.teams);
     cache.setMeta({ schedule: slimSchedule });
+
+    // Arm the flush guard — new league is now created and ready for writes.
+    _saveIsExplicitlyLoaded = true;
 
     // Persist everything
     await Promise.all([
@@ -781,7 +803,10 @@ async function handleAdvanceWeek(payload, id) {
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
       }
     }
-    cache.setMeta({ phase: 'offseason', championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null });
+    // ── Phase transition: playoffs → offseason_resign ─────────────────────────
+    // offseason_resign is the contract-extension window (User + AI renew
+    // expiring deals before the FA bidding phase begins).
+    cache.setMeta({ phase: 'offseason_resign', championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null, freeAgencyState: null });
 
   } else if (isPlayoffWeek) {
     // ── Regular playoff round → advance bracket to next round ───────────────
@@ -948,11 +973,16 @@ function applyGameResultToCache(result, week, seasonId) {
 
   // ── 3. Aggregate per-player game stats into seasonal totals ───────────────
   // result.boxScore shape: { home: {[pid]: {name, pos, stats:{...}}}, away: {...} }
+  //
+  // AWARD RACES FIX: Always inject `gamesPlayed: 1` for every player who
+  // appears in a box score.  calculateAwardRaces() filters on
+  // `totals.gamesPlayed >= MIN_GAMES_AWARD` — if the simulator never emits
+  // this field the accumulator stays 0 and ALL players are excluded.
   const aggregateSide = (teamId, boxSide) => {
     if (!boxSide) return;
     for (const [pid, entry] of Object.entries(boxSide)) {
       if (entry?.stats) {
-        cache.updateSeasonStat(Number(pid), teamId, entry.stats);
+        cache.updateSeasonStat(Number(pid), teamId, { ...entry.stats, gamesPlayed: 1 });
       }
     }
   };
@@ -1041,31 +1071,70 @@ async function handleGetAllSeasons(payload, id) {
 // ── Handler: GET_PLAYER_CAREER ────────────────────────────────────────────────
 
 async function handleGetPlayerCareer({ playerId }, id) {
+  // Validate the incoming playerId — an undefined/NaN id would cause IDB errors.
   const numId = Number(playerId);
-  const archivedStats = await PlayerStats.byPlayer(numId);
-  const player = cache.getPlayer(numId) ?? await Players.load(numId);
+  if (!Number.isFinite(numId)) {
+    post(toUI.PLAYER_CAREER, { playerId: numId, player: null, stats: [], error: 'Invalid playerId' }, id);
+    return;
+  }
 
-  // The in-memory stat is always the freshest version for the current season.
-  // When stats have been partially flushed to the DB mid-season, both the DB
-  // record AND the in-memory accumulator exist for the same seasonId.  We must
-  // use the in-memory version (more up-to-date) and discard the DB copy to
-  // prevent double-counting and stale data in the Player Profile.
-  const liveSeasonStat  = cache.getSeasonStat(numId);
-  const currentSeasonId = cache.getMeta()?.currentSeasonId;
+  try {
+    // Check cache first (fastest path — always returns the live object for active players).
+    let player = cache.getPlayer(numId);
 
-  // Strip any DB entry for the current season when we have a live version.
-  const historicalStats = (archivedStats ?? []).filter(
-    s => !(liveSeasonStat && currentSeasonId && s.seasonId === currentSeasonId)
-  );
+    // Rookies and recently released players may not be in the hot cache.
+    // Fall back to DB without throwing if the record doesn't exist.
+    if (!player) {
+      player = await Players.load(numId).catch(() => null);
+    }
 
-  const allStats = [...historicalStats];
-  if (liveSeasonStat) allStats.push(liveSeasonStat);
+    // Fetch historical (archived) stats from DB.
+    // For rookies this is an empty array — that is fine.
+    let archivedStats = [];
+    try {
+      archivedStats = (await PlayerStats.byPlayer(numId)) ?? [];
+    } catch (dbErr) {
+      console.warn('[Worker] GET_PLAYER_CAREER: Could not load archived stats for', numId, dbErr.message);
+      archivedStats = [];
+    }
 
-  post(toUI.PLAYER_CAREER, {
-    playerId: numId,
-    player:   player ?? null,
-    stats:    allStats,
-  }, id);
+    // The in-memory stat accumulator is always the freshest version for the
+    // current season.  If the DB was flushed mid-season we'd have both a DB
+    // record AND the live accumulator for the same seasonId.  Use the live
+    // version to prevent double-counting.
+    const liveSeasonStat  = cache.getSeasonStat(numId);  // null if rookie who hasn't played
+    const currentSeasonId = cache.getMeta()?.currentSeasonId ?? null;
+
+    // Strip any DB entry for the current season when we have a live version.
+    const historicalStats = archivedStats.filter(s => {
+      if (!s || s.seasonId == null) return false;          // drop corrupt entries
+      if (liveSeasonStat && currentSeasonId && s.seasonId === currentSeasonId) return false;
+      return true;
+    });
+
+    const allStats = [...historicalStats];
+    if (liveSeasonStat) allStats.push(liveSeasonStat);
+
+    // Always respond — even if player is null or stats are empty.
+    // The UI decides how to render the "no data" state; the worker must not crash.
+    post(toUI.PLAYER_CAREER, {
+      playerId: numId,
+      player:   player ?? null,
+      stats:    allStats,
+    }, id);
+
+  } catch (err) {
+    console.error('[Worker] GET_PLAYER_CAREER unhandled error for player', numId, err);
+    // Even on a hard error, send back whatever the cache has so the UI
+    // can at least show the player card without crashing.
+    const fallbackPlayer = cache.getPlayer(numId) ?? null;
+    post(toUI.PLAYER_CAREER, {
+      playerId: numId,
+      player:   fallbackPlayer,
+      stats:    [],
+      error:    err.message,
+    }, id);
+  }
 }
 
 // ── Handler: GET_BOX_SCORE ────────────────────────────────────────────────────
@@ -1121,6 +1190,7 @@ async function handleSaveNow(payload, id) {
 // ── Handler: RESET_LEAGUE ─────────────────────────────────────────────────────
 
 async function handleResetLeague(payload, id) {
+  _saveIsExplicitlyLoaded = false;
   await clearAllData();
   cache.reset();
   post(toUI.READY, { hasSave: false }, id);
@@ -1138,7 +1208,7 @@ async function handleSetUserTeam({ teamId }, id) {
 
 async function handleSignPlayer({ playerId, teamId, contract }, id) {
   const meta = cache.getMeta();
-  const limit = (meta.phase === 'offseason' || meta.phase === 'preseason')
+  const limit = (['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'].includes(meta.phase))
       ? Constants.ROSTER_LIMITS.OFFSEASON
       : Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
@@ -1659,7 +1729,8 @@ async function handleStartDraft(payload, id) {
     return;
   }
 
-  if (meta.phase !== 'offseason') {
+  // Accept 'draft' (new pipeline) and 'offseason' (legacy saves).
+  if (!['draft', 'offseason'].includes(meta.phase)) {
     post(toUI.DRAFT_STATE, { notStarted: true }, id);
     return;
   }
@@ -1916,7 +1987,8 @@ function calculateAwards(stats, teams) {
  */
 async function handleAdvanceOffseason(payload, id) {
   const meta = cache.getMeta();
-  if (!meta || meta.phase !== 'offseason') {
+  // Accept both new 'offseason_resign' phase and legacy 'offseason' for save compatibility.
+  if (!meta || !['offseason_resign', 'offseason'].includes(meta.phase)) {
     post(toUI.ERROR, { message: 'Not in offseason phase' }, id);
     return;
   }
@@ -1964,11 +2036,13 @@ async function handleAdvanceOffseason(payload, id) {
     }
   }
 
-  // Initialize Free Agency Phase
-  // DO NOT RUN executeAIFreeAgency instantly anymore.
+  // ── Phase transition: offseason_resign → free_agency ─────────────────────
+  // Initialize the FA bidding window and advance the phase so the UI can gate
+  // on the correct screen (FA panel, not the resign panel).
   cache.setMeta({
       offseasonProgressionDone: true,
-      freeAgencyState: { day: 1, maxDays: 5, complete: false }
+      phase: 'free_agency',
+      freeAgencyState: { day: 1, maxDays: 5, complete: false },
   });
 
   await flushDirty();
@@ -1993,7 +2067,13 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     const { day, maxDays } = meta.freeAgencyState;
 
     if (day > maxDays) {
+        // FA is already over — ensure the phase advanced correctly (idempotent).
+        if (meta.phase === 'free_agency') {
+            cache.setMeta({ phase: 'draft' });
+            await flushDirty();
+        }
         post(toUI.NOTIFICATION, { level: 'info', message: 'Free Agency period is over.' });
+        post(toUI.STATE_UPDATE, buildViewState());
         return;
     }
 
@@ -2004,12 +2084,16 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     const nextDay = day + 1;
     const isComplete = nextDay > maxDays;
 
+    // ── Phase transition: free_agency → draft ────────────────────────────────
+    // When the last FA day completes, advance the phase so the UI gates
+    // correctly onto the draft screen.
     cache.setMeta({
         freeAgencyState: {
             ...meta.freeAgencyState,
             day: nextDay,
-            complete: isComplete
-        }
+            complete: isComplete,
+        },
+        ...(isComplete ? { phase: 'draft' } : {}),
     });
 
     await flushDirty();
@@ -2140,6 +2224,13 @@ async function archiveSeason(seasonId) {
 async function handleStartNewSeason(payload, id) {
   const meta = cache.getMeta();
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  // Gate: new season can only start from the draft phase (or legacy 'offseason').
+  // This prevents accidental season resets from wrong phases.
+  if (!['draft', 'offseason'].includes(meta.phase)) {
+    post(toUI.ERROR, { message: `Cannot start new season from phase "${meta.phase}". Complete the draft first.` }, id);
+    return;
+  }
 
   // Archive the completed season (if any) before resetting
   if (meta.currentSeasonId) {

@@ -77,19 +77,40 @@ export function openDB() {
   const dbName = `${LEAGUE_DB_PREFIX}${_activeLeagueId}`;
 
   _leagueOpening = new Promise((resolve, reject) => {
+    let _settled = false;
+    const settle = (fn, val) => { if (_settled) return; _settled = true; fn(val); };
+
+    // iOS/Safari guard: IDB open can hang indefinitely after backgrounding.
+    // Reject after 15 s so the UI can surface a recoverable error.
+    const _timer = setTimeout(() => {
+      _leagueOpening = null;
+      settle(reject, new Error('IDB open timed out — please reload the app.'));
+    }, 15000);
+
     const req = indexedDB.open(dbName, LEAGUE_DB_VERSION);
 
     req.onerror = () => {
+      clearTimeout(_timer);
       _leagueOpening = null;
-      reject(req.error);
+      settle(reject, req.error);
+    };
+
+    // onblocked fires on iOS/WebKit when another tab holds a connection at an older
+    // version. Close our own stale handle (if any) and wait for onsuccess to fire.
+    req.onblocked = () => {
+      console.warn('[DB] League DB open blocked — closing stale connection if present.');
+      if (_leagueDB) { _leagueDB.close(); _leagueDB = null; }
     };
 
     req.onsuccess = () => {
+      clearTimeout(_timer);
       _leagueDB = req.result;
       _leagueOpening = null;
-      _leagueDB.onversionchange = () => { _leagueDB.close(); _leagueDB = null; };
-      _leagueDB.onclose = () => { _leagueDB = null; };
-      resolve(_leagueDB);
+      // Reset the opening promise reference when the connection is force-closed
+      // (e.g. iOS backgrounding the PWA) so the next call to openDB() reopens cleanly.
+      _leagueDB.onversionchange = () => { _leagueDB.close(); _leagueDB = null; _leagueOpening = null; };
+      _leagueDB.onclose       = () => { _leagueDB = null; _leagueOpening = null; };
+      settle(resolve, _leagueDB);
     };
 
     req.onupgradeneeded = (event) => {
@@ -158,19 +179,34 @@ export function openGlobalDB() {
   if (_globalOpening) return _globalOpening;
 
   _globalOpening = new Promise((resolve, reject) => {
+    let _settled = false;
+    const settle = (fn, val) => { if (_settled) return; _settled = true; fn(val); };
+
+    const _timer = setTimeout(() => {
+      _globalOpening = null;
+      settle(reject, new Error('Global IDB open timed out — please reload the app.'));
+    }, 15000);
+
     const req = indexedDB.open(GLOBAL_DB_NAME, GLOBAL_DB_VERSION);
 
     req.onerror = () => {
+      clearTimeout(_timer);
       _globalOpening = null;
-      reject(req.error);
+      settle(reject, req.error);
+    };
+
+    req.onblocked = () => {
+      console.warn('[DB] Global DB open blocked — closing stale connection if present.');
+      if (_globalDB) { _globalDB.close(); _globalDB = null; }
     };
 
     req.onsuccess = () => {
+      clearTimeout(_timer);
       _globalDB = req.result;
       _globalOpening = null;
-      _globalDB.onversionchange = () => { _globalDB.close(); _globalDB = null; };
-      _globalDB.onclose = () => { _globalDB = null; };
-      resolve(_globalDB);
+      _globalDB.onversionchange = () => { _globalDB.close(); _globalDB = null; _globalOpening = null; };
+      _globalDB.onclose       = () => { _globalDB = null; _globalOpening = null; };
+      settle(resolve, _globalDB);
     };
 
     req.onupgradeneeded = (event) => {
