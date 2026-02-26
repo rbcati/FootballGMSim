@@ -1248,6 +1248,19 @@ async function handleGetPlayerCareer({ playerId }, id) {
       return;
     }
 
+    // ── 2c. Fast-path: draft-eligible players have no career stats ─────────
+    // Return immediately with an empty stats array so the UI renders their
+    // profile cleanly instead of attempting (and failing) a historical DB lookup.
+    if (player && player.status === 'draft_eligible') {
+      post(toUI.PLAYER_CAREER, {
+        playerId: strId,
+        player,
+        stats: [],
+        isDraftProspect: true,
+      }, id);
+      return;
+    }
+
     // ── 3. Historical stats from DB ─────────────────────────────────────────
     let archivedStats = [];
     try {
@@ -1611,42 +1624,52 @@ async function handleGetAvailableCoaches(payload, id) {
 }
 
 async function handleHireCoach({ teamId, coach, role }, id) {
-    const team = cache.getTeam(Number(teamId));
+    const numId = Number(teamId);
+    const team = cache.getTeam(numId);
     if (!team) {
         post(toUI.ERROR, { message: 'Team not found' }, id);
         return;
     }
 
-    if (!team.staff) team.staff = {};
+    const staff = { ...(team.staff || {}) };
 
     // Assign coach to slot
-    if (role === 'HC') team.staff.headCoach = coach;
-    else if (role === 'OC') team.staff.offCoordinator = coach;
-    else if (role === 'DC') team.staff.defCoordinator = coach;
+    if (role === 'HC') staff.headCoach = coach;
+    else if (role === 'OC') staff.offCoordinator = coach;
+    else if (role === 'DC') staff.defCoordinator = coach;
+
+    // Build the update patch — must use cache.updateTeam() to mark dirty
+    const patch = { staff };
 
     // If HC, update strategies to match their schemes
     if (role === 'HC') {
-        if (!team.strategies) team.strategies = {};
-        team.strategies.offense = coach.offScheme;
-        team.strategies.defense = coach.defScheme;
+        patch.strategies = {
+            ...(team.strategies || {}),
+            offense: coach.offScheme,
+            defense: coach.defScheme,
+        };
     }
 
-    await flushDirty(); // Should trigger update of team record
+    cache.updateTeam(numId, patch);
+    await flushDirty();
 
     // Return updated roster data which includes staff
-    await handleGetRoster({ teamId }, id);
+    await handleGetRoster({ teamId: numId }, id);
 }
 
 async function handleFireCoach({ teamId, role }, id) {
-    const team = cache.getTeam(Number(teamId));
+    const numId = Number(teamId);
+    const team = cache.getTeam(numId);
     if (!team || !team.staff) return;
 
-    if (role === 'HC') team.staff.headCoach = null;
-    else if (role === 'OC') team.staff.offCoordinator = null;
-    else if (role === 'DC') team.staff.defCoordinator = null;
+    const staff = { ...team.staff };
+    if (role === 'HC') staff.headCoach = null;
+    else if (role === 'OC') staff.offCoordinator = null;
+    else if (role === 'DC') staff.defCoordinator = null;
 
+    cache.updateTeam(numId, { staff });
     await flushDirty();
-    await handleGetRoster({ teamId }, id);
+    await handleGetRoster({ teamId: numId }, id);
 }
 
 // ── Handler: EXTENSION ──────────────────────────────────────────────────────

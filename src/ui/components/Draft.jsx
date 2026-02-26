@@ -9,8 +9,13 @@
  *  1. On mount — fetches current draft state (may be "not started yet").
  *  2. Pre-draft  — "Advance Offseason" (progression/retirements) → "Start Draft".
  *  3. AI on clock — "Sim to My Pick" auto-advances all AI picks.
- *  4. User on clock — prospect rows show a "Draft" button.
+ *  4. User on clock — prospect rows show a "Draft This Player" button.
  *  5. Draft complete — summary + "Start New Season" button.
+ *
+ * Priority 2 fixes:
+ *  - Explicit "Draft This Player" button on every prospect row when user is on clock
+ *  - Responsive grid (single column on mobile via .draft-board-grid CSS)
+ *  - Data-dense .data-table styling with overflow-x-auto for mobile
  *
  * Receives { league, actions } from LeagueDashboard (same shape as other tabs).
  */
@@ -21,37 +26,26 @@ import PlayerProfile from './PlayerProfile';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-const POSITIONS = ['QB','RB','WR','TE','OL','DL','LB','CB','S','K','P'];
-
 function ovrColor(ovr) {
-  if (ovr >= 85) return 'var(--success)';
-  if (ovr >= 75) return 'var(--accent)';
-  if (ovr >= 65) return 'var(--warning)';
-  return 'var(--danger)';
+  if (ovr >= 90) return '#34C759';
+  if (ovr >= 80) return '#30D158';
+  if (ovr >= 70) return '#0A84FF';
+  if (ovr >= 60) return '#FF9F0A';
+  return '#FF453A';
 }
 
 function OvrBadge({ ovr }) {
+  const c = ovrColor(ovr);
   return (
     <span style={{
-      display: 'inline-block',
-      minWidth: 32,
-      padding: '2px 4px',
-      borderRadius: 'var(--radius-pill)',
-      background: `${ovrColor(ovr)}22`,
-      color: ovrColor(ovr),
-      fontWeight: 700,
-      fontSize: 'var(--text-xs)',
-      textAlign: 'center',
-      border: `1px solid ${ovrColor(ovr)}55`,
+      display: 'inline-block', minWidth: 26,
+      padding: '0 3px', borderRadius: 3,
+      background: c + '22', color: c,
+      fontWeight: 800, fontSize: 11, textAlign: 'center',
     }}>
       {ovr}
     </span>
   );
-}
-
-function SortIcon({ active, dir }) {
-  if (!active) return <span style={{ color: 'var(--text-subtle)', marginLeft: 3 }}>⇅</span>;
-  return <span style={{ color: 'var(--accent)', marginLeft: 3 }}>{dir > 0 ? '↑' : '↓'}</span>;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -240,32 +234,48 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
   const posOptions = useMemo(() =>
     [...new Set(prospects.map(p => p.pos))].sort(), [prospects]);
 
+  const SortTh = ({ label, sKey, style = {} }) => {
+    const active = sortKey === sKey;
+    return (
+      <th
+        onClick={() => toggleSort(sKey)}
+        style={{
+          cursor: 'pointer', userSelect: 'none',
+          color: active ? 'var(--accent)' : undefined,
+          fontWeight: active ? 800 : undefined,
+          ...style,
+        }}
+      >
+        {label}{active ? (sortDir > 0 ? ' ▲' : ' ▼') : ''}
+      </th>
+    );
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 'var(--space-5)', alignItems: 'start' }}>
+    <div className="draft-board-grid">
 
       {/* ── Left Panel: Draft Board ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
 
         {/* Current pick clock */}
-        <div className="card" style={{ padding: 'var(--space-4)', overflow: 'hidden' }}>
+        <div className="card" style={{ padding: 'var(--space-3)', overflow: 'hidden' }}>
           {isDraftComplete ? (
-            <div style={{ textAlign: 'center', padding: 'var(--space-3)' }}>
-              <div style={{ fontSize: '1.4rem', marginBottom: 4 }}>🏈</div>
-              <div style={{ fontWeight: 800, color: 'var(--success)' }}>Draft Complete</div>
+            <div style={{ textAlign: 'center', padding: 'var(--space-2)' }}>
+              <div style={{ fontWeight: 800, color: 'var(--success)', fontSize: 14 }}>Draft Complete</div>
             </div>
           ) : (
             <>
               <div style={{
-                fontSize: 'var(--text-xs)', fontWeight: 700,
+                fontSize: 10, fontWeight: 700,
                 textTransform: 'uppercase', letterSpacing: '1px',
-                color: 'var(--text-muted)', marginBottom: 'var(--space-2)',
+                color: 'var(--text-muted)', marginBottom: 'var(--space-1)',
               }}>
                 On the Clock
               </div>
-              <div style={{ fontWeight: 800, fontSize: 'var(--text-xl)', color: 'var(--text)', marginBottom: 4 }}>
+              <div style={{ fontWeight: 800, fontSize: 'var(--text-xl)', color: 'var(--text)', marginBottom: 2 }}>
                 {currentPick?.teamAbbr ?? '???'}
               </div>
-              <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', marginBottom: 'var(--space-3)' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 'var(--space-2)' }}>
                 {currentPick?.teamName ?? '—'}
               </div>
               <div style={{
@@ -273,13 +283,13 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
                 background: isUserPick ? 'var(--accent)22' : 'var(--surface-strong)',
                 border: `1px solid ${isUserPick ? 'var(--accent)' : 'var(--hairline)'}`,
                 color: isUserPick ? 'var(--accent)' : 'var(--text-muted)',
-                fontWeight: 700, fontSize: 'var(--text-xs)',
-                display: 'inline-block', marginBottom: 'var(--space-3)',
+                fontWeight: 700, fontSize: 10,
+                display: 'inline-block', marginBottom: 'var(--space-2)',
               }}>
                 {isUserPick ? '★ YOUR PICK' : 'AI PICKING'}
               </div>
               <div style={{
-                fontSize: 'var(--text-sm)', color: 'var(--text)',
+                fontSize: 11, color: 'var(--text)',
                 display: 'flex', justifyContent: 'space-between',
               }}>
                 <span>Round {currentPick?.round}</span>
@@ -305,43 +315,40 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
         {!isDraftComplete && upcomingPicks.length > 0 && (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{
-              padding: 'var(--space-2) var(--space-3)',
+              padding: '3px 8px',
               background: 'var(--surface-strong)',
               borderBottom: '1px solid var(--hairline)',
-              fontSize: 'var(--text-xs)', fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)',
             }}>
               Pick Order
             </div>
-            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
               {upcomingPicks.map((pk, i) => (
                 <div
                   key={pk.overall}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-                    padding: 'var(--space-2) var(--space-3)',
-                    borderBottom: '1px solid var(--hairline)',
+                    padding: '3px 8px',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
                     background: i === 0
-                      ? (pk.isUser ? 'var(--accent)11' : 'var(--surface-strong)')
+                      ? (pk.isUser ? 'rgba(10,132,255,0.06)' : 'var(--surface-strong)')
                       : 'transparent',
                     fontWeight: i === 0 ? 700 : 400,
                   }}
                 >
-                  <span style={{
-                    minWidth: 24, textAlign: 'center',
-                    fontSize: 'var(--text-xs)', color: 'var(--text-subtle)',
-                  }}>
+                  <span style={{ minWidth: 22, textAlign: 'center', fontSize: 10, color: 'var(--text-subtle)' }}>
                     {pk.overall}
                   </span>
                   <span style={{
-                    flex: 1, fontSize: 'var(--text-xs)',
+                    flex: 1, fontSize: 11,
                     color: pk.isUser ? 'var(--accent)' : 'var(--text)',
                     fontWeight: pk.isUser ? 700 : 400,
                   }}>
                     {pk.teamAbbr}
                     {pk.isUser && <span style={{ marginLeft: 4 }}>★</span>}
                   </span>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-subtle)' }}>
                     R{pk.round}
                   </span>
                 </div>
@@ -354,25 +361,25 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
         {completedPicks.length > 0 && (
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{
-              padding: 'var(--space-2) var(--space-3)',
+              padding: '3px 8px',
               background: 'var(--surface-strong)',
               borderBottom: '1px solid var(--hairline)',
-              fontSize: 'var(--text-xs)', fontWeight: 700,
+              fontSize: 10, fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)',
             }}>
               Recent Picks
             </div>
-            <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 200, overflowY: 'auto' }}>
               {[...completedPicks].reverse().slice(0, 10).map(pk => (
                 <div
                   key={pk.overall}
                   style={{
-                    padding: 'var(--space-2) var(--space-3)',
-                    borderBottom: '1px solid var(--hairline)',
-                    fontSize: 'var(--text-xs)',
+                    padding: '3px 8px',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    fontSize: 11,
                   }}
                 >
-                  <div style={{ color: 'var(--text-muted)', marginBottom: 1 }}>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: 1, fontSize: 10 }}>
                     #{pk.overall} {pk.teamAbbr}
                   </div>
                   <div style={{ fontWeight: 600, color: 'var(--text)' }}>
@@ -389,86 +396,78 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
       </div>
 
       {/* ── Main Panel: Prospects Table ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
 
-        {/* User pick banner */}
+        {/* User pick banner — bold call to action */}
         {isUserPick && !isDraftComplete && (
           <div style={{
             padding: 'var(--space-3) var(--space-4)',
-            background: 'var(--accent)18',
-            border: '1px solid var(--accent)',
+            background: 'rgba(10,132,255,0.1)',
+            border: '2px solid var(--accent)',
             borderRadius: 'var(--radius-md)',
             fontWeight: 700, color: 'var(--accent)',
             display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
+            fontSize: 13,
           }}>
             <span style={{ fontSize: '1.1rem' }}>★</span>
-            You're on the clock! Round {currentPick?.round}, Pick #{currentPick?.overall} — select a prospect below.
+            You're on the clock! Round {currentPick?.round}, Pick #{currentPick?.overall} — click "Draft This Player" to make your selection.
           </div>
         )}
 
         {/* Filters */}
-        <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
           <input
             type="text"
             placeholder="Search name…"
             value={nameFilter}
             onChange={e => setNameFilter(e.target.value)}
             style={{
-              padding: '5px 10px',
+              padding: '4px 8px',
               background: 'var(--surface-strong)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--radius-sm)',
               color: 'var(--text)',
-              fontSize: 'var(--text-sm)',
-              width: 180,
+              fontSize: 12,
+              width: 150,
             }}
           />
           <select
             value={filterPos}
             onChange={e => setFilterPos(e.target.value)}
             style={{
-              padding: '5px 10px',
+              padding: '4px 8px',
               background: 'var(--surface-strong)',
               border: '1px solid var(--hairline)',
               borderRadius: 'var(--radius-sm)',
               color: 'var(--text)',
-              fontSize: 'var(--text-sm)',
+              fontSize: 12,
             }}
           >
-            <option value="">All Positions</option>
+            <option value="">All Pos</option>
             {posOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 'auto' }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 'auto' }}>
             {sortedProspects.length} prospect{sortedProspects.length !== 1 ? 's' : ''}
           </span>
         </div>
 
-        {/* Prospects table */}
+        {/* Prospects table — data-dense */}
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-wrapper" style={{ overflowX: 'auto' }}>
-            <table className="standings-table" style={{ width: '100%', fontSize: 'var(--text-sm)' }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 'calc(100vh - 240px)', overflowY: 'auto' }}>
+            <table className="data-table" style={{ minWidth: 580 }}>
               <thead>
                 <tr>
-                  <th style={{ width: 36, textAlign: 'center', paddingLeft: 'var(--space-3)' }}>#</th>
-                  {[
-                    { key: 'pos',       label: 'POS' },
-                    { key: 'name',      label: 'NAME' },
-                    { key: 'traits',    label: 'TRAITS' },
-                    { key: 'age',       label: 'AGE' },
-                    { key: 'ovr',       label: 'OVR' },
-                    { key: 'potential', label: 'POT' },
-                    { key: 'college',   label: 'COLLEGE' },
-                  ].map(col => (
-                    <th
-                      key={col.key}
-                      onClick={() => toggleSort(col.key)}
-                      style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
-                    >
-                      {col.label}<SortIcon active={sortKey === col.key} dir={sortDir} />
-                    </th>
-                  ))}
+                  <th style={{ paddingLeft: 8, textAlign: 'center', width: 28 }}>#</th>
+                  <SortTh label="Pos" sKey="pos" style={{ textAlign: 'center', width: 36 }} />
+                  <SortTh label="Name" sKey="name" style={{ textAlign: 'left' }} />
+                  <th style={{ textAlign: 'center' }}>Traits</th>
+                  <SortTh label="Age" sKey="age" style={{ textAlign: 'center', width: 32 }} />
+                  <SortTh label="OVR" sKey="ovr" style={{ textAlign: 'center', width: 36 }} />
+                  <SortTh label="Pot" sKey="potential" style={{ textAlign: 'center', width: 36 }} />
+                  <SortTh label="College" sKey="college" style={{ textAlign: 'left' }} />
+                  {/* ACTION column always shown when user is on the clock */}
                   {isUserPick && !isDraftComplete && (
-                    <th style={{ textAlign: 'right', paddingRight: 'var(--space-4)' }}>ACTION</th>
+                    <th style={{ textAlign: 'center', minWidth: 110 }}>Action</th>
                   )}
                 </tr>
               </thead>
@@ -476,7 +475,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
                 {sortedProspects.length === 0 && (
                   <tr>
                     <td
-                      colSpan={isUserPick ? 8 : 7}
+                      colSpan={isUserPick ? 9 : 8}
                       style={{ textAlign: 'center', padding: 'var(--space-6)', color: 'var(--text-muted)' }}
                     >
                       {isDraftComplete ? 'All prospects have been drafted.' : 'No prospects match the filter.'}
@@ -485,51 +484,59 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
                 )}
                 {sortedProspects.map((p, i) => (
                   <tr key={p.id}>
-                    <td style={{ textAlign: 'center', color: 'var(--text-subtle)', paddingLeft: 'var(--space-3)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                    <td style={{ paddingLeft: 8, textAlign: 'center', color: 'var(--text-subtle)', fontSize: 10, fontWeight: 700 }}>
                       {i + 1}
                     </td>
-                    <td>
+                    <td style={{ textAlign: 'center' }}>
                       <span style={{
-                        display: 'inline-block',
-                        padding: '1px 6px',
-                        borderRadius: 'var(--radius-pill)',
-                        background: 'var(--surface-strong)',
-                        fontSize: 'var(--text-xs)',
-                        fontWeight: 700,
-                        color: 'var(--text-muted)',
-                        fontFamily: 'monospace',
+                        display: 'inline-block', padding: '0 4px',
+                        borderRadius: 3, background: 'var(--surface-strong)',
+                        fontSize: 10, fontWeight: 700, color: 'var(--text-muted)',
                       }}>
                         {p.pos}
                       </span>
                     </td>
-                    <td
-                      style={{ fontWeight: 600, color: 'var(--text)', cursor: onPlayerClick ? 'pointer' : 'default' }}
-                      onClick={() => onPlayerClick && onPlayerClick(p.id)}
-                      title={onPlayerClick ? `View ${p.name}'s profile` : undefined}
-                    >
-                      <span style={{ borderBottom: onPlayerClick ? '1px dotted var(--text-muted)' : 'none' }}>
+                    <td>
+                      <span
+                        className="player-link"
+                        onClick={() => onPlayerClick && onPlayerClick(p.id)}
+                        style={{ fontSize: 12 }}
+                      >
                         {p.name}
                       </span>
                     </td>
-                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                        {(p.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
+                    <td style={{ textAlign: 'center' }}>
+                      {(p.traits || []).map(t => <TraitBadge key={t} traitId={t} />)}
                     </td>
-                    <td style={{ color: 'var(--text-muted)' }}>{p.age}</td>
-                    <td><OvrBadge ovr={p.ovr} /></td>
-                    <td style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                    <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>{p.age}</td>
+                    <td style={{ textAlign: 'center' }}><OvrBadge ovr={p.ovr} /></td>
+                    <td style={{ textAlign: 'center', color: 'var(--text-subtle)', fontSize: 11 }}>
                       {p.potential ?? '—'}
                     </td>
-                    <td style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <td style={{ color: 'var(--text-muted)', fontSize: 11, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {p.college ?? '—'}
                     </td>
+                    {/* ── "Draft This Player" button — explicit action mechanism ── */}
                     {isUserPick && !isDraftComplete && (
-                      <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
+                      <td style={{ textAlign: 'center' }}>
                         <button
-                          className="btn btn-primary"
-                          style={{ padding: '3px 12px', fontSize: 'var(--text-xs)' }}
-                          onClick={() => onDraftPlayer(p.id)}
+                          onClick={(e) => { e.stopPropagation(); onDraftPlayer(p.id); }}
+                          style={{
+                            padding: '3px 10px',
+                            fontSize: 11,
+                            fontWeight: 800,
+                            border: '2px solid var(--accent)',
+                            borderRadius: 'var(--radius-pill)',
+                            background: 'var(--accent)',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            transition: 'filter 0.1s',
+                          }}
+                          onMouseOver={e => e.currentTarget.style.filter = 'brightness(1.15)'}
+                          onMouseOut={e => e.currentTarget.style.filter = 'none'}
                         >
-                          Draft
+                          Draft This Player
                         </button>
                       </td>
                     )}
@@ -551,11 +558,10 @@ function DraftCompletePanel({ actions, draftState }) {
   return (
     <div>
       <div style={{
-        textAlign: 'center', padding: 'var(--space-8) 0',
+        textAlign: 'center', padding: 'var(--space-6) 0',
         borderBottom: '1px solid var(--hairline)',
-        marginBottom: 'var(--space-6)',
+        marginBottom: 'var(--space-5)',
       }}>
-        <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-3)' }}>🏈</div>
         <h2 style={{ fontWeight: 800, fontSize: 'var(--text-xl)', color: 'var(--text)', marginBottom: 'var(--space-2)' }}>
           Draft Complete
         </h2>
@@ -567,47 +573,55 @@ function DraftCompletePanel({ actions, draftState }) {
           style={{ fontSize: 'var(--text-base)' }}
           onClick={() => actions.startNewSeason()}
         >
-          Start New Season →
+          Start New Season
         </button>
       </div>
 
-      {/* Full pick history */}
+      {/* Full pick history — data-dense */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{
-          padding: 'var(--space-3) var(--space-5)',
+          padding: '4px 8px',
           background: 'var(--surface-strong)',
           borderBottom: '1px solid var(--hairline)',
-          fontWeight: 700, fontSize: 'var(--text-xs)',
+          fontWeight: 700, fontSize: 10,
           textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)',
         }}>
           All Picks
         </div>
-        <div className="table-wrapper" style={{ overflowX: 'auto', maxHeight: 480, overflowY: 'auto' }}>
-          <table className="standings-table" style={{ width: '100%', fontSize: 'var(--text-sm)' }}>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 480, overflowY: 'auto' }}>
+          <table className="data-table" style={{ minWidth: 420 }}>
             <thead>
               <tr>
-                <th style={{ paddingLeft: 'var(--space-4)' }}>#</th>
-                <th>Round</th>
+                <th style={{ paddingLeft: 8, width: 32 }}>#</th>
+                <th>Rd</th>
                 <th>Team</th>
                 <th>Player</th>
-                <th>POS</th>
-                <th style={{ paddingRight: 'var(--space-4)' }}>OVR</th>
+                <th>Pos</th>
+                <th style={{ textAlign: 'center' }}>OVR</th>
               </tr>
             </thead>
             <tbody>
               {completedPicks.map(pk => (
-                <tr key={pk.overall} className={pk.isUser ? 'selected' : ''}>
-                  <td style={{ paddingLeft: 'var(--space-4)', color: 'var(--text-subtle)', fontWeight: 700 }}>
+                <tr key={pk.overall} className={pk.isUser ? 'user-row' : ''}>
+                  <td style={{ paddingLeft: 8, color: 'var(--text-subtle)', fontWeight: 700, fontSize: 10 }}>
                     {pk.overall}
                   </td>
-                  <td style={{ color: 'var(--text-muted)' }}>R{pk.round}</td>
-                  <td style={{ fontWeight: pk.isUser ? 700 : 400, color: pk.isUser ? 'var(--accent)' : 'var(--text)' }}>
+                  <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>R{pk.round}</td>
+                  <td style={{ fontWeight: pk.isUser ? 700 : 400, color: pk.isUser ? 'var(--accent)' : 'var(--text)', fontSize: 12 }}>
                     {pk.teamAbbr}
-                    {pk.isUser && <span style={{ marginLeft: 4 }}>★</span>}
+                    {pk.isUser && <span style={{ marginLeft: 3 }}>★</span>}
                   </td>
-                  <td style={{ fontWeight: 600 }}>{pk.playerName ?? '—'}</td>
-                  <td style={{ color: 'var(--text-muted)' }}>{pk.playerPos ?? '—'}</td>
-                  <td style={{ paddingRight: 'var(--space-4)' }}>
+                  <td style={{ fontWeight: 600, fontSize: 12 }}>{pk.playerName ?? '—'}</td>
+                  <td style={{ fontSize: 11 }}>
+                    <span style={{
+                      display: 'inline-block', padding: '0 4px', borderRadius: 3,
+                      background: 'var(--surface-strong)', fontSize: 10, fontWeight: 700,
+                      color: 'var(--text-muted)',
+                    }}>
+                      {pk.playerPos ?? '—'}
+                    </span>
+                  </td>
+                  <td style={{ textAlign: 'center' }}>
                     {pk.playerOvr != null ? <OvrBadge ovr={pk.playerOvr} /> : '—'}
                   </td>
                 </tr>
@@ -694,7 +708,7 @@ export default function Draft({ league, actions }) {
       {/* Page header */}
       <div style={{
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        marginBottom: 'var(--space-6)',
+        marginBottom: 'var(--space-4)',
       }}>
         <div>
           <h1 style={{
@@ -703,17 +717,17 @@ export default function Draft({ league, actions }) {
           }}>
             NFL Draft
           </h1>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
             {league?.year ?? ''} Season · Offseason
           </div>
         </div>
         {draftState && !draftState.notStarted && !draftState.isDraftComplete && (
           <div style={{
-            padding: '4px 12px',
+            padding: '3px 10px',
             background: 'var(--surface-strong)',
             border: '1px solid var(--hairline)',
             borderRadius: 'var(--radius-pill)',
-            fontSize: 'var(--text-xs)',
+            fontSize: 11,
             color: 'var(--text-muted)',
           }}>
             {draftState.currentPickIndex ?? 0} / {draftState.totalPicks ?? 0} picks made
@@ -729,14 +743,14 @@ export default function Draft({ league, actions }) {
           border: '1px solid var(--danger)',
           borderRadius: 'var(--radius-md)',
           color: 'var(--danger)',
-          marginBottom: 'var(--space-5)',
+          marginBottom: 'var(--space-4)',
           fontSize: 'var(--text-sm)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <span>{error}</span>
           <button
             className="btn"
-            style={{ padding: '2px 10px', fontSize: 'var(--text-xs)' }}
+            style={{ padding: '2px 10px', fontSize: 10 }}
             onClick={() => setError(null)}
           >
             Dismiss
