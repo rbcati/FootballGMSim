@@ -3,8 +3,6 @@
  * Handles Weekly Game Plans and Risk Profiles
  */
 
-import { saveState } from './state.js';
-
 export const OFFENSIVE_PLANS = {
     BALANCED: {
         id: 'BALANCED',
@@ -238,9 +236,6 @@ export function updateWeeklyStrategy(league, offPlanId, defPlanId, riskId) {
     league.strategyHistory[defPlanId]++;
 
     console.log(`[Strategy] Updated to Off: ${offPlanId}, Def: ${defPlanId}, Risk: ${riskId}`);
-
-    // Persist strategy change immediately
-    if (saveState) saveState();
 }
 
 // Keep GAME_PLANS for backward compatibility if needed, but alias to merged

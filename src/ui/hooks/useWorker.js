@@ -317,6 +317,10 @@ export function useWorker() {
     /** Set which team the human manages. */
     setUserTeam: (teamId)        => send(toWorker.SET_USER_TEAM, { teamId }),
 
+    /** Update Weekly Strategy (Offense, Defense, Risk). */
+    updateStrategy: (offPlanId, defPlanId, riskId) =>
+      send(toWorker.UPDATE_STRATEGY, { offPlanId, defPlanId, riskId }),
+
     /** Sign a free agent. */
     signPlayer: (playerId, teamId, contract) =>
       send(toWorker.SIGN_PLAYER, { playerId, teamId, contract }),
