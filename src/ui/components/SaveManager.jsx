@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 export default function SaveManager({ actions, onCreate }) {
   const [saves, setSaves] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionInProgress, setActionInProgress] = useState(false);
   const [error, setError] = useState(null);
 
   const fetchSaves = async () => {
@@ -22,13 +23,25 @@ export default function SaveManager({ actions, onCreate }) {
     fetchSaves();
   }, [actions]);
 
+  const handleLoad = (id) => {
+    if (actionInProgress) return;
+    setActionInProgress(true);
+    // Note: loadSave is a 'send' action (fire-and-forget to worker),
+    // but busy state in App will take over. We just need to block local double-clicks.
+    actions.loadSave(id);
+  };
+
   const handleDelete = async (id) => {
+    if (actionInProgress) return;
     if (!window.confirm("Are you sure you want to delete this save? This cannot be undone.")) return;
     try {
+      setActionInProgress(true);
       const res = await actions.deleteSave(id);
       setSaves(res.saves || []);
     } catch (err) {
       setError(err.message);
+    } finally {
+      setActionInProgress(false);
     }
   };
 
@@ -92,10 +105,10 @@ export default function SaveManager({ actions, onCreate }) {
                   </div>
                 </div>
                 <div className="save-slot-actions">
-                  <button className="btn primary" onClick={() => actions.loadSave(save.id)}>
-                    Load
+                  <button className="btn primary" onClick={() => handleLoad(save.id)} disabled={actionInProgress}>
+                    {actionInProgress ? '...' : 'Load'}
                   </button>
-                  <button className="btn danger" onClick={() => handleDelete(save.id)}>
+                  <button className="btn danger" onClick={() => handleDelete(save.id)} disabled={actionInProgress}>
                     Delete
                   </button>
                 </div>

@@ -31,11 +31,11 @@ export default function App() {
   const [activeView, setActiveView] = useState('saves');
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
-  const advancingRef = useRef(false);
+  const actionInProgressRef = useRef(false);
 
   // Reset guard when busy goes back to false
   useEffect(() => {
-    if (!busy) advancingRef.current = false;
+    if (!busy) actionInProgressRef.current = false;
   }, [busy]);
 
   // ── Service-Worker update detection ───────────────────────────────────────
@@ -97,16 +97,16 @@ export default function App() {
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleAdvanceWeek = useCallback(() => {
-    if (busy || simulating || advancingRef.current) return;
+    if (busy || simulating || actionInProgressRef.current) return;
 
     if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
-      advancingRef.current = true;
+      actionInProgressRef.current = true;
       actions.advanceWeek();
     } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
-      advancingRef.current = true;
+      actionInProgressRef.current = true;
       actions.advanceOffseason();
     } else if (league.phase === 'free_agency') {
-      advancingRef.current = true;
+      actionInProgressRef.current = true;
       actions.advanceFreeAgencyDay();
     } else if (league.phase === 'draft') {
       // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
@@ -115,11 +115,19 @@ export default function App() {
     }
   }, [busy, simulating, actions, league]);
 
+  const handleSave = useCallback(() => {
+    if (busy || simulating || actionInProgressRef.current) return;
+    actionInProgressRef.current = true;
+    actions.save();
+  }, [busy, simulating, actions]);
+
   const handleReset = useCallback(() => {
+    if (busy || simulating || actionInProgressRef.current) return;
     if (window.confirm('Reset/Delete your active save? This cannot be undone.')) {
+      actionInProgressRef.current = true;
       actions.reset();
     }
-  }, [actions]);
+  }, [busy, simulating, actions]);
 
   // Expose state and actions to window for E2E testing
   useEffect(() => {
@@ -213,7 +221,7 @@ export default function App() {
               ? 'Draft Active'
               : `Advance Week ${league.week}`}
           </button>
-          <button className="btn" onClick={() => actions.save()} disabled={busy}>
+          <button className="btn" onClick={handleSave} disabled={busy}>
             Save
           </button>
           <button className="btn btn-danger" onClick={handleReset} disabled={busy}>

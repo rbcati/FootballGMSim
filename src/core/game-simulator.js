@@ -1214,7 +1214,7 @@ export function simGameStats(home, away, options = {}) {
         let possessions = 0;
 
         const maxPossessions = allowTies ? 4 : 20;
-        const HARD_ITERATION_CAP = 50; // Absolute safety cap to prevent infinite loops
+        const HARD_ITERATION_CAP = 20; // Absolute safety cap to prevent infinite loops
 
         // Track which team kicked off (received 2nd) so we know possession order
         const firstTeam = possession; // Team with first possession
@@ -1579,7 +1579,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     const away = league.teams.find(t => t && t.id === awayTeamId);
 
     if (!home || !away) {
-        throw new Error(`Teams not found: ${homeTeamId}, ${awayTeamId}`);
+        console.error(`[commitGameResult] Teams not found: ${homeTeamId}, ${awayTeamId}. Aborting commit.`);
+        return null;
     }
 
     // 1. Update Schedule (Find the game)
@@ -1810,6 +1811,7 @@ export function simulateBatch(games, options = {}) {
     }
 
     games.forEach((pair, index) => {
+        let resultObj = null;
         try {
             if (verbose) console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${games.length}: Home=${pair.home?.abbr}, Away=${pair.away?.abbr}`);
 
@@ -1914,17 +1916,39 @@ export function simulateBatch(games, options = {}) {
                 injuries: gameInjuries
             };
 
-            const resultObj = commitGameResult(league, gameData, { persist: false });
+            resultObj = commitGameResult(league, gameData, { persist: false });
             if (schemeNote && resultObj) {
                 resultObj.schemeNote = schemeNote;
             }
 
-            if (resultObj) {
-                results.push(resultObj);
-            }
-
         } catch (error) {
             console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);
+            // Fallback: If simulation failed or commit crashed, force a 0-0 result
+            // so the game is at least marked played and doesn't disappear.
+            try {
+                const homeId = (pair.home?.id !== undefined) ? pair.home.id : pair.home;
+                const awayId = (pair.away?.id !== undefined) ? pair.away.id : pair.away;
+
+                // Only attempt fallback if we have valid IDs
+                if (homeId != null && awayId != null) {
+                    console.warn(`[SIM-DEBUG] Attempting fallback commit for ${homeId} vs ${awayId}`);
+                    resultObj = commitGameResult(league, {
+                        homeTeamId: homeId,
+                        awayTeamId: awayId,
+                        homeScore: 0,
+                        awayScore: 0,
+                        isPlayoff: options.isPlayoff || false,
+                        stats: null,
+                        injuries: []
+                    }, { persist: false });
+                }
+            } catch (fallbackError) {
+                console.error(`[SIM-DEBUG] Critical failure in fallback commit for game ${index}:`, fallbackError);
+            }
+        }
+
+        if (resultObj) {
+            results.push(resultObj);
         }
     });
 

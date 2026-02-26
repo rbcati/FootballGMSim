@@ -83,7 +83,7 @@ function MatchupCard({ event, userTeamId, pending }) {
   const finished = !pending;
 
   return (
-    <div style={{
+    <div className="matchup-card" style={{
       background: 'var(--surface)',
       border: `1px solid ${isUser ? 'var(--accent)' : 'var(--hairline)'}`,
       borderRadius: 'var(--radius-md)',
@@ -144,7 +144,7 @@ function PendingCard({ game, teamById, userTeamId }) {
   const away   = teamById[game.away] ?? { abbr: '???', id: game.away };
   const isUser = home.id === userTeamId || away.id === userTeamId;
   return (
-    <div style={{
+    <div className="matchup-card pending" style={{
       background: 'var(--surface)',
       border: `1px solid ${isUser ? 'var(--accent)' : 'var(--hairline)'}`,
       borderRadius: 'var(--radius-md)',
@@ -413,6 +413,19 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         gap: 0,
         minHeight: 200,
       }}>
+        <style>{`
+          @media (max-width: 480px) {
+            .matchup-card {
+              flex-wrap: wrap;
+              padding: 8px !important;
+              gap: 8px !important;
+            }
+            .matchup-card > div:nth-child(2),
+            .matchup-card > div:nth-child(4) {
+              min-width: 60px !important;
+            }
+          }
+        `}</style>
         {/* ── Left: Scoreboard ── */}
         <div style={{
            flex: '999 1 300px',
