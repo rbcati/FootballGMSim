@@ -299,7 +299,7 @@ export function useWorker() {
 
     /** Submit an offer to a free agent. */
     submitOffer: (playerId, teamId, contract) =>
-      send(toWorker.SUBMIT_OFFER, { playerId, teamId, contract }),
+      request(toWorker.SUBMIT_OFFER, { playerId, teamId, contract }),
 
     /** Release a player. */
     releasePlayer: (playerId, teamId) =>

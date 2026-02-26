@@ -15,6 +15,7 @@ import LiveGame            from './components/LiveGame.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
+import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,17 @@ export default function App() {
       actions.reset();
     }
   }, [actions]);
+
+  // Expose state and actions to window for E2E testing
+  useEffect(() => {
+    window.state = state;
+    window.gameController = {
+      ...actions,
+      startNewLeague: () => actions.newLeague(DEFAULT_TEAMS, { userTeamId: 0, name: 'Test League' }),
+      advanceWeek: handleAdvanceWeek,
+    };
+    window.handleGlobalAdvance = handleAdvanceWeek;
+  }, [state, actions, handleAdvanceWeek]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 

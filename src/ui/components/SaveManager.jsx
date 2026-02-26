@@ -105,7 +105,7 @@ export default function SaveManager({ actions, onCreate }) {
         </div>
 
         <div style={{ textAlign: 'center' }}>
-          <button className="btn primary" style={{ width: '100%', padding: 'var(--space-4)', fontSize: 'var(--text-lg)' }} onClick={onCreate}>
+          <button id="create-league-btn" className="btn primary" style={{ width: '100%', padding: 'var(--space-4)', fontSize: 'var(--text-lg)' }} onClick={onCreate}>
             + Create New League
           </button>
         </div>
