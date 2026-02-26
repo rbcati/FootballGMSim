@@ -519,25 +519,31 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   const scoreDiff = oppScore - teamScore;
   const scriptMod = Math.max(-12, Math.min(12, scoreDiff * 0.5));
 
-  let baseAttempts = 34 + scriptMod + U.rand(-4, 4);
-  if (modifiers.passVolume) baseAttempts *= modifiers.passVolume;
-  const attempts = Math.max(18, Math.min(55, Math.round(baseAttempts)));
+  // 4th-quarter blowout suppression: 21+ point lead reduces pass volume
+  const blowoutLead = teamScore - oppScore;
+  const blowoutMod = blowoutLead >= 21 ? 0.72 : 1.0; // suppress passing by ~28% in blowouts
 
-  // Completion percentage: NFL average ~65%, range 50-78%
+  let baseAttempts = 32 + scriptMod + U.rand(-4, 4); // reduced from 34
+  if (modifiers.passVolume) baseAttempts *= modifiers.passVolume;
+  baseAttempts *= blowoutMod;
+  const attempts = Math.max(18, Math.min(50, Math.round(baseAttempts))); // tightened max from 55
+
+  // Completion percentage: NFL average ~63%, range 48-74%
+  // ATTENUATION: Reduced base by ~13% to bring league averages down
   let baseCompPct = (throwAccuracy + awareness) / 2;
   if (modifiers.passAccuracy) baseCompPct *= modifiers.passAccuracy;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
 
-  // Gaussian distribution for Comp% (Mean: derived from ratings, StdDev: 6.0)
-  const meanCompPct = 60 + (baseCompPct - 70) * 0.4 + defenseFactor * 12;
-  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 90);
+  // Gaussian distribution for Comp% — attenuated mean (was 60 base, now 55)
+  const meanCompPct = 55 + (baseCompPct - 70) * 0.35 + defenseFactor * 10;
+  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 78); // ceiling lowered from 90 to 78
 
   const completions = Math.round(attempts * (compPct / 100));
 
-  // Yards per completion: NFL average ~10.5, driven by arm strength
-  // REMOVED teamScore dependency — yards should come from QB ability, not score
-  const meanYPC = 10.5 + (throwPower - 75) * 0.1 + defenseFactor * 2;
-  const avgYPC = U.gaussianClamped(meanYPC, 2.0, 5.0, 20.0);
+  // Yards per completion: NFL average ~10.0, driven by arm strength
+  // ATTENUATION: Reduced base YPC by ~12% (was 10.5, now 9.2)
+  const meanYPC = 9.2 + (throwPower - 75) * 0.08 + defenseFactor * 1.6;
+  const avgYPC = U.gaussianClamped(meanYPC, 1.8, 5.0, 17.0); // tightened range
 
   const yards = Math.max(0, Math.round(completions * avgYPC));
 
@@ -602,7 +608,12 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   const scoreDiff = teamScore - oppScore; // Positive if leading
   const scriptMod = Math.max(-10, Math.min(12, scoreDiff * 0.4));
 
+  // 4th-quarter blowout clock-burn: 21+ point lead boosts run weight by 40%
+  const blowoutLead = teamScore - oppScore;
+  const blowoutRunBoost = blowoutLead >= 21 ? 1.40 : 1.0;
+
   let baseTeamCarries = 26 + scriptMod + U.rand(-5, 8);
+  baseTeamCarries *= blowoutRunBoost;
 
   if (modifiers.runVolume) baseTeamCarries *= modifiers.runVolume;
 
@@ -695,12 +706,12 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
 
   const receptions = Math.max(0, Math.min(targets, Math.round(targets * (receptionPct / 100) + U.rand(-1, 1))));
 
-  // Adjusted YPC to match QB output ~11.0
-  // Gaussian distribution for Yards Per Catch
-  let meanYPR = 11.0 + (speed - 70) * 0.15;
+  // Adjusted YPC to match attenuated QB output ~9.2
+  // ATTENUATION: Reduced from 11.0 to 9.5 (~13% reduction)
+  let meanYPR = 9.5 + (speed - 70) * 0.12;
   if (receiver.traits && receiver.traits.includes(TRAITS.DEEP_THREAT.id)) meanYPR *= 1.1;
 
-  const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.5, 4.0, 30.0);
+  const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.2, 4.0, 25.0);
   const recYd = Math.round(receptions * avgYardsPerCatch);
 
   // TDs: derived from receiving production, not from team score.
@@ -1110,45 +1121,43 @@ export function simGameStats(home, away, options = {}) {
      * @returns {Object} { score, touchdowns, field_goals }
      */
     const simulateDrives = (offStr, defStr, advantage, mods) => {
-        // NFL teams average ~12 possessions per game
-        const numDrives = U.rand(10, 14);
+        // NFL teams average ~11 possessions per game
+        const numDrives = U.rand(9, 13); // tightened from 10-14
+
         let score = 0;
         let touchdowns = 0;
         let field_goals = 0;
         let xpMade = 0;
         let twoPtMade = 0;
 
-        // Base scoring probability calibrated to ~22 pts/game avg
+        // Base scoring probability calibrated to 20-24 PPG target
         // offStr/defStr are roughly 50-90 range
         const offFactor = (offStr - 50) / 40; // 0.0 for 50 OVR, 1.0 for 90 OVR
         const defFactor = (defStr - 50) / 40;
-        const netQuality = offFactor - defFactor * 0.7 + (advantage / 80);
+        const netQuality = offFactor - defFactor * 0.75 + (advantage / 90); // defense weighs more
 
         for (let d = 0; d < numDrives; d++) {
-            // Drive outcome probabilities (NFL averages: ~35% score, ~21% TD, ~14% FG)
+            // Drive outcome probabilities (NFL averages: ~33% score, ~20% TD, ~13% FG)
             const driveRoll = U.random();
 
             // Apply variance boost and modifier
             const varianceMod = (mods.variance || 1.0);
-            const upsetChance = varianceBoost * 0.015;
+            const upsetChance = varianceBoost * 0.012; // reduced from 0.015
 
             // Red Zone Efficiency Factor
-            // Convert offensive strength to a red zone rating (using strength as proxy)
-            // Higher strength = better conversion of drives to TDs
-            const rzFactor = (offStr - 60) * 0.005;
+            const rzFactor = (offStr - 60) * 0.004; // reduced from 0.005
 
             // Base Probability that a drive results in points (TD or FG)
-            // NFL average ~35% of drives score points
-            let scoreProb = 0.32 + netQuality * 0.15 + upsetChance;
-            scoreProb = U.clamp(scoreProb, 0.15, 0.60);
+            // Attenuated to target ~21 PPG (was 0.32 base, now 0.28)
+            let scoreProb = 0.28 + netQuality * 0.12 + upsetChance;
+            scoreProb = U.clamp(scoreProb, 0.12, 0.52); // tightened ceiling from 0.60
 
             // If drive scores, what % is TD vs FG?
-            // NFL average: ~60% of scores are TDs, 40% FGs
-            // Adjusted by RZ factor and aggression
-            let tdShare = 0.58 + rzFactor;
-            if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05; // Aggressive
-            if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05; // Conservative
-            tdShare = U.clamp(tdShare, 0.35, 0.80);
+            // NFL average: ~58% of scores are TDs, 42% FGs
+            let tdShare = 0.55 + rzFactor; // reduced from 0.58
+            if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05;
+            if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05;
+            tdShare = U.clamp(tdShare, 0.35, 0.75); // tightened ceiling from 0.80
 
             if (driveRoll < scoreProb) {
                 // It's a scoring drive. Now determine TD vs FG.

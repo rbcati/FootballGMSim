@@ -338,10 +338,10 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div className="table-wrapper" style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <table className="standings-table" style={{ width: '100%', minWidth: 700 }}>
+          <table className="standings-table" style={{ width: '100%', minWidth: 700, fontVariantNumeric: 'tabular-nums' }}>
             <thead>
               <tr>
-                <th style={{ paddingLeft: 'var(--space-5)', width: 32, color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>#</th>
+                <th style={{ paddingLeft: 'var(--space-2)', width: 28, color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>#</th>
                 <SortTh label="POS"    sortKey="pos"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'left' }} />
                 <th style={{ textAlign: 'left', color: 'var(--text-muted)', fontSize: 'var(--text-xs)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</th>
                 <SortTh label="OVR"    sortKey="ovr"    currentSort={sortKey} currentDir={sortDir} onSort={handleSort} style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }} />
@@ -365,6 +365,8 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
               {displayed.map((player, idx) => {
                 const isReleasing = releasing === player.id;
                 const isExpiring  = (player.contract?.years || 0) <= 1;
+                const yearsLeft = player.contract?.yearsRemaining ?? player.contract?.years ?? 1;
+                const isZeroYears = yearsLeft === 0 || (yearsLeft <= 1 && isResignPhase);
                 const fit    = player.schemeFit ?? 50;
                 const morale = player.morale ?? 75;
                 const fitCol    = indicatorColor(fit);
@@ -378,7 +380,7 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
                 return (
                   <tr key={player.id} style={rowStyle}>
                     {/* # */}
-                    <td style={{ paddingLeft: 'var(--space-5)', color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
+                    <td style={{ paddingLeft: 'var(--space-2)', color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
                       {idx + 1}
                     </td>
                     {/* POS */}
@@ -389,6 +391,16 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
                       style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
                     >
                       {player.name}
+                      {isResignPhase && isZeroYears && (
+                        <span style={{
+                          marginLeft: 6, padding: '1px 5px', borderRadius: 'var(--radius-pill)',
+                          background: 'rgba(255,69,58,0.15)', color: 'var(--danger)',
+                          fontSize: 9, fontWeight: 800, letterSpacing: '0.5px',
+                          verticalAlign: 'middle',
+                        }}>
+                          EXPIRING
+                        </span>
+                      )}
                     </td>
                     {/* OVR */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
@@ -445,13 +457,18 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
                         </div>
                       ) : (
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
-                            {player.contract?.years === 1 && (
+                            {isExpiring && (
                                 <button
                                     className="btn"
-                                    style={{ fontSize: 'var(--text-xs)', padding: '2px 8px', color: 'var(--success)', borderColor: 'var(--success)' }}
+                                    style={{
+                                      fontSize: 'var(--text-xs)', padding: '2px 10px',
+                                      ...(isResignPhase && isZeroYears
+                                        ? { background: 'var(--success)', borderColor: 'var(--success)', color: '#fff', fontWeight: 700 }
+                                        : { color: 'var(--success)', borderColor: 'var(--success)' })
+                                    }}
                                     onClick={() => setExtending(player)}
                                 >
-                                    Ext
+                                    Extend
                                 </button>
                             )}
                             <button
