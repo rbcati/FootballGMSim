@@ -38,6 +38,7 @@ import AiLogic from '../core/ai-logic.js';
 import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
+import { processPlayerProgression } from '../core/progression-logic.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -198,6 +199,7 @@ function buildRosterView(teamId) {
         pos:      p.pos,
         age:      p.age,
         ovr:      p.ovr,
+        progressionDelta: p.progressionDelta ?? null,
         contract,
         traits:   p.traits ?? [],
         schemeFit: fit,
@@ -1560,17 +1562,18 @@ async function handleGetRoster({ teamId }, id) {
       );
 
       return {
-        id:        p.id,
-        name:      p.name,
-        pos:       p.pos,
-        age:       p.age,
-        ovr:       p.ovr,
-        potential: p.potential ?? null,
-        status:    p.status ?? 'active',
+        id:               p.id,
+        name:             p.name,
+        pos:              p.pos,
+        age:              p.age,
+        ovr:              p.ovr,
+        progressionDelta: p.progressionDelta ?? null,
+        potential:        p.potential ?? null,
+        status:           p.status ?? 'active',
         contract,
-        traits:    p.traits ?? [],
-        schemeFit: fit,
-        morale:    calculateMorale(p, team, true)
+        traits:           p.traits ?? [],
+        schemeFit:        fit,
+        morale:           calculateMorale(p, team, true)
       };
   });
 
@@ -2319,11 +2322,17 @@ function calculateAwards(stats, teams) {
 // ── Handler: ADVANCE_OFFSEASON ────────────────────────────────────────────────
 
 /**
- * Run yearly player progression and retirement loop:
- *  - Age < 26  → improve OVR by 0–3
- *  - Age 30–32 → decline OVR by 0–2
- *  - Age 33+   → decline OVR by 1–3
- *  - Age 34+   → increasing retirement chance
+ * Dynamic Progression & Regression Engine.
+ *
+ * Runs the full age-curve progression pass then handles retirement:
+ *  - Growth  (Age 21–25): Mean +2 OVR | 10% Breakout: +5 to +8 | 5% Bust: -2 to -4
+ *  - Prime   (Age 26–29): High stability — fluctuate ±1 OVR
+ *  - Cliff   (Age 30+):   Mean -2 OVR  | 15% Age Cliff: physical traits plummet -5 to -8
+ *  - Retirement: 20% base at age 34, +15% per year, capped at 85%
+ *
+ * Progression runs BEFORE retirement so delta values are stored on the player
+ * record and can be read by the UI via the next ROSTER_DATA response.
+ * All mutations are flushed to IndexedDB before the UI is notified.
  */
 async function handleAdvanceOffseason(payload, id) {
   const meta = cache.getMeta();
@@ -2333,34 +2342,40 @@ async function handleAdvanceOffseason(payload, id) {
     return;
   }
 
-  // AI: Process Extensions
+  // ── Step 1: AI processes contract extensions ──────────────────────────────
   const allTeams = cache.getAllTeams();
   for (const team of allTeams) {
-      if (team.id !== meta.userTeamId) {
-          await AiLogic.processExtensions(team.id);
-      }
+    if (team.id !== meta.userTeamId) {
+      await AiLogic.processExtensions(team.id);
+    }
   }
 
+  // ── Step 2: Dynamic progression pass ─────────────────────────────────────
+  // processPlayerProgression mutates each player's ratings, ovr, and
+  // progressionDelta in place.  We then flush those fields to cache.
+  const allPlayers = cache.getAllPlayers();
+  const { gainers, regressors } = processPlayerProgression(allPlayers);
+
+  // Flush progression mutations (ratings, ovr, progressionDelta, potential)
+  for (const player of allPlayers) {
+    if (player.status === 'draft_eligible' || player.status === 'retired') continue;
+    cache.updatePlayer(player.id, {
+      ratings:          player.ratings,
+      ovr:              player.ovr,
+      potential:        player.potential,
+      progressionDelta: player.progressionDelta ?? null,
+    });
+  }
+
+  // ── Step 3: Age all players by 1 year + retirement rolls ─────────────────
   const retired = [];
 
   for (const player of cache.getAllPlayers()) {
-    if (player.status === 'draft_eligible') continue; // skip draft prospects
+    if (player.status === 'draft_eligible' || player.status === 'retired') continue;
 
-    const age = player.age ?? 22;
-    let ovrDelta = 0;
+    const age = (player.age ?? 22) + 1;
 
-    if (age < 26) {
-      ovrDelta = Utils.rand(0, 3);
-    } else if (age >= 30 && age < 33) {
-      ovrDelta = -Utils.rand(0, 2);
-    } else if (age >= 33) {
-      ovrDelta = -Utils.rand(1, 3);
-    }
-    // Ages 26–29: prime — no change
-
-    const newOvr = Utils.clamp((player.ovr ?? 70) + ovrDelta, 40, 99);
-
-    // Retirement: 20 % base at 34, +15 % per year after, capped at 85 %
+    // Retirement: 20% base at 34, +15% per year after, capped at 85%
     let willRetire = false;
     if (age >= 34) {
       const retireChance = Math.min(0.85, 0.20 + (age - 34) * 0.15);
@@ -2372,30 +2387,62 @@ async function handleAdvanceOffseason(payload, id) {
       if (player.teamId != null) recalculateTeamCap(player.teamId);
       // Mark as retired instead of deleting — keeps the player record in DB
       // so GET_PLAYER_CAREER can still resolve name/pos/ovr for history views.
-      cache.updatePlayer(player.id, { status: 'retired', teamId: null });
+      cache.updatePlayer(player.id, { status: 'retired', teamId: null, age });
     } else {
-      cache.updatePlayer(player.id, { age: age + 1, ovr: newOvr });
+      cache.updatePlayer(player.id, { age });
     }
   }
 
-  // ── Phase transition: offseason_resign → free_agency ─────────────────────
-  // Initialize the FA bidding window and advance the phase so the UI can gate
-  // on the correct screen (FA panel, not the resign panel).
+  // ── Step 4: Generate news items for dramatic progressions ─────────────────
+  // "Top Offseason Gains" — up to 5 biggest breakouts/growers
+  const topGainers = gainers.slice(0, 5);
+  if (topGainers.length > 0) {
+    const names = topGainers
+      .map(p => `${p.name} (${p.pos}, ${p.isBreakout ? '🌟 Breakout' : ''}+${p.delta} OVR)`)
+      .join(', ');
+    await NewsEngine.logNews(
+      'PROGRESSION',
+      `🔥 Top Offseason Gains: ${names}`,
+      null,
+      { category: 'top_gains', players: topGainers }
+    );
+  }
+
+  // "Shocking Regressions" — up to 5 worst cliff/decline events
+  const topRegressors = regressors.slice(0, 5);
+  if (topRegressors.length > 0) {
+    const names = topRegressors
+      .map(p => `${p.name} (${p.pos}, ${p.isCliff ? '📉 Age Cliff' : ''}${p.delta} OVR)`)
+      .join(', ');
+    await NewsEngine.logNews(
+      'PROGRESSION',
+      `😨 Shocking Regressions: ${names}`,
+      null,
+      { category: 'regressions', players: topRegressors }
+    );
+  }
+
+  // ── Step 5: Phase transition → free_agency ────────────────────────────────
+  // All DB writes happen here atomically before the UI is notified.
   cache.setMeta({
-      offseasonProgressionDone: true,
-      phase: 'free_agency',
-      freeAgencyState: { day: 1, maxDays: 5, complete: false },
+    offseasonProgressionDone: true,
+    phase: 'free_agency',
+    freeAgencyState: { day: 1, maxDays: 5, complete: false },
   });
 
+  // Flush everything to IndexedDB BEFORE notifying the UI so the UI
+  // always reads consistent state when it re-fetches rosters.
   await flushDirty();
 
   // Free memory: retired players are now persisted to DB, safe to evict from hot cache.
   cache.evictRetired();
 
   post(toUI.OFFSEASON_PHASE, {
-    phase:   'progression_complete',
+    phase:      'progression_complete',
     retired,
-    message: `Offseason: ${retired.length} player(s) retired. Free Agency Begins!`,
+    gainers:    topGainers,
+    regressors: topRegressors,
+    message:    `Offseason: ${retired.length} player(s) retired. Free Agency Begins!`,
   }, id);
   post(toUI.STATE_UPDATE, buildViewState());
 }

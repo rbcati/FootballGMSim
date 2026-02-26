@@ -405,6 +405,14 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
                     {/* OVR */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)' }}>
                       <OvrBadge ovr={player.ovr} />
+                      {player.progressionDelta != null && player.progressionDelta !== 0 && (
+                        <span
+                          className={player.progressionDelta > 0 ? 'text-success' : 'text-danger'}
+                          style={{ fontSize: 10, fontWeight: 700, marginLeft: 3, whiteSpace: 'nowrap' }}
+                        >
+                          ({player.progressionDelta > 0 ? '+' : ''}{player.progressionDelta})
+                        </span>
+                      )}
                     </td>
                     {/* Age */}
                     <td style={{ textAlign: 'right', paddingRight: 'var(--space-3)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
@@ -530,7 +538,17 @@ function DepthCard({ player, isStarter }) {
         <span style={{ fontWeight: 600, fontSize: 'var(--text-xs)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>
           {player.name}
         </span>
-        <OvrBadge ovr={player.ovr} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <OvrBadge ovr={player.ovr} />
+          {player.progressionDelta != null && player.progressionDelta !== 0 && (
+            <span
+              className={player.progressionDelta > 0 ? 'text-success' : 'text-danger'}
+              style={{ fontSize: 9, fontWeight: 700, whiteSpace: 'nowrap' }}
+            >
+              ({player.progressionDelta > 0 ? '+' : ''}{player.progressionDelta})
+            </span>
+          )}
+        </div>
       </div>
       {/* Age + Fit */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
