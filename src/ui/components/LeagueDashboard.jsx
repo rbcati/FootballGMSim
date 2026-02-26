@@ -26,6 +26,8 @@ import TeamProfile     from './TeamProfile.jsx';
 import Leaders         from './Leaders.jsx';
 import AwardRaces      from './AwardRaces.jsx';
 import PlayerStats     from './PlayerStats.jsx';
+import StrategyPanel   from './StrategyPanel.jsx';
+import NewsFeed        from './NewsFeed.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -82,7 +84,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Roster', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Strategy', 'Roster', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -692,7 +694,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
 
       {/* ── Status Grid (3-col: Cap Space | Standings | Last Game + Scores) ── */}
-      <div className="status-grid">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-4)', marginBottom: 'var(--space-6)' }}>
         {/* Cap Space widget — consolidated financials */}
         <div className="stat-box">
           <div className="stat-label">Cap Space</div>
@@ -786,6 +788,9 @@ export default function LeagueDashboard({ league, busy, actions }) {
             );
           })()}
         </div>
+
+        {/* News Feed */}
+        <NewsFeed />
       </div>
 
       {/* ── Tab Navigation ── */}
@@ -834,6 +839,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Award Races' && (
         <TabErrorBoundary label="Award Races">
           <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Strategy' && (
+        <TabErrorBoundary label="Strategy">
+          <StrategyPanel league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Roster' && (

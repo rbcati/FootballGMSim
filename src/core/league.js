@@ -221,9 +221,18 @@ function makeLeague(teams, options = {}, dependencies = {}) {
 
             // Set Strategies
             team.strategies = {
-                offense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
-                defense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative'])
+                offPlanId: 'BALANCED',
+                defPlanId: 'BALANCED',
+                riskId: 'BALANCED',
+                starTargetId: null,
+                baseOffense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
+                baseDefense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative']),
+                // Keep legacy fields for a bit if anything reads them directly, but aim to migrate
+                offense: 'Balanced',
+                defense: '4-3'
             };
+            team.strategies.offense = team.strategies.baseOffense;
+            team.strategies.defense = team.strategies.baseDefense;
 
             // Initial Cap Check
             if (recalcCap) {

@@ -673,12 +673,18 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   };
 }
 
-function distributePassingTargets(receivers, totalTargets, U) {
+function distributePassingTargets(receivers, totalTargets, U, starTargetId) {
   if (!receivers || receivers.length === 0) return [];
 
   const weights = receivers.map(r => {
       const ratings = r.ratings || {};
-      return (r.ovr * 0.5) + ((ratings.awareness || 50) * 0.3) + ((ratings.speed || 50) * 0.2);
+      let w = (r.ovr * 0.5) + ((ratings.awareness || 50) * 0.3) + ((ratings.speed || 50) * 0.2);
+
+      // Star Target Logic: +25% weight if this is the focal point
+      if (starTargetId && (r.id === starTargetId || String(r.id) === String(starTargetId))) {
+          w *= 1.25;
+      }
+      return w;
   });
 
   const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
@@ -998,32 +1004,63 @@ export function simGameStats(home, away, options = {}) {
     // FIX: Defense strength should come from each team's OWN defensive players.
     // Previously swapped: home defense was calculated from away groups.
     // Now: homeDefenseStrength = how good HOME team's defense is (from homeGroups).
-    const homeDefenseStrength = calculateDefenseStrength(homeGroups);
-    const awayDefenseStrength = calculateDefenseStrength(awayGroups);
+    let homeDefenseStrength = calculateDefenseStrength(homeGroups);
+    let awayDefenseStrength = calculateDefenseStrength(awayGroups);
+
+    // Apply Scheme Penalty
+    // If a team is running a 3-4 but has more DL talent than LB talent (or vice versa), apply a penalty
+    const applySchemePenalty = (team, defenseStrength, groups) => {
+        const defPlan = team.strategies?.defPlanId;
+        // Basic heuristic: check if they are running a mismatch
+        // '3-4' logic: Needs strong LBs. If DL > LB (by count of quality players?), penalty.
+        // Simplified check: if plan is 3-4 or BLITZ_HEAVY (LB dependent)
+        if (defPlan === 'BLITZ_HEAVY' || (team.strategies?.baseDefense === '3-4')) {
+             const dlCount = (groups['DL'] || []).filter(p => p.ovr > 75).length;
+             const lbCount = (groups['LB'] || []).filter(p => p.ovr > 75).length;
+
+             if (dlCount > lbCount + 1) {
+                 // They have DL talent but are forcing a LB scheme
+                 return defenseStrength * 0.95; // 5% penalty
+             }
+        }
+        return defenseStrength;
+    };
+
+    homeDefenseStrength = applySchemePenalty(home, homeDefenseStrength, homeGroups);
+    awayDefenseStrength = applySchemePenalty(away, awayDefenseStrength, awayGroups);
 
     // --- STAFF PERKS & STRATEGY INTEGRATION ---
     const homeMods = getCoachingMods(home.staff);
     const awayMods = getCoachingMods(away.staff);
 
-    // Determine strategy modifiers (Assumes userTeamId or strategies are passed in context or present in team object)
-    // Note: options.league is passed by GameRunner
+    // Determine strategy modifiers
+    // New logic: Read directly from team.strategies (supported for both User and AI)
+    // Fallback: Read from league.weeklyGamePlan for legacy user setups
     const league = options.league;
-    const userTeamId = league?.userTeamId;
+    const history = league?.strategyHistory || {};
 
-    if (userTeamId !== undefined && league?.weeklyGamePlan) {
-        const history = league.strategyHistory || {};
-        if (home.id === userTeamId) {
-             const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
-             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
-             if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Home):`, stratMods);
-             Object.assign(homeMods, stratMods);
-        } else if (away.id === userTeamId) {
-             const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
-             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
-             if (verbose) console.log(`[SIM-DEBUG] Applying Strategy Mods for User (Away):`, stratMods);
-             Object.assign(awayMods, stratMods);
+    const applyStrategy = (team, mods) => {
+        // 1. Prefer team.strategies (source of truth)
+        if (team.strategies && team.strategies.offPlanId) {
+            const { offPlanId, defPlanId, riskId } = team.strategies;
+            const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
+            if (verbose) console.log(`[SIM-DEBUG] Strategy Mods (${team.abbr}):`, stratMods);
+            Object.assign(mods, stratMods);
+            return;
         }
-    }
+
+        // 2. Legacy/User Fallback via league.weeklyGamePlan
+        const userTeamId = league?.userTeamId;
+        if (userTeamId !== undefined && team.id === userTeamId && league?.weeklyGamePlan) {
+             const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
+             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
+             if (verbose) console.log(`[SIM-DEBUG] Legacy Strategy Mods (${team.abbr}):`, stratMods);
+             Object.assign(mods, stratMods);
+        }
+    };
+
+    applyStrategy(home, homeMods);
+    applyStrategy(away, awayMods);
 
     if (verbose) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
     // --- SCHEME FIT IMPACT ---
@@ -1348,7 +1385,9 @@ export function simGameStats(home, away, options = {}) {
       const tes = (groups['TE'] || []).slice(0, 2);
       const receiverTargetsPool = Math.round(totalPassAttempts * 0.85);
       const allReceivers = [...wrs, ...tes];
-      const distributedTargets = distributePassingTargets(allReceivers, receiverTargetsPool, U);
+      // Pass starTargetId from strategies
+      const starTargetId = team.strategies?.starTargetId;
+      const distributedTargets = distributePassingTargets(allReceivers, receiverTargetsPool, U, starTargetId);
 
       distributedTargets.forEach(item => {
         const wrStats = generateReceiverStats(item.player, item.targets, score, oppDefenseStrength, U);
