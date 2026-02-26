@@ -4,28 +4,14 @@
  * Phase-4 live game viewer.  Shown as a panel when the worker is
  * simulating a week; stays visible after simulation ends to show results.
  *
- * Architecture:
- *  - Receives `gameEvents` — an array of GAME_EVENT payloads emitted by the
- *    worker after each individual game finishes.  One entry per game.
- *  - Each event: { gameId, week, homeId, awayId, homeName, awayName,
- *                  homeAbbr, awayAbbr, homeScore, awayScore }
- *  - The user's own game is identified via `league.userTeamId`.
- *  - Synthetic play-by-play runs on an interval while simulating; text is
- *    generated from team abbreviations so it's always plausible.
- *  - "Skip to End" sets a local flag that suppresses new play lines and
- *    waits quietly for WEEK_COMPLETE.
- *
- * Layout:
- *   ┌──────────────── Header (LIVE dot / title / Skip button) ──────────────┐
- *   │ Progress bar                                                           │
- *   ├───────────────────────────────┬───────────────────────────────────────┤
- *   │  Scoreboard (left column)     │  Play-by-play log (right column)      │
- *   │  • All matchup cards          │  • Scrolling text for user's game     │
- *   │  • User game highlighted      │  • Auto-scroll to bottom              │
- *   └───────────────────────────────┴───────────────────────────────────────┘
+ * Updates:
+ * - Integrated FieldVisualizer for real-time field animation.
+ * - Enhanced synthetic play generator to track field position and downs.
+ * - Decoupled visual "Live Mode" from worker "Simulating" state to ensure fluidity.
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import FieldVisualizer from './FieldVisualizer';
 
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
@@ -162,49 +148,67 @@ function PendingCard({ game, teamById, userTeamId }) {
 }
 
 // ── Synthetic play-by-play generator ─────────────────────────────────────────
-// Generates believable play descriptions from team abbreviations.
-// These are entirely synthetic — the simulator doesn't produce play logs.
 
-const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
+// Returns { text, gain, type, turnover, score }
+const PLAY_TEMPLATES = [
+  // Passes
+  { type: 'pass', func: (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`, gain: (g)=>g },
+  { type: 'pass', func: (o, d, g) => `${o} — screen pass, ${g} yds after catch`, gain: (g)=>g },
+  { type: 'pass', func: (o, d, g) => `${o} — play-action fake, ${g} yd gain`, gain: (g)=>g },
+  { type: 'pass', func: (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`, gain: ()=>0 },
+
+  // Runs
+  { type: 'run', func: (o, d, g) => `${o} — QB scrambles for ${g} yds`, gain: (g)=>g },
+  { type: 'run', func: (o, d, g) => `${o} — run up the middle, ${g} yds`, gain: (g)=>g },
+  { type: 'run', func: (o, d, g) => `${o} — stretch run to the outside, ${g} yds`, gain: (g)=>g },
+
+  // Negative
+  { type: 'sack', func: (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`, gain: (g) => -(g % 8 + 1) },
+  { type: 'penalty', func: (o, d, g) => `${o} — penalty: false start, 5 yd loss`, gain: () => -5 },
+
+  // Big Plays
+  { type: 'turnover', func: (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`, gain: 0, turnover: true },
+  { type: 'turnover', func: (o, d, g) => `${o} — FUMBLE recovered by ${d}!`, gain: 0, turnover: true },
 ];
 
-function generatePlay(homeAbbr, awayAbbr, seed = 0) {
-  const isHome = (seed ^ 0x5f) % 3 !== 0;
-  const off    = isHome ? homeAbbr : awayAbbr;
-  const def    = isHome ? awayAbbr : homeAbbr;
-  const gain   = ((seed * 13 + 7) % 28) + 1;
-  const tplIdx = (seed * 7 + 3) % PLAY_POOL.length;
-  return PLAY_POOL[tplIdx](off, def, gain);
+function generatePlayData(offAbbr, defAbbr, seed) {
+  const rawGain = ((seed * 13 + 7) % 20) + 1; // 1-20 yds usually
+  const tplIdx = (seed * 7 + 3) % PLAY_TEMPLATES.length;
+  const tpl = PLAY_TEMPLATES[tplIdx];
+
+  const gain = tpl.gain(rawGain);
+  const text = tpl.func(offAbbr, defAbbr, rawGain);
+
+  return {
+    text,
+    gain,
+    type: tpl.type,
+    turnover: tpl.turnover || false
+  };
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function LiveGame({ simulating, simProgress, league, lastResults, gameEvents }) {
+export default function LiveGame({ simulating: workerSimulating, simProgress, league, lastResults, gameEvents }) {
   const [visible, setVisible]       = useState(false);
+  const [isLiveMode, setIsLiveMode] = useState(false); // Controls the visual simulation state
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
-  const [prevSim, setPrevSim]       = useState(false);
+
+  // Game State for Visualizer
+  const [gameState, setGameState] = useState({
+    possession: 'home',
+    ballOn: 20, // 0-100
+    down: 1,
+    toGo: 10,
+    lastPlayType: null,
+    isGoal: false
+  });
+
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
+  const prevWorkerSimRef            = useRef(false);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
 
@@ -223,7 +227,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   // The user's team's game from the current week schedule
   const userGame = useMemo(() => {
-    if (!league?.userTeamId) return null;
+    if (league?.userTeamId === undefined || league?.userTeamId === null) return null;
     return weekGames.find(
       g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId
     ) ?? null;
@@ -231,7 +235,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   // Resolved GAME_EVENT for the user's game (if simulation already finished it)
   const userEvent = useMemo(() => {
-    if (!league?.userTeamId) return null;
+    if (league?.userTeamId === undefined || league?.userTeamId === null) return null;
     return (gameEvents ?? []).find(
       e => e.homeId === league.userTeamId || e.awayId === league.userTeamId
     ) ?? null;
@@ -245,29 +249,111 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   // ── Show / hide logic ────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (simulating && !prevSim) {
-      // Simulation just started
+    // Detect start of simulation
+    if (workerSimulating && !prevWorkerSimRef.current) {
       setVisible(true);
+      setIsLiveMode(true);
       setPlays([]);
       setSkipping(false);
       playCountRef.current = 0;
+      setGameState({
+        possession: 'home',
+        ballOn: 20,
+        down: 1,
+        toGo: 10,
+        lastPlayType: null,
+        isGoal: false
+      });
     }
-    setPrevSim(simulating);
-  }, [simulating]);
+    prevWorkerSimRef.current = workerSimulating;
+  }, [workerSimulating]);
 
   // ── Synthetic play ticker ────────────────────────────────────────────────
 
   const addPlay = useCallback(() => {
     if (skipping) return;
     const n = playCountRef.current++;
-    setPlays(prev => {
-      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+
+    // Determine play result
+    const isHomePossession = gameState.possession === 'home';
+    const offAbbr = isHomePossession ? userHomeAbbr : userAwayAbbr;
+    const defAbbr = isHomePossession ? userAwayAbbr : userHomeAbbr;
+
+    const playData = generatePlayData(offAbbr, defAbbr, n);
+
+    // Update Game State
+    setGameState(prev => {
+      let { possession, ballOn, down, toGo } = prev;
+      let { gain, type, turnover } = playData;
+      let isGoal = false;
+      let nextPossession = possession;
+      let nextBallOn = ballOn;
+      let nextDown = down;
+      let nextToGo = toGo;
+
+      if (turnover) {
+        // Switch possession
+        nextPossession = possession === 'home' ? 'away' : 'home';
+        nextBallOn = 100 - ballOn; // Flip field
+        nextDown = 1;
+        nextToGo = 10;
+      } else {
+        // Move ball
+        nextBallOn += gain;
+        nextToGo -= gain;
+
+        // Check Score
+        if (nextBallOn >= 100) {
+          isGoal = true;
+          playData.text = `${offAbbr} — TOUCHDOWN!`;
+          // Kickoff (reset)
+          nextPossession = possession === 'home' ? 'away' : 'home';
+          nextBallOn = 20;
+          nextDown = 1;
+          nextToGo = 10;
+        } else if (nextBallOn <= 0) {
+          // Safety or touchback? Safety for simplicity
+          playData.text = `${defAbbr} — SAFETY!`;
+          // Free kick
+          nextPossession = possession === 'home' ? 'away' : 'home';
+          nextBallOn = 30;
+          nextDown = 1;
+          nextToGo = 10;
+        } else if (nextToGo <= 0) {
+          // First Down
+          nextDown = 1;
+          nextToGo = 10;
+        } else {
+          // Next Down
+          nextDown += 1;
+          if (nextDown > 4) {
+             // Turnover on downs
+             playData.text += ` — Turnover on downs!`;
+             nextPossession = possession === 'home' ? 'away' : 'home';
+             nextBallOn = 100 - nextBallOn;
+             nextDown = 1;
+             nextToGo = 10;
+          }
+        }
+      }
+
+      return {
+        possession: nextPossession,
+        ballOn: nextBallOn,
+        down: nextDown,
+        toGo: nextToGo,
+        lastPlayType: type,
+        isGoal
+      };
     });
-  }, [skipping, userHomeAbbr, userAwayAbbr]);
+
+    setPlays(prev => {
+      return [...prev.slice(-49), { id: n, text: playData.text }];
+    });
+  }, [skipping, userHomeAbbr, userAwayAbbr, gameState.possession, gameState.ballOn]);
 
   useEffect(() => {
-    if (!simulating || skipping) {
+    if (!isLiveMode || skipping) {
       clearInterval(intervalRef.current);
       return;
     }
@@ -276,14 +362,14 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       clearInterval(intervalRef.current);
       return;
     }
-    intervalRef.current = setInterval(addPlay, 700);
+    intervalRef.current = setInterval(addPlay, 1500); // Slower for animation
     return () => clearInterval(intervalRef.current);
-  }, [simulating, skipping, addPlay, userGame, userEvent]);
+  }, [isLiveMode, skipping, addPlay, userGame, userEvent]);
 
-  // Stop ticker when simulation finishes
+  // Stop ticker when user chooses to see results (skipping is true)
   useEffect(() => {
-    if (!simulating) clearInterval(intervalRef.current);
-  }, [simulating]);
+    if (skipping) clearInterval(intervalRef.current);
+  }, [skipping]);
 
   // ── Auto-scroll play log ─────────────────────────────────────────────────
 
@@ -297,8 +383,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   const handleSkip = () => {
     setSkipping(true);
+    setIsLiveMode(false); // Stop the visualizer immediately
     clearInterval(intervalRef.current);
   };
+
+  const handleFinishWatching = () => {
+    setIsLiveMode(false);
+    setSkipping(true);
+    clearInterval(intervalRef.current);
+  }
 
   // ── Build scoreboard data ────────────────────────────────────────────────
 
@@ -321,7 +414,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   );
 
   // Final results to show when sim is done — user's game only.
-  const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
+  const isFinished = (lastResults?.length ?? 0) > 0;
   const userLastResults = (lastResults ?? []).filter(
     r => r.homeId === userTeamId || r.awayId === userTeamId
   );
@@ -343,44 +436,46 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         background: 'var(--surface-strong)',
         borderBottom: '1px solid var(--hairline)',
       }}>
-        {simulating && <LiveDot />}
+        {isLiveMode && <LiveDot />}
         <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
-          {simulating
-            ? `Week ${league?.week} · Simulating…`
+          {isLiveMode
+            ? `Week ${league?.week} · ${workerSimulating ? 'Simulating…' : 'Finalizing…'}`
             : `Week ${league?.week ?? ''} · Final Results`}
         </span>
 
-        {simulating && !skipping && (
+        {isLiveMode && !skipping && (
           <>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 8 }}>
-              {simProgress}%
-            </span>
+            {workerSimulating && (
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginLeft: 8 }}>
+                {simProgress}%
+              </span>
+            )}
+            {!workerSimulating && (
+               <span style={{ fontSize: 'var(--text-xs)', color: 'var(--success)', marginLeft: 8, fontWeight: 700 }}>
+                 COMPLETE
+               </span>
+            )}
+
             <button
-              onClick={handleSkip}
+              onClick={workerSimulating ? handleSkip : handleFinishWatching}
               style={{
                 marginLeft: 'auto',
-                background: 'var(--surface-strong)',
-                border: '1px solid var(--hairline)',
+                background: workerSimulating ? 'var(--surface-strong)' : 'var(--accent)',
+                color: workerSimulating ? 'var(--text-muted)' : '#fff',
+                border: workerSimulating ? '1px solid var(--hairline)' : 'none',
                 borderRadius: 'var(--radius-sm)',
                 cursor: 'pointer',
                 fontSize: 'var(--text-xs)',
-                color: 'var(--text-muted)',
-                padding: '3px 10px',
+                padding: '5px 12px',
                 fontWeight: 600,
               }}
             >
-              Skip to End
+              {workerSimulating ? 'Skip to End' : 'View Final Results'}
             </button>
           </>
         )}
 
-        {simulating && skipping && (
-          <span style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', fontStyle: 'italic' }}>
-            Waiting for results…
-          </span>
-        )}
-
-        {!simulating && (
+        {!isLiveMode && (
           <button
             onClick={() => setVisible(false)}
             style={{
@@ -396,10 +491,10 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       </div>
 
       {/* ── Progress bar ── */}
-      {simulating && (
+      {isLiveMode && (
         <div style={{ height: 3, background: 'var(--hairline)' }}>
           <div style={{
-            height: '100%', width: `${simProgress}%`,
+            height: '100%', width: `${workerSimulating ? simProgress : 100}%`,
             background: skipping ? 'var(--text-muted)' : 'var(--accent)',
             transition: 'width 0.2s ease',
           }} />
@@ -413,13 +508,24 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         gap: 0,
         minHeight: 200,
       }}>
-        {/* ── Left: Scoreboard ── */}
+        {/* ── Left: Scoreboard + Visualizer ── */}
         <div style={{
            flex: '999 1 300px',
            padding: 'var(--space-4)',
            borderRight: '1px solid var(--hairline)',
-           borderBottom: '1px solid var(--hairline)', // fallback for wrapping
+           borderBottom: '1px solid var(--hairline)',
         }}>
+          {isLiveMode && !skipping && (userGame || userEvent) && (
+            <FieldVisualizer
+              possession={gameState.possession}
+              ballOn={gameState.ballOn}
+              yardsToGo={gameState.toGo}
+              down={gameState.down}
+              playType={gameState.lastPlayType}
+              isGoal={gameState.isGoal}
+            />
+          )}
+
           <div style={{
             fontSize: 'var(--text-xs)', fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: '0.8px',
@@ -444,7 +550,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             ))}
 
             {/* User's pending game (still in progress during sim) */}
-            {simulating && userPendingGames.map((g, i) => (
+            {isLiveMode && userPendingGames.map((g, i) => (
               <PendingCard
                 key={i}
                 game={g}
@@ -453,8 +559,8 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
               />
             ))}
 
-            {/* Post-sim fallback: show user's lastResult if no events (e.g. skip was used) */}
-            {isFinished && userResolvedEvents.length === 0 && userLastResults.map((r, i) => (
+            {/* Post-sim fallback */}
+            {!isLiveMode && isFinished && userResolvedEvents.length === 0 && userLastResults.map((r, i) => (
               <MatchupCard
                 key={i}
                 event={{
@@ -470,12 +576,6 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 pending={false}
               />
             ))}
-
-            {userResolvedEvents.length === 0 && !simulating && (
-              <p style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', margin: 0 }}>
-                No games to display.
-              </p>
-            )}
           </div>
         </div>
 
@@ -483,8 +583,8 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         <div style={{
            flex: '1 1 280px',
            display: 'flex', flexDirection: 'column',
-           borderTop: '1px solid var(--hairline)', // for wrapping
-           marginTop: -1, // collapse double border if wrapped
+           borderTop: '1px solid var(--hairline)',
+           marginTop: -1,
         }}>
           <div style={{
             padding: 'var(--space-3) var(--space-4)',
@@ -499,12 +599,12 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
           <div
             ref={playLogRef}
             style={{
-              flex: 1, overflowY: 'auto', maxHeight: 280, minHeight: 150,
+              flex: 1, overflowY: 'auto', maxHeight: 380, minHeight: 150,
               padding: 'var(--space-2) var(--space-3)',
               display: 'flex', flexDirection: 'column', gap: 'var(--space-1)',
             }}
           >
-            {plays.length === 0 && simulating && !skipping && (
+            {plays.length === 0 && isLiveMode && !skipping && (
               <p style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', margin: 0, padding: 'var(--space-2) 0' }}>
                 {userGame || userEvent ? 'Simulation starting…' : 'Your team is on a bye this week.'}
               </p>
@@ -514,7 +614,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 Skipping to final results…
               </p>
             )}
-            {!simulating && plays.length === 0 && (
+            {!isLiveMode && plays.length === 0 && (
               <p style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', margin: 0, padding: 'var(--space-2) 0' }}>
                 Simulation complete.
               </p>
