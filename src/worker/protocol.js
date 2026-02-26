@@ -73,6 +73,7 @@ export const toWorker = Object.freeze({
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
   UPDATE_SETTINGS:    'UPDATE_SETTINGS',      // { settings }
+  UPDATE_STRATEGY:    'UPDATE_STRATEGY',      // { offPlanId, defPlanId, riskId }
 
   /** Roster / Free Agency */
   GET_ROSTER:         'GET_ROSTER',           // { teamId }

@@ -19,6 +19,7 @@ import Draft           from './Draft.jsx';
 import Coaches         from './Coaches.jsx';
 import FreeAgency     from './FreeAgency.jsx';
 import TradeCenter     from './TradeCenter.jsx';
+import StrategyPanel   from './StrategyPanel.jsx';
 import BoxScore        from './BoxScore.jsx';
 import LeagueHistory   from './LeagueHistory.jsx';
 import PlayerProfile   from './PlayerProfile.jsx';
@@ -82,7 +83,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Roster', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Roster', 'Draft', 'Coaches', 'Strategy', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -849,6 +850,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Coaches' && (
         <TabErrorBoundary label="Coaches">
           <Coaches league={league} actions={actions} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Strategy' && (
+        <TabErrorBoundary label="Strategy">
+          <StrategyPanel league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Free Agency' && (

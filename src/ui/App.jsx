@@ -191,6 +191,7 @@ export default function App() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <button
+            id="btnAdvanceWeekTop"
             className="btn btn-primary"
             onClick={handleAdvanceWeek}
             disabled={busy || simulating || isCutdownRequired}

@@ -34,6 +34,7 @@ import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
+import { updateWeeklyStrategy } from '../core/strategy.js';
 import AiLogic from '../core/ai-logic.js';
 import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
@@ -145,6 +146,7 @@ function buildViewState() {
     playoffSeeds: meta?.playoffSeeds ?? null,
     ownerApproval,
     fanApproval,
+    weeklyGamePlan: meta?.weeklyGamePlan ?? { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED' },
     teams,
   };
 }
@@ -1837,6 +1839,19 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
 }
 
+// ── Handler: UPDATE_STRATEGY ─────────────────────────────────────────────────
+
+async function handleUpdateStrategy({ offPlanId, defPlanId, riskId }, id) {
+  const meta = cache.getMeta();
+  if (!meta) {
+    post(toUI.ERROR, { message: 'No league loaded' }, id);
+    return;
+  }
+  updateWeeklyStrategy(meta, offPlanId, defPlanId, riskId);
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 // ── Handler: UPDATE_SETTINGS ─────────────────────────────────────────────────
 
 async function handleUpdateSettings({ settings }, id) {
@@ -3053,6 +3068,7 @@ async function handleMessage(event) {
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
+      case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
