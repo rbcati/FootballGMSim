@@ -236,15 +236,27 @@ export default function PlayerProfile({ playerId, onClose, actions, isUserOnCloc
   const [loading, setLoading]   = useState(true);
   const [extending, setExtending] = useState(false);
 
-  const fetchProfile = () => {
+  const fetchProfile = React.useCallback(() => {
     if (!playerId) return;
     setLoading(true);
     actions.getPlayerCareer(playerId)
       .then(response => { setData(response.payload ?? response); setLoading(false); })
       .catch(err => { console.error('Failed to load player profile:', err); setLoading(false); });
-  };
+  }, [playerId, actions]);
 
-  useEffect(() => { fetchProfile(); }, [playerId]);
+  useEffect(() => {
+    let stale = false;
+    if (!playerId) return;
+    setLoading(true);
+    actions.getPlayerCareer(playerId)
+      .then(response => {
+        if (!stale) { setData(response.payload ?? response); setLoading(false); }
+      })
+      .catch(err => {
+        if (!stale) { console.error('Failed to load player profile:', err); setLoading(false); }
+      });
+    return () => { stale = true; };
+  }, [playerId, actions]);
 
   if (!playerId) return null;
 

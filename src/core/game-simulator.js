@@ -794,25 +794,38 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
 
   const pressureRating = Math.round((passRushPower + passRushSpeed + awareness) / 3 + U.rand(-5, 5));
 
-  let sackChance = (passRushPower + passRushSpeed) / 200;
-  if (modifiers.sackChance) sackChance *= modifiers.sackChance;
-  if (defender.traits && defender.traits.includes(TRAITS.SPEED_RUSHER.id)) sackChance *= 1.2;
+  // ── Sacks ──────────────────────────────────────────────────────────────────
+  // NFL average: ~0.4 sacks/game for a starter. Elite pass-rushers: 0.8–1.2.
+  // Single-game record: 4.5 (hard cap at 4.0 to stay realistic).
+  const rushComposite = (passRushPower + passRushSpeed) / 2;   // 0–100
+  const olStrength = Math.max(50, offenseStrength || 70);       // opponent OL quality
+  let baseSacks = (rushComposite - 50) / 80;                    // 0–0.625 for 50–100 rated
+  baseSacks += U.rand(-0.3, 0.6);                               // variance
+  if (modifiers.sackChance) baseSacks *= modifiers.sackChance;
+  if (defender.traits && defender.traits.includes(TRAITS.SPEED_RUSHER.id)) baseSacks *= 1.25;
+  baseSacks *= (1 - (olStrength - 50) / 200);                   // better OL = fewer sacks
+  const sacks = Math.max(0, Math.min(4, Math.round(baseSacks)));
 
-  const sacks = Math.max(0, Math.min(4, Math.round(sackChance * 3 + U.rand(-0.5, 1.5))));
+  // ── Tackles ────────────────────────────────────────────────────────────────
+  const baseTackles = defender.pos === 'LB' ? 8 : 4;
+  const tackles = Math.max(0, Math.min(15, Math.round(baseTackles + (runStop / 25) + U.rand(-2, 2))));
 
-  const baseTackles = defender.pos === 'LB' ? 8 : 5;
-  const tackles = Math.max(0, Math.min(15, Math.round(baseTackles + (runStop / 20) + U.rand(-1, 3))));
-
-  let tflCount = (runStop / 50) + U.rand(-0.5, 1.5);
-  if (defender.traits && defender.traits.includes(TRAITS.RUN_STUFFER.id)) tflCount *= 1.2;
+  // ── TFL ────────────────────────────────────────────────────────────────────
+  let tflCount = (runStop / 60) + U.rand(-0.3, 1.0);
+  if (defender.traits && defender.traits.includes(TRAITS.RUN_STUFFER.id)) tflCount *= 1.15;
   const tacklesForLoss = Math.max(0, Math.min(3, Math.round(tflCount)));
 
-  const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.3, 0.5))));
-  const fumbleRecoveries = Math.max(0, U.random() < 0.08 ? 1 : 0);
+  // ── Forced fumbles / recoveries ────────────────────────────────────────────
+  const forcedFumbles = Math.max(0, Math.min(2, Math.round((passRushPower / 100) + U.rand(-0.4, 0.3))));
+  const fumbleRecoveries = Math.max(0, U.random() < 0.06 ? 1 : 0);
 
-  const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed)/5);
-  const pressureChance = (passRushPower + passRushSpeed) / 300;
-  const pressures = Math.round(passRushSnaps * pressureChance);
+  // ── Pressures ──────────────────────────────────────────────────────────────
+  // NFL average: ~3–5 pressures/game for starters. Elite: 6–8 max.
+  // Hard cap at 10 per game (single-game outlier ceiling).
+  const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed) / 8);
+  const pressureRate = Math.max(0, (rushComposite - 40) / 250);  // ~0.04–0.24
+  let pressures = Math.round(passRushSnaps * pressureRate + U.rand(-1, 1));
+  pressures = Math.max(0, Math.min(10, pressures));              // HARD CAP: 10/game
 
   return {
     gamesPlayed: 1,

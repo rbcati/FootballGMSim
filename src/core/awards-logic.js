@@ -101,17 +101,21 @@ function offensiveScore(entry, teamWins) {
 
 /**
  * Defensive value score — composite
+ *
+ * Weights are calibrated so that an elite 17-game defensive season
+ * (e.g. 16 sacks, 30 TFL, 70 pressures) produces a score roughly
+ * competitive with but NOT exceeding a strong QB season.
  */
 function defensiveScore(entry) {
   const t   = entry.totals || {};
   const pos = normalisePos(entry.pos);
 
   if (pos === 'EDGE' || pos === 'DT') {
-    return (t.sacks          || 0) * 3.5
-      + (t.tacklesForLoss  || 0) * 1.8
-      + (t.pressures       || 0) * 0.6
-      + (t.forcedFumbles   || 0) * 2.5
-      + (t.tackles         || 0) * 0.25;
+    return (t.sacks          || 0) * 2.5
+      + (t.tacklesForLoss  || 0) * 1.2
+      + (t.pressures       || 0) * 0.3
+      + (t.forcedFumbles   || 0) * 2.0
+      + (t.tackles         || 0) * 0.15;
   }
   if (pos === 'LB') {
     return (t.tackles        || 0) * 0.6
@@ -142,6 +146,11 @@ function defensiveScore(entry) {
 /**
  * MVP composite: heavily favours QBs on winning teams, but any elite
  * offensive or defensive player can appear in the top 5.
+ *
+ * The defensive multiplier (0.35) is intentionally low so that only a
+ * truly historic defensive season (e.g. 20+ sacks on a 13-win team)
+ * can compete with an above-average QB season — matching real-world
+ * MVP voting patterns where only 2 defensive players have ever won.
  */
 function mvpScore(entry, teamWins) {
   const pos = entry.pos?.toUpperCase() ?? '';
@@ -153,8 +162,10 @@ function mvpScore(entry, teamWins) {
     const multiplier = pos === 'QB' ? 1.15 : 1.0;
     return offScore * multiplier;
   }
-  // Defensive players can win MVP but face a significant headwind
-  return defScore * 0.7;
+  // Defensive players can win MVP but face a very steep headwind.
+  // Team wins provide a small boost so elite defenders on winning teams
+  // can still surface in the top 5.
+  return defScore * 0.35 + (teamWins ?? 0) * 0.3;
 }
 
 // ── Key stat summary for display ─────────────────────────────────────────────

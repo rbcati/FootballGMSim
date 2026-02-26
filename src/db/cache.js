@@ -306,6 +306,17 @@ export const cache = {
     _dirty.draftPicks.clear();
   },
 
+  /**
+   * Evict retired players from the hot cache (memory management).
+   * Called AFTER flushDirty() so their updated records are already in DB.
+   * Does NOT add to the dirty set — the DB already has the latest version.
+   */
+  evictRetired() {
+    for (const [id, p] of _players) {
+      if (p.status === 'retired') _players.delete(id);
+    }
+  },
+
   /** Diagnostic: approximate item count per bucket */
   stats() {
     return {
