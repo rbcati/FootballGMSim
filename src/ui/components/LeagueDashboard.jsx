@@ -691,55 +691,101 @@ export default function LeagueDashboard({ league, busy, actions }) {
         </div>
       )}
 
-      {/* ── Status Grid (Financials + Last Game) ── */}
+      {/* ── Status Grid (3-col: Cap Space | Standings | Last Game + Scores) ── */}
       <div className="status-grid">
-        {/* Last Game Widget */}
-        {(() => {
-          const prevWeek = (league.week || 1) - 1;
-          const weekData = league.schedule?.weeks?.find(w => w.week === prevWeek);
-          const game = weekData?.games?.find(g =>
+        {/* Cap Space widget — consolidated financials */}
+        <div className="stat-box">
+          <div className="stat-label">Cap Space</div>
+          <div className="stat-value-large" style={{ color: capRoom > 10 ? 'var(--success)' : capRoom > 0 ? 'var(--warning)' : 'var(--danger)', fontVariantNumeric: 'tabular-nums' }}>
+            ${capRoom.toFixed(1)}M
+          </div>
+          <div style={{ display: 'flex', gap: 12, fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>
+            <span>Used ${capUsed.toFixed(1)}M</span>
+            {deadCap > 0 && <span>Dead ${deadCap.toFixed(1)}M</span>}
+            <span>Total ${capTotal.toFixed(0)}M</span>
+          </div>
+          <div className="stat-bar-container" style={{ marginTop: 4 }}>
+            <div className="stat-bar-fill" style={{ width: `${Math.min(100, (capUsed / capTotal) * 100)}%`, background: capRoom > 10 ? 'var(--success)' : 'var(--danger)' }} />
+          </div>
+        </div>
+
+        {/* Standings snapshot */}
+        <div className="stat-box">
+          <div className="stat-label">Standings</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ fontSize: 'var(--text-xl)', fontWeight: 800, color: 'var(--text)' }}>{userRecord}</span>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              {userTeam ? `${typeof userTeam.conf === 'number' ? CONFS[userTeam.conf] : userTeam.conf} ${typeof userTeam.div === 'number' ? DIVS.find(d => d.idx === userTeam.div)?.name : userTeam.div}` : ''}
+            </span>
+          </div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+            Avg PPG: {avgScore} · Lg OVR: {avgOvr}
+          </div>
+        </div>
+
+        {/* Last Game + compact league scores */}
+        <div className="stat-box">
+          {(() => {
+            const prevWeek = (league.week || 1) - 1;
+            const weekData = league.schedule?.weeks?.find(w => w.week === prevWeek);
+            const allGames = weekData?.games?.filter(g => g.played) ?? [];
+            const userGame = allGames.find(g =>
               (g.home === league.userTeamId || (typeof g.home === 'object' && g.home.id === league.userTeamId)) ||
               (g.away === league.userTeamId || (typeof g.away === 'object' && g.away.id === league.userTeamId))
-          );
+            );
+            const otherGames = allGames.filter(g => g !== userGame);
 
-          if (game && game.played) {
-              const homeId = typeof game.home === 'object' ? game.home.id : game.home;
+            const teamById = {};
+            league.teams?.forEach(t => { teamById[t.id] = t; });
+
+            if (userGame) {
+              const homeId = typeof userGame.home === 'object' ? userGame.home.id : userGame.home;
+              const awayId = typeof userGame.away === 'object' ? userGame.away.id : userGame.away;
               const isHome = homeId === league.userTeamId;
-              const userScore = isHome ? game.homeScore : game.awayScore;
-              const oppScore  = isHome ? game.awayScore : game.homeScore;
+              const userScore = isHome ? userGame.homeScore : userGame.awayScore;
+              const oppScore  = isHome ? userGame.awayScore : userGame.homeScore;
+              const oppId = isHome ? awayId : homeId;
+              const oppAbbr = teamById[oppId]?.abbr ?? '???';
               const win = userScore > oppScore;
               const resultChar = win ? 'W' : (userScore === oppScore ? 'T' : 'L');
               const resultColor = win ? 'var(--success)' : (userScore === oppScore ? 'var(--text-muted)' : 'var(--danger)');
 
               return (
-                  <div className="stat-box">
-                      <div className="stat-label">Last Game</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
-                          <span style={{ fontSize: '1.5rem', fontWeight: 800, color: resultColor }}>{resultChar}</span>
-                          <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>
-                              {userScore}-{oppScore}
-                          </div>
-                      </div>
+                <>
+                  <div className="stat-label">Last Game</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontVariantNumeric: 'tabular-nums' }}>
+                    <span style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: resultColor }}>{resultChar}</span>
+                    <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{userScore}-{oppScore}</span>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>vs {oppAbbr}</span>
                   </div>
+                  {/* Compact other league scores */}
+                  {otherGames.length > 0 && (
+                    <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-subtle)', lineHeight: 1.5, fontVariantNumeric: 'tabular-nums', maxHeight: 48, overflow: 'hidden' }}>
+                      {otherGames.slice(0, 6).map((g, i) => {
+                        const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                        const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                        const hA = teamById[hId]?.abbr ?? '?';
+                        const aA = teamById[aId]?.abbr ?? '?';
+                        return (
+                          <span key={i}>
+                            {aA} {g.awayScore}-{g.homeScore} {hA}
+                            {i < Math.min(otherGames.length, 6) - 1 ? ' · ' : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               );
-          }
-          return null;
-        })()}
-
-        {[
-          { label: 'Total Cap',       value: `$${capTotal.toFixed(1)}M`, pct: 100, color: 'var(--text-muted)' },
-          { label: 'Cap Used',        value: `$${capUsed.toFixed(1)}M`,  pct: Math.min(100, (capUsed/capTotal)*100), color: 'var(--accent)' },
-          { label: 'Dead Cap',        value: `$${deadCap.toFixed(1)}M`,  pct: Math.min(100, (deadCap/capTotal)*100), color: 'var(--text-subtle)' },
-          { label: 'Cap Space',       value: `$${capRoom.toFixed(1)}M`,  pct: Math.min(100, (capRoom/capTotal)*100), color: capRoom > 10 ? 'var(--success)' : 'var(--danger)' },
-        ].map(({ label, value, pct, color }) => (
-          <div key={label} className="stat-box">
-            <div className="stat-label">{label}</div>
-            <div className="stat-value-large" style={{ color: color || 'var(--text)' }}>{value}</div>
-            <div className="stat-bar-container">
-              <div className="stat-bar-fill" style={{ width: `${pct}%`, background: color || 'var(--accent)' }} />
-            </div>
-          </div>
-        ))}
+            }
+            return (
+              <>
+                <div className="stat-label">Last Game</div>
+                <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>No results yet</div>
+              </>
+            );
+          })()}
+        </div>
       </div>
 
       {/* ── Tab Navigation ── */}
