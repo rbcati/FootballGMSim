@@ -56,6 +56,10 @@ export function configureActiveLeague(leagueId) {
     _leagueDB.close();
     _leagueDB = null;
   }
+  // Cancel any in-flight open for the previous league so the next openDB()
+  // call starts a fresh connection to the new league instead of returning
+  // the old promise.
+  _leagueOpening = null;
   _activeLeagueId = leagueId;
 }
 
@@ -70,8 +74,25 @@ export function openDB() {
     return Promise.reject(new Error("No active league configured. Call configureActiveLeague(id) first."));
   }
 
-  // Fast path
-  if (_leagueDB) return Promise.resolve(_leagueDB);
+  // Fast path — but verify the connection is still alive.
+  // iOS/Safari silently kills IDB connections when the app is backgrounded.
+  // A closed connection has objectStoreNames.length === 0 or throws on transaction().
+  if (_leagueDB) {
+    try {
+      // Probe: accessing objectStoreNames on a closed db throws in WebKit.
+      // If it succeeds but has no stores, the handle is stale (shouldn't happen
+      // on a properly-versioned DB, but guard anyway).
+      if (_leagueDB.objectStoreNames.length > 0) {
+        return Promise.resolve(_leagueDB);
+      }
+      // Stale handle — fall through to reopen
+      _leagueDB.close();
+    } catch (_) {
+      // Connection was force-closed by the browser — clean up and reopen.
+    }
+    _leagueDB = null;
+    _leagueOpening = null;
+  }
   if (_leagueOpening) return _leagueOpening;
 
   const dbName = `${LEAGUE_DB_PREFIX}${_activeLeagueId}`;
@@ -87,7 +108,16 @@ export function openDB() {
       settle(reject, new Error('IDB open timed out — please reload the app.'));
     }, 15000);
 
-    const req = indexedDB.open(dbName, LEAGUE_DB_VERSION);
+    let req;
+    try {
+      req = indexedDB.open(dbName, LEAGUE_DB_VERSION);
+    } catch (openErr) {
+      // indexedDB.open() itself can throw on iOS in certain states.
+      clearTimeout(_timer);
+      _leagueOpening = null;
+      settle(reject, openErr);
+      return;
+    }
 
     req.onerror = () => {
       clearTimeout(_timer);
@@ -175,7 +205,19 @@ export function openDB() {
 // ── Open / Upgrade: Global DB ────────────────────────────────────────────────
 
 export function openGlobalDB() {
-  if (_globalDB) return Promise.resolve(_globalDB);
+  // Verify the connection is still alive (iOS kills connections on background).
+  if (_globalDB) {
+    try {
+      if (_globalDB.objectStoreNames.length > 0) {
+        return Promise.resolve(_globalDB);
+      }
+      _globalDB.close();
+    } catch (_) {
+      // Connection was force-closed — clean up and reopen.
+    }
+    _globalDB = null;
+    _globalOpening = null;
+  }
   if (_globalOpening) return _globalOpening;
 
   _globalOpening = new Promise((resolve, reject) => {

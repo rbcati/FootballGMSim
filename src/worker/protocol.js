@@ -156,6 +156,9 @@ export const toUI = Object.freeze({
   ALL_PLAYER_STATS:   'ALL_PLAYER_STATS',     // { stats[] }
   AWARD_RACES:        'AWARD_RACES',          // { week, year, awards, allPro }
 
+  /** Season lifecycle */
+  SEASON_START:       'SEASON_START',         // { year, season, phase } — forces UI to Standings tab
+
   /** Non-fatal notices */
   NOTIFICATION:       'NOTIFICATION',         // { level: 'info'|'warn', message }
 

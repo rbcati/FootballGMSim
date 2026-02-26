@@ -468,18 +468,6 @@ async function handleNewLeague(payload, id) {
       settings:        options.settings ?? {},
     };
 
-    // Create Save Entry
-    const userTeam = teamDefs.find(t => t.id === userTeamId);
-    const saveEntry = {
-        id: leagueId,
-        name: meta.name,
-        year: meta.year,
-        teamId: userTeamId,
-        teamAbbr: userTeam?.abbr || '???',
-        lastPlayed: Date.now()
-    };
-    await Saves.save(saveEntry);
-
     // Separate flat data from the league blob
     // Teams — strip rosters (players stored separately)
     const teams = league.teams.map(t => {
@@ -527,15 +515,31 @@ async function handleNewLeague(payload, id) {
     // Arm the flush guard — new league is now created and ready for writes.
     _saveIsExplicitlyLoaded = true;
 
-    // Persist everything
+    // Persist league DB first — this is the critical data.
+    // The Meta entry MUST be committed before anything else so that a
+    // reload during this window never sees an empty league DB.
+    await Meta.save(cache.getMeta());
     await Promise.all([
-      Meta.save(cache.getMeta()),
       Teams.saveBulk(cache.getAllTeams()),
       Players.saveBulk(cache.getAllPlayers()),
       DraftPicks.saveBulk(cache.getAllDraftPicks()),
     ]);
     // Clear dirty flags after explicit save
     cache.drainDirty();
+
+    // Write the global Save Entry LAST — only after the league DB is confirmed.
+    // This guarantees that if the user sees the save in their list, the league
+    // data definitely exists.
+    const userTeam = teamDefs.find(t => t.id === userTeamId);
+    const saveEntry = {
+        id: leagueId,
+        name: meta.name,
+        year: meta.year,
+        teamId: userTeamId,
+        teamAbbr: userTeam?.abbr || '???',
+        lastPlayed: Date.now()
+    };
+    await Saves.save(saveEntry);
 
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (err) {
@@ -908,7 +912,8 @@ async function handleAdvanceWeek(payload, id) {
     // ── Phase transition: playoffs → offseason_resign ─────────────────────────
     // offseason_resign is the contract-extension window (User + AI renew
     // expiring deals before the FA bidding phase begins).
-    cache.setMeta({ phase: 'offseason_resign', championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null, freeAgencyState: null });
+    // Reset currentWeek so the UI no longer shows "Week 22".
+    cache.setMeta({ phase: 'offseason_resign', currentWeek: 0, championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null, freeAgencyState: null });
 
   } else if (isPlayoffWeek) {
     // ── Regular playoff round → advance bracket to next round ───────────────
@@ -1228,14 +1233,47 @@ async function handleGetPlayerCareer({ playerId }, id) {
       }
     }
 
+    // ── 2c. PlayerStats-based reconstruction (retired players) ─────────────
+    // If the player object was lost (e.g. old saves that deleted retired
+    // players), reconstruct a minimal record from their archived stat rows.
     if (!player) {
-      console.warn(`[Worker] GET_PLAYER_CAREER: Player ${strId} not found in Cache or DB.`);
+      let retiredStats = [];
+      try {
+        retiredStats = (await PlayerStats.byPlayer(strId)) ?? [];
+        if (!retiredStats.length) {
+          const numId = Number(strId);
+          if (Number.isFinite(numId)) retiredStats = (await PlayerStats.byPlayer(numId)) ?? [];
+        }
+      } catch (_) { /* swallow */ }
+
+      if (retiredStats.length > 0) {
+        // Reconstruct a minimal player shell from the stat records
+        const sample = retiredStats[0];
+        player = {
+          id: strId,
+          name: sample.name || 'Retired Player',
+          pos:  sample.pos  || '?',
+          ovr:  sample.ovr  ?? 0,
+          age:  null,
+          teamId: null,
+          status: 'retired',
+          ratings: {},
+          traits: [],
+          accolades: [],
+        };
+        // Stats will be merged below in step 3/4 as normal.
+      }
+    }
+
+    if (!player) {
+      console.warn(`[Worker] GET_PLAYER_CAREER: Player ${strId} not found in Cache, DB, or PlayerStats.`);
       const skeleton = {
         id: strId,
         name: 'Unknown Player',
         pos: '?',
         ovr: 0,
         teamId: null,
+        status: 'unknown',
         ratings: {},
         stats: { career: { gamesPlayed: 0 } }
       };
@@ -2332,7 +2370,9 @@ async function handleAdvanceOffseason(payload, id) {
     if (willRetire) {
       retired.push({ id: player.id, name: player.name, pos: player.pos, age, ovr: player.ovr });
       if (player.teamId != null) recalculateTeamCap(player.teamId);
-      cache.removePlayer(player.id);
+      // Mark as retired instead of deleting — keeps the player record in DB
+      // so GET_PLAYER_CAREER can still resolve name/pos/ovr for history views.
+      cache.updatePlayer(player.id, { status: 'retired', teamId: null });
     } else {
       cache.updatePlayer(player.id, { age: age + 1, ovr: newOvr });
     }
@@ -2348,6 +2388,9 @@ async function handleAdvanceOffseason(payload, id) {
   });
 
   await flushDirty();
+
+  // Free memory: retired players are now persisted to DB, safe to evict from hot cache.
+  cache.evictRetired();
 
   post(toUI.OFFSEASON_PHASE, {
     phase:   'progression_complete',
@@ -2603,6 +2646,15 @@ async function handleStartNewSeason(payload, id) {
   });
 
   await flushDirty();
+
+  // Broadcast SEASON_START so the UI can force-switch to Standings/Dashboard.
+  const updatedMeta = cache.getMeta();
+  post(toUI.SEASON_START, {
+    year:    updatedMeta.year,
+    season:  updatedMeta.season,
+    phase:   updatedMeta.phase,
+    week:    updatedMeta.currentWeek,
+  });
   post(toUI.FULL_STATE, buildViewState(), id);
 }
 

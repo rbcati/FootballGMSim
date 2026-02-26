@@ -172,6 +172,30 @@ export function useWorker() {
             standings:  payload.standings,
           });
           break;
+        case toUI.OFFSEASON_PHASE:
+          // Phase-change signal (e.g. offseason_resign→FA, FA→draft).
+          // Merge the new phase into league state so the UI can gate on it.
+          if (payload.phase) {
+            dispatch({ type: 'STATE_UPDATE', payload: { phase: payload.phase } });
+          }
+          if (payload.message) {
+            dispatch({ type: 'NOTIFY', level: 'info', message: payload.message });
+          }
+          break;
+        case toUI.SEASON_START:
+          // Force the league state to reflect the new season.
+          // The FULL_STATE that follows will have the complete data,
+          // but this ensures the UI immediately recognises the phase change
+          // and can switch tabs (e.g. back to Standings).
+          dispatch({
+            type: 'STATE_UPDATE',
+            payload: {
+              week:  payload.week  ?? 1,
+              phase: payload.phase ?? 'preseason',
+              year:  payload.year,
+            },
+          });
+          break;
         case toUI.SAVED:
           dispatch({ type: 'IDLE' });
           break;
