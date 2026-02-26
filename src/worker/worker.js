@@ -1265,6 +1265,14 @@ async function handleGetPlayerCareer({ playerId }, id) {
         };
         // Stats will be merged below in step 3/4 as normal.
       }
+    } else {
+        // Player FOUND in active cache or DB.
+        // Force status to 'active' if they are on a team roster, to prevent
+        // any lingering 'retired' flags or missing status fields from breaking the UI.
+        // Exception: If they are explicitly marked 'retired' in the cache (e.g. just retired this offseason), keep it.
+        if (player.teamId !== null && player.status !== 'retired') {
+            player.status = 'active';
+        }
     }
 
     if (!player) {
@@ -1852,6 +1860,36 @@ async function handleUpdateSettings({ settings }, id) {
   cache.setMeta({ settings: { ...(current?.settings ?? {}), ...settings } });
   await flushDirty();
   post(toUI.STATE_UPDATE, { settings: cache.getMeta().settings }, id);
+}
+
+// ── Handler: UPDATE_STRATEGY ──────────────────────────────────────────────────
+
+async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId }, id) {
+  const meta = cache.getMeta();
+  const userTeamId = meta.userTeamId;
+  const team = cache.getTeam(userTeamId);
+
+  if (!team) {
+      post(toUI.ERROR, { message: 'User team not found' }, id);
+      return;
+  }
+
+  // Update strategy object
+  const strategies = team.strategies || {};
+  if (offPlanId) strategies.offPlanId = offPlanId;
+  if (defPlanId) strategies.defPlanId = defPlanId;
+  if (riskId)    strategies.riskId    = riskId;
+  // Allow null to clear star target
+  if (starTargetId !== undefined) strategies.starTargetId = starTargetId;
+
+  // Persist
+  cache.updateTeam(userTeamId, { strategies });
+  await flushDirty();
+
+  // Also update legacy meta.weeklyGamePlan for compatibility if needed, but truth is now on team object
+  cache.setMeta({ weeklyGamePlan: strategies });
+
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Cap helper ────────────────────────────────────────────────────────────────
@@ -3110,6 +3148,7 @@ async function handleMessage(event) {
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:    return await handleExtendContract(payload, id);
       case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
+      case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────
       case toWorker.GET_DRAFT_STATE:    return await handleGetDraftState(payload, id);

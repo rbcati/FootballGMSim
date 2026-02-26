@@ -53,6 +53,9 @@ export const toWorker = Object.freeze({
   EXTEND_CONTRACT:    'EXTEND_CONTRACT',   // { playerId, teamId, contract }
   RESTRUCTURE_CONTRACT: 'RESTRUCTURE_CONTRACT',
 
+  /** Strategy */
+  UPDATE_STRATEGY:    'UPDATE_STRATEGY',   // { offPlanId, defPlanId, riskId, starTargetId }
+
   /** Offseason */
   ADVANCE_OFFSEASON:  'ADVANCE_OFFSEASON', // move through offseason phases
   START_NEW_SEASON:   'START_NEW_SEASON',  // finalize offseason → week 1
