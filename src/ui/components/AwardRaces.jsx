@@ -1,492 +1,332 @@
 /**
  * AwardRaces.jsx
  *
- * ZenGM-style mid-season Award Races & Projected All-Pro Team viewer.
+ * Mid-season award projections and All-Pro team display.
+ * ZenGM data-dense style: compact rows, minimal padding, nowrap headers,
+ * .toLocaleString() for yardage stats, overflow-x-auto for mobile.
  *
- * Layout:
- *  - Week indicator header
- *  - Award Races sub-tabs: MVP | OPOY | DPOY | OROY | DROY | All-Pro
- *  - MVP: league-wide top-5 table
- *  - OPOY / DPOY / OROY / DROY: side-by-side AFC / NFC columns
- *  - All-Pro: 1st Team / 2nd Team depth chart grid
+ * Sub-tabs: MVP · OPOY · DPOY · OROY · DROY · All-Pro
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+// ── Configuration ─────────────────────────────────────────────────────────────
+
+const AWARD_TABS = ['MVP', 'OPOY', 'DPOY', 'OROY', 'DROY', 'All-Pro'];
+
+const ALL_PRO_POSITIONS = [
+  { pos: 'QB',   count: 1 },
+  { pos: 'RB',   count: 2 },
+  { pos: 'WR',   count: 3 },
+  { pos: 'TE',   count: 1 },
+  { pos: 'EDGE', count: 2 },
+  { pos: 'DT',   count: 1 },
+  { pos: 'LB',   count: 3 },
+  { pos: 'CB',   count: 2 },
+  { pos: 'S',    count: 1 },
+  { pos: 'K',    count: 1 },
+  { pos: 'P',    count: 1 },
+];
+
+const POS_COLORS = {
+  QB: '#0A84FF', RB: '#34C759', WR: '#FF9F0A', TE: '#BF5AF2',
+  OL: '#636366', DL: '#FF453A', LB: '#FF6B35', CB: '#64D2FF',
+  S:  '#5E5CE6', K:  '#A8A29E', P:  '#A8A29E',
+  EDGE: '#FF453A', DT: '#FF453A',
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function posColor(pos) {
-  const map = {
-    QB: '#0A84FF', RB: '#34C759', WR: '#FF9F0A', TE: '#5E5CE6',
-    OL: '#64D2FF', OT: '#64D2FF', OG: '#64D2FF', C: '#64D2FF',
-    DL: '#FF453A', DE: '#FF453A', DT: '#FF453A', EDGE: '#FF453A',
-    LB: '#FFD60A', CB: '#30D158', S: '#30D158', SS: '#30D158', FS: '#30D158',
-    K: '#AEC6CF', P: '#AEC6CF',
-  };
-  return map[pos?.toUpperCase()] ?? 'var(--text-muted)';
+function fmtStat(value) {
+  if (value == null) return '—';
+  if (typeof value === 'number') {
+    if (value % 1 !== 0) return value.toFixed(1);
+    if (Math.abs(value) >= 1000) return value.toLocaleString();
+  }
+  return String(value);
 }
 
-function rankColor(rank) {
-  if (rank === 1) return '#FFD60A';
-  if (rank === 2) return '#C0C0C0';
-  if (rank === 3) return '#CD7F32';
-  return 'var(--text-subtle)';
+function rankBadge(idx) {
+  if (idx === 0) return { bg: '#B8860B22', color: '#FFD700', label: '1st' };
+  if (idx === 1) return { bg: '#C0C0C022', color: '#C0C0C0', label: '2nd' };
+  if (idx === 2) return { bg: '#CD7F3222', color: '#CD7F32', label: '3rd' };
+  return { bg: 'transparent', color: 'var(--text-subtle)', label: `${idx + 1}th` };
 }
 
-// ── Candidate row ─────────────────────────────────────────────────────────────
+function pickStatKeys(entry) {
+  const t = entry?.totals || {};
+  const stats = [];
 
-function CandidateRow({ candidate, rank, onPlayerSelect, showConf = false }) {
-  if (!candidate) return null;
-  const { name, pos, teamAbbr, keyStats = [], confLabel } = candidate;
+  if ((t.passYd || 0) > 500) stats.push({ label: 'Pass', val: t.passYd }, { label: 'TD', val: t.passTD }, { label: 'Int', val: t.interceptions });
+  else if ((t.rushYd || 0) > 200) stats.push({ label: 'Rush', val: t.rushYd }, { label: 'TD', val: t.rushTD }, { label: 'Rec', val: t.receptions });
+  else if ((t.recYd || 0) > 200) stats.push({ label: 'Rec', val: t.receptions }, { label: 'Yds', val: t.recYd }, { label: 'TD', val: t.recTD });
+  else if ((t.sacks || 0) > 1) stats.push({ label: 'Sck', val: t.sacks }, { label: 'Tkl', val: t.tackles }, { label: 'TFL', val: t.tacklesForLoss });
+  else if ((t.interceptions || 0) > 0) stats.push({ label: 'Int', val: t.interceptions }, { label: 'PD', val: t.passesDefended }, { label: 'Tkl', val: t.tackles });
+  else if ((t.fgMade || 0) > 0) stats.push({ label: 'FGM', val: t.fgMade }, { label: 'FGA', val: t.fgAttempts });
+  else stats.push({ label: 'GP', val: t.gamesPlayed });
+
+  return stats;
+}
+
+// ── Candidate Row ─────────────────────────────────────────────────────────────
+
+function CandidateRow({ entry, rank, onPlayerClick }) {
+  const badge = rankBadge(rank);
+  const posColor = POS_COLORS[entry.pos] || 'var(--text-muted)';
+  const stats = pickStatKeys(entry);
 
   return (
-    <div
-      onClick={() => candidate.playerId != null && onPlayerSelect?.(candidate.playerId)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
-        padding: 'var(--space-3) var(--space-4)',
-        borderBottom: '1px solid var(--hairline)',
-        cursor: onPlayerSelect ? 'pointer' : 'default',
-        transition: 'background 0.1s',
-      }}
-      onMouseEnter={e => { if (onPlayerSelect) e.currentTarget.style.background = 'var(--surface-strong)'; }}
-      onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+    <tr
+      style={{ cursor: 'pointer' }}
+      onClick={() => onPlayerClick && onPlayerClick(entry.playerId)}
     >
-      {/* Rank */}
-      <span style={{ width: 22, textAlign: 'center', fontWeight: 800, fontSize: 'var(--text-sm)', color: rankColor(rank), flexShrink: 0 }}>
-        {rank}
-      </span>
-
-      {/* POS badge */}
-      <span style={{
-        fontSize: 10, fontWeight: 700, padding: '2px 6px',
-        borderRadius: 'var(--radius-pill)', color: '#fff',
-        background: posColor(pos), minWidth: 32, textAlign: 'center', flexShrink: 0,
-      }}>
-        {pos ?? '?'}
-      </span>
-
-      {/* Name + team */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 'var(--text-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {name ?? `Player ${candidate.playerId}`}
-        </div>
-        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-          {teamAbbr ?? '???'}
-          {showConf && confLabel ? ` · ${confLabel}` : ''}
-        </div>
-      </div>
-
-      {/* Key stats */}
-      <div style={{ display: 'flex', gap: 'var(--space-4)', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        {(keyStats ?? []).slice(0, 3).map((ks, i) => (
-          <div key={i} style={{ textAlign: 'center', minWidth: 36, whiteSpace: 'nowrap' }}>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{ks.label}</div>
-            <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>
-              {typeof ks.value === 'number' ? ks.value.toLocaleString() : ks.value}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── Award card ────────────────────────────────────────────────────────────────
-
-function AwardCard({ title, subtitle, candidates = [], onPlayerSelect, showConf = false }) {
-  if (candidates.length === 0) return (
-    <div className="card" style={{ padding: 'var(--space-5)', color: 'var(--text-muted)', textAlign: 'center', fontSize: 'var(--text-sm)' }}>
-      No candidates yet — play through more weeks to see the race take shape.
-    </div>
-  );
-
-  return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{
-        padding: 'var(--space-3) var(--space-4)',
-        background: 'var(--surface-strong)',
-        borderBottom: '1px solid var(--hairline)',
-        display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)',
-      }}>
-        <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', color: 'var(--text-muted)' }}>
-          {title}
+      <td style={{ width: 32, textAlign: 'center' }}>
+        <span style={{
+          display: 'inline-block', width: 22, height: 18,
+          lineHeight: '18px', borderRadius: 3,
+          background: badge.bg, color: badge.color,
+          fontWeight: 800, fontSize: 10, textAlign: 'center',
+        }}>
+          {badge.label}
         </span>
-        {subtitle && (
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', fontWeight: 600 }}>{subtitle}</span>
-        )}
-      </div>
-      {candidates.map((c, i) => (
-        <CandidateRow
-          key={c.playerId ?? i}
-          candidate={c}
-          rank={i + 1}
-          onPlayerSelect={onPlayerSelect}
-          showConf={showConf}
-        />
+      </td>
+      <td style={{ width: 30, textAlign: 'center' }}>
+        <span style={{
+          display: 'inline-block', padding: '0 4px',
+          borderRadius: 3, background: posColor + '22',
+          color: posColor, fontWeight: 700, fontSize: 10,
+        }}>
+          {entry.pos}
+        </span>
+      </td>
+      <td>
+        <span className="player-link" style={{ fontWeight: 600, fontSize: 12 }}>
+          {entry.name}
+        </span>
+        <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--text-subtle)' }}>
+          {entry.teamAbbr ?? entry.teamId}
+        </span>
+      </td>
+      {stats.map((s, i) => (
+        <td key={i} style={{ textAlign: 'right', fontSize: 11, padding: '2px 5px' }}>
+          <span style={{ fontSize: 9, color: 'var(--text-subtle)', marginRight: 3 }}>{s.label}</span>
+          <span style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmtStat(s.val)}</span>
+        </td>
       ))}
-    </div>
+      {/* Pad if fewer than 3 stat columns */}
+      {Array.from({ length: Math.max(0, 3 - stats.length) }, (_, i) => (
+        <td key={`pad-${i}`} />
+      ))}
+    </tr>
   );
 }
 
-// ── Conference split layout ───────────────────────────────────────────────────
+// ── Award Category Panel ──────────────────────────────────────────────────────
 
-function ConferenceSplit({ awardLabel, afcCandidates = [], nfcCandidates = [], onPlayerSelect }) {
-  return (
-    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-5)', minWidth: 560 }}>
-        <AwardCard
-          title={`${awardLabel} — AFC`}
-          candidates={afcCandidates}
-          onPlayerSelect={onPlayerSelect}
-        />
-        <AwardCard
-          title={`${awardLabel} — NFC`}
-          candidates={nfcCandidates}
-          onPlayerSelect={onPlayerSelect}
-        />
-      </div>
-    </div>
-  );
-}
-
-// ── MVP tab ───────────────────────────────────────────────────────────────────
-
-function MVPTab({ award, onPlayerSelect }) {
-  return (
-    <div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 0, marginBottom: 'var(--space-5)' }}>
-        League-wide ranking. QBs on winning teams carry a significant edge, but elite defensive performances can contend.
-      </p>
-      <AwardCard
-        title="Most Valuable Player — League"
-        candidates={award?.mvp?.league ?? []}
-        onPlayerSelect={onPlayerSelect}
-        showConf
-      />
-    </div>
-  );
-}
-
-// ── OPOY tab ──────────────────────────────────────────────────────────────────
-
-function OPOYTab({ award, onPlayerSelect }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-        Best offensive player in each conference. QBs, RBs, WRs, and TEs all compete.
-      </p>
-      <ConferenceSplit
-        awardLabel="Offensive Player of the Year"
-        afcCandidates={award?.opoy?.afc ?? []}
-        nfcCandidates={award?.opoy?.nfc ?? []}
-        onPlayerSelect={onPlayerSelect}
-      />
-    </div>
-  );
-}
-
-// ── DPOY tab ──────────────────────────────────────────────────────────────────
-
-function DPOYTab({ award, onPlayerSelect }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-        Best defensive player in each conference. Pass rushers, shutdown corners, and tackling machines all contend.
-      </p>
-      <ConferenceSplit
-        awardLabel="Defensive Player of the Year"
-        afcCandidates={award?.dpoy?.afc ?? []}
-        nfcCandidates={award?.dpoy?.nfc ?? []}
-        onPlayerSelect={onPlayerSelect}
-      />
-    </div>
-  );
-}
-
-// ── OROY tab ──────────────────────────────────────────────────────────────────
-
-function OROYTab({ award, onPlayerSelect }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-        Best offensive rookie in each conference — first-year players only.
-      </p>
-      <ConferenceSplit
-        awardLabel="Offensive Rookie of the Year"
-        afcCandidates={award?.oroy?.afc ?? []}
-        nfcCandidates={award?.oroy?.nfc ?? []}
-        onPlayerSelect={onPlayerSelect}
-      />
-    </div>
-  );
-}
-
-// ── DROY tab ──────────────────────────────────────────────────────────────────
-
-function DROYTab({ award, onPlayerSelect }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-        Best defensive rookie in each conference — first-year players only.
-      </p>
-      <ConferenceSplit
-        awardLabel="Defensive Rookie of the Year"
-        afcCandidates={award?.droy?.afc ?? []}
-        nfcCandidates={award?.droy?.nfc ?? []}
-        onPlayerSelect={onPlayerSelect}
-      />
-    </div>
-  );
-}
-
-// ── All-Pro tab ───────────────────────────────────────────────────────────────
-
-const ALL_PRO_POSITIONS = [
-  { key: 'QB',   label: 'QB',          slots: 1 },
-  { key: 'RB',   label: 'RB',          slots: 2 },
-  { key: 'WR',   label: 'WR',          slots: 3 },
-  { key: 'TE',   label: 'TE',          slots: 1 },
-  { key: 'EDGE', label: 'EDGE / DE',   slots: 2 },
-  { key: 'DT',   label: 'DT',          slots: 1 },
-  { key: 'LB',   label: 'LB',          slots: 3 },
-  { key: 'CB',   label: 'CB',          slots: 2 },
-  { key: 'S',    label: 'S',           slots: 1 },
-  { key: 'K',    label: 'K',           slots: 1 },
-  { key: 'P',    label: 'P',           slots: 1 },
-];
-
-function AllProSlot({ player, onPlayerSelect }) {
-  if (!player) {
+function AwardPanel({ title, candidates = [], onPlayerClick }) {
+  if (candidates.length === 0) {
     return (
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-        padding: 'var(--space-2) var(--space-3)',
-        borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface-sunken)',
-        color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontStyle: 'italic',
-      }}>
-        TBD
+      <div style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', textAlign: 'center', fontSize: 12 }}>
+        No data available — play more games.
       </div>
     );
   }
+
   return (
-    <div
-      onClick={() => player.playerId != null && onPlayerSelect?.(player.playerId)}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-        padding: 'var(--space-2) var(--space-3)',
-        borderRadius: 'var(--radius-sm)',
-        background: 'var(--surface-strong)',
-        border: '1px solid var(--hairline)',
-        cursor: onPlayerSelect ? 'pointer' : 'default',
-        transition: 'background 0.1s, border-color 0.1s',
-      }}
-      onMouseEnter={e => { if (onPlayerSelect) { e.currentTarget.style.background = 'var(--accent)22'; e.currentTarget.style.borderColor = 'var(--accent)'; } }}
-      onMouseLeave={e => { e.currentTarget.style.background = 'var(--surface-strong)'; e.currentTarget.style.borderColor = 'var(--hairline)'; }}
-    >
-      <span style={{
-        fontSize: 9, fontWeight: 700, padding: '1px 5px',
-        borderRadius: 'var(--radius-pill)', color: '#fff',
-        background: posColor(player.pos), flexShrink: 0,
-      }}>
-        {player.pos ?? '?'}
-      </span>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 'var(--text-xs)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {player.name ?? `Player ${player.playerId}`}
-        </div>
-        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{player.teamAbbr ?? '???'}</div>
-      </div>
-      {/* Top stat */}
-      {player.keyStats?.[0] && (
-        <div style={{ marginLeft: 'auto', textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{player.keyStats[0].label}</div>
-          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700 }}>
-            {typeof player.keyStats[0].value === 'number'
-              ? player.keyStats[0].value.toLocaleString()
-              : player.keyStats[0].value}
-          </div>
-        </div>
-      )}
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <table className="data-table" style={{ minWidth: 360 }}>
+        <thead>
+          <tr>
+            <th style={{ width: 32, textAlign: 'center' }}>#</th>
+            <th style={{ width: 30, textAlign: 'center' }}>Pos</th>
+            <th style={{ textAlign: 'left' }}>Player</th>
+            <th style={{ textAlign: 'right' }}>Stat 1</th>
+            <th style={{ textAlign: 'right' }}>Stat 2</th>
+            <th style={{ textAlign: 'right' }}>Stat 3</th>
+          </tr>
+        </thead>
+        <tbody>
+          {candidates.map((c, i) => (
+            <CandidateRow key={c.playerId ?? i} entry={c} rank={i} onPlayerClick={onPlayerClick} />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function AllProTab({ allPro, onPlayerSelect }) {
-  const [activeTeam, setActiveTeam] = useState('first');
+// ── All-Pro Team Grid ─────────────────────────────────────────────────────────
 
-  const team = allPro?.[activeTeam] ?? {};
+function AllProTeam({ allPro = {}, onPlayerClick }) {
+  const firstTeam  = allPro?.firstTeam  || {};
+  const secondTeam = allPro?.secondTeam || {};
+
+  if (Object.keys(firstTeam).length === 0 && Object.keys(secondTeam).length === 0) {
+    return (
+      <div style={{ padding: 'var(--space-6)', color: 'var(--text-muted)', textAlign: 'center', fontSize: 12 }}>
+        All-Pro voting not yet available. Play more games.
+      </div>
+    );
+  }
 
   return (
-    <div>
-      {/* 1st / 2nd team toggle */}
-      <div className="standings-tabs" style={{ marginBottom: 'var(--space-6)' }}>
-        {[{ key: 'first', label: '1st Team All-Pro' }, { key: 'second', label: '2nd Team All-Pro' }].map(({ key, label }) => (
-          <button
-            key={key}
-            className={`standings-tab${activeTeam === key ? ' active' : ''}`}
-            onClick={() => setActiveTeam(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-        gap: 'var(--space-4)',
-      }}>
-        {ALL_PRO_POSITIONS.map(({ key, label, slots }) => {
-          const players = team[key] ?? [];
-          return (
-            <div key={key} className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              {/* Position header */}
-              <div style={{
-                padding: 'var(--space-2) var(--space-3)',
-                background: 'var(--surface-strong)',
-                borderBottom: '1px solid var(--hairline)',
-                display: 'flex', alignItems: 'center', gap: 'var(--space-2)',
-              }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '1px 6px',
-                  borderRadius: 'var(--radius-pill)', color: '#fff',
-                  background: posColor(key), minWidth: 28, textAlign: 'center',
-                }}>
-                  {key}
-                </span>
-                <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  {label}
-                </span>
-              </div>
-
-              {/* Slot rows */}
-              <div style={{ padding: 'var(--space-2)', display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                {Array.from({ length: slots }, (_, i) => (
-                  <AllProSlot
-                    key={i}
-                    player={players[i] ?? null}
-                    onPlayerSelect={onPlayerSelect}
-                  />
-                ))}
-              </div>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+      {['1st Team', '2nd Team'].map((teamLabel, teamIdx) => {
+        const team = teamIdx === 0 ? firstTeam : secondTeam;
+        return (
+          <div key={teamLabel}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+              letterSpacing: '1px', color: teamIdx === 0 ? 'var(--accent)' : 'var(--text-muted)',
+              marginBottom: 'var(--space-2)', borderBottom: `2px solid ${teamIdx === 0 ? 'var(--accent)' : 'var(--hairline)'}`,
+              paddingBottom: 'var(--space-1)',
+            }}>
+              {teamLabel} All-Pro
             </div>
-          );
-        })}
-      </div>
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left' }}>Pos</th>
+                    <th style={{ textAlign: 'left' }}>Player</th>
+                    <th style={{ textAlign: 'left' }}>Tm</th>
+                    <th style={{ textAlign: 'right' }}>OVR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ALL_PRO_POSITIONS.map(({ pos, count }) => {
+                    const entries = team[pos] ?? [];
+                    return Array.from({ length: count }, (_, slotIdx) => {
+                      const player = entries[slotIdx];
+                      return (
+                        <tr
+                          key={`${pos}-${slotIdx}`}
+                          style={{ cursor: player ? 'pointer' : 'default' }}
+                          onClick={() => player && onPlayerClick && onPlayerClick(player.playerId)}
+                        >
+                          <td>
+                            {slotIdx === 0 && (
+                              <span style={{
+                                display: 'inline-block', padding: '0 4px', borderRadius: 3,
+                                background: (POS_COLORS[pos] || 'var(--text-muted)') + '22',
+                                color: POS_COLORS[pos] || 'var(--text-muted)',
+                                fontWeight: 700, fontSize: 10,
+                              }}>
+                                {pos}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {player ? (
+                              <span className="player-link" style={{ fontSize: 11, fontWeight: 600 }}>
+                                {player.name}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-subtle)', fontSize: 11 }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                            {player?.teamAbbr ?? ''}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {player ? (() => {
+                              const c = player.ovr >= 90 ? '#34C759' : player.ovr >= 80 ? '#0A84FF' : 'var(--text)';
+                              return (
+                                <span style={{
+                                  display: 'inline-block', minWidth: 22, padding: '0 2px', borderRadius: 3,
+                                  background: c + '22', color: c, fontWeight: 800, fontSize: 10, textAlign: 'center',
+                                }}>
+                                  {player.ovr}
+                                </span>
+                              );
+                            })() : ''}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  }).flat()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 
-const AWARD_TABS = [
-  { key: 'mvp',    label: 'MVP' },
-  { key: 'opoy',   label: 'OPOY' },
-  { key: 'dpoy',   label: 'DPOY' },
-  { key: 'oroy',   label: 'OROY' },
-  { key: 'droy',   label: 'DROY' },
-  { key: 'allpro', label: 'All-Pro' },
-];
-
-export default function AwardRaces({ onPlayerSelect, actions }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [activeTab, setActiveTab] = useState('mvp');
+export default function AwardRaces({ actions, onPlayerSelect }) {
+  const [data, setData]         = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [activeTab, setActiveTab] = useState('MVP');
 
   useEffect(() => {
+    if (!actions) return;
     setLoading(true);
-    setError(null);
     actions.getAwardRaces()
       .then(resp => {
         setData(resp.payload ?? resp);
         setLoading(false);
       })
       .catch(err => {
-        console.error('[AwardRaces] fetch failed:', err);
-        setError(err.message ?? 'Failed to load award races');
+        console.error('Failed to load award races:', err);
         setLoading(false);
       });
-  }, []);  // fetch once when tab mounts
+  }, [actions]);
 
-  const { awards, allPro, week, year, phase } = data ?? {};
+  if (loading) {
+    return (
+      <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading award projections...
+      </div>
+    );
+  }
 
-  const isOffseason = phase && phase !== 'regular';
-  const weekLabel   = week ? `Week ${week}` : '';
-  const yearLabel   = year ? `${year} Season` : '';
+  const awards = data?.awards ?? {};
+  const allPro = data?.allPro ?? {};
+  const week   = data?.week ?? 0;
+  const year   = data?.year ?? '?';
 
   return (
     <div>
       {/* ── Header ── */}
-      <div style={{ marginBottom: 'var(--space-6)' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <h3 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 800 }}>
-            Award Races
-          </h3>
-          {!loading && data && (
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              {weekLabel}{weekLabel && yearLabel ? ' · ' : ''}{yearLabel}
-              {isOffseason ? ' · Offseason — final projections' : ' · Projected mid-season standings'}
-            </span>
-          )}
-        </div>
-        {!loading && !error && !isOffseason && (
-          <p style={{ margin: 'var(--space-2) 0 0', fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-            Rankings are updated each time you open this tab and reflect live stats through the latest week played.
-          </p>
-        )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
+        <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800 }}>
+          {year} Award Races
+        </h3>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          Week {week}
+        </span>
       </div>
 
-      {/* ── Loading / Error ── */}
-      {loading && (
-        <div style={{ textAlign: 'center', padding: 'var(--space-12)', color: 'var(--text-muted)' }}>
-          Loading award races…
-        </div>
-      )}
+      {/* ── Tab pills ── */}
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
+        {AWARD_TABS.map(tab => (
+          <button
+            key={tab}
+            className={`standings-tab${activeTab === tab ? ' active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+            style={{ padding: '3px 10px', fontSize: 11 }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-      {!loading && error && (
-        <div style={{
-          padding: 'var(--space-6)', textAlign: 'center', color: 'var(--danger)',
-          background: 'rgba(255,69,58,0.07)', borderRadius: 'var(--radius-md)',
-          border: '1px solid var(--danger)',
-        }}>
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && !data && (
-        <div style={{ textAlign: 'center', padding: 'var(--space-12)', color: 'var(--text-muted)' }}>
-          <div style={{ fontSize: '2rem', marginBottom: 'var(--space-3)' }}>🏆</div>
-          <div>No award data available — play through at least a couple of weeks to see the races begin.</div>
-        </div>
-      )}
-
-      {!loading && !error && data && (
-        <>
-          {/* ── Sub-tab nav ── */}
-          <div className="standings-tabs" style={{ marginBottom: 'var(--space-6)', flexWrap: 'wrap' }}>
-            {AWARD_TABS.map(({ key, label }) => (
-              <button
-                key={key}
-                className={`standings-tab${activeTab === key ? ' active' : ''}`}
-                onClick={() => setActiveTab(key)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* ── Tab content ── */}
-          {activeTab === 'mvp'    && <MVPTab  award={awards} onPlayerSelect={onPlayerSelect} />}
-          {activeTab === 'opoy'   && <OPOYTab award={awards} onPlayerSelect={onPlayerSelect} />}
-          {activeTab === 'dpoy'   && <DPOYTab award={awards} onPlayerSelect={onPlayerSelect} />}
-          {activeTab === 'oroy'   && <OROYTab award={awards} onPlayerSelect={onPlayerSelect} />}
-          {activeTab === 'droy'   && <DROYTab award={awards} onPlayerSelect={onPlayerSelect} />}
-          {activeTab === 'allpro' && <AllProTab allPro={allPro} onPlayerSelect={onPlayerSelect} />}
-        </>
-      )}
+      {/* ── Content Card ── */}
+      <div className="card" style={{ padding: 'var(--space-3)', overflow: 'hidden' }}>
+        {activeTab === 'All-Pro' ? (
+          <AllProTeam allPro={allPro} onPlayerClick={onPlayerSelect} />
+        ) : (
+          <AwardPanel
+            title={activeTab}
+            candidates={awards[activeTab.toLowerCase()] || awards[activeTab] || []}
+            onPlayerClick={onPlayerSelect}
+          />
+        )}
+      </div>
     </div>
   );
 }

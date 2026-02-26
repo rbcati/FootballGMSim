@@ -285,6 +285,104 @@ label {
   white-space: nowrap;
 }
 
+/* ── ZenGM-style data-dense tables ────────────────────────────────────────── */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-strong, rgba(22, 27, 34, 0.95));
+  color: var(--text-muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  padding: 4px 6px;
+  border-bottom: 2px solid var(--hairline);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.data-table tbody td {
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.data-table tbody tr {
+  transition: background 0.08s ease;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.data-table tbody tr.selected,
+.data-table tbody tr.user-row {
+  background: rgba(10, 132, 255, 0.08);
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Numeric columns align right by default */
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+}
+
+/* Clickable name cells */
+.data-table .player-link {
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  border-bottom: 1px dotted transparent;
+  transition: border-color 0.1s;
+}
+
+.data-table .player-link:hover {
+  border-bottom-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Draft board responsive layout */
+.draft-board-grid {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .draft-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-table {
+    font-size: 11px;
+  }
+
+  .data-table thead th {
+    font-size: 9px;
+    padding: 3px 4px;
+  }
+
+  .data-table tbody td {
+    padding: 2px 4px;
+  }
+}
+
 /* ============================================================================
    MODALS
    ============================================================================ */
