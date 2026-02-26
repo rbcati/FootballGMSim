@@ -154,6 +154,8 @@ p {
 .spacer { flex: 1; }
 .muted { color: var(--text-muted); }
 .subtle { color: var(--text-subtle); }
+.text-success { color: var(--success); }
+.text-danger  { color: var(--danger);  }
 .small { font-size: var(--text-sm); }
 .mt { margin-top: var(--space-6); }
 .mb { margin-bottom: var(--space-6); }

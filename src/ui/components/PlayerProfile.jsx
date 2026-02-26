@@ -340,11 +340,19 @@ export default function PlayerProfile({ playerId, onClose, actions, isUserOnCloc
                     : 'Retired'}
                 </div>
 
-                {/* OVR + potential */}
+                {/* OVR + progression delta + potential */}
                 <div style={{ marginTop: 'var(--space-2)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                   <span className={`rating-pill rating-color-${player.ovr >= 85 ? 'elite' : player.ovr >= 75 ? 'good' : 'avg'}`}>
                     {player.ovr} OVR
                   </span>
+                  {player.progressionDelta != null && player.progressionDelta !== 0 && (
+                    <span
+                      className={player.progressionDelta > 0 ? 'text-success' : 'text-danger'}
+                      style={{ fontSize: 'var(--text-sm)', fontWeight: 700 }}
+                    >
+                      ({player.progressionDelta > 0 ? '+' : ''}{player.progressionDelta})
+                    </span>
+                  )}
                   {player.potential && (
                     <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
                       Pot: {player.potential}
