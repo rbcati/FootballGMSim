@@ -1007,6 +1007,19 @@ export function simGameStats(home, away, options = {}) {
     let homeDefenseStrength = calculateDefenseStrength(homeGroups);
     let awayDefenseStrength = calculateDefenseStrength(awayGroups);
 
+    // Difficulty Scaling
+    // If options.difficultyBoost is set and this is an AI team playing the User, apply it.
+    const userTeamId = options.league?.userTeamId;
+    if (options.difficultyBoost && options.difficultyBoost !== 1.0 && userTeamId) {
+        if (home.id === userTeamId) {
+            awayStrength *= options.difficultyBoost;
+            awayDefenseStrength *= options.difficultyBoost;
+        } else if (away.id === userTeamId) {
+            homeStrength *= options.difficultyBoost;
+            homeDefenseStrength *= options.difficultyBoost;
+        }
+    }
+
     // Apply Scheme Penalty
     // If a team is running a 3-4 but has more DL talent than LB talent (or vice versa), apply a penalty
     const applySchemePenalty = (team, defenseStrength, groups) => {
