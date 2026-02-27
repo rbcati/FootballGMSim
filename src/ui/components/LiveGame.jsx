@@ -83,7 +83,7 @@ function MatchupCard({ event, userTeamId, pending }) {
   const finished = !pending;
 
   return (
-    <div style={{
+    <div className={`matchup-card ${isUser ? 'user-game' : ''}`} style={{
       background: 'var(--surface)',
       border: `1px solid ${isUser ? 'var(--accent)' : 'var(--hairline)'}`,
       borderRadius: 'var(--radius-md)',
@@ -91,6 +91,7 @@ function MatchupCard({ event, userTeamId, pending }) {
       display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
       boxShadow: isUser ? '0 0 0 1px var(--accent)' : 'none',
       minWidth: 0,
+      transition: 'all 0.2s ease',
     }}>
       {/* Away team */}
       <TeamBadge abbr={awayAbbr} size={32} isUser={awayId === userTeamId} />
@@ -144,13 +145,14 @@ function PendingCard({ game, teamById, userTeamId }) {
   const away   = teamById[game.away] ?? { abbr: '???', id: game.away };
   const isUser = home.id === userTeamId || away.id === userTeamId;
   return (
-    <div style={{
+    <div className="matchup-card pending" style={{
       background: 'var(--surface)',
       border: `1px solid ${isUser ? 'var(--accent)' : 'var(--hairline)'}`,
       borderRadius: 'var(--radius-md)',
       padding: 'var(--space-3) var(--space-4)',
       display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
       opacity: 0.6,
+      transition: 'all 0.2s ease',
     }}>
       <TeamBadge abbr={away.abbr} size={32} isUser={away.id === userTeamId} />
       <div style={{ flex: 1, textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
@@ -166,24 +168,96 @@ function PendingCard({ game, teamById, userTeamId }) {
 // These are entirely synthetic — the simulator doesn't produce play logs.
 
 const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
+  (o, d, g) => ({
+    text: `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
+    type: g >= 20 ? 'big-play' : 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — QB scrambles for ${g} yds`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — run up the middle, ${g} yds`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — stretch run to the outside, ${g} yds`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
+    type: 'sack',
+    gain: -(g % 8 + 1)
+  }),
+  (o, d, g) => ({
+    text: `${o} — pass incomplete, ${d} breaks it up`,
+    type: 'normal',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${o} — TOUCHDOWN! 6 pts`,
+    type: 'touchdown',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${o} — field goal attempt... GOOD! 3 pts`,
+    type: 'field-goal',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${d} — INTERCEPTION! Ball at the ${g} yd line`,
+    type: 'turnover',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${o} — punt, ${d} fair catch at their ${g} yd line`,
+    type: 'normal',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${o} — penalty: false start, 5 yd loss`,
+    type: 'normal',
+    gain: -5
+  }),
+  (o, d, g) => ({
+    text: `${o} — 4th-and-short: QB sneak, 1st down`,
+    type: 'normal',
+    gain: 2
+  }),
+  (o, d, g) => ({
+    text: `${d} — pass interference called, ${g} yds`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — play-action fake, ${g} yd gain`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — screen pass, ${g} yds after catch`,
+    type: 'normal',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${o} — FUMBLE recovered by ${d}!`,
+    type: 'turnover',
+    gain: 0
+  }),
+  (o, d, g) => ({
+    text: `${o} — 3rd-and-long conversion, ${g} yds`,
+    type: 'big-play',
+    gain: g
+  }),
+  (o, d, g) => ({
+    text: `${d} — safety! 2 pts`,
+    type: 'safety',
+    gain: 0
+  }),
 ];
 
 function generatePlay(homeAbbr, awayAbbr, seed = 0) {
@@ -202,9 +276,11 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [overlayEvent, setOverlayEvent] = useState(null); // Major event type: 'touchdown', 'turnover', etc.
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
+  const overlayTimerRef             = useRef(null);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
 
@@ -250,6 +326,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       setVisible(true);
       setPlays([]);
       setSkipping(false);
+      setOverlayEvent(null);
       playCountRef.current = 0;
     }
     setPrevSim(simulating);
@@ -261,14 +338,29 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+      const play = generatePlay(userHomeAbbr, userAwayAbbr, n);
+
+      // Trigger overlay for major events
+      if (['touchdown', 'field-goal', 'turnover', 'safety', 'sack'].includes(play.type)) {
+        setOverlayEvent(play.type === 'touchdown' ? 'goal' : // Map TD to 'goal' style for now, or add specific style
+                        play.type === 'field-goal' ? 'field-goal' : // Map field-goal
+                        play.type === 'turnover' ? 'save' : // Map turnover to 'save'/shield style
+                        play.type === 'sack' ? 'sack' : // sack
+                        play.type === 'safety' ? 'safety' : 'normal');
+
+        // Clear overlay after 2.5s
+        if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+        overlayTimerRef.current = setTimeout(() => setOverlayEvent(null), 2500);
+      }
+
+      return [...prev.slice(-49), { id: n, ...play }];   // keep last 50 entries
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
 
   useEffect(() => {
     if (!simulating || skipping) {
       clearInterval(intervalRef.current);
+      setOverlayEvent(null);
       return;
     }
     // Only generate plays when the user has a game this week
@@ -298,6 +390,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const handleSkip = () => {
     setSkipping(true);
     clearInterval(intervalRef.current);
+    setOverlayEvent(null);
   };
 
   // ── Build scoreboard data ────────────────────────────────────────────────
@@ -326,16 +419,38 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     r => r.homeId === userTeamId || r.awayId === userTeamId
   );
 
+  // Determine shake effect
+  const isShaking = overlayEvent && ['save', 'sack', 'safety'].includes(overlayEvent);
+
   if (!visible) return null;
 
   return (
     <div style={{
+      position: 'relative',
       background: 'var(--surface)',
       border: '1px solid var(--hairline)',
       borderRadius: 'var(--radius-lg)',
       marginBottom: 'var(--space-6)',
       overflow: 'hidden',
-    }}>
+    }} className={isShaking ? 'shake' : ''}>
+
+      {/* ── Game Event Overlay ── */}
+      {overlayEvent && (
+        <div className={`game-event-overlay ${overlayEvent === 'goal' ? 'goal' :
+                                              overlayEvent === 'field-goal' ? 'kick' :
+                                              overlayEvent === 'save' ? 'save' :
+                                              overlayEvent === 'sack' ? 'save' : // Reuse save style for sack for now
+                                              overlayEvent === 'safety' ? 'save' : ''}`}>
+          <div className="event-text">
+            {overlayEvent === 'goal' ? 'TOUCHDOWN!' :
+             overlayEvent === 'field-goal' ? 'FIELD GOAL!' :
+             overlayEvent === 'save' ? 'TURNOVER!' :
+             overlayEvent === 'sack' ? 'SACK!' :
+             overlayEvent === 'safety' ? 'SAFETY!' : ''}
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
@@ -522,10 +637,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             {plays.map((p) => (
               <div
                 key={p.id}
+                className={`play-item ${p.type === 'touchdown' ? 'play-touchdown' :
+                                       p.type === 'turnover' || p.type === 'sack' || p.type === 'safety' ? 'play-turnover' : ''}`}
                 style={{
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
                   paddingBottom: 'var(--space-1)',
+                  paddingLeft: (p.type === 'touchdown' || p.type === 'turnover' || p.type === 'sack' || p.type === 'safety') ? '4px' : '0',
+                  borderLeft: p.type === 'touchdown' ? '3px solid var(--success)' :
+                              (p.type === 'turnover' || p.type === 'sack' || p.type === 'safety') ? '3px solid var(--danger)' : 'none',
                   animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
                 }}
               >
