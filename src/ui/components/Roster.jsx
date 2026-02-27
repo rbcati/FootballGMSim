@@ -23,6 +23,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import TraitBadge from './TraitBadge';
+import { teamColor } from '../../data/team-utils.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -731,7 +732,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
         }}>
           {/* Left: name + player count */}
           <div>
-            <span style={{ fontWeight: 800, fontSize: 'var(--text-lg)', color: 'var(--text)' }}>
+            <span style={{ fontWeight: 800, fontSize: 'var(--text-lg)', color: team?.abbr ? teamColor(team.abbr) : 'var(--text)' }}>
               {team?.name ?? 'Roster'}
             </span>
             <span style={{

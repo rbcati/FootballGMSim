@@ -470,6 +470,20 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
 
   useEffect(() => { fetchRosters(targetId); }, [targetId, fetchRosters]);
 
+  // ── Sync myTeam / theirTeam with the live league.teams prop ───────────────
+  // After a week is simulated or a previous trade executes, league.teams carries
+  // updated cap figures.  Using stale fetchRoster data here would show wrong
+  // cap-after-trade numbers, so we overlay the live team object when available.
+
+  const liveMyTeam    = useMemo(
+    () => league?.teams?.find(t => t.id === myTeamId) ?? myTeam,
+    [league?.teams, myTeamId, myTeam],
+  );
+  const liveTheirTeam = useMemo(
+    () => (targetId != null ? (league?.teams?.find(t => t.id === targetId) ?? theirTeam) : theirTeam),
+    [league?.teams, targetId, theirTeam],
+  );
+
   // ── Trade value math ───────────────────────────────────────────────────────
 
   const myOfferValue = useMemo(() => {
@@ -489,18 +503,18 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
   // When I receive a player    → I absorb their salary   → my room decreases
 
   const myCapAfter = useMemo(() => {
-    const base    = myTeam?.capRoom ?? 0;
-    const freed   = [...offering ].reduce((s, id) => s + (myRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
+    const base     = liveMyTeam?.capRoom ?? 0;
+    const freed    = [...offering ].reduce((s, id) => s + (myRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
     const absorbed = [...receiving].reduce((s, id) => s + (theirRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
-  }, [offering, receiving, myRoster, theirRoster, myTeam]);
+  }, [offering, receiving, myRoster, theirRoster, liveMyTeam]);
 
   const theirCapAfter = useMemo(() => {
-    const base    = theirTeam?.capRoom ?? 0;
-    const freed   = [...receiving].reduce((s, id) => s + (theirRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
+    const base     = liveTheirTeam?.capRoom ?? 0;
+    const freed    = [...receiving].reduce((s, id) => s + (theirRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
     const absorbed = [...offering ].reduce((s, id) => s + (myRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
-  }, [offering, receiving, myRoster, theirRoster, theirTeam]);
+  }, [offering, receiving, myRoster, theirRoster, liveTheirTeam]);
 
   // ── Selection toggles ──────────────────────────────────────────────────────
 
@@ -631,8 +645,8 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
 
               {/* Cap-space-after-trade panel */}
               <CapImpact
-                myTeam={myTeam}
-                theirTeam={theirTeam}
+                myTeam={liveMyTeam}
+                theirTeam={liveTheirTeam}
                 myCapAfter={myCapAfter}
                 theirCapAfter={theirCapAfter}
               />
@@ -653,7 +667,7 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
               }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 800, fontSize: 'var(--text-sm)', color: 'var(--accent)' }}>
-                    {myTeam?.name ?? 'My Team'} · You Give
+                    {liveMyTeam?.name ?? 'My Team'} · You Give
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     {offering.size} player{offering.size !== 1 ? 's' : ''} + {myPicks.length} pick{myPicks.length !== 1 ? 's' : ''} selected
@@ -701,7 +715,7 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
               }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 800, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
-                    {theirTeam?.name ?? 'Their Team'} · You Receive
+                    {liveTheirTeam?.name ?? 'Their Team'} · You Receive
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     {receiving.size} player{receiving.size !== 1 ? 's' : ''} + {theirPicks.length} pick{theirPicks.length !== 1 ? 's' : ''} selected

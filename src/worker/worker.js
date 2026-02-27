@@ -447,18 +447,16 @@ async function handleLoadSave({ leagueId }, id) {
         }
       }
 
-      // Completeness check: do not send FULL_STATE until the view has all
-      // required fields. A partially-hydrated state causes blank Season/Week.
+      // Completeness check: core fields (seasonId + teams) must be present.
+      // Schedule is intentionally excluded — older saves may have stored it in
+      // a different format; the Schedule tab handles missing data gracefully so
+      // we must NOT block the UI in an infinite spinner waiting for it.
       const viewState = buildViewState();
-      const isComplete = viewState.seasonId != null &&
-        viewState.teams.length > 0 &&
-        (viewState.schedule?.weeks?.length ?? 0) > 0;
+      const isComplete = viewState.seasonId != null && viewState.teams.length > 0;
 
       if (!isComplete) {
-        console.warn('[Worker] LOAD_SAVE: view state incomplete after hydration — retrying', viewState);
-        post(toUI.NOTIFICATION, { level: 'warn', message: 'Hydrating save…' });
-        // Still send the partial state; App.jsx leagueReady guard will show a
-        // loading spinner until the next FULL_STATE with complete data.
+        console.warn('[Worker] LOAD_SAVE: view state incomplete after hydration', viewState);
+        post(toUI.NOTIFICATION, { level: 'warn', message: 'Save data partially loaded — some features may be unavailable.' });
       }
 
       post(toUI.FULL_STATE, viewState, id);
