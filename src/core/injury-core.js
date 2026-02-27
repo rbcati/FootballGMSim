@@ -22,6 +22,14 @@ const INJURIES = [
 export function generateInjury(player, context = {}) {
     // Base chance per game ~1.5%
     let chance = 0.015;
+    // Durability Modifier
+    // Rating 60-99. High durability = lower chance.
+    // 99 durability -> 0.6x multiplier
+    // 60 durability -> 1.4x multiplier
+    const durability = player.ratings?.durability || 80;
+    const durabilityMod = 1.4 - ((durability - 60) / 39) * 0.8;
+    chance *= durabilityMod;
+
 
     // Position modifiers (Physical positions get hurt more)
     if (['RB', 'LB', 'DL', 'OL'].includes(player.pos)) chance *= 1.3;

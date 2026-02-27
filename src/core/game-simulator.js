@@ -509,7 +509,7 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
  * @param {Object} modifiers - Coaching/strategy modifiers
  * @returns {Object} QB game stats
  */
-function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}) {
+function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers = {}, share = 1.0) {
   const ratings = qb.ratings || {};
   const throwPower = ratings.throwPower || 70;
   const throwAccuracy = ratings.throwAccuracy || 70;
@@ -524,6 +524,7 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   const blowoutMod = blowoutLead >= 21 ? 0.72 : 1.0; // suppress passing by ~28% in blowouts
 
   let baseAttempts = 32 + scriptMod + U.rand(-4, 4); // reduced from 34
+  if (share < 1.0) baseAttempts *= share;
   if (modifiers.passVolume) baseAttempts *= modifiers.passVolume;
   baseAttempts *= blowoutMod;
   const attempts = Math.max(18, Math.min(50, Math.round(baseAttempts))); // tightened max from 55
@@ -1352,39 +1353,154 @@ export function simGameStats(home, away, options = {}) {
     if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualFGs, actualXPs, actualTwoPts) => {
+      // Helper to handle positional injuries (QB/RB/WR)
+      // Returns { stats, injury }
+      const processPositionGroup = (players, generateStatsFn, shareDistribution = [1.0], ...args) => {
+          if (!players || players.length === 0) return;
+
+          // Only check injury for the starter (index 0) for now, or iterate
+          // Simpler: iterate provided players and apply shares
+
+          // Special logic for QB/RB/WR starters getting injured mid-game
+          const starter = players[0];
+          let starterShare = shareDistribution[0] || 1.0;
+          let backupShare = 0;
+          let injury = null;
+
+          // Roll for injury on starter
+          if (starter && generateInjury && canPlayerPlay(starter)) {
+             // Roll for in-game injury
+             const dur = starter.ratings?.durability || 80;
+             // Modulate chance based on durability (already handled in generateInjury, but we might want extra 'in-game' factor)
+             // generateInjury handles the probability.
+
+             // We need to simulate "did they get injured during this game"
+             // If we call generateInjury(starter), it returns an injury object if they get hurt.
+             injury = generateInjury(starter);
+
+             if (injury) {
+                 // They got hurt. Determine when.
+                 // Random share 0.1 to 0.9 (10% to 90% of game played)
+                 const playedShare = 0.1 + (U.random() * 0.8);
+                 starterShare *= playedShare;
+                 backupShare = (shareDistribution[0] || 1.0) - starterShare;
+
+                 // Apply injury to player
+                 if (!starter.injuries) starter.injuries = [];
+                 starter.injuries.push(injury);
+                 starter.injured = true;
+                 starter.injuryWeeksRemaining = Math.max(starter.injuryWeeksRemaining || 0, injury.weeksRemaining);
+                 if (injury.seasonEnding) starter.seasonEndingInjury = true;
+
+                 gameInjuries.push({
+                      playerId: starter.id,
+                      name: starter.name,
+                      teamId: team.id,
+                      type: injury.name,
+                      duration: injury.weeksRemaining,
+                      seasonEnding: injury.seasonEnding
+                 });
+             }
+          }
+
+          // Process Starter
+          if (starter) {
+              const stats = generateStatsFn(starter, ...args, starterShare);
+              // Zero out random TDs (handled later)
+              if (stats.passTD !== undefined) stats.passTD = 0;
+              if (stats.rushTD !== undefined) stats.rushTD = 0;
+              if (stats.recTD !== undefined) stats.recTD = 0;
+              Object.assign(starter.stats.game, stats);
+          }
+
+          // Process Backup if needed (either due to injury or rotation)
+          const backup = players[1];
+          // Normal rotation share + extra form injury
+          let rotationShare = shareDistribution[1] || 0;
+          let totalBackupShare = rotationShare + backupShare;
+
+          if (backup && totalBackupShare > 0.05) {
+               const stats = generateStatsFn(backup, ...args, totalBackupShare);
+               if (stats.passTD !== undefined) stats.passTD = 0;
+               if (stats.rushTD !== undefined) stats.rushTD = 0;
+               if (stats.recTD !== undefined) stats.recTD = 0;
+               Object.assign(backup.stats.game, stats);
+          }
+      };
+
        team.roster.forEach(player => {
         initializePlayerStats(player);
         player.stats.game = {};
       });
 
       const qbs = groups['QB'] || [];
-      const qb = qbs.length > 0 ? qbs[0] : null;
       let totalPassAttempts = 30;
 
-      if (qb) {
-        const qbStats = generateQBStats(qb, score, oppScore, oppDefenseStrength, U, mods);
-        if (score > oppScore) qbStats.wins = 1;
-        else if (score < oppScore) qbStats.losses = 1;
-        // Zero out random TDs, we will set real ones later
-        qbStats.passTD = 0;
-        Object.assign(qb.stats.game, qbStats);
-        totalPassAttempts = qbStats.passAtt || 30;
+      // QB Injury/Stats Logic
+      if (qbs.length > 0) {
+          processPositionGroup(qbs,
+            (p, s, os, d, u, m, share) => generateQBStats(p, s, os, d, u, m, share),
+            [1.0], // 100% share for starter normally
+            score, oppScore, oppDefenseStrength, U, mods
+          );
+
+          // Update totalPassAttempts based on whoever played
+          const starterStats = qbs[0].stats.game;
+          const backupStats = qbs[1] ? qbs[1].stats.game : {};
+          totalPassAttempts = (starterStats.passAtt || 0) + (backupStats.passAtt || 0) || 30;
+
+          // Assign Win/Loss to starter
+          if (qbs[0]) {
+             if (score > oppScore) qbs[0].stats.game.wins = 1;
+             else if (score < oppScore) qbs[0].stats.game.losses = 1;
+          }
       }
 
-      const rbs = (groups['RB'] || []).slice(0, 2);
-      rbs.forEach((rb, index) => {
-        const share = index === 0 ? 0.7 : 0.3;
-        const rbStats = generateRBStats(rb, score, oppScore, oppDefenseStrength, U, mods, share);
-        // Zero out random TDs
-        rbStats.rushTD = 0;
-        rbStats.recTD = 0;
-        Object.assign(rb.stats.game, rbStats);
-      });
+      const rbs = (groups['RB'] || []).slice(0, 3);
+      // RB Injury/Stats Logic
+      // 70/30 split normally
+      processPositionGroup(rbs,
+        (p, s, os, d, u, m, share) => generateRBStats(p, s, os, d, u, m, share),
+        [0.7, 0.3],
+        score, oppScore, oppDefenseStrength, U, mods
+      );
 
       const wrs = (groups['WR'] || []).slice(0, 5);
       const tes = (groups['TE'] || []).slice(0, 2);
       const receiverTargetsPool = Math.round(totalPassAttempts * 0.85);
       const allReceivers = [...wrs, ...tes];
+
+      // Check WR/TE In-Game Injuries
+      allReceivers.forEach(rec => {
+          if (generateInjury && canPlayerPlay(rec)) {
+              // Lower chance for WRs than RBs? generateInjury handles position mods.
+              // We only want to injure maybe 1 receiver max per game to avoid chaos?
+              // Standard probability is fine.
+              if (!rec.injured && U.random() < 0.015) { // 1.5% chance per game
+                   const injury = generateInjury(rec);
+                   if (injury) {
+                       if (!rec.injuries) rec.injuries = [];
+                       rec.injuries.push(injury);
+                       rec.injured = true;
+                       rec.injuryWeeksRemaining = Math.max(rec.injuryWeeksRemaining || 0, injury.weeksRemaining);
+                       if (injury.seasonEnding) rec.seasonEndingInjury = true;
+
+                       // Reduce effectiveness for target distribution (simulating partial game)
+                       rec.ovr *= 0.5;
+
+                       gameInjuries.push({
+                          playerId: rec.id,
+                          name: rec.name,
+                          teamId: team.id,
+                          type: injury.name,
+                          duration: injury.weeksRemaining,
+                          seasonEnding: injury.seasonEnding
+                       });
+                   }
+              }
+          }
+      });
+
       // Pass starTargetId from strategies
       const starTargetId = team.strategies?.starTargetId;
       const distributedTargets = distributePassingTargets(allReceivers, receiverTargetsPool, U, starTargetId);
@@ -1506,42 +1622,17 @@ export function simGameStats(home, away, options = {}) {
           }
       }
 
+
       // Assign Pass TDs to QB
-      if (qb && qb.stats.game) {
-          qb.stats.game.passTD = totalRecTDs;
+      const starterQB = qbs.length > 0 ? qbs[0] : null;
+      if (starterQB && starterQB.stats.game) {
+          starterQB.stats.game.passTD = totalRecTDs;
           // QB doesn't get 2PT stats in standard box scores usually (unless rushing/catching),
           // but sometimes passing 2PTs are tracked. For simplicity, we track it on the scorer.
       }
 
-      // --- INJURY GENERATION ---
-      // Check for injuries for all active players in this game
-      if (generateInjury) {
-          team.roster.forEach(player => {
-              if (canPlayerPlay(player)) {
-                  // Only check for players who actually played (simple check: has stats)
-                  // or just check everyone active. Let's check everyone active.
-                  const injury = generateInjury(player);
-                  if (injury) {
-                      if (!player.injuries) player.injuries = [];
-                      player.injuries.push(injury);
-                      player.injured = true;
-                      // Update max weeks remaining
-                      player.injuryWeeks = Math.max(player.injuryWeeks || 0, injury.weeksRemaining);
-                      if (injury.seasonEnding) player.seasonEndingInjury = true;
 
-                      // Collect for return
-                      gameInjuries.push({
-                          playerId: player.id,
-                          name: player.name,
-                          teamId: team.id,
-                          type: injury.name,
-                          duration: injury.weeksRemaining,
-                          seasonEnding: injury.seasonEnding
-                      });
-                  }
-              }
-          });
-      }
+// In-game injuries handled within position groups
     };
 
     // Pass the mods to the team generation

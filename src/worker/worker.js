@@ -865,6 +865,33 @@ async function handleAdvanceWeek(payload, id) {
 
   if (!schedule) { post(toUI.ERROR, { message: 'No schedule found' }, id); return; }
 
+  // ── 0. Update Injuries (Recovery) ─────────────────────────────────────────
+  // Before simulation, process recovery for all players in the league.
+  if (['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
+      const allPlayers = cache.getAllPlayers();
+      for (const p of allPlayers) {
+          if (p.injuryWeeksRemaining && p.injuryWeeksRemaining > 0) {
+              p.injuryWeeksRemaining--;
+              if (p.injuryWeeksRemaining <= 0) {
+                  // Healed
+                  p.injuryWeeksRemaining = 0;
+                  p.injured = false;
+                  p.injuries = []; // Clear injury list
+                  p.seasonEndingInjury = false;
+                  // Notify? Maybe too spammy.
+              }
+              // Mark as dirty to ensure persistence
+              cache.updatePlayer(p.id, {
+                  injuryWeeksRemaining: p.injuryWeeksRemaining,
+                  injured: p.injured,
+                  injuries: p.injuries,
+                  seasonEndingInjury: p.seasonEndingInjury
+              });
+          }
+      }
+  }
+
+
   // Build a temporary league-style object for GameRunner (read-only view of cache)
   const league = buildLeagueForSim(schedule, week, seasonId);
 
@@ -889,7 +916,24 @@ async function handleAdvanceWeek(payload, id) {
       applyGameResultToCache(res, week, seasonId);
 
       // Log significant injuries to News
-      if (res.injuries && res.injuries.length > 0) {
+
+      // Mark injured players as dirty so changes persist
+      if (res.injuries) {
+          for (const inj of res.injuries) {
+             // We just need to trigger a dirty flag. Passing current state works.
+             const p = cache.getPlayer(inj.playerId);
+             if (p) {
+                 cache.updatePlayer(p.id, {
+                     injuries: p.injuries,
+                     injured: p.injured,
+                     injuryWeeksRemaining: p.injuryWeeksRemaining,
+                     seasonEndingInjury: p.seasonEndingInjury
+                 });
+             }
+          }
+      }
+
+if (res.injuries && res.injuries.length > 0) {
           for (const inj of res.injuries) {
               // Log only if duration > 2 weeks to reduce noise, or if season ending
               if (inj.duration > 2 || inj.seasonEnding) {
