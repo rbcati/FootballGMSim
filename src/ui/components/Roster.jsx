@@ -147,7 +147,8 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
       zIndex: 1000
     }}>
       <div className="card" style={{ width: 400, padding: 'var(--space-6)', boxShadow: 'var(--shadow-lg)' }}>
-        <h3 style={{ marginTop: 0 }}>Extend {player.name}</h3>
+        <h3 style={{ marginTop: 0 }}>Extend {player.name}
+                      <StatusBadge injuryWeeks={player.injuryWeeksRemaining} /></h3>
         {loading ? (
           <div style={{ padding: 'var(--space-4)', textAlign: 'center', color: 'var(--text-muted)' }}>Negotiating...</div>
         ) : ask ? (
@@ -231,6 +232,23 @@ function SortTh({ label, sortKey, currentSort, currentDir, onSort, style = {} })
     </th>
   );
 }
+
+
+function StatusBadge({ injuryWeeks }) {
+  if (!injuryWeeks || injuryWeeks <= 0) return null;
+  const isIR = injuryWeeks >= 4;
+  return (
+    <span style={{
+      display: 'inline-block', padding: '1px 5px', borderRadius: 'var(--radius-pill)',
+      background: isIR ? '#FF9F0A' : '#FF453A', color: '#fff',
+      fontSize: 9, fontWeight: 800, letterSpacing: '0.5px',
+      verticalAlign: 'middle', marginLeft: 6
+    }}>
+      {isIR ? 'IR' : 'OUT'}
+    </span>
+  );
+}
+
 
 function OvrBadge({ ovr }) {
   const col = ovrColor(ovr);
@@ -523,13 +541,18 @@ function DepthCard({ player, isStarter }) {
 
   const fit         = player.schemeFit ?? 50;
   const fitCol      = indicatorColor(fit);
-  const borderStyle = isStarter
-    ? `1px solid var(--accent)`
-    : `1px solid var(--hairline)`;
+
+  const isInjured = (player.injuryWeeksRemaining || 0) > 0;
+  const borderStyle = isInjured
+    ? '1px solid #FF453A' // Red border for injured
+    : (isStarter
+        ? '1px solid var(--accent)'
+        : '1px solid var(--hairline)');
+    `1px solid var(--hairline)`;
 
   return (
     <div style={{
-      minWidth: 130, maxWidth: 160, padding: '6px 10px',
+      minWidth: 130, maxWidth: 160, opacity: isInjured ? 0.7 : 1, padding: '6px 10px',
       borderRadius: 'var(--radius-sm)',
       background: isStarter ? 'var(--accent-muted)' : 'var(--surface)',
       border: borderStyle,
@@ -572,7 +595,15 @@ function DepthChartView({ players }) {
     });
     // Sort each group by OVR desc so the best player is always Starter
     Object.keys(map).forEach(key => {
-      map[key].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+
+      map[key].sort((a, b) => {
+          // Push injured to bottom
+          const aInj = (a.injuryWeeksRemaining || 0) > 0 ? 1 : 0;
+          const bInj = (b.injuryWeeksRemaining || 0) > 0 ? 1 : 0;
+          if (aInj !== bInj) return aInj - bInj;
+          return (b.ovr ?? 0) - (a.ovr ?? 0);
+      });
+
     });
     return map;
   }, [players]);

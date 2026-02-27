@@ -207,6 +207,7 @@ function generatePlayerRatings(pos, targetOvr = null) {
     intelligence: genRating(40, 99),
     kickPower: genRating(60, 99),
     kickAccuracy: genRating(60, 99),
+    durability: genRating(60, 99),
     height: U.rand(68, 80),
     weight: U.rand(180, 320)
   };
@@ -362,6 +363,7 @@ function makePlayer(pos, age = null, ovr = null) {
         baseAnnual: contractDetails.baseAnnual,
         signingBonus: contractDetails.signingBonus,
         guaranteedPct: contractDetails.guaranteedPct,
+        injuryWeeksRemaining: 0,
         injuryWeeks: 0,
         fatigue: 0,
         morale: U.rand(70, 95),
