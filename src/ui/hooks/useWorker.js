@@ -387,6 +387,10 @@ export function useWorker() {
     getLeagueLeaders: (mode = 'season') =>
       request(toWorker.GET_LEAGUE_LEADERS, { mode }, { silent: true }),
 
+    /** Fetch dashboard leaders (returns a Promise). */
+    getDashboardLeaders: () =>
+      request(toWorker.GET_DASHBOARD_LEADERS, {}, { silent: true }),
+
     /** Fetch all player stats (returns a Promise). */
     getAllPlayerStats: (payload) =>
       request(toWorker.GET_ALL_PLAYER_STATS, payload, { silent: true }),
