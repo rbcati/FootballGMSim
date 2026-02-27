@@ -1,5 +1,3 @@
-import TeamNeedsWidget from './TeamNeedsWidget';
-        <TeamNeedsWidget needs={teamNeeds} />
 /**
  * Draft.jsx
  *
@@ -20,6 +18,7 @@ import TeamNeedsWidget from './TeamNeedsWidget';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import TraitBadge from './TraitBadge';
 import PlayerProfile from './PlayerProfile';
+import TeamNeedsWidget from './TeamNeedsWidget';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -247,6 +246,8 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
 
       {/* ── Left Panel: Draft Board ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+
+        <TeamNeedsWidget needs={teamNeeds} />
 
         {/* Current pick clock */}
         <div className="card" style={{ padding: 'var(--space-4)', overflow: 'hidden' }}>
