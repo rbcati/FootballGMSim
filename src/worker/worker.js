@@ -331,6 +331,25 @@ async function flushDirty() {
     games:         validGames,
     seasonStats,
   });
+
+  // Heartbeat persistence: post a lightweight save manifest to the UI so it
+  // can mirror the save index in localStorage. This protects against iOS Safari
+  // clearing IndexedDB while the app is backgrounded (the manifest survives in
+  // localStorage and lets the UI show a recovery prompt instead of "No saves").
+  try {
+    const _hbMeta = cache.getMeta();
+    const _hbLeagueId = getActiveLeagueId();
+    if (_hbMeta && _hbLeagueId) {
+      const _hbUserTeam = cache.getTeam(_hbMeta.userTeamId);
+      self.postMessage({ type: 'SAVE_MANIFEST_UPDATE', payload: {
+        id:        _hbLeagueId,
+        name:      _hbMeta.name || `League ${_hbLeagueId}`,
+        year:      _hbMeta.year,
+        teamAbbr:  _hbUserTeam?.abbr,
+        lastPlayed: Date.now(),
+      }});
+    }
+  } catch (_) { /* non-fatal — manifest is best-effort */ }
 }
 
 // ── Bootstrap ────────────────────────────────────────────────────────────────
@@ -412,7 +431,37 @@ async function handleLoadSave({ leagueId }, id) {
         recalculateTeamCap(team.id);
       }
 
-      post(toUI.FULL_STATE, buildViewState(), id);
+      // Auto-generate draft class if save is in draft phase but prospects are missing.
+      // This guards against iOS saves where the worker restarted mid-draft.
+      if (meta.phase === 'draft') {
+        const draftEligible = cache.getAllPlayers().filter(p => p.status === 'draft_eligible');
+        if (draftEligible.length === 0 && !meta.draftState) {
+          const teams = cache.getAllTeams();
+          const ROUNDS = 5;
+          const classSize = ROUNDS * teams.length;
+          const prospects = generateDraftClass(meta.year, { classSize });
+          prospects.forEach(p => {
+            cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
+          });
+          await flushDirty();
+        }
+      }
+
+      // Completeness check: do not send FULL_STATE until the view has all
+      // required fields. A partially-hydrated state causes blank Season/Week.
+      const viewState = buildViewState();
+      const isComplete = viewState.seasonId != null &&
+        viewState.teams.length > 0 &&
+        (viewState.schedule?.weeks?.length ?? 0) > 0;
+
+      if (!isComplete) {
+        console.warn('[Worker] LOAD_SAVE: view state incomplete after hydration — retrying', viewState);
+        post(toUI.NOTIFICATION, { level: 'warn', message: 'Hydrating save…' });
+        // Still send the partial state; App.jsx leagueReady guard will show a
+        // loading spinner until the next FULL_STATE with complete data.
+      }
+
+      post(toUI.FULL_STATE, viewState, id);
     } else {
       post(toUI.ERROR, { message: "Save not found" }, id);
     }
@@ -954,7 +1003,7 @@ async function handleAdvanceWeek(payload, id) {
     }
   }
 
-  // --- Flush to DB (non-blocking) ---
+  // AUTO-SAVE: phase transition — persist all game results and the new week/phase to IDB.
   await flushDirty();
 
   // --- Check for Game Narratives (User Team) ---
@@ -1864,7 +1913,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     };
     await Transactions.add(tradeRecord);
     await NewsEngine.logTransaction('TRADE', { fromTeamId, toTeamId });
-    await flushDirty();
+    await flushDirty(); // AUTO-SAVE: phase transition — roster swap persisted immediately.
   }
 
   post(toUI.TRADE_RESPONSE, {
@@ -2499,8 +2548,7 @@ async function handleAdvanceOffseason(payload, id) {
     freeAgencyState: { day: 1, maxDays: 5, complete: false },
   });
 
-  // Flush everything to IndexedDB BEFORE notifying the UI so the UI
-  // always reads consistent state when it re-fetches rosters.
+  // AUTO-SAVE: phase transition — flush all progression/retirement changes before notifying UI.
   await flushDirty();
 
   // Free memory: retired players are now persisted to DB, safe to evict from hot cache.
@@ -2627,6 +2675,43 @@ async function archiveSeason(seasonId) {
         populatedStats.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId, age: p.age });
       }
     }));
+
+    // 4a. Archive per-player season stats to player.careerStats for quick access.
+    // This stores a compact SeasonStatLine on the player object itself so the
+    // PlayerProfile can display full career history without an extra DB round-trip.
+    const teamAbbrMap = {};
+    cache.getAllTeams().forEach(t => { teamAbbrMap[t.id] = t.abbr; });
+
+    for (const s of populatedStats) {
+      const p = cache.getPlayer(s.playerId);
+      if (!p || p.status === 'draft_eligible') continue;
+      const totals = s.totals || {};
+      const passAtt  = totals.passAtt  || 0;
+      const passComp = totals.passComp || 0;
+      const line = {
+        season:      seasonId,
+        team:        teamAbbrMap[s.teamId] ?? (s.teamId != null ? String(s.teamId) : 'FA'),
+        gamesPlayed: totals.gamesPlayed ?? 0,
+        passYds:     totals.passYd      ?? 0,
+        passTDs:     totals.passTD      ?? 0,
+        ints:        totals.interceptions ?? 0,
+        compPct:     passAtt > 0 ? Math.round((passComp / passAtt) * 1000) / 10 : 0,
+        rushYds:     totals.rushYd      ?? 0,
+        rushTDs:     totals.rushTD      ?? 0,
+        receptions:  totals.receptions  ?? 0,
+        recYds:      totals.recYd       ?? 0,
+        recTDs:      totals.recTD       ?? 0,
+        tackles:     totals.tackles     ?? 0,
+        sacks:       totals.sacks       ?? 0,
+        ffum:        totals.forcedFumbles ?? 0,
+        ovr:         p.ovr,
+      };
+      const existing = Array.isArray(p.careerStats) ? p.careerStats : [];
+      // Avoid double-archiving if this season was already stored (idempotent).
+      if (!existing.some(l => l.season === seasonId)) {
+        cache.updatePlayer(p.id, { careerStats: [...existing, line] });
+      }
+    }
 
     // 4. Determine Champion
     const championId = meta.championTeamId;
@@ -2761,7 +2846,7 @@ async function handleStartNewSeason(payload, id) {
     offseasonProgressionDone:false,
   });
 
-  await flushDirty();
+  await flushDirty(); // AUTO-SAVE: phase transition — new season initialized to preseason.
 
   // Broadcast SEASON_START so the UI can force-switch to Standings/Dashboard.
   const updatedMeta = cache.getMeta();

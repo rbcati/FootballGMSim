@@ -166,7 +166,21 @@ export default function App() {
     );
   }
 
-  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  // Validate that the league arriving from the worker is fully hydrated before
+  // rendering the dashboard. A partially-hydrated league (e.g. loaded from IDB
+  // before the schedule is written) causes "Season: " / "Week: " to render blank.
+  const leagueReady = league &&
+    league.seasonId != null &&
+    typeof league.week === 'number' &&
+    Array.isArray(league.teams) &&
+    league.teams.length > 0 &&
+    league.schedule?.weeks?.length > 0;
+
+  if (league && !leagueReady) {
+    return <Loading message="Initializing league data…" />;
+  }
+
+  const userTeam = (leagueReady ? league : null)?.teams?.find(t => t.id === league.userTeamId);
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   return (
@@ -371,7 +385,7 @@ export default function App() {
 
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
       <LeagueDashboard
-        league={league}
+        league={leagueReady ? league : null}
         busy={busy}
         actions={actions}
       />

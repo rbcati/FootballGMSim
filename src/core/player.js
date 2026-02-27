@@ -380,6 +380,12 @@ function makePlayer(pos, age = null, ovr = null) {
           season: getZeroStats(),
           career: getZeroStats()
         },
+        // careerStats: archived per-season stat lines (SeasonStatLine[]).
+        // Populated by archiveSeason() in the worker at the end of each season.
+        // Shape: { season, team, gamesPlayed, passYds, passTDs, ints, compPct,
+        //          rushYds, rushTDs, receptions, recYds, recTDs,
+        //          tackles, sacks, ffum, ovr }
+        careerStats: [],
         history: [],
         college: generateCollege()
     };

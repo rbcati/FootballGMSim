@@ -497,6 +497,63 @@ export default function PlayerProfile({ playerId, onClose, actions, teams = [], 
               </div>
             );
           })()}
+
+          {/* ── Per-season Career Stats (from player.careerStats archive) ── */}
+          {!loading && player?.careerStats?.length > 0 && (
+            <div style={{ marginTop: 'var(--space-6)' }}>
+              <h3 style={{ fontSize: 'var(--text-base)', fontWeight: 700, marginBottom: 'var(--space-3)', marginTop: 0 }}>
+                Season Log
+              </h3>
+              <div className="table-wrapper" style={{ overflowX: 'auto' }}>
+                <table className="standings-table" style={{ width: '100%', fontVariantNumeric: 'tabular-nums', minWidth: 360 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: 'left', paddingLeft: 'var(--space-4)' }}>Season</th>
+                      <th style={{ textAlign: 'left' }}>Team</th>
+                      <th style={{ textAlign: 'center' }}>GP</th>
+                      {['QB'].includes(player.pos) && <><th style={{ textAlign: 'center' }}>YDS</th><th style={{ textAlign: 'center' }}>TD</th><th style={{ textAlign: 'center' }}>INT</th><th style={{ textAlign: 'center' }}>CMP%</th></>}
+                      {['RB', 'FB'].includes(player.pos) && <><th style={{ textAlign: 'center' }}>RYDS</th><th style={{ textAlign: 'center' }}>RTD</th><th style={{ textAlign: 'center' }}>REC</th><th style={{ textAlign: 'center' }}>RCYDS</th></>}
+                      {['WR', 'TE'].includes(player.pos) && <><th style={{ textAlign: 'center' }}>REC</th><th style={{ textAlign: 'center' }}>YDS</th><th style={{ textAlign: 'center' }}>TD</th></>}
+                      {['DE', 'DT', 'LB', 'CB', 'S', 'DL'].includes(player.pos) && <><th style={{ textAlign: 'center' }}>TKL</th><th style={{ textAlign: 'center' }}>SCK</th><th style={{ textAlign: 'center' }}>FF</th></>}
+                      <th style={{ textAlign: 'center' }}>OVR</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...player.careerStats].reverse().map((line, i) => (
+                      <tr key={i}>
+                        <td style={{ paddingLeft: 'var(--space-4)', fontWeight: 600 }}>{line.season}</td>
+                        <td style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{line.team}</td>
+                        <td style={{ textAlign: 'center' }}>{line.gamesPlayed}</td>
+                        {['QB'].includes(player.pos) && <>
+                          <td style={{ textAlign: 'center' }}>{line.passYds?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'center' }}>{line.passTDs}</td>
+                          <td style={{ textAlign: 'center' }}>{line.ints}</td>
+                          <td style={{ textAlign: 'center' }}>{line.compPct?.toFixed(1)}%</td>
+                        </>}
+                        {['RB', 'FB'].includes(player.pos) && <>
+                          <td style={{ textAlign: 'center' }}>{line.rushYds?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'center' }}>{line.rushTDs}</td>
+                          <td style={{ textAlign: 'center' }}>{line.receptions}</td>
+                          <td style={{ textAlign: 'center' }}>{line.recYds?.toLocaleString()}</td>
+                        </>}
+                        {['WR', 'TE'].includes(player.pos) && <>
+                          <td style={{ textAlign: 'center' }}>{line.receptions}</td>
+                          <td style={{ textAlign: 'center' }}>{line.recYds?.toLocaleString()}</td>
+                          <td style={{ textAlign: 'center' }}>{line.recTDs}</td>
+                        </>}
+                        {['DE', 'DT', 'LB', 'CB', 'S', 'DL'].includes(player.pos) && <>
+                          <td style={{ textAlign: 'center' }}>{line.tackles}</td>
+                          <td style={{ textAlign: 'center' }}>{line.sacks}</td>
+                          <td style={{ textAlign: 'center' }}>{line.ffum}</td>
+                        </>}
+                        <td style={{ textAlign: 'center' }}><strong>{line.ovr}</strong></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
