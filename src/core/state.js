@@ -739,7 +739,9 @@ export async function saveState(stateToSave = null, options = {}) {
 
     // --- INTEGRATION FIX: Use Dashboard Save System if available ---
     // This ensures auto-saves via beforeunload go to the same DB as manual saves
+    // Priority: use worker-based save if available to avoid main-thread serialization blocking.
     if (typeof window !== 'undefined' && window.saveGame && !options.legacyOnly) {
+        // Pass object directly to window.saveGame - do NOT stringify here
         await window.saveGame(stateForSave, options);
         return true;
     }

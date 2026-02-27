@@ -144,37 +144,51 @@ function createWeekSchedule(week, teams, teamByeWeek, teamGameCount, teamOpponen
     const weekPairings = [];
 
     // Try to pair teams that haven't played each other yet
-    for (let i = 0; i < shuffledTeams.length; i++) {
-        const team1 = shuffledTeams[i];
-        if (usedThisWeek.has(team1.id) || teamGameCount[team1.id] >= 17) continue;
-        
-        // Find best opponent for team1
+    // OPTIMIZATION: Use a Map for O(1) availability checks and filtered list for candidates
+    // instead of nested loops.
+
+    // Filter available candidates once
+    const candidates = shuffledTeams.filter(t =>
+        !usedThisWeek.has(t.id) && teamGameCount[t.id] < 17
+    );
+
+    const availableSet = new Set(candidates.map(t => t.id));
+
+    // Iterate candidates to form pairs
+    // We iterate by index but skip if already used in inner loop
+    for (let i = 0; i < candidates.length; i++) {
+        const team1 = candidates[i];
+        if (usedThisWeek.has(team1.id)) continue;
+
         let bestOpponent = null;
         let fallbackOpponent = null;
 
-        for (let j = i + 1; j < shuffledTeams.length; j++) {
-            const team2 = shuffledTeams[j];
-            if (usedThisWeek.has(team2.id) || teamGameCount[team2.id] >= 17) continue;
+        // Search for an opponent starting from next index
+        for (let j = i + 1; j < candidates.length; j++) {
+            const team2 = candidates[j];
+            if (usedThisWeek.has(team2.id)) continue;
 
-            // Prioritize teams that haven't played each other
-            if (!teamOpponents[team1.id].has(team2.id)) {
+            // Prioritize teams that haven't played each other (O(1) lookup in Set)
+            const opponentsSet = teamOpponents[team1.id];
+            if (!opponentsSet.has(team2.id)) {
                 bestOpponent = team2;
-                break;
+                break; // Found ideal match, stop searching
             }
 
-            // Keep track of the first available opponent as fallback
+            // Keep track of first valid fallback (repeat matchup)
             if (!fallbackOpponent) {
                 fallbackOpponent = team2;
             }
         }
-        
-        // If no new opponent found, take any available opponent
+
         const opponent = bestOpponent || fallbackOpponent;
-        
+
         if (opponent) {
             weekPairings.push([team1, opponent]);
             usedThisWeek.add(team1.id);
             usedThisWeek.add(opponent.id);
+            availableSet.delete(team1.id);
+            availableSet.delete(opponent.id);
 
             // Update tracking
             teamGameCount[team1.id]++;
