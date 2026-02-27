@@ -7,8 +7,6 @@
  * Architecture:
  *  - Receives `gameEvents` — an array of GAME_EVENT payloads emitted by the
  *    worker after each individual game finishes.  One entry per game.
- *  - Each event: { gameId, week, homeId, awayId, homeName, awayName,
- *                  homeAbbr, awayAbbr, homeScore, awayScore }
  *  - The user's own game is identified via `league.userTeamId`.
  *  - Synthetic play-by-play runs on an interval while simulating; text is
  *    generated from team abbreviations so it's always plausible.
@@ -26,6 +24,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useSyntheticGame } from '../hooks/useSyntheticGame.js';
 
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
@@ -161,38 +160,102 @@ function PendingCard({ game, teamById, userTeamId }) {
   );
 }
 
-// ── Synthetic play-by-play generator ─────────────────────────────────────────
-// Generates believable play descriptions from team abbreviations.
-// These are entirely synthetic — the simulator doesn't produce play logs.
+// ── Animated Score Component ─────────────────────────────────────────────────
 
-const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
-];
+function ScoreAnimated({ value }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [animate, setAnimate] = useState(false);
 
-function generatePlay(homeAbbr, awayAbbr, seed = 0) {
-  const isHome = (seed ^ 0x5f) % 3 !== 0;
-  const off    = isHome ? homeAbbr : awayAbbr;
-  const def    = isHome ? awayAbbr : homeAbbr;
-  const gain   = ((seed * 13 + 7) % 28) + 1;
-  const tplIdx = (seed * 7 + 3) % PLAY_POOL.length;
-  return PLAY_POOL[tplIdx](off, def, gain);
+  useEffect(() => {
+    if (value !== displayValue) {
+      setAnimate(true);
+      const timer = setTimeout(() => {
+        setDisplayValue(value);
+        setAnimate(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [value, displayValue]);
+
+  return (
+    <span
+      style={{
+        display: 'inline-block',
+        transition: 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+        transform: animate ? 'scale(1.5)' : 'scale(1)',
+        color: animate ? 'var(--accent)' : 'inherit',
+      }}
+    >
+      {displayValue}
+    </span>
+  );
+}
+
+
+// ── Field Display Component ──────────────────────────────────────────────────
+
+function FieldDisplay({ gameState, homeAbbr, awayAbbr }) {
+  const { ballLocation, possession, down, distance } = gameState;
+
+  // Calculate marker position (0-100%)
+  const markerPos = possession === 'home' ? ballLocation : ballLocation;
+
+  return (
+    <div className="field-container" style={{
+      height: 120,
+      background: 'var(--surface-strong)',
+      border: '1px solid var(--hairline)',
+      borderRadius: 'var(--radius-md)',
+      position: 'relative',
+      margin: 'var(--space-4) 0',
+      overflow: 'hidden',
+    }}>
+      {/* Field markings */}
+      <div style={{
+        position: 'absolute', top: 0, bottom: 0, left: '10%', right: '10%',
+        background: 'linear-gradient(90deg, transparent 49%, rgba(255,255,255,0.1) 50%, transparent 51%)',
+        backgroundSize: '10% 100%',
+      }} />
+
+      {/* Endzones */}
+      <div style={{
+        position: 'absolute', top: 0, bottom: 0, left: 0, width: '10%',
+        background: teamColor(homeAbbr) + '44',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        writingMode: 'vertical-rl', fontWeight: 900, fontSize: 10, color: '#fff',
+        letterSpacing: 2
+      }}>{homeAbbr}</div>
+
+      <div style={{
+        position: 'absolute', top: 0, bottom: 0, right: 0, width: '10%',
+        background: teamColor(awayAbbr) + '44',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        writingMode: 'vertical-rl', fontWeight: 900, fontSize: 10, color: '#fff',
+        letterSpacing: 2
+      }}>{awayAbbr}</div>
+
+      {/* Ball / Line of Scrimmage */}
+      <div style={{
+        position: 'absolute',
+        top: '20%', bottom: '20%',
+        left: `${10 + (markerPos * 0.8)}%`,
+        width: 2,
+        background: 'var(--accent)',
+        boxShadow: '0 0 8px var(--accent)',
+        transition: 'left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        zIndex: 10
+      }}>
+        <div style={{
+          position: 'absolute', top: -14, left: -14,
+          width: 28, padding: '2px 0',
+          background: 'var(--accent)', color: '#fff',
+          borderRadius: 4, fontSize: 9, fontWeight: 700, textAlign: 'center'
+        }}>
+          {down}&{distance}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -202,9 +265,20 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  // Track the week being viewed. Freezes on the "just finished" week when sim ends.
+  const [activeWeek, setActiveWeek] = useState(league?.week);
+
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
+
+  // Update activeWeek only when simulation starts or is running
+  // This prevents the UI from jumping to "Week X+1" immediately after Week X finishes.
+  useEffect(() => {
+    if (simulating && league?.week) {
+      setActiveWeek(league.week);
+    }
+  }, [simulating, league?.week]);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
 
@@ -216,31 +290,38 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
   // Games currently scheduled for this week that haven't resolved yet
   const weekGames = useMemo(() => {
-    if (!league?.schedule?.weeks || !league?.week) return [];
-    const wd = league.schedule.weeks.find(w => w.week === league.week);
+    if (!league?.schedule?.weeks || !activeWeek) return [];
+    const wd = league.schedule.weeks.find(w => w.week === activeWeek);
     return wd?.games ?? [];
-  }, [league?.schedule, league?.week]);
+  }, [league?.schedule, activeWeek]);
 
   // The user's team's game from the current week schedule
   const userGame = useMemo(() => {
-    if (!league?.userTeamId) return null;
-    return weekGames.find(
-      g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId
-    ) ?? null;
+    if (league?.userTeamId == null) return null;
+    return weekGames.find(g => {
+        const homeId = typeof g.home === 'object' ? g.home.id : g.home;
+        const awayId = typeof g.away === 'object' ? g.away.id : g.away;
+        return Number(homeId) === league.userTeamId || Number(awayId) === league.userTeamId;
+    }) ?? null;
   }, [weekGames, league?.userTeamId]);
 
   // Resolved GAME_EVENT for the user's game (if simulation already finished it)
   const userEvent = useMemo(() => {
-    if (!league?.userTeamId) return null;
+    if (league?.userTeamId == null) return null;
+    // We filter by activeWeek in case gameEvents has data from multiple weeks (rare but safe)
     return (gameEvents ?? []).find(
-      e => e.homeId === league.userTeamId || e.awayId === league.userTeamId
+      e => (e.homeId === league.userTeamId || e.awayId === league.userTeamId) && e.week === activeWeek
     ) ?? null;
-  }, [gameEvents, league?.userTeamId]);
+  }, [gameEvents, league?.userTeamId, activeWeek]);
 
   const userHomeAbbr = userEvent?.homeAbbr
     ?? (userGame ? teamById[userGame.home]?.abbr : null) ?? '???';
   const userAwayAbbr = userEvent?.awayAbbr
     ?? (userGame ? teamById[userGame.away]?.abbr : null) ?? '???';
+
+  // ── Hook: Synthetic Game State ──────────────────────────────────────────
+  const { gameState, generatePlay } = useSyntheticGame(userHomeAbbr, userAwayAbbr);
+
 
   // ── Show / hide logic ────────────────────────────────────────────────────
 
@@ -261,10 +342,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+      // Use the hook to generate the play and update field state
+      const play = generatePlay();
+      if (!play) return prev;
+
+      const text = play.text;
+      // Keep last 50 entries
+      return [...prev.slice(-49), { id: n, text, type: play.type }];
     });
-  }, [skipping, userHomeAbbr, userAwayAbbr]);
+  }, [skipping, generatePlay]);
 
   useEffect(() => {
     if (!simulating || skipping) {
@@ -307,13 +393,13 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   // All resolved game events — then filtered to user's game only for the scoreboard.
   const resolvedEvents = gameEvents ?? [];
   const userResolvedEvents = resolvedEvents.filter(
-    e => e.homeId === userTeamId || e.awayId === userTeamId
+    e => (e.homeId === userTeamId || e.awayId === userTeamId) && e.week === activeWeek
   );
 
   // Games still pending (not yet in gameEvents) — show only user's game.
   const resolvedGameIds = new Set(resolvedEvents.map(e => e.gameId));
   const pendingGames = weekGames.filter(g => {
-    const id = `${league?.seasonId}_w${league?.week}_${g.home}_${g.away}`;
+    const id = `${league?.seasonId}_w${activeWeek}_${g.home}_${g.away}`;
     return !resolvedGameIds.has(id);
   });
   const userPendingGames = pendingGames.filter(
@@ -346,8 +432,8 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         {simulating && <LiveDot />}
         <span style={{ fontWeight: 700, fontSize: 'var(--text-sm)', color: 'var(--text)' }}>
           {simulating
-            ? `Week ${league?.week} · Simulating…`
-            : `Week ${league?.week ?? ''} · Final Results`}
+            ? `Week ${activeWeek} · Simulating…`
+            : `Week ${activeWeek ?? ''} · Final Results`}
         </span>
 
         {simulating && !skipping && (
@@ -425,7 +511,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             textTransform: 'uppercase', letterSpacing: '0.8px',
             color: 'var(--text-muted)', marginBottom: 'var(--space-3)',
           }}>
-            Scoreboard — Week {league?.week}
+            Scoreboard — Week {activeWeek}
           </div>
 
           <div style={{
@@ -496,6 +582,14 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
           }}>
             {userHomeAbbr !== '???' ? `${userAwayAbbr} @ ${userHomeAbbr}` : 'Play-by-play'}
           </div>
+
+          {/* Field Display (only when simulating) */}
+          {!skipping && userHomeAbbr !== '???' && (
+            <div style={{ padding: '0 var(--space-4)' }}>
+               <FieldDisplay gameState={gameState} homeAbbr={userHomeAbbr} awayAbbr={userAwayAbbr} />
+            </div>
+          )}
+
           <div
             ref={playLogRef}
             style={{
@@ -522,6 +616,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             {plays.map((p) => (
               <div
                 key={p.id}
+                className={p.type === 'score' ? 'play-touchdown' : ''}
                 style={{
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
