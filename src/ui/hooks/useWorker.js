@@ -214,6 +214,14 @@ export function useWorker() {
         case toUI.NOTIFICATION:
           dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message });
           break;
+        case toUI.RELOAD_REQUIRED:
+          // The IDB was blocked or version-changed — a page reload is the only
+          // safe recovery.  We notify the user then reload after a short delay
+          // so they can read the message.
+          console.warn('[useWorker] RELOAD_REQUIRED received:', payload?.reason);
+          dispatch({ type: 'NOTIFY', level: 'warn', message: 'Database conflict detected — reloading to recover…' });
+          setTimeout(() => window.location.reload(), 2000);
+          break;
         default:
           // Other message types (draft, career stats, history, box score) are handled
           // exclusively via the pending promise map — no extra dispatch needed.

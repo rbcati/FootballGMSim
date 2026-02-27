@@ -37,6 +37,25 @@ const GLOBAL_STORES = {
 /** currently active league ID (null if none selected) */
 let _activeLeagueId = null;
 
+/**
+ * Optional callback invoked when the DB signals it needs a full page reload
+ * (e.g. another tab holds a blocking version, or the connection was killed).
+ * Set this via setReloadRequiredCallback() from the worker so it can post a
+ * message to the UI thread (workers cannot call window.location.reload()).
+ */
+let _onReloadRequired = null;
+
+export function setReloadRequiredCallback(fn) {
+  _onReloadRequired = fn;
+}
+
+function _signalReload(reason) {
+  console.warn(`[DB] Reload required: ${reason}`);
+  if (typeof _onReloadRequired === 'function') {
+    try { _onReloadRequired(reason); } catch (_) {}
+  }
+}
+
 /** Singletons for the active league DB */
 let _leagueDB      = null;
 let _leagueOpening = null;
@@ -126,20 +145,25 @@ export function openDB() {
     };
 
     // onblocked fires on iOS/WebKit when another tab holds a connection at an older
-    // version. Close our own stale handle (if any) and wait for onsuccess to fire.
+    // version. Close our own stale handle, reject the promise, and signal a reload.
     req.onblocked = () => {
-      console.warn('[DB] League DB open blocked — closing stale connection if present.');
+      clearTimeout(_timer);
+      _leagueOpening = null;
       if (_leagueDB) { _leagueDB.close(); _leagueDB = null; }
+      _signalReload('league_db_blocked');
+      settle(reject, new Error('IDB blocked: another tab holds an older version. Please reload.'));
     };
 
     req.onsuccess = () => {
       clearTimeout(_timer);
       _leagueDB = req.result;
       _leagueOpening = null;
-      // Reset the opening promise reference when the connection is force-closed
-      // (e.g. iOS backgrounding the PWA) so the next call to openDB() reopens cleanly.
-      _leagueDB.onversionchange = () => { _leagueDB.close(); _leagueDB = null; _leagueOpening = null; };
-      _leagueDB.onclose       = () => { _leagueDB = null; _leagueOpening = null; };
+      // When another context upgrades the DB, close gracefully and signal reload.
+      _leagueDB.onversionchange = () => {
+        _leagueDB.close(); _leagueDB = null; _leagueOpening = null;
+        _signalReload('league_db_version_change');
+      };
+      _leagueDB.onclose = () => { _leagueDB = null; _leagueOpening = null; };
       settle(resolve, _leagueDB);
     };
 
@@ -238,16 +262,22 @@ export function openGlobalDB() {
     };
 
     req.onblocked = () => {
-      console.warn('[DB] Global DB open blocked — closing stale connection if present.');
+      clearTimeout(_timer);
+      _globalOpening = null;
       if (_globalDB) { _globalDB.close(); _globalDB = null; }
+      _signalReload('global_db_blocked');
+      settle(reject, new Error('Global IDB blocked: another tab holds an older version. Please reload.'));
     };
 
     req.onsuccess = () => {
       clearTimeout(_timer);
       _globalDB = req.result;
       _globalOpening = null;
-      _globalDB.onversionchange = () => { _globalDB.close(); _globalDB = null; _globalOpening = null; };
-      _globalDB.onclose       = () => { _globalDB = null; _globalOpening = null; };
+      _globalDB.onversionchange = () => {
+        _globalDB.close(); _globalDB = null; _globalOpening = null;
+        _signalReload('global_db_version_change');
+      };
+      _globalDB.onclose = () => { _globalDB = null; _globalOpening = null; };
       settle(resolve, _globalDB);
     };
 

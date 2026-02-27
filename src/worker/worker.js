@@ -25,6 +25,7 @@ import {
   Seasons, PlayerStats, Transactions, DraftPicks,
   clearAllData, openDB, bulkWrite,
   Saves, configureActiveLeague, deleteLeagueDB, openGlobalDB, getActiveLeagueId,
+  setReloadRequiredCallback,
 } from '../db/index.js';
 import { makeLeague }     from '../core/league.js';
 import GameRunner         from '../core/game-runner.js';
@@ -39,6 +40,15 @@ import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
+import { runAIToAITrades }          from '../core/trade-logic.js';
+
+// ── DB Reload Guard ───────────────────────────────────────────────────────────
+// Register a callback with db/index.js so that when IDB fires onblocked or
+// onversionchange, the worker can notify the UI to reload (since workers
+// cannot call window.location.reload() directly).
+setReloadRequiredCallback((reason) => {
+  self.postMessage({ type: toUI.RELOAD_REQUIRED, payload: { reason } });
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -932,6 +942,18 @@ async function handleAdvanceWeek(payload, id) {
     cache.setMeta({ currentWeek: nextWeekNum });
   }
 
+  // --- AI-to-AI Trades (regular season only) ---
+  // Runs after standings/scores are finalised so AI decisions reflect current rosters.
+  // Max 2 trades per week — see trade-logic.js for full guardrails.
+  if (meta.phase === 'regular') {
+    try {
+      await runAIToAITrades();
+    } catch (tradeErr) {
+      // Trade engine errors should never crash the week advance.
+      console.warn('[Worker] AI trade engine error (non-fatal):', tradeErr.message);
+    }
+  }
+
   // --- Flush to DB (non-blocking) ---
   await flushDirty();
 
@@ -1394,8 +1416,17 @@ async function handleGetBoxScore({ gameId }, id) {
 // ── Handler: SAVE_NOW ─────────────────────────────────────────────────────────
 
 async function handleSaveNow(payload, id) {
-  await flushDirty();
-  post(toUI.SAVED, {}, id);
+  // Verify the DB connection is still alive before attempting a flush.
+  // On iOS/Safari, the connection can be silently killed after backgrounding.
+  // openDB() re-opens if needed; if it rejects, the catch below surfaces the error.
+  try {
+    if (getActiveLeagueId()) await openDB();
+    await flushDirty();
+    post(toUI.SAVED, {}, id);
+  } catch (err) {
+    console.error('[Worker] SAVE_NOW failed:', err.message);
+    post(toUI.ERROR, { message: `Save failed: ${err.message}` }, id);
+  }
 }
 
 // ── Handler: RESET_LEAGUE ─────────────────────────────────────────────────────

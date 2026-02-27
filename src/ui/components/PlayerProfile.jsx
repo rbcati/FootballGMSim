@@ -231,7 +231,15 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PlayerProfile({ playerId, onClose, actions, isUserOnClock = false, onDraftPlayer = null }) {
+/** Look up a team's full name from the teams array, falling back to the raw ID. */
+function getTeamName(teamId, teams) {
+  if (teamId == null) return 'Free Agent';
+  if (!Array.isArray(teams) || teams.length === 0) return `Team ${teamId}`;
+  const t = teams.find(tm => String(tm.id) === String(teamId));
+  return t ? (t.name || t.abbr || `Team ${teamId}`) : `Team ${teamId}`;
+}
+
+export default function PlayerProfile({ playerId, onClose, actions, teams = [], isUserOnClock = false, onDraftPlayer = null }) {
   const [data, setData]         = useState(null);
   const [loading, setLoading]   = useState(true);
   const [extending, setExtending] = useState(false);
@@ -336,7 +344,7 @@ export default function PlayerProfile({ playerId, onClose, actions, isUserOnCloc
                 <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)' }}>
                   {player.pos} · Age {player.age} ·{' '}
                   {player.status === 'active'
-                    ? (player.teamId != null ? `Team ${player.teamId}` : 'Free Agent')
+                    ? getTeamName(player.teamId, teams)
                     : 'Retired'}
                 </div>
 
@@ -443,7 +451,7 @@ export default function PlayerProfile({ playerId, onClose, actions, isUserOnCloc
                           {seasonYear(s.seasonId)}
                         </td>
                         <td style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
-                          {s.teamId != null ? `T${s.teamId}` : 'FA'}
+                          {s.teamId != null ? getTeamName(s.teamId, teams) : 'FA'}
                         </td>
                         {columns.map(col => (
                           <td
