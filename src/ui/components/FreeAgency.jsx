@@ -1,4 +1,3 @@
-import TeamNeedsWidget from './TeamNeedsWidget';
 /**
  * FreeAgency.jsx
  *
@@ -25,6 +24,7 @@ import TeamNeedsWidget from './TeamNeedsWidget';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import TraitBadge from './TraitBadge';
+import TeamNeedsWidget from './TeamNeedsWidget';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ function CapBanner({ userTeam }) {
             Used / Total
           </div>
           <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--text)' }}>
-            {fmtSalary(capUsed)} / ${capTotal}M
+            {fmtSalary(capUsed)} / $${capTotal}M
           </div>
         </div>
       </div>
