@@ -9,10 +9,31 @@ export default function SaveManager({ actions, onCreate }) {
     try {
       setLoading(true);
       const res = await actions.getAllSaves();
-      setSaves(res.saves || []);
+      const idbSaves = res.saves || [];
+      if (idbSaves.length === 0) {
+        // IDB returned nothing — check localStorage heartbeat manifest.
+        // On iOS Safari PWA, IDB can be silently wiped while backgrounded.
+        // The manifest is updated on every flushDirty() so it survives.
+        try {
+          const manifest = JSON.parse(localStorage.getItem('gmsim_save_manifest') || '[]');
+          if (manifest.length > 0) {
+            setError('Save index recovered from backup. Tap Load to attempt recovery.');
+            setSaves(manifest.map(s => ({ ...s, recovered: true })));
+            return;
+          }
+        } catch (_me) { /* ignore parse errors */ }
+      }
+      setSaves(idbSaves);
     } catch (err) {
       console.error(err);
-      setError(err.message);
+      // IDB failure — fall back to localStorage manifest for recovery.
+      try {
+        const manifest = JSON.parse(localStorage.getItem('gmsim_save_manifest') || '[]');
+        setSaves(manifest.map(s => ({ ...s, recovered: true })));
+        setError(`IDB error — showing recovered saves: ${err.message}`);
+      } catch (_me) {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }

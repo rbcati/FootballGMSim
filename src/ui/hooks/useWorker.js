@@ -222,6 +222,17 @@ export function useWorker() {
           dispatch({ type: 'NOTIFY', level: 'warn', message: 'Database conflict detected — reloading to recover…' });
           setTimeout(() => window.location.reload(), 2000);
           break;
+        case 'SAVE_MANIFEST_UPDATE':
+          // Mirror save metadata to localStorage so iOS Safari can recover the
+          // save list even if IndexedDB is wiped while the app is backgrounded.
+          try {
+            const existing = JSON.parse(localStorage.getItem('gmsim_save_manifest') || '[]');
+            const idx = existing.findIndex(s => s.id === payload.id);
+            if (idx >= 0) existing[idx] = payload;
+            else existing.push(payload);
+            localStorage.setItem('gmsim_save_manifest', JSON.stringify(existing));
+          } catch (_e) { /* non-fatal */ }
+          break;
         default:
           // Other message types (draft, career stats, history, box score) are handled
           // exclusively via the pending promise map — no extra dispatch needed.
