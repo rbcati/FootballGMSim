@@ -28,6 +28,7 @@ import AwardRaces      from './AwardRaces.jsx';
 import PlayerStats     from './PlayerStats.jsx';
 import StrategyPanel   from './StrategyPanel.jsx';
 import NewsFeed        from './NewsFeed.jsx';
+import StatLeadersWidget from './StatLeadersWidget.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -813,6 +814,12 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
         {/* News Feed */}
         <NewsFeed />
+
+        {/* Stat Leaders Widget */}
+        {league.phase !== 'preseason' && (
+          <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} />
+        )}
+
       </div>
 
       {/* ── Tab Navigation ── */}
