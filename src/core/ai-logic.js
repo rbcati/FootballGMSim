@@ -461,58 +461,6 @@ class AiLogic {
      * Scores offers based on Money (70%), Winning (20%), Scheme (10%).
      * Returns { signed: boolean, offer: Object | null }
      */
-    /**
-     * Calculate and rank positional needs for a team.
-     * Returns sorted array of need objects { pos, rank, score, starterOvr }.
-     */
-    static getRankedTeamNeeds(teamId) {
-        const needsMap = this.calculateTeamNeeds(teamId);
-        const roster = cache.getPlayersByTeam(teamId);
-        const STARTERS = Constants.LEAGUE_GEN_CONFIG.STARTERS_COUNT;
-
-        // Find best player at each position to display as "current starter"
-        const bestAtPos = {};
-        roster.forEach(p => {
-            if (!bestAtPos[p.pos] || (p.ovr > bestAtPos[p.pos].ovr)) {
-                bestAtPos[p.pos] = p;
-            }
-        });
-
-        const rankedNeeds = Object.keys(STARTERS).map(pos => {
-            const multiplier = needsMap[pos] || 1.0;
-            // Base need score on multiplier (1.0 = normal, >1.5 = high)
-            // Normalize to a 0-100 scale for UI if needed, or just use raw score
-            // Score formula: (Multiplier - 0.5) * 50?
-            // Let's use the gap from baseline 80 ovr
-
-            const starter = bestAtPos[pos];
-            const starterOvr = starter ? starter.ovr : 0;
-            const targetOvr = 80;
-
-            // Score: higher is more needed.
-            // If empty (0 ovr), score is 80.
-            // If 70 ovr, score is 10.
-            // If 90 ovr, score is -10 (strength).
-            // Multiplier from calculateTeamNeeds already factors depth and starters.
-            // Let's use multiplier primarily for ranking.
-
-            return {
-                pos,
-                score: multiplier,
-                starterOvr,
-                displayScore: Math.max(0, targetOvr - starterOvr) // Simple "points under 80" metric
-            };
-        });
-
-        // Sort by Score descending (highest need first)
-        rankedNeeds.sort((a, b) => b.score - a.score);
-
-        // Add Rank index
-        return rankedNeeds.map((item, index) => ({
-            ...item,
-            rank: index + 1
-        }));
-    }
 
     static evaluateOffers(player) {
         if (!player.offers || player.offers.length === 0) return { signed: false, offer: null };
