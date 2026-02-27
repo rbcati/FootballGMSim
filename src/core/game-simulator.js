@@ -1552,8 +1552,10 @@ export function simGameStats(home, away, options = {}) {
     // Collect all injuries for this game
     const gameInjuries = [];
 
-    generateStatsForTeam(home, homeScore, awayScore, homeDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs, homeTwoPts);
-    generateStatsForTeam(away, awayScore, homeScore, awayDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs, awayTwoPts);
+    // CORRECTED: Pass the OPPONENT'S defense strength when generating stats for a team.
+    // generateStatsForTeam(team, score, oppScore, oppDefenseStrength, ...)
+    generateStatsForTeam(home, homeScore, awayScore, awayDefenseStrength, awayStrength, homeGroups, homeMods, homeTDs, homeFGs, homeXPs, homeTwoPts);
+    generateStatsForTeam(away, awayScore, homeScore, homeDefenseStrength, homeStrength, awayGroups, awayMods, awayTDs, awayFGs, awayXPs, awayTwoPts);
 
     // Situational stats (unaffected by perks for now)
     const generateTeamStats = (team, score, strength, oppStrength) => {
@@ -1838,6 +1840,13 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
 
 /**
  * Simulates a batch of games.
+ *
+ * BATCHING OPTIMIZATION:
+ * This function collects all game results into an in-memory buffer (array) and returns them.
+ * It does NOT perform individual database transactions per game. The caller (worker.js)
+ * is responsible for applying these results to the state cache and performing a single
+ * bulk flush via flushDirty().
+ *
  * @param {Array} games - Array of game objects {home, away, ...}
  * @param {Object} options - Simulation options {verbose: boolean, overrideResults: Array, league: Object}
  * @returns {Array} Array of result objects

@@ -415,6 +415,8 @@
     ROSTER_LIMITS,
 
     // Names/Generation - Replaced hard-coded names with getters to prevent "Race Condition" bugs
+    // Using dynamic getters ensures that even if window.EXPANDED_*_NAMES are loaded
+    // after this module initializes, we still return the correct full lists.
     get FIRST_NAMES() { return getFirstNames(); },
     get LAST_NAMES() { return getLastNames(); },
 

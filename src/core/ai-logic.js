@@ -261,29 +261,40 @@ class AiLogic {
     /**
      * AI submits offers to free agents based on needs.
      * Does NOT sign players immediately; pushes to player.offers.
+     *
+     * OPTIMIZATION: Now accepts an optional pre-filtered freeAgentsMap to avoid
+     * iterating all players for every team.
+     * @param {number} teamId
+     * @param {Object} [freeAgentsMap] - Optional map of pos -> sorted array of free agents
      */
-    static async makeFreeAgencyOffers(teamId) {
+    static async makeFreeAgencyOffers(teamId, freeAgentsMap = null) {
         const team = cache.getTeam(teamId);
         if (!team) return;
 
         // 1. Identify Needs
         const needs = this.calculateTeamNeeds(teamId);
-        const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2); // Lowered threshold slightly for active bidding
+        const highNeedPositions = Object.keys(needs).filter(pos => needs[pos] >= 1.2);
 
         if (highNeedPositions.length === 0) return;
 
-        // 2. Get Available FAs who are NOT already signed/committed to this team
-        const allPlayers = cache.getAllPlayers();
-        const freeAgents = allPlayers.filter(p => !p.teamId || p.status === 'free_agent');
+        // 2. Get Available FAs (use map if provided, otherwise build it inefficiently)
+        let getCandidates = (pos) => {
+             const allPlayers = cache.getAllPlayers();
+             return allPlayers
+                .filter(p => (!p.teamId || p.status === 'free_agent') && p.pos === pos)
+                .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+        };
+
+        if (freeAgentsMap) {
+            getCandidates = (pos) => freeAgentsMap[pos] || [];
+        }
 
         // 3. Attempt to fill each high need position
         for (const pos of highNeedPositions) {
             // Get FAs at this pos, sorted by OVR
-            const candidates = freeAgents
-                .filter(p => p.pos === pos)
-                .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+            const candidates = getCandidates(pos);
 
-            if (candidates.length === 0) continue;
+            if (!candidates || candidates.length === 0) continue;
 
             // Try to offer to the best affordable one
             for (const fa of candidates) {
