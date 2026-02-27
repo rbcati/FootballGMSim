@@ -1006,6 +1006,19 @@ if (res.injuries && res.injuries.length > 0) {
       const rawW   = hScore >= aScore ? (sbR.home ?? sbR.homeTeamId) : (sbR.away ?? sbR.awayTeamId);
       const wId    = Number(typeof rawW === 'object' ? rawW?.id : rawW);
       const champ  = cache.getTeam(wId);
+      // Decrement yearsRemaining for all players at the end of the season
+      const allPlayers = cache.getAllPlayers();
+      for (const p of allPlayers) {
+          // Only process active players (on a team or free agents)
+          if (p.contract && p.contract.yearsRemaining > 0) {
+              p.contract.yearsRemaining--;
+              cache.updatePlayer(p.id, { contract: p.contract });
+          } else if (p.yearsRemaining > 0) {
+              // Legacy fallback
+              p.yearsRemaining--;
+              cache.updatePlayer(p.id, { yearsRemaining: p.yearsRemaining });
+          }
+      }
       if (champ) {
         sbChampId = wId;
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
@@ -1666,6 +1679,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
 async function handleGetRoster({ teamId }, id) {
   const numId = Number(teamId);
   const team  = cache.getTeam(numId);
+  const teamNeeds = AiLogic.getRankedTeamNeeds(numId);
   if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
 
   const players = cache.getPlayersByTeam(numId).map(p => {
@@ -1716,7 +1730,9 @@ async function handleGetRoster({ teamId }, id) {
       capUsed: team.capUsed ?? 0,
       capRoom: team.capRoom ?? 0,
       capTotal:team.capTotal ?? 255,
-      staff:   team.staff // Send staff data
+    },
+    teamNeeds,
+    players,
     },
     players,
   }, id);
@@ -1727,6 +1743,7 @@ async function handleGetRoster({ teamId }, id) {
 async function handleGetFreeAgents(payload, id) {
   const meta = cache.getMeta();
   const userTeamId = meta.userTeamId;
+  const teamNeeds = AiLogic.getRankedTeamNeeds(userTeamId);
 
   const freeAgents = cache.getAllPlayers()
     .filter(p => !p.teamId || p.status === 'free_agent')
@@ -1762,7 +1779,7 @@ async function handleGetFreeAgents(payload, id) {
         };
     });
 
-  post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
+  post(toUI.FREE_AGENT_DATA, { freeAgents, teamNeeds }, id);
 }
 
 // ── Handler: COACHING ACTIONS ────────────────────────────────────────────────
@@ -1989,6 +2006,7 @@ async function handleUpdateSettings({ settings }, id) {
 async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId }, id) {
   const meta = cache.getMeta();
   const userTeamId = meta.userTeamId;
+  const teamNeeds = AiLogic.getRankedTeamNeeds(userTeamId);
   const team = cache.getTeam(userTeamId);
 
   if (!team) {
@@ -2191,7 +2209,9 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
 // ── Handler: GET_DRAFT_STATE ──────────────────────────────────────────────────
 
 async function handleGetDraftState(payload, id) {
-  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  const meta = cache.getMeta();
+  const teamNeeds = meta ? AiLogic.getRankedTeamNeeds(meta.userTeamId) : [];
+  post(toUI.DRAFT_STATE,  { ...buildDraftStateView(), teamNeeds }, id);
 }
 
 // ── Handler: START_DRAFT ──────────────────────────────────────────────────────
@@ -2202,7 +2222,7 @@ async function handleStartDraft(payload, id) {
 
   // Idempotent: if draft is already running, return current state
   if (meta.draftState) {
-    post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+    post(toUI.DRAFT_STATE,  { ...buildDraftStateView(), teamNeeds }, id);
     return;
   }
 
@@ -2253,7 +2273,7 @@ async function handleStartDraft(payload, id) {
   cache.setMeta({ draftState: { picks, currentPickIndex: 0 } });
   await flushDirty();
 
-  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  post(toUI.DRAFT_STATE,  { ...buildDraftStateView(), teamNeeds }, id);
 }
 
 // ── Handler: MAKE_DRAFT_PICK ──────────────────────────────────────────────────
@@ -2303,7 +2323,7 @@ async function handleMakeDraftPick({ playerId }, id) {
     return await handleStartNewSeason({}, id);
   }
 
-  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  post(toUI.DRAFT_STATE,  { ...buildDraftStateView(), teamNeeds }, id);
 }
 
 // ── Handler: SIM_DRAFT_PICK ───────────────────────────────────────────────────
@@ -2317,6 +2337,7 @@ async function handleSimDraftPick(payload, id) {
   if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
 
   const userTeamId = meta.userTeamId;
+  const teamNeeds = AiLogic.getRankedTeamNeeds(userTeamId);
   let currentPickIndex = meta.draftState.currentPickIndex;
   const picks = meta.draftState.picks;
 
@@ -2377,7 +2398,7 @@ async function handleSimDraftPick(payload, id) {
     return await handleStartNewSeason({}, id);
   }
 
-  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  post(toUI.DRAFT_STATE,  { ...buildDraftStateView(), teamNeeds }, id);
 }
 
 // ── Stats / Awards Helpers ────────────────────────────────────────────────────
@@ -2906,6 +2927,7 @@ async function handleStartNewSeason(payload, id) {
 async function handleGetTeamProfile({ teamId }, id) {
   const numId = Number(teamId);
   const team  = cache.getTeam(numId);
+  const teamNeeds = AiLogic.getRankedTeamNeeds(numId);
   if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
 
   // Build a conf+div lookup from current cache so we can identify division titles

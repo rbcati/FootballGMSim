@@ -285,6 +285,7 @@ function generateContract(ovr, pos) {
   return {
     years,
     yearsTotal: years,
+    yearsRemaining: years,
     baseAnnual,
     signingBonus: signingBonus,
     guaranteedPct: C.SALARY_CAP?.GUARANTEED_PCT_DEFAULT || 0.5
@@ -359,6 +360,7 @@ function makePlayer(pos, age = null, ovr = null) {
         ovr: playerOvr,
         displayOvr: playerOvr, // Simplified calibration
         years: contractDetails.years,
+        yearsRemaining: contractDetails.years,
         yearsTotal: contractDetails.yearsTotal,
         baseAnnual: contractDetails.baseAnnual,
         signingBonus: contractDetails.signingBonus,
@@ -570,6 +572,7 @@ function calculateExtensionDemand(player) {
     return {
         years,
         yearsTotal: years,
+    yearsRemaining: years,
         baseAnnual,
         signingBonus,
         guaranteedPct: baseline.guaranteedPct || 0.5

@@ -280,7 +280,7 @@ function PosBadge({ pos }) {
 
 // ── Roster Table View ─────────────────────────────────────────────────────────
 
-function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phase }) {
+function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phase, teamNeeds }) {
   const isResignPhase = phase === 'offseason_resign';
   // Default to EXPIRING view in resign phase
   const [posFilter, setPosFilter] = useState(isResignPhase ? 'EXPIRING' : 'ALL');
@@ -384,10 +384,12 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
               {displayed.map((player, idx) => {
                 const isReleasing = releasing === player.id;
                 const isExpiring  = (player.contract?.years || 0) <= 1;
-                const yearsLeft = player.contract?.yearsRemaining ?? player.contract?.years ?? 1;
+                const yearsLeft = player.contract?.yearsRemaining ?? player.contract?.years ?? (player.yearsRemaining ?? player.years ?? 1);
                 const isZeroYears = yearsLeft === 0 || (yearsLeft <= 1 && isResignPhase);
                 const fit    = player.schemeFit ?? 50;
                 const morale = player.morale ?? 75;
+                const needInfo = teamNeeds ? teamNeeds.find(n => n.pos === player.pos) : null;
+                const needRank = (isResignPhase && needInfo && needInfo.score >= 1.2) ? needInfo.rank : null;
                 const fitCol    = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
 
@@ -410,6 +412,16 @@ function RosterTable({ players, actions, teamId, onRefetch, onPlayerSelect, phas
                       style={{ fontWeight: 600, color: 'var(--text)', fontSize: 'var(--text-sm)', whiteSpace: 'nowrap', cursor: 'pointer' }}
                     >
                       {player.name}
+                      {needRank && (
+                        <span style={{
+                          marginLeft: 6, padding: "1px 5px", borderRadius: "var(--radius-pill)",
+                          background: "var(--warning)22", color: "var(--warning)",
+                          fontSize: 9, fontWeight: 800, letterSpacing: "0.5px",
+                          verticalAlign: "middle",
+                        }}>
+                          NEED #{needRank}
+                        </span>
+                      )}
                       {isResignPhase && isZeroYears && (
                         <span style={{
                           marginLeft: 6, padding: '1px 5px', borderRadius: 'var(--radius-pill)',
@@ -710,6 +722,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   const [loading,  setLoading]  = useState(false);
   const [team,     setTeam]     = useState(null);
   const [players,  setPlayers]  = useState([]);
+  const [teamNeeds, setTeamNeeds] = useState([]);
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'depth'
 
   const fetchRoster = useCallback(async () => {
@@ -720,6 +733,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
       if (resp?.payload) {
         setTeam(resp.payload.team);
         setPlayers(resp.payload.players ?? []);
+        setTeamNeeds(resp.payload.teamNeeds ?? []);
       }
     } catch (e) {
       console.error('[Roster] getRoster failed:', e);
@@ -830,6 +844,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
       {/* ── Table view ── */}
       {!loading && viewMode === 'table' && (
         <RosterTable
+          teamNeeds={teamNeeds}
           players={players}
           actions={actions}
           teamId={teamId}

@@ -1,3 +1,4 @@
+import TeamNeedsWidget from './TeamNeedsWidget';
 /**
  * FreeAgency.jsx
  *
@@ -320,6 +321,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
 
   const [loading,   setLoading]   = useState(false);
   const [faPool,    setFaPool]    = useState([]);
+  const [teamNeeds, setTeamNeeds] = useState([]);
   const [posFilter, setPosFilter] = useState('ALL');
   const [search,    setSearch]    = useState('');
   const [ovrMin,    setOvrMin]    = useState(60);
@@ -343,6 +345,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
           _ask: p.contract?.baseAnnual ?? suggestedSalary(p.ovr, p.pos, p.age),
         }));
         setFaPool(enriched);
+        setTeamNeeds(resp.payload.teamNeeds ?? []);
       }
     } catch (e) {
       console.error('[FreeAgency] getFreeAgents failed:', e);
@@ -429,6 +432,8 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
           )}
         </div>
       )}
+
+      <TeamNeedsWidget needs={teamNeeds} />
 
       {/* Cap banner */}
       <CapBanner userTeam={userTeam} />
