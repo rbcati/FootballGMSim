@@ -18,19 +18,9 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { teamColor } from '../../data/team-utils.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function teamColor(abbr = '') {
-  const palette = [
-    '#0A84FF', '#34C759', '#FF9F0A', '#FF453A',
-    '#5E5CE6', '#64D2FF', '#FFD60A', '#30D158',
-    '#FF6961', '#AEC6CF', '#FF6B35', '#B4A0E5',
-  ];
-  let hash = 0;
-  for (let i = 0; i < abbr.length; i++) hash = abbr.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
-}
 
 function stat(v, decimals = 0) {
   if (v == null || v === 0) return '—';

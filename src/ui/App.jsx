@@ -169,12 +169,14 @@ export default function App() {
   // Validate that the league arriving from the worker is fully hydrated before
   // rendering the dashboard. A partially-hydrated league (e.g. loaded from IDB
   // before the schedule is written) causes "Season: " / "Week: " to render blank.
+  // Note: schedule is NOT required here — the Schedule tab handles a missing
+  // schedule gracefully so we don't lock the user in an infinite spinner when
+  // loading a save whose schedule was stored in an older format.
   const leagueReady = league &&
     league.seasonId != null &&
     typeof league.week === 'number' &&
     Array.isArray(league.teams) &&
-    league.teams.length > 0 &&
-    league.schedule?.weeks?.length > 0;
+    league.teams.length > 0;
 
   if (league && !leagueReady) {
     return <Loading message="Initializing league data…" />;
@@ -200,7 +202,11 @@ export default function App() {
           Football GM
         </h1>
         <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-          Season {league.seasonId} · Week {league.week} · {league.phase}
+          {league.year ?? league.seasonId} Season
+          {' · '}
+          {league.week ? `Week ${league.week}` : 'Offseason'}
+          {' · '}
+          {league.phase}
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>

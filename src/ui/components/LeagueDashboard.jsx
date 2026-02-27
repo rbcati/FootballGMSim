@@ -351,6 +351,19 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
     return map;
   }, [playoffSeeds]);
 
+  // Guard: if schedule is missing (e.g. older save format) show a clear message
+  // instead of crashing or showing blank content.
+  if (!schedule?.weeks?.length) {
+    return (
+      <div style={{
+        padding: 'var(--space-8)', textAlign: 'center',
+        color: 'var(--text-muted)', fontSize: 'var(--text-sm)',
+      }}>
+        Schedule data is not available for this save. Advance the season to regenerate.
+      </div>
+    );
+  }
+
   const isPlayoffs = selectedWeek >= 19;
 
   const totalWeeks = schedule?.weeks?.length ?? 0;
@@ -572,17 +585,8 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
   if (!league) return null;
 
-  if (!league.schedule?.weeks) {
-    return (
-      <div style={{
-        padding: 'var(--space-5)', color: 'var(--danger)',
-        background: 'rgba(255,69,58,0.1)', border: '1px solid var(--danger)',
-        borderRadius: 'var(--radius-md)',
-      }}>
-        Error: Schedule data missing from league state.
-      </div>
-    );
-  }
+  // NOTE: a missing schedule only affects the Schedule tab.
+  // Do NOT block the whole dashboard — all other tabs remain usable.
 
   const userTeam   = league.teams?.find(t => t.id === league.userTeamId);
   const userAbbr   = userTeam?.abbr ?? '---';
@@ -625,7 +629,9 @@ export default function LeagueDashboard({ league, busy, actions }) {
             </div>
           </div>
           <div className="season-context">
-            <div className="current-week-large">Week {league.week}</div>
+            <div className="current-week-large">
+              {league.week ? `Week ${league.week}` : 'Offseason'}
+            </div>
             <div className="season-year-large">{league.year ?? 2025} Season · {league.phase}</div>
             <div style={{ marginTop: 8, display: 'flex', gap: 16 }}>
                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>

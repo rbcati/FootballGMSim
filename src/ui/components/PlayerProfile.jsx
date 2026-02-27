@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import TraitBadge from './TraitBadge';
+import { getTeamIdentity } from '../../data/team-utils.js';
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -231,12 +232,9 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-/** Look up a team's full name from the teams array, falling back to the raw ID. */
+/** Look up a team's full name, delegating to the shared getTeamIdentity utility. */
 function getTeamName(teamId, teams) {
-  if (teamId == null) return 'Free Agent';
-  if (!Array.isArray(teams) || teams.length === 0) return `Team ${teamId}`;
-  const t = teams.find(tm => String(tm.id) === String(teamId));
-  return t ? (t.name || t.abbr || `Team ${teamId}`) : `Team ${teamId}`;
+  return getTeamIdentity(teamId, teams).name;
 }
 
 export default function PlayerProfile({ playerId, onClose, actions, teams = [], isUserOnClock = false, onDraftPlayer = null }) {
