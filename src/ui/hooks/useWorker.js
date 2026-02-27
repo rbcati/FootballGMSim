@@ -18,6 +18,7 @@
 
 import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
+import { configureActiveLeague } from '../../db/index.js';
 
 // ── State shape ───────────────────────────────────────────────────────────────
 
@@ -155,9 +156,11 @@ export function useWorker() {
           dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave });
           break;
         case toUI.FULL_STATE:
+          if (payload.leagueId) configureActiveLeague(payload.leagueId);
           dispatch({ type: 'FULL_STATE', payload });
           break;
         case toUI.STATE_UPDATE:
+          if (payload.leagueId) configureActiveLeague(payload.leagueId);
           dispatch({ type: 'STATE_UPDATE', payload });
           break;
         case toUI.SIM_PROGRESS:
