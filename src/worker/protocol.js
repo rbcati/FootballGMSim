@@ -173,6 +173,13 @@ export const toUI = Object.freeze({
 
   /** Fatal worker error */
   ERROR:              'ERROR',               // { message, stack? }
+
+  /**
+   * IndexedDB version conflict / blocked event — the UI must reload the page
+   * to allow the new DB version to take effect.  Workers cannot call
+   * window.location.reload() directly, so they post this message instead.
+   */
+  RELOAD_REQUIRED:    'RELOAD_REQUIRED',     // { reason }
 });
 
 /**

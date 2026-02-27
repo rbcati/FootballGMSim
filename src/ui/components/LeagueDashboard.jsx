@@ -330,7 +330,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
 
 // ── Schedule Tab ──────────────────────────────────────────────────────────────
 
-function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect, playoffSeeds }) {
+function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes, seasonId, onGameSelect, playoffSeeds, onTeamRoster }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
   const teamById = useMemo(() => {
@@ -451,7 +451,12 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
               <div className="matchup-content">
                 <div className="matchup-team away">
                   <TeamLogo abbr={away.abbr} size={64} isUser={away.id === userTeamId} />
-                  <div className="team-name-matchup">
+                  <div
+                    className="team-name-matchup"
+                    onClick={onTeamRoster ? (e) => { e.stopPropagation(); onTeamRoster(away.id); } : undefined}
+                    style={{ cursor: onTeamRoster ? 'pointer' : 'default' }}
+                    title={onTeamRoster ? `View ${away.name ?? away.abbr} roster` : undefined}
+                  >
                     {isPlayoffs && seedByTeam[away.id] ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginRight: 3 }}>({seedByTeam[away.id]})</span> : null}
                     {away.abbr}
                   </div>
@@ -463,7 +468,12 @@ function ScheduleTab({ schedule, teams, currentWeek, userTeamId, nextGameStakes,
                 </div>
                 <div className="matchup-team home">
                   <TeamLogo abbr={home.abbr} size={64} isUser={home.id === userTeamId} />
-                  <div className="team-name-matchup">
+                  <div
+                    className="team-name-matchup"
+                    onClick={onTeamRoster ? (e) => { e.stopPropagation(); onTeamRoster(home.id); } : undefined}
+                    style={{ cursor: onTeamRoster ? 'pointer' : 'default' }}
+                    title={onTeamRoster ? `View ${home.name ?? home.abbr} roster` : undefined}
+                  >
                     {isPlayoffs && seedByTeam[home.id] ? <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', marginRight: 3 }}>({seedByTeam[home.id]})</span> : null}
                     {home.abbr}
                   </div>
@@ -760,7 +770,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
                     <span style={{ fontSize: 'var(--text-base)', fontWeight: 700 }}>{userScore}-{oppScore}</span>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>vs {oppAbbr}</span>
                   </div>
-                  {/* Compact other league scores */}
+                  {/* Compact other league scores — click to open BoxScore */}
                   {otherGames.length > 0 && (
                     <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-subtle)', lineHeight: 1.5, fontVariantNumeric: 'tabular-nums', maxHeight: 48, overflow: 'hidden' }}>
                       {otherGames.slice(0, 6).map((g, i) => {
@@ -768,8 +778,14 @@ export default function LeagueDashboard({ league, busy, actions }) {
                         const aId = typeof g.away === 'object' ? g.away.id : g.away;
                         const hA = teamById[hId]?.abbr ?? '?';
                         const aA = teamById[aId]?.abbr ?? '?';
+                        const gId = league.seasonId ? `${league.seasonId}_w${prevWeek}_${hId}_${aId}` : null;
                         return (
-                          <span key={i}>
+                          <span
+                            key={i}
+                            onClick={gId ? () => setSelectedGameId(gId) : undefined}
+                            style={{ cursor: gId ? 'pointer' : 'default', textDecoration: gId ? 'underline dotted' : 'none' }}
+                            title={gId ? 'View box score' : undefined}
+                          >
                             {aA} {g.awayScore}-{g.homeScore} {hA}
                             {i < Math.min(otherGames.length, 6) - 1 ? ' · ' : ''}
                           </span>
@@ -823,6 +839,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
             seasonId={league.seasonId}
             onGameSelect={setSelectedGameId}
             playoffSeeds={league.playoffSeeds}
+            onTeamRoster={(teamId) => { setSelectedTeamId(teamId); }}
           />
         </TabErrorBoundary>
       )}
@@ -895,6 +912,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
             playerId={selectedPlayerId}
             onClose={() => setSelectedPlayerId(null)}
             actions={actions}
+            teams={league.teams}
           />
         </TabErrorBoundary>
       )}
