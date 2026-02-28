@@ -71,11 +71,13 @@ export default function App() {
     navigator.serviceWorker.addEventListener('message', onMessage);
 
     // Reload automatically after the new SW takes control
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
-    });
+    const onControllerChange = () => window.location.reload();
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
 
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onMessage);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    };
   }, []);
 
   const handleSwUpdate = () => {

@@ -470,7 +470,10 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     }
 
     // 4. Stakes Callbacks
-    if (stakes && stakes > 50) {
+    if (stakes && stakes > 75) {
+        if (won) callbacks.push("In a must-win game, your team delivered under immense pressure to keep the season alive.");
+        else callbacks.push("A heartbreaking defeat under massive pressure puts the front office on high alert.");
+    } else if (stakes && stakes > 50) {
         if (won) callbacks.push("Clutch performance in a high-stakes rivalry game.");
         else callbacks.push("Crushing defeat to a bitter rival.");
     }

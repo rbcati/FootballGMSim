@@ -813,7 +813,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
         </div>
 
         {/* News Feed */}
-        <NewsFeed />
+        <NewsFeed league={league} />
 
         {/* Stat Leaders Widget */}
         {league.phase !== 'preseason' && (

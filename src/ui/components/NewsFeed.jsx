@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { News } from '../../db/index.js'; // Direct DB access for read-only view
+import { News, configureActiveLeague } from '../../db/index.js'; // Direct DB access for read-only view
 
 function NewsItem({ item }) {
     const date = new Date(item.timestamp).toLocaleDateString();
@@ -27,14 +27,15 @@ function NewsItem({ item }) {
     );
 }
 
-export default function NewsFeed() {
+export default function NewsFeed({ league }) {
     const [news, setNews] = useState([]);
 
     useEffect(() => {
-        // Direct DB read for simplicity since news is high-volume/low-criticality
-        // In a stricter arch, we'd ask the worker via GET_RECENT_NEWS
-        News.getRecent(10).then(setNews).catch(console.error);
-    }, []);
+        if (league) {
+            configureActiveLeague(league.id || league.seasonId?.split('_')[0] || league.name?.split(' ')[1] || 'league');
+            News.getRecent(10).then(setNews).catch(console.error);
+        }
+    }, [league]);
 
     return (
         <div className="card" style={{ padding: 'var(--space-4)', maxHeight: 300, overflowY: 'auto' }}>

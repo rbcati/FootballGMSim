@@ -165,8 +165,10 @@ class GameRunner {
         // 3. Coach Hot Seat
         if (stakes === 0 && ownerMode?.enabled) {
             const satisfaction = ownerMode.fanSatisfaction;
-            if (satisfaction < 35) {
+            if (satisfaction < 40) {
                 stakes = 90;
+            } else if (satisfaction < 60) {
+                stakes = 75;
             }
         }
 
