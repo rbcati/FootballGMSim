@@ -166,24 +166,24 @@ function PendingCard({ game, teamById, userTeamId }) {
 // These are entirely synthetic — the simulator doesn't produce play logs.
 
 const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
+  (o, d, g) => ({ type: 'big-play', text: `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — QB scrambles for ${g} yds` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — run up the middle, ${g} yds` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — stretch run to the outside, ${g} yds` }),
+  (o, d, g) => ({ type: 'sack', text: `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — pass incomplete, ${d} breaks it up` }),
+  (o, d, g) => ({ type: 'touchdown', text: `${o} — TOUCHDOWN! 6 pts` }),
+  (o, d, g) => ({ type: 'field-goal', text: `${o} — field goal attempt... GOOD! 3 pts` }),
+  (o, d, g) => ({ type: 'turnover', text: `${d} — INTERCEPTION! Ball at the ${g} yd line` }),
+  (o, d, g) => ({ type: 'punt', text: `${o} — punt, ${d} fair catch at their ${g} yd line` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — penalty: false start, 5 yd loss` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — 4th-and-short: QB sneak, 1st down` }),
+  (o, d, g) => ({ type: 'normal', text: `${d} — pass interference called, ${g} yds` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — play-action fake, ${g} yd gain` }),
+  (o, d, g) => ({ type: 'normal', text: `${o} — screen pass, ${g} yds after catch` }),
+  (o, d, g) => ({ type: 'turnover', text: `${o} — FUMBLE recovered by ${d}!` }),
+  (o, d, g) => ({ type: 'big-play', text: `${o} — 3rd-and-long conversion, ${g} yds` }),
+  (o, d, g) => ({ type: 'safety', text: `${d} — safety! 2 pts` }),
 ];
 
 function generatePlay(homeAbbr, awayAbbr, seed = 0) {
@@ -202,6 +202,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [overlayEvent, setOverlayEvent] = useState(null);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
@@ -261,10 +262,27 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+      const playData = generatePlay(userHomeAbbr, userAwayAbbr, n);
+
+      // Trigger overlay for major events
+      if (['touchdown', 'turnover', 'sack', 'field-goal', 'big-play', 'safety', 'punt'].includes(playData.type)) {
+        setOverlayEvent({
+          type: playData.type,
+          text: playData.type.replace('-', ' ').toUpperCase() + (playData.type === 'touchdown' ? '!' : '')
+        });
+      }
+
+      return [...prev.slice(-49), { id: n, ...playData }];
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
+
+  // Clear overlay after delay
+  useEffect(() => {
+    if (overlayEvent) {
+      const timer = setTimeout(() => setOverlayEvent(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [overlayEvent]);
 
   useEffect(() => {
     if (!simulating || skipping) {
@@ -335,7 +353,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       borderRadius: 'var(--radius-lg)',
       marginBottom: 'var(--space-6)',
       overflow: 'hidden',
+      position: 'relative', // Context for overlay
     }}>
+      {/* ── Event Overlay ── */}
+      {overlayEvent && (
+        <div className={`game-event-overlay ${overlayEvent.type}`}>
+          <div className="event-text">{overlayEvent.text}</div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 'var(--space-3)',
@@ -522,11 +548,9 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             {plays.map((p) => (
               <div
                 key={p.id}
+                className={`play-item play-${p.type || 'normal'}`}
                 style={{
-                  fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
-                  lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
-                  paddingBottom: 'var(--space-1)',
-                  animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
+                  animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : undefined,
                 }}
               >
                 {p.text}

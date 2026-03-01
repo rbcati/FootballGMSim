@@ -154,15 +154,19 @@ export default function App() {
   if (!league) {
     if (activeView === 'new_league') {
       return (
-        <ErrorBoundary>
-          <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
-        </ErrorBoundary>
+        <div key="new_league" className="view fade-in">
+          <ErrorBoundary>
+            <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+          </ErrorBoundary>
+        </div>
       );
     }
     return (
-      <ErrorBoundary>
-        <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
-      </ErrorBoundary>
+      <div key="saves" className="view fade-in">
+        <ErrorBoundary>
+          <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        </ErrorBoundary>
+      </div>
     );
   }
 
@@ -186,7 +190,7 @@ export default function App() {
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div key="dashboard" className="view fade-in" style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
