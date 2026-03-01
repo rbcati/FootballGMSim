@@ -2230,6 +2230,7 @@ body {
 .close-game-btn,
 .watch-live-btn {
   transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease, box-shadow 0.2s ease;
+  touch-action: manipulation; /* Improves touch responsiveness */
 }
 
 .btn:active,
