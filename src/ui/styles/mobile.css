@@ -945,3 +945,32 @@
         grid-template-columns: 1fr; /* Stack on mobile */
     }
 }
+
+/* Added for Leaders and Draft Table Mobile Optimization */
+@media (max-width: 768px) {
+  .standings-table th, .standings-table td {
+    padding: var(--space-1) var(--space-2);
+    font-size: 0.8rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+/* Added for Leaders Table Mobile Optimization */
+@media (max-width: 768px) {
+  .leaderboards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Added for Draft Mobile Optimization */
+@media (max-width: 768px) {
+  .draft-layout {
+    grid-template-columns: 1fr !important;
+  }
+}

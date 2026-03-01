@@ -131,7 +131,7 @@ function CategorySection({ catKey, stats, onPlayerSelect }) {
       }}>
         {CATEGORY_LABELS[catKey] ?? catKey}
       </h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
+      <div className="leaderboards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
         {entries.map(([statKey, rows]) => (
           <LeaderTable
             key={statKey}
