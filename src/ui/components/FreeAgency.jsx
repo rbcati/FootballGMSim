@@ -24,6 +24,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import TraitBadge from './TraitBadge';
+import TeamNeedsWidget from './TeamNeedsWidget';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,7 @@ function CapBanner({ userTeam }) {
             Used / Total
           </div>
           <div style={{ fontWeight: 700, fontSize: 'var(--text-base)', color: 'var(--text)' }}>
-            {fmtSalary(capUsed)} / ${capTotal}M
+            {fmtSalary(capUsed)} / $${capTotal}M
           </div>
         </div>
       </div>
@@ -320,6 +321,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
 
   const [loading,   setLoading]   = useState(false);
   const [faPool,    setFaPool]    = useState([]);
+  const [teamNeeds, setTeamNeeds] = useState([]);
   const [posFilter, setPosFilter] = useState('ALL');
   const [search,    setSearch]    = useState('');
   const [ovrMin,    setOvrMin]    = useState(60);
@@ -343,6 +345,7 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
           _ask: p.contract?.baseAnnual ?? suggestedSalary(p.ovr, p.pos, p.age),
         }));
         setFaPool(enriched);
+        setTeamNeeds(resp.payload.teamNeeds ?? []);
       }
     } catch (e) {
       console.error('[FreeAgency] getFreeAgents failed:', e);
@@ -429,6 +432,8 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
           )}
         </div>
       )}
+
+      <TeamNeedsWidget needs={teamNeeds} />
 
       {/* Cap banner */}
       <CapBanner userTeam={userTeam} />

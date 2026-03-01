@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import TraitBadge from './TraitBadge';
 import PlayerProfile from './PlayerProfile';
+import TeamNeedsWidget from './TeamNeedsWidget';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -210,7 +211,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
   );
 }
 
-function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPlayerClick, simming }) {
+function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPlayerClick, simming, teamNeeds }) {
   const [sortKey, setSortKey] = useState('ovr');
   const [sortDir, setSortDir] = useState(-1);   // -1 = descending
   const [filterPos, setFilterPos] = useState('');
@@ -245,6 +246,8 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
 
       {/* ── Left Panel: Draft Board ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+
+        <TeamNeedsWidget needs={teamNeeds} />
 
         {/* Current pick clock */}
         <div className="card" style={{ padding: 'var(--space-4)', overflow: 'hidden' }}>
@@ -624,6 +627,7 @@ function DraftCompletePanel({ actions, draftState }) {
 
 export default function Draft({ league, actions }) {
   const [draftState, setDraftState] = useState(null);
+  const [teamNeeds, setTeamNeeds] = useState([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState(null);
   const [simming, setSimming]       = useState(false);
@@ -650,6 +654,7 @@ export default function Draft({ league, actions }) {
         const res = await actions.getDraftState();
         if (!cancelled && res?.payload) {
           setDraftState(res.payload.notStarted ? null : res.payload);
+          setTeamNeeds(res.payload.teamNeeds ?? []);
         }
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -763,6 +768,7 @@ export default function Draft({ league, actions }) {
       {/* Draft board: draft in progress */}
       {!loading && draftState && !draftState.isDraftComplete && (
         <DraftBoard
+          teamNeeds={teamNeeds}
           draftState={enrichedDraftState}
           userTeamId={league?.userTeamId}
           onSimToMyPick={handleSimToMyPick}
