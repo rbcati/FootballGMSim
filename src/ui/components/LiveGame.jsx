@@ -26,6 +26,9 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { audioManager } from '../audio.js';
+import { launchConfetti } from '../../confetti.js';
+import '../../ui-enhancements.css';
 
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
@@ -166,25 +169,37 @@ function PendingCard({ game, teamById, userTeamId }) {
 // These are entirely synthetic — the simulator doesn't produce play logs.
 
 const PLAY_POOL = [
-  (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`,
-  (o, d, g) => `${o} — QB scrambles for ${g} yds`,
-  (o, d, g) => `${o} — run up the middle, ${g} yds`,
-  (o, d, g) => `${o} — stretch run to the outside, ${g} yds`,
-  (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`,
-  (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`,
-  (o, d, g) => `${o} — TOUCHDOWN! 6 pts`,
-  (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`,
-  (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`,
-  (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`,
-  (o, d, g) => `${o} — penalty: false start, 5 yd loss`,
-  (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`,
-  (o, d, g) => `${d} — pass interference called, ${g} yds`,
-  (o, d, g) => `${o} — play-action fake, ${g} yd gain`,
-  (o, d, g) => `${o} — screen pass, ${g} yds after catch`,
-  (o, d, g) => `${o} — FUMBLE recovered by ${d}!`,
-  (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`,
-  (o, d, g) => `${d} — safety! 2 pts`,
+  { template: (o, d, g) => `${o} — ${g >= 15 ? 'deep pass complete' : 'short pass complete'} for ${g} yds`, type: 'PASS', momentum: 10 },
+  { template: (o, d, g) => `${o} — QB scrambles for ${g} yds`, type: 'RUN', momentum: 5 },
+  { template: (o, d, g) => `${o} — run up the middle, ${g} yds`, type: 'RUN', momentum: 5 },
+  { template: (o, d, g) => `${o} — stretch run to the outside, ${g} yds`, type: 'RUN', momentum: 5 },
+  { template: (o, d, g) => `${d} — sack! QB brought down, loss of ${g % 8 + 1} yds`, type: 'SACK', momentum: -15 },
+  { template: (o, d, g) => `${o} — pass incomplete, ${d} breaks it up`, type: 'INCOMPLETE', momentum: -2 },
+  { template: (o, d, g) => `${o} — TOUCHDOWN! 6 pts`, type: 'TOUCHDOWN', momentum: 40 },
+  { template: (o, d, g) => `${o} — field goal attempt... GOOD! 3 pts`, type: 'FIELD_GOAL', momentum: 15 },
+  { template: (o, d, g) => `${d} — INTERCEPTION! Ball at the ${g} yd line`, type: 'INTERCEPTION', momentum: -30 },
+  { template: (o, d, g) => `${o} — punt, ${d} fair catch at their ${g} yd line`, type: 'PUNT', momentum: -5 },
+  { template: (o, d, g) => `${o} — penalty: false start, 5 yd loss`, type: 'PENALTY', momentum: -5 },
+  { template: (o, d, g) => `${o} — 4th-and-short: QB sneak, 1st down`, type: 'RUN', momentum: 15 },
+  { template: (o, d, g) => `${d} — pass interference called, ${g} yds`, type: 'PENALTY', momentum: 5 },
+  { template: (o, d, g) => `${o} — play-action fake, ${g} yd gain`, type: 'PASS', momentum: 8 },
+  { template: (o, d, g) => `${o} — screen pass, ${g} yds after catch`, type: 'PASS', momentum: 8 },
+  { template: (o, d, g) => `${o} — FUMBLE recovered by ${d}!`, type: 'FUMBLE', momentum: -30 },
+  { template: (o, d, g) => `${o} — 3rd-and-long conversion, ${g} yds`, type: 'PASS', momentum: 12 },
+  { template: (o, d, g) => `${d} — safety! 2 pts`, type: 'SAFETY', momentum: -20 },
 ];
+
+function getOverlayClass(type) {
+  switch (type) {
+    case 'TOUCHDOWN': return 'goal touchdown';
+    case 'FIELD_GOAL': return 'goal field-goal';
+    case 'INTERCEPTION': return 'save turnover';
+    case 'FUMBLE': return 'save turnover';
+    case 'SACK': return 'save sack';
+    case 'SAFETY': return 'save safety';
+    default: return '';
+  }
+}
 
 function generatePlay(homeAbbr, awayAbbr, seed = 0) {
   const isHome = (seed ^ 0x5f) % 3 !== 0;
@@ -192,7 +207,13 @@ function generatePlay(homeAbbr, awayAbbr, seed = 0) {
   const def    = isHome ? awayAbbr : homeAbbr;
   const gain   = ((seed * 13 + 7) % 28) + 1;
   const tplIdx = (seed * 7 + 3) % PLAY_POOL.length;
-  return PLAY_POOL[tplIdx](off, def, gain);
+  const playObj = PLAY_POOL[tplIdx];
+
+  return {
+    ...playObj,
+    text: playObj.template(off, def, gain),
+    isHomeOffense: isHome, // true if Offense is Home team
+  };
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
@@ -202,8 +223,12 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [momentum, setMomentum]     = useState(0);
+  const [overlayEvent, setOverlayEvent] = useState(null);
+  const [resultShown, setResultShown] = useState(false);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
+  const overlayTimerRef             = useRef(null);
   const playCountRef                = useRef(0);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
@@ -242,6 +267,12 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const userAwayAbbr = userEvent?.awayAbbr
     ?? (userGame ? teamById[userGame.away]?.abbr : null) ?? '???';
 
+  const userIsHome = useMemo(() => {
+    if (userEvent) return userEvent.homeId === league?.userTeamId;
+    if (userGame) return Number(userGame.home) === league?.userTeamId;
+    return false;
+  }, [userEvent, userGame, league?.userTeamId]);
+
   // ── Show / hide logic ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -249,6 +280,9 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       // Simulation just started
       setVisible(true);
       setPlays([]);
+      setMomentum(0);
+      setOverlayEvent(null);
+      setResultShown(false);
       setSkipping(false);
       playCountRef.current = 0;
     }
@@ -261,10 +295,41 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     if (skipping) return;
     const n = playCountRef.current++;
     setPlays(prev => {
-      const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+      const play = generatePlay(userHomeAbbr, userAwayAbbr, n);
+
+      // Audio & Visual Effects
+      if (play.type === 'TOUCHDOWN') {
+        audioManager.playTouchdown();
+        // Trigger confetti if the user's team scored
+        if (play.isHomeOffense === userIsHome) {
+          launchConfetti();
+        }
+      } else if (play.type === 'FIELD_GOAL') {
+        audioManager.playFieldGoal();
+      } else if (play.type === 'INTERCEPTION' || play.type === 'FUMBLE') {
+        audioManager.playInterception();
+      } else if (play.type === 'SACK') {
+        audioManager.playSack();
+      } else if (play.type === 'SAFETY') {
+        audioManager.playSack(); // Re-use sack sound for now
+      }
+
+      // Update Momentum
+      const delta = play.momentum || 0;
+      const userIsOffense = play.isHomeOffense === userIsHome;
+      const change = userIsOffense ? delta : -delta;
+      setMomentum(m => Math.max(-100, Math.min(100, m + change)));
+
+      // Trigger Overlay
+      if (['TOUCHDOWN', 'FIELD_GOAL', 'INTERCEPTION', 'SACK', 'FUMBLE', 'SAFETY'].includes(play.type)) {
+        if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+        setOverlayEvent({ type: play.type, text: play.type.replace('_', ' ') });
+        overlayTimerRef.current = setTimeout(() => setOverlayEvent(null), 2000);
+      }
+
+      return [...prev.slice(-49), { id: n, ...play }];   // keep last 50 entries
     });
-  }, [skipping, userHomeAbbr, userAwayAbbr]);
+  }, [skipping, userHomeAbbr, userAwayAbbr, userIsHome]);
 
   useEffect(() => {
     if (!simulating || skipping) {
@@ -325,6 +390,27 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const userLastResults = (lastResults ?? []).filter(
     r => r.homeId === userTeamId || r.awayId === userTeamId
   );
+
+  useEffect(() => {
+    if (simulating) {
+      setResultShown(false);
+    } else if (isFinished && !resultShown) {
+      const userResult = userLastResults[0];
+      if (userResult) {
+        const userWon = userResult.homeId === userTeamId
+          ? userResult.homeScore > userResult.awayScore
+          : userResult.awayScore > userResult.homeScore;
+
+        if (userWon) {
+          audioManager.playWin();
+          launchConfetti();
+        } else {
+          audioManager.playLoss();
+        }
+      }
+      setResultShown(true);
+    }
+  }, [simulating, isFinished, resultShown, userLastResults, userTeamId]);
 
   if (!visible) return null;
 
@@ -403,6 +489,74 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             background: skipping ? 'var(--text-muted)' : 'var(--accent)',
             transition: 'width 0.2s ease',
           }} />
+        </div>
+      )}
+
+      {/* ── Final Result Banner ── */}
+      {!simulating && isFinished && userLastResults.length > 0 && (
+        <div style={{
+          padding: 'var(--space-4)',
+          textAlign: 'center',
+          background: 'var(--surface-strong)',
+          borderBottom: '1px solid var(--hairline)',
+          animation: 'lgFadeIn 0.5s ease'
+        }}>
+          {(() => {
+             const r = userLastResults[0];
+             const userWon = r.homeId === userTeamId ? r.homeScore > r.awayScore : r.awayScore > r.homeScore;
+             return (
+               <div>
+                 <div style={{
+                   fontSize: '3rem', fontWeight: 900,
+                   color: userWon ? 'var(--success)' : 'var(--danger)',
+                   textTransform: 'uppercase', letterSpacing: '2px',
+                   marginBottom: 'var(--space-2)',
+                   textShadow: userWon ? '0 0 20px rgba(52, 199, 89, 0.4)' : 'none'
+                 }}>
+                   {userWon ? 'Victory' : 'Defeat'}
+                 </div>
+                 <div style={{ fontSize: 'var(--text-lg)', color: 'var(--text-muted)', fontWeight: 700 }}>
+                   {r.homeScore} — {r.awayScore}
+                 </div>
+               </div>
+             );
+          })()}
+        </div>
+      )}
+
+      {/* ── Event Overlay ── */}
+      {overlayEvent && (
+        <div className={`game-event-overlay ${getOverlayClass(overlayEvent.type)}`}>
+          <div className="event-text">{overlayEvent.text}</div>
+        </div>
+      )}
+
+      {/* ── Momentum Bar ── */}
+      {simulating && (
+        <div style={{
+          height: 6, background: 'var(--surface-strong)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', overflow: 'hidden', borderBottom: '1px solid var(--hairline)'
+        }}>
+          {/* Center Marker */}
+          <div style={{ position: 'absolute', width: 2, height: '100%', background: 'var(--text-muted)', opacity: 0.3, zIndex: 1 }} />
+
+          {/* Bar */}
+          <div style={{
+            height: '100%',
+            width: '50%',
+            display: 'flex',
+            justifyContent: momentum > 0 ? 'flex-start' : 'flex-end',
+            marginLeft: momentum > 0 ? '50%' : 0,
+            marginRight: momentum > 0 ? 0 : '50%',
+          }}>
+             <div style={{
+               width: `${Math.abs(momentum)}%`,
+               height: '100%',
+               background: momentum > 0 ? 'var(--accent)' : 'var(--danger)',
+               transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+             }} />
+          </div>
         </div>
       )}
 
