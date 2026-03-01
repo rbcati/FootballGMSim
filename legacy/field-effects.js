@@ -122,7 +122,8 @@ export class FieldEffects {
         const count = type === 'touchdown' ? 100 : // Increased from 80
                       type === 'sack' ? 30 :
                       type === 'kick' ? 15 :
-                      type === 'catch' ? 10 :
+                      type === 'kick_flash' ? 40 :
+                      type === 'catch' ? 25 :
                       type === 'first_down' ? 20 :
                       type === 'field_goal' ? 40 :
                       type === 'defense_stop' ? 45 :
@@ -195,20 +196,38 @@ export class FieldEffects {
             p.color = '#888'; // Dust
             p.decay = 0.05; // Fast fade
         } else if (type === 'tackle') {
-            p.color = '#fff';
-            p.decay = 0.03;
+            // Dirt/Grass clods
+            p.vx = (rand() - 0.5) * 6;
+            p.vy = (rand() * -6) - 2; // Upward spray
+            const colors = ['#fff', '#8B4513', '#A0522D', '#D2B48C']; // White, SaddleBrown, Sienna, Tan
+            p.color = colors[Math.floor(rand() * colors.length)];
+            p.decay = 0.04;
+            p.size = rand() * 3 + 1;
+            p.gravity = 0.2;
         } else if (type === 'kick') {
             p.vx = (rand() - 0.5) * 8; // Fast burst
             p.vy = (rand() - 0.5) * 8;
             p.color = '#fff';
             p.decay = 0.08; // Very fast fade
             p.size = rand() * 4 + 2;
+        } else if (type === 'kick_flash') {
+            // Explosive burst
+            const angle = rand() * Math.PI * 2;
+            const speed = rand() * 15 + 5;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
+            p.color = rand() > 0.5 ? '#fff' : '#ffffaa';
+            p.decay = 0.15; // Extremely fast fade
+            p.size = rand() * 5 + 3;
         } else if (type === 'catch') {
-            p.vx = (rand() - 0.5) * 3;
-            p.vy = (rand() - 0.5) * 3;
+            // Ring / Sparkle
+            const angle = rand() * Math.PI * 2;
+            const speed = rand() * 6 + 2;
+            p.vx = Math.cos(angle) * speed;
+            p.vy = Math.sin(angle) * speed;
             p.color = this.getThemeColor('--accent', '#87CEEB'); // Sky Blue
-            p.decay = 0.1;
-            p.size = rand() * 2 + 1;
+            p.decay = 0.06;
+            p.size = rand() * 2.5 + 1;
         } else if (type === 'first_down') {
             p.x = x + (rand() - 0.5) * 5; // Vertical stripish
             p.y = rand() * this.canvas.height;

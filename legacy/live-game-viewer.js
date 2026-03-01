@@ -436,9 +436,10 @@ class LiveGameViewer {
 
       const currentLeft = parseFloat(ballEl.style.left || '-1');
 
-      // Detect Jump (> 20% difference implies large teleportation/turnover)
+      // Detect Jump (> 25% difference implies large teleportation/turnover)
       const dist = Math.abs(pct - currentLeft);
-      const isTeleport = currentLeft > 0 && dist > 20;
+      // Threshold: 25% of visual width is roughly 30 yards
+      const isTeleport = currentLeft > 0 && dist > 25;
 
       if (isTeleport) {
           // Add blur effect to container for smoother transition feeling
@@ -451,7 +452,8 @@ class LiveGameViewer {
               if (!e.classList.contains('fade-out')) e.classList.add('fade-out');
           });
 
-          this.triggerShake();
+          // Only shake if it's a huge jump (likely turnover)
+          if (dist > 40) this.triggerShake();
 
           this.setTimeoutSafe(() => {
               elements.forEach(e => {
@@ -491,6 +493,9 @@ class LiveGameViewer {
           // Ensure transition is active if it was disabled by JS animation previously and not cleared
           if (ballEl.style.transition === 'none') {
               ballEl.style.transition = ''; // Revert to CSS class transition
+              ballEl.classList.add('smooth-transition');
+          } else {
+              // Ensure we are using the smooth transition class if valid
               ballEl.classList.add('smooth-transition');
           }
 
@@ -1007,7 +1012,9 @@ class LiveGameViewer {
 
               // Catch Effect
               if (play.result !== 'incomplete' && play.result !== 'interception' && play.result !== 'turnover') {
-                   if (this.fieldEffects) this.fieldEffects.spawnParticles(endPct, 'catch');
+                   if (this.fieldEffects) {
+                       this.fieldEffects.spawnParticles(endPct, 'catch');
+                   }
                    soundManager.playCatch();
                    if (skillMarker) {
                        skillMarker.classList.add('marker-catch');
@@ -1019,6 +1026,9 @@ class LiveGameViewer {
               if (play.result !== 'touchdown' && play.result !== 'incomplete' && play.result !== 'interception') {
                   soundManager.playTackle();
                   this.triggerImpact(); // Visual impact
+                  if (this.fieldEffects) {
+                      this.fieldEffects.spawnParticles(endPct, 'tackle');
+                  }
                   if (skillMarker) skillMarker.classList.add('tackle-collision');
                   if (defMarker) defMarker.classList.add('tackle-collision');
                   if (ballEl) {
@@ -1110,6 +1120,9 @@ class LiveGameViewer {
                    // Standard tackle
                    soundManager.playTackle();
                    this.triggerImpact(); // Visual impact
+                   if (this.fieldEffects) {
+                       this.fieldEffects.spawnParticles(endPct, 'tackle');
+                   }
                    if (skillMarker) {
                        skillMarker.classList.add('tackle-collision');
                        this.setTimeoutSafe(() => skillMarker.classList.remove('tackle-collision'), 300);
@@ -1133,6 +1146,10 @@ class LiveGameViewer {
           if (ballEl) {
               ballEl.classList.add('kick-flash');
               this.setTimeoutSafe(() => ballEl.classList.remove('kick-flash'), 300);
+          }
+
+          if (this.fieldEffects) {
+              this.fieldEffects.spawnParticles(startPct, 'kick_flash');
           }
 
           if (qbMarker) qbMarker.style.opacity = 0;
@@ -2409,6 +2426,7 @@ class LiveGameViewer {
 
         if (play.message && play.message.includes('First down!')) {
              soundManager.playFirstDown();
+             this.triggerVisualFeedback('first-down', 'FIRST DOWN!');
         }
 
         if (play.result === 'touchdown') {
@@ -2469,7 +2487,7 @@ class LiveGameViewer {
             if (soundManager.playBigPlay) soundManager.playBigPlay();
             else soundManager.playCheer();
             this.triggerFlash();
-            this.triggerFloatText('BIG PLAY!');
+            this.triggerVisualFeedback('big-play', 'BIG PLAY!');
 
             if (this.fieldEffects) {
                 const isHome = this.gameState.ballPossession === 'home';
