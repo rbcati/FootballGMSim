@@ -354,16 +354,29 @@ class AiLogic {
         const meta = cache.getMeta();
         const userTeamId = meta.userTeamId;
 
+        // OPTIMIZATION: Build freeAgentsMap once for all AI teams
+        const allPlayers = cache.getAllPlayers();
+        const freeAgentsMap = {};
+        for (const p of allPlayers) {
+            if (!p.teamId || p.status === 'free_agent') {
+                if (!freeAgentsMap[p.pos]) freeAgentsMap[p.pos] = [];
+                freeAgentsMap[p.pos].push(p);
+            }
+        }
+        for (const pos in freeAgentsMap) {
+            freeAgentsMap[pos].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+        }
+
         // 1. AI Teams Make Offers
         const allTeams = cache.getAllTeams();
         for (const team of allTeams) {
             if (team.id !== userTeamId) {
-                await this.makeFreeAgencyOffers(team.id);
+                await this.makeFreeAgencyOffers(team.id, freeAgentsMap);
             }
         }
 
         // 2. Players Evaluate Offers
-        const freeAgents = cache.getAllPlayers().filter(p => (!p.teamId || p.status === 'free_agent') && p.offers && p.offers.length > 0);
+        const freeAgents = allPlayers.filter(p => (!p.teamId || p.status === 'free_agent') && p.offers && p.offers.length > 0);
 
         for (const player of freeAgents) {
             const decision = this.evaluateOffers(player);
