@@ -273,6 +273,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                     <th style={{ textAlign: 'center' }}>PCT</th>
                     <th style={{ textAlign: 'center' }}>PF</th>
                     <th style={{ textAlign: 'center' }}>PA</th>
+                    <th style={{ textAlign: 'center' }}>STRK</th>
                     <th style={{ textAlign: 'center' }}>OVR</th>
                     <th style={{ textAlign: 'right', paddingRight: 'var(--space-5)' }}>CAP</th>
                   </tr>
@@ -280,6 +281,10 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                 <tbody>
                   {divTeams.map((team, idx) => {
                     const isUser = team.id === userTeamId;
+                    const streak = team.streak || 0;
+                    const streakText = streak > 0 ? `W${streak}` : streak < 0 ? `L${Math.abs(streak)}` : '-';
+                    const streakClass = streak > 0 ? 'streak-w' : streak < 0 ? 'streak-l' : '';
+
                     return (
                       <tr key={team.id} className={isUser ? 'selected' : ''}>
                         <td style={{ paddingLeft: 'var(--space-4)' }}>
@@ -306,6 +311,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                         <td style={{ textAlign: 'center', fontWeight: 600 }}>{winPct(team.wins, team.losses, team.ties)}</td>
                         <td style={{ textAlign: 'center' }}>{team.ptsFor}</td>
                         <td style={{ textAlign: 'center' }}>{team.ptsAgainst}</td>
+                        <td className={streakClass} style={{ textAlign: 'center', fontWeight: 600 }}>{streakText}</td>
                         <td style={{ textAlign: 'center' }}><OvrPill ovr={team.ovr} /></td>
                         <td style={{ textAlign: 'right', paddingRight: 'var(--space-4)', color: 'var(--success)', fontSize: 'var(--text-sm)' }}>
                           ${(team.capRoom ?? 0).toFixed(1)}M

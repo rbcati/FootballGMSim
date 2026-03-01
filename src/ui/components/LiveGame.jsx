@@ -26,6 +26,9 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { soundManager } from '../audio/SoundManager.js';
+import { launchConfetti } from '../../confetti.js';
+import GameResultOverlay from './GameResultOverlay.jsx';
 
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
@@ -202,6 +205,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [showResultOverlay, setShowResultOverlay] = useState(false);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
@@ -250,10 +254,30 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
       setVisible(true);
       setPlays([]);
       setSkipping(false);
+      setShowResultOverlay(false);
       playCountRef.current = 0;
     }
+
+    // Detect simulation finish
+    if (prevSim && !simulating) {
+      // Find the user's game result
+      const userResult = lastResults?.find(r => r.homeId === league.userTeamId || r.awayId === league.userTeamId);
+      if (userResult) {
+        setShowResultOverlay(true);
+        const userWon = (userResult.homeId === league.userTeamId && userResult.homeScore > userResult.awayScore) ||
+                        (userResult.awayId === league.userTeamId && userResult.awayScore > userResult.homeScore);
+
+        if (userWon) {
+          launchConfetti();
+          soundManager.playScore();
+        } else {
+          soundManager.playThud();
+        }
+      }
+    }
+
     setPrevSim(simulating);
-  }, [simulating]);
+  }, [simulating, prevSim, lastResults, league?.userTeamId]);
 
   // ── Synthetic play ticker ────────────────────────────────────────────────
 
@@ -262,6 +286,10 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     const n = playCountRef.current++;
     setPlays(prev => {
       const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
+      // Play sound if touchdown
+      if (text.includes('TOUCHDOWN')) {
+        soundManager.playCheer();
+      }
       return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
@@ -329,6 +357,14 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   if (!visible) return null;
 
   return (
+    <>
+    {showResultOverlay && lastResults?.length > 0 && (
+      <GameResultOverlay
+        game={lastResults.find(r => r.homeId === league.userTeamId || r.awayId === league.userTeamId)}
+        onClose={() => setShowResultOverlay(false)}
+        userTeamId={league.userTeamId}
+      />
+    )}
     <div style={{
       background: 'var(--surface)',
       border: '1px solid var(--hairline)',
@@ -537,5 +573,6 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -81,6 +81,7 @@ function buildViewState() {
     ties:      t.ties      ?? 0,
     ptsFor:    t.ptsFor    ?? 0,
     ptsAgainst:t.ptsAgainst?? 0,
+    streak:    t.streak    ?? 0,
     capUsed:   t.capUsed   ?? 0,
     capRoom:   t.capRoom   ?? 0,
     capTotal:  t.capTotal  ?? 255,
@@ -903,11 +904,17 @@ async function handleAdvanceWeek(payload, id) {
   const gamesToSim = [...league._weekGames];
   const results    = [];
 
+  // Difficulty Progression: Boost AI if user is on a win streak
+  const userTeam = cache.getTeam(meta.userTeamId);
+  const userStreak = userTeam?.streak || 0;
+  const difficultyBoost = userStreak >= 3 ? 1.05 : 1.0; // 5% boost to opponents if user has won 3+ games
+
   for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
     const batch = gamesToSim.slice(i, i + BATCH_SIZE);
     const batchResults = simulateBatch(batch, {
       league,
-      isPlayoff: meta.phase === 'playoffs'
+      isPlayoff: meta.phase === 'playoffs',
+      difficultyBoost: difficultyBoost
     });
     results.push(...batchResults);
 
@@ -1158,21 +1165,33 @@ function applyGameResultToCache(result, week, seasonId) {
   const awayTeam = cache.getTeam(aId);
 
   if (homeTeam) {
+    let hStreak = homeTeam.streak || 0;
+    if (homeWin) hStreak = (hStreak > 0 ? hStreak : 0) + 1;
+    else if (!tie) hStreak = (hStreak < 0 ? hStreak : 0) - 1;
+    else hStreak = 0; // Reset on tie
+
     cache.updateTeam(hId, {
       wins:       (homeTeam.wins ?? 0) + (homeWin ? 1 : 0),
       losses:     (homeTeam.losses ?? 0) + (!homeWin && !tie ? 1 : 0),
       ties:       (homeTeam.ties ?? 0) + (tie ? 1 : 0),
       ptsFor:     (homeTeam.ptsFor ?? 0) + scoreHome,
       ptsAgainst: (homeTeam.ptsAgainst ?? 0) + scoreAway,
+      streak:     hStreak,
     });
   }
   if (awayTeam) {
+    let aStreak = awayTeam.streak || 0;
+    if (!homeWin && !tie) aStreak = (aStreak > 0 ? aStreak : 0) + 1; // Away won
+    else if (homeWin) aStreak = (aStreak < 0 ? aStreak : 0) - 1; // Away lost
+    else aStreak = 0; // Tie
+
     cache.updateTeam(aId, {
       wins:       (awayTeam.wins ?? 0) + (!homeWin && !tie ? 1 : 0),
       losses:     (awayTeam.losses ?? 0) + (homeWin ? 1 : 0),
       ties:       (awayTeam.ties ?? 0) + (tie ? 1 : 0),
       ptsFor:     (awayTeam.ptsFor ?? 0) + scoreAway,
       ptsAgainst: (awayTeam.ptsAgainst ?? 0) + scoreHome,
+      streak:     aStreak,
     });
   }
 
@@ -1249,6 +1268,7 @@ function buildStandings() {
       ties:    t.ties    ?? 0,
       pf:      t.ptsFor  ?? 0,
       pa:      t.ptsAgainst ?? 0,
+      streak:  t.streak  ?? 0,
       pct:     winPct(t),
     }))
     .sort((a, b) => b.pct - a.pct || b.pf - a.pf);
