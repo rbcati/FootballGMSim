@@ -426,7 +426,8 @@
     COLLEGES, ABILITIES_BY_POS,
     
     // League/Trade
-    CONF_NAMES, DIV_NAMES,
+    get CONF_NAMES() { return CONF_NAMES; },
+    get DIV_NAMES() { return DIV_NAMES; },
     TRADE_CONFIG, // Replaces TRADE_VALUES
     POSITION_VALUES,
     
