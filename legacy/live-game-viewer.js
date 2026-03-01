@@ -410,6 +410,7 @@ class LiveGameViewer {
                <div class="player-marker marker-def"></div>
            </div>
 
+           <div class="ball-shadow" style="left: 50%;"></div>
            <div class="football-ball" style="left: 50%;"></div>
 
            <div class="endzone right" style="background-color: ${awayColor}; opacity: 0.8;">${awayName}</div>
@@ -569,6 +570,8 @@ class LiveGameViewer {
           const easeInOutQuad = t => t < .5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
           const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
           const easeOutQuart = t => 1 - Math.pow(1 - t, 4);
+          const easeOutQuint = t => 1 - Math.pow(1 - t, 5); // Added for smoother transitions
+          const easeOutExpo = t => t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
           const easeOutBack = t => {
               const c1 = 1.70158;
               const c3 = c1 + 1;
@@ -605,6 +608,8 @@ class LiveGameViewer {
           else if (options.easing === 'easeOut') easing = easeOutQuad;
           else if (options.easing === 'easeOutCubic') easing = easeOutCubic;
           else if (options.easing === 'easeOutQuart') easing = easeOutQuart;
+          else if (options.easing === 'easeOutQuint') easing = easeOutQuint; // New
+          else if (options.easing === 'easeOutExpo') easing = easeOutExpo;   // New
           else if (options.easing === 'easeOutBack') easing = easeOutBack;
           else if (options.easing === 'easeInBack') easing = easeInBack;
           else if (options.easing === 'easeOutElastic') easing = easeOutElastic;
@@ -924,7 +929,7 @@ class LiveGameViewer {
 
           // QB Drops back
           animations.push(this.animateTrajectory(qbMarker, {
-              startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOut', animationClass: 'bob'
+              startX: startPct, endX: dropbackPct, duration: dropbackDuration, easing: 'easeOutQuint', animationClass: 'bob'
           }));
 
           // Receiver runs route
@@ -1079,11 +1084,11 @@ class LiveGameViewer {
           const swayVal = play.playType === 'run_outside' ? 8 : 3;
 
           animations.push(this.animateTrajectory(ballEl, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeOutQuint', animationClass: 'run-bob', sway: swayVal
           }));
 
           animations.push(this.animateTrajectory(skillMarker, {
-              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeInOutCubic', animationClass: 'run-bob', sway: swayVal
+              startX: startPct, endX: endPct, duration: runDuration, easing: 'easeOutQuint', animationClass: 'run-bob', sway: swayVal
           }));
 
           // Def Logic: Chase
