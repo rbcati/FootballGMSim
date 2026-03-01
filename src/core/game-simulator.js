@@ -20,7 +20,8 @@ import { TRAITS } from './traits.js';
 export function groupPlayersByPosition(roster) {
   const groups = {};
   if (!roster) return groups;
-  for (const player of roster) {
+  for (let i = 0; i < roster.length; i++) {
+    const player = roster[i];
     const pos = player.pos || 'UNK';
     if (!groups[pos]) groups[pos] = [];
     groups[pos].push(player);
@@ -83,13 +84,19 @@ function getActiveGroups(team, league) {
   const active = [];
   const groups = {};
 
-  for (const pos in fullGroups) {
-    // canPlayerPlay is imported from ./injury-core.js
-    const activeInPos = fullGroups[pos].filter(p => canPlayerPlay(p));
-    groups[pos] = activeInPos;
-    for (let i = 0; i < activeInPos.length; i++) {
-      active.push(activeInPos[i]);
+  const positions = Object.keys(fullGroups);
+  for (let j = 0; j < positions.length; j++) {
+    const pos = positions[j];
+    const activeInPos = [];
+    const fullGroup = fullGroups[pos];
+    for (let i = 0; i < fullGroup.length; i++) {
+        const p = fullGroup[i];
+        if (canPlayerPlay(p)) {
+            activeInPos.push(p);
+            active.push(p);
+        }
     }
+    groups[pos] = activeInPos;
   }
 
   return { active, groups };
@@ -1720,8 +1727,14 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     }
 
     const { homeTeamId, awayTeamId, homeScore, awayScore, stats, injuries } = gameData;
-    const home = league.teams.find(t => t && t.id === homeTeamId);
-    const away = league.teams.find(t => t && t.id === awayTeamId);
+    let home, away;
+    if (league._teamsMap) {
+        home = league._teamsMap[homeTeamId];
+        away = league._teamsMap[awayTeamId];
+    } else {
+        home = league.teams.find(t => t && t.id === homeTeamId);
+        away = league.teams.find(t => t && t.id === awayTeamId);
+    }
 
     if (!home || !away) {
         throw new Error(`Teams not found: ${homeTeamId}, ${awayTeamId}`);
@@ -1729,52 +1742,57 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 
     // 1. Update Schedule (Find the game)
     const weekIndex = (league.week || 1) - 1;
-    const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
     let scheduledGame = null;
 
-    // Strategy 1: Look in current week (if structured with weeks)
-    const weekSchedule = scheduleWeeks[weekIndex];
-    if (weekSchedule && weekSchedule.games) {
-        scheduledGame = weekSchedule.games.find(g =>
-            g && g.home !== undefined && g.away !== undefined &&
-            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
-            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
-        );
-    }
+    if (league._scheduleMap) {
+        scheduledGame = league._scheduleMap[`${homeTeamId}-${awayTeamId}`];
+    } else {
+        const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
 
-    // Strategy 2: Look in flat array (if schedule is flat array of games)
-    if (!scheduledGame && Array.isArray(scheduleWeeks)) {
-        scheduledGame = scheduleWeeks.find(g =>
-            g && g.home !== undefined && g.away !== undefined &&
-            (g.week === league.week) &&
-            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
-            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
-        );
-    }
+        // Strategy 1: Look in current week (if structured with weeks)
+        const weekSchedule = scheduleWeeks[weekIndex];
+        if (weekSchedule && weekSchedule.games) {
+            scheduledGame = weekSchedule.games.find(g =>
+                g && g.home !== undefined && g.away !== undefined &&
+                (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+                (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
+            );
+        }
 
-    // Strategy 3: Global search (fallback)
-    if (!scheduledGame && league.schedule) {
-        // Iterate all weeks if structure is nested
-        if (league.schedule.weeks) {
-            for (const w of league.schedule.weeks) {
-                if (w.games) {
-                    const g = w.games.find(g =>
-                        g && g.home !== undefined && g.away !== undefined &&
-                        (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
-                        (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
-                    );
-                    if (g) {
-                        scheduledGame = g;
-                        break;
+        // Strategy 2: Look in flat array (if schedule is flat array of games)
+        if (!scheduledGame && Array.isArray(scheduleWeeks)) {
+            scheduledGame = scheduleWeeks.find(g =>
+                g && g.home !== undefined && g.away !== undefined &&
+                (g.week === league.week) &&
+                (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+                (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
+            );
+        }
+
+        // Strategy 3: Global search (fallback)
+        if (!scheduledGame && league.schedule) {
+            // Iterate all weeks if structure is nested
+            if (league.schedule.weeks) {
+                for (const w of league.schedule.weeks) {
+                    if (w.games) {
+                        const g = w.games.find(g =>
+                            g && g.home !== undefined && g.away !== undefined &&
+                            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
+                            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
+                        );
+                        if (g) {
+                            scheduledGame = g;
+                            break;
+                        }
                     }
                 }
+            } else if (Array.isArray(league.schedule)) {
+                 scheduledGame = league.schedule.find(g =>
+                    g && g.home !== undefined && g.away !== undefined &&
+                    (g.home === homeTeamId || (g.home && g.home.id === homeTeamId)) &&
+                    (g.away === awayTeamId || (g.away && g.away.id === awayTeamId))
+                );
             }
-        } else if (Array.isArray(league.schedule)) {
-             scheduledGame = league.schedule.find(g =>
-                g && g.home !== undefined && g.away !== undefined &&
-                (g.home === homeTeamId || (g.home && g.home.id === homeTeamId)) &&
-                (g.away === awayTeamId || (g.away && g.away.id === awayTeamId))
-            );
         }
     }
 
@@ -1907,17 +1925,24 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
     const box = {};
 
     // OPTIMIZATION: Create a map for fast roster lookups O(N) instead of O(N*M)
-    const rosterMap = new Map();
-    if (roster && Array.isArray(roster)) {
-        for (const p of roster) {
-            if (p && p.id !== undefined) {
-                rosterMap.set(String(p.id), p);
+    const pids = Object.keys(playerStatsMap);
+
+    // Instead of looping all roster players, only lookup players that have stats
+    for (let i = 0; i < pids.length; i++) {
+        const pid = pids[i];
+        // We do have to search the array, but roster is small (53 elements)
+        // Alternatively we can use the map approach but without array checks if already map
+        // Given earlier benchmarks, ObjectKeys is taking time
+        // Let's optimize by just looping through the roster!
+
+        let p = null;
+        for (let j = 0; j < roster.length; j++) {
+            if (String(roster[j].id) === pid) {
+                p = roster[j];
+                break;
             }
         }
-    }
 
-    Object.keys(playerStatsMap).forEach(pid => {
-        const p = rosterMap.get(String(pid));
         if (p) {
             box[pid] = {
                 name: p.name,
@@ -1925,7 +1950,7 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
                 stats: playerStatsMap[pid]
             };
         }
-    });
+    }
     return box;
 }
 
@@ -1959,6 +1984,58 @@ export function simulateBatch(games, options = {}) {
     if (!league) {
         console.error('No league provided to simulateBatch');
         return [];
+    }
+
+    // OPTIMIZATION: create maps for fast lookups during commit
+    if (league.teams && !league._teamsMap) {
+        league._teamsMap = {};
+        for (let i = 0; i < league.teams.length; i++) {
+            const t = league.teams[i];
+            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
+        }
+    }
+
+    if (league.schedule && !league._scheduleMap) {
+        league._scheduleMap = {};
+        const weekIndex = (league.week || 1) - 1;
+        const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
+        const weekSchedule = scheduleWeeks[weekIndex];
+        if (weekSchedule && weekSchedule.games) {
+            for (let i = 0; i < weekSchedule.games.length; i++) {
+                const g = weekSchedule.games[i];
+                if (g && g.home !== undefined && g.away !== undefined) {
+                    const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                    const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                    league._scheduleMap[`${hId}-${aId}`] = g;
+                }
+            }
+        }
+    }
+
+    // OPTIMIZATION: create maps for fast lookups during commit
+    if (league.teams && !league._teamsMap) {
+        league._teamsMap = {};
+        for (let i = 0; i < league.teams.length; i++) {
+            const t = league.teams[i];
+            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
+        }
+    }
+
+    if (league.schedule && !league._scheduleMap) {
+        league._scheduleMap = {};
+        const weekIndex = (league.week || 1) - 1;
+        const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
+        const weekSchedule = scheduleWeeks[weekIndex];
+        if (weekSchedule && weekSchedule.games) {
+            for (let i = 0; i < weekSchedule.games.length; i++) {
+                const g = weekSchedule.games[i];
+                if (g && g.home !== undefined && g.away !== undefined) {
+                    const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                    const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                    league._scheduleMap[`${hId}-${aId}`] = g;
+                }
+            }
+        }
     }
 
     games.forEach((pair, index) => {
@@ -2034,16 +2111,16 @@ export function simulateBatch(games, options = {}) {
                 // (legacy saves vs. new base-36 IDs) produce consistent keys.
                 const capturePlayerStats = (roster) => {
                     const playerStats = {};
-                    roster.forEach(player => {
+                    for (let i = 0; i < roster.length; i++) {
+                        const player = roster[i];
                         if (player && player.stats && player.stats.game) {
-                            const pid = String(player.id);
-                            playerStats[pid] = {
+                            playerStats[String(player.id)] = {
                                 name: player.name,
                                 pos: player.pos,
                                 ...player.stats.game
                             };
                         }
-                    });
+                    }
                     return playerStats;
                 };
 
@@ -2079,6 +2156,13 @@ export function simulateBatch(games, options = {}) {
             console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);
         }
     });
+
+    if (league._teamsMap) {
+        delete league._teamsMap;
+    }
+    if (league._scheduleMap) {
+        delete league._scheduleMap;
+    }
 
     return results;
 }
