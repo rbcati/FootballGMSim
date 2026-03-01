@@ -3317,12 +3317,16 @@ class LiveGameViewer {
         
         <div class="field-container" style="margin: 0 var(--space-4);"></div>
 
-        <div class="game-controls">
-          <button class="tempo-btn active" data-tempo="normal">Normal</button>
-          <button class="tempo-btn" data-tempo="hurry-up">Hurry-Up</button>
-          <button class="tempo-btn" data-tempo="slow">Slow</button>
-          <button class="pause-btn">⏸ Pause</button>
-          <button class="skip-btn" style="background: var(--danger, #dc3545); color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Skip to End</button>
+        <div class="game-controls control-bar" style="justify-content: center; margin-bottom: 10px;">
+          <button class="control-btn pause-btn">⏸ Pause</button>
+          <div class="control-divider"></div>
+          <div class="tempo-controls">
+            <button class="control-btn tempo-btn" data-tempo="slow">Slow</button>
+            <button class="control-btn tempo-btn active" data-tempo="normal">Normal</button>
+            <button class="control-btn tempo-btn" data-tempo="hurry-up">Fast</button>
+          </div>
+          <div class="control-divider"></div>
+          <button class="control-btn skip-btn" style="color: var(--danger);">Skip to End</button>
         </div>
 
         <div class="game-dashboard" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; background: rgba(0,0,0,0.2); margin-top: 10px; border-radius: 8px;">
@@ -3379,6 +3383,9 @@ class LiveGameViewer {
     modal.querySelectorAll('.tempo-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         this.setTempo(e.target.dataset.tempo);
+        // Ensure active state updates visually immediately
+        modal.querySelectorAll('.tempo-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
       });
     });
     modal.querySelector('.pause-btn').addEventListener('click', () => this.togglePause());
