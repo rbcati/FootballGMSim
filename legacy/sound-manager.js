@@ -84,21 +84,24 @@ class SoundManager {
 
     playTouchdown() {
         if (!this.enabled || this.muted) return;
-        // Crowd Roar
-        this.playNoise(3.0, 0.3);
+        // Crowd Roar (Longer, louder)
+        this.playNoise(4.0, 0.4);
 
-        // C Major Triad + Octave: C4, E4, G4, C5
-        const notes = [261.63, 329.63, 392.00, 523.25];
+        // Epic Fanfare: C4, E4, G4, C5, E5, G5
+        const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
 
-        // Rapid arpeggio
+        // Rapid arpeggio ascent
         notes.forEach((freq, i) => {
-            this.playTone(freq, 'triangle', 0.4, 0.15, null, i * 80);
+            this.playTone(freq, 'sawtooth', 0.5, 0.1, null, i * 60);
         });
 
-        // Power chord finish
-        this.playTone(261.63, 'sawtooth', 0.8, 0.1, null, 400); // Low C
-        this.playTone(523.25, 'square', 0.8, 0.1, null, 400);   // High C
-        this.playNoise(1.0, 0.1, 400); // Crowd swell
+        // Power chord finish (Major Chord)
+        setTimeout(() => {
+            this.playTone(261.63, 'sawtooth', 1.0, 0.5, null, 0); // Low C
+            this.playTone(392.00, 'square', 0.8, 0.5, null, 0);   // G
+            this.playTone(523.25, 'sawtooth', 1.0, 0.5, null, 0); // High C
+            this.playNoise(1.5, 0.2, 0); // Impact noise
+        }, 400);
     }
 
     playIntercept() {
@@ -237,6 +240,25 @@ class SoundManager {
         this.playTone(380, 'sawtooth', 0.3, 0.15, null, 50);
         this.playTone(350, 'sawtooth', 0.5, 0.1, null, 150);
         this.playNoise(0.5, 0.2); // Crash
+    }
+
+    playComboFire() {
+        if (!this.enabled || this.muted) return;
+        // Rising fire sound (Whoosh + Crackle)
+        this.playNoise(1.0, 0.3); // Fire roar
+        // Rising synth
+        this.playTone(200, 'sawtooth', 0.5, 0.1, 600); // Slide up 200->600
+        this.playTone(300, 'square', 0.3, 0.1, 800, 100); // Harmonics
+    }
+
+    playAdaptiveWarning() {
+        if (!this.enabled || this.muted) return;
+        // Sci-fi "System Warning"
+        this.playTone(800, 'square', 0.1, 0.2);
+        this.playTone(0, 'sine', 0.1, 0, null, 100); // Silence
+        this.playTone(800, 'square', 0.1, 0.2, null, 200);
+        // Low drone
+        this.playTone(100, 'sawtooth', 1.0, 0.1, 80, 0); // Pitch bend down
     }
 
     playMomentumShift() {

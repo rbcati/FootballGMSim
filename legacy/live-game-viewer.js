@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from '../src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -1525,6 +1525,8 @@ class LiveGameViewer {
              // Visual feedback for difficulty increase
              if (Math.random() < 0.05 && !this.isSkipping) {
                  this.triggerFloatText('⚠️ AI ADAPTING', 'warning');
+                 this.triggerShake('normal');
+                 if (soundManager.playAdaptiveWarning) soundManager.playAdaptiveWarning();
              }
         }
     }
@@ -2392,6 +2394,12 @@ class LiveGameViewer {
         if (comboIncreased && this.combo > 1) {
              this.triggerFloatText(`COMBO x${this.combo}!`, 'positive');
              soundManager.playPing();
+
+             // High combo juice
+             if (this.combo >= 3) {
+                 if (soundManager.playComboFire) soundManager.playComboFire();
+                 if (this.fieldEffects) this.fieldEffects.spawnParticles(50, 'combo_fire');
+             }
         }
         if (comboBroken) {
              this.triggerFloatText('COMBO BROKEN', 'negative');
@@ -3509,7 +3517,7 @@ class LiveGameViewer {
       // Fire logic for high momentum
       if (Math.abs(m) > 75 && Date.now() - this.lastFireTime > 1000) {
           if (this.fieldEffects) {
-              this.fieldEffects.spawnParticles(50, 'fire');
+              this.fieldEffects.spawnParticles(50, 'combo_fire');
           }
           this.lastFireTime = Date.now();
       }
