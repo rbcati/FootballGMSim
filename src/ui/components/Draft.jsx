@@ -241,7 +241,7 @@ function DraftBoard({ draftState, userTeamId, onSimToMyPick, onDraftPlayer, onPl
     [...new Set(prospects.map(p => p.pos))].sort(), [prospects]);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 'var(--space-5)', alignItems: 'start' }}>
+    <div className="draft-layout" style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: 'var(--space-5)', alignItems: 'start' }}>
 
       {/* ── Left Panel: Draft Board ── */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>

@@ -2701,8 +2701,8 @@ async function archiveSeason(seasonId) {
     };
 
     // Helper to write an accolade to a player
-    const grantAccolade = (playerId, accolade) => {
-      const p = cache.getPlayer(playerId);
+    const grantAccolade = async (playerId, accolade) => {
+      const p = await resolvePlayer(playerId);
       if (!p) return;
       const accolades = Array.isArray(p.accolades) ? [...p.accolades] : [];
       accolades.push(accolade);
@@ -2772,25 +2772,25 @@ async function archiveSeason(seasonId) {
     const year = meta.year;
 
     if (awards.mvp?.playerId != null) {
-      grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
+      await grantAccolade(awards.mvp.playerId, { type: 'MVP', year, seasonId });
       // Log MVP to News
       await NewsEngine.logAward('MVP', { ...awards.mvp, teamId: awards.mvp.teamId });
     }
     if (awards.opoy?.playerId != null) {
-      grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
+      await grantAccolade(awards.opoy.playerId, { type: 'OPOY', year, seasonId });
     }
     if (awards.dpoy?.playerId != null) {
-      grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
+      await grantAccolade(awards.dpoy.playerId, { type: 'DPOY', year, seasonId });
     }
     if (awards.roty?.playerId != null) {
-      grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
+      await grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
     }
 
     // SB Rings: all players on champion team
     if (championId != null) {
       const champPlayers = cache.getPlayersByTeam(championId);
       for (const p of champPlayers) {
-        grantAccolade(p.id, { type: 'SB_RING', year, seasonId });
+        await grantAccolade(p.id, { type: 'SB_RING', year, seasonId });
       }
 
       // SB MVP: highest-scoring player on champion team
@@ -2804,7 +2804,7 @@ async function archiveSeason(seasonId) {
         };
         const sbMvp = champStats.reduce((best, s) => getMVPScore(s) > getMVPScore(best) ? s : best, champStats[0]);
         if (sbMvp?.playerId != null) {
-          grantAccolade(sbMvp.playerId, { type: 'SB_MVP', year, seasonId });
+          await grantAccolade(sbMvp.playerId, { type: 'SB_MVP', year, seasonId });
           awards.sbMvp = { playerId: sbMvp.playerId, name: sbMvp.name, teamId: sbMvp.teamId, pos: sbMvp.pos };
         }
       }
