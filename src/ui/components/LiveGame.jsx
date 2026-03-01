@@ -83,7 +83,7 @@ function MatchupCard({ event, userTeamId, pending }) {
   const finished = !pending;
 
   return (
-    <div style={{
+    <div className={`matchup-card ${pending ? 'pending' : ''}`} style={{
       background: 'var(--surface)',
       border: `1px solid ${isUser ? 'var(--accent)' : 'var(--hairline)'}`,
       borderRadius: 'var(--radius-md)',
