@@ -259,69 +259,81 @@ function fixScheduleCompletely(teams) {
     // Create 18 weeks
     for (let week = 1; week <= 18; week++) {
         const weekGames = [];
-        const teamsOnBye = teams.filter(team => teamByeWeek[team.id] === week);
+        const teamsOnByeIds = [];
+        const teamsToSchedule = [];
+
+        for (let i = 0; i < teams.length; i++) {
+            const team = teams[i];
+            const teamId = team.id;
+            if (teamByeWeek[teamId] === week) {
+                teamsOnByeIds.push(teamId);
+            } else if (teamGameCount[teamId] < 17) {
+                teamsToSchedule.push(team);
+            }
+        }
         
         // Add bye games
-        if (teamsOnBye.length > 0) {
+        if (teamsOnByeIds.length > 0) {
             weekGames.push({
-                bye: teamsOnBye.map(team => team.id)
+                bye: teamsOnByeIds
             });
         }
 
-        // Get teams available to play this week
-        const teamsToSchedule = teams.filter(team =>
-            teamByeWeek[team.id] !== week && 
-            teamGameCount[team.id] < 17
-        );
-
         // Pair teams for games
         const usedThisWeek = new Set();
-        const shuffledTeams = [...teamsToSchedule];
-        shuffleArray(shuffledTeams);
+        shuffleArray(teamsToSchedule);
+        const numTeamsToSchedule = teamsToSchedule.length;
 
-        for (let i = 0; i < shuffledTeams.length - 1; i++) {
-            const team1 = shuffledTeams[i];
-            if (usedThisWeek.has(team1.id) || teamGameCount[team1.id] >= 17) continue;
+        for (let i = 0; i < numTeamsToSchedule; i++) {
+            const team1 = teamsToSchedule[i];
+            const team1Id = team1.id;
+            if (usedThisWeek.has(team1Id)) continue;
             
             // Find an opponent for team1
             let bestOpponent = null;
-            for (let j = i + 1; j < shuffledTeams.length; j++) {
-                const team2 = shuffledTeams[j];
-                if (usedThisWeek.has(team2.id) || teamGameCount[team2.id] >= 17) continue;
-                if (team2.id === team1.id) continue;
+            let bestOpponentId = null;
+            const opponentsOfTeam1 = teamOpponents[team1Id];
+
+            for (let j = i + 1; j < numTeamsToSchedule; j++) {
+                const team2 = teamsToSchedule[j];
+                const team2Id = team2.id;
+                if (usedThisWeek.has(team2Id)) continue;
 
                 // Prefer teams that haven't played each other yet
-                if (!teamOpponents[team1.id].has(team2.id)) {
+                if (!opponentsOfTeam1.has(team2Id)) {
                     bestOpponent = team2;
+                    bestOpponentId = team2Id;
                     break;
                 }
             }
             
             // If no new opponent, take any available
             if (!bestOpponent) {
-                for (let j = i + 1; j < shuffledTeams.length; j++) {
-                    const team2 = shuffledTeams[j];
-                    if (usedThisWeek.has(team2.id) || teamGameCount[team2.id] >= 17) continue;
-                    if (team2.id === team1.id) continue;
-                    bestOpponent = team2;
-                    break;
+                for (let j = i + 1; j < numTeamsToSchedule; j++) {
+                    const team2 = teamsToSchedule[j];
+                    const team2Id = team2.id;
+                    if (!usedThisWeek.has(team2Id)) {
+                        bestOpponent = team2;
+                        bestOpponentId = team2Id;
+                        break;
+                    }
                 }
             }
             
             if (bestOpponent) {
                 weekGames.push({
-                    home: team1.id,
-                    away: bestOpponent.id,
+                    home: team1Id,
+                    away: bestOpponentId,
                     week: week
                 });
                 
-                teamGameCount[team1.id]++;
-                teamGameCount[bestOpponent.id]++;
-                teamOpponents[team1.id].add(bestOpponent.id);
-                teamOpponents[bestOpponent.id].add(team1.id);
+                teamGameCount[team1Id]++;
+                teamGameCount[bestOpponentId]++;
+                opponentsOfTeam1.add(bestOpponentId);
+                teamOpponents[bestOpponentId].add(team1Id);
 
-                usedThisWeek.add(team1.id);
-                usedThisWeek.add(bestOpponent.id);
+                usedThisWeek.add(team1Id);
+                usedThisWeek.add(bestOpponentId);
             }
         }
 
@@ -329,7 +341,7 @@ function fixScheduleCompletely(teams) {
             weekNumber: week, 
             week: week, // CRITICAL: Ensures Worker UI bridge can read the week
             games: weekGames,
-            teamsWithBye: teamsOnBye.map(team => team.id)
+            teamsWithBye: teamsOnByeIds
         });
     }
 
