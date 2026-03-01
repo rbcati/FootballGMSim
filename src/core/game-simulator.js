@@ -477,9 +477,15 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     }
 
     // 4. Stakes Callbacks
-    if (stakes && stakes > 50) {
-        if (won) callbacks.push("Clutch performance in a high-stakes rivalry game.");
-        else callbacks.push("Crushing defeat to a bitter rival.");
+    if (stakes && stakes >= 90) {
+        if (won) callbacks.push("A season-defining victory under absolutely immense pressure!");
+        else callbacks.push("A devastating and agonizing loss when the franchise needed it most.");
+    } else if (stakes && stakes >= 80) {
+        if (won) callbacks.push("A massive, clutch win to keep those playoff dreams alive.");
+        else callbacks.push("Playoff hopes take a brutal, crushing hit with this performance.");
+    } else if (stakes && stakes > 50) {
+        if (won) callbacks.push("Secured a tense, emotional victory in a high-stakes matchup.");
+        else callbacks.push("A bitter pill to swallow in a tightly contested, high-tension game.");
     }
 
     // Limit to 3 unique lines
