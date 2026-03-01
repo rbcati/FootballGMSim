@@ -163,3 +163,84 @@
   80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
 }
+
+/* ============================================================================
+   NEW ANIMATIONS - Fluid Player Movements
+   ============================================================================ */
+
+/* QB Throw Motion */
+@keyframes throwMotion {
+    0% { transform: translate(-50%, -50%) rotate(0deg) scale(1); }
+    20% { transform: translate(-50%, -50%) rotate(-15deg) scale(0.9); } /* Windup */
+    40% { transform: translate(-50%, -50%) rotate(-30deg) scale(0.85); } /* Cock back */
+    60% { transform: translate(-50%, -50%) rotate(10deg) scale(1.1); } /* Release */
+    100% { transform: translate(-50%, -50%) rotate(45deg) scale(1); } /* Follow through */
+}
+
+.throw-motion {
+    animation: throwMotion 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+/* Tackle Impact */
+@keyframes tackleImpact {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    10% { transform: translate(-50%, -50%) scale(1.2); }
+    20% { transform: translate(-50%, -50%) translate(-2px, 2px) scale(0.9); }
+    30% { transform: translate(-50%, -50%) translate(2px, -2px) scale(0.9); }
+    40% { transform: translate(-50%, -50%) translate(-2px, -2px) scale(0.95); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.tackle-impact {
+    animation: tackleImpact 0.4s ease-out;
+}
+
+/* Run Cycle (Smoother Bob) */
+@keyframes runCycle {
+    0% { transform: translate(-50%, -50%) translateY(0); }
+    25% { transform: translate(-50%, -50%) translateY(-2px) rotate(5deg); }
+    50% { transform: translate(-50%, -50%) translateY(0); }
+    75% { transform: translate(-50%, -50%) translateY(-2px) rotate(-5deg); }
+    100% { transform: translate(-50%, -50%) translateY(0); }
+}
+
+.run-cycle {
+    animation: runCycle 0.4s infinite linear;
+}
+
+/* Catch Pop */
+@keyframes catchPop {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    40% { transform: translate(-50%, -50%) scale(1.4); background-color: white; }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+.catch-pop {
+    animation: catchPop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Field Slide (Camera Pan) */
+.football-field-container {
+    transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.3s ease;
+    will-change: transform;
+}
+
+.field-slide-left {
+    animation: slideLeft 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.field-slide-right {
+    animation: slideRight 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes slideLeft {
+    0% { transform: translateX(0); }
+    40% { transform: translateX(-10%); opacity: 0.8; }
+    100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideRight {
+    0% { transform: translateX(0); }
+    40% { transform: translateX(10%); opacity: 0.8; }
+    100% { transform: translateX(0); opacity: 1; }
+}
