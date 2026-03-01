@@ -708,6 +708,57 @@ function prepareStateForSave(stateObj, { keepBoxScoreWeeks = 1 } = {}) {
   };
 }
 
+
+// --- Offload JSON.stringify to a worker to prevent blocking main thread ---
+let _stringifyWorker = null;
+let _stringifyCallbacks = {};
+let _stringifyId = 0;
+
+function asyncStringify(obj) {
+  if (typeof window === 'undefined' || !window.Worker || !window.Blob || !window.URL) {
+    return Promise.resolve(JSON.stringify(obj));
+  }
+
+  if (!_stringifyWorker) {
+    const code = `
+      self.onmessage = function(e) {
+        try {
+          const str = JSON.stringify(e.data.obj);
+          self.postMessage({ id: e.data.id, str });
+        } catch (err) {
+          self.postMessage({ id: e.data.id, error: err.message });
+        }
+      };
+    `;
+    try {
+      const blob = new Blob([code], { type: 'application/javascript' });
+      _stringifyWorker = new Worker(URL.createObjectURL(blob));
+      _stringifyWorker.onmessage = function(e) {
+        const { id, str, error } = e.data;
+        if (_stringifyCallbacks[id]) {
+          if (error) _stringifyCallbacks[id].reject(new Error(error));
+          else _stringifyCallbacks[id].resolve(str);
+          delete _stringifyCallbacks[id];
+        }
+      };
+    } catch(err) {
+      console.warn('Failed to create stringify worker, falling back to sync', err);
+      return Promise.resolve(JSON.stringify(obj));
+    }
+  }
+
+  return new Promise((resolve, reject) => {
+    const id = ++_stringifyId;
+    _stringifyCallbacks[id] = { resolve, reject };
+    try {
+      _stringifyWorker.postMessage({ id, obj });
+    } catch(err) {
+      delete _stringifyCallbacks[id];
+      reject(err);
+    }
+  });
+}
+
 export async function saveState(stateToSave = null, options = {}) {
   try {
     const stateObj = stateToSave || window.state;
@@ -745,7 +796,10 @@ export async function saveState(stateToSave = null, options = {}) {
         await window.saveGame(stateForSave, options);
         return true;
     }
-    const serialized = JSON.stringify(stateForSave);
+
+    // Use worker-based JSON stringify to avoid main-thread UI freeze
+    const serialized = await asyncStringify(stateForSave);
+
     const activeSlot = stateObj.saveSlot || getActiveSaveSlot();
     const saveKey = saveKeyFor(activeSlot);
     window.localStorage.setItem(saveKey, serialized);
@@ -764,7 +818,7 @@ export async function saveState(stateToSave = null, options = {}) {
       console.warn('Save failed: storage quota exceeded');
       try {
         const fallbackState = prepareStateForSave(stateToSave || window.state, { keepBoxScoreWeeks: 0 });
-        const fallbackSerialized = JSON.stringify(fallbackState);
+        const fallbackSerialized = await asyncStringify(fallbackState);
         const activeSlot = (stateToSave || window.state)?.saveSlot || getActiveSaveSlot();
         const saveKey = saveKeyFor(activeSlot);
         window.localStorage.setItem(saveKey, fallbackSerialized);
