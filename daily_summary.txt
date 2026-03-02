@@ -1,0 +1,5 @@
+Daily Regression Pass Summary:
+- What was tested: Smoke tests, Strategy persistence, Mobile UI layout scrolling, Contracts & Cap Trust, Replay exploit prevention.
+- What broke: Mobile UI Scrolling Check failed due to missing min-width on Standings tables in mobile view.
+- What was fixed: Added `min-width: 600px` to `.standings-table` to enforce table wrapper overflow correctly so that mobile users can scroll horizontally to see remaining stats.
+- Small improvement: Restored proper table width overflow detection for Power Rankings and Standings tables so that mobile users do not lose critical visibility into their team's performance, maintaining tension and UI trust.
