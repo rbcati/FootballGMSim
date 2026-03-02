@@ -263,7 +263,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
             </div>
 
             <div className="table-wrapper" style={{ padding: '0 var(--space-2)' }}>
-              <table className="standings-table" style={{ width: '100%' }}>
+              <table className="standings-table" style={{ width: '100%', minWidth: '600px' }}>
                 <thead>
                   <tr>
                     <th style={{ paddingLeft: 'var(--space-5)' }}>Team</th>

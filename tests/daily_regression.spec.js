@@ -127,10 +127,12 @@ test.describe('Daily Regression Pass', () => {
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const prScrolls = await page.evaluate(() => {
-            const container = document.querySelector('.table-wrapper');
-            return container ? container.scrollWidth > container.clientWidth : false;
+            const table = document.querySelector('.standings-table');
+            const parent = table.parentElement;
+            return parent.scrollWidth > parent.clientWidth || table.scrollWidth > table.clientWidth;
         });
         console.log('Standings Scrollable:', prScrolls);
+        expect(prScrolls).toBeTruthy();
 
         // Check League Stats Scroll (Stats Tab)
         await page.click('button.standings-tab:has-text("Stats")');

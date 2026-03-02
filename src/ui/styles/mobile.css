@@ -116,11 +116,14 @@
   }
   
   /* Tables */
-  .table-wrapper,
-  table {
+  .table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    display: block;
+    width: 100%;
+  }
+
+  table {
+    min-width: 100%;
   }
   
   table {
@@ -243,6 +246,7 @@
   /* Standings */
   .standings-table {
     font-size: 0.8rem;
+    min-width: 600px;
   }
   
   .standings-tabs {
