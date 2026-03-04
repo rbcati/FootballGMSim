@@ -2,6 +2,7 @@
 'use strict';
 
 import { COACH_SKILL_TREES, initializeCoachingStats } from './coach-system.js';
+import { Utils as U } from './utils.js';
 
 export { initializeCoachingStats };
 
@@ -363,10 +364,10 @@ export function calculateWinPercentage(wins, losses, ties = 0) {
 function calculateOffensiveRanking(team, ppg) {
   // Simplified ranking based on points per game
   // In a full implementation, this would compare against all teams
-  if (ppg >= 28) return Math.floor((window.Utils?.random || Math.random)() * 5) + 1; // Top 5
-  if (ppg >= 24) return Math.floor((window.Utils?.random || Math.random)() * 10) + 6; // 6-15
-  if (ppg >= 20) return Math.floor((window.Utils?.random || Math.random)() * 10) + 16; // 16-25
-  return Math.floor((window.Utils?.random || Math.random)() * 7) + 26; // 26-32
+  if (ppg >= 28) return Math.floor(U.random() * 5) + 1; // Top 5
+  if (ppg >= 24) return Math.floor(U.random() * 10) + 6; // 6-15
+  if (ppg >= 20) return Math.floor(U.random() * 10) + 16; // 16-25
+  return Math.floor(U.random() * 7) + 26; // 26-32
 }
 
 /**
@@ -377,10 +378,10 @@ function calculateOffensiveRanking(team, ppg) {
  */
 function calculateDefensiveRanking(team, papg) {
   // Simplified ranking based on points allowed per game
-  if (papg <= 17) return Math.floor((window.Utils?.random || Math.random)() * 5) + 1; // Top 5
-  if (papg <= 21) return Math.floor((window.Utils?.random || Math.random)() * 10) + 6; // 6-15
-  if (papg <= 25) return Math.floor((window.Utils?.random || Math.random)() * 10) + 16; // 16-25
-  return Math.floor((window.Utils?.random || Math.random)() * 7) + 26; // 26-32
+  if (papg <= 17) return Math.floor(U.random() * 5) + 1; // Top 5
+  if (papg <= 21) return Math.floor(U.random() * 10) + 6; // 6-15
+  if (papg <= 25) return Math.floor(U.random() * 10) + 16; // 16-25
+  return Math.floor(U.random() * 7) + 26; // 26-32
 }
 
 /**
@@ -1287,8 +1288,8 @@ export class CoachingMarket {
     const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Davis', 'Miller', 'Wilson', 'Moore', 'Taylor', 'Anderson', 'Jackson'];
     
     const coach = {
-      id: U ? U.id() : (window.Utils?.random || Math.random)().toString(36).slice(2),
-      name: (U ? U.choice(firstNames) : firstNames[0]) + ' ' + (U ? U.choice(lastNames) : lastNames[0]),
+      id: U.id(),
+      name: U.choice(firstNames) + ' ' + U.choice(lastNames),
       position: position,
       age: U ? U.rand(35, 65) : 45,
       playerDevelopment: U ? U.rand(40, 95) : 75,

@@ -542,9 +542,12 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   if (modifiers.passAccuracy) baseCompPct *= modifiers.passAccuracy;
   const defenseFactor = (100 - (defenseStrength || 70)) / 100;
 
-  // Gaussian distribution for Comp% — attenuated mean (was 60 base, now 55)
-  const meanCompPct = 55 + (baseCompPct - 70) * 0.35 + defenseFactor * 10;
-  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 78); // ceiling lowered from 90 to 78
+  // Gaussian distribution for Comp% — recalibrated (Task 15):
+  //   Base raised 55→57 (closer to NFL avg 63%)
+  //   Coefficient raised 0.35→0.55 (wider spread between good/bad QBs)
+  //   Ceiling raised 78→84 (allows elite single-game peaks)
+  const meanCompPct = 57 + (baseCompPct - 70) * 0.55 + defenseFactor * 12;
+  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 84);
 
   const completions = Math.round(attempts * (compPct / 100));
 
@@ -883,37 +886,45 @@ function generateOLStats(ol, defenseStrength, U) {
   };
 }
 
-function generateKickerStats(kicker, teamScore, U) {
+/**
+ * Generate kicker stats derived directly from actual drive results (Task 9).
+ * Accepts actualFGs and actualXPs from the drive engine as the ground truth.
+ * fgAttempts is calculated as made + missed (based on accuracy); never < actualFGs.
+ */
+function generateKickerStats(kicker, actualFGs, actualXPs, U) {
   const ratings = kicker.ratings || {};
-  const kickPower = ratings.kickPower || 70;
+  const kickPower    = ratings.kickPower    || 70;
   const kickAccuracy = ratings.kickAccuracy || 70;
-
-  const fgAttempts = Math.max(0, Math.min(5, Math.round(teamScore / 7 + U.rand(-1, 2))));
 
   let makeRate = kickAccuracy / 100;
   if (kicker.traits && kicker.traits.includes(TRAITS.CLUTCH_KICKER.id)) makeRate *= 1.1;
-  const fgMade = Math.max(0, Math.min(fgAttempts, Math.round(fgAttempts * makeRate + U.rand(-0.5, 0.5))));
+  makeRate = Math.min(makeRate, 0.99); // cap at 99%
 
-  const longestFG = Math.max(20, Math.min(65, Math.round(30 + (kickPower / 2) + U.rand(-5, 10))));
+  // Derive attempts from made + estimated misses (how many tries to get actualFGs makes)
+  const fgMissed    = actualFGs > 0 ? Math.max(0, Math.round((actualFGs / makeRate) - actualFGs)) : 0;
+  const fgAttempts  = actualFGs + fgMissed;
 
-  const xpAttempts = Math.max(0, Math.round(teamScore / 7));
-  const xpMade = Math.max(0, Math.min(xpAttempts, Math.round(xpAttempts * (kickAccuracy / 100) + U.rand(-0.3, 0.3))));
+  const xpMissed    = actualXPs > 0 ? Math.max(0, Math.round((actualXPs / (kickAccuracy / 100)) - actualXPs)) : 0;
+  const xpAttempts  = actualXPs + xpMissed;
 
-  const successPct = fgAttempts > 0 ? Math.round((fgMade / fgAttempts) * 1000) / 10 : 0;
+  const longestFG   = actualFGs > 0
+      ? Math.max(20, Math.min(65, Math.round(30 + (kickPower / 2) + U.rand(-5, 10))))
+      : 0;
 
+  const successPct  = fgAttempts > 0 ? Math.round((actualFGs / fgAttempts) * 1000) / 10 : 0;
   const avgKickYards = Math.round(60 + (kickPower / 3) + U.rand(-5, 5));
 
   return {
     gamesPlayed: 1,
-    fgAttempts: fgAttempts,
-    fgMade: fgMade,
-    fgMissed: fgAttempts - fgMade,
-    longestFG: longestFG,
-    xpAttempts: xpAttempts,
-    xpMade: xpMade,
-    xpMissed: xpAttempts - xpMade,
-    successPct: successPct,
-    avgKickYards: avgKickYards,
+    fgAttempts,
+    fgMade:    actualFGs,
+    fgMissed,
+    longestFG,
+    xpAttempts,
+    xpMade:    actualXPs,
+    xpMissed,
+    successPct,
+    avgKickYards,
   };
 }
 
@@ -1075,8 +1086,11 @@ export function simGameStats(home, away, options = {}) {
     let schemeNote = null;
 
     if (calculateTeamRatingWithSchemeFit) {
-        const homeFit = calculateTeamRatingWithSchemeFit(home);
-        const awayFit = calculateTeamRatingWithSchemeFit(away);
+        // Cache scheme fit per team per batch (cleared in simulateBatch between weeks)
+        if (!home._cachedSchemeFit) home._cachedSchemeFit = calculateTeamRatingWithSchemeFit(home);
+        if (!away._cachedSchemeFit) away._cachedSchemeFit = calculateTeamRatingWithSchemeFit(away);
+        const homeFit = home._cachedSchemeFit;
+        const awayFit = away._cachedSchemeFit;
 
         // Get fit percentages (50 = neutral, 100 = perfect, 0 = terrible)
         const hOffFit = homeFit.offensiveSchemeFit || 50;
@@ -1133,8 +1147,11 @@ export function simGameStats(home, away, options = {}) {
         return totalMorale / activeRoster.length;
     };
 
-    const homeMorale = calculateTeamMorale(homeActive, home);
-    const awayMorale = calculateTeamMorale(awayActive, away);
+    // Cache morale per team per batch (only changes weekly, not per-game)
+    if (home._cachedMorale === undefined) home._cachedMorale = calculateTeamMorale(homeActive, home);
+    if (away._cachedMorale === undefined) away._cachedMorale = calculateTeamMorale(awayActive, away);
+    const homeMorale = home._cachedMorale;
+    const awayMorale = away._cachedMorale;
 
     // Morale Mod: 50 is neutral. 100 is +2%, 0 is -2% strength impact
     // Formula: 1.0 + ((morale - 50) / 50) * 0.02
@@ -1192,7 +1209,7 @@ export function simGameStats(home, away, options = {}) {
         // offStr/defStr are roughly 50-90 range
         const offFactor = (offStr - 50) / 40; // 0.0 for 50 OVR, 1.0 for 90 OVR
         const defFactor = (defStr - 50) / 40;
-        const netQuality = offFactor - defFactor * 0.75 + (advantage / 90); // defense weighs more
+        const netQuality = offFactor - defFactor + (advantage / 50); // equal offense/defense weight
 
         for (let d = 0; d < numDrives; d++) {
             // Drive outcome probabilities (NFL averages: ~33% score, ~20% TD, ~13% FG)
@@ -1206,9 +1223,9 @@ export function simGameStats(home, away, options = {}) {
             const rzFactor = (offStr - 60) * 0.004; // reduced from 0.005
 
             // Base Probability that a drive results in points (TD or FG)
-            // Attenuated to target ~21 PPG (was 0.32 base, now 0.28)
-            let scoreProb = 0.28 + netQuality * 0.12 + upsetChance;
-            scoreProb = U.clamp(scoreProb, 0.12, 0.52); // tightened ceiling from 0.60
+            // Recalibrated: 0.33 base × 11 avg drives × 6.3 pts/drive ≈ 22.8 PPG target
+            let scoreProb = 0.33 + netQuality * 0.18 + upsetChance;
+            scoreProb = U.clamp(scoreProb, 0.12, 0.58); // raised ceiling for elite offenses
 
             // If drive scores, what % is TD vs FG?
             // NFL average: ~58% of scores are TDs, 42% FGs
@@ -1271,7 +1288,9 @@ export function simGameStats(home, away, options = {}) {
         let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
         let possessions = 0;
 
-        const maxPossessions = allowTies ? 4 : 20;
+        // Regular season: max 4 pairs (8 possessions) before forced tie
+        // Playoffs: hard cap of 50 prevents infinite loops (handled by HARD_ITERATION_CAP)
+        const maxPossessions = allowTies ? 8 : 50;
         const HARD_ITERATION_CAP = 50; // Absolute safety cap to prevent infinite loops
 
         // Track which team kicked off (received 2nd) so we know possession order
@@ -1317,30 +1336,23 @@ export function simGameStats(home, away, options = {}) {
                 }
             }
 
-            // Apply NFL OT Rules (2024+: both teams guaranteed a possession)
-            if (possessions === 1) {
-                // First possession TD: other team still gets a chance
-                if (drivePoints >= 6) {
-                    firstPossessionScore = 7;
-                } else if (drivePoints === 3) {
-                    firstPossessionScore = 3;
-                }
-                // First possession: no immediate game-over, other team gets the ball
-            } else if (possessions === 2) {
-                // Second team's response
-                // If scores are no longer tied after both teams had a possession, game over
+            // Apply NFL OT Rules (2024+):
+            //   Pair 1 (possessions 1-2): Both teams guaranteed a drive. End if unequal after pair.
+            //   Pairs 2+ (possessions 3+): Sudden death — evaluate only after complete pairs (even count).
+            //   Regular season: allow tie after 2 complete pairs (4 possessions).
+            //   Playoffs: continue indefinitely until winner after complete pair.
+            const isCompletePair = (possessions % 2 === 0); // both teams had equal drives
+            const pairsCompleted = Math.floor(possessions / 2);
+
+            if (isCompletePair) {
                 if (homeScore !== awayScore) {
                     gameOver = true;
-                }
-                // If still tied, continue to sudden death
-            } else {
-                // Sudden death after both teams have had at least one possession
-                // Game ends when score is different after the team that received 2nd has had their turn
-                // (i.e., check after each pair of possessions, or if a score creates a lead)
-                if (homeScore !== awayScore) {
+                } else if (allowTies && pairsCompleted >= 2) {
+                    // Regular season: tie after 2 complete pairs (4 total drives)
                     gameOver = true;
                 }
             }
+            // Odd possessions: no game-over check — other team must get their drive
 
             possession = possession === 'home' ? 'away' : 'home';
         }
@@ -1478,11 +1490,12 @@ export function simGameStats(home, away, options = {}) {
       const allReceivers = [...wrs, ...tes];
 
       // Check WR/TE In-Game Injuries
+      // Save original OVRs so injury does NOT permanently mutate player objects
+      const originalReceiverOvrs = new Map();
+      allReceivers.forEach(rec => originalReceiverOvrs.set(rec.id, rec.ovr));
+
       allReceivers.forEach(rec => {
           if (generateInjury && canPlayerPlay(rec)) {
-              // Lower chance for WRs than RBs? generateInjury handles position mods.
-              // We only want to injure maybe 1 receiver max per game to avoid chaos?
-              // Standard probability is fine.
               if (!rec.injured && U.random() < 0.015) { // 1.5% chance per game
                    const injury = generateInjury(rec);
                    if (injury) {
@@ -1492,8 +1505,8 @@ export function simGameStats(home, away, options = {}) {
                        rec.injuryWeeksRemaining = Math.max(rec.injuryWeeksRemaining || 0, injury.weeksRemaining);
                        if (injury.seasonEnding) rec.seasonEndingInjury = true;
 
-                       // Reduce effectiveness for target distribution (simulating partial game)
-                       rec.ovr *= 0.5;
+                       // Temporarily reduce OVR for target distribution weight only
+                       rec.ovr = (originalReceiverOvrs.get(rec.id) || rec.ovr) * 0.5;
 
                        gameInjuries.push({
                           playerId: rec.id,
@@ -1519,6 +1532,12 @@ export function simGameStats(home, away, options = {}) {
         Object.assign(item.player.stats.game, wrStats);
       });
 
+      // Restore original OVRs after target distribution (injury reduced them temporarily)
+      allReceivers.forEach(rec => {
+        const origOvr = originalReceiverOvrs.get(rec.id);
+        if (origOvr !== undefined) rec.ovr = origOvr;
+      });
+
       const ols = (groups['OL'] || []).slice(0, 5);
       ols.forEach(ol => {
         Object.assign(ol.stats.game, generateOLStats(ol, oppDefenseStrength, U));
@@ -1536,18 +1555,9 @@ export function simGameStats(home, away, options = {}) {
 
       const kickers = groups['K'] || [];
       if (kickers.length > 0) {
-        // Use standard generator for attempts/yards, but overwrite makes
         const k = kickers[0];
-        const kStats = generateKickerStats(k, score, U);
-        kStats.fgMade = actualFGs;
-        kStats.xpMade = actualXPs;
-        // Ensure attempts logic is consistent
-        kStats.fgAttempts = Math.max(kStats.fgAttempts, actualFGs);
-        kStats.xpAttempts = Math.max(kStats.xpAttempts, actualXPs);
-        kStats.fgMissed = kStats.fgAttempts - kStats.fgMade;
-        kStats.xpMissed = kStats.xpAttempts - kStats.xpMade;
-        kStats.successPct = kStats.fgAttempts > 0 ? Math.round((kStats.fgMade / kStats.fgAttempts) * 1000) / 10 : 0;
-
+        // Pass drive-engine results directly; no post-hoc patching needed
+        const kStats = generateKickerStats(k, actualFGs, actualXPs, U);
         Object.assign(k.stats.game, kStats);
       }
 
@@ -1557,7 +1567,8 @@ export function simGameStats(home, away, options = {}) {
       }
 
       // --- DISTRIBUTE TOUCHDOWNS ---
-      // Distribute actualTDs among offensive players based on performance
+      // NFL average: ~55-60% of TDs are passing TDs. Enforce a minimum pass TD floor
+      // to prevent rush-heavy games from giving QB a 0 passTD line despite 250+ yards.
       let tdsToAssign = actualTDs;
       let totalRecTDs = 0;
 
@@ -1579,7 +1590,24 @@ export function simGameStats(home, away, options = {}) {
           }
       });
 
+      const receiverScorers = scorers.filter(s => s.type === 'WR');
+
       if (scorers.length > 0) {
+          // Step 1: Guarantee a minimum of 55% of TDs go to receivers (pass TDs)
+          const passTdFloor = receiverScorers.length > 0
+              ? Math.min(tdsToAssign, Math.round(actualTDs * 0.55))
+              : 0;
+
+          for (let i = 0; i < passTdFloor; i++) {
+              const weights = receiverScorers.map(s => s.weight);
+              const idx = U.weightedChoice(weights);
+              const winner = receiverScorers[idx];
+              winner.p.stats.game.recTD = (winner.p.stats.game.recTD || 0) + 1;
+              totalRecTDs++;
+              tdsToAssign--;
+          }
+
+          // Step 2: Distribute remaining TDs among all scorers (RBs + receivers)
           while (tdsToAssign > 0) {
               const weights = scorers.map(s => s.weight);
               const idx = U.weightedChoice(weights);
@@ -1986,6 +2014,13 @@ export function simulateBatch(games, options = {}) {
         return [];
     }
 
+    // Clear per-batch caches so scheme fit and morale are recalculated fresh each week
+    if (league.teams) {
+        for (const t of league.teams) {
+            if (t) { delete t._cachedSchemeFit; delete t._cachedMorale; }
+        }
+    }
+
     // OPTIMIZATION: create maps for fast lookups during commit
     if (league.teams && !league._teamsMap) {
         league._teamsMap = {};
@@ -2064,7 +2099,7 @@ export function simulateBatch(games, options = {}) {
             if (league.resultsByWeek && league.resultsByWeek[weekIndex]) {
                  const existing = league.resultsByWeek[weekIndex].find(r => r.home === home.id && r.away === away.id);
                  if (existing) {
-                     console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
+                     if (verbose) console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
                      results.push(existing);
                      return;
                  }
