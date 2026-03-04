@@ -45,7 +45,7 @@ export function generateInjury(player, context = {}) {
     if (player.age > 30) chance *= 1.2;
 
     // Roll for injury
-    if (Math.random() < chance) {
+    if (U.random() < chance) {
         const injuryTemplate = U.choice(INJURIES);
         const weeks = U.rand(injuryTemplate.minWeeks, injuryTemplate.maxWeeks);
         return {

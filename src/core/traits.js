@@ -1,5 +1,7 @@
 // src/core/traits.js
 
+import { Utils as U } from './utils.js';
+
 export const TRAITS = {
   // Offensive Skill
   POCKET_PRESENCE: {
@@ -124,7 +126,7 @@ export function generateTraits(pos, ovr, count = null) {
     numTraits = count;
   } else {
     // Probability curve
-    const rand = Math.random();
+    const rand = U.random();
     if (ovr >= 90) {
       if (rand < 0.4) numTraits = 2;
       else if (rand < 0.8) numTraits = 1;
@@ -144,7 +146,7 @@ export function generateTraits(pos, ovr, count = null) {
   if (numTraits === 0) return [];
 
   // Shuffle and pick
-  const shuffled = allTraits.sort(() => 0.5 - Math.random());
+  const shuffled = U.shuffle([...allTraits]);
   return shuffled.slice(0, numTraits).map(t => t.id);
 }
 

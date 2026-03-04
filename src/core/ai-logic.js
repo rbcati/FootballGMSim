@@ -379,7 +379,7 @@ class AiLogic {
         const freeAgents = allPlayers.filter(p => (!p.teamId || p.status === 'free_agent') && p.offers && p.offers.length > 0);
 
         for (const player of freeAgents) {
-            const decision = this.evaluateOffers(player);
+            const decision = this.evaluateOffers(player, day);
 
             if (decision.signed && decision.offer) {
                 // SIGN PLAYER
@@ -430,38 +430,50 @@ class AiLogic {
      * Scores offers based on Money (70%), Winning (20%), Scheme (10%).
      * Returns { signed: boolean, offer: Object | null }
      */
-    static evaluateOffers(player) {
+    /**
+     * Player Decision Matrix — rebalanced weights (Task 8).
+     * Money: 50% (normalized to 0-100), Winning: 30%, Scheme Fit: 20%.
+     * Position-specific money sensitivity adjusts the weights further.
+     * Threshold decreases by 5% per day after day 2 so players eventually commit.
+     *
+     * @param {object} player
+     * @param {number} [day=1] - FA day (1-indexed). Threshold decreases after day 2.
+     */
+    static evaluateOffers(player, day = 1) {
         if (!player.offers || player.offers.length === 0) return { signed: false, offer: null };
+
+        // Position-specific weight sets (moneyW, winW, fitW)
+        // Money-sensitive: QB, WR — value financial security above rings
+        // Win-sensitive: veteran LB, S — chase championships late career
+        const POS_WEIGHTS = {
+            QB:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
+            WR:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
+            RB:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
+            LB:  { moneyW: 0.40, winW: 0.40, fitW: 0.20 },
+            S:   { moneyW: 0.40, winW: 0.40, fitW: 0.20 },
+        };
+        const weights = POS_WEIGHTS[player.pos] ?? { moneyW: 0.50, winW: 0.30, fitW: 0.20 };
+
+        // Max expected contract value for normalization (~5yr × $50M)
+        const MAX_CONTRACT_VALUE = 250;
 
         let bestScore = -1;
         let bestOffer = null;
-
-        // Calculate baseline demand value for comparison
-        // Simple Total Value for now: (Base * Years) + Bonus
-        // Guaranteed money weight mentioned in prompt, but let's stick to Total Value for simplicity first
-        // or: Annual * 0.5 + Guaranteed * 0.5?
 
         for (const offer of player.offers) {
             const team = cache.getTeam(offer.teamId);
             if (!team) continue;
 
-            // 1. Financial Value (Weight: 70%)
-            // Score normalized to ~0-100 range roughly
             const c = offer.contract;
             const totalValue = (c.baseAnnual * c.yearsTotal) + c.signingBonus;
-            const guaranteed = (totalValue * (c.guaranteedPct || 0.5)); // Approx
 
-            // Heuristic: 1M = 1 point roughly?
-            // A 5yr/$100M deal = 100 points.
-            // A 1yr/$5M deal = 5 points.
-            const moneyScore = totalValue;
+            // 1. Financial Value — normalized 0-100
+            const normalizedMoney = Math.min(100, (totalValue / MAX_CONTRACT_VALUE) * 100);
 
-            // 2. Team Contender Status (Weight: 20%)
-            // Based on OVR (0-100)
-            const teamOvr = team.ovr || 75;
-            const winScore = teamOvr; // 0-100
+            // 2. Team Contender Status — OVR already 0-100
+            const winScore = team.ovr || 75;
 
-            // 3. Scheme Fit (Weight: 10%)
+            // 3. Scheme Fit — 0-100
             let fitScore = 50;
             if (team.staff && team.staff.headCoach) {
                 const hc = team.staff.headCoach;
@@ -470,22 +482,9 @@ class AiLogic {
                 else fitScore = calculateDefensiveSchemeFit(player, hc.defScheme || '4-3');
             }
 
-            // Weighted Sum
-            // We need to normalize money score to be comparable to 0-100 ratings
-            // Max contract roughly $150M?
-            // Let's just use raw values and weights that make sense.
-            // Money is dominant.
-
-            // Weight 70% -> Money factor
-            // Weight 20% -> Win factor
-            // Weight 10% -> Fit factor
-
-            // If Money is ~50 (50M deal), Win is ~80, Fit is ~80.
-            // 50 * 3.0 = 150
-            // 80 * 0.5 = 40
-            // 80 * 0.2 = 16
-
-            const score = (moneyScore * 3.0) + (winScore * 0.5) + (fitScore * 0.2);
+            const score = (normalizedMoney * weights.moneyW * 100)
+                        + (winScore       * weights.winW  * 100)
+                        + (fitScore       * weights.fitW  * 100);
 
             if (score > bestScore) {
                 bestScore = score;
@@ -493,41 +492,22 @@ class AiLogic {
             }
         }
 
-        // Decision to sign?
-        // If we are late in FA (Day 3+), sign the best offer.
-        // If we are early (Day 1-2), only sign if it blows us away (e.g. > expected market value).
-        // For Phase 16, let's keep it simple:
-        // If bestOffer exists and beats a "patience threshold", sign.
-        // Or simplified: Always sign the best offer available today?
-        // Prompt says: "If an offer exceeds their internal threshold, they sign. If not, they wait for the next day."
-
-        // Calculate internal threshold based on "Ask"
-        // Ask ~ OVR * PosMult
+        // Signing threshold based on player's ask — decreases 5% per day after day 2
         const ask = calculateExtensionDemand(player);
         const askTotalValue = (ask.baseAnnual * ask.yearsTotal) + ask.signingBonus;
-        const askScore = (askTotalValue * 3.0); // Baseline money score
+        const askNormalized  = Math.min(100, (askTotalValue / MAX_CONTRACT_VALUE) * 100);
+        const askScore = askNormalized * weights.moneyW * 100
+                       + 75 * weights.winW * 100   // assume average team baseline
+                       + 50 * weights.fitW * 100;  // assume average fit baseline
 
-        // Threshold lowers as days pass?
-        // We don't pass 'day' here easily without context, but we can assume simple logic:
-        // Threshold = 95% of Ask Score + Baseline expectation for Team/Fit
-        // Baseline extras: Average Team (75 OVR) * 0.5 + Average Fit (50) * 0.2 = 37.5 + 10 = 47.5
-        const baselineExtras = 47.5;
-        const threshold = (askScore + baselineExtras) * 0.95;
-
-        // Also, if it's the User's offer, we might want to be stricter or looser?
-        // Let's just use the score.
+        const dayPenalty = Math.max(0, day - 2) * 0.05; // 5% per day after day 2
+        const threshold  = askScore * (0.95 - dayPenalty);
 
         if (bestScore >= threshold) {
             return { signed: true, offer: bestOffer };
         }
 
-        // If 'day' context was available we could force sign on Day 5.
-        // For now, return false (wait).
-        // But we need a way to ensure they eventually sign.
-        // Let's pass 'day' or handle forced signing in the caller if day == max.
-        // We'll modify processFreeAgencyDay to handle forced signing.
-
-        return { signed: false, offer: bestOffer }; // Wait
+        return { signed: false, offer: bestOffer }; // Wait for better offer
     }
 }
 

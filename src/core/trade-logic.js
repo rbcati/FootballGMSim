@@ -26,6 +26,8 @@
 import { cache }        from '../db/cache.js';
 import { Transactions } from '../db/index.js';
 import NewsEngine       from './news-engine.js';
+import { Constants }    from './constants.js';
+import { Utils as U }   from './utils.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -54,16 +56,35 @@ const VALUE_TOLERANCE = 0.10;
 
 /**
  * Calculate a player's trade value score.
- * Formula: (OVR × 1.5) + (POT × 0.5) − (Age × 2)
+ *
+ * Formula: ((OVR × 1.5 + POT × 0.5) × posMult) − agePenalty − contractPenalty
+ *
+ * Improvements over the original (OVR*1.5 + POT*0.5 - Age*2):
+ *  - Position multiplier: QBs worth more than Ks at the same OVR
+ *  - Exponential age penalty: steep for 32+ (was linear)
+ *  - Contract penalty: expensive contracts reduce trade value
  *
  * @param {object} player  – player object from cache
  * @returns {number}
  */
 export function calculatePlayerValue(player) {
-  const ovr = player.ovr      ?? 60;
-  const pot = player.potential ?? player.ovr ?? 60;
-  const age = player.age      ?? 26;
-  return (ovr * 1.5) + (pot * 0.5) - (age * 2);
+  const ovr = player.ovr       ?? 60;
+  const pot = player.potential  ?? player.ovr ?? 60;
+  const age = player.age        ?? 26;
+
+  // Position multiplier (from Constants.POSITION_VALUES)
+  const posValues  = Constants?.POSITION_VALUES ?? {};
+  const posMult    = posValues[player.pos] ?? 1.0;
+
+  // Exponential age penalty (grows slowly through 20s, accelerates at 32+)
+  const agePenalty = Math.pow(1.08, Math.max(0, age - 25));
+
+  // Contract cost penalty (expensive players are harder to trade for)
+  const annualSalary  = player.contract?.baseAnnual ?? 0;
+  const contractPenalty = annualSalary * 0.5;
+
+  const rawValue = ((ovr * 1.5) + (pot * 0.5)) * posMult;
+  return Math.max(0, rawValue - agePenalty - contractPenalty);
 }
 
 // ── Roster Analysis ───────────────────────────────────────────────────────────
@@ -211,7 +232,7 @@ export async function runAIToAITrades() {
   const allTeams    = cache.getAllTeams().filter(t => t.id !== userTeamId);
 
   // Randomise order so the same teams don't always trade first.
-  const shuffled = [...allTeams].sort(() => Math.random() - 0.5);
+  const shuffled = U.shuffle([...allTeams]);
 
   // Build surplus/need map upfront — avoids repeated roster scans.
   const surplusMap = {};

@@ -237,7 +237,7 @@ export function updateWeeklyStrategy(league, offPlanId, defPlanId, riskId) {
     if (!league.strategyHistory[defPlanId]) league.strategyHistory[defPlanId] = 0;
     league.strategyHistory[defPlanId]++;
 
-    console.log(`[Strategy] Updated to Off: ${offPlanId}, Def: ${defPlanId}, Risk: ${riskId}`);
+    // Strategy updated — no console log needed in production
 
     // Persist strategy change immediately
     if (saveState) saveState();
