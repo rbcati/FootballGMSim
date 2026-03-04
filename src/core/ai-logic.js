@@ -426,11 +426,6 @@ class AiLogic {
     }
 
     /**
-     * Player Decision Matrix.
-     * Scores offers based on Money (70%), Winning (20%), Scheme (10%).
-     * Returns { signed: boolean, offer: Object | null }
-     */
-    /**
      * Player Decision Matrix — rebalanced weights (Task 8).
      * Money: 50% (normalized to 0-100), Winning: 30%, Scheme Fit: 20%.
      * Position-specific money sensitivity adjusts the weights further.
