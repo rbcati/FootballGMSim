@@ -714,6 +714,7 @@
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+    min-width: 100%;
   }
   
   .standings-tabs {
@@ -948,12 +949,20 @@
 
 /* Added for Leaders and Draft Table Mobile Optimization */
 @media (max-width: 768px) {
+  .standings-table {
+    display: table !important;
+    min-width: 600px !important; /* Force overflow on mobile */
+  }
+
   .standings-table th, .standings-table td {
-    padding: var(--space-1) var(--space-2);
+    padding: var(--space-2) var(--space-3) !important;
     font-size: 0.8rem;
+    white-space: nowrap !important;
   }
 
   .table-wrapper {
+    display: block;
+    width: 100%;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
