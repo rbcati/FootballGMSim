@@ -1,6 +1,8 @@
 // constants.js - Cleaned, organized, and properly exported properties
 'use strict';
 
+  import { FIRST_NAMES as EXPANDED_FIRST_NAMES, LAST_NAMES as EXPANDED_LAST_NAMES } from '../data/names.js';
+
   // --- I. GAME CONFIGURATION ---
   const GAME_CONFIG = {
     YEAR_START: 2025,
@@ -130,8 +132,8 @@
 
   // --- VI. NAMES, COLLEGES, ABILITIES (REFACTORED FOR SAFETY) ---
   // We use a function to ensure we get the names EVEN IF the other script loads late
-  const getFirstNames = () => ((typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || ['James', 'Michael', 'John', 'Robert', 'David', 'William', 'Richard', 'Joseph', 'Thomas', 'Christopher']);
-  const getLastNames = () => ((typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']);
+  const getFirstNames = () => EXPANDED_FIRST_NAMES;
+  const getLastNames = () => EXPANDED_LAST_NAMES;
   
   // NAMES object also needs to be dynamic or a getter, but for simplicity in this structure we use the getters in Constants
   

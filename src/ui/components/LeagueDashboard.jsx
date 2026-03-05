@@ -281,7 +281,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                   {divTeams.map((team, idx) => {
                     const isUser = team.id === userTeamId;
                     return (
-                      <tr key={team.id} className={isUser ? 'selected' : ''}>
+                      <tr key={team.id} className={isUser ? 'user-team-row' : ''}>
                         <td style={{ paddingLeft: 'var(--space-4)' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
                             <span style={{ width: 20, textAlign: 'center', color: 'var(--text-subtle)', fontSize: 'var(--text-xs)', fontWeight: 700 }}>
@@ -863,7 +863,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       )}
       {activeTab === 'Leaders' && (
         <TabErrorBoundary label="Leaders">
-          <Leaders onPlayerSelect={setSelectedPlayerId} />
+          <Leaders onPlayerSelect={setSelectedPlayerId} userTeamId={league.userTeamId} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Award Races' && (
