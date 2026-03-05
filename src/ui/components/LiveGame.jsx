@@ -202,6 +202,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [overlayEvent, setOverlayEvent] = useState(null);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
   const playCountRef                = useRef(0);
@@ -290,6 +291,28 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   useEffect(() => {
     if (playLogRef.current) {
       playLogRef.current.scrollTop = playLogRef.current.scrollHeight;
+    }
+  }, [plays]);
+
+  // ── Play Visual Feedback ─────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (plays.length > 0) {
+      const lastPlay = plays[plays.length - 1];
+      if (lastPlay.text.includes('TOUCHDOWN')) {
+        setOverlayEvent('goal');
+      } else if (lastPlay.text.includes('field goal attempt... GOOD')) {
+        setOverlayEvent('goal field-goal');
+      } else if (lastPlay.text.includes('INTERCEPTION') || lastPlay.text.includes('sack!')) {
+        setOverlayEvent('save');
+      } else if (lastPlay.text.includes('punt,')) {
+        setOverlayEvent('kick');
+      }
+
+      const timer = setTimeout(() => {
+        setOverlayEvent(null);
+      }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [plays]);
 
@@ -412,7 +435,15 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         flexWrap: 'wrap',
         gap: 0,
         minHeight: 200,
+        position: 'relative',
       }}>
+        {overlayEvent && (
+          <div className={"game-event-overlay " + overlayEvent}>
+            <div className="event-text">
+              {overlayEvent.includes('goal') ? 'SCORE!' : overlayEvent === 'save' ? 'DEFENSE!' : 'KICK!'}
+            </div>
+          </div>
+        )}
         {/* ── Left: Scoreboard ── */}
         <div style={{
            flex: '999 1 300px',
@@ -519,19 +550,29 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 Simulation complete.
               </p>
             )}
-            {plays.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
-                  lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
-                  paddingBottom: 'var(--space-1)',
-                  animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
-                }}
-              >
-                {p.text}
-              </div>
-            ))}
+            {plays.map((p) => {
+              let colorClass = '';
+              if (p.text.includes('TOUCHDOWN') || p.text.includes('GOOD!')) {
+                colorClass = 'play-touchdown';
+              } else if (p.text.includes('INTERCEPTION')) {
+                colorClass = 'play-turnover';
+              }
+
+              return (
+                <div
+                  key={p.id}
+                  className={colorClass ? `play-item ${colorClass}` : 'play-item'}
+                  style={{
+                    fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+                    lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
+                    paddingBottom: 'var(--space-1)',
+                    animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
+                  }}
+                >
+                  {p.text}
+                </div>
+              );
+            })}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
           </div>
         </div>
