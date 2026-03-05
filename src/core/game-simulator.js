@@ -405,84 +405,229 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     const oppScore = userIsHome ? awayScore : homeScore;
     const won = userScore > oppScore;
 
-    // Helper to sum stats
+    // Helper to sum stats across all players on a team.
+    // capturePlayerStats creates flat objects { name, pos, passYd, ... } so
+    // we access the stat directly on p rather than through p.stats.
     const sumStat = (teamStats, statName) => {
         if (!teamStats || !teamStats.players) return 0;
-        return Object.values(teamStats.players).reduce((sum, p) => sum + (p.stats[statName] || 0), 0);
+        return Object.values(teamStats.players).reduce((sum, p) => sum + (p[statName] || 0), 0);
     };
 
     // Helper to check for big plays (simplistic check on longest)
     const hasBigPlay = (teamStats) => {
         if (!teamStats || !teamStats.players) return false;
-        return Object.values(teamStats.players).some(p => (p.stats.longestPass > 45) || (p.stats.longestRun > 35));
+        return Object.values(teamStats.players).some(p => (p.longestPass > 45) || (p.longestRun > 35));
     };
+
+    // Helper to find the top performer at a given position from a team's stats map
+    const getTopPlayer = (teamStats, posFilter, statName) => {
+        if (!teamStats || !teamStats.players) return null;
+        let best = null;
+        let bestVal = 0;
+        for (const p of Object.values(teamStats.players)) {
+            const passes = posFilter ? posFilter(p.pos) : true;
+            if (passes && (p[statName] || 0) > bestVal) {
+                bestVal = p[statName];
+                best = p;
+            }
+        }
+        return best;
+    };
+
+    const isQB = pos => pos === 'QB';
+    const isRB = pos => pos === 'RB';
+    const isWRTE = pos => pos === 'WR' || pos === 'TE';
+    const isDef = pos => pos === 'DL' || pos === 'LB' || pos === 'CB' || pos === 'S';
 
     const userRushYds = sumStat(userStats, 'rushYd');
     const userPassYds = sumStat(userStats, 'passYd');
     const userTurnovers = sumStat(userStats, 'interceptions') + sumStat(userStats, 'fumbles');
-    const userSacks = sumStat(userStats, 'sacksAllowed'); // allowed by offense
-    const userDefSacks = sumStat(userStats, 'sacks'); // made by defense
+    const userSacks = sumStat(userStats, 'sacksAllowed'); // sacks allowed by offense
+    const userDefSacks = sumStat(userStats, 'sacks');    // sacks made by defense
     const userBigPlays = hasBigPlay(userStats);
+    const userTotalYds = userPassYds + userRushYds;
+    const userPassTDs = sumStat(userStats, 'passTD');
+    const userDefInts = sumStat(userStats, 'interceptions'); // user DEF interceptions
 
     const oppRushYds = sumStat(oppStats, 'rushYd');
     const oppPassYds = sumStat(oppStats, 'passYd');
+    const oppTurnovers = sumStat(oppStats, 'interceptions') + sumStat(oppStats, 'fumbles');
+
+    const scoreDiff = Math.abs(userScore - oppScore);
+    const isBlowout = scoreDiff >= 21;
+    const isClose = scoreDiff <= 7;
+    const isOT = (userScore !== oppScore) && (userScore > 0) && (oppScore > 0) &&
+                  (userScore + oppScore > 0) && context._wasOT; // flag set below if applicable
+
+    // Named player helpers
+    const topPasser = getTopPlayer(userStats, isQB, 'passYd');
+    const topRusher = getTopPlayer(userStats, isRB, 'rushYd');
+    const topReceiver = getTopPlayer(userStats, isWRTE, 'recYd');
+    const topDefender = getTopPlayer(userStats, isDef, 'sacks') ||
+                        getTopPlayer(userStats, isDef, 'tackles');
+    const userAbbr = context.userTeamAbbr || 'your team';
+    const oppAbbr = context.oppTeamAbbr || 'the opponent';
 
     // 1. Matchup Callbacks
     if (matchup) {
         if (matchup.toLowerCase().includes("passing") && userPassYds > 275) {
-            callbacks.push("Your passing attack exploited the matchup as expected.");
+            const name = topPasser ? topPasser.name.split(' ').pop() : 'the QB';
+            callbacks.push(`${name} exploited the favorable passing matchup with ${userPassYds} yards through the air.`);
         } else if (matchup.toLowerCase().includes("passing") && userPassYds < 175) {
-            callbacks.push("Despite a favorable matchup, the passing game stalled.");
+            callbacks.push(`Despite a favorable passing matchup, ${userAbbr}'s air attack never got going (${userPassYds} yds).`);
         } else if (matchup.toLowerCase().includes("rushing") && userRushYds > 160) {
-            callbacks.push("Ground game dominated their weak run defense.");
+            const name = topRusher ? topRusher.name.split(' ').pop() : 'the run game';
+            callbacks.push(`${name} ran all over their weak run defense — ${userRushYds} rushing yards.`);
         } else if (matchup.toLowerCase().includes("rushing") && userRushYds < 60) {
-            callbacks.push("Run game failed to gain traction despite the advantage.");
+            callbacks.push(`The run game failed to capitalize despite the favorable matchup (${userRushYds} rushing yds).`);
         }
     }
 
-    // 2. Strategy Callbacks
+    // 2. Offensive Strategy Callbacks
     if (offPlanId === 'AGGRESSIVE_PASSING') {
-        if (userPassYds > 300) callbacks.push("Aggressive passing strategy led to huge yardage.");
-        else if (userTurnovers >= 3) callbacks.push("Aggressive air attack resulted in costly turnovers.");
+        if (userPassYds > 300) {
+            const name = topPasser ? topPasser.name.split(' ').pop() : 'the QB';
+            callbacks.push(`Aggressive passing paid off — ${name} carved them up for ${userPassYds} yards.`);
+        } else if (userTurnovers >= 3) {
+            callbacks.push(`Going aggressive through the air backfired with ${userTurnovers} costly turnovers.`);
+        } else if (userPassTDs >= 3) {
+            callbacks.push(`The aggressive air attack found paydirt ${userPassTDs} times today.`);
+        }
     } else if (offPlanId === 'BALL_CONTROL') {
-        if (userRushYds > 150 && won) callbacks.push("Ball control strategy wore them down perfectly.");
-        else if (userScore < 14) callbacks.push("Conservative offense failed to generate points.");
+        if (userRushYds > 150 && won) {
+            const name = topRusher ? topRusher.name.split(' ').pop() : 'the backfield';
+            callbacks.push(`${name} wore them down — ${userRushYds} rushing yards made ball control the perfect call.`);
+        } else if (userScore < 14) {
+            callbacks.push(`Ball-control backfired — the conservative offense couldn't generate points.`);
+        } else if (userRushYds > 120) {
+            callbacks.push(`Ground-and-pound kept the chains moving with ${userRushYds} rushing yards.`);
+        }
     } else if (offPlanId === 'PROTECT_QB') {
-        if (userSacks === 0) callbacks.push("Protection schemes kept the QB clean all day.");
-        else if (userSacks >= 4) callbacks.push("Protection broke down despite the focus on safety.");
+        if (userSacks === 0) {
+            callbacks.push(`Protection schemes worked flawlessly — the QB was never sacked.`);
+        } else if (userSacks >= 4) {
+            callbacks.push(`The pocket collapsed despite prioritizing QB protection (${userSacks} sacks allowed).`);
+        } else if (userSacks <= 1 && userPassYds > 250) {
+            callbacks.push(`Clean pocket led to a sharp passing performance with ${userPassYds} yards.`);
+        }
     } else if (offPlanId === 'FEED_STAR') {
-        // Hard to check star without ID, but assume high usage if stats are skewed?
-        // Skip for now to keep simple
+        const starId = context.starTargetId;
+        const starName = context.starPlayerName;
+        // Find the star's stats in the user's player map
+        let starStats = null;
+        if (starId && userStats && userStats.players) {
+            starStats = userStats.players[String(starId)];
+        }
+        if (starStats) {
+            const totalStarYds = (starStats.recYd || 0) + (starStats.rushYd || 0);
+            const starTDs = (starStats.recTD || 0) + (starStats.rushTD || 0);
+            const displayName = (starName || (starStats.name || 'the star')).split(' ').pop();
+            if (totalStarYds > 120 || starTDs >= 2) {
+                callbacks.push(`Feeding ${displayName} paid dividends — ${totalStarYds} yards${starTDs > 0 ? ` and ${starTDs} TD${starTDs > 1 ? 's' : ''}` : ''} today.`);
+            } else if (totalStarYds < 50) {
+                callbacks.push(`${displayName} was well-covered and couldn't get untracked (${totalStarYds} yds).`);
+            } else {
+                callbacks.push(`${displayName} was a steady presence with ${totalStarYds} yards.`);
+            }
+        } else if (starName) {
+            callbacks.push(`The game plan revolved around ${starName.split(' ').pop()}, with mixed results.`);
+        }
     }
 
+    // 3. Defensive Strategy Callbacks
     if (defPlanId === 'BLITZ_HEAVY') {
-        if (userDefSacks >= 4) callbacks.push("Blitz packages overwhelmed their line.");
-        else if (oppScore > 28) callbacks.push("Heavy blitzing left the secondary exposed.");
+        if (userDefSacks >= 4) {
+            callbacks.push(`The blitz was relentless — ${userDefSacks} sacks left their QB rattled.`);
+        } else if (oppScore > 28) {
+            callbacks.push(`Blitzing backfired badly; ${oppAbbr} found the open receivers for ${oppScore} points.`);
+        } else if (userDefSacks >= 2 && oppTurnovers >= 2) {
+            callbacks.push(`Pressure and takeaways: the blitz scheme created chaos in ${oppAbbr}'s backfield.`);
+        }
     } else if (defPlanId === 'SELL_OUT_RUN') {
-        if (oppPassYds > 280) callbacks.push("Selling out vs run left passing lanes wide open.");
-        else if (oppRushYds < 60) callbacks.push("Run defense completely shut them down.");
+        if (oppPassYds > 280) {
+            callbacks.push(`Stacking the box opened up the air — ${oppAbbr} threw for ${oppPassYds} yards over the top.`);
+        } else if (oppRushYds < 60) {
+            callbacks.push(`Selling out to stop the run worked: ${oppAbbr} held to ${oppRushYds} rushing yards.`);
+        } else if (oppRushYds < 100 && oppPassYds < 200) {
+            callbacks.push(`Run-stop focus kept ${oppAbbr} one-dimensional all afternoon.`);
+        }
     } else if (defPlanId === 'DISGUISE_COVERAGE') {
-        const oppInts = sumStat(oppStats, 'interceptions');
-        if (oppInts >= 2) callbacks.push("Confusing looks forced multiple turnovers.");
-        else if (oppPassYds > 280) callbacks.push("Complex coverage schemes were picked apart.");
+        if (userDefInts >= 2) {
+            callbacks.push(`Mixed coverages paid off — the defense forced ${userDefInts} interceptions.`);
+        } else if (oppPassYds > 280) {
+            callbacks.push(`${oppAbbr}'s QB solved the disguised looks and threw for ${oppPassYds} yards.`);
+        } else if (oppTurnovers >= 2) {
+            callbacks.push(`Confusing looks created ${oppTurnovers} turnovers and kept the offense off-balance.`);
+        }
+    } else if (defPlanId === 'ZONE_COVERAGE') {
+        if (oppPassYds < 180) {
+            callbacks.push(`Zone coverage smothered ${oppAbbr}'s passing attack (${oppPassYds} yds allowed).`);
+        } else if (oppPassYds > 300) {
+            callbacks.push(`Zone had too many holes today — ${oppAbbr} found space for ${oppPassYds} passing yards.`);
+        }
     }
 
-    // 3. Risk Profile Callbacks
+    // 4. Risk Profile Callbacks
     if (riskId === 'AGGRESSIVE') {
-        if (userBigPlays && won) callbacks.push("High-risk approach sparked explosive plays.");
-        else if (userTurnovers >= 3) callbacks.push("Gambling on big plays backfired with turnovers.");
+        if (userBigPlays && won) {
+            callbacks.push(`High-risk football paid off — explosive plays were the difference.`);
+        } else if (userTurnovers >= 3) {
+            callbacks.push(`Gambling backfired: ${userTurnovers} turnovers handed ${oppAbbr} momentum they never gave back.`);
+        } else if (userBigPlays && !won) {
+            callbacks.push(`Big plays were there, but too many mistakes allowed ${oppAbbr} to hang around.`);
+        }
     } else if (riskId === 'CONSERVATIVE') {
-        if (won && userTurnovers === 0) callbacks.push("Mistake-free football secured the win.");
-        else if (!won && userScore < 17) callbacks.push("Conservative play limited comeback chances.");
+        if (won && userTurnovers === 0) {
+            callbacks.push(`Mistake-free football — zero turnovers and steady execution sealed the win.`);
+        } else if (!won && userScore < 17) {
+            callbacks.push(`Playing it safe stalled the offense; ${userAbbr} couldn't generate enough firepower.`);
+        } else if (won && scoreDiff <= 6) {
+            callbacks.push(`Conservative execution was enough to grind out a close one.`);
+        }
     }
 
-    // 4. Stakes Callbacks
+    // 5. Score-context Callbacks (close games, blowouts, OT, standout performances)
+    if (isBlowout && won) {
+        if (userTotalYds > 400) {
+            callbacks.push(`Dominant from start to finish — ${userTotalYds} total yards in a ${userScore}-${oppScore} blowout.`);
+        } else {
+            callbacks.push(`${userAbbr} was in full control all day, winning by ${scoreDiff} points.`);
+        }
+    } else if (isBlowout && !won) {
+        callbacks.push(`A forgettable day — ${oppAbbr} dominated and won by ${scoreDiff} points.`);
+    } else if (isClose && won) {
+        if (topPasser && (topPasser.passYd || 0) > 250) {
+            callbacks.push(`${topPasser.name.split(' ').pop()} came through when it mattered — ${topPasser.passYd} yards in a ${userScore}-${oppScore} nail-biter.`);
+        } else {
+            callbacks.push(`A gutsy ${userScore}-${oppScore} win — ${userAbbr} found a way to close it out.`);
+        }
+    } else if (isClose && !won) {
+        callbacks.push(`Heartbreaker — ${userAbbr} fell by just ${scoreDiff} points.`);
+    }
+
+    // 6. Individual standout callbacks (only when no other context covered performance)
+    if (callbacks.length < 2) {
+        if (topReceiver && (topReceiver.recYd || 0) > 130) {
+            const tds = topReceiver.recTD || 0;
+            callbacks.push(`${topReceiver.name.split(' ').pop()} was impossible to stop: ${topReceiver.recYd} yards${tds > 0 ? `, ${tds} TD` : ''}.`);
+        } else if (topRusher && (topRusher.rushYd || 0) > 120) {
+            const tds = topRusher.rushTD || 0;
+            callbacks.push(`${topRusher.name.split(' ').pop()} carried the load with ${topRusher.rushYd} rushing yards${tds > 0 ? ` and ${tds} TD${tds > 1 ? 's' : ''}` : ''}.`);
+        } else if (topDefender && (topDefender.sacks || 0) >= 2) {
+            callbacks.push(`${topDefender.name.split(' ').pop()} wrecked the game plan — ${topDefender.sacks} sacks.`);
+        }
+    }
+
+    // 7. Stakes Callbacks
     if (stakes && stakes > 50) {
-        if (won) callbacks.push("Clutch performance in a high-stakes rivalry game.");
-        else callbacks.push("Crushing defeat to a bitter rival.");
+        if (won) {
+            callbacks.push(`${stakes >= 90 ? 'Season-defining' : 'Clutch'} performance when it mattered most — ${userScore}-${oppScore}.`);
+        } else {
+            callbacks.push(`Crushing ${scoreDiff}-point defeat when the stakes couldn't be higher.`);
+        }
     }
 
-    // Limit to 3 unique lines
+    // Deduplicate and limit to 3 lines
     return [...new Set(callbacks)].slice(0, 3);
 }
 
@@ -2018,32 +2163,6 @@ export function simulateBatch(games, options = {}) {
     if (league.teams) {
         for (const t of league.teams) {
             if (t) { delete t._cachedSchemeFit; delete t._cachedMorale; }
-        }
-    }
-
-    // OPTIMIZATION: create maps for fast lookups during commit
-    if (league.teams && !league._teamsMap) {
-        league._teamsMap = {};
-        for (let i = 0; i < league.teams.length; i++) {
-            const t = league.teams[i];
-            if (t && t.id !== undefined) league._teamsMap[t.id] = t;
-        }
-    }
-
-    if (league.schedule && !league._scheduleMap) {
-        league._scheduleMap = {};
-        const weekIndex = (league.week || 1) - 1;
-        const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
-        const weekSchedule = scheduleWeeks[weekIndex];
-        if (weekSchedule && weekSchedule.games) {
-            for (let i = 0; i < weekSchedule.games.length; i++) {
-                const g = weekSchedule.games[i];
-                if (g && g.home !== undefined && g.away !== undefined) {
-                    const hId = typeof g.home === 'object' ? g.home.id : g.home;
-                    const aId = typeof g.away === 'object' ? g.away.id : g.away;
-                    league._scheduleMap[`${hId}-${aId}`] = g;
-                }
-            }
         }
     }
 

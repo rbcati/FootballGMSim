@@ -98,13 +98,27 @@ class GameRunner {
 
                 const stakesVal = GameRunner.calculateContextualStakes(league, userTeam, oppTeam, options.ownerMode);
 
+                // Identify the star target player name for FEED_STAR callbacks
+                const starTargetId = plan.starTargetId || userTeam.strategies?.starTargetId || null;
+                let starPlayerName = null;
+                let starPlayerPos = null;
+                if (starTargetId && userTeam.roster) {
+                    const starP = userTeam.roster.find(p => String(p.id) === String(starTargetId));
+                    if (starP) { starPlayerName = starP.name; starPlayerPos = starP.pos; }
+                }
+
                 gameObj.preGameContext = {
                     matchup: matchupStr,
                     offPlanId: plan.offPlanId,
                     defPlanId: plan.defPlanId,
                     riskId: plan.riskId,
                     stakes: stakesVal,
-                    userIsHome: isHome
+                    userIsHome: isHome,
+                    userTeamAbbr: userTeam.abbr || null,
+                    oppTeamAbbr: oppTeam.abbr || null,
+                    starTargetId,
+                    starPlayerName,
+                    starPlayerPos
                 };
             }
 
