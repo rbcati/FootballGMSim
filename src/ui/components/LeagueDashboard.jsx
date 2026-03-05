@@ -836,6 +836,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
       </div>
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
+      <div key={activeTab} className="fade-in">
       {activeTab === 'Standings' && (
         <TabErrorBoundary label="Standings">
           <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
@@ -906,6 +907,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
           <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
+      </div>
 
       {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
       {selectedGameId && (
