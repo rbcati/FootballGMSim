@@ -154,7 +154,7 @@ test.describe('Daily Regression Pass', () => {
         console.log('Roster Scrollable:', rosterScrolls);
 
         // Assertions (soft, as content might fit on some screens)
-        // expect(prScrolls).toBeTruthy();
+        expect(prScrolls).toBeTruthy();
     });
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
