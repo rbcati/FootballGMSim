@@ -40,7 +40,7 @@ const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
  * @param {Function} makePlayer - Factory function to create a player.
  * @returns {Array} Array of player objects.
  */
-const initializeRoster = (team, Constants, Utils, makePlayer) => {
+const initializeRoster = (team, Constants, Utils, makePlayer, eliteNames = new Set()) => {
     if (!Constants?.DEPTH_NEEDS) return [];
 
     const roster = [];
@@ -79,9 +79,11 @@ const initializeRoster = (team, Constants, Utils, makePlayer) => {
             const ovr = Utils.rand(ovrRange[0], ovrRange[1]);
             const age = Utils.rand(21, 35);
 
-            const player = makePlayer(pos, age, ovr);
+            const player = makePlayer(pos, age, ovr, eliteNames);
             if (player) {
                 player.teamId = team.id;
+                // Track elite player names to prevent duplicates
+                if (player.ovr > 80) eliteNames.add(player.name);
 
                 // --- Cap Safety Check ---
                 const playersRemaining = totalPlayersNeeded - playersCreated - 1;
@@ -176,6 +178,9 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             ownerChallenge: null
         };
 
+        // Shared set of elite player names across all teams to prevent duplicates
+        const eliteNames = new Set();
+
         // Main Orchestration Loop
         league.teams = teams.map((teamData, index) => {
             const team = {
@@ -199,7 +204,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             };
 
             // Delegate tasks to specialized functions
-            team.roster = initializeRoster(team, Constants, Utils, makePlayer);
+            team.roster = initializeRoster(team, Constants, Utils, makePlayer, eliteNames);
             team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils);
 
             if (generateInitialStaff) {

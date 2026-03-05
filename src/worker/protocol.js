@@ -28,6 +28,9 @@ export const toWorker = Object.freeze({
   SIM_TO_WEEK:        'SIM_TO_WEEK',       // fast-forward to a specific week
   SIM_TO_PLAYOFFS:    'SIM_TO_PLAYOFFS',   // sim all remaining reg-season weeks
 
+  /** Batch simulation to a target phase */
+  SIM_TO_PHASE:       'SIM_TO_PHASE',      // { targetPhase: 'playoffs'|'offseason'|'preseason' }
+
   /** Playoffs */
   ADVANCE_PLAYOFFS:   'ADVANCE_PLAYOFFS',  // simulate the next playoff round
 
@@ -114,6 +117,9 @@ export const toUI = Object.freeze({
 
   /** Simulation progress (for multi-game batch operations) */
   SIM_PROGRESS:       'SIM_PROGRESS',         // { done, total, currentGame }
+
+  /** Batch sim progress (Sim to... operations) */
+  SIM_BATCH_PROGRESS: 'SIM_BATCH_PROGRESS',   // { currentWeek, targetPhase, phase }
 
   /** A single game result (live ticker feed) */
   GAME_EVENT:         'GAME_EVENT',           // { gameId, event }

@@ -53,7 +53,7 @@ const STAT_LABELS = {
 
 // ── Single leaderboard table ──────────────────────────────────────────────────
 
-function LeaderTable({ title, rows, onPlayerSelect }) {
+function LeaderTable({ title, rows, onPlayerSelect, userTeamId }) {
   if (!rows || rows.length === 0) return null;
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -69,7 +69,9 @@ function LeaderTable({ title, rows, onPlayerSelect }) {
         }}>{title}</span>
       </div>
       <div style={{ padding: 'var(--space-1) 0' }}>
-        {rows.map((row, i) => (
+        {rows.map((row, i) => {
+          const isUserTeam = userTeamId != null && row.teamId === userTeamId;
+          return (
           <div
             key={row.playerId ?? i}
             onClick={() => onPlayerSelect?.(row.playerId)}
@@ -79,9 +81,11 @@ function LeaderTable({ title, rows, onPlayerSelect }) {
               borderBottom: i < rows.length - 1 ? '1px solid var(--hairline)' : 'none',
               cursor: onPlayerSelect && row.playerId != null ? 'pointer' : 'default',
               transition: 'background 0.1s',
+              background: isUserTeam ? 'rgba(10, 132, 255, 0.08)' : undefined,
+              borderLeft: isUserTeam ? '3px solid var(--accent)' : undefined,
             }}
-            onMouseEnter={e => { if (onPlayerSelect) e.currentTarget.style.background = 'var(--surface-strong)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+            onMouseEnter={e => { if (onPlayerSelect) e.currentTarget.style.background = isUserTeam ? 'rgba(10, 132, 255, 0.14)' : 'var(--surface-strong)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = isUserTeam ? 'rgba(10, 132, 255, 0.08)' : ''; }}
           >
             {/* Rank */}
             <span style={{
@@ -101,9 +105,10 @@ function LeaderTable({ title, rows, onPlayerSelect }) {
               {row.pos ?? '?'}
             </span>
 
-            {/* Name */}
+            {/* Name + user star */}
             <span style={{ flex: 1, fontSize: 'var(--text-sm)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {row.name ?? `Player ${row.playerId}`}
+              {isUserTeam && <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--accent)', fontWeight: 700 }}>★</span>}
             </span>
 
             {/* Value */}
@@ -111,7 +116,8 @@ function LeaderTable({ title, rows, onPlayerSelect }) {
               {typeof row.value === 'number' ? row.value.toLocaleString() : row.value}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -119,7 +125,7 @@ function LeaderTable({ title, rows, onPlayerSelect }) {
 
 // ── Category section ──────────────────────────────────────────────────────────
 
-function CategorySection({ catKey, stats, onPlayerSelect }) {
+function CategorySection({ catKey, stats, onPlayerSelect, userTeamId }) {
   const entries = Object.entries(stats || {});
   if (entries.length === 0) return null;
   return (
@@ -138,6 +144,7 @@ function CategorySection({ catKey, stats, onPlayerSelect }) {
             title={STAT_LABELS[statKey]?.label ?? statKey}
             rows={rows}
             onPlayerSelect={onPlayerSelect}
+            userTeamId={userTeamId}
           />
         ))}
       </div>
@@ -147,7 +154,7 @@ function CategorySection({ catKey, stats, onPlayerSelect }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Leaders({ onPlayerSelect }) {
+export default function Leaders({ onPlayerSelect, userTeamId }) {
   const { actions } = useWorker();
 
   const [mode, setMode]       = useState('season');
@@ -250,6 +257,7 @@ export default function Leaders({ onPlayerSelect }) {
           catKey={activeCategory}
           stats={categories[activeCategory]}
           onPlayerSelect={onPlayerSelect}
+          userTeamId={userTeamId}
         />
       )}
     </div>

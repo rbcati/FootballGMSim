@@ -16,6 +16,7 @@ import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
+import MilestoneModal      from './components/MilestoneModal.jsx';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ export default function App() {
     workerReady, hasSave,
     league, lastResults, gameEvents,
     error, notifications,
+    batchSim,
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
@@ -114,6 +116,12 @@ export default function App() {
       actions.getDraftState();
     }
   }, [busy, simulating, actions, league]);
+
+  const handleSimToPhase = useCallback((targetPhase) => {
+    if (busy || simulating || advancingRef.current || batchSim) return;
+    advancingRef.current = true;
+    actions.simToPhase(targetPhase);
+  }, [busy, simulating, batchSim, actions]);
 
   const handleReset = useCallback(() => {
     if (window.confirm('Reset/Delete your active save? This cannot be undone.')) {
@@ -209,15 +217,17 @@ export default function App() {
           {league.phase}
         </span>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
           <button
             className="btn btn-primary"
             onClick={handleAdvanceWeek}
-            disabled={busy || simulating || isCutdownRequired}
+            disabled={busy || simulating || isCutdownRequired || !!batchSim}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
             style={isCutdownRequired ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
           >
-            {simulating
+            {batchSim
+              ? `Simming to ${batchSim.targetPhase}…`
+              : simulating
               ? `Simulating… ${simProgress}%`
               : busy
               ? 'Working…'
@@ -233,10 +243,45 @@ export default function App() {
               ? 'Draft Active'
               : `Advance Week ${league.week}`}
           </button>
-          <button className="btn" onClick={() => actions.save()} disabled={busy}>
+          {/* Sim to... buttons — only show during regular season */}
+          {league.phase === 'regular' && !batchSim && (
+            <>
+              <button
+                className="btn"
+                onClick={() => handleSimToPhase('playoffs')}
+                disabled={busy || simulating}
+                title="Simulate all remaining regular season weeks"
+                style={{ fontSize: 'var(--text-xs)' }}
+              >
+                Sim to Playoffs
+              </button>
+              <button
+                className="btn"
+                onClick={() => handleSimToPhase('offseason')}
+                disabled={busy || simulating}
+                title="Simulate through playoffs to offseason"
+                style={{ fontSize: 'var(--text-xs)' }}
+              >
+                Sim to Offseason
+              </button>
+            </>
+          )}
+          {/* During offseason phases, offer Sim to Season */}
+          {['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase) && !batchSim && (
+            <button
+              className="btn"
+              onClick={() => handleSimToPhase('preseason')}
+              disabled={busy || simulating}
+              title="Simulate through offseason to next preseason"
+              style={{ fontSize: 'var(--text-xs)' }}
+            >
+              Sim to Season
+            </button>
+          )}
+          <button className="btn" onClick={() => actions.save()} disabled={busy || !!batchSim}>
             Save
           </button>
-          <button className="btn btn-danger" onClick={handleReset} disabled={busy}>
+          <button className="btn btn-danger" onClick={handleReset} disabled={busy || !!batchSim}>
             Reset
           </button>
         </div>
@@ -262,6 +307,53 @@ export default function App() {
               transition: 'width 0.15s ease',
             }}
           />
+        </div>
+      )}
+
+      {/* ── Batch Sim Overlay ──────────────────────────────────────────── */}
+      {batchSim && (
+        <div
+          style={{
+            background: 'rgba(0,0,0,0.75)',
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 'var(--space-4)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ color: '#fff', fontSize: 'var(--text-xl)', fontWeight: 800 }}>
+            Simulating to {batchSim.targetPhase}...
+          </div>
+          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>
+            {batchSim.phase === 'regular' ? `Week ${batchSim.currentWeek}` :
+             batchSim.phase === 'playoffs' ? `Playoffs Week ${batchSim.currentWeek}` :
+             batchSim.phase || 'Initializing...'}
+          </div>
+          <div style={{
+            width: 300, height: 6,
+            background: 'rgba(255,255,255,0.15)',
+            borderRadius: 'var(--radius-pill)',
+            overflow: 'hidden',
+          }}>
+            <div style={{
+              height: '100%',
+              background: 'var(--accent)',
+              borderRadius: 'var(--radius-pill)',
+              animation: 'batchSimPulse 1.2s ease-in-out infinite',
+              width: '60%',
+            }} />
+          </div>
+          <style>{`
+            @keyframes batchSimPulse {
+              0%, 100% { opacity: 0.4; transform: translateX(-40%); }
+              50% { opacity: 1; transform: translateX(40%); }
+            }
+          `}</style>
         </div>
       )}
 
@@ -395,6 +487,11 @@ export default function App() {
         busy={busy}
         actions={actions}
       />
+
+      {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
+      {leagueReady && league && (
+        <MilestoneModal league={league} />
+      )}
     </div>
   );
 }

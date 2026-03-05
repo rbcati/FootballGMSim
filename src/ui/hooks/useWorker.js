@@ -28,6 +28,8 @@ const INITIAL_STATE = {
   simulating:   false,
   /** progress 0-100 during simulation */
   simProgress:  0,
+  /** batch sim state (Sim to... operations) */
+  batchSim:     null,   // { currentWeek, phase, targetPhase } or null
   /** worker announced it loaded + ready */
   workerReady:  false,
   /** true if a save exists (worker confirmed on INIT) */
@@ -62,13 +64,19 @@ function reducer(state, action) {
     case 'WORKER_READY':
       return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false, league: null };
     case 'FULL_STATE':
-      return { ...state, busy: false, simulating: false, league: action.payload };
+      return { ...state, busy: false, simulating: false, batchSim: null, league: action.payload };
     case 'STATE_UPDATE':
       // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0, gameEvents: [] };
+    case 'BATCH_SIM_START':
+      return { ...state, busy: true, batchSim: { currentWeek: 0, phase: '', targetPhase: action.targetPhase } };
+    case 'BATCH_SIM_PROGRESS':
+      return { ...state, batchSim: { ...state.batchSim, currentWeek: action.currentWeek, phase: action.phase } };
+    case 'BATCH_SIM_DONE':
+      return { ...state, busy: false, batchSim: null };
     case 'SIM_PROGRESS':
       return {
         ...state,
@@ -208,6 +216,9 @@ export function useWorker() {
             reject(new Error(payload.message));
           }
           break;
+        case toUI.SIM_BATCH_PROGRESS:
+          dispatch({ type: 'BATCH_SIM_PROGRESS', currentWeek: payload.currentWeek, phase: payload.phase });
+          break;
         case toUI.GAME_EVENT:
           dispatch({ type: 'GAME_EVENT', event: payload });
           break;
@@ -317,6 +328,12 @@ export function useWorker() {
 
     /** Sim all remaining regular-season weeks. */
     simToPlayoffs: ()          => send(toWorker.SIM_TO_PLAYOFFS),
+
+    /** Batch sim to a target phase (playoffs, offseason, preseason/regular). */
+    simToPhase: (targetPhase)  => {
+      dispatch({ type: 'BATCH_SIM_START', targetPhase });
+      send(toWorker.SIM_TO_PHASE, { targetPhase });
+    },
 
     /** Fetch a specific season's history (returns a Promise). */
     getSeasonHistory: (seasonId) => request(toWorker.GET_SEASON_HISTORY, { seasonId }, { silent: true }),

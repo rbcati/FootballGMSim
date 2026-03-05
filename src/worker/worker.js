@@ -154,6 +154,7 @@ function buildViewState() {
     draftStarted: !!(meta?.draftState),
     nextGameStakes,
     playoffSeeds: meta?.playoffSeeds ?? null,
+    championTeamId: meta?.championTeamId ?? null,
     ownerApproval,
     fanApproval,
     teams,
@@ -439,7 +440,9 @@ async function handleLoadSave({ leagueId }, id) {
           const teams = cache.getAllTeams();
           const ROUNDS = 5;
           const classSize = ROUNDS * teams.length;
-          const prospects = generateDraftClass(meta.year, { classSize });
+          // Build elite name set from existing players to avoid collisions
+          const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
+          const prospects = generateDraftClass(meta.year, { classSize, eliteNames });
           prospects.forEach(p => {
             cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
           });
@@ -1269,6 +1272,86 @@ async function handleSimToWeek({ targetWeek }, id) {
   for (let w = start; w < targetWeek; w++) {
     await handleAdvanceWeek({}, null); // null id → no per-week reply
   }
+  // Final state broadcast
+  post(toUI.FULL_STATE, buildViewState(), id);
+}
+
+// ── Handler: SIM_TO_PHASE ────────────────────────────────────────────────────
+
+async function handleSimToPhase({ targetPhase }, id) {
+  const meta = cache.getMeta();
+  if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
+
+  // Map target phases to stop conditions
+  const PHASE_TARGETS = {
+    playoffs:   (m) => m.phase === 'playoffs',
+    offseason:  (m) => m.phase === 'offseason_resign' || m.phase === 'offseason',
+    preseason:  (m) => m.phase === 'preseason',
+    regular:    (m) => m.phase === 'regular',
+  };
+
+  const isTarget = PHASE_TARGETS[targetPhase];
+  if (!isTarget) {
+    post(toUI.ERROR, { message: `Unknown target phase: ${targetPhase}` }, id);
+    return;
+  }
+
+  // Already at target?
+  if (isTarget(meta)) {
+    post(toUI.FULL_STATE, buildViewState(), id);
+    return;
+  }
+
+  // Safety: max iterations to prevent infinite loops
+  const MAX_ITERATIONS = 200;
+  let iterations = 0;
+
+  while (iterations < MAX_ITERATIONS) {
+    const currentMeta = cache.getMeta();
+
+    // Check if we've reached the target
+    if (isTarget(currentMeta)) break;
+
+    // Send progress to UI
+    post(toUI.SIM_BATCH_PROGRESS, {
+      currentWeek: currentMeta.currentWeek ?? 0,
+      phase: currentMeta.phase,
+      targetPhase,
+    });
+
+    // Advance based on current phase
+    if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
+      await handleAdvanceWeek({}, null);
+    } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
+      await handleAdvanceOffseason({}, null);
+    } else if (currentMeta.phase === 'free_agency') {
+      await handleAdvanceFreeAgencyDay({}, null);
+    } else if (currentMeta.phase === 'draft') {
+      // Auto-sim all draft picks
+      await handleStartDraft({}, null);
+      // Sim through all draft picks
+      let draftDone = false;
+      let draftGuard = 0;
+      while (!draftDone && draftGuard < 500) {
+        const draftMeta = cache.getMeta();
+        if (!draftMeta.draftState || draftMeta.draftState.currentPick >= draftMeta.draftState.order?.length) {
+          draftDone = true;
+        } else {
+          await handleSimDraftPick({}, null);
+        }
+        draftGuard++;
+      }
+      // After draft completes, advance offseason
+      await handleAdvanceOffseason({}, null);
+    } else {
+      // Unknown phase — break to prevent infinite loop
+      break;
+    }
+
+    iterations++;
+    await yieldFrame();
+  }
+
   // Final state broadcast
   post(toUI.FULL_STATE, buildViewState(), id);
 }
@@ -2216,8 +2299,11 @@ async function handleStartDraft(payload, id) {
   const teams     = cache.getAllTeams();
   const classSize = ROUNDS * teams.length;
 
+  // Build elite name set from existing players to avoid collisions
+  const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
+
   // Generate draft class and add to player pool as draft_eligible
-  const prospects = generateDraftClass(meta.year, { classSize });
+  const prospects = generateDraftClass(meta.year, { classSize, eliteNames });
   prospects.forEach(p => {
     cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
   });
@@ -3351,6 +3437,7 @@ async function handleMessage(event) {
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);
       case toWorker.SIM_TO_PLAYOFFS:    return await handleSimToWeek({ targetWeek: 18 }, id);
+      case toWorker.SIM_TO_PHASE:       return await handleSimToPhase(payload, id);
       case toWorker.GET_SEASON_HISTORY: return await handleGetSeasonHistory(payload, id);
       case toWorker.GET_ALL_SEASONS:    return await handleGetAllSeasons(payload, id);
       case toWorker.GET_PLAYER_CAREER:  return await handleGetPlayerCareer(payload, id);

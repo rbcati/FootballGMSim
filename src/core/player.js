@@ -338,11 +338,27 @@ function generateName() {
     return U.choice(C.FIRST_NAMES) + ' ' + U.choice(C.LAST_NAMES);
 }
 
+/**
+ * Generate a unique name that doesn't collide with existing elite players (OVR > 80).
+ * Re-rolls up to 10 times if a collision with an elite player name is found.
+ * @param {Set<string>} eliteNames - Set of names belonging to elite players.
+ * @returns {string} A player name.
+ */
+function generateUniqueName(eliteNames) {
+    if (!eliteNames || eliteNames.size === 0) return generateName();
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const name = generateName();
+        if (!eliteNames.has(name)) return name;
+    }
+    // Fallback: return whatever we got (extremely rare with 52k+ combos)
+    return generateName();
+}
+
 // ============================================================================
 // MAIN PLAYER FUNCTIONS
 // ============================================================================
 
-function makePlayer(pos, age = null, ovr = null) {
+function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     if (!U || !C) throw new Error('Utils and Constants must be loaded');
 
     const playerAge = age || U.rand(C.PLAYER_CONFIG.MIN_AGE, C.PLAYER_CONFIG.MAX_AGE);
@@ -352,7 +368,7 @@ function makePlayer(pos, age = null, ovr = null) {
 
     const player = {
         id: U.id(),
-        name: generateName(),
+        name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
         pos: pos,
         age: playerAge,
         ratings: ratings,
@@ -447,12 +463,17 @@ function generateDraftClass(year, options = {}) {
     const positions = C.DRAFT_CONFIG?.POSITIONS || C.POSITIONS; // Fallback
     const posKeys = Object.keys(positions).length > 0 && isNaN(Object.keys(positions)[0]) ? Object.keys(positions) : C.POSITIONS;
 
+    // Build a set of existing elite player names to avoid collisions
+    const eliteNames = options.eliteNames || new Set();
+
     for (let i = 0; i < classSize; i++) {
         const pos = U.choice(posKeys);
-        const rookie = makePlayer(pos, 21); // Rookies are young
+        const rookie = makePlayer(pos, 21, null, eliteNames); // Rookies are young
         rookie.year = year;
         rookie.draftId = i + 1;
         draftClass.push(rookie);
+        // If this rookie is elite, add them to the set too
+        if (rookie.ovr > 80) eliteNames.add(rookie.name);
     }
 
     draftClass.sort((a, b) => b.ovr - a.ovr);
@@ -482,7 +503,8 @@ export {
     generatePlayerRatings,
     tagAbilities,
     calculateMorale,
-    calculateExtensionDemand
+    calculateExtensionDemand,
+    generateUniqueName
 };
 
 /**
