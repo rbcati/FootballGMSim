@@ -29,6 +29,7 @@ import PlayerStats     from './PlayerStats.jsx';
 import StrategyPanel   from './StrategyPanel.jsx';
 import NewsFeed        from './NewsFeed.jsx';
 import StatLeadersWidget from './StatLeadersWidget.jsx';
+import FinancialsView  from './FinancialsView.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -85,7 +86,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Strategy', 'Roster', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Strategy', 'Roster', 'Financials', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -879,6 +880,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
       {activeTab === 'Roster' && (
         <TabErrorBoundary label="Roster">
           <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+        </TabErrorBoundary>
+      )}
+      {activeTab === 'Financials' && (
+        <TabErrorBoundary label="Financials">
+          <FinancialsView league={league} actions={actions} />
         </TabErrorBoundary>
       )}
       {activeTab === 'Draft' && (

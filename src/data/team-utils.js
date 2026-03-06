@@ -13,6 +13,7 @@
  */
 
 import { DEFAULT_TEAMS } from './default-teams.js';
+import { Constants } from '../core/constants.js';
 
 // ── Colour palette ────────────────────────────────────────────────────────────
 // 12 distinct colours that look good on both light and dark backgrounds.
@@ -54,6 +55,39 @@ export function teamColor(abbr = '') {
  * @param {Array}              [teams] Live teams from `league.teams` (optional).
  * @returns {{ id, name, abbr, conf, div, color }}
  */
+/**
+ * Returns the available cap space for a team.
+ *
+ * Priority order for data:
+ *  1. Live `teams` array (most current, from worker view-state)
+ *  2. Static DEFAULT_TEAMS fallback
+ *
+ * The result accounts for capUsed (active + dead) against the hard cap ceiling.
+ *
+ * @param {number|string} teamId   The team ID to look up.
+ * @param {Array}         [teams]  Live teams from `league.teams` (optional).
+ * @returns {number}  Available cap space in millions (may be negative if over cap).
+ */
+export function getAvailableCap(teamId, teams = []) {
+  if (teamId == null) return 0;
+
+  let team = null;
+
+  if (Array.isArray(teams) && teams.length > 0) {
+    team = teams.find(t => String(t.id) === String(teamId));
+  }
+
+  if (!team) {
+    team = DEFAULT_TEAMS.find(t => t.id === Number(teamId));
+  }
+
+  if (!team) return 0;
+
+  const capTotal = team.capTotal ?? Constants.SALARY_CAP.HARD_CAP;
+  const capUsed  = team.capUsed  ?? 0;
+  return Math.round((capTotal - capUsed) * 100) / 100;
+}
+
 export function getTeamIdentity(teamId, teams = []) {
   if (teamId == null) {
     return { id: null, name: 'Free Agent', abbr: 'FA', conf: null, div: null, color: '#888888' };

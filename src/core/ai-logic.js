@@ -93,6 +93,116 @@ class AiLogic {
     }
 
     /**
+     * Execute AI Cap Management for the start of the regular season.
+     *
+     * If a team is over the $301.2M hard cap after cutdowns, the AI will:
+     *   1. First try to restructure the highest-paid star players (OVR ≥ 80)
+     *      by converting 50% of their base salary to prorated bonus.
+     *   2. If still over cap, cut the most "cap-inefficient" veterans:
+     *      players with the worst (cap hit / OVR) ratio, skipping essential
+     *      starters (OVR ≥ 85) if possible.
+     *
+     * This runs for all AI teams; the user's team must manage its own cap.
+     */
+    static async executeAICapManagement() {
+        const meta        = cache.getMeta();
+        const userTeamId  = meta.userTeamId;
+        const hardCap     = Constants.SALARY_CAP.HARD_CAP;
+        const allTeams    = cache.getAllTeams();
+
+        for (const team of allTeams) {
+            if (team.id === userTeamId) continue;
+
+            this.updateTeamCap(team.id);
+            let freshTeam = cache.getTeam(team.id);
+            if ((freshTeam.capUsed ?? 0) <= hardCap) continue;
+
+            const roster = cache.getPlayersByTeam(team.id);
+
+            // ── Step 1: Restructure star players (OVR ≥ 80, ≥ 2 yrs remaining) ──
+            const restructureCandidates = roster
+                .filter(p => (p.ovr ?? 0) >= 80 && (p.contract?.years ?? 1) >= 2)
+                .sort((a, b) => {
+                    const hitA = (a.contract?.baseAnnual ?? 0) + ((a.contract?.signingBonus ?? 0) / (a.contract?.yearsTotal || 1));
+                    const hitB = (b.contract?.baseAnnual ?? 0) + ((b.contract?.signingBonus ?? 0) / (b.contract?.yearsTotal || 1));
+                    return hitB - hitA; // highest cap hit first
+                });
+
+            for (const p of restructureCandidates) {
+                freshTeam = cache.getTeam(team.id);
+                if ((freshTeam.capUsed ?? 0) <= hardCap) break;
+
+                const c = p.contract;
+                if (!c) continue;
+                const yearsRemaining  = Math.max(c.years ?? 1, 2);
+                const base            = c.baseAnnual ?? 0;
+                const convertAmount   = Math.round(base * Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT * 100) / 100;
+                if (convertAmount <= 0) continue;
+
+                const newBase         = Math.round((base - convertAmount) * 100) / 100;
+                const addedBonusTotal = convertAmount * yearsRemaining;
+                const newSigningBonus = Math.round(((c.signingBonus ?? 0) + addedBonusTotal) * 100) / 100;
+
+                cache.updatePlayer(p.id, {
+                    contract: { ...c, baseAnnual: newBase, signingBonus: newSigningBonus },
+                });
+                this.updateTeamCap(team.id);
+
+                await Transactions.add({
+                    type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek, teamId: team.id,
+                    details: { playerId: p.id, convertAmount, aiInitiated: true },
+                });
+            }
+
+            // ── Step 2: Cut cap-inefficient veterans if still over cap ──────────
+            freshTeam = cache.getTeam(team.id);
+            if ((freshTeam.capUsed ?? 0) <= hardCap) continue;
+
+            // Score by inefficiency = cap hit / OVR  (higher = more inefficient)
+            const cutCandidates = roster
+                .filter(p => {
+                    // Don't cut essential starters or rookies
+                    const ovr = p.ovr ?? 0;
+                    const age = p.age ?? 28;
+                    return ovr < 85 && age >= 27;
+                })
+                .map(p => {
+                    const base  = p.contract?.baseAnnual  ?? p.baseAnnual  ?? 0;
+                    const bonus = p.contract?.signingBonus ?? p.signingBonus ?? 0;
+                    const yrs   = p.contract?.yearsTotal   ?? p.yearsTotal   ?? 1;
+                    const capHit = base + bonus / (yrs || 1);
+                    const ovr   = p.ovr ?? 50;
+                    return { ...p, _capHit: capHit, _inefficiency: ovr > 0 ? capHit / ovr : capHit };
+                })
+                .sort((a, b) => b._inefficiency - a._inefficiency); // most inefficient first
+
+            for (const p of cutCandidates) {
+                freshTeam = cache.getTeam(team.id);
+                if ((freshTeam.capUsed ?? 0) <= hardCap) break;
+
+                // Calculate dead cap (all remaining prorated bonus — preseason = pre-June-1)
+                const c           = p.contract;
+                const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
+                const deadMoney   = annualBonus * (c?.years ?? 1);
+
+                cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
+                if (deadMoney > 0) {
+                    const t = cache.getTeam(team.id);
+                    cache.updateTeam(team.id, { deadCap: (t.deadCap ?? 0) + deadMoney });
+                }
+                this.updateTeamCap(team.id);
+
+                await Transactions.add({
+                    type: 'RELEASE', seasonId: meta.currentSeasonId,
+                    week: meta.currentWeek, teamId: team.id,
+                    details: { playerId: p.id, deadCap: deadMoney, aiCapCut: true },
+                });
+            }
+        }
+    }
+
+    /**
      * Calculate positional needs for a team based on its roster.
      * Returns a map of Position -> Multiplier.
      * High Need (> 1.5): Empty starter slot or starter < 75 OVR.
