@@ -1287,8 +1287,179 @@
   text-align: center;
 }
 
+/* ============================================================================
+   POSTSEASON THEME
+   When league.phase === 'playoffs', the App container gets class 'postseason'.
+   Adds gold/silver accents to headers and a subtle trophy icon.
+   ============================================================================ */
+
+.postseason .hub-header {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 215, 0, 0.06) 0%,
+    rgba(192, 192, 192, 0.04) 50%,
+    rgba(255, 215, 0, 0.06) 100%
+  );
+  border: 1px solid rgba(255, 215, 0, 0.15);
+  position: relative;
+}
+
+.postseason .hub-header::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(255, 215, 0, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 90% 80%, rgba(192, 192, 192, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.postseason header h1 {
+  background: linear-gradient(135deg, #FFD700, #C0C0C0, #FFD700);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.postseason .standings-tab.active {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: #000;
+}
+
+.postseason .btn-primary {
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: #000;
+  border: none;
+  font-weight: 800;
+}
+
+.postseason .btn-primary:hover {
+  background: linear-gradient(135deg, #FFE44D, #FFB733);
+}
+
+.postseason .card {
+  border-color: rgba(255, 215, 0, 0.08);
+}
+
+/* Postseason confetti overlay - subtle */
+.postseason-glow {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #FFD700, #C0C0C0, #FFD700, transparent);
+  opacity: 0.6;
+  z-index: 100;
+  pointer-events: none;
+  animation: postseasonShimmer 3s ease-in-out infinite;
+}
+
+@keyframes postseasonShimmer {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+/* ============================================================================
+   QUICK-JUMP FAB (Mobile Navigation)
+   Floating action button for rapid navigation between key sections.
+   ============================================================================ */
+
+.quick-jump-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9990;
+}
+
+.quick-jump-fab-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 900;
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+
+.quick-jump-fab-btn:hover {
+  transform: scale(1.1);
+  box-shadow: var(--shadow-xl);
+}
+
+.quick-jump-fab-btn:active {
+  transform: scale(0.95);
+}
+
+.quick-jump-menu {
+  position: absolute;
+  bottom: 62px;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 140;
+  animation: fabMenuIn 0.2s ease-out;
+}
+
+@keyframes fabMenuIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.quick-jump-menu button {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: background var(--dur-fast) var(--ease);
+  white-space: nowrap;
+}
+
+.quick-jump-menu button:hover {
+  background: var(--surface-strong);
+}
+
+/* Only show FAB on smaller screens */
+@media (min-width: 1024px) {
+  .quick-jump-fab {
+    display: none;
+  }
+}
+
+/* ============================================================================
+   DRAFT TICKER (animated scrolling)
+   ============================================================================ */
+
+.draft-ticker::-webkit-scrollbar {
+  display: none;
+}
+
 /* Note: Additional feature styles (Player Stats Modal, Contracts, Draft, Box Scores,
-   Records, Injuries, History, Live Game Viewer, Depth Chart, Playoff Bracket, 
+   Records, Injuries, History, Live Game Viewer, Depth Chart, Playoff Bracket,
    Player Database) should be extracted from the original style.css file.
    Due to file size constraints, this is a representative sample.
    Complete extraction recommended via automated script or manual review. */

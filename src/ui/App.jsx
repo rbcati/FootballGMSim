@@ -193,8 +193,13 @@ export default function App() {
   const userTeam = (leagueReady ? league : null)?.teams?.find(t => t.id === league.userTeamId);
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
+  const isPostseason = league?.phase === 'playoffs';
+
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div className={isPostseason ? 'postseason' : ''} style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+
+      {/* Postseason glow bar */}
+      {isPostseason && <div className="postseason-glow" />}
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
       <header
