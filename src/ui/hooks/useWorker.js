@@ -233,6 +233,15 @@ export function useWorker() {
           dispatch({ type: 'NOTIFY', level: 'warn', message: 'Database conflict detected — reloading to recover…' });
           setTimeout(() => window.location.reload(), 2000);
           break;
+        case 'WORKER_CRASH':
+          // self.onerror in worker.js forwards uncaught exceptions here so the
+          // UI can surface a meaningful error instead of a silent hang.
+          console.error('[useWorker] WORKER_CRASH:', payload);
+          dispatch({
+            type: 'ERROR',
+            message: `Worker crashed at line ${payload?.lineno ?? '?'}: ${payload?.message ?? 'Unknown error'}`,
+          });
+          break;
         case 'SAVE_MANIFEST_UPDATE':
           // Mirror save metadata to localStorage so iOS Safari can recover the
           // save list even if IndexedDB is wiped while the app is backgrounded.

@@ -42,6 +42,28 @@ import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { runAIToAITrades }          from '../core/trade-logic.js';
 
+// ── Global crash reporter ─────────────────────────────────────────────────────
+// Catches any uncaught exception or syntax error that escapes all try/catch
+// blocks (e.g. a bad dynamic import, a thrown non-Error, or a ReferenceError
+// in module-level code).  Without this handler the worker dies silently and
+// the UI sees only a generic worker.onerror event with no detail.
+self.onerror = (message, source, lineno, colno, error) => {
+  try {
+    self.postMessage({
+      type: 'WORKER_CRASH',
+      payload: {
+        message: typeof message === 'string' ? message : String(message),
+        source,
+        lineno,
+        colno,
+        stack: error?.stack ?? null,
+      },
+    });
+  } catch (_) { /* postMessage itself failed — nothing more we can do */ }
+  // Return false so the browser still logs the error to the console.
+  return false;
+};
+
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
 // onversionchange, the worker can notify the UI to reload (since workers
@@ -1770,7 +1792,8 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  // `meta` was already declared above for the dead-money phase check —
+  // do NOT re-declare it here (duplicate const = SyntaxError in strict-mode modules).
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
@@ -1827,6 +1850,32 @@ async function handleGetRoster({ teamId }, id) {
       };
   });
 
+  // Flatten coach objects so the Structured Clone Algorithm never encounters
+  // a class instance, function, or circular reference inside team.staff.
+  const flattenCoach = (coach) => {
+    if (!coach) return null;
+    return {
+      id:             coach.id           ?? null,
+      name:           coach.name         ?? '',
+      role:           coach.role         ?? null,
+      rating:         coach.rating       ?? 3,
+      level:          coach.level        ?? 1,
+      xp:             coach.xp           ?? 0,
+      xpToNextLevel:  coach.xpToNextLevel ?? 100,
+      archetype:      coach.archetype    ?? null,
+      offScheme:      coach.offScheme    ?? null,
+      defScheme:      coach.defScheme    ?? null,
+      skills:         Array.isArray(coach.skills) ? [...coach.skills] : [],
+      totalSeasons:   coach.totalSeasons ?? 0,
+    };
+  };
+
+  const flatStaff = team.staff ? {
+    headCoach:       flattenCoach(team.staff.headCoach),
+    offCoordinator:  flattenCoach(team.staff.offCoordinator),
+    defCoordinator:  flattenCoach(team.staff.defCoordinator),
+  } : null;
+
   post(toUI.ROSTER_DATA, {
     teamId: numId,
     team: {
@@ -1838,7 +1887,7 @@ async function handleGetRoster({ teamId }, id) {
       capTotal:          team.capTotal          ?? Constants.SALARY_CAP.HARD_CAP,
       deadCap:           team.deadCap           ?? 0,
       deadMoneyNextYear: team.deadMoneyNextYear  ?? 0,
-      staff:             team.staff,
+      staff:             flatStaff,
     },
     players,
   }, id);
@@ -3331,6 +3380,9 @@ async function handleGetDashboardLeaders(payload, id) {
 async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   const meta = cache.getMeta();
 
+  // Declare before topN so the closure is never in the TDZ when it executes.
+  const allTeamsByIdRef = cache.getAllTeams();
+
   // Helper: build display-ready top-N list for a stat key
   const topN = (entries, key, n = 10) => {
     const playerMap = {};
@@ -3360,7 +3412,8 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
     return Math.round(((a + b + c + d) / 6) * 100 * 10) / 10;
   };
 
-  const allTeamsByIdRef = cache.getAllTeams();
+  // allTeamsByIdRef is declared at the top of this function (before topN)
+  // to avoid a temporal dead zone reference inside the closure.
 
   let entries = [];
 
