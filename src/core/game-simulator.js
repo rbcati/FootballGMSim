@@ -627,8 +627,57 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
         }
     }
 
+    // 8. Weather Callbacks (if context carries weather info)
+    if (context.weather) {
+        const w = context.weather;
+        if (w === 'snow' && won) {
+            callbacks.push(`${userAbbr} embraced the snow and ice to grind out a win in the elements.`);
+        } else if (w === 'snow' && !won) {
+            callbacks.push(`The blizzard conditions neutralized ${userAbbr}'s offense in a tough loss.`);
+        } else if (w === 'rain' && userTurnovers >= 2) {
+            callbacks.push(`Slippery conditions contributed to ${userTurnovers} turnovers in the rain.`);
+        } else if (w === 'wind' && userPassYds < 150) {
+            callbacks.push(`Heavy winds grounded ${userAbbr}'s passing attack (${userPassYds} yards).`);
+        }
+    }
+
     // Deduplicate and limit to 3 lines
     return [...new Set(callbacks)].slice(0, 3);
+}
+
+// --- PERFORMANCE VARIANCE SYSTEM ---
+// Adds "career games" and "duds" for drama. Players can have hot or cold games.
+// NFL reality: even elite QBs have 4-INT games, and journeymen can throw for 400.
+
+/**
+ * Roll for a performance modifier that creates variance.
+ * Returns a multiplier: 1.0 = normal, >1.0 = hot game, <1.0 = cold game.
+ * Frequency: ~8% chance of career game, ~8% chance of dud, ~84% normal.
+ * @param {Object} player - Player object
+ * @param {Object} U - Utils
+ * @returns {{ multiplier: number, type: string }}
+ */
+function rollPerformanceVariance(player, U) {
+  const roll = U.random();
+  const ovr = player.ovr || 70;
+
+  // Elite players have slightly lower dud chance, slightly higher career game chance
+  const eliteBonus = Math.max(0, (ovr - 80) * 0.003); // up to +0.06 for 100 OVR
+
+  if (roll < 0.04 + eliteBonus) {
+    // CAREER GAME: player is on fire
+    return { multiplier: U.randFloat(1.25, 1.55), type: 'career_game' };
+  } else if (roll < 0.08 + eliteBonus) {
+    // HOT GAME: noticeable uptick
+    return { multiplier: U.randFloat(1.10, 1.25), type: 'hot' };
+  } else if (roll > 0.96 - eliteBonus * 0.5) {
+    // DUD GAME: off day
+    return { multiplier: U.randFloat(0.55, 0.78), type: 'dud' };
+  } else if (roll > 0.92 - eliteBonus * 0.5) {
+    // COLD GAME: slightly below average
+    return { multiplier: U.randFloat(0.80, 0.92), type: 'cold' };
+  }
+  return { multiplier: 1.0, type: 'normal' };
 }
 
 // --- STAT GENERATION HELPERS ---
@@ -667,6 +716,10 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   const throwAccuracy = ratings.throwAccuracy || 70;
   const awareness = ratings.awareness || 70;
 
+  // Performance variance: career game or dud
+  const perfVar = rollPerformanceVariance(qb, U);
+  const perfMult = perfVar.multiplier;
+
   // Game script: trailing teams pass more, leading teams pass less
   const scoreDiff = oppScore - teamScore;
   const scriptMod = Math.max(-12, Math.min(12, scoreDiff * 0.5));
@@ -692,7 +745,7 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   //   Coefficient raised 0.35→0.55 (wider spread between good/bad QBs)
   //   Ceiling raised 78→84 (allows elite single-game peaks)
   const meanCompPct = 57 + (baseCompPct - 70) * 0.55 + defenseFactor * 12;
-  const compPct = U.gaussianClamped(meanCompPct, 6.0, 35, 84);
+  const compPct = U.gaussianClamped(meanCompPct * (perfMult > 1 ? 1 + (perfMult - 1) * 0.3 : 1 - (1 - perfMult) * 0.3), 6.0, 35, 84);
 
   const completions = Math.round(attempts * (compPct / 100));
 
@@ -701,7 +754,7 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   const meanYPC = 9.2 + (throwPower - 75) * 0.08 + defenseFactor * 1.6;
   const avgYPC = U.gaussianClamped(meanYPC, 1.8, 5.0, 17.0); // tightened range
 
-  const yards = Math.max(0, Math.round(completions * avgYPC));
+  const yards = Math.max(0, Math.round(completions * avgYPC * perfMult));
 
   // TDs: derived from PRODUCTION (yards, completions), not from score
   // NFL average: ~1.4 pass TD/game. Roughly 1 TD per ~150 passing yards.
@@ -729,6 +782,30 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
     ? Math.max(12, Math.round(avgYPC * U.rand(2.0, 3.5)))
     : 0;
 
+  // --- QB RUSHING STATS ---
+  // Dual-threat QBs (high speed) run significantly more.
+  // NFL averages: ~3.2 rush att/game for QBs, mobile QBs: 6-10 att/game
+  const qbSpeed = ratings.speed || 60;
+  const qbAgility = ratings.agility || 60;
+  const mobilityFactor = (qbSpeed - 55) / 45; // 0 at speed 55, 1 at speed 100
+  let qbRushAtt = Math.max(1, Math.round(2 + mobilityFactor * 7 + U.rand(-2, 2)));
+  if (share < 1.0) qbRushAtt = Math.round(qbRushAtt * share);
+
+  // Scramble boost: blowout suppression reduces QB runs too
+  qbRushAtt = Math.round(qbRushAtt * blowoutMod);
+  qbRushAtt = Math.max(0, Math.min(15, qbRushAtt));
+
+  const qbYPC = U.gaussianClamped(3.5 + mobilityFactor * 3.5, 2.0, -2.0, 15.0);
+  const qbRushYd = Math.max(0, Math.round(qbRushAtt * qbYPC));
+
+  // QB Rush TDs: mobile QBs score ~0.3 rush TD/game, pocket passers ~0.05
+  const qbRushTdChance = 0.03 + mobilityFactor * 0.12;
+  const qbRushTD = U.random() < qbRushTdChance ? 1 : 0;
+
+  const qbLongestRun = qbRushAtt > 0
+    ? Math.max(2, Math.round(qbYPC * U.rand(1.5, 3.0)))
+    : 0;
+
   // NFL Passer Rating formula
   const att = Math.max(1, attempts);
   const _a = Math.max(0, Math.min(2.375, ((completions / att) - 0.3) / 0.2));
@@ -749,6 +826,12 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
     longestPass: longestPass,
     completionPct: Math.round((completions / Math.max(1, attempts)) * 1000) / 10,
     passerRating,
+    // QB rushing
+    rushAtt: qbRushAtt,
+    rushYd: qbRushYd,
+    rushTD: qbRushTD,
+    longestRun: qbLongestRun,
+    yardsPerCarry: qbRushAtt > 0 ? Math.round((qbRushYd / qbRushAtt) * 10) / 10 : 0,
   };
 }
 
@@ -758,6 +841,10 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
   const trucking = ratings.trucking || 70;
   const juking = ratings.juking || 70;
   const catching = ratings.catching || 50;
+
+  // Performance variance
+  const perfVar = rollPerformanceVariance(rb, U);
+  const perfMult = perfVar.multiplier;
 
   // Realistic Game Script Logic
   // Baseline ~26 team carries. Increase if leading, decrease if trailing.
@@ -783,7 +870,7 @@ function generateRBStats(rb, teamScore, oppScore, defenseStrength, U, modifiers 
 
   // Gaussian distribution for YPC (Mean: rating-based, StdDev: 1.2)
   const yardsPerCarry = U.gaussianClamped(baseYPC + defenseFactor, 1.2, 1.5, 12.0);
-  const rushYd = Math.round(carries * yardsPerCarry);
+  const rushYd = Math.round(carries * yardsPerCarry * perfMult);
 
   // TDs: derived from rushing production, not from team score
   // NFL average: ~0.6 rush TD/game for lead back. ~1 TD per 80 rushing yards.
@@ -858,6 +945,10 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   const catchInTraffic = ratings.catchInTraffic || 70;
   const speed = ratings.speed || 70;
 
+  // Performance variance
+  const perfVar = rollPerformanceVariance(receiver, U);
+  const perfMult = perfVar.multiplier;
+
   const targets = targetCount;
 
   const catchRate = (catching + catchInTraffic) / 2;
@@ -874,7 +965,7 @@ function generateReceiverStats(receiver, targetCount, teamScore, defenseStrength
   if (receiver.traits && receiver.traits.includes(TRAITS.DEEP_THREAT.id)) meanYPR *= 1.1;
 
   const avgYardsPerCatch = U.gaussianClamped(meanYPR, 2.2, 4.0, 25.0);
-  const recYd = Math.round(receptions * avgYardsPerCatch);
+  const recYd = Math.round(receptions * avgYardsPerCatch * perfMult);
 
   // TDs: derived from receiving production, not from team score.
   // NFL average: ~0.4 rec TD/game for primary WR. ~1 TD per 100 rec yards.
@@ -954,6 +1045,10 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   const runStop = ratings.runStop || 70;
   const awareness = ratings.awareness || 70;
 
+  // Performance variance - defensive players can have monster games too
+  const perfVar = rollPerformanceVariance(defender, U);
+  const perfMult = perfVar.multiplier;
+
   const pressureRating = Math.round((passRushPower + passRushSpeed + awareness) / 3 + U.rand(-5, 5));
 
   // ── Sacks ──────────────────────────────────────────────────────────────────
@@ -966,7 +1061,8 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   if (modifiers.sackChance) baseSacks *= modifiers.sackChance;
   if (defender.traits && defender.traits.includes(TRAITS.SPEED_RUSHER.id)) baseSacks *= 1.25;
   baseSacks *= (1 - (olStrength - 50) / 200);                   // better OL = fewer sacks
-  const sacks = Math.max(0, Math.min(4, Math.round(baseSacks)));
+  baseSacks *= perfMult; // career game can mean 3-4 sack game
+  const sacks = Math.max(0, Math.min(5, Math.round(baseSacks)));
 
   // ── Tackles ────────────────────────────────────────────────────────────────
   const baseTackles = defender.pos === 'LB' ? 8 : 4;
@@ -986,7 +1082,7 @@ function generateDLStats(defender, offenseStrength, U, modifiers = {}) {
   // Hard cap at 10 per game (single-game outlier ceiling).
   const passRushSnaps = Math.round(20 + (passRushPower + passRushSpeed) / 8);
   const pressureRate = Math.max(0, (rushComposite - 40) / 250);  // ~0.04–0.24
-  let pressures = Math.round(passRushSnaps * pressureRate + U.rand(-1, 1));
+  let pressures = Math.round(passRushSnaps * pressureRate * perfMult + U.rand(-1, 1));
   pressures = Math.max(0, Math.min(10, pressures));              // HARD CAP: 10/game
 
   return {
@@ -1311,10 +1407,10 @@ export function simGameStats(home, away, options = {}) {
     if (verbose) console.log(`[SIM-DEBUG] Morale Mods: Home ${homeMoraleMod.toFixed(3)} (${Math.round(homeMorale)}), Away ${awayMoraleMod.toFixed(3)} (${Math.round(awayMorale)})`);
 
     // =================================================================
-    // REALISTIC NFL SCORING ENGINE
-    // Uses drive-based simulation to produce authentic football scores.
-    // Average NFL game: ~22 points per team, range 3-45 typical.
-    // Scores naturally land on football numbers (3,6,7,10,13,14,17,20,21,24,27,28,31...)
+    // ENHANCED NFL SCORING ENGINE v2
+    // Drive-by-drive simulation with momentum, weather, turnovers,
+    // defensive/special teams TDs, and clutch mechanics.
+    // Average NFL game: ~22 points per team, range 0-50+ realistic.
     // =================================================================
 
     const HOME_ADVANTAGE = C.SIMULATION?.HOME_ADVANTAGE || C.HOME_ADVANTAGE || 3;
@@ -1332,85 +1428,207 @@ export function simGameStats(home, away, options = {}) {
 
     const strengthDiff = (homeStrength - awayStrength) + HOME_ADVANTAGE;
 
+    // --- WEATHER SYSTEM ---
+    // Weather affects passing, kicking, and turnover rates
+    const WEATHER_TYPES = [
+      { id: 'clear', weight: 40, passMod: 1.0, kickMod: 1.0, turnoverMod: 1.0, runMod: 1.0 },
+      { id: 'dome', weight: 15, passMod: 1.05, kickMod: 1.02, turnoverMod: 0.92, runMod: 1.0 },
+      { id: 'rain', weight: 15, passMod: 0.88, kickMod: 0.90, turnoverMod: 1.35, runMod: 1.08 },
+      { id: 'snow', weight: 8, passMod: 0.82, kickMod: 0.82, turnoverMod: 1.45, runMod: 1.12 },
+      { id: 'wind', weight: 12, passMod: 0.90, kickMod: 0.80, turnoverMod: 1.15, runMod: 1.05 },
+      { id: 'cold', weight: 10, passMod: 0.95, kickMod: 0.92, turnoverMod: 1.10, runMod: 1.02 },
+    ];
+    // Determine game weather
+    const isDome = home.stadium?.dome === true;
+    let weather;
+    if (isDome) {
+      weather = WEATHER_TYPES[1]; // dome
+    } else {
+      const weatherWeights = WEATHER_TYPES.map(w => w.weight);
+      weather = WEATHER_TYPES[U.weightedChoice(weatherWeights)];
+    }
+
     /**
-     * Simulate drives for one team to generate a realistic score.
-     * @param {number} offStr - Offensive strength (team's overall)
-     * @param {number} defStr - Opposing defense strength
-     * @param {number} advantage - Net strength advantage (positive = favored)
-     * @param {Object} mods - Coaching/strategy modifiers
-     * @returns {Object} { score, touchdowns, field_goals }
+     * Full game simulation with alternating possessions, momentum, and
+     * defensive/special teams scoring.
+     *
+     * Returns results for BOTH teams simultaneously to model interaction.
      */
-    const simulateDrives = (offStr, defStr, advantage, mods) => {
-        // NFL teams average ~11 possessions per game
-        const numDrives = U.rand(9, 13); // tightened from 10-14
+    const simulateFullGame = (homeStr, awayStr, homeDefStr, awayDefStr, diff, hMods, aMods) => {
+        const result = {
+          home: { score: 0, touchdowns: 0, field_goals: 0, xpMade: 0, twoPtMade: 0,
+                  defensiveTDs: 0, turnoversForced: 0, safeties: 0 },
+          away: { score: 0, touchdowns: 0, field_goals: 0, xpMade: 0, twoPtMade: 0,
+                  defensiveTDs: 0, turnoversForced: 0, safeties: 0 },
+        };
 
-        let score = 0;
-        let touchdowns = 0;
-        let field_goals = 0;
-        let xpMade = 0;
-        let twoPtMade = 0;
+        // Momentum tracker: -100 (away hot) to +100 (home hot)
+        let momentum = 0;
 
-        // Base scoring probability calibrated to 20-24 PPG target
-        // offStr/defStr are roughly 50-90 range
-        const offFactor = (offStr - 50) / 40; // 0.0 for 50 OVR, 1.0 for 90 OVR
-        const defFactor = (defStr - 50) / 40;
-        const netQuality = offFactor - defFactor + (advantage / 50); // equal offense/defense weight
+        // NFL game: ~22 total possessions (11 per team)
+        const totalDrives = U.rand(20, 26);
+        let possession = U.random() < 0.5 ? 'home' : 'away';
 
-        for (let d = 0; d < numDrives; d++) {
-            // Drive outcome probabilities (NFL averages: ~33% score, ~20% TD, ~13% FG)
-            const driveRoll = U.random();
+        // Track consecutive scores/stops for momentum
+        let lastScoringTeam = null;
+        let scoringStreak = 0;
 
-            // Apply variance boost and modifier
+        for (let d = 0; d < totalDrives; d++) {
+            const isHome = possession === 'home';
+            const offStr = isHome ? homeStr : awayStr;
+            const defStr = isHome ? awayDefStr : homeDefStr;
+            const mods = isHome ? hMods : aMods;
+            const defMods = isHome ? aMods : hMods;
+            const offTeam = isHome ? result.home : result.away;
+            const defTeam = isHome ? result.away : result.home;
+            const advantage = isHome ? diff : -diff;
+
+            const offFactor = (offStr - 50) / 40;
+            const defFactor = (defStr - 50) / 40;
+            const netQuality = offFactor - defFactor + (advantage / 50);
+
+            // Momentum modifier: ±5% scoring probability
+            const momentumMod = isHome
+              ? U.clamp(momentum / 2000, -0.05, 0.05)
+              : U.clamp(-momentum / 2000, -0.05, 0.05);
+
+            // Game script: trailing team gets more aggressive in later drives
+            const scoreDiffNow = result.home.score - result.away.score;
+            const trailingMod = (d >= totalDrives * 0.6) ? (
+              (isHome && scoreDiffNow < -10) ? 0.06 :
+              (!isHome && scoreDiffNow > 10) ? 0.06 : 0
+            ) : 0;
+
+            // Garbage time: leading team runs more, scores less efficiently late
+            const garbageMod = (d >= totalDrives * 0.75 && Math.abs(scoreDiffNow) >= 21) ? -0.08 : 0;
+
             const varianceMod = (mods.variance || 1.0);
-            const upsetChance = varianceBoost * 0.012; // reduced from 0.015
+            const upsetChance = varianceBoost * 0.012;
+            const rzFactor = (offStr - 60) * 0.004;
 
-            // Red Zone Efficiency Factor
-            const rzFactor = (offStr - 60) * 0.004; // reduced from 0.005
+            // Scoring probability per drive
+            let scoreProb = 0.33 + netQuality * 0.18 + upsetChance + momentumMod + trailingMod + garbageMod;
+            scoreProb *= weather.passMod * 0.3 + 0.7; // weather has partial effect on scoring
+            scoreProb = U.clamp(scoreProb, 0.10, 0.60);
 
-            // Base Probability that a drive results in points (TD or FG)
-            // Recalibrated: 0.33 base × 11 avg drives × 6.3 pts/drive ≈ 22.8 PPG target
-            let scoreProb = 0.33 + netQuality * 0.18 + upsetChance;
-            scoreProb = U.clamp(scoreProb, 0.12, 0.58); // raised ceiling for elite offenses
-
-            // If drive scores, what % is TD vs FG?
-            // NFL average: ~58% of scores are TDs, 42% FGs
-            let tdShare = 0.55 + rzFactor; // reduced from 0.58
+            // TD share within scoring drives
+            let tdShare = 0.55 + rzFactor;
             if (mods.passVolume && mods.passVolume > 1.1) tdShare += 0.05;
             if (mods.runVolume && mods.runVolume > 1.1) tdShare -= 0.05;
-            tdShare = U.clamp(tdShare, 0.35, 0.75); // tightened ceiling from 0.80
+            tdShare = U.clamp(tdShare, 0.35, 0.75);
+
+            const driveRoll = U.random();
 
             if (driveRoll < scoreProb) {
-                // It's a scoring drive. Now determine TD vs FG.
+                // --- SCORING DRIVE ---
                 const typeRoll = U.random();
 
                 if (typeRoll < tdShare) {
-                    // Touchdown (6 pts + XP attempt)
+                    // Touchdown
                     const xpRoll = U.random();
-                    if (xpRoll < 0.94) {
-                        score += 7; // Normal XP make (94% NFL avg)
-                        xpMade++;
+                    if (xpRoll < 0.94 * weather.kickMod) {
+                        offTeam.score += 7;
+                        offTeam.xpMade++;
+                    } else if (xpRoll < 0.97) {
+                        offTeam.score += 6; // Missed XP
+                    } else {
+                        offTeam.score += 8; // 2-point conversion
+                        offTeam.twoPtMade++;
                     }
-                    else if (xpRoll < 0.97) {
-                        score += 6; // Missed XP
-                    }
-                    else {
-                        score += 8; // 2-point conversion
-                        twoPtMade++;
-                    }
-                    touchdowns++;
+                    offTeam.touchdowns++;
                 } else {
-                    score += 3; // Field goal
-                    field_goals++;
+                    // Field goal (weather affects accuracy)
+                    const fgMakeChance = 0.85 * weather.kickMod;
+                    if (U.random() < fgMakeChance) {
+                        offTeam.score += 3;
+                        offTeam.field_goals++;
+                    }
+                    // Else: missed FG, no points
                 }
+
+                // Momentum shift towards scoring team
+                if (lastScoringTeam === possession) {
+                    scoringStreak++;
+                    momentum += (isHome ? 12 : -12) * Math.min(scoringStreak, 3);
+                } else {
+                    scoringStreak = 1;
+                    lastScoringTeam = possession;
+                    momentum += isHome ? 10 : -10;
+                }
+            } else {
+                // --- NON-SCORING DRIVE ---
+                // Check for turnover (fumble, INT)
+                const baseTurnoverRate = 0.14 * weather.turnoverMod;
+                let turnoverChance = baseTurnoverRate;
+                if (mods.intChance) turnoverChance *= (mods.intChance - 1) * 0.3 + 1;
+                if (defMods.defIntChance) turnoverChance *= (defMods.defIntChance - 1) * 0.3 + 1;
+                if (defMods.defPressure) turnoverChance *= 1 + (defMods.defPressure - 1) * 0.15;
+
+                if (U.random() < turnoverChance) {
+                    defTeam.turnoversForced++;
+
+                    // Defensive/Special Teams TD chance (pick-six, fumble return, scoop-and-score)
+                    // NFL average: ~5% of turnovers returned for TD
+                    const defTDChance = 0.05 + (defStr - 70) * 0.002;
+                    if (U.random() < defTDChance) {
+                        defTeam.defensiveTDs++;
+                        const xpRoll = U.random();
+                        if (xpRoll < 0.95) {
+                            defTeam.score += 7;
+                            defTeam.xpMade++;
+                        } else {
+                            defTeam.score += 6;
+                        }
+
+                        // Huge momentum swing on defensive TD
+                        momentum += isHome ? -25 : 25;
+                    } else {
+                        // Normal turnover — moderate momentum swing
+                        momentum += isHome ? -8 : 8;
+                    }
+                }
+
+                // Safety chance (~0.5% of drives in NFL)
+                if (U.random() < 0.005 + (defStr - offStr) * 0.0001) {
+                    defTeam.score += 2;
+                    defTeam.safeties++;
+                    momentum += isHome ? -15 : 15;
+                }
+
+                // Momentum decays towards neutral on non-scoring drives
+                momentum *= 0.92;
             }
-            // Otherwise: punt, turnover, turnover on downs (no points)
+
+            // Clamp momentum
+            momentum = U.clamp(momentum, -100, 100);
+
+            // Alternate possession
+            possession = isHome ? 'away' : 'home';
         }
 
-        return { score, touchdowns, field_goals, xpMade, twoPtMade };
+        // --- SPECIAL TEAMS SCORING (Kick/Punt Return TDs) ---
+        // NFL average: ~2-3 return TDs per team per season (~0.15/game)
+        const checkReturnTD = (team, oppDefStr) => {
+            const returnTDChance = 0.04 + (team === result.home ? homeStr : awayStr - 70) * 0.001;
+            if (U.random() < returnTDChance) {
+                team.score += 7;
+                team.touchdowns++;
+                team.xpMade++;
+            }
+        };
+        checkReturnTD(result.home, awayDefStr);
+        checkReturnTD(result.away, homeDefStr);
+
+        return result;
     };
 
-    const homeRes = simulateDrives(homeStrength, awayStrength, strengthDiff, homeMods);
-    const awayRes = simulateDrives(awayStrength, homeStrength, -strengthDiff, awayMods);
+    const fullGameResult = simulateFullGame(
+        homeStrength, awayStrength, homeDefenseStrength, awayDefenseStrength,
+        strengthDiff, homeMods, awayMods
+    );
+
+    const homeRes = fullGameResult.home;
+    const awayRes = fullGameResult.away;
 
     let homeScore = Math.max(0, homeRes.score);
     let awayScore = Math.max(0, awayRes.score);
@@ -1421,34 +1639,48 @@ export function simGameStats(home, away, options = {}) {
     let homeXPs = homeRes.xpMade;
     let awayXPs = awayRes.xpMade;
 
-    // --- OVERTIME LOGIC ---
+    // --- OVERTIME LOGIC WITH CLUTCH MECHANICS ---
     // If tied at end of regulation, simulate OT
+    // Clutch trait on QB gives a scoring boost in OT
     if (homeScore === awayScore) {
         if (verbose) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
         const isPlayoff = options.isPlayoff === true;
         const allowTies = !isPlayoff && (options.allowTies !== false);
 
+        // Calculate clutch bonuses from QB traits and personality
+        const getClutchBonus = (groups) => {
+            const qbs = groups['QB'] || [];
+            if (qbs.length === 0) return 0;
+            const qb = qbs[0];
+            let bonus = 0;
+            // Clutch personality trait
+            if (qb.personality?.traits?.includes('Clutch')) bonus += 0.06;
+            // High awareness helps in pressure situations
+            if ((qb.ratings?.awareness || 70) >= 85) bonus += 0.03;
+            // X-Factor dev trait
+            if (qb.devTrait === 'X-Factor') bonus += 0.04;
+            else if (qb.devTrait === 'Superstar') bonus += 0.02;
+            return bonus;
+        };
+
+        const homeClutch = getClutchBonus(homeGroups);
+        const awayClutch = getClutchBonus(awayGroups);
+
         let gameOver = false;
         let possession = U.random() < 0.5 ? 'home' : 'away';
-        let firstPossessionScore = 0; // 0=none, 3=FG, 7=TD
         let possessions = 0;
 
-        // Regular season: max 4 pairs (8 possessions) before forced tie
-        // Playoffs: hard cap of 50 prevents infinite loops (handled by HARD_ITERATION_CAP)
         const maxPossessions = allowTies ? 8 : 50;
-        const HARD_ITERATION_CAP = 50; // Absolute safety cap to prevent infinite loops
-
-        // Track which team kicked off (received 2nd) so we know possession order
-        const firstTeam = possession; // Team with first possession
+        const HARD_ITERATION_CAP = 50;
 
         while (!gameOver && possessions < maxPossessions && possessions < HARD_ITERATION_CAP) {
             possessions++;
-            // Simulate a drive
             const offStrength = possession === 'home' ? homeStrength : awayStrength;
             const defStrength = possession === 'home' ? awayStrength : homeStrength;
+            const clutchBonus = possession === 'home' ? homeClutch : awayClutch;
 
             const diff = offStrength - defStrength;
-            const scoreChance = 0.35 + (diff / 200);
+            const scoreChance = 0.35 + (diff / 200) + clutchBonus;
 
             let drivePoints = 0;
             if (U.rand(0, 100) / 100 < scoreChance) {
@@ -1712,12 +1944,22 @@ export function simGameStats(home, away, options = {}) {
       }
 
       // --- DISTRIBUTE TOUCHDOWNS ---
-      // NFL average: ~55-60% of TDs are passing TDs. Enforce a minimum pass TD floor
-      // to prevent rush-heavy games from giving QB a 0 passTD line despite 250+ yards.
+      // Enhanced: QB can now score rush TDs, and defensive TDs are tracked.
+      // NFL average: ~55-60% of offensive TDs are passing TDs.
       let tdsToAssign = actualTDs;
       let totalRecTDs = 0;
 
       const scorers = [];
+
+      // QBs are eligible for rushing TDs (dual-threat)
+      qbs.forEach(p => {
+          if (p.stats && p.stats.game && (p.stats.game.rushYd || 0) > 0) {
+              const qbSpeed = (p.ratings?.speed || 60);
+              // Weight by rush yards and mobility
+              const w = Math.max(1, (p.stats.game.rushYd || 0) * (qbSpeed > 75 ? 1.5 : 0.5));
+              scorers.push({ p, weight: w, type: 'QB' });
+          }
+      });
 
       // RBs are eligible
       rbs.forEach(p => {
@@ -1738,9 +1980,9 @@ export function simGameStats(home, away, options = {}) {
       const receiverScorers = scorers.filter(s => s.type === 'WR');
 
       if (scorers.length > 0) {
-          // Step 1: Guarantee a minimum of 55% of TDs go to receivers (pass TDs)
+          // Step 1: Guarantee a minimum of 50% of TDs go to receivers (pass TDs)
           const passTdFloor = receiverScorers.length > 0
-              ? Math.min(tdsToAssign, Math.round(actualTDs * 0.55))
+              ? Math.min(tdsToAssign, Math.round(actualTDs * 0.50))
               : 0;
 
           for (let i = 0; i < passTdFloor; i++) {
@@ -1752,13 +1994,16 @@ export function simGameStats(home, away, options = {}) {
               tdsToAssign--;
           }
 
-          // Step 2: Distribute remaining TDs among all scorers (RBs + receivers)
+          // Step 2: Distribute remaining TDs among all scorers (QBs + RBs + receivers)
           while (tdsToAssign > 0) {
               const weights = scorers.map(s => s.weight);
               const idx = U.weightedChoice(weights);
               const winner = scorers[idx];
 
-              if (winner.type === 'RB') {
+              if (winner.type === 'QB') {
+                  // QB rushing TD
+                  winner.p.stats.game.rushTD = (winner.p.stats.game.rushTD || 0) + 1;
+              } else if (winner.type === 'RB') {
                   // Bias towards rush TD if rush yards > rec yards
                   const rushY = winner.p.stats.game.rushYd || 0;
                   const recY = winner.p.stats.game.recYd || 0;
@@ -1779,14 +2024,11 @@ export function simGameStats(home, away, options = {}) {
       }
 
       // --- DISTRIBUTE 2-POINT CONVERSIONS ---
-      // Prioritize players who scored TDs, but fallback to any scorer
       if (actualTwoPts > 0) {
           let ptsToAssign = actualTwoPts;
 
-          // Scorer pool is already built
           if (scorers.length > 0) {
               while (ptsToAssign > 0) {
-                  // Bias heavily towards players who actually scored touchdowns
                   const tdScorers = scorers.filter(s => (s.p.stats.game.rushTD > 0 || s.p.stats.game.recTD > 0));
                   const pool = tdScorers.length > 0 ? tdScorers : scorers;
 
@@ -1802,13 +2044,10 @@ export function simGameStats(home, away, options = {}) {
           }
       }
 
-
-      // Assign Pass TDs to QB
+      // Assign Pass TDs to QB (receiving TDs = passing TDs for the QB)
       const starterQB = qbs.length > 0 ? qbs[0] : null;
       if (starterQB && starterQB.stats.game) {
           starterQB.stats.game.passTD = totalRecTDs;
-          // QB doesn't get 2PT stats in standard box scores usually (unless rushing/catching),
-          // but sometimes passing 2PTs are tracked. For simplicity, we track it on the scorer.
       }
 
 
@@ -1849,7 +2088,16 @@ export function simGameStats(home, away, options = {}) {
     generateTeamStats(home, homeScore, homeStrength, awayStrength);
     generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
-    return { homeScore, awayScore, schemeNote, injuries: gameInjuries };
+    return {
+      homeScore, awayScore, schemeNote, injuries: gameInjuries,
+      weather: weather.id,
+      homeDefTDs: homeRes.defensiveTDs || 0,
+      awayDefTDs: awayRes.defensiveTDs || 0,
+      homeSafeties: homeRes.safeties || 0,
+      awaySafeties: awayRes.safeties || 0,
+      homeTurnoversForced: homeRes.turnoversForced || 0,
+      awayTurnoversForced: awayRes.turnoversForced || 0,
+    };
 
   } catch (error) {
     console.error('[SIM-DEBUG] Error in simGameStats:', error);
@@ -2065,7 +2313,12 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         injuries: injuries || [],
         week: league.week,
         year: league.year,
-        isPlayoff: isPlayoff
+        isPlayoff: isPlayoff,
+        weather: gameData.weather || null,
+        defensiveTDs: {
+            home: gameData.homeDefTDs || 0,
+            away: gameData.awayDefTDs || 0
+        },
     };
 
     if (gameData.preGameContext) {
@@ -2260,6 +2513,11 @@ export function simulateBatch(games, options = {}) {
                 schemeNote = gameScores.schemeNote;
                 if (gameScores.injuries) gameInjuries = gameScores.injuries;
 
+                // Store weather and defensive scoring data for the result
+                pair._weather = gameScores.weather || null;
+                pair._homeDefTDs = gameScores.homeDefTDs || 0;
+                pair._awayDefTDs = gameScores.awayDefTDs || 0;
+
                 // Capture stats for box score.
                 // Always key by String(player.id) so numeric and string IDs
                 // (legacy saves vs. new base-36 IDs) produce consistent keys.
@@ -2294,12 +2552,18 @@ export function simulateBatch(games, options = {}) {
                     home: { players: homePlayerStats },
                     away: { players: awayPlayerStats }
                 },
-                injuries: gameInjuries
+                injuries: gameInjuries,
+                weather: pair._weather,
+                homeDefTDs: pair._homeDefTDs || 0,
+                awayDefTDs: pair._awayDefTDs || 0,
             };
 
             const resultObj = commitGameResult(league, gameData, { persist: false });
             if (schemeNote && resultObj) {
                 resultObj.schemeNote = schemeNote;
+            }
+            if (resultObj && pair._weather) {
+                resultObj.weather = pair._weather;
             }
 
             if (resultObj) {
