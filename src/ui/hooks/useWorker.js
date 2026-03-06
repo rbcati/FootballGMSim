@@ -392,6 +392,14 @@ export function useWorker() {
     extendContract: (playerId, teamId, contract) =>
       request(toWorker.EXTEND_CONTRACT, { playerId, teamId, contract }),
 
+    /**
+     * Restructure a player's contract — converts up to 50% of base salary into
+     * prorated signing bonus, reducing current-year cap hit.
+     * Returns a Promise resolving to the updated STATE_UPDATE payload.
+     */
+    restructureContract: (playerId, teamId) =>
+      request(toWorker.RESTRUCTURE_CONTRACT, { playerId, teamId }),
+
     /** Fetch the full box score for a completed game (returns a Promise). */
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),

@@ -83,7 +83,7 @@ function buildViewState() {
     ptsAgainst:t.ptsAgainst?? 0,
     capUsed:   t.capUsed   ?? 0,
     capRoom:   t.capRoom   ?? 0,
-    capTotal:  t.capTotal  ?? 255,
+    capTotal:  t.capTotal  ?? Constants.SALARY_CAP.HARD_CAP,
     ovr:       t.ovr       ?? 75,
     rosterCount: cache.getPlayersByTeam(t.id).length,
   }));
@@ -126,7 +126,7 @@ function buildViewState() {
       const wPct = totalGames > 0
         ? ((userTeamObj.wins ?? 0) + (userTeamObj.ties ?? 0) * 0.5) / totalGames
         : 0.5;                                        // neutral at season start
-      const capTotal  = userTeamObj.capTotal ?? 255;
+      const capTotal  = userTeamObj.capTotal ?? Constants.SALARY_CAP.HARD_CAP;
       const capUsed   = userTeamObj.capUsed  ?? 0;
       const capHealth = Math.max(0, Math.min(1, 1 - capUsed / capTotal));
 
@@ -826,8 +826,12 @@ async function handleAdvanceWeek(payload, id) {
       return;
     }
 
-    // Execute AI Cutdowns
+    // Execute AI Cutdowns (53-man roster limit)
     await AiLogic.executeAICutdowns();
+
+    // Execute AI Cap Management — restructure stars or cut cap-inefficient
+    // veterans so all AI teams are under the $301.2M hard cap at season start.
+    await AiLogic.executeAICapManagement();
 
     // Priority 4: Initialize zeroed-out season stat entries for EVERY active player
     // on EVERY team before the first game is simulated. This guarantees that:
@@ -1640,6 +1644,20 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
+  // ── Hard Cap Check ($301.2M) ────────────────────────────────────────────────
+  const team = cache.getTeam(teamId);
+  if (team && contract) {
+    const newCapHit = (contract.baseAnnual ?? 0) + ((contract.signingBonus ?? 0) / (contract.yearsTotal || 1));
+    const projectedCapUsed = (team.capUsed ?? 0) + newCapHit;
+    const hardCap = Constants.SALARY_CAP.HARD_CAP;
+    if (projectedCapUsed > hardCap) {
+      post(toUI.ERROR, {
+        message: `Signing blocked: this deal would put ${team.name} at $${projectedCapUsed.toFixed(1)}M — over the $${hardCap}M hard cap. Free up cap room first.`
+      }, id);
+      return;
+    }
+  }
+
   const oldTeamId = player.teamId;
   cache.updatePlayer(player.id, { teamId, contract, status: 'active', offers: [] });
 
@@ -1710,22 +1728,41 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  // Calculate Dead Cap: Remaining prorated bonus
+  // ── June 1st Dead Money Rule ────────────────────────────────────────────────
+  // Pre-June-1 phases (offseason_resign): ALL remaining prorated bonus accelerates
+  //   to the current year's dead cap.
+  // Post-June-1 phases (free_agency, draft, preseason, regular, playoffs):
+  //   This year's prorated bonus hits current dead cap; future years defer to
+  //   deadMoneyNextYear (carries into next season's cap).
+  const meta = cache.getMeta();
   const team = cache.getTeam(teamId);
   if (team && player.contract) {
-    const yearsRemaining = player.contract.years || 1;
-    const yearsTotal = player.contract.yearsTotal || 1;
-    const totalBonus = player.contract.signingBonus || 0;
+    const yearsRemaining = Math.max(player.contract.years ?? 1, 1);
+    const yearsTotal     = Math.max(player.contract.yearsTotal ?? yearsRemaining, 1);
+    const totalBonus     = player.contract.signingBonus ?? 0;
+    const annualBonus    = totalBonus / yearsTotal;   // prorated share per year
 
-    // Prorated amount per year
-    const annualBonus = totalBonus / yearsTotal;
+    const isPostJune1 = Constants.SALARY_CAP.POST_JUNE1_PHASES.includes(meta.phase);
 
-    // Dead cap is the acceleration of all remaining bonus money
-    const deadMoney = annualBonus * yearsRemaining;
+    if (isPostJune1 && yearsRemaining > 1) {
+      // Current-year prorated bonus → dead cap now
+      const currentYearDead = annualBonus;
+      // Future years' prorated bonus → deferred to next season
+      const futureYearsDead = annualBonus * (yearsRemaining - 1);
 
-    if (deadMoney > 0) {
-       const currentDead = team.deadCap || 0;
-       cache.updateTeam(teamId, { deadCap: currentDead + deadMoney });
+      if (currentYearDead > 0) {
+        cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + currentYearDead });
+      }
+      if (futureYearsDead > 0) {
+        const freshTeam = cache.getTeam(teamId);
+        cache.updateTeam(teamId, { deadMoneyNextYear: (freshTeam.deadMoneyNextYear ?? 0) + futureYearsDead });
+      }
+    } else {
+      // Pre-June-1: all remaining prorated bonus hits current year
+      const deadMoney = annualBonus * yearsRemaining;
+      if (deadMoney > 0) {
+        cache.updateTeam(teamId, { deadCap: (team.deadCap ?? 0) + deadMoney });
+      }
     }
   }
 
@@ -1793,13 +1830,15 @@ async function handleGetRoster({ teamId }, id) {
   post(toUI.ROSTER_DATA, {
     teamId: numId,
     team: {
-      id:      team.id,
-      name:    team.name,
-      abbr:    team.abbr,
-      capUsed: team.capUsed ?? 0,
-      capRoom: team.capRoom ?? 0,
-      capTotal:team.capTotal ?? 255,
-      staff:   team.staff // Send staff data
+      id:                team.id,
+      name:              team.name,
+      abbr:              team.abbr,
+      capUsed:           team.capUsed           ?? 0,
+      capRoom:           team.capRoom           ?? 0,
+      capTotal:          team.capTotal          ?? Constants.SALARY_CAP.HARD_CAP,
+      deadCap:           team.deadCap           ?? 0,
+      deadMoneyNextYear: team.deadMoneyNextYear  ?? 0,
+      staff:             team.staff,
     },
     players,
   }, id);
@@ -2014,6 +2053,55 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const threshold   = offerVal * 0.85;
   const accepted    = receiveVal >= threshold;
 
+  // ── Hard Cap Trade Validation ────────────────────────────────────────────────
+  // Before executing an accepted trade, verify neither team would breach the
+  // $301.2M hard cap after swapping players.
+  if (accepted) {
+    const hardCap = Constants.SALARY_CAP.HARD_CAP;
+
+    // Helper: sum cap hit for a list of player IDs
+    const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
+      const p = cache.getPlayer(Number(pid));
+      if (!p) return sum;
+      const base  = p.contract?.baseAnnual  ?? p.baseAnnual  ?? 0;
+      const bonus = p.contract?.signingBonus ?? p.signingBonus ?? 0;
+      const yrs   = p.contract?.yearsTotal   ?? p.yearsTotal  ?? 1;
+      return sum + base + bonus / (yrs || 1);
+    }, 0);
+
+    const fromTeamObj = cache.getTeam(Number(fromTeamId));
+    const toTeamObj   = cache.getTeam(Number(toTeamId));
+
+    // fromTeam loses offering players, gains receiving players
+    const fromProjected = (fromTeamObj?.capUsed ?? 0)
+      - capHitOf(offering.playerIds)
+      + capHitOf(receiving.playerIds);
+
+    // toTeam loses receiving players, gains offering players
+    const toProjected = (toTeamObj?.capUsed ?? 0)
+      - capHitOf(receiving.playerIds)
+      + capHitOf(offering.playerIds);
+
+    if (fromProjected > hardCap) {
+      post(toUI.TRADE_RESPONSE, {
+        accepted: false,
+        offerValue: Math.round(offerVal),
+        receiveValue: Math.round(receiveVal),
+        reason: `Trade blocked: ${from.name} would exceed the $${hardCap}M hard cap ($${fromProjected.toFixed(1)}M projected).`,
+      }, id);
+      return;
+    }
+    if (toProjected > hardCap) {
+      post(toUI.TRADE_RESPONSE, {
+        accepted: false,
+        offerValue: Math.round(offerVal),
+        receiveValue: Math.round(receiveVal),
+        reason: `Trade blocked: ${to.name} would exceed the $${hardCap}M hard cap ($${toProjected.toFixed(1)}M projected).`,
+      }, id);
+      return;
+    }
+  }
+
   if (accepted) {
     // Execute the trade: swap players
     (offering.playerIds ?? []).forEach(pid => {
@@ -2115,17 +2203,103 @@ function recalculateTeamCap(teamId) {
   const team = cache.getTeam(teamId);
   if (!team) return;
 
-  const deadCap = team.deadCap || 0;
-  const totalCapUsed = activeCap + deadCap;
+  const deadCap          = team.deadCap         || 0;
+  const deadMoneyNextYear = team.deadMoneyNextYear || 0;
+  const capTotal          = team.capTotal         ?? Constants.SALARY_CAP.HARD_CAP;
+  const totalCapUsed      = activeCap + deadCap;
 
   cache.updateTeam(teamId, {
-    capUsed: Math.round(totalCapUsed * 100) / 100,
-    capRoom: Math.round((team.capTotal - totalCapUsed) * 100) / 100,
-    deadCap: Math.round(deadCap * 100) / 100 // Ensure it's set/rounded
+    capUsed:         Math.round(totalCapUsed * 100)        / 100,
+    capRoom:         Math.round((capTotal - totalCapUsed) * 100) / 100,
+    deadCap:         Math.round(deadCap * 100)             / 100,
+    deadMoneyNextYear: Math.round(deadMoneyNextYear * 100) / 100,
   });
 }
 // Alias for backward compatibility if needed, but we should replace calls.
 const _updateTeamCap = recalculateTeamCap;
+
+// ── Handler: RESTRUCTURE_CONTRACT ────────────────────────────────────────────
+//
+// Converts a portion of a player's base salary into a prorated signing bonus,
+// lowering the current-year cap hit by spreading the converted amount across
+// remaining contract years.
+//
+// Example: Player has $20M base / 3 yrs remaining.
+//   Convert 50% of base → $10M becomes new prorated bonus.
+//   New annual bonus = $10M / 3 = $3.33M.
+//   New base = $10M.  Cap hit FALLS by $10M - $3.33M = $6.67M this year.
+//   BUT future years each have a higher cap hit (+$3.33M bonus per year remaining).
+
+async function handleRestructureContract({ playerId, teamId }, id) {
+  let player = cache.getPlayer(playerId);
+  if (!player) player = cache.getPlayer(String(playerId));
+  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
+  if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const team = cache.getTeam(teamId);
+  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
+
+  // Only players with at least 2 years remaining can be restructured
+  const contract = player.contract ?? {
+    years:       player.years       ?? 1,
+    yearsTotal:  player.yearsTotal  ?? player.years ?? 1,
+    baseAnnual:  player.baseAnnual  ?? 0,
+    signingBonus:player.signingBonus ?? 0,
+    guaranteedPct:player.guaranteedPct ?? 0.5,
+  };
+
+  const yearsRemaining = contract.years ?? 1;
+  if (yearsRemaining < 2) {
+    post(toUI.ERROR, { message: 'Cannot restructure: player must have at least 2 years remaining.' }, id);
+    return;
+  }
+
+  const maxConvertPct = Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT;
+  const baseAnnual    = contract.baseAnnual ?? 0;
+  const convertAmount = Math.round(baseAnnual * maxConvertPct * 100) / 100;
+
+  if (convertAmount <= 0) {
+    post(toUI.ERROR, { message: 'Cannot restructure: no base salary to convert.' }, id);
+    return;
+  }
+
+  // New contract values after restructure
+  const newBase         = Math.round((baseAnnual - convertAmount) * 100) / 100;
+  const addedBonusTotal = convertAmount * yearsRemaining; // spread over remaining years
+  const existingBonus   = contract.signingBonus ?? 0;
+  const newSigningBonus = Math.round((existingBonus + addedBonusTotal) * 100) / 100;
+
+  const newContract = {
+    ...contract,
+    baseAnnual:   newBase,
+    signingBonus: newSigningBonus,
+  };
+
+  cache.updatePlayer(player.id, { contract: newContract });
+  recalculateTeamCap(teamId);
+
+  const meta = cache.getMeta();
+  await Transactions.add({
+    type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
+    week: meta.currentWeek, teamId,
+    details: { playerId: player.id, convertAmount, newBase, newSigningBonus },
+  });
+
+  await flushDirty();
+
+  const updatedTeam = cache.getTeam(teamId);
+  post(toUI.STATE_UPDATE, {
+    roster: buildRosterView(teamId),
+    ...buildViewState(),
+    restructureResult: {
+      playerName:    player.name,
+      convertAmount,
+      newBase,
+      newSigningBonus,
+      capSavingsThisYear: Math.round((convertAmount - convertAmount / yearsRemaining) * 100) / 100,
+    },
+  }, id);
+}
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
 
@@ -2947,9 +3121,18 @@ async function handleStartNewSeason(payload, id) {
   const newSeason   = (meta.season ?? 1)    + 1;
   const newSeasonId = `s${newSeason}`;
 
-  // Reset all team win/loss records
+  // Reset team records and roll dead money forward
   for (const team of cache.getAllTeams()) {
-    cache.updateTeam(team.id, { wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0 });
+    // Roll deferred dead money (post-June-1 cuts) into current-year dead cap
+    const rolledDeadCap = team.deadMoneyNextYear ?? 0;
+    // Update capTotal to current hard cap in case constants changed
+    cache.updateTeam(team.id, {
+      wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0,
+      deadCap:          rolledDeadCap,
+      deadMoneyNextYear: 0,
+      capTotal:          Constants.SALARY_CAP.HARD_CAP,
+    });
+    recalculateTeamCap(team.id);
   }
 
   // Generate a fresh schedule
@@ -3064,7 +3247,7 @@ async function handleGetTeamProfile({ teamId }, id) {
       ovr:         team.ovr         || 75,
       capUsed:     team.capUsed     || 0,
       capRoom:     team.capRoom     || 0,
-      capTotal:    team.capTotal    || 255,
+      capTotal:    team.capTotal    || Constants.SALARY_CAP.HARD_CAP,
     },
     franchise: {
       allTimeWins,
@@ -3455,8 +3638,9 @@ async function handleMessage(event) {
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
-      case toWorker.EXTEND_CONTRACT:    return await handleExtendContract(payload, id);
-      case toWorker.GET_BOX_SCORE:      return await handleGetBoxScore(payload, id);
+      case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
+      case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);
+      case toWorker.GET_BOX_SCORE:        return await handleGetBoxScore(payload, id);
       case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
 
       // ── Draft & Offseason ──────────────────────────────────────────────────

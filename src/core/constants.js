@@ -12,32 +12,65 @@
 
   // --- II. SALARY & CONTRACTS (REFACTORED) ---
   const SALARY_CAP = {
-    BASE: 255, // Updated to 2025 projection
+    BASE: 301.2, // 2026 hard cap per team ($301.2M)
+    HARD_CAP: 301.2, // Absolute hard cap — no team may exceed this
     MAX_ROLLOVER: 10,
     MIN_CONTRACT: 0.75, // $750k - Standard league minimum
     MAX_CONTRACT: 55.0, // $55M - Current star QB ceiling
 
-    // NEW: Positional Salary Weights
-    // (Ensures QBs cost more than Punters naturally)
+    // Positional Salary Weights
     POS_SALARY_WEIGHTS: {
-      QB: 1.15,  // Reduced from 1.25 to help cap
-      WR: 1.05,  // Reduced from 1.10
+      QB: 1.15,
+      WR: 1.05,
       OL: 1.05,
       CB: 1.05,
       DL: 1.05,
-      RB: 0.90,  // Devalued positions
+      RB: 0.90,
       LB: 0.90,
       S:  0.85,
       TE: 0.85,
-      K:  0.40,  // Specialists
+      K:  0.40,
       P:  0.40
     },
 
     ROOKIE_DISCOUNT: 0.9,
     GUARANTEED_PCT_DEFAULT: 0.5,
-    // Keeping existing bonus config
     SIGNING_BONUS_MIN: 0.25,
-    SIGNING_BONUS_MAX: 0.6
+    SIGNING_BONUS_MAX: 0.6,
+
+    // June 1st Dead Money Rule
+    // Phases considered "pre-June 1" — all dead cap hits current year
+    PRE_JUNE1_PHASES: ['offseason_resign'],
+    // Phases considered "post-June 1" — future years defer to deadMoneyNextYear
+    POST_JUNE1_PHASES: ['free_agency', 'draft', 'preseason', 'regular', 'playoffs'],
+
+    // Restructure: max % of base salary that can be converted to prorated bonus
+    RESTRUCTURE_MAX_CONVERT_PCT: 0.50,
+  };
+
+  // --- IIb. RESTRICTED FREE AGENCY (Phase 31 Prep) ---
+  const RFA_CONFIG = {
+    // Players eligible for RFA: years_of_service between MIN and MAX
+    // (i.e. 1–3 accrued seasons on a non-rookie contract)
+    MIN_SERVICE_YEARS: 1,
+    MAX_SERVICE_YEARS: 3,
+
+    // Tender types and their cap values (multiples of league minimum or fixed $M)
+    TENDER_TYPES: {
+      ORIGINAL_ROUND: { label: 'Original Round',  capHit: 2.0,  compensationRound: null },
+      SECOND_ROUND:   { label: 'Second Round',     capHit: 3.5,  compensationRound: 2    },
+      FIRST_ROUND:    { label: 'First Round',      capHit: 5.5,  compensationRound: 1    },
+      RIGHT_OF_FIRST_REFUSAL: { label: 'Right of First Refusal', capHit: 1.0, compensationRound: null },
+    },
+
+    // Default tender for a team that doesn't pick a specific level
+    DEFAULT_TENDER: 'ORIGINAL_ROUND',
+
+    // OVR threshold: players above this are considered "stars" to protect
+    STAR_OVR_THRESHOLD: 82,
+
+    // Age cap for RFA eligibility
+    MAX_AGE: 27,
   };
 
   // --- III. PLAYER & ROSTER DEFINITION ---
@@ -392,6 +425,7 @@
   const Constants = {
     GAME_CONFIG,
     SALARY_CAP,
+    RFA_CONFIG,
     PLAYER_CONFIG,
     TRAINING,
     DRAFT_CONFIG,
@@ -435,6 +469,7 @@
     
     // Legacy/Compatibility:
     CAP_BASE: SALARY_CAP.BASE,
+    HARD_CAP: SALARY_CAP.HARD_CAP,
     HOME_ADVANTAGE: SIMULATION.HOME_ADVANTAGE,
     YEARS_OF_PICKS,
     PLAYER_AGE_MIN: PLAYER_CONFIG.MIN_AGE,
