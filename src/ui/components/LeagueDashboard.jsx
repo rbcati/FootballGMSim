@@ -30,6 +30,7 @@ import StrategyPanel   from './StrategyPanel.jsx';
 import NewsFeed        from './NewsFeed.jsx';
 import StatLeadersWidget from './StatLeadersWidget.jsx';
 import FinancialsView  from './FinancialsView.jsx';
+import PostseasonHub   from './PostseasonHub.jsx';
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -86,7 +87,7 @@ class TabErrorBoundary extends Component {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Strategy', 'Roster', 'Financials', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
+const BASE_TABS = ['Standings', 'Schedule', 'Stats', 'Leaders', 'Award Races', 'Strategy', 'Roster', 'Financials', 'Draft', 'Coaches', 'Free Agency', 'Trades', 'History'];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -560,6 +561,43 @@ function LeadersTab({ teams }) {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
+// ── Quick-Jump FAB ─────────────────────────────────────────────────────────
+function QuickJumpFab({ onNavigate }) {
+  const [open, setOpen] = useState(false);
+
+  const items = [
+    { label: 'Roster', icon: '👥', tab: 'Roster' },
+    { label: 'Standings', icon: '📊', tab: 'Standings' },
+    { label: 'Schedule', icon: '📅', tab: 'Schedule' },
+    { label: 'Trades', icon: '🔄', tab: 'Trades' },
+  ];
+
+  return (
+    <div className="quick-jump-fab">
+      {open && (
+        <div className="quick-jump-menu">
+          {items.map(item => (
+            <button
+              key={item.tab}
+              onClick={() => { onNavigate(item.tab); setOpen(false); }}
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <button
+        className="quick-jump-fab-btn"
+        onClick={() => setOpen(!open)}
+        title="Quick navigation"
+      >
+        {open ? 'X' : '='}
+      </button>
+    </div>
+  );
+}
+
 export default function LeagueDashboard({ league, busy, actions }) {
   const [activeTab, setActiveTab]           = useState('Standings');
   const [selectedGameId, setSelectedGameId] = useState(null);
@@ -569,10 +607,24 @@ export default function LeagueDashboard({ league, busy, actions }) {
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
 
+  // Dynamic tabs: add Postseason when in playoffs
+  const TABS = useMemo(() => {
+    const isPlayoffs = league?.phase === 'playoffs' || league?.playoffSeeds;
+    if (isPlayoffs) {
+      // Insert "Postseason" after "Schedule"
+      const copy = [...BASE_TABS];
+      const idx = copy.indexOf('Schedule');
+      copy.splice(idx + 1, 0, 'Postseason');
+      return copy;
+    }
+    return BASE_TABS;
+  }, [league?.phase, league?.playoffSeeds]);
+
   // Auto-navigate based on phase transitions:
   //  draft       → go to Draft tab (so the user sees the board immediately)
   //  draft→preseason → new season started; leave Draft tab so the stale
   //                    DraftComplete panel no longer shows.
+  //  playoffs    → auto-switch to Postseason tab on first entry
   useEffect(() => {
     const prevPhase = prevPhaseRef.current;
     prevPhaseRef.current = league?.phase;
@@ -580,8 +632,9 @@ export default function LeagueDashboard({ league, busy, actions }) {
     if (league?.phase === 'draft') {
       setActiveTab('Draft');
     } else if (prevPhase === 'draft' && league?.phase === 'preseason') {
-      // startNewSeason() just completed — clear the Draft tab.
       setActiveTab('Standings');
+    } else if (league?.phase === 'playoffs' && prevPhase !== 'playoffs') {
+      setActiveTab('Postseason');
     }
   }, [league?.phase]);
 
@@ -686,6 +739,28 @@ export default function LeagueDashboard({ league, busy, actions }) {
           </span>
           <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text-muted)' }}>
             — You must release {(userTeam?.rosterCount ?? 0) > 53 ? (userTeam.rosterCount - 53) : 0} players to advance.
+          </span>
+        </div>
+      )}
+
+      {/* ── Postseason Banner ── */}
+      {league.phase === 'playoffs' && activeTab !== 'Postseason' && (
+        <div
+          onClick={() => setActiveTab('Postseason')}
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,215,0,0.12), rgba(192,192,192,0.08))',
+            border: '1px solid rgba(255,215,0,0.3)',
+            color: '#FFD700', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-6)', fontWeight: 700, textAlign: 'center',
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 'var(--space-3)',
+            fontSize: 'var(--text-lg)',
+          }}
+        >
+          <span style={{ fontSize: '1.3rem' }}>&#127942;</span>
+          <span>PLAYOFF BRACKET</span>
+          <span style={{ fontWeight: 400, fontSize: 'var(--text-base)', color: 'var(--text)' }}>
+            — Click to view the bracket and matchups.
           </span>
         </div>
       )}
@@ -912,6 +987,14 @@ export default function LeagueDashboard({ league, busy, actions }) {
           <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
         </TabErrorBoundary>
       )}
+      {activeTab === 'Postseason' && (
+        <TabErrorBoundary label="Postseason">
+          <PostseasonHub league={league} />
+        </TabErrorBoundary>
+      )}
+
+      {/* ── Quick-Jump FAB (mobile) ── */}
+      <QuickJumpFab onNavigate={setActiveTab} />
 
       {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
       {selectedGameId && (
