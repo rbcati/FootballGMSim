@@ -1770,7 +1770,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  // meta is already defined above
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
@@ -1982,7 +1982,7 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   recalculateTeamCap(teamId);
 
   // Log Transaction
-  const meta = cache.getMeta();
+  // meta is already defined above
   await Transactions.add({
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
@@ -2278,7 +2278,7 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { contract: newContract });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  // meta is already defined above
   await Transactions.add({
     type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId,
