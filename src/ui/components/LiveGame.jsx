@@ -202,8 +202,10 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
   const [plays, setPlays]           = useState([]);
   const [skipping, setSkipping]     = useState(false);
   const [prevSim, setPrevSim]       = useState(false);
+  const [overlayEvent, setOverlayEvent] = useState(null);
   const playLogRef                  = useRef(null);
   const intervalRef                 = useRef(null);
+  const overlayTimeoutRef           = useRef(null);
   const playCountRef                = useRef(0);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
@@ -262,9 +264,33 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
     const n = playCountRef.current++;
     setPlays(prev => {
       const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-      return [...prev.slice(-49), { id: n, text }];   // keep last 50 entries
+      let eventType = null;
+      if (text.includes('TOUCHDOWN') || text.includes('GOOD! 3 pts')) eventType = 'goal touchdown';
+      else if (text.includes('INTERCEPTION') || text.includes('FUMBLE') || text.includes('safety!') || text.includes('sack')) eventType = 'save turnover';
+      else if (text.includes('punt')) eventType = 'kick';
+
+      return [...prev.slice(-49), { id: n, text, eventType }];   // keep last 50 entries
     });
   }, [skipping, userHomeAbbr, userAwayAbbr]);
+
+  useEffect(() => {
+    if (plays.length === 0) return;
+    const lastPlay = plays[plays.length - 1];
+    if (lastPlay.eventType) {
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+      setOverlayEvent(lastPlay.eventType);
+      overlayTimeoutRef.current = setTimeout(() => {
+        setOverlayEvent(null);
+      }, 2000);
+    }
+  }, [plays]);
+
+  // Clean up overlay timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!simulating || skipping) {
@@ -356,6 +382,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
               {simProgress}%
             </span>
             <button
+              className="control-btn"
               onClick={handleSkip}
               style={{
                 marginLeft: 'auto',
@@ -382,6 +409,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
 
         {!simulating && (
           <button
+            className="control-btn"
             onClick={() => setVisible(false)}
             style={{
               marginLeft: 'auto', background: 'none', border: 'none',
@@ -412,7 +440,13 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
         flexWrap: 'wrap',
         gap: 0,
         minHeight: 200,
+        position: 'relative',
       }}>
+        {overlayEvent && (
+          <div className={`game-event-overlay ${overlayEvent.split(' ')[0]} ${overlayEvent.split(' ')[1] || ''}`}>
+             <div className="event-text">{overlayEvent.includes('touchdown') ? 'TOUCHDOWN' : overlayEvent.includes('turnover') ? 'TURNOVER' : overlayEvent.includes('kick') ? 'KICK' : ''}</div>
+          </div>
+        )}
         {/* ── Left: Scoreboard ── */}
         <div style={{
            flex: '999 1 300px',
@@ -522,6 +556,7 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
             {plays.map((p) => (
               <div
                 key={p.id}
+                className={p.eventType ? `play-item play-${p.eventType.split(' ')[1] || p.eventType}` : 'play-item'}
                 style={{
                   fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
                   lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
