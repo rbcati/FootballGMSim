@@ -791,8 +791,12 @@ function advancePlayoffBracket(results, currentWeek) {
   } else if (currentWeek === 21) {
     // Conference → Super Bowl (Week 22)
     // AFC (confs[0]) champ hosts by convention
-    const afcChamp = winners.find(tid => getConf(tid) === confs[0]) ?? winners[0];
-    const nfcChamp = winners.find(tid => getConf(tid) === (confs[1] ?? 1)) ?? winners[1];
+    const champsByConf = [];
+    for (let i = 0; i < winners.length; i++) {
+      champsByConf[getConf(winners[i])] = winners[i];
+    }
+    const afcChamp = champsByConf[confs[0]] ?? winners[0];
+    const nfcChamp = champsByConf[confs[1] ?? 1] ?? winners[1];
     if (afcChamp !== undefined && nfcChamp !== undefined) {
       return { week: 22, playoffRound: 'superbowl', games: [
         { home: afcChamp, away: nfcChamp, played: false, round: 'superbowl' },
