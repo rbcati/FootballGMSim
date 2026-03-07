@@ -1774,10 +1774,10 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  const freshMeta = cache.getMeta();
   await Transactions.add({
-    type: 'RELEASE', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId, details: { playerId: player.id },
+    type: 'RELEASE', seasonId: freshMeta.currentSeasonId,
+    week: freshMeta.currentWeek, teamId, details: { playerId: player.id },
   });
   await NewsEngine.logTransaction('RELEASE', { teamId, playerId: player.id });
 
