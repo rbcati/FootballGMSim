@@ -1782,7 +1782,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  // const meta = cache.getMeta(); // removed duplicate declaration
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
