@@ -1,0 +1,11 @@
+
+> dev
+> vite
+
+
+  VITE v7.3.1  ready in 270 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+9:16:23 PM [vite] (client) page reload src/worker/worker.js
+9:17:10 PM [vite] (client) page reload src/worker/worker.js
