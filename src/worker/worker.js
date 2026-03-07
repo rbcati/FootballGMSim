@@ -776,11 +776,23 @@ function advancePlayoffBracket(results, currentWeek) {
   } else if (currentWeek === 20) {
     // Divisional → Conference (Week 21)
     const allGames = [];
+
+    // O(N) mapping of winners to their conference and seed
+    const winnersByConf = new Map();
+    for (let i = 0; i < winners.length; i++) {
+      const tid = winners[i];
+      const confId = getConf(tid);
+      let confList = winnersByConf.get(confId);
+      if (!confList) {
+        confList = [];
+        winnersByConf.set(confId, confList);
+      }
+      confList.push({ teamId: tid, seed: getSeed(tid) });
+    }
+
     for (const confId of confs) {
-      const confWinners = winners
-        .filter(tid => getConf(tid) === confId)
-        .map(tid => ({ teamId: tid, seed: getSeed(tid) }))
-        .sort((a, b) => a.seed - b.seed);
+      const confWinners = winnersByConf.get(confId) || [];
+      confWinners.sort((a, b) => a.seed - b.seed);
 
       if (confWinners.length >= 2) {
         allGames.push({ home: confWinners[0].teamId, away: confWinners[1].teamId, played: false, round: 'conference', conf: confId });
