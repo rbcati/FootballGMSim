@@ -7284,6 +7284,18 @@ input[type="radio"] {
     margin-right: 8px;
     accent-color: var(--accent);
     cursor: pointer;
+    position: relative;
+}
+
+input[type="radio"]::before {
+    content: '';
+    position: absolute;
+    top: -12px;
+    bottom: -12px;
+    left: -12px;
+    right: -12px;
+    border-radius: 50%;
+    background: transparent;
 }
 
 /* Fix: Low Contrast on Inputs */
