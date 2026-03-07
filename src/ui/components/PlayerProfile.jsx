@@ -201,14 +201,14 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
           <div>
             <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Agent Demand:</p>
             <div style={{
-              fontSize: '1.5em', fontWeight: 800, margin: 'var(--space-4) 0',
+              fontSize: 'var(--text-xl)', fontWeight: 800, margin: 'var(--space-4) 0',
               color: 'var(--accent)', textAlign: 'center',
               background: 'var(--surface-strong)', padding: 'var(--space-4)', borderRadius: 'var(--radius-md)',
             }}>
               {ask.years} Years<br/>
-              <span style={{ fontSize: '0.6em', color: 'var(--text)' }}>${ask.baseAnnual}M / yr</span>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text)' }}>${ask.baseAnnual}M / yr</span>
             </div>
-            <div style={{ fontSize: '0.85em', color: 'var(--text-subtle)', textAlign: 'center', marginBottom: 'var(--space-6)' }}>
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-subtle)', textAlign: 'center', marginBottom: 'var(--space-6)' }}>
               Includes ${ask.signingBonus}M Signing Bonus
             </div>
             <div style={{ display: 'flex', gap: 'var(--space-3)', justifyContent: 'flex-end' }}>
