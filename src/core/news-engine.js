@@ -108,6 +108,15 @@ class NewsEngine {
         }
     }
 
+    static async logFeat(feat) {
+        if (!feat || !feat.name) return;
+        const text = `🔥 STATISTICAL FEAT: ${feat.name} went off for ${feat.text}!`;
+        await this.logNews('FEAT', text, feat.teamId, {
+            playerId: feat.playerId,
+            category: feat.category
+        });
+    }
+
     static async logAward(type, winner) {
         let text = '';
         let teamId = null;

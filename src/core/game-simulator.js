@@ -641,7 +641,55 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
         }
     }
 
+
+    // --- 9. Check for Statistical Feats ---
+    const logFeat = (player, text, category) => {
+        if (!player || !player.id) return;
+        if (!league.feats) league.feats = [];
+        league.feats.push({
+            playerId: player.id,
+            name: player.name,
+            teamId: player.teamId || null,
+            text: text,
+            week: league.week,
+            seasonId: league.currentSeasonId,
+            category: category
+        });
+
+        // Push callback for immediate UI notification
+        callbacks.push(`🏆 ${player.name.split(' ').pop()} achieved a Statistical Feat: ${text}`);
+    };
+
+    // Iterate over box score to find feats
+    const checkFeats = (teamStats) => {
+        if (!teamStats || !teamStats.players) return;
+        for (const [pid, p] of Object.entries(teamStats.players)) {
+            if (!p || typeof p !== 'object') continue;
+
+            // Passing Feats
+            if ((p.passYd || 0) >= 400) logFeat(p, `${p.passYd} Passing Yards`, 'passing');
+            if ((p.passTD || 0) >= 5) logFeat(p, `${p.passTD} Passing TDs`, 'passing');
+
+            // Rushing Feats
+            if ((p.rushYd || 0) >= 150) logFeat(p, `${p.rushYd} Rushing Yards`, 'rushing');
+            if ((p.rushTD || 0) >= 3) logFeat(p, `${p.rushTD} Rushing TDs`, 'rushing');
+
+            // Receiving Feats
+            if ((p.recYd || 0) >= 150) logFeat(p, `${p.recYd} Receiving Yards`, 'receiving');
+            if ((p.receptions || 0) >= 12) logFeat(p, `${p.receptions} Receptions`, 'receiving');
+            if ((p.recTD || 0) >= 3) logFeat(p, `${p.recTD} Receiving TDs`, 'receiving');
+
+            // Defensive Feats
+            if ((p.sacks || 0) >= 3) logFeat(p, `${p.sacks} Sacks`, 'defense');
+            if ((p.interceptions || 0) >= 2) logFeat(p, `${p.interceptions} Interceptions`, 'defense');
+        }
+    };
+
+    checkFeats(stats?.home);
+    checkFeats(stats?.away);
+
     // Deduplicate and limit to 3 lines
+
     return [...new Set(callbacks)].slice(0, 3);
 }
 

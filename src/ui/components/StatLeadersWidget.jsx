@@ -19,7 +19,11 @@ function LeaderList({ title, players, onPlayerSelect }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
         {players.map((p, i) => (
-          <div key={p.playerId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}>
+          <div key={p.playerId} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 'var(--text-sm)',
+              padding: 'var(--space-1)',
+              borderLeft: `3px solid ${teamColor(p.teamAbbr)}`
+            }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', overflow: 'hidden' }}>
               <span style={{
                 color: 'var(--text-subtle)',
@@ -41,15 +45,15 @@ function LeaderList({ title, players, onPlayerSelect }) {
               >
                 {p.name}
               </span>
-              <span style={{
+               <span style={{
                 fontSize: '10px',
                 fontWeight: 700,
                 padding: '1px 4px',
                 borderRadius: 'var(--radius-pill)',
-                backgroundColor: teamColor(p.teamAbbr) + '22',
-                color: teamColor(p.teamAbbr)
+                backgroundColor: 'var(--surface-sunken)',
+                color: 'var(--text-muted)'
               }}>
-                {p.teamAbbr}
+                {p.pos}
               </span>
             </div>
             <div style={{ fontWeight: 800, fontVariantNumeric: 'tabular-nums', marginLeft: 'var(--space-2)' }}>

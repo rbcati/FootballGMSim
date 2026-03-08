@@ -1058,6 +1058,14 @@ if (res.injuries && res.injuries.length > 0) {
   // --- Check for Game Narratives (User Team) ---
   // Send notifications for any "callbacks" (narrative moments) generated during simulation
   const userResult = results.find(r => r.home === meta.userTeamId || r.away === meta.userTeamId);
+  // Process feats logged during simulation
+  if (league.feats && league.feats.length > 0) {
+      for (const feat of league.feats) {
+          await NewsEngine.logFeat(feat);
+      }
+      league.feats = []; // Clear after logging
+  }
+
   if (userResult && userResult.callbacks && Array.isArray(userResult.callbacks)) {
     userResult.callbacks.forEach(msg => {
       post(toUI.NOTIFICATION, { level: 'info', message: msg });
@@ -1770,7 +1778,6 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
@@ -1982,7 +1989,6 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   recalculateTeamCap(teamId);
 
   // Log Transaction
-  const meta = cache.getMeta();
   await Transactions.add({
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
@@ -2278,7 +2284,6 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { contract: newContract });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
   await Transactions.add({
     type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId,
@@ -3266,64 +3271,80 @@ async function handleGetTeamProfile({ teamId }, id) {
 // ── Handler: GET_DASHBOARD_LEADERS ────────────────────────────────────────────
 
 async function handleGetDashboardLeaders(payload, id) {
-  const meta = cache.getMeta();
-  const userTeamId = meta?.userTeamId;
+  try {
+    const meta = cache.getMeta();
+    const userTeamId = meta?.userTeamId;
 
-  // Build a map seeded from in-memory stats
-  const liveMap = new Map(cache.getAllSeasonStats().map(s => [s.playerId, s]));
-  if (meta?.currentSeasonId) {
-    const dbStats = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
-    for (const s of dbStats) {
-      if (!liveMap.has(s.playerId)) liveMap.set(s.playerId, s);
+    // Build a map seeded from in-memory stats
+    const liveMap = new Map(cache.getAllSeasonStats().map(s => [s.playerId, s]));
+    if (meta?.currentSeasonId) {
+      const dbStats = await PlayerStats.bySeason(meta.currentSeasonId).catch(() => []);
+      for (const s of dbStats) {
+        if (!liveMap.has(s.playerId)) liveMap.set(s.playerId, s);
+      }
     }
+
+    const allTeamsByIdRef = cache.getAllTeams();
+    const teamMap = {};
+    allTeamsByIdRef.forEach(t => { teamMap[t.id] = t.abbr; });
+
+    const entries = [];
+    await Promise.all([...liveMap.values()].map(async s => {
+      const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
+      if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId, teamAbbr: teamMap[p.teamId ?? s.teamId] || 'FA' });
+    }));
+
+    const topN = (list, key, n = 5) => {
+      return list
+        .filter(e => {
+            // Check if totals object exists, handle different nesting structures
+            const statsObj = e.totals || e;
+            return (statsObj[key] || 0) > 0;
+        })
+        .sort((a, b) => {
+            const aVal = (a.totals && a.totals[key]) || a[key] || 0;
+            const bVal = (b.totals && b.totals[key]) || b[key] || 0;
+            return bVal - aVal;
+        })
+        .slice(0, n)
+        .map(e => {
+           const val = (e.totals && e.totals[key]) || e[key] || 0;
+           return {
+              playerId: e.playerId,
+              name:     e.name     || `Player ${e.playerId}`,
+              pos:      e.pos      || '?',
+              teamId:   e.teamId,
+              teamAbbr: e.teamAbbr,
+              value:    val,
+          };
+        });
+    };
+
+    const qbs = entries.filter(e => e.pos === 'QB');
+    const rbs = entries.filter(e => e.pos === 'RB');
+    const wrs = entries.filter(e => ['WR', 'TE', 'RB'].includes(e.pos));
+
+    const teamQbs = qbs.filter(e => e.teamId === userTeamId);
+    const teamRbs = rbs.filter(e => e.teamId === userTeamId);
+    const teamWrs = wrs.filter(e => e.teamId === userTeamId);
+
+    const league = {
+      passing: topN(qbs, 'passYd', 5),
+      rushing: topN(rbs, 'rushYd', 5),
+      receiving: topN(wrs, 'recYd', 5),
+    };
+
+    const team = {
+      passing: topN(teamQbs, 'passYd', 3),
+      rushing: topN(teamRbs, 'rushYd', 3),
+      receiving: topN(teamWrs, 'recYd', 3),
+    };
+
+    post(toUI.DASHBOARD_LEADERS, { league, team }, id);
+  } catch (error) {
+    console.error('[Worker] handleGetDashboardLeaders error:', error);
+    post(toUI.ERROR, { message: `Dashboard leaders error: ${error.message}` }, id);
   }
-
-  const allTeamsByIdRef = cache.getAllTeams();
-  const teamMap = {};
-  allTeamsByIdRef.forEach(t => { teamMap[t.id] = t.abbr; });
-
-  const entries = [];
-  await Promise.all([...liveMap.values()].map(async s => {
-    const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
-    if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId, teamAbbr: teamMap[p.teamId ?? s.teamId] || 'FA' });
-  }));
-
-  const topN = (list, key, n = 5) => {
-    return list
-      .filter(e => (e.totals?.[key] || 0) > 0)
-      .sort((a, b) => (b.totals[key] || 0) - (a.totals[key] || 0))
-      .slice(0, n)
-      .map(e => ({
-        playerId: e.playerId,
-        name:     e.name     || `Player ${e.playerId}`,
-        pos:      e.pos      || '?',
-        teamId:   e.teamId,
-        teamAbbr: e.teamAbbr,
-        value:    e.totals[key] || 0,
-      }));
-  };
-
-  const qbs = entries.filter(e => e.pos === 'QB');
-  const rbs = entries.filter(e => e.pos === 'RB');
-  const wrs = entries.filter(e => ['WR', 'TE', 'RB'].includes(e.pos));
-
-  const teamQbs = qbs.filter(e => e.teamId === userTeamId);
-  const teamRbs = rbs.filter(e => e.teamId === userTeamId);
-  const teamWrs = wrs.filter(e => e.teamId === userTeamId);
-
-  const league = {
-    passing: topN(qbs, 'passYd', 5),
-    rushing: topN(rbs, 'rushYd', 5),
-    receiving: topN(wrs, 'recYd', 5),
-  };
-
-  const team = {
-    passing: topN(teamQbs, 'passYd', 3),
-    rushing: topN(teamRbs, 'rushYd', 3),
-    receiving: topN(teamWrs, 'recYd', 3),
-  };
-
-  post(toUI.DASHBOARD_LEADERS, { league, team }, id);
 }
 
 // ── Handler: GET_LEAGUE_LEADERS ───────────────────────────────────────────────

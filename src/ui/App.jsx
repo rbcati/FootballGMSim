@@ -22,6 +22,16 @@ import MilestoneModal      from './components/MilestoneModal.jsx';
 
 export default function App() {
   const { state, actions } = useWorker();
+
+  // Expose global state for Playwright tests
+  useEffect(() => {
+    window.state = state;
+    window.gameController = {
+        startNewLeague: () => actions.newLeague(DEFAULT_TEAMS, { userTeamId: 0, settings: {} }),
+    };
+    window.handleGlobalAdvance = () => actions.advanceWeek();
+  }, [state, actions]);
+
   const {
     busy, simulating, simProgress,
     workerReady, hasSave,
