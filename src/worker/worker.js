@@ -1770,7 +1770,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  // meta is already declared above
   await Transactions.add({
     type: 'RELEASE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId, details: { playerId: player.id },
@@ -3188,9 +3188,36 @@ async function handleGetTeamProfile({ teamId }, id) {
   let sbTitles = 0, divTitles = 0;
   const seasonHistory = [];
 
+  const myDiv = teamDivInfo[numId];
+  const myConfNum = myDiv ? myDiv.conf : null;
+  const myDivNum = myDiv ? myDiv.div : null;
+
   for (const season of seasons) {
     if (!season.standings) continue;
-    const standing = season.standings.find(s => s.id === numId);
+
+    let standing = null;
+    let bestDivId = -1;
+    let bestDivPct = -1;
+    let bestDivWins = -1;
+
+    for (let i = 0; i < season.standings.length; i++) {
+      const s = season.standings[i];
+      if (s.id === numId) standing = s;
+
+      if (myConfNum !== null) {
+        const sd = teamDivInfo[s.id];
+        if (sd && sd.conf === myConfNum && sd.div === myDivNum) {
+          const pct = s.pct || 0;
+          const wins = s.wins || 0;
+          if (pct > bestDivPct || (pct === bestDivPct && wins > bestDivWins)) {
+            bestDivPct = pct;
+            bestDivWins = wins;
+            bestDivId = s.id;
+          }
+        }
+      }
+    }
+
     if (!standing) continue;
 
     allTimeWins   += standing.wins   || 0;
@@ -3201,15 +3228,9 @@ async function handleGetTeamProfile({ teamId }, id) {
     if (isSBChamp) sbTitles++;
 
     // Division title: top record in same conf + div
-    const myDiv = teamDivInfo[numId];
     let isDivChamp = false;
     if (myDiv) {
-      const divStandings = season.standings.filter(s => {
-        const sd = teamDivInfo[s.id];
-        return sd && sd.conf === myDiv.conf && sd.div === myDiv.div;
-      });
-      divStandings.sort((a, b) => (b.pct || 0) - (a.pct || 0) || (b.wins || 0) - (a.wins || 0));
-      isDivChamp = divStandings.length > 0 && divStandings[0].id === numId;
+      isDivChamp = bestDivId === numId;
       if (isDivChamp) divTitles++;
     }
 
