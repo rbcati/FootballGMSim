@@ -163,13 +163,17 @@ export default function App() {
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary>
-          <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+          <div className="view fade-in" key="new_league">
+            <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+          </div>
         </ErrorBoundary>
       );
     }
     return (
       <ErrorBoundary>
-        <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        <div className="view fade-in" key="save_manager">
+          <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        </div>
       </ErrorBoundary>
     );
   }
@@ -196,7 +200,7 @@ export default function App() {
   const isPostseason = league?.phase === 'playoffs';
 
   return (
-    <div className={isPostseason ? 'postseason' : ''} style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div className={`view fade-in ${isPostseason ? 'postseason' : ''}`} key={league.seasonId ? 'league' : 'setup'} style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
 
       {/* Postseason glow bar */}
       {isPostseason && <div className="postseason-glow" />}

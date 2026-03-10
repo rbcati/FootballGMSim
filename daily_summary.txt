@@ -1,0 +1,17 @@
+Daily Regression Pass Summary
+
+1. What was tested:
+- Playability Smoke Test (New league, load save, advance week, game sim)
+- State & Persistence Audit (Strategy persistence, replay exploit prevention)
+- UI Interaction & Mobile Check (Scrolling on mobile)
+- Contracts, Free Agency, and Cap Trust (Cap calculations, FA signing)
+- Tension & Drama Verification (HQ messaging, Pre-game tension)
+
+2. What broke (if anything):
+- The Playability Smoke Test failed due to missing '.hub-header' element. This occurred because `App.jsx` rendered root views without the standard `view fade-in` wrapper and React `key`, which broke the view state transition animations expected by E2E tests and created UI jank.
+
+3. What was fixed:
+- Added `className="view fade-in"` and appropriate `key` attributes to the root layout and setup/save manager views in `src/ui/App.jsx`. This restores the CSS fade transitions between major screens and fixes the test timeouts waiting for elements to become visible.
+
+4. One small improvement that increased clarity, tension, or trust:
+- Restored smooth visual continuity when navigating between the Save Manager, New League Setup, and the main League Dashboard, improving player trust by eliminating jarring UI flashes during critical state transitions.
