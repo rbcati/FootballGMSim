@@ -693,6 +693,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
                  Owner: <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? 'var(--success)' : (league.ownerApproval ?? 75) >= 50 ? 'var(--warning)' : 'var(--danger)' }}>
                    {league.ownerApproval ?? 75}%
                  </span>
+                 {(league.ownerApproval ?? 75) < 50 && (
+                   <span style={{ marginLeft: 6, color: 'var(--danger)', fontStyle: 'italic', fontSize: 'var(--text-xs)' }}>
+                     (Seat Hot)
+                   </span>
+                 )}
                </div>
                <div style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-muted)' }}>
                  Fan: <span style={{ color: (league.fanApproval ?? 65) >= 70 ? 'var(--success)' : (league.fanApproval ?? 65) >= 50 ? 'var(--warning)' : 'var(--danger)' }}>
