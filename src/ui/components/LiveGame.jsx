@@ -519,20 +519,39 @@ export default function LiveGame({ simulating, simProgress, league, lastResults,
                 Simulation complete.
               </p>
             )}
-            {plays.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
-                  lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
-                  paddingBottom: 'var(--space-1)',
-                  animation: p.id === plays[plays.length - 1]?.id ? 'lgFadeIn 0.22s ease' : 'none',
-                }}
-              >
-                {p.text}
-              </div>
-            ))}
-            <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
+            {plays.map((p) => {
+              const text = p.text;
+              let eventClass = '';
+              if (text.includes('TOUCHDOWN')) eventClass = 'play-touchdown';
+              else if (text.includes('field goal attempt... GOOD')) eventClass = 'play-field-goal';
+              else if (text.includes('INTERCEPTION') || text.includes('FUMBLE')) eventClass = 'play-turnover';
+              else if (text.includes('sack!')) eventClass = 'play-sack';
+              else if (text.includes('safety!')) eventClass = 'play-safety';
+
+              const isLatest = p.id === plays[plays.length - 1]?.id;
+
+              // We removed the inline animation that was overriding the CSS class flash animations.
+              // If it's the latest play but has no flash animation class, we fall back to a simple lgFadeIn via class.
+              const fadeClass = (isLatest && !eventClass) ? 'lg-fade-in' : '';
+
+              return (
+                <div
+                  key={p.id}
+                  className={`play-item ${eventClass} ${fadeClass}`}
+                  style={{
+                    fontSize: 'var(--text-xs)', color: 'var(--text-muted)',
+                    lineHeight: 1.45, borderBottom: '1px solid var(--hairline)',
+                    paddingBottom: 'var(--space-1)',
+                  }}
+                >
+                  {p.text}
+                </div>
+              );
+            })}
+            <style>{`
+              @keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+              .lg-fade-in { animation: lgFadeIn 0.22s ease; }
+            `}</style>
           </div>
         </div>
       </div>

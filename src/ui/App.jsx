@@ -196,7 +196,7 @@ export default function App() {
   const isPostseason = league?.phase === 'playoffs';
 
   return (
-    <div className={isPostseason ? 'postseason' : ''} style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div key={league?.seasonId || 'default'} className={`view fade-in ${isPostseason ? 'postseason' : ''}`} style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
 
       {/* Postseason glow bar */}
       {isPostseason && <div className="postseason-glow" />}
