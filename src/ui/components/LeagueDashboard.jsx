@@ -912,86 +912,88 @@ export default function LeagueDashboard({ league, busy, actions }) {
       </div>
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
-      {activeTab === 'Standings' && (
-        <TabErrorBoundary label="Standings">
-          <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Schedule' && (
-        <TabErrorBoundary label="Schedule">
-          <ScheduleTab
-            schedule={league.schedule}
-            teams={league.teams}
-            currentWeek={league.week}
-            userTeamId={league.userTeamId}
-            nextGameStakes={league.nextGameStakes}
-            seasonId={league.seasonId}
-            onGameSelect={setSelectedGameId}
-            playoffSeeds={league.playoffSeeds}
-            onTeamRoster={(teamId) => { setSelectedTeamId(teamId); }}
-          />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Stats' && (
-        <TabErrorBoundary label="Stats">
-          <PlayerStats actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Leaders' && (
-        <TabErrorBoundary label="Leaders">
-          <Leaders onPlayerSelect={setSelectedPlayerId} userTeamId={league.userTeamId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Award Races' && (
-        <TabErrorBoundary label="Award Races">
-          <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Strategy' && (
-        <TabErrorBoundary label="Strategy">
-          <StrategyPanel league={league} actions={actions} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Roster' && (
-        <TabErrorBoundary label="Roster">
-          <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Financials' && (
-        <TabErrorBoundary label="Financials">
-          <FinancialsView league={league} actions={actions} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Draft' && (
-        <TabErrorBoundary label="Draft">
-          <Draft league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Coaches' && (
-        <TabErrorBoundary label="Coaches">
-          <Coaches league={league} actions={actions} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Free Agency' && (
-        <TabErrorBoundary label="Free Agency">
-          <FreeAgency league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Trades' && (
-        <TabErrorBoundary label="Trades">
-          <TradeCenter league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'History' && (
-        <TabErrorBoundary label="History">
-          <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
-        </TabErrorBoundary>
-      )}
-      {activeTab === 'Postseason' && (
-        <TabErrorBoundary label="Postseason">
-          <PostseasonHub league={league} />
-        </TabErrorBoundary>
-      )}
+      <div key={activeTab} className="view fade-in">
+        {activeTab === 'Standings' && (
+          <TabErrorBoundary label="Standings">
+            <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Schedule' && (
+          <TabErrorBoundary label="Schedule">
+            <ScheduleTab
+              schedule={league.schedule}
+              teams={league.teams}
+              currentWeek={league.week}
+              userTeamId={league.userTeamId}
+              nextGameStakes={league.nextGameStakes}
+              seasonId={league.seasonId}
+              onGameSelect={setSelectedGameId}
+              playoffSeeds={league.playoffSeeds}
+              onTeamRoster={(teamId) => { setSelectedTeamId(teamId); }}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Stats' && (
+          <TabErrorBoundary label="Stats">
+            <PlayerStats actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Leaders' && (
+          <TabErrorBoundary label="Leaders">
+            <Leaders onPlayerSelect={setSelectedPlayerId} userTeamId={league.userTeamId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Award Races' && (
+          <TabErrorBoundary label="Award Races">
+            <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Strategy' && (
+          <TabErrorBoundary label="Strategy">
+            <StrategyPanel league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Roster' && (
+          <TabErrorBoundary label="Roster">
+            <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Financials' && (
+          <TabErrorBoundary label="Financials">
+            <FinancialsView league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Draft' && (
+          <TabErrorBoundary label="Draft">
+            <Draft league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Coaches' && (
+          <TabErrorBoundary label="Coaches">
+            <Coaches league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Free Agency' && (
+          <TabErrorBoundary label="Free Agency">
+            <FreeAgency league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Trades' && (
+          <TabErrorBoundary label="Trades">
+            <TradeCenter league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'History' && (
+          <TabErrorBoundary label="History">
+            <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === 'Postseason' && (
+          <TabErrorBoundary label="Postseason">
+            <PostseasonHub league={league} />
+          </TabErrorBoundary>
+        )}
+      </div>
 
       {/* ── Quick-Jump FAB (mobile) ── */}
       <QuickJumpFab onNavigate={setActiveTab} />

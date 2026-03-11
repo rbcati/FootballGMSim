@@ -967,9 +967,28 @@ select:disabled {
 /* Play log item flash animations */
 .play-item.play-touchdown {
   animation: flash-success 1s;
+  background-color: rgba(52, 199, 89, 0.1);
+  border-left: 3px solid var(--success);
+}
+.play-item.play-field-goal {
+  animation: flash-success 1s;
+  background-color: rgba(52, 199, 89, 0.05);
+  border-left: 3px solid var(--success);
 }
 .play-item.play-turnover {
   animation: flash-danger 1s;
+  background-color: rgba(255, 59, 48, 0.1);
+  border-left: 3px solid var(--danger);
+}
+.play-item.play-sack {
+  animation: flash-warning 1s;
+  background-color: rgba(255, 159, 10, 0.1);
+  border-left: 3px solid var(--warning);
+}
+.play-item.play-safety {
+  animation: flash-warning 1s;
+  background-color: rgba(255, 159, 10, 0.1);
+  border-left: 3px solid var(--warning);
 }
 
 @keyframes flash-success {
@@ -980,6 +999,11 @@ select:disabled {
 @keyframes flash-danger {
   0% { background-color: rgba(255, 59, 48, 0.5); }
   100% { background-color: rgba(255, 59, 48, 0.1); }
+}
+
+@keyframes flash-warning {
+  0% { background-color: rgba(255, 159, 10, 0.5); }
+  100% { background-color: rgba(255, 159, 10, 0.1); }
 }
 
 /* ============================================
