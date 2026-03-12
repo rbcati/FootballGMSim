@@ -1392,47 +1392,29 @@ async function handleGetPlayerCareer({ playerId }, id) {
   const strId = String(playerId);
 
   try {
-    // ── 1. Cache lookup — try the raw key, then a string-comparison scan ─────
+    // ── 1. Cache lookup ──────────────────────────────────────────────────────
     let player = cache.getPlayer(strId);
 
-    // Backward-compat: legacy saves may have stored players with numeric IDs.
-    if (!player) {
-      const numId = Number(strId);
-      if (Number.isFinite(numId)) player = cache.getPlayer(numId);
+    // ── 2. Draft-prospect early return ───────────────────────────────────────
+    // Draft-eligible players live in the hot cache but have no career stats yet.
+    // Handle them immediately to avoid unnecessary DB lookups.
+    if (player && player.status === 'draft_eligible') {
+      post(toUI.PLAYER_CAREER, {
+        playerId: strId,
+        player,
+        stats: [],
+        isDraftProspect: true,
+      }, id);
+      return;
     }
 
-    // Full scan: covers any residual type-mismatch where the Map key differs from strId.
-    if (!player) {
-      player = cache.getAllPlayers().find(p => String(p.id) === strId);
-    }
-
-    // ── 2. DB fallback — rookies / released players may not be in hot cache ───
+    // ── 3. DB fallback — rookies / released players may not be in hot cache ───
     if (!player) {
       player = await Players.load(strId).catch(() => null);
     }
     if (!player) {
       const numId = Number(strId);
       if (Number.isFinite(numId)) player = await Players.load(numId).catch(() => null);
-    }
-
-    // ── 2b. Draft-prospect fallback ─────────────────────────────────────────
-    // Draft-eligible players live in the hot cache but may not be in the DB yet
-    // (they're flushed lazily).  Explicitly scan the draft pool so clicking a
-    // prospect in the Draft board never returns the "Unknown Player" skeleton.
-    if (!player) {
-      player = cache.getAllPlayers().find(
-        p => p.status === 'draft_eligible' && String(p.id) === strId
-      ) ?? null;
-      if (player) {
-        // Prospects have no career stats yet — return early with empty stats array.
-        post(toUI.PLAYER_CAREER, {
-          playerId: strId,
-          player,
-          stats: [],
-          isDraftProspect: true,
-        }, id);
-        return;
-      }
     }
 
     // ── 2c. PlayerStats-based reconstruction (retired players) ─────────────
@@ -1537,7 +1519,7 @@ async function handleGetPlayerCareer({ playerId }, id) {
 
   } catch (err) {
     console.error('[Worker] GET_PLAYER_CAREER unhandled error for player', strId, err);
-    const fallbackPlayer = cache.getPlayer(strId) ?? cache.getAllPlayers().find(p => String(p.id) === strId) ?? null;
+    const fallbackPlayer = cache.getPlayer(strId);
     post(toUI.PLAYER_CAREER, {
       playerId: strId,
       player:   fallbackPlayer,
@@ -1638,10 +1620,8 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
       return;
   }
 
-  // Normalize the incoming playerId: Map lookup first, then string-comparison scan.
+  // Normalize the incoming playerId.
   let player = cache.getPlayer(playerId);
-  if (!player) player = cache.getPlayer(String(playerId));
-  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // ── Hard Cap Check ($301.2M) ────────────────────────────────────────────────
@@ -1724,8 +1704,6 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
 
 async function handleReleasePlayer({ playerId, teamId }, id) {
   let player = cache.getPlayer(playerId);
-  if (!player) player = cache.getPlayer(String(playerId));
-  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // ── June 1st Dead Money Rule ────────────────────────────────────────────────
@@ -2232,8 +2210,6 @@ const _updateTeamCap = recalculateTeamCap;
 
 async function handleRestructureContract({ playerId, teamId }, id) {
   let player = cache.getPlayer(playerId);
-  if (!player) player = cache.getPlayer(String(playerId));
-  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   const team = cache.getTeam(teamId);
@@ -2398,10 +2374,8 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   const draftState = meta?.draftState;
   if (!draftState) return;
 
-  // Normalize the ID: try Map lookup first, then a string-comparison scan.
+  // Normalize the ID.
   let player = cache.getPlayer(playerId);
-  if (!player) player = cache.getPlayer(String(playerId));
-  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player) return;
 
   const pk = draftState.picks[pickIndex];
@@ -2540,10 +2514,8 @@ async function handleMakeDraftPick({ playerId }, id) {
       return;
   }
 
-  // Normalize the incoming playerId to avoid type-mismatch misses (string vs number keys).
+  // Normalize the incoming playerId.
   let player = cache.getPlayer(playerId);
-  if (!player) player = cache.getPlayer(String(playerId));
-  if (!player) player = cache.getAllPlayers().find(p => String(p.id) === String(playerId));
   if (!player || player.status !== 'draft_eligible') {
     post(toUI.ERROR, { message: 'Player not available' }, id);
     return;

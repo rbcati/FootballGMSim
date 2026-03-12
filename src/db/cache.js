@@ -150,22 +150,24 @@ export const cache = {
 
   // --- Players ---
 
-  getPlayer:    (id)     => _players.get(id) ?? null,
+  getPlayer:    (id)     => (id != null) ? (_players.get(String(id)) ?? null) : null,
   getAllPlayers: ()       => [..._players.values()],
   getPlayersByTeam: (teamId) => [..._players.values()].filter(p => p.teamId === teamId),
   setPlayer:    (player) => {
-    _players.set(player.id, player);
+    if (!player || player.id == null) return;
+    _players.set(String(player.id), player);
     _dirty.players.add(player.id);
   },
   removePlayer: (id)     => {
-    _players.delete(id);
+    if (id == null) return;
+    _players.delete(String(id));
     _dirty.players.add(id);          // will be a delete operation during flush
   },
   updatePlayer: (id, patch) => {
-    const p = _players.get(id);
+    const p = (id != null) ? (_players.get(String(id)) ?? null) : null;
     if (!p) return;
     Object.assign(p, patch);
-    _dirty.players.add(id);
+    _dirty.players.add(p.id);
   },
 
   // --- Weekly games ---
@@ -270,7 +272,12 @@ export const cache = {
   hydrate({ meta, teams, players, draftPicks } = {}) {
     if (meta)       { _meta = meta; }
     if (teams)      { _teams.clear(); teams.forEach(t => _teams.set(t.id, t)); }
-    if (players)    { _players.clear(); players.forEach(p => _players.set(p.id, p)); }
+    if (players)    {
+      _players.clear();
+      players.forEach(p => {
+        if (p && p.id != null) _players.set(String(p.id), p);
+      });
+    }
     if (draftPicks) { _draftPicks.clear(); draftPicks.forEach(dp => _draftPicks.set(dp.id, dp)); }
     _weekGames = [];
     _seasonStats.clear();
