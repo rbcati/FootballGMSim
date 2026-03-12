@@ -2355,16 +2355,8 @@ class GameController {
             }
         });
 
-        // FIX: Handle Bottom Nav Menu Click
-        const navMenuBottom = document.getElementById('navMenuBottom');
-        if (navMenuBottom) {
-            this.addEventListener(navMenuBottom, 'click', (e) => {
-                e.preventDefault();
-                // Toggle sidebar by clicking the main toggle
-                const toggle = document.querySelector('.nav-toggle');
-                if (toggle) toggle.click();
-            });
-        }
+        // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
+        // ui-interactions.js handles mobile menu toggle via .nav-toggle
 
         // Sound Toggle UI
         const navContainer = document.querySelector('.nav-toggle-container');
@@ -2424,18 +2416,17 @@ class GameController {
             navContainer.insertBefore(soundBtn, navContainer.firstChild);
         }
 
-        // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
-        // ui-interactions.js handles mobile menu toggle via .nav-toggle
-
         // FIX: Dashboard Button
         const btnDashboard = document.getElementById('btnDashboard');
         if (btnDashboard) {
             this.addEventListener(btnDashboard, 'click', () => {
                 if (window.show) window.show('leagueDashboard');
                 if (window.renderDashboard) window.renderDashboard();
-                // Close menu if open
-                if (typeof toggleMenu === 'function' && sidebar && sidebar.classList.contains('active')) {
-                    toggleMenu();
+
+                // Close menu if open (standardized for mobile/legacy)
+                const sidebar = document.getElementById('nav-sidebar');
+                if (window.toggleNavigation && sidebar && (sidebar.classList.contains('nav-open') || sidebar.classList.contains('active'))) {
+                    window.toggleNavigation();
                 }
             });
         }
