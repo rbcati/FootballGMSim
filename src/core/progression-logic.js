@@ -159,8 +159,18 @@ export function processPlayerProgression(players) {
     // ── Resolve dev trait multipliers (Task 3) ────────────────────────────
     const devTrait = player.devTrait ?? 'Normal';
     const traitMods = DEV_TRAIT_MULTIPLIERS[devTrait] ?? DEV_TRAIT_MULTIPLIERS.Normal;
-    const effectiveBreakoutProb = GROWTH_BREAKOUT_PROB + traitMods.breakoutBonus;
-    const effectiveBustProb     = GROWTH_BREAKOUT_PROB + GROWTH_BUST_PROB; // bust range end
+    let effectiveBreakoutProb = GROWTH_BREAKOUT_PROB + traitMods.breakoutBonus;
+    let effectiveBustProb     = GROWTH_BREAKOUT_PROB + GROWTH_BUST_PROB; // bust range end
+
+    // Personality Trait Modifiers
+    if (player.personality?.traits) {
+        if (player.personality.traits.includes('High Work Ethic')) {
+            effectiveBreakoutProb += 0.15; // 15% higher chance of positive roll/breakout
+        }
+        if (player.personality.traits.includes('Low Work Ethic')) {
+            effectiveBustProb += 0.15; // 15% higher chance of negative roll/bust
+        }
+    }
 
     // ── Age 21–25: Growth phase ────────────────────────────────────────────
     if (age >= 21 && age <= 25) {

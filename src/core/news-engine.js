@@ -90,6 +90,28 @@ class NewsEngine {
         }
     }
 
+    static async logFeat(player, teamAbbr, opponentAbbr, featDescription, statValue) {
+        if (!player) return;
+        const text = `Feat: ${player.name} recorded ${statValue} ${featDescription} against ${opponentAbbr}.`;
+        await this.logNews('FEAT', text, player.teamId, {
+            playerId: player.id,
+            featDescription,
+            statValue
+        });
+    }
+
+    static async logNarrative(player, type, teamAbbr) {
+        if (!player) return;
+        let text = '';
+        if (type === 'HOLDOUT') text = `${player.name} (${teamAbbr}) is holding out for a new contract.`;
+        if (type === 'SUSPENSION') text = `${player.name} (${teamAbbr}) has been suspended by the league.`;
+        if (type === 'CONDUCT') text = `${player.name} (${teamAbbr}) was fined for conduct detrimental to the team.`;
+
+        if (text) {
+             await this.logNews('NARRATIVE', text, player.teamId, { playerId: player.id });
+        }
+    }
+
     static async logGameEvent(game) {
         // Log upsets, big scores, etc.
         const home = cache.getTeam(game.homeId);

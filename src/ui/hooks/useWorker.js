@@ -400,6 +400,10 @@ export function useWorker() {
     restructureContract: (playerId, teamId) =>
       request(toWorker.RESTRUCTURE_CONTRACT, { playerId, teamId }),
 
+    /** Applies the franchise tag to a pending free agent (returns a Promise) */
+    applyFranchiseTag: (playerId, teamId) =>
+      request(toWorker.APPLY_FRANCHISE_TAG, { playerId, teamId }),
+
     /** Fetch the full box score for a completed game (returns a Promise). */
     getBoxScore: (gameId) =>
       request(toWorker.GET_BOX_SCORE, { gameId }, { silent: true }),

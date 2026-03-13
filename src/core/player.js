@@ -309,10 +309,25 @@ function tagAbilities(player) {
 function generatePersonality() {
     const traits = [];
     const numTraits = U.rand(1, 2);
-    const possibleTraits = ['Winner', 'Loyal', 'Greedy', 'Clutch', 'Leader', 'Mentor', 'Injury Prone', 'Iron Man'];
-    for (let i = 0; i < numTraits; i++) {
-        const trait = U.choice(possibleTraits);
-        if (!traits.includes(trait)) traits.push(trait);
+    const possibleTraits = ['High Work Ethic', 'Low Work Ethic', 'Leadership', 'Divisive', 'Clutch', 'Loyal', 'Greedy', 'Mentor'];
+
+    // Prevent conflicting traits
+    const addTrait = (trait) => {
+        if (trait === 'High Work Ethic' && traits.includes('Low Work Ethic')) return false;
+        if (trait === 'Low Work Ethic' && traits.includes('High Work Ethic')) return false;
+        if (trait === 'Leadership' && traits.includes('Divisive')) return false;
+        if (trait === 'Divisive' && traits.includes('Leadership')) return false;
+        if (!traits.includes(trait)) {
+            traits.push(trait);
+            return true;
+        }
+        return false;
+    };
+
+    let attempts = 0;
+    while (traits.length < numTraits && attempts < 10) {
+        addTrait(U.choice(possibleTraits));
+        attempts++;
     }
     return { traits };
 }
@@ -560,7 +575,7 @@ function calculateMorale(player, team, isStarter = true) {
  * @param {Object} player
  * @returns {Object} { years, baseAnnual, signingBonus, guaranteedPct }
  */
-function calculateExtensionDemand(player) {
+function calculateExtensionDemand(player, difficulty = 'Normal') {
     if (!player) return null;
 
     // Determine years based on age
@@ -576,8 +591,13 @@ function calculateExtensionDemand(player) {
     // We can call generateContract to get a baseline market value for their OVR.
     const baseline = generateContract(player.ovr, player.pos);
 
-    // Apply Extension Premium (10-15%)
-    const premiumMult = 1.15;
+    // Apply Extension Premium & Difficulty Modifier
+    let diffMult = 1.0;
+    if (difficulty === 'Easy') diffMult = 0.9;
+    if (difficulty === 'Hard') diffMult = 1.1;
+    if (difficulty === 'Legendary') diffMult = 1.25;
+
+    const premiumMult = 1.15 * diffMult;
     const baseAnnual = Math.round(baseline.baseAnnual * premiumMult * 10) / 10;
 
     // Recalculate signing bonus based on new annual

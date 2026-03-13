@@ -76,14 +76,25 @@ export function calculatePlayerValue(player) {
   const posValues  = Constants?.POSITION_VALUES ?? {};
   const posMult    = posValues[player.pos] ?? 1.0;
 
-  // Exponential age penalty (grows slowly through 20s, accelerates at 32+)
-  const agePenalty = Math.pow(1.08, Math.max(0, age - 25));
+  // Age Curve - Opus Phase 4 - Realism adjustments
+  // Sharp drop-off post 28, especially for RBs
+  let agePenalty = 0;
+  if (player.pos === 'RB' && age >= 27) {
+      agePenalty = Math.pow(1.15, age - 26) * 10;
+  } else if (age >= 30) {
+      agePenalty = Math.pow(1.10, age - 29) * 8;
+  }
 
   // Contract cost penalty (expensive players are harder to trade for)
   const annualSalary  = player.contract?.baseAnnual ?? 0;
-  const contractPenalty = annualSalary * 0.5;
+  const capHitPct = annualSalary / Constants.SALARY_CAP.HARD_CAP;
+  const contractPenalty = capHitPct * 200; // Adjust penalty based on cap percentage
 
-  const rawValue = ((ovr * 1.5) + (pot * 0.5)) * posMult;
+  // Base calculation heavily rewards potential for young players
+  const potWeight = age <= 25 ? 1.2 : 0.5;
+  const ovrWeight = age <= 25 ? 0.8 : 1.5;
+
+  const rawValue = ((ovr * ovrWeight) + (pot * potWeight)) * posMult;
   return Math.max(0, rawValue - agePenalty - contractPenalty);
 }
 
@@ -296,4 +307,69 @@ export async function runAIToAITrades() {
       break; // move to the next outer team
     }
   }
+}
+
+/**
+ * Phase 4 Opus: AI-Initiated Trade Proposals
+ * The AI evaluates the user's roster for surplus and needs, and generates
+ * 1-2 trade proposals from AI teams that match those needs.
+ */
+export function generateAITradeProposalsForUser() {
+    const meta = cache.getMeta();
+    if (!meta || meta.phase !== 'regular') return [];
+
+    const userTeamId = meta.userTeamId;
+    if (!userTeamId) return [];
+
+    const allTeams = cache.getAllTeams();
+    const userTeam = allTeams.find(t => t.id === userTeamId);
+    if (!userTeam) return [];
+
+    const aiTeams = allTeams.filter(t => t.id !== userTeamId);
+    const userNeeds = getTeamNeeds(userTeamId);
+    const userSurplus = getSurplusPlayers(userTeamId);
+
+    const proposals = [];
+
+    // The AI looks for what the user needs and offers it, asking for user surplus in return
+    for (const aiTeam of aiTeams) {
+        if (proposals.length >= 2) break; // Max 2 proposals per week
+
+        const aiSurplus = getSurplusPlayers(aiTeam.id);
+        const aiNeeds = getTeamNeeds(aiTeam.id);
+
+        for (const userNeed of userNeeds) {
+            const aiOffer = aiSurplus.find(p => p.pos === userNeed.pos && calculatePlayerValue(p) >= 40);
+            if (aiOffer) {
+                // Find what the AI wants in return
+                for (const aiNeed of aiNeeds) {
+                    const userAsset = userSurplus.find(p => p.pos === aiNeed.pos);
+                    if (userAsset) {
+                        const valA = calculatePlayerValue(aiOffer);
+                        const valB = calculatePlayerValue(userAsset);
+
+                        // Check if values are close enough (AI is willing to overpay slightly or underpay slightly)
+                        if (valA > 0 && valB > 0 && Math.abs(valA - valB) / Math.max(valA, valB) <= 0.20) {
+                            proposals.push({
+                                offeringTeamId: aiTeam.id,
+                                offeringTeamAbbr: aiTeam.abbr,
+                                offeringPlayerId: aiOffer.id,
+                                offeringPlayerName: aiOffer.name,
+                                receivingPlayerId: userAsset.id,
+                                receivingPlayerName: userAsset.name,
+                                timestamp: Date.now()
+                            });
+                            // Remove from surplus to prevent duplicate logic
+                            aiSurplus.splice(aiSurplus.indexOf(aiOffer), 1);
+                            userSurplus.splice(userSurplus.indexOf(userAsset), 1);
+                            break; // Move to next team
+                        }
+                    }
+                }
+            }
+            if (proposals.some(p => p.offeringTeamId === aiTeam.id)) break;
+        }
+    }
+
+    return proposals;
 }

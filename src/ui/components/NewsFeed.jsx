@@ -9,6 +9,18 @@ function NewsItem({ item }) {
   if (item.type === "INJURY") {
     icon = "🚑";
     color = "var(--danger)";
+  } else if (item.type === "TRADE_PROPOSAL") {
+    icon = "🚨";
+    color = "var(--accent)";
+  } else if (item.type === "FEAT" || item.type === "MILESTONE") {
+    icon = "⭐";
+    color = "var(--warning)";
+  } else if (item.type === "NARRATIVE") {
+    icon = "🎭";
+    color = "var(--text)";
+  } else if (item.type === "INJURY") { // Re-trigger to avoid syntax issue
+    icon = "🚑";
+    color = "var(--danger)";
   } else if (item.type === "TRANSACTION") {
     icon = "✍️";
     color = "var(--success)";

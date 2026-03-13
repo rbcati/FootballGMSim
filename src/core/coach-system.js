@@ -223,7 +223,7 @@ export function processStaffXp(staff, performance) {
 export function processStaffPoaching(league) {
     if (!league || !league.teams) return;
 
-    console.log("Processing Staff Poaching...");
+    // console.log("Processing Staff Poaching...");
     const vacancies = [];
     const candidates = [];
 
@@ -236,7 +236,7 @@ export function processStaffPoaching(league) {
 
             // Fire logic: < 4 wins?
             if (wins < 4 && Utils.random() < 0.3) {
-                console.log(`🔥 ${team.name} has fired HC ${team.staff.headCoach.name} after a ${wins}-win season.`);
+                // console.log(`🔥 ${team.name} has fired HC ${team.staff.headCoach.name} after a ${wins}-win season.`);
                 if (league.news) league.news.push(`${team.name} has fired Head Coach ${team.staff.headCoach.name}.`);
                 team.staff.headCoach = null; // Create vacancy
             }
@@ -248,7 +248,7 @@ export function processStaffPoaching(league) {
     });
 
     if (vacancies.length === 0) {
-        console.log("No Head Coach vacancies.");
+        // console.log("No Head Coach vacancies.");
         return;
     }
 
@@ -278,7 +278,7 @@ export function processStaffPoaching(league) {
             if (newHC) {
                 if (!team.staff) team.staff = {};
                 team.staff.headCoach = newHC;
-                console.log(`👔 ${team.name} hired ${newHC.name} (Unknown) as Head Coach.`);
+                // console.log(`👔 ${team.name} hired ${newHC.name} (Unknown) as Head Coach.`);
                 if (league.news) league.news.push(`${team.name} hires unknown candidate ${newHC.name} as Head Coach.`);
             }
             return;
@@ -308,7 +308,7 @@ export function processStaffPoaching(league) {
         if (!team.staff) team.staff = {};
         team.staff.headCoach = newHC;
 
-        console.log(`🚀 ${team.name} poaches ${selection.role} ${coach.name} from ${oldTeam.name} to be Head Coach!`);
+        // console.log(`🚀 ${team.name} poaches ${selection.role} ${coach.name} from ${oldTeam.name} to be Head Coach!`);
         if (league.news) league.news.push(`${team.name} hires ${coach.name} (formerly ${oldTeam.abbr} ${selection.role}) as Head Coach!`);
 
         // Refill old team's coordinator spot immediately (or let next offseason step handle it)
@@ -317,7 +317,7 @@ export function processStaffPoaching(league) {
         if (replacement) {
              if (selection.role === 'OC') oldTeam.staff.offCoordinator = replacement;
              if (selection.role === 'DC') oldTeam.staff.defCoordinator = replacement;
-             console.log(`  -> ${oldTeam.name} promotes internal candidate ${replacement.name} to ${selection.role}.`);
+             // console.log(`  -> ${oldTeam.name} promotes internal candidate ${replacement.name} to ${selection.role}.`);
         }
     });
 }

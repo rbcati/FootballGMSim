@@ -40,7 +40,7 @@ import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
-import { runAIToAITrades }          from '../core/trade-logic.js';
+import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -527,6 +527,7 @@ async function handleNewLeague(payload, id) {
       year:            league.year,
       season:          league.season ?? 1,
       phase:           'regular',
+      difficulty:      options.difficulty ?? 'Normal',
       settings:        options.settings ?? {},
     };
 
@@ -1040,12 +1041,44 @@ if (res.injuries && res.injuries.length > 0) {
     cache.setMeta({ currentWeek: nextWeekNum });
   }
 
+  // Phase 4 Opus: Narrative Events
+  if (meta.phase === 'regular' || meta.phase === 'preseason') {
+      const userRoster = cache.getPlayersByTeam(meta.userTeamId);
+      const team = cache.getTeam(meta.userTeamId);
+      for (const p of userRoster) {
+          const isDivisive = p.personality?.traits?.includes('Divisive');
+          const holdoutProb = isDivisive ? 0.03 : 0.01;
+          const conductProb = isDivisive ? 0.02 : 0.005;
+
+          // chance per week for low morale players to holdout
+          if (p.morale < 30 && p.ovr > 80 && Math.random() < holdoutProb) {
+              await NewsEngine.logNarrative(p, 'HOLDOUT', team?.abbr || 'FA');
+              // Could also apply a temporary OVR penalty or status change here
+          }
+          // chance per week for any player to get a conduct fine
+          if (Math.random() < conductProb) {
+              await NewsEngine.logNarrative(p, 'CONDUCT', team?.abbr || 'FA');
+              // Apply morale hit
+              cache.updatePlayer(p.id, { morale: Math.max(0, p.morale - 10) });
+          }
+      }
+  }
+
   // --- AI-to-AI Trades (regular season only) ---
   // Runs after standings/scores are finalised so AI decisions reflect current rosters.
   // Max 2 trades per week — see trade-logic.js for full guardrails.
   if (meta.phase === 'regular') {
     try {
       await runAIToAITrades();
+
+      // Also generate trade proposals for the user
+      const tradeProposals = generateAITradeProposalsForUser();
+      if (tradeProposals.length > 0) {
+         // Create a news item or notification for the UI
+         for (const prop of tradeProposals) {
+            NewsEngine.logNews('TRADE_PROPOSAL', `🚨 ${prop.offeringTeamAbbr} has offered ${prop.offeringPlayerName} in exchange for ${prop.receivingPlayerName}.`, null, { isProposal: true, ...prop });
+         }
+      }
     } catch (tradeErr) {
       // Trade engine errors should never crash the week advance.
       console.warn('[Worker] AI trade engine error (non-fatal):', tradeErr.message);
@@ -1221,6 +1254,21 @@ function applyGameResultToCache(result, week, seasonId) {
   aggregateSide(aId, result.boxScore?.away);
 
   // ── 4. Queue game record for DB flush ─────────────────────────────────────
+
+  // Process feats
+  if (result.feats && result.feats.length > 0) {
+    for (const feat of result.feats) {
+      if (feat.playerId) {
+        const p = cache.getPlayer(feat.playerId);
+        NewsEngine.logFeat(p || { id: feat.playerId, name: feat.name, teamId: p?.teamId }, feat.teamAbbr, feat.opponentAbbr, feat.featDescription, '');
+      } else {
+         // Team Feats
+         const t = cache.getTeam(feat.teamAbbr);
+         NewsEngine.logNews('FEAT', `Feat: ${feat.name} recorded ${feat.featDescription} against ${feat.opponentAbbr}.`, t?.id);
+      }
+    }
+  }
+
   const gameId = `${seasonId}_w${week}_${hId}_${aId}`;
   cache.addGame({
     id:        gameId,
@@ -1532,6 +1580,77 @@ async function handleGetPlayerCareer({ playerId }, id) {
 
 // ── Handler: GET_BOX_SCORE ────────────────────────────────────────────────────
 
+
+// ── Handler: APPLY_FRANCHISE_TAG ──────────────────────────────────────────────
+async function handleApplyFranchiseTag({ playerId, teamId }, id) {
+  const meta = cache.getMeta();
+  const player = cache.getPlayer(playerId);
+  if (!player || player.teamId !== teamId) {
+      post(toUI.ERROR, { message: 'Invalid player for franchise tag.' }, id);
+      return;
+  }
+  if (meta.phase !== 'offseason_resign') {
+      post(toUI.ERROR, { message: 'Franchise tag can only be applied during re-signing phase.' }, id);
+      return;
+  }
+
+  // Calculate Tag Value (simplified heuristic: roughly 1.25x market value for 1 year)
+  // Realism Note: A real franchise tag takes the top 5 salaries at the position.
+  const baseline = Constants.SALARY_CAP.HARD_CAP * (Constants.POSITION_VALUES[player.pos] || 0.1);
+  const ask = (player.ovr > 85 ? 0.08 : 0.05) * Constants.SALARY_CAP.HARD_CAP;
+  const tagCost = Math.round(ask * 1.25 * 10) / 10;
+
+  const contract = {
+      years: 1,
+      yearsTotal: 1,
+      baseAnnual: tagCost,
+      signingBonus: 0,
+      guaranteedPct: 100, // Fully guaranteed
+  };
+
+  cache.updatePlayer(playerId, { contract, isTagged: true });
+  recalculateTeamCap(teamId);
+
+  await Transactions.add({
+      type: 'FRANCHISE_TAG',
+      seasonId: meta.currentSeasonId,
+      week: meta.currentWeek,
+      teamId,
+      details: { playerId, contract }
+  });
+
+  await NewsEngine.logNews('TRANSACTION', `The ${cache.getTeam(teamId)?.abbr || 'team'} placed the franchise tag on ${player.pos} ${player.name}.`, teamId);
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+}
+
+
+// ── Handler: RELOCATE_TEAM ────────────────────────────────────────────────────
+async function handleRelocateTeam({ teamId, newCity, newName, newAbbr }, id) {
+  const meta = cache.getMeta();
+  const team = cache.getTeam(teamId);
+  if (!team) {
+      post(toUI.ERROR, { message: 'Team not found.' }, id);
+      return;
+  }
+  if (meta.userTeamId !== teamId) {
+      post(toUI.ERROR, { message: 'You can only relocate your own team.' }, id);
+      return;
+  }
+  // Optional: Add cost/phase requirements, e.g. phase === 'offseason'
+
+  cache.updateTeam(teamId, {
+      city: newCity,
+      name: newName,
+      abbr: newAbbr.toUpperCase()
+  });
+
+  await NewsEngine.logNews('TRANSACTION', `BREAKING: The franchise formerly known as ${team.city} ${team.name} has relocated to ${newCity} and will now be known as the ${newName}.`, teamId);
+
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
 async function handleGetBoxScore({ gameId }, id) {
   if (!gameId) {
     post(toUI.BOX_SCORE, { gameId: null, game: null, error: 'No gameId provided' }, id);
@@ -1927,7 +2046,7 @@ async function handleGetExtensionAsk({ playerId }, id) {
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // Generate ask based on market value
-  const ask = calculateExtensionDemand(player);
+  const ask = calculateExtensionDemand(player, meta?.difficulty);
   post(toUI.EXTENSION_ASK, { ask }, id);
 }
 
@@ -2015,7 +2134,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       return sum + _tradeValue(p);
     }, 0);
     // Draft picks: rough round-based flat value (R1=800, R2=300, R3=150 …)
-    const PICK_VALUES = [0, 800, 300, 150, 60, 25, 10, 3];
+    const PICK_VALUES = [0, 800, 300, 100, 40, 15, 5, 2];
     const pickVal = pickIds.reduce((sum, pid) => {
       const pk = cache.getDraftPick ? cache.getDraftPick(pid) : null;
       const round = pk?.round ?? 3;
@@ -2027,9 +2146,21 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const offerVal    = calcSideValue(offering);
   const receiveVal  = calcSideValue(receiving);
 
-  // AI accepts if it gets at least 85 % of what it gives
-  const threshold   = offerVal * 0.85;
-  const accepted    = receiveVal >= threshold;
+  // AI acceptance threshold scales by difficulty
+  const meta = cache.getMeta();
+  const diff = meta.difficulty || 'Normal';
+  let diffMult = 1.0;
+  if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
+  if (diff === 'Hard') diffMult = 1.15; // AI demands 15% more
+  if (diff === 'Legendary') diffMult = 1.30; // AI demands 30% more
+
+  // E.g. User (fromTeam) offers 1000 value, wants 1000 value.
+  // On Normal, AI wants 1000 * 1.0 = 1000 in return (offerVal >= receiveVal * 1.0)
+  // Let's refine the logic: AI is "toTeam". It is receiving "offering" and giving up "receiving".
+  // AI accepts if offering >= receiving * diffMult
+
+  const threshold = receiveVal * diffMult;
+  const accepted = offerVal >= threshold;
 
   // ── Hard Cap Trade Validation ────────────────────────────────────────────────
   // Before executing an accepted trade, verify neither team would breach the
@@ -2777,9 +2908,28 @@ async function handleAdvanceOffseason(payload, id) {
     if (willRetire) {
       retired.push({ id: player.id, name: player.name, pos: player.pos, age, ovr: player.ovr });
       if (player.teamId != null) recalculateTeamCap(player.teamId);
+
+      // Calculate Hall of Fame induction
+      // Very basic heuristic for now
+      let isHof = false;
+      if (player.accolades && player.accolades.length > 0) {
+          let score = player.ovr;
+          for (const a of player.accolades) {
+              if (a.type === 'MVP') score += 10;
+              if (a.type === 'SB_MVP') score += 5;
+              if (a.type === 'OPOY' || a.type === 'DPOY') score += 5;
+              if (a.type === 'PRO_BOWL') score += 2;
+          }
+          if (score > 120) isHof = true; // Needs some accolades and high ovr
+      }
+
+      if (isHof) {
+          NewsEngine.logNews('HOF', `⭐️ ${player.pos} ${player.name} has been inducted into the Hall of Fame!`);
+      }
+
       // Mark as retired instead of deleting — keeps the player record in DB
       // so GET_PLAYER_CAREER can still resolve name/pos/ovr for history views.
-      cache.updatePlayer(player.id, { status: 'retired', teamId: null, age });
+      cache.updatePlayer(player.id, { status: 'retired', teamId: null, age, hof: isHof });
     } else {
       cache.updatePlayer(player.id, { age });
     }
@@ -3633,6 +3783,8 @@ async function handleMessage(event) {
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);
+      case toWorker.APPLY_FRANCHISE_TAG:  return await handleApplyFranchiseTag(payload, id);
+      case toWorker.RELOCATE_TEAM:        return await handleRelocateTeam(payload, id);
       case toWorker.GET_BOX_SCORE:        return await handleGetBoxScore(payload, id);
       case toWorker.UPDATE_STRATEGY:    return await handleUpdateStrategy(payload, id);
 

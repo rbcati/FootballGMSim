@@ -62,19 +62,23 @@ class AiLogic {
             const toCut = scoredPlayers.slice(0, cutCount);
 
             for (const p of toCut) {
-                // Calculate Dead Cap
+                // Calculate Dead Cap (post-June 1 rules for preseason)
                 const c = p.contract;
                 const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
-                const deadCap = annualBonus * (c?.years || 1);
+                const yearsRemaining = c?.years || 1;
+                const currentYearDead = annualBonus;
+                const futureYearsDead = annualBonus * Math.max(0, yearsRemaining - 1);
 
                 // Update Cache (Release)
                 cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
 
-                // Update Team Dead Cap
-                if (deadCap > 0) {
-                    const freshTeam = cache.getTeam(team.id);
-                    const newDead = (freshTeam.deadCap ?? 0) + deadCap;
-                    cache.updateTeam(team.id, { deadCap: newDead });
+                // Update Team Dead Cap (Preseason cutdowns are post-June 1)
+                const freshTeam = cache.getTeam(team.id);
+                if (currentYearDead > 0) {
+                    cache.updateTeam(team.id, { deadCap: (freshTeam.deadCap ?? 0) + currentYearDead });
+                }
+                if (futureYearsDead > 0) {
+                    cache.updateTeam(team.id, { deadMoneyNextYear: (freshTeam.deadMoneyNextYear ?? 0) + futureYearsDead });
                 }
 
                 // Log Transaction
@@ -83,7 +87,7 @@ class AiLogic {
                     seasonId: meta.currentSeasonId,
                     week: meta.currentWeek,
                     teamId: team.id,
-                    details: { playerId: p.id, deadCap }
+                    details: { playerId: p.id, deadCap: currentYearDead }
                 });
             }
 
@@ -107,7 +111,11 @@ class AiLogic {
     static async executeAICapManagement() {
         const meta        = cache.getMeta();
         const userTeamId  = meta.userTeamId;
-        const hardCap     = Constants.SALARY_CAP.HARD_CAP;
+        let targetCap = Constants.SALARY_CAP.HARD_CAP;
+        // On higher difficulties, AI targets a lower cap utilization to preserve space for free agency
+        if (meta.difficulty === 'Hard') targetCap = Constants.SALARY_CAP.HARD_CAP - 10; // Target $10M buffer
+        if (meta.difficulty === 'Legendary') targetCap = Constants.SALARY_CAP.HARD_CAP - 25; // Target $25M buffer
+        const hardCap = targetCap;
         const allTeams    = cache.getAllTeams();
 
         for (const team of allTeams) {
@@ -181,22 +189,27 @@ class AiLogic {
                 freshTeam = cache.getTeam(team.id);
                 if ((freshTeam.capUsed ?? 0) <= hardCap) break;
 
-                // Calculate dead cap (all remaining prorated bonus — preseason = pre-June-1)
+                // Calculate dead cap (Preseason is Post-June 1)
                 const c           = p.contract;
                 const annualBonus = (c?.signingBonus ?? 0) / (c?.yearsTotal || 1);
-                const deadMoney   = annualBonus * (c?.years ?? 1);
+                const yearsRemaining = c?.years || 1;
+                const currentYearDead = annualBonus;
+                const futureYearsDead = annualBonus * Math.max(0, yearsRemaining - 1);
 
                 cache.updatePlayer(p.id, { teamId: null, status: 'free_agent' });
-                if (deadMoney > 0) {
-                    const t = cache.getTeam(team.id);
-                    cache.updateTeam(team.id, { deadCap: (t.deadCap ?? 0) + deadMoney });
+                const t = cache.getTeam(team.id);
+                if (currentYearDead > 0) {
+                    cache.updateTeam(team.id, { deadCap: (t.deadCap ?? 0) + currentYearDead });
+                }
+                if (futureYearsDead > 0) {
+                    cache.updateTeam(team.id, { deadMoneyNextYear: (t.deadMoneyNextYear ?? 0) + futureYearsDead });
                 }
                 this.updateTeamCap(team.id);
 
                 await Transactions.add({
                     type: 'RELEASE', seasonId: meta.currentSeasonId,
                     week: meta.currentWeek, teamId: team.id,
-                    details: { playerId: p.id, deadCap: deadMoney, aiCapCut: true },
+                    details: { playerId: p.id, deadCap: currentYearDead, aiCapCut: true },
                 });
             }
         }
