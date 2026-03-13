@@ -135,7 +135,7 @@ export const State = {
    * @returns {Object} Fresh state object
    */
   init() {
-    console.log('Initializing fresh state...');
+
     
     const freshState = {
       // Core game data
@@ -194,7 +194,7 @@ export const State = {
       created: new Date().toISOString()
     };
     
-    console.log('Fresh state created');
+
     return freshState;
   },
   
@@ -335,7 +335,7 @@ export const State = {
     if (!oldState) return this.init();
     
     const oldVersion = oldState.version || '1.0.0';
-    console.log('Migrating state from version:', oldVersion, 'to', this.init().version);
+
     
     let migratedState = { ...oldState };
     
@@ -404,7 +404,7 @@ export const State = {
       newState.created = migratedState.created;
     }
     
-    console.log('State migration complete');
+
     return newState;
   },
   
@@ -500,7 +500,7 @@ export const State = {
    * Migrate to version 4.0.0 schema
    */
   migrateToV4(state) {
-    console.log('Applying v4.0.0 migration...');
+
     
     // Add new properties that didn't exist in older versions
     if (!state.settings) {
@@ -543,7 +543,7 @@ export const State = {
    * Reset state to initial values.
    */
   reset() {
-    console.log('Resetting state...');
+
     const newState = this.init();
     // Clear all properties on the existing global state object
     Object.keys(window.state).forEach(key => {
@@ -564,7 +564,7 @@ export const State = {
  */
 export async function loadState() {
   try {
-    console.log('Loading state...');
+
     
     const activeSlot = getActiveSaveSlot();
     const activeKey = saveKeyFor(activeSlot);
@@ -576,7 +576,7 @@ export async function loadState() {
       legacyKeyUsed = !!saved;
     }
     if (!saved) {
-      console.log('No saved state found');
+
       return null;
     }
     
@@ -595,7 +595,7 @@ export async function loadState() {
       if (validation.errors.length > 0) {
         console.warn('Invalid state found, migrating...', validation.errors);
       } else {
-        console.log('Outdated state version, migrating...');
+
       }
       loadedState = State.migrate(parsed);
       
@@ -607,7 +607,7 @@ export async function loadState() {
         loadedState = State.init();
       }
     } else {
-      console.log('Valid state loaded');
+
       loadedState = parsed;
     }
     
@@ -763,15 +763,6 @@ export async function saveState(stateToSave = null, options = {}) {
   try {
     const stateObj = stateToSave || window.state;
 
-    // [QA-AUDIT]
-    if (stateObj && stateObj.league) {
-        console.log(`[QA-AUDIT] saveState: Saving state. Week: ${stateObj.league.week}, Teams Count: ${stateObj.league.teams ? stateObj.league.teams.length : 0}`);
-        if (stateObj.league.teams && stateObj.league.teams.length > 0) {
-             console.log(`[QA-AUDIT] saveState: Sample Team 0 Wins: ${stateObj.league.teams[0].wins}`);
-        }
-    } else {
-        console.log(`[QA-AUDIT] saveState: Warning - stateObj or stateObj.league is missing!`);
-    }
     
     if (!stateObj) {
       console.error('No state object available to save');
@@ -805,7 +796,7 @@ export async function saveState(stateToSave = null, options = {}) {
     window.localStorage.setItem(saveKey, serialized);
 
     
-    console.log('State saved successfully');
+
 
     if (typeof window.setStatus === 'function') {
       window.setStatus('Game saved');
@@ -848,7 +839,7 @@ export function clearSavedState(slot = null) {
     const normalizedSlot = slot ? normalizeSlot(slot) : activeSlot;
     const saveKey = saveKeyFor(normalizedSlot);
     window.localStorage.removeItem(saveKey);
-    console.log('Saved state cleared for slot', normalizedSlot);
+
     // Optional: Reset in-memory state after clearing save
     if (normalizedSlot === activeSlot) {
       State.reset();
@@ -872,7 +863,7 @@ export function hookAutoSave() {
         // swallow; user is leaving anyway
       }
     });
-    console.log('Auto-save hook installed');
+
   }
 }
 
@@ -957,7 +948,7 @@ async function initializeGlobalState() {
     try {
         const loaded = await loadState();
         if (!loaded) {
-            console.log('Creating initial global state (no save found)...');
+
             window.state = State.init();
         }
     } catch (e) {
@@ -965,7 +956,7 @@ async function initializeGlobalState() {
         window.state = State.init();
     }
   } else {
-    console.log('Global state already exists, skipping initialization.');
+
   }
   state = window.state;
 }
@@ -996,5 +987,5 @@ if (typeof window !== 'undefined') {
   window.FIRST_NAMES = [...currentFirstNames];
   window.LAST_NAMES = [...currentLastNames];
 
-  console.log('✅ State-Save Manager loaded. Full state persistence is active.');
+
 }

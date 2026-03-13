@@ -536,6 +536,21 @@ function RosterTable({
     }
   };
 
+
+  const handleTag = async (player) => {
+      if (window.confirm(`Apply Franchise Tag to ${player.name}?`)) {
+          await actions.applyFranchiseTag(player.id, player.teamId);
+          fetchRoster();
+      }
+  };
+
+  const handleRestructure = async (player) => {
+      if (window.confirm(`Restructure ${player.name}'s contract to save cap space this year?`)) {
+          await actions.restructureContract(player.id, player.teamId);
+          fetchRoster();
+      }
+  };
+
   const handleRelease = async (player) => {
     if (releasing !== player.id) {
       setReleasing(player.id);

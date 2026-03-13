@@ -273,7 +273,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             }
         });
 
-    console.log('✨ League creation complete and modularized!');
+
     return league;
 
     } catch (error) {

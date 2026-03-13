@@ -118,10 +118,31 @@ export function calculateTeamRatingWithSchemeFit(team) {
     }
   });
 
-  const avgOffensiveRating = offensiveCount > 0 ? offensiveRating / offensiveCount : 0;
-  const avgDefensiveRating = defensiveCount > 0 ? defensiveRating / defensiveCount : 0;
+  let avgOffensiveRating = offensiveCount > 0 ? offensiveRating / offensiveCount : 0;
+  let avgDefensiveRating = defensiveCount > 0 ? defensiveRating / defensiveCount : 0;
   const avgOffensiveFit = offensiveCount > 0 ? offensiveFitTotal / offensiveCount : 50;
   const avgDefensiveFit = defensiveCount > 0 ? defensiveFitTotal / defensiveCount : 50;
+
+  // Apply Personality Traits (Chemistry)
+  // Leadership gives a +5 boost to team chemistry (reflected as rating boost)
+  // Divisive gives a -5 penalty
+  let chemistryBonus = 0;
+  let hasLeader = false;
+  let hasDivisive = false;
+
+  // Ideally we only check starters, but for now we check top 22 players by OVR
+  const topPlayers = [...team.roster].sort((a, b) => b.ovr - a.ovr).slice(0, 22);
+  for (const p of topPlayers) {
+      if (p.personality?.traits?.includes('Leadership')) hasLeader = true;
+      if (p.personality?.traits?.includes('Divisive')) hasDivisive = true;
+  }
+
+  if (hasLeader) chemistryBonus += 5;
+  if (hasDivisive) chemistryBonus -= 5;
+
+  avgOffensiveRating += chemistryBonus;
+  avgDefensiveRating += chemistryBonus;
+
 
   // Calculate scheme fit bonuses/penalties
   const offensiveFitBonus = (avgOffensiveFit - 50) * 0.2; // Up to +/- 10 points

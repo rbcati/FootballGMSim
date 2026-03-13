@@ -22,6 +22,7 @@ export const toWorker = Object.freeze({
   /** Bootstrap: load an existing save or create a fresh league */
   INIT:               'INIT',
   NEW_LEAGUE:         'NEW_LEAGUE',
+  RELOCATE_TEAM:      'RELOCATE_TEAM',
 
   /** Regular-season flow */
   ADVANCE_WEEK:       'ADVANCE_WEEK',      // simulate the current week

@@ -6,6 +6,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { useWorker } from "../hooks/useWorker.js";
+import RelocateModal from "./RelocateModal.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -120,6 +121,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
   const color = teamColor(team?.abbr ?? "");
 
   return (
+    <>
     <div
       onClick={onClose}
       style={{
@@ -515,5 +517,9 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
         )}
       </div>
     </div>
+    {showRelocate && team && (
+        <RelocateModal team={team} actions={actions} onClose={() => { setShowRelocate(false); onClose(); }} />
+    )}
+    </>
   );
 }

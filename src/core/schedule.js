@@ -24,7 +24,7 @@ function makeAccurateSchedule(teams) {
  * @returns {Object} Schedule object
  */
 function createNFLStyleSchedule(teams) {
-    console.log('Creating NFL-style schedule...');
+
 
     if (!teams || teams.length !== 32) {
         console.error('Invalid teams array for NFL schedule');
@@ -77,7 +77,7 @@ function createNFLStyleSchedule(teams) {
         return fixScheduleCompletely(teams);
     }
 
-    console.log('Generated NFL-style schedule successfully');
+
     logScheduleStats(schedule, teams);
     return schedule;
 }
@@ -221,7 +221,7 @@ function createWeekSchedule(week, teams, teamByeWeek, teamGameCount, teamOpponen
  * @returns {Object} Fixed schedule object
  */
 function fixScheduleCompletely(teams) {
-    console.log('Fixing schedule completely...');
+
 
     const schedule = {
         weeks: [],
@@ -352,7 +352,7 @@ function fixScheduleCompletely(teams) {
         return createSimpleSchedule(teams);
     }
 
-    console.log('Schedule fixed successfully');
+
     logScheduleStats(schedule, teams);
     return schedule;
 }
@@ -464,14 +464,6 @@ function logScheduleStats(schedule, teams) {
         });
     });
 
-    console.log('Schedule Statistics:');
-    console.log('- Weeks:', schedule.weeks.length);
-    console.log('- Games per team:', Object.values(teamGameCount));
-    console.log('- Bye week distribution:',
-        schedule.weeks.slice(4, 12).map((week, i) =>
-            `Week ${i+5}: ${week.teamsWithBye.length} teams`
-        ).join(', ')
-    );
 }
 
 /**
@@ -480,7 +472,7 @@ function logScheduleStats(schedule, teams) {
  * @returns {Object} Schedule object
  */
 function createSimpleSchedule(teams) {
-    console.log('Creating simple fallback schedule...');
+
     const schedule = {
         weeks: [],
         teams: teams,

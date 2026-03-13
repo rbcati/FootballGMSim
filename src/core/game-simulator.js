@@ -196,7 +196,7 @@ export function updateTeamStandings(league, teamId, stats) {
  */
 export function applyResult(league, game, homeScore, awayScore, options = {}) {
   const verbose = options.verbose === true;
-  if (verbose) console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
+  if (false) console.log(`[SIM-DEBUG] applyResult called for ${game?.home?.abbr} (${homeScore}) vs ${game?.away?.abbr} (${awayScore})`);
 
   if (!game || typeof game !== 'object') return;
 
@@ -257,13 +257,13 @@ export function applyResult(league, game, homeScore, awayScore, options = {}) {
   updateHeadToHead(away, home.id, awayStats, awayStats.wins > 0, awayStats.losses > 0, awayStats.ties > 0);
 
   // UPDATE LEAGUE via Setter
-  if (verbose) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
+  if (false) console.log(`[SIM-DEBUG] Updating standings: Home +${JSON.stringify(homeStats)}, Away +${JSON.stringify(awayStats)}`);
 
   const updatedHome = updateTeamStandings(league, home.id, homeStats);
   const updatedAway = updateTeamStandings(league, away.id, awayStats);
 
-  if (verbose && updatedHome) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
-  if (verbose && updatedAway) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
+  if (false) console.log(`[SIM-DEBUG] Home Updated Record: ${updatedHome.wins}-${updatedHome.losses}-${updatedHome.ties}`);
+  if (false) console.log(`[SIM-DEBUG] Away Updated Record: ${updatedAway.wins}-${updatedAway.losses}-${updatedAway.ties}`);
 
   // Sync back to passed objects (home/away) if they were different (e.g. copies or not the global ref)
   const syncObject = (target, source, stats) => {
@@ -716,9 +716,15 @@ function generateQBStats(qb, teamScore, oppScore, defenseStrength, U, modifiers 
   const throwAccuracy = ratings.throwAccuracy || 70;
   const awareness = ratings.awareness || 70;
 
+  // Clutch Trait Bonus
+  let clutchBonus = 1.0;
+  if (qb.personality?.traits?.includes('Clutch') && Math.abs(teamScore - oppScore) <= 8) {
+      clutchBonus = 1.05; // 5% boost in close games
+  }
+
   // Performance variance: career game or dud
   const perfVar = rollPerformanceVariance(qb, U);
-  const perfMult = perfVar.multiplier;
+  const perfMult = perfVar.multiplier * clutchBonus;
 
   // Game script: trailing teams pass more, leading teams pass less
   const scoreDiff = oppScore - teamScore;
@@ -1205,7 +1211,7 @@ export function simulateMatchup(home, away, options = {}) {
 export function simGameStats(home, away, options = {}) {
   const verbose = options.verbose === true;
   try {
-    if (verbose) console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
+    if (false) console.log(`[SIM-DEBUG] simGameStats called for ${home?.abbr} vs ${away?.abbr}`);
 
     // Dependencies (Inject or Import)
     // U and C are imported.
@@ -1241,7 +1247,7 @@ export function simGameStats(home, away, options = {}) {
     let homeStrength = calculateStrength(homeActive, home);
     let awayStrength = calculateStrength(awayActive, away);
 
-    if (verbose) console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
+    if (false) console.log(`[SIM-DEBUG] Strength Calculated: ${home.abbr}=${homeStrength.toFixed(1)}, ${away.abbr}=${awayStrength.toFixed(1)}`);
 
     const calculateDefenseStrength = (groups) => {
       const defensivePositions = ['DL', 'LB', 'CB', 'S'];
@@ -1304,7 +1310,7 @@ export function simGameStats(home, away, options = {}) {
         if (team.strategies && team.strategies.offPlanId) {
             const { offPlanId, defPlanId, riskId } = team.strategies;
             const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
-            if (verbose) console.log(`[SIM-DEBUG] Strategy Mods (${team.abbr}):`, stratMods);
+            if (false) console.log(`[SIM-DEBUG] Strategy Mods (${team.abbr}):`, stratMods);
             Object.assign(mods, stratMods);
             return;
         }
@@ -1314,7 +1320,7 @@ export function simGameStats(home, away, options = {}) {
         if (userTeamId !== undefined && team.id === userTeamId && league?.weeklyGamePlan) {
              const { offPlanId, defPlanId, riskId } = league.weeklyGamePlan;
              const stratMods = getStrategyModifiers(offPlanId, defPlanId, riskId, history);
-             if (verbose) console.log(`[SIM-DEBUG] Legacy Strategy Mods (${team.abbr}):`, stratMods);
+             if (false) console.log(`[SIM-DEBUG] Legacy Strategy Mods (${team.abbr}):`, stratMods);
              Object.assign(mods, stratMods);
         }
     };
@@ -1322,7 +1328,7 @@ export function simGameStats(home, away, options = {}) {
     applyStrategy(home, homeMods);
     applyStrategy(away, awayMods);
 
-    if (verbose) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
+    if (false) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
     // --- SCHEME FIT IMPACT ---
     let schemeNote = null;
 
@@ -1373,7 +1379,7 @@ export function simGameStats(home, away, options = {}) {
             schemeNote = `Scheme Issue: ${away.abbr} offense struggled due to poor roster fit.`;
         }
 
-        if (verbose) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
+        if (false) console.log(`[SIM-DEBUG] Scheme Mods: Home ${homeFitBonus.toFixed(2)}, Away ${awayFitBonus.toFixed(2)}`);
     }
 
     // --- MORALE IMPACT ---
@@ -1404,7 +1410,7 @@ export function simGameStats(home, away, options = {}) {
     homeStrength *= homeMoraleMod;
     awayStrength *= awayMoraleMod;
 
-    if (verbose) console.log(`[SIM-DEBUG] Morale Mods: Home ${homeMoraleMod.toFixed(3)} (${Math.round(homeMorale)}), Away ${awayMoraleMod.toFixed(3)} (${Math.round(awayMorale)})`);
+    if (false) console.log(`[SIM-DEBUG] Morale Mods: Home ${homeMoraleMod.toFixed(3)} (${Math.round(homeMorale)}), Away ${awayMoraleMod.toFixed(3)} (${Math.round(awayMorale)})`);
 
     // =================================================================
     // ENHANCED NFL SCORING ENGINE v2
@@ -1643,7 +1649,7 @@ export function simGameStats(home, away, options = {}) {
     // If tied at end of regulation, simulate OT
     // Clutch trait on QB gives a scoring boost in OT
     if (homeScore === awayScore) {
-        if (verbose) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
+        if (false) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
         const isPlayoff = options.isPlayoff === true;
         const allowTies = !isPlayoff && (options.allowTies !== false);
 
@@ -1702,7 +1708,7 @@ export function simGameStats(home, away, options = {}) {
                 }
             }
 
-            if (verbose) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
+            if (false) console.log(`[SIM-DEBUG] OT Drive ${possessions}: ${possession} scores ${drivePoints}`);
 
             // Apply score
             if (drivePoints > 0) {
@@ -1743,10 +1749,10 @@ export function simGameStats(home, away, options = {}) {
             }
         }
 
-        if (verbose) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
+        if (false) console.log(`[SIM-DEBUG] OT Final: ${homeScore}-${awayScore}`);
     }
 
-    if (verbose) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
+    if (false) console.log(`[SIM-DEBUG] Scores Generated: ${home.abbr} ${homeScore} - ${away.abbr} ${awayScore}`);
 
     const generateStatsForTeam = (team, score, oppScore, oppDefenseStrength, oppOffenseStrength, groups, mods, actualTDs, actualFGs, actualXPs, actualTwoPts) => {
       // Helper to handle positional injuries (QB/RB/WR)
@@ -2222,7 +2228,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scheduledGame.finalized = true;
         scheduledGame.homeScore = homeScore;
         scheduledGame.awayScore = awayScore;
-        // console.log(`[SIM-DEBUG] Scheduled game updated: ${home.abbr} vs ${away.abbr}`);
+
     }
 
     // 2. Update Standings / Team Records
@@ -2447,7 +2453,7 @@ export function simulateBatch(games, options = {}) {
 
     games.forEach((pair, index) => {
         try {
-            if (verbose) console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${games.length}: Home=${pair.home?.abbr}, Away=${pair.away?.abbr}`);
+            if (false) console.log(`[SIM-DEBUG] Processing pairing ${index + 1}/${games.length}: Home=${pair.home?.abbr}, Away=${pair.away?.abbr}`);
 
             // Handle bye weeks
             if (pair.bye !== undefined) {
@@ -2471,7 +2477,7 @@ export function simulateBatch(games, options = {}) {
             if (league.resultsByWeek && league.resultsByWeek[weekIndex]) {
                  const existing = league.resultsByWeek[weekIndex].find(r => r.home === home.id && r.away === away.id);
                  if (existing) {
-                     if (verbose) console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
+                     if (false) console.log(`[SIM-DEBUG] Game ${home.abbr} vs ${away.abbr} already finalized. Using existing result.`);
                      results.push(existing);
                      return;
                  }
@@ -2540,6 +2546,72 @@ export function simulateBatch(games, options = {}) {
                 awayPlayerStats = capturePlayerStats(away.roster);
             }
 
+
+            // -- Feats Check --
+            const checkFeats = (teamStats, teamAbbr, oppAbbr) => {
+                const feats = [];
+                for (const [pid, p] of Object.entries(teamStats)) {
+                    const featList = [];
+                    // Passing
+                    if (p.passYd >= 400 || p.passTD >= 5) {
+                        const sub = [];
+                        if (p.passYd >= 400) sub.push(`${p.passYd} passing yards`);
+                        if (p.passTD >= 5) sub.push(`${p.passTD} passing TDs`);
+                        featList.push(sub.join(' and '));
+                    }
+                    // Rushing
+                    if (p.rushYd >= 150 || p.rushTD >= 3) {
+                        const sub = [];
+                        if (p.rushYd >= 150) sub.push(`${p.rushYd} rushing yards`);
+                        if (p.rushTD >= 3) sub.push(`${p.rushTD} rushing TDs`);
+                        featList.push(sub.join(' and '));
+                    }
+                    // Receiving
+                    if (p.recYd >= 200 || p.receptions >= 12 || p.recTD >= 3) {
+                        const sub = [];
+                        if (p.recYd >= 200) sub.push(`${p.recYd} receiving yards`);
+                        if (p.receptions >= 12) sub.push(`${p.receptions} receptions`);
+                        if (p.recTD >= 3) sub.push(`${p.recTD} receiving TDs`);
+                        featList.push(sub.join(', '));
+                    }
+                    // Defense
+                    if (p.sacks >= 3.0 || p.interceptions >= 2 || p.defTDs > 0) {
+                        const sub = [];
+                        if (p.sacks >= 3.0) sub.push(`${p.sacks} sacks`);
+                        if (p.interceptions >= 2) sub.push(`${p.interceptions} interceptions`);
+                        if (p.defTDs > 0) sub.push(`${p.defTDs} defensive TDs`);
+                        featList.push(sub.join(' and '));
+                    }
+                    // Special Teams
+                    if (p.longestFG >= 55) {
+                        featList.push(`a ${p.longestFG}-yard field goal`);
+                    }
+                    if (p.returnTDs > 0) {
+                        featList.push(`a return TD`);
+                    }
+
+                    if (featList.length > 0) {
+                        feats.push({
+                            playerId: pid,
+                            name: p.name,
+                            pos: p.pos,
+                            teamAbbr: teamAbbr,
+                            opponentAbbr: oppAbbr,
+                            featDescription: featList.join(', '),
+                        });
+                    }
+                }
+                return feats;
+            };
+
+            const homeFeats = checkFeats(homePlayerStats, home.abbr, away.abbr);
+            const awayFeats = checkFeats(awayPlayerStats, away.abbr, home.abbr);
+            const allFeats = [...homeFeats, ...awayFeats];
+
+            // Defensive Shutout (Team Feat)
+            if (sA === 0) allFeats.push({ name: `${home.abbr} Defense`, teamAbbr: home.abbr, opponentAbbr: away.abbr, featDescription: 'a defensive shutout', statValue: '' });
+            if (sH === 0) allFeats.push({ name: `${away.abbr} Defense`, teamAbbr: away.abbr, opponentAbbr: home.abbr, featDescription: 'a defensive shutout', statValue: '' });
+
             // Finalize Game Result via Commit
             const gameData = {
                 homeTeamId: (home.id !== undefined) ? home.id : pair.home,
@@ -2559,6 +2631,9 @@ export function simulateBatch(games, options = {}) {
             };
 
             const resultObj = commitGameResult(league, gameData, { persist: false });
+            if (resultObj) {
+                resultObj.feats = allFeats;
+            }
             if (schemeNote && resultObj) {
                 resultObj.schemeNote = schemeNote;
             }

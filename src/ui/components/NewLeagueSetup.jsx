@@ -4,6 +4,7 @@ import { DEFAULT_TEAMS } from "../../data/default-teams.js";
 export default function NewLeagueSetup({ actions, onCancel }) {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [year, setYear] = useState(2025);
+  const [difficulty, setDifficulty] = useState("Normal");
   const [creating, setCreating] = useState(false);
 
   const handleStart = async () => {
@@ -11,7 +12,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
     setCreating(true);
     // This triggers BUSY state in useWorker, showing loading spinner in App if implemented there
     // Or we just show local loading state.
-    await actions.newLeague(DEFAULT_TEAMS, { userTeamId: selectedTeam, year });
+    await actions.newLeague(DEFAULT_TEAMS, { userTeamId: selectedTeam, year, difficulty });
   };
 
   return (
