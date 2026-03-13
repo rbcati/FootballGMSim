@@ -158,6 +158,7 @@ function buildViewState() {
     ownerApproval,
     fanApproval,
     teams,
+    leagueId: getActiveLeagueId(), // Crucial: UI needs this to open the correct DB
   };
 }
 
