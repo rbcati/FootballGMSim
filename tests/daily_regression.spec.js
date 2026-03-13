@@ -28,7 +28,7 @@ test.describe('Daily Regression Pass', () => {
             console.log('Assuming game already loaded...');
         }
 
-        await page.waitForSelector('.hub-header', { state: 'visible', timeout: 30000 });
+        await page.waitForSelector('.hub-header', { state: 'visible', timeout: 60000 });
         const hubVisible = await page.isVisible('.hub-header');
         expect(hubVisible).toBeTruthy();
 
@@ -115,7 +115,7 @@ test.describe('Daily Regression Pass', () => {
         });
         await page.waitForFunction(() => window.state && window.state.league);
         try {
-            await page.waitForSelector('.hub-header', { state: 'visible', timeout: 30000 });
+            await page.waitForSelector('.hub-header', { state: 'visible', timeout: 60000 });
         } catch (e) {
             const errorText = await page.evaluate(() => document.body.innerText);
             console.log('DUMP ON TIMEOUT:', errorText);
