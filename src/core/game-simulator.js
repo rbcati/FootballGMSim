@@ -619,11 +619,25 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     }
 
     // 7. Stakes Callbacks
-    if (stakes && stakes > 50) {
-        if (won) {
-            callbacks.push(`${stakes >= 90 ? 'Season-defining' : 'Clutch'} performance when it mattered most — ${userScore}-${oppScore}.`);
-        } else {
-            callbacks.push(`Crushing ${scoreDiff}-point defeat when the stakes couldn't be higher.`);
+    if (stakes) {
+        if (stakes >= 90) {
+            if (won) {
+                callbacks.push(`A legendary, season-defining victory under immense pressure (${userScore}-${oppScore}).`);
+            } else {
+                callbacks.push(`Heartbreaking loss on the biggest stage. The locker room is devastated.`);
+            }
+        } else if (stakes >= 75) {
+            if (won) {
+                callbacks.push(`Clutch performance when the lights were brightest, securing a crucial ${userScore}-${oppScore} win.`);
+            } else {
+                callbacks.push(`A crushing ${scoreDiff}-point defeat in a must-win situation.`);
+            }
+        } else if (stakes >= 50) {
+            if (won) {
+                callbacks.push(`A gritty, important win to keep the momentum going (${userScore}-${oppScore}).`);
+            } else {
+                callbacks.push(`A frustrating setback at a critical point in the season.`);
+            }
         }
     }
 
