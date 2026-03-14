@@ -2338,12 +2338,34 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     if (!league.resultsByWeek) league.resultsByWeek = {};
     if (!league.resultsByWeek[weekIndex]) league.resultsByWeek[weekIndex] = [];
 
-    // Idempotency check
-    const existingIndex = league.resultsByWeek[weekIndex].findIndex(r => r.home === homeTeamId && r.away === awayTeamId);
-    if (existingIndex >= 0) {
+    // Idempotency check (O(1) optimization)
+    // Create transient Map for fast lookups if it doesn't exist
+    if (!league._resultsIndexByWeek) {
+        Object.defineProperty(league, '_resultsIndexByWeek', {
+            value: {},
+            enumerable: false,
+            writable: true,
+            configurable: true
+        });
+    }
+
+    if (!league._resultsIndexByWeek[weekIndex]) {
+        league._resultsIndexByWeek[weekIndex] = new Map();
+        // Populate the Map with existing results
+        league.resultsByWeek[weekIndex].forEach((r, idx) => {
+            league._resultsIndexByWeek[weekIndex].set(`${r.home}_${r.away}`, idx);
+        });
+    }
+
+    const gameKey = `${homeTeamId}_${awayTeamId}`;
+    const existingIndex = league._resultsIndexByWeek[weekIndex].get(gameKey);
+
+    if (existingIndex !== undefined) {
         league.resultsByWeek[weekIndex][existingIndex] = resultObj;
     } else {
         league.resultsByWeek[weekIndex].push(resultObj);
+        // Cache the new result index
+        league._resultsIndexByWeek[weekIndex].set(gameKey, league.resultsByWeek[weekIndex].length - 1);
     }
 
     return resultObj;
