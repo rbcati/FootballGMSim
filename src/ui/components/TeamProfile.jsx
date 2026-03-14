@@ -96,6 +96,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
   const { actions } = useWorker();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showRelocate, setShowRelocate] = useState(false);
 
   useEffect(() => {
     if (!teamId && teamId !== 0) return;

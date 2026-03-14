@@ -30,6 +30,8 @@ import React, {
   useRef,
 } from "react";
 import TraitBadge from "./TraitBadge";
+import PlayerAvatar from "./PlayerAvatar";
+import DonutChart from "./DonutChart";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,85 +51,48 @@ const POS_MULTIPLIERS = {
 
 // ── Salary helpers ────────────────────────────────────────────────────────────
 
-/**
- * Market-rate contract demand.
- * OVR/position/age tiers mirror the worker's FA wave logic so suggested
- * values feel coherent with the rest of the simulation.
- *
- * Quick-mock formula (as requested): baseAnnual ≈ OVR × 0.1 for mid-tier
- * players (ovr 70, no position premium).  The full formula below is more
- * realistic but stays well within that spirit.
- */
 function suggestedSalary(ovr, pos, age) {
-  const BASE_CAP = 255;
-  const posMult = POS_MULTIPLIERS[pos] ?? 1.0;
+  const isSuperstar = ovr >= 90;
+  const isStar = ovr >= 80;
+  const isStarter = ovr >= 70;
+  const isBackup = ovr >= 60;
 
-  let basePct;
-  if (ovr >= 95) basePct = 0.18;
-  else if (ovr >= 90) basePct = 0.14;
-  else if (ovr >= 85) basePct = 0.1;
-  else if (ovr >= 80) basePct = 0.07;
-  else if (ovr >= 75) basePct = 0.05;
-  else if (ovr >= 70) basePct = 0.03;
-  else basePct = 0.015;
+  const base = isSuperstar
+    ? 25
+    : isStar
+      ? 15
+      : isStarter
+        ? 8
+        : isBackup
+          ? 3
+          : 0.8;
+  const mult = POS_MULTIPLIERS[pos] || 1.0;
+  let raw = base * mult;
 
-  const ageFactor = age <= 26 ? 1.1 : age <= 30 ? 1.0 : age <= 33 ? 0.85 : 0.65;
+  if (age > 32) raw *= 0.7;
+  else if (age > 29) raw *= 0.85;
 
-  return Math.round(BASE_CAP * basePct * posMult * ageFactor * 10) / 10;
+  // Fluctuation
+  const varFactor = 0.9 + Math.random() * 0.2;
+  raw *= varFactor;
+
+  // Vet minimum floor
+  const floor = 0.75 + (age > 26 ? 0.25 : 0);
+  return Math.max(floor, Number(raw.toFixed(1)));
 }
 
-/** Age-appropriate default contract length. */
 function suggestedYears(age) {
-  return age <= 26 ? 3 : age <= 30 ? 2 : 1;
+  if (age <= 26) return 4;
+  if (age <= 29) return 3;
+  if (age <= 32) return 2;
+  return 1;
 }
-
-// ── Visual helpers ────────────────────────────────────────────────────────────
 
 function ovrColor(ovr) {
-  if (ovr >= 90) return "#34C759";
-  if (ovr >= 80) return "#30D158";
-  if (ovr >= 70) return "#0A84FF";
-  if (ovr >= 60) return "#FF9F0A";
-  return "#FF453A";
-}
-
-function fmtSalary(annual) {
-  if (annual == null) return "—";
-  return `$${annual.toFixed(1)}M`;
-}
-
-function sortFA(players, sortKey, sortDir) {
-  return [...players].sort((a, b) => {
-    let va, vb;
-    switch (sortKey) {
-      case "ovr":
-        va = a.ovr ?? 0;
-        vb = b.ovr ?? 0;
-        break;
-      case "age":
-        va = a.age ?? 0;
-        vb = b.age ?? 0;
-        break;
-      case "salary":
-        va = a._ask ?? 0;
-        vb = b._ask ?? 0;
-        break;
-      case "pos":
-        va = a.pos ?? "";
-        vb = b.pos ?? "";
-        break;
-      case "name":
-        va = a.name ?? "";
-        vb = b.name ?? "";
-        break;
-      default:
-        va = 0;
-        vb = 0;
-    }
-    if (va < vb) return sortDir === "asc" ? -1 : 1;
-    if (va > vb) return sortDir === "asc" ? 1 : -1;
-    return 0;
-  });
+  if (ovr >= 85) return "var(--success)";
+  if (ovr >= 75) return "var(--accent)";
+  if (ovr >= 65) return "var(--warning)";
+  return "var(--danger)";
 }
 
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
@@ -221,12 +186,13 @@ function PipBar({ value, color }) {
 // ── Cap banner ────────────────────────────────────────────────────────────────
 
 function CapBanner({ userTeam }) {
-  const capRoom = userTeam?.capRoom ?? 0;
-  const capUsed = userTeam?.capUsed ?? 0;
   const capTotal = userTeam?.capTotal ?? 255;
-  const pct = capTotal > 0 ? Math.min(100, (capUsed / capTotal) * 100) : 0;
+  const capUsed = userTeam?.capUsed ?? 0;
+  const deadCap = userTeam?.deadCap ?? 0;
+  const capRoom = userTeam?.capRoom ?? capTotal - capUsed - deadCap;
+
   const roomCol =
-    capRoom < 5
+    capRoom < 0
       ? "var(--danger)"
       : capRoom < 15
         ? "var(--warning)"
@@ -255,61 +221,52 @@ function CapBanner({ userTeam }) {
             style={{
               fontSize: "var(--text-xs)",
               textTransform: "uppercase",
-              letterSpacing: "0.5px",
+              letterSpacing: "1px",
               color: "var(--text-muted)",
-              marginBottom: 2,
+              marginBottom: 4,
+              fontWeight: 700,
             }}
           >
-            {userTeam?.name ?? "Your Team"} · Cap Space Available
+            Salary Cap Room
           </div>
           <div
             style={{
-              fontSize: "var(--text-2xl)",
+              fontSize: "1.75rem",
               fontWeight: 800,
               color: roomCol,
+              lineHeight: 1,
+              fontVariantNumeric: "tabular-nums",
             }}
           >
-            {fmtSalary(capRoom)}
+            ${capRoom.toFixed(1)}M
           </div>
-        </div>
-        <div style={{ textAlign: "right" }}>
           <div
             style={{
               fontSize: "var(--text-xs)",
               color: "var(--text-muted)",
-              marginBottom: 2,
+              marginTop: 4,
             }}
           >
-            Used / Total
-          </div>
-          <div
-            style={{
-              fontWeight: 700,
-              fontSize: "var(--text-base)",
-              color: "var(--text)",
-            }}
-          >
-            {fmtSalary(capUsed)} / ${capTotal}M
+            Used: ${capUsed.toFixed(1)}M · Dead: ${deadCap.toFixed(1)}M
           </div>
         </div>
-      </div>
-      {/* Cap usage bar */}
-      <div
-        style={{
-          height: 5,
-          background: "var(--hairline)",
-          borderRadius: 3,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${pct}%`,
-            background: roomCol,
-            transition: "width .3s",
-          }}
-        />
+
+        <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+          <div
+            style={{
+              fontSize: "var(--text-xs)",
+              color: "var(--text-muted)",
+              marginBottom: 4,
+            }}
+          >
+            League Ceiling: ${capTotal.toFixed(0)}M
+          </div>
+          <DonutChart data={[
+              { value: capUsed, color: "var(--accent)" },
+              { value: deadCap, color: "var(--danger)" },
+              { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
+          ]} size={48} strokeWidth={8} />
+        </div>
       </div>
     </div>
   );
@@ -319,7 +276,7 @@ function CapBanner({ userTeam }) {
 // Renders as a full-width <td colSpan=7> in its own table row, appearing
 // directly below the highlighted player row (two-row pattern from Roster.jsx).
 
-function SignForm({ player, capRoom, onSubmit, onCancel }) {
+function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
   const defaultSalary = suggestedSalary(player.ovr, player.pos, player.age);
   const defaultYears = suggestedYears(player.age);
   const [annual, setAnnual] = useState(defaultSalary);
@@ -328,24 +285,28 @@ function SignForm({ player, capRoom, onSubmit, onCancel }) {
 
   const handleConfirm = () => {
     const sal = parseFloat(annual);
+    const yrs = parseInt(years, 10);
     if (isNaN(sal) || sal <= 0) {
-      setErr("Invalid salary.");
+      setErr("Invalid salary amount.");
       return;
     }
-    if (sal > capRoom + 0.1) {
-      setErr(`Exceeds cap room (${fmtSalary(capRoom)}).`);
+    if (isNaN(yrs) || yrs < 1 || yrs > 7) {
+      setErr("Years must be between 1 and 7.");
       return;
     }
-    if (years < 1 || years > 7) {
-      setErr("Years must be 1–7.");
+    if (sal > capRoom) {
+      setErr(`Cannot afford. You only have $${capRoom.toFixed(1)}M in space.`);
       return;
     }
-    onSubmit({ baseAnnual: sal, yearsTotal: years, signingBonus: 0 });
+    onSubmit({ baseAnnual: sal, yearsTotal: yrs, signingBonus: 0 });
   };
 
+  const Wrapper = asDiv ? 'div' : 'td';
+  const props = asDiv ? {} : { colSpan: 7 };
+
   return (
-    <td
-      colSpan={7}
+    <Wrapper
+      {...props}
       style={{
         padding: "var(--space-3) var(--space-5)",
         background: "var(--surface-strong)",
@@ -364,11 +325,11 @@ function SignForm({ player, capRoom, onSubmit, onCancel }) {
           <div
             style={{
               fontSize: "var(--text-sm)",
-              fontWeight: 700,
+              fontWeight: 600,
               color: "var(--text)",
             }}
           >
-            Sign {player.name}
+            {player.name} is asking for:
           </div>
           <div
             style={{
@@ -377,224 +338,257 @@ function SignForm({ player, capRoom, onSubmit, onCancel }) {
               marginTop: 2,
             }}
           >
-            Asking {fmtSalary(defaultSalary)} / {defaultYears}yr · Age{" "}
-            {player.age}
+            ${(player._ask ?? 0).toFixed(1)}M / yr · {suggestedYears(player.age)}{" "}
+            years
           </div>
         </div>
 
-        {/* Salary input */}
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            fontSize: "var(--text-sm)",
-          }}
-        >
-          <span style={{ color: "var(--text-muted)" }}>$/yr</span>
-          <input
-            type="number"
-            min={0.5}
-            max={80}
-            step={0.5}
-            value={annual}
-            onChange={(e) => {
-              setAnnual(e.target.value);
-              setErr("");
-            }}
-            style={{
-              width: 72,
-              background: "var(--surface)",
-              border: "1px solid var(--hairline)",
-              color: "var(--text)",
-              borderRadius: "var(--radius-sm)",
-              padding: "3px 6px",
-              fontSize: "var(--text-sm)",
-            }}
-          />
-          <span style={{ color: "var(--text-muted)" }}>M</span>
-        </label>
+        {/* Inputs */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ fontSize: "var(--text-sm)" }}>$</span>
+            <input
+              type="number"
+              step="0.1"
+              min="0.75"
+              max="60"
+              value={annual}
+              onChange={(e) => {
+                setAnnual(e.target.value);
+                setErr("");
+              }}
+              style={{
+                width: 70,
+                padding: "4px 8px",
+                background: "var(--bg)",
+                border: "1px solid var(--hairline)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: "var(--text-sm)",
+              }}
+            />
+            <span
+              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
+            >
+              M/yr
+            </span>
+          </div>
+          <span style={{ color: "var(--hairline)" }}>×</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <input
+              type="number"
+              min="1"
+              max="7"
+              value={years}
+              onChange={(e) => {
+                setYears(e.target.value);
+                setErr("");
+              }}
+              style={{
+                width: 50,
+                padding: "4px 8px",
+                background: "var(--bg)",
+                border: "1px solid var(--hairline)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: "var(--text-sm)",
+              }}
+            />
+            <span
+              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
+            >
+              Yrs
+            </span>
+          </div>
+        </div>
 
-        {/* Years select */}
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            fontSize: "var(--text-sm)",
-          }}
-        >
-          <span style={{ color: "var(--text-muted)" }}>Yrs</span>
-          <select
-            value={years}
-            onChange={(e) => {
-              setYears(Number(e.target.value));
-              setErr("");
-            }}
-            style={{
-              background: "var(--surface)",
-              border: "1px solid var(--hairline)",
-              color: "var(--text)",
-              borderRadius: "var(--radius-sm)",
-              padding: "3px 6px",
-              fontSize: "var(--text-sm)",
-            }}
-          >
-            {[1, 2, 3, 4, 5, 6, 7].map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {/* Validation error */}
-        {err && (
-          <span
-            style={{
-              color: "var(--danger)",
-              fontSize: "var(--text-xs)",
-              fontWeight: 600,
-            }}
-          >
-            {err}
-          </span>
-        )}
-
-        {/* Action buttons */}
+        {/* Actions */}
         <div
-          style={{ display: "flex", gap: "var(--space-2)", marginLeft: "auto" }}
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+          }}
         >
-          <button
-            className="btn btn-primary"
-            style={{ fontSize: "var(--text-xs)", padding: "3px 14px" }}
-            onClick={handleConfirm}
-          >
-            Confirm
-          </button>
+          {err && (
+            <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
+              {err}
+            </span>
+          )}
           <button
             className="btn"
-            style={{ fontSize: "var(--text-xs)", padding: "3px 10px" }}
+            style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}
             onClick={onCancel}
           >
             Cancel
           </button>
+          <button
+            className="btn btn-primary"
+            style={{ fontSize: "var(--text-xs)", padding: "4px 16px" }}
+            onClick={handleConfirm}
+          >
+            Confirm Sign
+          </button>
         </div>
       </div>
-    </td>
+    </Wrapper>
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main Export ──────────────────────────────────────────────────────────────
 
-export default function FreeAgency({ league, actions, onPlayerSelect }) {
-  const teamId = league?.userTeamId;
-  const userTeam = useMemo(
-    () => league?.teams?.find((t) => t.id === teamId),
-    [league?.teams, teamId],
-  );
-  const capRoom = userTeam?.capRoom ?? 0;
+const mobileStyle = `
+@media (max-width: 768px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: flex !important; }
+}
+`;
 
-  const faState = league?.freeAgencyState; // { day, maxDays, complete }
+export default function FreeAgency({
+  userTeamId,
+  league,
+  actions,
+  onPlayerSelect,
+}) {
+  const [faState, setFaState] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] = useState(false);
-  const [faPool, setFaPool] = useState([]);
+  // Filters
   const [posFilter, setPosFilter] = useState("ALL");
-  const [search, setSearch] = useState("");
-  const [ovrMin, setOvrMin] = useState(60);
+  const [nameFilter, setNameFilter] = useState("");
+  const [minOvr, setMinOvr] = useState(60);
+
+  // Sorting
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
-  const [signing, setSigning] = useState(null); // playerId currently open
-  const [signedIds, setSignedIds] = useState(new Set()); // optimistic removal
-  const [flash, setFlash] = useState(null); // success banner text
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // Interaction
+  const [signingPlayerId, setSigningPlayerId] = useState(null);
+  const [signedIds, setSignedIds] = useState(new Set()); // Optimistic hides
+  const [flash, setFlash] = useState(null);
 
-  const fetchFA = useCallback(async () => {
-    if (!actions?.getFreeAgents) return;
-    setLoading(true);
-    try {
-      const resp = await actions.getFreeAgents();
-      if (resp?.payload?.freeAgents) {
-        const enriched = resp.payload.freeAgents.map((p) => ({
-          ...p,
-          // _ask: prefer last contract value; fall back to market-rate formula
-          _ask: p.contract?.baseAnnual ?? suggestedSalary(p.ovr, p.pos, p.age),
-        }));
-        setFaPool(enriched);
+  // Keep ref to avoid stale closure during mount load
+  const loadCountRef = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    if (loadCountRef.current === 0) setLoading(true);
+    loadCountRef.current += 1;
+
+    actions
+      .getFreeAgents()
+      .then((res) => {
+        if (!active) return;
+        setFaState(res.payload);
+        setLoading(false);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error("FA load error:", err);
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [actions, league?.week, league?.phase]);
+
+  // ── Derived state ──────────────────────────────────────────────────────────
+
+  const userTeam = useMemo(
+    () => league?.teams?.find((t) => t.id === userTeamId),
+    [league, userTeamId],
+  );
+
+  const capTotal = userTeam?.capTotal ?? 255;
+  const capUsed = userTeam?.capUsed ?? 0;
+  const deadCap = userTeam?.deadCap ?? 0;
+  const capRoom = capTotal - capUsed - deadCap;
+
+  const faPool = useMemo(() => {
+    if (!faState?.freeAgents) return [];
+    return faState.freeAgents.map((p) => ({
+      ...p,
+      _ask: suggestedSalary(p.ovr, p.pos, p.age),
+    }));
+  }, [faState]);
+
+  const displayed = useMemo(() => {
+    return faPool.filter((p) => {
+      if (signedIds.has(p.id)) return false; // Hide players we just signed
+      if (posFilter !== "ALL" && p.pos !== posFilter) return false;
+      if (minOvr > 0 && p.ovr < minOvr) return false;
+      if (
+        nameFilter &&
+        !p.name.toLowerCase().includes(nameFilter.toLowerCase())
+      ) {
+        return false;
       }
-    } catch (e) {
-      console.error("[FreeAgency] getFreeAgents failed:", e);
-    } finally {
-      setLoading(false);
-    }
-    // actions is wrapped in useMemo inside useWorker so its reference is stable.
-  }, [actions]);
+      return true;
+    });
+  }, [faPool, signedIds, posFilter, nameFilter, minOvr]);
 
-  // Fetch on mount (and if the user's team changes, which is caught by actions
-  // being stable and fetchFA not changing).
-  useEffect(() => {
-    fetchFA();
-  }, [fetchFA]);
+  const sortedAgents = useMemo(() => {
+    const arr = [...displayed];
+    arr.sort((a, b) => {
+      let va = a[sortKey];
+      let vb = b[sortKey];
+      if (sortKey === "ask") {
+        va = a._ask;
+        vb = b._ask;
+      }
+      if (va === vb) return 0;
+      if (sortDir === "asc") return va > vb ? 1 : -1;
+      return va < vb ? 1 : -1;
+    });
+    return arr;
+  }, [displayed, sortKey, sortDir]);
 
-  // Re-fetch when cap changes — means a sign/release resolved in the worker.
-  // We track the *previous* capUsed so we skip the very first time the league
-  // loads (capUsed going undefined → a number).  Without this guard the
-  // component would double-fetch on mount causing a loading → data → loading
-  // → data flash.
-  const capUsed = userTeam?.capUsed;
-  const prevCapUsedRef = useRef(undefined);
-  useEffect(() => {
-    if (capUsed === undefined) return; // league not loaded yet
-    if (prevCapUsedRef.current === undefined) {
-      // first observed value — skip
-      prevCapUsedRef.current = capUsed;
-      return;
-    }
-    if (prevCapUsedRef.current === capUsed) return; // no actual change
-    prevCapUsedRef.current = capUsed;
-    fetchFA();
-  }, [capUsed, fetchFA]);
-
-  // ── Sorting / filtering ────────────────────────────────────────────────────
+  // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleSort = (key) => {
-    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
       setSortKey(key);
-      setSortDir("desc");
+      setSortDir("desc"); // default desc for most football stats
     }
   };
 
-  const displayed = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    const filtered = faPool.filter((p) => {
-      if (signedIds.has(p.id)) return false;
-      if (posFilter !== "ALL" && p.pos !== posFilter) return false;
-      if (p.ovr < ovrMin) return false;
-      if (q && !p.name?.toLowerCase().includes(q)) return false;
-      return true;
-    });
-    return sortFA(filtered, sortKey, sortDir);
-  }, [faPool, posFilter, search, ovrMin, sortKey, sortDir, signedIds]);
+  const handleSign = async (playerId, contract) => {
+    setSigningPlayerId(null);
+    try {
+        await actions.submitOffer(playerId, userTeamId, contract);
+        showFlash(`Offer submitted.`);
+        // Optimistic update for test
+        setFaState(prev => {
+            if (!prev) return prev;
+            return {
+                ...prev,
+                freeAgents: prev.freeAgents.map(p => {
+                    if (p.id === playerId) {
+                        return { ...p, offers: { ...(p.offers || {}), userOffered: true } };
+                    }
+                    return p;
+                })
+            };
+        });
+    } catch (err) {
+      alert("Sign failed: " + err.message);
+    }
+  };
 
-  // ── Sign handler ───────────────────────────────────────────────────────────
-
-  const handleSign = async (player, contract) => {
-    setSigning(null);
-    // Use submitOffer instead of signPlayer
-    await actions.submitOffer(player.id, teamId, contract);
-    fetchFA(); // Refresh list to show updated status
-    setFlash(
-      `Offer submitted to ${player.name} — ${fmtSalary(contract.baseAnnual)} / ${contract.yearsTotal}yr`,
-    );
+  const showFlash = (msg) => {
+    setFlash(msg);
     setTimeout(() => setFlash(null), 3000);
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div>
+    <div className="free-agency-container">
+      <style>{mobileStyle}</style>
       {/* Free Agency Status Banner */}
       {faState && (
         <div
@@ -617,499 +611,461 @@ export default function FreeAgency({ league, actions, onPlayerSelect }) {
                 color: "var(--text-muted)",
               }}
             >
-              Free Agency Status
+              Current Phase
             </div>
             <div
               style={{
-                fontSize: "var(--text-xl)",
-                fontWeight: 800,
-                color: "var(--accent)",
+                fontSize: "var(--text-base)",
+                fontWeight: 700,
+                color: "var(--text)",
               }}
             >
-              {faState.complete
-                ? "Period Complete"
-                : `Day ${faState.day} of ${faState.maxDays}`}
+              {faState.phase === "free_agency"
+                ? "Free Agency Wave " + faState.wave
+                : faState.phase === "offseason_resign"
+                  ? "Offseason Re-Signing"
+                  : "In-Season Free Agency"}
             </div>
           </div>
-          {!faState.complete && (
+          {faState.phase === "free_agency" && (
             <button
               className="btn btn-primary"
               onClick={() => actions.advanceFreeAgencyDay()}
             >
-              Advance to Day {faState.day + 1}
+              Advance FA Wave →
             </button>
           )}
         </div>
       )}
 
-      {/* Cap banner */}
       <CapBanner userTeam={userTeam} />
 
-      {/* Success flash */}
       {flash && (
         <div
           style={{
-            background: "var(--success)",
-            color: "#fff",
+            padding: "12px 16px",
+            background: "var(--success)22",
+            border: "1px solid var(--success)",
+            color: "var(--success)",
             borderRadius: "var(--radius-md)",
-            padding: "var(--space-2) var(--space-5)",
-            marginBottom: "var(--space-3)",
-            fontSize: "var(--text-sm)",
+            marginBottom: "var(--space-4)",
             fontWeight: 600,
+            fontSize: "var(--text-sm)",
           }}
         >
-          {flash}
+          ✓ {flash}
         </div>
       )}
 
-      {/* Filters row */}
+      {/* Filters Toolbar */}
       <div
+        className="card"
         style={{
+          marginBottom: "var(--space-4)",
+          padding: "var(--space-4)",
           display: "flex",
-          alignItems: "center",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-3)",
-          flexWrap: "wrap",
+          flexDirection: "column",
+          gap: "var(--space-4)",
         }}
       >
-        {/* Name search */}
-        <input
-          type="text"
-          placeholder="Search name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--hairline)",
-            color: "var(--text)",
-            borderRadius: "var(--radius-md)",
-            padding: "var(--space-2) var(--space-3)",
-            fontSize: "var(--text-sm)",
-            width: 160,
-          }}
-        />
-        {/* OVR threshold */}
-        <label
+        {/* Top row: search & OVR */}
+        <div
           style={{
             display: "flex",
+            gap: "var(--space-4)",
+            flexWrap: "wrap",
             alignItems: "center",
-            gap: "var(--space-2)",
-            fontSize: "var(--text-sm)",
-            color: "var(--text-muted)",
           }}
         >
-          OVR ≥
-          <select
-            value={ovrMin}
-            onChange={(e) => setOvrMin(Number(e.target.value))}
+          <input
+            type="text"
+            placeholder="Search players..."
+            value={nameFilter}
+            onChange={(e) => setNameFilter(e.target.value)}
             style={{
-              background: "var(--surface)",
+              padding: "6px 12px",
+              background: "var(--surface-strong)",
               border: "1px solid var(--hairline)",
-              color: "var(--text)",
               borderRadius: "var(--radius-sm)",
-              padding: "3px 6px",
+              color: "var(--text)",
               fontSize: "var(--text-sm)",
+              flex: "1 1 200px",
             }}
-          >
-            {[60, 65, 70, 75, 80, 85, 90].map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+              Min OVR:
+            </span>
+            <input
+              type="number"
+              min="0"
+              max="99"
+              value={minOvr}
+              onChange={(e) => setMinOvr(Number(e.target.value))}
+              style={{
+                width: 60,
+                padding: "4px 8px",
+                background: "var(--surface-strong)",
+                border: "1px solid var(--hairline)",
+                borderRadius: "var(--radius-sm)",
+                color: "var(--text)",
+                fontSize: "var(--text-sm)",
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Bottom row: Position Pills */}
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          {POSITIONS.map((pos) => (
+            <button
+              key={pos}
+              onClick={() => setPosFilter(pos)}
+              style={{
+                padding: "4px 12px",
+                borderRadius: "var(--radius-pill)",
+                border:
+                  pos === posFilter
+                    ? "1px solid var(--accent)"
+                    : "1px solid var(--hairline)",
+                background:
+                  pos === posFilter ? "var(--accent-muted)" : "var(--surface)",
+                color: pos === posFilter ? "var(--accent)" : "var(--text)",
+                fontSize: "var(--text-xs)",
+                fontWeight: pos === posFilter ? 700 : 500,
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              {pos}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Position filter pills */}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-2)",
-          flexWrap: "wrap",
-          marginBottom: "var(--space-4)",
-        }}
-      >
-        {POSITIONS.map((pos) => (
-          <button
-            key={pos}
-            className={`standings-tab${posFilter === pos ? " active" : ""}`}
-            onClick={() => setPosFilter(pos)}
-            style={{ minWidth: 36, padding: "4px 10px" }}
-          >
-            {pos}
-          </button>
-        ))}
-      </div>
-
-      {/* FA pool table */}
+      {/* Main Table Card */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <div
             style={{
-              padding: "var(--space-8)",
+              padding: "var(--space-10)",
               textAlign: "center",
               color: "var(--text-muted)",
             }}
           >
-            Loading free agents…
+            Loading Free Agents...
           </div>
         ) : (
-          <div className="table-wrapper">
-            <table className="standings-table" style={{ width: "100%" }}>
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      paddingLeft: "var(--space-5)",
-                      width: 36,
-                      color: "var(--text-subtle)",
-                      fontSize: "var(--text-xs)",
-                    }}
-                  >
-                    #
-                  </th>
-                  <SortTh
-                    label="POS"
-                    sortKey="pos"
-                    current={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortTh
-                    label="Name"
-                    sortKey="name"
-                    current={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                  />
-                  <SortTh
-                    label="OVR"
-                    sortKey="ovr"
-                    current={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    right
-                  />
-                  <SortTh
-                    label="Age"
-                    sortKey="age"
-                    current={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    right
-                  />
-                  <SortTh
-                    label="Ask $/yr"
-                    sortKey="salary"
-                    current={sortKey}
-                    dir={sortDir}
-                    onSort={handleSort}
-                    right
-                  />
-                  <th
-                    style={{
-                      textAlign: "right",
-                      paddingRight: "var(--space-3)",
-                      color: "var(--text-muted)",
-                      fontSize: "var(--text-xs)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Yrs
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "center",
-                      color: "var(--text-muted)",
-                      fontSize: "var(--text-xs)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Offers
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "center",
-                      color: "var(--text-muted)",
-                      fontSize: "var(--text-xs)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Traits
-                  </th>
-                  <th
-                    style={{
-                      textAlign: "center",
-                      paddingRight: "var(--space-3)",
-                      color: "var(--text-muted)",
-                      fontSize: "var(--text-xs)",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* Empty state */}
-                {displayed.length === 0 && (
+          <div>
+            <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
+              <table className="standings-table" style={{ width: "100%" }}>
+                <thead>
                   <tr>
-                    <td
-                      colSpan={8}
+                    <th
                       style={{
-                        textAlign: "center",
-                        padding: "var(--space-8)",
-                        color: "var(--text-muted)",
+                        paddingLeft: "var(--space-5)",
+                        width: 36,
+                        color: "var(--text-subtle)",
+                        fontSize: "var(--text-xs)",
                       }}
                     >
-                      No free agents match your filters.
-                    </td>
+                      #
+                    </th>
+                    <SortTh
+                      label="POS"
+                      sortKey="pos"
+                      current={sortKey}
+                      dir={sortDir}
+                      onSort={handleSort}
+                    />
+                    <SortTh
+                      label="NAME"
+                      sortKey="name"
+                      current={sortKey}
+                      dir={sortDir}
+                      onSort={handleSort}
+                    />
+                    <th>TRAITS</th>
+                    <SortTh
+                      label="OVR"
+                      sortKey="ovr"
+                      current={sortKey}
+                      dir={sortDir}
+                      onSort={handleSort}
+                    />
+                    <SortTh
+                      label="AGE"
+                      sortKey="age"
+                      current={sortKey}
+                      dir={sortDir}
+                      onSort={handleSort}
+                    />
+                    <th
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-muted)",
+                        fontWeight: 600,
+                        textAlign: "center",
+                      }}
+                    >
+                      SCHEME FIT
+                    </th>
+                    <SortTh
+                      label="ASK $/YR"
+                      sortKey="ask"
+                      current={sortKey}
+                      dir={sortDir}
+                      onSort={handleSort}
+                      right
+                    />
                   </tr>
-                )}
+                </thead>
+                <tbody>
+                  {sortedAgents.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        style={{
+                          textAlign: "center",
+                          padding: "var(--space-8)",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        No free agents match your filter.
+                      </td>
+                    </tr>
+                  )}
+                  {sortedAgents.slice(0, 100).map((player, idx) => {
+                    const isSigningThis = signingPlayerId === player.id;
+                    const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
+                    const askYrs = suggestedYears(player.age);
 
-                {displayed.map((player, idx) => {
-                  const isSigningThis = signing === player.id;
-                  const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
-                  const askYrs = suggestedYears(player.age);
+                    if (isSigningThis) {
+                      // Two-row pattern: player info row (highlighted) + sign form row
+                      return (
+                        <React.Fragment key={player.id}>
+                          {/* Highlighted player row */}
+                          <tr style={{ background: "var(--accent)0d" }}>
+                            <td
+                              style={{
+                                paddingLeft: "var(--space-5)",
+                                color: "var(--text-subtle)",
+                                fontSize: "var(--text-xs)",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {idx + 1}
+                            </td>
+                            <td>
+                              <PosBadge pos={player.pos} />
+                            </td>
+                            <td
+                              onClick={() =>
+                                onPlayerSelect && onPlayerSelect(player.id)
+                              }
+                              style={{
+                                fontWeight: 600,
+                                color: "var(--text)",
+                                cursor: onPlayerSelect ? "pointer" : "default",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  borderBottom: onPlayerSelect
+                                    ? "1px dotted var(--text-muted)"
+                                    : "none",
+                                }}
+                              >
+                                {player.name}
+                              </span>
+                            </td>
+                            <td style={{ whiteSpace: "nowrap" }}>
+                              {(player.traits || []).map((t) => (
+                                <TraitBadge key={t} traitId={t} />
+                              ))}
+                            </td>
+                            <td>
+                              <OvrBadge ovr={player.ovr} />
+                            </td>
+                            <td style={{ color: "var(--text-muted)" }}>
+                              {player.age}
+                            </td>
+                            <td style={{ textAlign: "center" }}>
+                              <PipBar
+                                value={player.schemeFit ?? 50}
+                                color="var(--accent)"
+                              />
+                            </td>
+                            <td
+                              style={{
+                                textAlign: "right",
+                                paddingRight: "var(--space-5)",
+                              }}
+                            >
+                              {/* Keep button rendered but disabled so layout doesn't shift */}
+                              <button className="btn btn-primary" disabled>
+                                {player.offers?.userOffered ? "Update" : "Offer"}
+                              </button>
+                            </td>
+                          </tr>
+                          {/* Inline form row */}
+                          <tr>
+                            <SignInlineForm
+                              player={player}
+                              capRoom={capRoom}
+                              onCancel={() => setSigningPlayerId(null)}
+                              onSubmit={(c) => handleSign(player.id, c)}
+                            />
+                          </tr>
+                        </React.Fragment>
+                      );
+                    }
 
-                  if (isSigningThis) {
-                    // Two-row pattern: player info row (highlighted) + sign form row
+                    // Normal player row
                     return (
-                      <React.Fragment key={player.id}>
-                        {/* Highlighted player row */}
-                        <tr style={{ background: "var(--accent)0d" }}>
-                          <td
+                      <tr key={player.id}>
+                        <td
+                          style={{
+                            paddingLeft: "var(--space-5)",
+                            color: "var(--text-subtle)",
+                            fontSize: "var(--text-xs)",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td>
+                          <PosBadge pos={player.pos} />
+                        </td>
+                        <td
+                          onClick={() =>
+                            onPlayerSelect && onPlayerSelect(player.id)
+                          }
+                          style={{
+                            fontWeight: 600,
+                            color: "var(--text)",
+                            cursor: onPlayerSelect ? "pointer" : "default",
+                          }}
+                        >
+                          <span
                             style={{
-                              paddingLeft: "var(--space-5)",
-                              color: "var(--text-subtle)",
-                              fontSize: "var(--text-xs)",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {idx + 1}
-                          </td>
-                          <td>
-                            <PosBadge pos={player.pos} />
-                          </td>
-                          <td
-                            onClick={() =>
-                              onPlayerSelect && onPlayerSelect(player.id)
-                            }
-                            style={{
-                              fontWeight: 700,
-                              color: "var(--accent)",
-                              fontSize: "var(--text-sm)",
-                              whiteSpace: "nowrap",
-                              cursor: "pointer",
+                              borderBottom: onPlayerSelect
+                                ? "1px dotted var(--text-muted)"
+                                : "none",
                             }}
                           >
                             {player.name}
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "right",
-                              paddingRight: "var(--space-4)",
-                            }}
-                          >
-                            <OvrBadge ovr={player.ovr} />
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "right",
-                              paddingRight: "var(--space-4)",
-                              color: "var(--text-muted)",
-                              fontSize: "var(--text-sm)",
-                            }}
-                          >
-                            {player.age}
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "right",
-                              paddingRight: "var(--space-4)",
-                              fontSize: "var(--text-sm)",
-                              color: "var(--text)",
-                            }}
-                          >
-                            {fmtSalary(player._ask)}
-                          </td>
-                          <td
-                            style={{
-                              textAlign: "right",
-                              paddingRight: "var(--space-3)",
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {askYrs}yr
-                          </td>
-                          <td />
-                        </tr>
-                        {/* Sign form row */}
-                        <tr style={{ background: "var(--surface-strong)" }}>
-                          <td
-                            style={{
-                              paddingLeft: "var(--space-5)",
-                              color: "var(--accent)",
-                              fontSize: "var(--text-sm)",
-                              verticalAlign: "middle",
-                            }}
-                          >
-                            ›
-                          </td>
-                          <SignForm
-                            player={player}
-                            capRoom={capRoom}
-                            onSubmit={(contract) =>
-                              handleSign(player, contract)
-                            }
-                            onCancel={() => setSigning(null)}
+                          </span>
+                        </td>
+                        <td style={{ whiteSpace: "nowrap" }}>
+                          {(player.traits || []).map((t) => (
+                            <TraitBadge key={t} traitId={t} />
+                          ))}
+                        </td>
+                        <td>
+                          <OvrBadge ovr={player.ovr} />
+                        </td>
+                        <td style={{ color: "var(--text-muted)" }}>
+                          {player.age}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
+                          <PipBar
+                            value={player.schemeFit ?? 50}
+                            color="var(--accent)"
                           />
-                        </tr>
-                      </React.Fragment>
-                    );
-                  }
-
-                  // Normal player row
-                  return (
-                    <tr key={player.id}>
-                      <td
-                        style={{
-                          paddingLeft: "var(--space-5)",
-                          color: "var(--text-subtle)",
-                          fontSize: "var(--text-xs)",
-                          fontWeight: 700,
-                        }}
-                      >
-                        {idx + 1}
-                      </td>
-                      <td>
-                        <PosBadge pos={player.pos} />
-                      </td>
-                      <td
-                        onClick={() =>
-                          onPlayerSelect && onPlayerSelect(player.id)
-                        }
-                        style={{
-                          fontWeight: 600,
-                          color: "var(--text)",
-                          fontSize: "var(--text-sm)",
-                          whiteSpace: "nowrap",
-                          cursor: "pointer",
-                        }}
-                      >
-                        {player.name}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          paddingRight: "var(--space-4)",
-                        }}
-                      >
-                        <OvrBadge ovr={player.ovr} />
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          paddingRight: "var(--space-4)",
-                          color: "var(--text-muted)",
-                          fontSize: "var(--text-sm)",
-                        }}
-                      >
-                        {player.age}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          paddingRight: "var(--space-4)",
-                          fontSize: "var(--text-sm)",
-                          color: canAfford ? "var(--text)" : "var(--danger)",
-                          fontWeight: canAfford ? 500 : 700,
-                          fontVariantNumeric: "tabular-nums",
-                        }}
-                      >
-                        {fmtSalary(player._ask)}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "right",
-                          paddingRight: "var(--space-3)",
-                          fontSize: "var(--text-xs)",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {askYrs}yr
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          fontSize: "var(--text-xs)",
-                        }}
-                      >
-                        {player.offers?.count > 0 ? (
+                        </td>
+                        <td
+                          style={{
+                            textAlign: "right",
+                            paddingRight: "var(--space-5)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
                           <div
                             style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
+                              fontSize: "var(--text-xs)",
+                              color: "var(--text)",
+                              fontWeight: 600,
+                              marginBottom: 4,
                             }}
                           >
-                            <span
-                              style={{ fontWeight: 700, color: "var(--text)" }}
-                            >
-                              {player.offers.count} Offers
-                            </span>
+                            ${(player._ask ?? 0).toFixed(1)}M{" "}
                             <span style={{ color: "var(--text-muted)" }}>
-                              Top: {fmtSalary(player.offers.topOfferValue)}
+                              / {askYrs}y
                             </span>
                           </div>
+                          {!canAfford ? (
+                            <span
+                              style={{
+                                color: "var(--danger)",
+                                fontSize: "var(--text-xs)",
+                              }}
+                            >
+                              Cannot Afford
+                            </span>
+                          ) : (
+                            <button
+                              className="btn btn-primary"
+                              style={{
+                                padding: "2px 10px",
+                                fontSize: "var(--text-xs)",
+                              }}
+                              onClick={() => setSigningPlayerId(player.id)}
+                            >
+                              {player.offers?.userOffered ? "Update" : "Offer"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card Layout */}
+            <div className="mobile-only" style={{ display: "none", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+               {sortedAgents.length === 0 && (
+                  <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-6)" }}>
+                      No free agents match your filter.
+                  </div>
+               )}
+               {sortedAgents.slice(0, 100).map((player, idx) => {
+                  const isSigningThis = signingPlayerId === player.id;
+                  const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
+                  const askYrs = suggestedYears(player.age);
+
+                  return (
+                     <div key={player.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                        <div style={{ display: "flex", gap: "var(--space-3)" }}>
+                           <PlayerAvatar text={player.pos} teamColor="var(--accent)" size={56} />
+                           <div style={{ flex: 1 }}>
+                               <div style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--text)", display: "flex", justifyContent: "space-between" }}>
+                                   <span onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ cursor: "pointer", borderBottom: "1px dotted" }}>{idx + 1}. {player.name}</span>
+                                   <OvrBadge ovr={player.ovr} />
+                               </div>
+                               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
+                                   Age {player.age} · Ask: ${(player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
+                               </div>
+                               <div style={{ marginTop: "var(--space-2)" }}>
+                                  {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
+                               </div>
+                           </div>
+                        </div>
+
+                        {isSigningThis ? (
+                            <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)", marginTop: "var(--space-2)" }}>
+                               <SignInlineForm player={player} capRoom={capRoom} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
+                            </div>
                         ) : (
-                          <span style={{ color: "var(--text-subtle)" }}>—</span>
+                            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                               <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{player.offers?.userOffered ? "Update" : "Offer"}</button>
+                            </div>
                         )}
-                      </td>
-                      <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
-                        {(player.traits || []).map((t) => (
-                          <TraitBadge key={t} traitId={t} />
-                        ))}
-                      </td>
-                      <td
-                        style={{
-                          textAlign: "center",
-                          paddingRight: "var(--space-3)",
-                        }}
-                      >
-                        {capRoom < 2 ? (
-                          <span
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              color: "var(--danger)",
-                              fontWeight: 700,
-                            }}
-                          >
-                            CAP FULL
-                          </span>
-                        ) : (
-                          <button
-                            className={`btn${player.offers?.userOffered ? "" : canAfford ? " btn-primary" : ""}`}
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              padding: "2px 12px",
-                            }}
-                            onClick={() => setSigning(player.id)}
-                          >
-                            {player.offers?.userOffered ? "Update" : "Offer"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
+                     </div>
                   );
-                })}
-              </tbody>
-            </table>
+               })}
+            </div>
           </div>
         )}
       </div>

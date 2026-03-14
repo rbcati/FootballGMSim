@@ -381,6 +381,7 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     const playerOvr = calculateOvr(pos, ratings);
     const contractDetails = generateContract(playerOvr, pos);
 
+    const playerPotential = Math.min(99, playerOvr + U.rand(0, 30));
     const player = {
         id: U.id(),
         name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
@@ -401,9 +402,12 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
         negotiationStatus: 'OPEN',
         lockoutWeeks: 0,
         devTrait: U.choice(['Normal', 'Star', 'Superstar', 'X-Factor']),
-        potential: Math.min(99, playerOvr + U.rand(0, 30)),
+        potential: playerPotential,
         isFollowed: false,
-        traits: generateTraits(pos, playerOvr),
+                depthOrder: 0,
+        scoutStatus: { grade: calculateScoutGrade(playerOvr, playerPotential), fullyScouted: false },
+        combineStats: generateCombineStats(ratings, pos),
+traits: generateTraits(pos, playerOvr),
         abilities: [],
         offers: [], // FA offers
         awards: [],
@@ -616,4 +620,33 @@ function calculateExtensionDemand(player, difficulty = 'Normal') {
         signingBonus,
         guaranteedPct: baseline.guaranteedPct || 0.5
     };
+}
+
+function calculateScoutGrade(ovr, pot) {
+    const avg = (ovr + pot) / 2;
+    if (avg >= 85) return "1st Round Talent";
+    if (avg >= 75) return "Day 2 Starter";
+    if (avg >= 65) return "Day 3 Project";
+    return "Undrafted Free Agent";
+}
+
+function generateCombineStats(ratings, pos) {
+    // 40-Yard Dash: inversely correlated to speed & acceleration (4.20 - 5.50s)
+    const speedFactor = (ratings.speed + ratings.acceleration) / 2;
+    const fortyTime = (5.50 - ((speedFactor - 40) / 60) * 1.30).toFixed(2);
+
+    // Bench Press: correlated to strength/power attributes (10 - 45 reps)
+    let powerFactor = 50;
+    if (['OL', 'DL', 'DT', 'DE'].includes(pos)) {
+        powerFactor = ratings.runBlock || ratings.passRushPower || 70;
+    } else if (['RB', 'FB', 'TE', 'LB'].includes(pos)) {
+        powerFactor = ratings.trucking || ratings.runStop || 60;
+    }
+    const benchReps = Math.max(0, Math.round(((powerFactor - 40) / 60) * 35 + 10));
+
+    // 3-Cone: inversely correlated to agility (6.50 - 7.50s)
+    const agilityFactor = ratings.agility || 50;
+    const threeCone = (7.50 - ((agilityFactor - 40) / 60) * 1.00).toFixed(2);
+
+    return `40-Yd: ${fortyTime}s | Bench: ${benchReps} | 3-Cone: ${threeCone}s`;
 }

@@ -5,6 +5,7 @@
  */
 import React, { useEffect, useState } from "react";
 import TraitBadge from "./TraitBadge";
+import RadarChart from "./RadarChart";
 import { getTeamIdentity } from "../../data/team-utils.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
