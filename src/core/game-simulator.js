@@ -2126,10 +2126,7 @@ const DERIVED_STAT_KEYS = new Set([
 export function accumulateStats(source, target) {
     if (!source || !target) return;
 
-    const keys = Object.keys(source);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        const value = source[key];
+    for (const [key, value] of Object.entries(source)) {
         if (typeof value !== 'number') continue;
         // Skip derived/calculated fields
         if (DERIVED_STAT_KEYS.has(key)) continue;
