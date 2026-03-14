@@ -63,7 +63,7 @@ let saveGame;
 
 async function setup() {
     try {
-        const module = await import('../league-dashboard.js');
+        const module = await import('../legacy/league-dashboard.js');
         saveGame = module.saveGame;
         console.log('✅ Loaded saveGame from league-dashboard.js');
     } catch (e) {
