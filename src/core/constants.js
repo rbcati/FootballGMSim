@@ -165,8 +165,8 @@
 
   // --- VI. NAMES, COLLEGES, ABILITIES (REFACTORED FOR SAFETY) ---
   // We use a function to ensure we get the names EVEN IF the other script loads late
-  const getFirstNames = () => EXPANDED_FIRST_NAMES;
-  const getLastNames = () => EXPANDED_LAST_NAMES;
+  const getFirstNames = () => (typeof window !== 'undefined' && window.EXPANDED_FIRST_NAMES) || EXPANDED_FIRST_NAMES;
+  const getLastNames = () => (typeof window !== 'undefined' && window.EXPANDED_LAST_NAMES) || EXPANDED_LAST_NAMES;
   
   // NAMES object also needs to be dynamic or a getter, but for simplicity in this structure we use the getters in Constants
   
