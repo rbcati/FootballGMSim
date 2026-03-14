@@ -2421,7 +2421,6 @@ class GameController {
         if (btnDashboard) {
             this.addEventListener(btnDashboard, 'click', () => {
                 if (window.show) window.show('leagueDashboard');
-                if (window.renderDashboard) window.renderDashboard();
 
                 // Close menu if open (standardized for mobile/legacy)
                 const sidebar = document.getElementById('nav-sidebar');
