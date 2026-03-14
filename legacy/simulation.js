@@ -1125,18 +1125,22 @@ function handleSimulationComplete(payload) {
         const teamsInDelta = new Set(updatedTeams ? updatedTeams.map(t => t.id) : []);
         const teamsInResults = new Set();
         results.forEach(res => {
-            if (res.home !== undefined && res.home !== null) teamsInResults.add(res.home);
-            if (res.away !== undefined && res.away !== null) teamsInResults.add(res.away);
+            const homeId = (res.home !== null && typeof res.home === 'object') ? res.home.id : res.home;
+            const awayId = (res.away !== null && typeof res.away === 'object') ? res.away.id : res.away;
+            if (homeId !== undefined && homeId !== null) teamsInResults.add(homeId);
+            if (awayId !== undefined && awayId !== null) teamsInResults.add(awayId);
         });
 
         teamsInResults.forEach(teamId => {
             if (!teamsInDelta.has(teamId)) {
                 console.warn(`[SIM-SAFETY] Team ${teamId} played but was missing from worker delta. Reconstructing record from results.`);
-                const team = L.teams.find(t => t.id === teamId);
+                const team = L.teams.find(t => t && t.id === teamId);
                 if (team) {
                     results.forEach(res => {
-                        let isHome = res.home === teamId;
-                        let isAway = res.away === teamId;
+                        const homeId = (res.home !== null && typeof res.home === 'object') ? res.home.id : res.home;
+                        const awayId = (res.away !== null && typeof res.away === 'object') ? res.away.id : res.away;
+                        let isHome = homeId === teamId;
+                        let isAway = awayId === teamId;
                         if (!isHome && !isAway) return;
 
                         const teamScore = isHome ? res.scoreHome : res.scoreAway;
