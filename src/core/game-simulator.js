@@ -1267,9 +1267,6 @@ export function simGameStats(home, away, options = {}) {
       return totalRating / count;
     };
 
-    // FIX: Defense strength should come from each team's OWN defensive players.
-    // Previously swapped: home defense was calculated from away groups.
-    // Now: homeDefenseStrength = how good HOME team's defense is (from homeGroups).
     let homeDefenseStrength = calculateDefenseStrength(homeGroups);
     let awayDefenseStrength = calculateDefenseStrength(awayGroups);
 
