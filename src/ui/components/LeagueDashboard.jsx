@@ -1074,6 +1074,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
                 >
                   {league.ownerApproval ?? 75}%
                 </span>
+                {(league.ownerApproval ?? 75) < 50 && (
+                  <span style={{ color: "var(--danger)", marginLeft: 4 }}>
+                    (Seat Hot)
+                  </span>
+                )}
               </div>
               <div
                 style={{

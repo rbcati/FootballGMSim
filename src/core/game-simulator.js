@@ -621,9 +621,9 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
     // 7. Stakes Callbacks
     if (stakes && stakes > 50) {
         if (won) {
-            callbacks.push(`${stakes >= 90 ? 'Season-defining' : 'Clutch'} performance when it mattered most — ${userScore}-${oppScore}.`);
+            callbacks.push(`${stakes >= 90 ? 'A legendary, season-defining' : 'An incredibly clutch'} performance under immense pressure. ${userAbbr} answered the bell and secured a massive ${userScore}-${oppScore} victory!`);
         } else {
-            callbacks.push(`Crushing ${scoreDiff}-point defeat when the stakes couldn't be higher.`);
+            callbacks.push(`A devastating, crushing ${scoreDiff}-point defeat when the stakes couldn't have been higher. The locker room is stunned.`);
         }
     }
 
