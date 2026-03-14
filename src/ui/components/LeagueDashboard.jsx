@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useMemo, useEffect, Component } from "react";
+import DonutChart from "./DonutChart";
 import Roster from "./Roster.jsx";
 import Draft from "./Draft.jsx";
 import Coaches from "./Coaches.jsx";
@@ -1281,28 +1282,19 @@ export default function LeagueDashboard({ league, busy, actions }) {
           >
             ${capRoom.toFixed(1)}M
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              fontVariantNumeric: "tabular-nums",
-              marginTop: 2,
-            }}
-          >
-            <span>Used ${capUsed.toFixed(1)}M</span>
-            {deadCap > 0 && <span>Dead ${deadCap.toFixed(1)}M</span>}
-            <span>Total ${capTotal.toFixed(0)}M</span>
-          </div>
-          <div className="stat-bar-container" style={{ marginTop: 4 }}>
-            <div
-              className="stat-bar-fill"
-              style={{
-                width: `${Math.min(100, (capUsed / capTotal) * 100)}%`,
-                background: capRoom > 10 ? "var(--success)" : "var(--danger)",
-              }}
-            />
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
+              <DonutChart data={[
+                  { value: capUsed - deadCap, color: "var(--accent)" },
+                  { value: deadCap, color: "var(--danger)" },
+                  { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
+              ]} size={36} strokeWidth={6} />
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: "var(--text-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                      <span style={{ color: "var(--accent)" }}>Act: ${(capUsed - deadCap).toFixed(1)}</span>
+                      {deadCap > 0 && <span style={{ color: "var(--danger)" }}>Ded: ${deadCap.toFixed(1)}</span>}
+                  </div>
+                  <div>Tot: ${capTotal.toFixed(0)}</div>
+              </div>
           </div>
         </div>
 

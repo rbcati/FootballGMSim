@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import DonutChart from "./DonutChart";
 import { getAvailableCap } from "../../data/team-utils.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -51,53 +52,30 @@ function CapBar({ activeCap, deadCap, total }) {
 
   return (
     <div style={{ marginBottom: "var(--space-4)" }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: 12,
-          marginBottom: 4,
-          color: "var(--text-secondary)",
-        }}
-      >
-        <span>
-          Cap Used: {fmt(activeCap + deadCap)} / {fmt(total)}
-        </span>
-        <span style={{ color: over ? "var(--danger)" : "var(--success)" }}>
-          {over
-            ? "⚠ OVER CAP"
-            : `${fmt(total - activeCap - deadCap)} available`}
-        </span>
+
+      <div style={{ display: 'flex', gap: 'var(--space-6)', alignItems: 'center' }}>
+        <DonutChart data={[
+            { value: activeCap, color: "var(--accent)" },
+            { value: deadCap, color: "var(--danger)" },
+            { value: Math.max(0, total - activeCap - deadCap), color: "var(--surface-strong)", label: over ? "OVER" : `${fmt(total - activeCap - deadCap)}` }
+        ]} size={100} strokeWidth={12} />
+
+        <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+                <span style={{ color: "var(--accent)" }}>Active: {fmt(activeCap)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 12 }}>
+                <span style={{ color: "var(--danger)" }}>Dead: {fmt(deadCap)}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ color: over ? "var(--danger)" : "var(--success)" }}>
+                  {over ? "⚠ OVER CAP" : `Available: ${fmt(total - activeCap - deadCap)}`}
+                </span>
+                <span style={{ color: "var(--text-muted)" }}>Limit: {fmt(total)}</span>
+            </div>
+        </div>
       </div>
-      <div
-        style={{
-          height: 14,
-          borderRadius: 7,
-          background: "var(--bg-secondary, #1e1e2e)",
-          overflow: "hidden",
-          display: "flex",
-          border: over
-            ? "1px solid var(--danger)"
-            : "1px solid rgba(255,255,255,0.08)",
-        }}
-      >
-        {/* Active cap */}
-        <div
-          style={{
-            width: `${activeW}%`,
-            background: over ? "var(--danger)" : "var(--accent, #0A84FF)",
-            transition: "width 0.3s",
-          }}
-        />
-        {/* Dead cap */}
-        <div
-          style={{
-            width: `${deadW}%`,
-            background: "rgba(255,149,0,0.75)",
-            transition: "width 0.3s",
-          }}
-        />
-      </div>
+
       <div
         style={{
           display: "flex",

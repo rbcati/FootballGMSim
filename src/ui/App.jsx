@@ -199,8 +199,30 @@ export default function App() {
 
   const isPostseason = league?.phase === 'playoffs';
 
+  const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
+
   return (
-    <div className={`view fade-in ${isPostseason ? 'postseason' : ''}`} key="league_dashboard" style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+    <div className={`view fade-in ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
+
+
+      {/* Phase-based Theming */}
+      <style>{`
+        .theme-regular {
+          --bg: #111;
+          --surface: #1e1e2e;
+        }
+        .theme-playoffs {
+          --bg: #0a0a0a;
+          --surface: #1a1a1a;
+          background: radial-gradient(circle at top, #201800 0%, var(--bg) 100%);
+        }
+        .theme-draft {
+          --bg: #050510;
+          --surface: #121222;
+          --accent: #ffb703;
+          background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+        }
+      `}</style>
 
       {/* Postseason glow bar */}
       {isPostseason && <div className="postseason-glow" />}

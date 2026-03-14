@@ -200,7 +200,8 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                 deadCap: 0,
                 capRollover: 0,
                 capUsed: 0,
-                capRoom: Constants.SALARY_CAP?.BASE || 220
+                capRoom: Constants.SALARY_CAP?.BASE || 220,
+                scoutingPoints: 100
             };
 
             // Delegate tasks to specialized functions
