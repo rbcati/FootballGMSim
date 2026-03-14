@@ -2195,28 +2195,37 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 
         // Strategy 3: Global search (fallback)
         if (!scheduledGame && league.schedule) {
-            // Iterate all weeks if structure is nested
-            if (league.schedule.weeks) {
-                for (const w of league.schedule.weeks) {
-                    if (w.games) {
-                        const g = w.games.find(g =>
-                            g && g.home !== undefined && g.away !== undefined &&
-                            (g.home === homeTeamId || (typeof g.home === 'object' && g.home.id === homeTeamId)) &&
-                            (g.away === awayTeamId || (typeof g.away === 'object' && g.away.id === awayTeamId))
-                        );
-                        if (g) {
-                            scheduledGame = g;
-                            break;
+            if (!league._globalScheduleMap) {
+                league._globalScheduleMap = {};
+                if (league.schedule.weeks) {
+                    for (const w of league.schedule.weeks) {
+                        if (w.games) {
+                            for (let i = 0; i < w.games.length; i++) {
+                                const g = w.games[i];
+                                if (g && g.home !== undefined && g.away !== undefined) {
+                                    const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                                    const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                                    if (!league._globalScheduleMap[`${hId}-${aId}`]) {
+                                        league._globalScheduleMap[`${hId}-${aId}`] = g;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (Array.isArray(league.schedule)) {
+                    for (let i = 0; i < league.schedule.length; i++) {
+                        const g = league.schedule[i];
+                        if (g && g.home !== undefined && g.away !== undefined) {
+                            const hId = typeof g.home === 'object' ? g.home.id : g.home;
+                            const aId = typeof g.away === 'object' ? g.away.id : g.away;
+                            if (!league._globalScheduleMap[`${hId}-${aId}`]) {
+                                league._globalScheduleMap[`${hId}-${aId}`] = g;
+                            }
                         }
                     }
                 }
-            } else if (Array.isArray(league.schedule)) {
-                 scheduledGame = league.schedule.find(g =>
-                    g && g.home !== undefined && g.away !== undefined &&
-                    (g.home === homeTeamId || (g.home && g.home.id === homeTeamId)) &&
-                    (g.away === awayTeamId || (g.away && g.away.id === awayTeamId))
-                );
             }
+            scheduledGame = league._globalScheduleMap[`${homeTeamId}-${awayTeamId}`];
         }
     }
 
@@ -2652,6 +2661,9 @@ export function simulateBatch(games, options = {}) {
     }
     if (league._scheduleMap) {
         delete league._scheduleMap;
+    }
+    if (league._globalScheduleMap) {
+        delete league._globalScheduleMap;
     }
 
     return results;
