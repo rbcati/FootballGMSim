@@ -2923,7 +2923,9 @@ async function handleAdvanceOffseason(payload, id) {
       }
 
       if (isHof) {
-          NewsEngine.logNews('HOF', `⭐️ ${player.pos} ${player.name} has been inducted into the Hall of Fame!`);
+        NewsEngine.logNews('HOF', `⭐️ LEGEND CROWNED: ${player.pos} ${player.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+    } else if ((player.ovr >= 85) || (age >= 35 && player.ovr >= 75)) {
+        NewsEngine.logNews('RETIREMENT', `END OF AN ERA: ${player.pos} ${player.name} has officially announced their retirement from professional football.`);
       }
 
       // Mark as retired instead of deleting — keeps the player record in DB
