@@ -183,7 +183,7 @@ export default function App() {
     if (['offseason_resign', 'offseason'].includes(league.phase)) return 'Advance';
     if (league.phase === 'free_agency') return 'Next FA Day';
     if (league.phase === 'draft') return 'Draft';
-    return `Week ${league.week}`;
+    return `🏈 Week ${league.week}`;
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
