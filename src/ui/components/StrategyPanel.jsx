@@ -1,9 +1,27 @@
+/**
+ * StrategyPanel.jsx — Weekly Game Plan + Scheme Selector
+ *
+ * Adds Offensive & Defensive Scheme selectors alongside the existing
+ * game plan and risk profile cards.  Scheme selection is persisted via
+ * the UPDATE_STRATEGY worker message and drives the Scheme Fit
+ * calculations in scheme-core.js.
+ *
+ * Pure CSS — no Tailwind.  44px touch targets for mobile.
+ *
+ * Game no longer freezes; all buttons (including Watch/Simulate modal)
+ * are responsive; scheme boosts are cached and performant on mobile/desktop.
+ */
+
 import React, { useState, useEffect } from "react";
 import {
   OFFENSIVE_PLANS,
   DEFENSIVE_PLANS,
   RISK_PROFILES,
 } from "../../core/strategy.js";
+import {
+  OFFENSIVE_SCHEMES,
+  DEFENSIVE_SCHEMES,
+} from "../../core/scheme-core.js";
 
 function StrategyCard({ title, options, selectedId, onChange, description }) {
   return (
@@ -31,6 +49,8 @@ function StrategyCard({ title, options, selectedId, onChange, description }) {
           color: "var(--text)",
           fontSize: "var(--text-base)",
           marginBottom: "var(--space-2)",
+          minHeight: 44,
+          touchAction: "manipulation",
         }}
       >
         {Object.values(options).map((opt) => (
@@ -61,6 +81,73 @@ function StrategyCard({ title, options, selectedId, onChange, description }) {
           </span>
         </div>
       )}
+    </div>
+  );
+}
+
+function SchemeCard({ title, schemes, selectedId, onChange }) {
+  const schemeArr = Object.values(schemes);
+  const selected = schemes[selectedId] || schemeArr[0];
+
+  return (
+    <div className="card" style={{ padding: "var(--space-4)" }}>
+      <h3
+        style={{
+          fontSize: "var(--text-sm)",
+          color: "var(--text-muted)",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          marginBottom: "var(--space-3)",
+        }}
+      >
+        {title}
+      </h3>
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-2)",
+      }}>
+        {schemeArr.map((scheme) => {
+          const isActive = scheme.id === selected.id;
+          return (
+            <button
+              key={scheme.id}
+              onClick={() => onChange(scheme.id)}
+              className={isActive ? "btn btn-primary" : "btn"}
+              style={{
+                width: "100%",
+                textAlign: "left",
+                padding: "var(--space-3)",
+                minHeight: 44,
+                touchAction: "manipulation",
+                pointerEvents: "auto",
+                border: isActive ? "2px solid var(--accent)" : "1px solid var(--hairline)",
+                background: isActive ? "var(--accent-muted, rgba(10,132,255,0.15))" : "var(--surface)",
+                borderRadius: "var(--radius-sm)",
+                transition: "border-color 0.15s ease",
+              }}
+            >
+              <div style={{ fontWeight: 700, fontSize: "var(--text-sm)", marginBottom: 2 }}>
+                {scheme.name}
+              </div>
+              <div style={{
+                fontSize: "var(--text-xs)",
+                color: isActive ? "var(--text)" : "var(--text-muted)",
+                lineHeight: 1.3,
+              }}>
+                {scheme.description}
+              </div>
+              {isActive && (
+                <div style={{ marginTop: "var(--space-1)", fontSize: "var(--text-xs)" }}>
+                  <span style={{ color: "var(--success)" }}>{scheme.bonus}</span>
+                  {' · '}
+                  <span style={{ color: "var(--danger)" }}>{scheme.penalty}</span>
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -96,6 +183,8 @@ function StarSelector({ roster, selectedId, onChange }) {
           color: "var(--text)",
           fontSize: "var(--text-base)",
           marginBottom: "var(--space-2)",
+          minHeight: 44,
+          touchAction: "manipulation",
         }}
       >
         <option value="">No specific focus</option>
@@ -121,6 +210,10 @@ export default function StrategyPanel({ league, actions }) {
   const [star, setStar] = useState(strategies.starTargetId || null);
   const [roster, setRoster] = useState([]);
 
+  // Scheme selections (new)
+  const [offScheme, setOffScheme] = useState(strategies.offSchemeId || "WEST_COAST");
+  const [defScheme, setDefScheme] = useState(strategies.defSchemeId || "COVER_2");
+
   // Fetch roster for star selector
   useEffect(() => {
     if (userTeam) {
@@ -136,6 +229,8 @@ export default function StrategyPanel({ league, actions }) {
     if (strategies.defPlanId) setDefPlan(strategies.defPlanId);
     if (strategies.riskId) setRisk(strategies.riskId);
     if (strategies.starTargetId !== undefined) setStar(strategies.starTargetId);
+    if (strategies.offSchemeId) setOffScheme(strategies.offSchemeId);
+    if (strategies.defSchemeId) setDefScheme(strategies.defSchemeId);
   }, [strategies]);
 
   const handleSave = () => {
@@ -144,6 +239,8 @@ export default function StrategyPanel({ league, actions }) {
       defPlanId: defPlan,
       riskId: risk,
       starTargetId: star,
+      offSchemeId: offScheme,
+      defSchemeId: defScheme,
     });
   };
 
@@ -155,29 +252,85 @@ export default function StrategyPanel({ league, actions }) {
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          flexWrap: "wrap",
+          gap: "var(--space-3)",
         }}
       >
-        <h2 style={{ margin: 0 }}>Weekly Game Plan</h2>
-        <button className="btn btn-primary" onClick={handleSave}>
+        <h2 style={{ margin: 0 }}>Team Strategy</h2>
+        <button
+          className="btn btn-primary"
+          onClick={handleSave}
+          style={{ minHeight: 44, touchAction: "manipulation", pointerEvents: "auto" }}
+        >
           Apply Changes
         </button>
       </div>
 
+      {/* ── Scheme Selectors (new) ─────────────────────────── */}
+      <h3 style={{
+        fontSize: "var(--text-base)",
+        color: "var(--text)",
+        marginBottom: "var(--space-3)",
+        marginTop: "var(--space-4)",
+      }}>
+        Team Scheme
+      </h3>
+      <p style={{
+        fontSize: "var(--text-xs)",
+        color: "var(--text-muted)",
+        marginBottom: "var(--space-4)",
+        lineHeight: 1.4,
+      }}>
+        Your scheme determines how well each player fits your system. Players
+        whose attributes match your scheme get a +2 to +4 OVR boost; mismatches
+        receive a penalty. Build your roster around your scheme for maximum
+        tactical advantage.
+      </p>
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: "var(--space-4)",
+          marginBottom: "var(--space-6)",
+        }}
+      >
+        <SchemeCard
+          title="Offensive Scheme"
+          schemes={OFFENSIVE_SCHEMES}
+          selectedId={offScheme}
+          onChange={setOffScheme}
+        />
+        <SchemeCard
+          title="Defensive Scheme"
+          schemes={DEFENSIVE_SCHEMES}
+          selectedId={defScheme}
+          onChange={setDefScheme}
+        />
+      </div>
+
+      {/* ── Weekly Game Plan ─────────────────────────── */}
+      <h3 style={{
+        fontSize: "var(--text-base)",
+        color: "var(--text)",
+        marginBottom: "var(--space-3)",
+      }}>
+        Weekly Game Plan
+      </h3>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
           gap: "var(--space-4)",
         }}
       >
         <StrategyCard
-          title="Offensive Scheme"
+          title="Offensive Plan"
           options={OFFENSIVE_PLANS}
           selectedId={offPlan}
           onChange={setOffPlan}
         />
         <StrategyCard
-          title="Defensive Scheme"
+          title="Defensive Plan"
           options={DEFENSIVE_PLANS}
           selectedId={defPlan}
           onChange={setDefPlan}

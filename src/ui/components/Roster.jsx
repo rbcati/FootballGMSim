@@ -154,6 +154,54 @@ function PipBar({ value, color }) {
   );
 }
 
+/**
+ * Color-coded Scheme Fit indicator with puzzle-piece icon.
+ * Green puzzle = great fit (+3/+4), Yellow = neutral (0), Red = penalty (-1 to -3).
+ */
+function SchemeFitIndicator({ fit, bonus }) {
+  let color, label, icon;
+  if (bonus >= 3) {
+    color = '#34C759'; // green
+    label = `+${bonus}`;
+    icon = '\u{1F9E9}'; // puzzle piece emoji
+  } else if (bonus >= 1) {
+    color = '#30D158'; // green-teal
+    label = `+${bonus}`;
+    icon = '\u{1F9E9}';
+  } else if (bonus === 0) {
+    color = '#FF9F0A'; // amber/yellow
+    label = '0';
+    icon = '\u25CF'; // circle
+  } else {
+    color = '#FF453A'; // red
+    label = `${bonus}`;
+    icon = '\u25BC'; // down triangle
+  }
+
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 3,
+      padding: '2px 6px',
+      borderRadius: 'var(--radius-sm, 4px)',
+      background: `${color}18`,
+      minHeight: 24,
+    }}>
+      <span style={{ fontSize: 12, lineHeight: 1 }}>{icon}</span>
+      <span style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color,
+        lineHeight: 1,
+        fontVariantNumeric: 'tabular-nums',
+      }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function sortPlayers(players, sortKey, sortDir) {
   return [...players].sort((a, b) => {
     let va, vb;
@@ -897,33 +945,14 @@ function RosterTable({
                         <TraitBadge key={t} traitId={t} />
                       ))}
                     </td>
-                    {/* Scheme Fit */}
+                    {/* Scheme Fit — color-coded puzzle icon + bonus */}
                     <td
                       style={{
                         textAlign: "center",
                         padding: "0 var(--space-2)",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: 2,
-                        }}
-                      >
-                        <PipBar value={fit} color={fitCol} />
-                        <span
-                          style={{
-                            fontSize: 10,
-                            color: fitCol,
-                            fontWeight: 700,
-                            lineHeight: 1,
-                          }}
-                        >
-                          {fit}
-                        </span>
-                      </div>
+                      <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} />
                     </td>
                     {/* Morale */}
                     <td
@@ -1136,17 +1165,14 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop }) {
           )}
         </div>
       </div>
-      {/* Age + Fit */}
+      {/* Age + Scheme Fit */}
       <div
         style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}
       >
         <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
           Ag {player.age}
         </span>
-        <span style={{ fontSize: 10, color: fitCol, fontWeight: 700 }}>
-          ◆{fit}
-        </span>
-        <PipBar value={fit} color={fitCol} />
+        <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} />
       </div>
     </div>
   );

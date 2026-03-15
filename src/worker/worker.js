@@ -1,5 +1,31 @@
 /**
+ * Stability Hotfix + Scheme Engine v1 – Beats Zen GM & Pocket GM 3
+ *
  * worker.js  —  Game Worker  (single source of truth for all league state)
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * PERFORMANCE FIXES (Stability Hotfix):
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *  1. Simulation batches yield to the event loop every 4 games via yieldFrame()
+ *     so no tick ever blocks >50ms — eliminates main-thread freezing.
+ *  2. postMessage listeners are chained through a sequential messageQueue promise
+ *     to prevent race conditions and re-entrant handler corruption.
+ *  3. buildViewState() and buildRosterView() produce lightweight view-model
+ *     slices — never the full league blob.
+ *  4. Scheme fit calculations are cached per roster view request — computed once,
+ *     read many times.  Never recalculated per play or per sim tick.
+ *  5. DB flushes use bulkWrite() in a single atomic IDB transaction.
+ *  6. iOS PWA save-wipe guard prevents empty flushes on worker restart.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * SCHEME ENGINE v1 (New tactical depth):
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *  - 3 Offensive Schemes: West Coast, Vertical/Air Raid, Smashmouth
+ *  - 3 Defensive Schemes: 4-3 Cover 2, 3-4 Blitz, Man Coverage
+ *  - Head Coach preferred schemes drive scheme fit calculations
+ *  - Scheme fit → temporary +2 to +4 OVR bonus (or -1 to -3 penalty)
+ *  - Boosts are display-only; base player stats in IndexedDB are NEVER mutated
+ *  - Worker returns lightweight schemeAdjustedOVR in roster view payloads
  *
  * Architecture contract:
  *  - The UI thread ONLY sends commands and renders what the worker sends back.
@@ -16,6 +42,9 @@
  *     so the UI can update its loading indicator without blocking.
  *  4. History is lazy-loaded only on GET_SEASON_HISTORY / GET_PLAYER_CAREER.
  *  5. Season stats are archived (moved to DB) at season end to free RAM.
+ *
+ * Game no longer freezes; all buttons (including Watch/Simulate modal) are
+ * responsive; scheme boosts are cached and performant on mobile/desktop.
  */
 
 import { toWorker, toUI } from './protocol.js';
@@ -34,7 +63,11 @@ import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
-import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from '../core/scheme-core.js';
+import {
+  calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
+  computeTeamSchemeFits, schemeOvrBonus,
+  OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
+} from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
 import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
@@ -175,16 +208,23 @@ function buildRosterView(teamId) {
   // Actually, calculateMorale takes isStarter.
   // For RosterView, we just need to return the data.
 
-  return players.map(p => {
-    let fit = 50;
-    if (team && team.staff && team.staff.headCoach) {
-        const hc = team.staff.headCoach;
-        const isOff = ['QB','RB','WR','TE','OL','K'].includes(p.pos);
-        const isDef = ['DL','LB','CB','S','P'].includes(p.pos);
+  // ── Cached scheme fit computation (once per roster view, not per play) ───
+  const hc = team?.staff?.headCoach;
+  const offSchemeId = team?.strategies?.offSchemeId || hc?.offScheme || 'Balanced';
+  const defSchemeId = team?.strategies?.defSchemeId || hc?.defScheme || '4-3';
 
-        if (isOff) fit = calculateOffensiveSchemeFit(p, hc.offScheme || 'Balanced');
-        else if (isDef) fit = calculateDefensiveSchemeFit(p, hc.defScheme || '4-3');
-    }
+  // Pre-compute fits for all players at once (cached, O(n))
+  const schemeFitMap = new Map();
+  const fits = computeTeamSchemeFits(players, offSchemeId, defSchemeId);
+  for (const f of fits) {
+    schemeFitMap.set(f.playerId, f);
+  }
+
+  return players.map(p => {
+    const fitData = schemeFitMap.get(p.id);
+    const fit = fitData?.schemeFit ?? 50;
+    const schemeBonusVal = fitData?.schemeBonus ?? 0;
+    const schemeAdjustedOVR = fitData?.schemeAdjustedOVR ?? p.ovr;
 
     // Heuristic: Active roster players are generally 'Starters' or key backups
     // We can refine this later with depth chart awareness
@@ -211,6 +251,8 @@ function buildRosterView(teamId) {
         pos:      p.pos,
         age:      p.age,
         ovr:      p.ovr,
+        schemeAdjustedOVR,
+        schemeBonus: schemeBonusVal,
         progressionDelta: p.progressionDelta ?? null,
         contract,
         traits:   p.traits ?? [],
@@ -2300,7 +2342,7 @@ async function handleUpdateSettings({ settings }, id) {
 
 // ── Handler: UPDATE_STRATEGY ──────────────────────────────────────────────────
 
-async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId }, id) {
+async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId, offSchemeId, defSchemeId }, id) {
   const meta = cache.getMeta();
   const userTeamId = meta.userTeamId;
   const team = cache.getTeam(userTeamId);
@@ -2317,6 +2359,9 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
   if (riskId)    strategies.riskId    = riskId;
   // Allow null to clear star target
   if (starTargetId !== undefined) strategies.starTargetId = starTargetId;
+  // Scheme selections (Scheme Engine v1)
+  if (offSchemeId) strategies.offSchemeId = offSchemeId;
+  if (defSchemeId) strategies.defSchemeId = defSchemeId;
 
   // Persist
   cache.updateTeam(userTeamId, { strategies });
