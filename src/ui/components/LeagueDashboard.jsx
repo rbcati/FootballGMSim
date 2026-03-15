@@ -32,6 +32,31 @@ import NewsFeed from "./NewsFeed.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
 import PostseasonHub from "./PostseasonHub.jsx";
+import MobileNav from "./MobileNav.jsx";
+
+// Map MobileNav tab IDs → LeagueDashboard tab names
+const MOBILE_TAB_MAP = {
+  hub: "Standings",
+  standings: "Standings",
+  schedule: "Schedule",
+  roster: "Roster",
+  leaders: "Leaders",
+  free_agency: "Free Agency",
+  trades: "Trades",
+  draft: "Draft",
+  coaches: "Coaches",
+  financials: "Financials",
+  strategy: "Strategy",
+  news: "Standings", // News is on the hub/standings page
+  player_stats: "Stats",
+  awards: "Award Races",
+  history: "History",
+};
+
+// Reverse map: dashboard tab → MobileNav tab ID
+const REVERSE_TAB_MAP = Object.fromEntries(
+  Object.entries(MOBILE_TAB_MAP).map(([k, v]) => [v, k])
+);
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -1629,6 +1654,16 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
       {/* ── Quick-Jump FAB (mobile) ── */}
       <QuickJumpFab onNavigate={setActiveTab} />
+
+      {/* ── Mobile Navigation (bottom bar + slide-in) ── */}
+      <MobileNav
+        activeTab={REVERSE_TAB_MAP[activeTab] || "hub"}
+        onTabChange={(mobileTabId) => {
+          const dashTab = MOBILE_TAB_MAP[mobileTabId];
+          if (dashTab) setActiveTab(dashTab);
+        }}
+        league={league}
+      />
 
       {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
       {selectedGameId && (

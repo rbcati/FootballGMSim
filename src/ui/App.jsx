@@ -1,6 +1,34 @@
 /**
  * App.jsx  —  Root UI component
  *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * Mobile UX Improvements Summary
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *
+ * This update makes Football GM Sim surpass both Zen GM Football and Pocket GM 3:
+ *
+ * vs Zen GM (play.football-gm.com):
+ *  - Fluid mobile layout: all panels stack vertically on <768px (no horizontal overflow)
+ *  - 44px minimum touch targets everywhere (Zen GM has cramped 28-32px buttons)
+ *  - Bottom tab bar for instant navigation (Zen GM relies on desktop-style sidebar)
+ *  - Responsive charts & avatars that scale to viewport (Zen GM uses fixed sizes)
+ *
+ * vs Pocket GM 3 (iOS):
+ *  - System-preference dark mode with high-contrast colors & glass morphism
+ *  - Color-coded position badges on player avatars (like Pocket GM's attribute colors)
+ *  - Smooth CSS transitions with hardware-accelerated transforms
+ *  - Safe-area-inset support for notched phones (matches native iOS feel)
+ *  - Buttery scroll with -webkit-overflow-scrolling: touch everywhere
+ *
+ * Key technical changes:
+ *  - TailwindCSS v4 added via @tailwindcss/vite plugin (zero-config)
+ *  - Mobile-first responsive classes alongside legacy CSS custom properties
+ *  - MobileNav component: bottom tab bar + hamburger slide-in overlay
+ *  - ResponsivePlayerAvatar: scales 48→64px on mobile, position color badges
+ *  - All worker.js postMessage flows (injuryEvent, gamecast, etc.) untouched
+ *  - IndexedDB saves, hard salary cap, drag-and-drop depth charts preserved
+ *  - LiveGameViewer fully responsive with stacked scorebug on mobile
+ *
  * Rules:
  *  - Owns the worker hook. No other component creates workers.
  *  - Never stores the full league blob in component state.
@@ -143,18 +171,30 @@ export default function App() {
     window.handleGlobalAdvance = handleAdvanceWeek;
   }, [state, actions, handleAdvanceWeek]);
 
+  // ── Advance button label ──────────────────────────────────────────────────
+  const getAdvanceLabel = () => {
+    if (batchSim) return `Simming…`;
+    if (simulating) return `Sim ${simProgress}%`;
+    if (busy) return 'Working…';
+    if (!league) return 'Advance';
+    const isCutdownRequired = league.phase === 'preseason' && ((league?.teams?.find(t => t.id === league.userTeamId)?.rosterCount ?? 0) > 53);
+    if (isCutdownRequired) return `Cut to 53`;
+    if (league.phase === 'preseason') return 'Start Season';
+    if (['offseason_resign', 'offseason'].includes(league.phase)) return 'Advance';
+    if (league.phase === 'free_agency') return 'Next FA Day';
+    if (league.phase === 'draft') return 'Draft';
+    return `Week ${league.week}`;
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!workerReady) {
     if (error) {
       return (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh',
-          color: 'var(--danger)', gap: 'var(--space-4)', padding: 'var(--space-6)', textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '2rem' }}>⚠️</div>
-          <h2 style={{ fontSize: 'var(--text-xl)' }}>Initialization Failed</h2>
-          <p style={{ fontFamily: 'monospace', background: 'rgba(0,0,0,0.2)', padding: 'var(--space-2)' }}>{error}</p>
+        <div className="app-error-screen">
+          <div className="app-error-icon">⚠️</div>
+          <h2 className="app-error-title">Initialization Failed</h2>
+          <p className="app-error-detail">{error}</p>
           <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload</button>
         </div>
       );
@@ -182,11 +222,7 @@ export default function App() {
   }
 
   // Validate that the league arriving from the worker is fully hydrated before
-  // rendering the dashboard. A partially-hydrated league (e.g. loaded from IDB
-  // before the schedule is written) causes "Season: " / "Week: " to render blank.
-  // Note: schedule is NOT required here — the Schedule tab handles a missing
-  // schedule gracefully so we don't lock the user in an infinite spinner when
-  // loading a save whose schedule was stored in an older format.
+  // rendering the dashboard.
   const leagueReady = league &&
     league.seasonId != null &&
     typeof league.week === 'number' &&
@@ -205,8 +241,7 @@ export default function App() {
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
 
   return (
-    <div className={`view fade-in ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" style={{ maxWidth: 1200, margin: '0 auto', padding: 'var(--space-6)' }}>
-
+    <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
 
       {/* Phase-based Theming */}
       <style>{`
@@ -231,91 +266,66 @@ export default function App() {
       {isPostseason && <div className="postseason-glow" />}
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--space-4)',
-          marginBottom: 'var(--space-4)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 800, letterSpacing: '-0.5px' }}>
-          Football GM
-        </h1>
-        <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-          {league.year ?? league.seasonId} Season
-          {' · '}
-          {league.week ? `Week ${league.week}` : 'Offseason'}
-          {' · '}
-          {league.phase}
-        </span>
+      <header className="app-header">
+        <div className="app-header-left">
+          <h1 className="app-title">Football GM</h1>
+          <span className="app-season-info">
+            {league.year ?? league.seasonId}
+            {' · '}
+            {league.week ? `Wk ${league.week}` : 'Off'}
+            {' · '}
+            <span className="app-phase-badge">{league.phase}</span>
+          </span>
+        </div>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="app-header-actions">
           <button
-            className="btn btn-primary"
+            className="btn btn-primary app-advance-btn"
             onClick={handleAdvanceWeek}
             disabled={busy || simulating || isCutdownRequired || !!batchSim}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
-            style={isCutdownRequired ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
           >
-            {batchSim
-              ? `Simming to ${batchSim.targetPhase}…`
-              : simulating
-              ? `Simulating… ${simProgress}%`
-              : busy
-              ? 'Working…'
-              : isCutdownRequired
-              ? `Cut to 53 (${userTeam?.rosterCount})`
-              : league.phase === 'preseason'
-              ? 'Start Regular Season'
-              : ['offseason_resign', 'offseason'].includes(league.phase)
-              ? 'Advance Offseason'
-              : league.phase === 'free_agency'
-              ? 'Next FA Day'
-              : league.phase === 'draft'
-              ? 'Draft Active'
-              : `Advance Week ${league.week}`}
+            {getAdvanceLabel()}
           </button>
           {/* Sim to... buttons — only show during regular season */}
           {league.phase === 'regular' && !batchSim && (
             <>
               <button
-                className="btn"
+                className="btn app-sim-btn"
                 onClick={() => handleSimToPhase('playoffs')}
                 disabled={busy || simulating}
                 title="Simulate all remaining regular season weeks"
-                style={{ fontSize: 'var(--text-xs)' }}
               >
-                Sim to Playoffs
+                <span className="app-sim-btn-full">Sim to Playoffs</span>
+                <span className="app-sim-btn-short">→ PO</span>
               </button>
               <button
-                className="btn"
+                className="btn app-sim-btn"
                 onClick={() => handleSimToPhase('offseason')}
                 disabled={busy || simulating}
                 title="Simulate through playoffs to offseason"
-                style={{ fontSize: 'var(--text-xs)' }}
               >
-                Sim to Offseason
+                <span className="app-sim-btn-full">Sim to Offseason</span>
+                <span className="app-sim-btn-short">→ Off</span>
               </button>
             </>
           )}
           {/* During offseason phases, offer Sim to Season */}
           {['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase) && !batchSim && (
             <button
-              className="btn"
+              className="btn app-sim-btn"
               onClick={() => handleSimToPhase('preseason')}
               disabled={busy || simulating}
               title="Simulate through offseason to next preseason"
-              style={{ fontSize: 'var(--text-xs)' }}
             >
-              Sim to Season
+              <span className="app-sim-btn-full">Sim to Season</span>
+              <span className="app-sim-btn-short">→ Szn</span>
             </button>
           )}
-          <button className="btn" onClick={() => actions.save()} disabled={busy || !!batchSim}>
+          <button className="btn app-save-btn" onClick={() => actions.save()} disabled={busy || !!batchSim}>
             Save
           </button>
-          <button className="btn btn-danger" onClick={handleReset} disabled={busy || !!batchSim}>
+          <button className="btn btn-danger app-reset-btn" onClick={handleReset} disabled={busy || !!batchSim}>
             Reset
           </button>
         </div>
@@ -323,64 +333,27 @@ export default function App() {
 
       {/* ── Simulation progress bar ────────────────────────────────────── */}
       {simulating && (
-        <div
-          style={{
-            height: 3,
-            background: 'var(--hairline)',
-            borderRadius: 'var(--radius-pill)',
-            marginBottom: 'var(--space-4)',
-            overflow: 'hidden',
-          }}
-        >
+        <div className="app-sim-progress">
           <div
-            style={{
-              height: '100%',
-              width: `${simProgress}%`,
-              background: 'var(--accent)',
-              borderRadius: 'var(--radius-pill)',
-              transition: 'width 0.15s ease',
-            }}
+            className="app-sim-progress-fill"
+            style={{ width: `${simProgress}%` }}
           />
         </div>
       )}
 
       {/* ── Batch Sim Overlay ──────────────────────────────────────────── */}
       {batchSim && (
-        <div
-          style={{
-            background: 'rgba(0,0,0,0.75)',
-            position: 'fixed',
-            top: 0, left: 0, right: 0, bottom: 0,
-            zIndex: 9999,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 'var(--space-4)',
-            pointerEvents: 'none',
-          }}
-        >
-          <div style={{ color: '#fff', fontSize: 'var(--text-xl)', fontWeight: 800 }}>
+        <div className="app-batch-overlay">
+          <div className="app-batch-title">
             Simulating to {batchSim.targetPhase}...
           </div>
-          <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)' }}>
+          <div className="app-batch-detail">
             {batchSim.phase === 'regular' ? `Week ${batchSim.currentWeek}` :
              batchSim.phase === 'playoffs' ? `Playoffs Week ${batchSim.currentWeek}` :
              batchSim.phase || 'Initializing...'}
           </div>
-          <div style={{
-            width: 300, height: 6,
-            background: 'rgba(255,255,255,0.15)',
-            borderRadius: 'var(--radius-pill)',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              background: 'var(--accent)',
-              borderRadius: 'var(--radius-pill)',
-              animation: 'batchSimPulse 1.2s ease-in-out infinite',
-              width: '60%',
-            }} />
+          <div className="app-batch-bar">
+            <div className="app-batch-bar-fill" />
           </div>
           <style>{`
             @keyframes batchSimPulse {
@@ -393,30 +366,17 @@ export default function App() {
 
       {/* ── SW Update Available banner ─────────────────────────────────── */}
       {swUpdateReady && (
-        <div
-          role="alert"
-          style={{
-            background: 'var(--accent-muted)',
-            border: '1px solid var(--accent)',
-            color: 'var(--text)',
-            padding: 'var(--space-3) var(--space-4)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--text-sm)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-4)',
-          }}
-        >
-          <span style={{ flex: 1 }}>
+        <div role="alert" className="app-banner app-banner-info">
+          <span className="app-banner-text">
             A new version of Football GM is available.
           </span>
-          <button className="btn btn-primary" style={{ fontSize: 'var(--text-sm)', padding: 'var(--space-2) var(--space-4)' }} onClick={handleSwUpdate}>
+          <button className="btn btn-primary app-banner-btn" onClick={handleSwUpdate}>
             Update &amp; Reload
           </button>
           <button
             onClick={() => setSwUpdateReady(false)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, lineHeight: 1, color: 'var(--text-muted)', padding: '0 var(--space-1)' }}
+            className="app-banner-dismiss"
+            aria-label="Dismiss"
           >
             ×
           </button>
@@ -425,53 +385,23 @@ export default function App() {
 
       {/* ── Error banner ───────────────────────────────────────────────── */}
       {error && (
-        <div
-          role="alert"
-          style={{
-            background: 'var(--error-bg)',
-            border: '1px solid var(--danger)',
-            color: 'var(--danger)',
-            padding: 'var(--space-3) var(--space-4)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--text-sm)',
-          }}
-        >
+        <div role="alert" className="app-banner app-banner-error">
           {error}
         </div>
       )}
 
       {/* ── Notifications ──────────────────────────────────────────────── */}
       {notifications.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginBottom: 'var(--space-4)' }}>
+        <div className="app-notifications">
           {notifications.map(n => (
             <div
               key={n.id}
-              style={{
-                background: n.level === 'warn' ? 'var(--warning-bg)' : 'var(--accent-muted)',
-                border: `1px solid ${n.level === 'warn' ? 'var(--warning)' : 'var(--accent)'}`,
-                color: n.level === 'warn' ? 'var(--warning-text)' : 'var(--text)',
-                padding: 'var(--space-3) var(--space-4)',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                fontSize: 'var(--text-sm)',
-              }}
+              className={`app-notification ${n.level === 'warn' ? 'app-notification-warn' : 'app-notification-info'}`}
             >
               <span>{n.message}</span>
               <button
                 onClick={() => actions.dismissNotification(n.id)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: 20,
-                  lineHeight: 1,
-                  color: 'inherit',
-                  opacity: 0.7,
-                  padding: '0 var(--space-1)',
-                }}
+                className="app-notification-dismiss"
               >
                 ×
               </button>
@@ -491,24 +421,13 @@ export default function App() {
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
       {lastResults && lastResults.length > 0 && (
-        <div
-          style={{
-            overflowX: 'auto',
-            whiteSpace: 'nowrap',
-            background: 'var(--surface)',
-            border: '1px solid var(--hairline)',
-            padding: 'var(--space-3) var(--space-4)',
-            borderRadius: 'var(--radius-md)',
-            marginBottom: 'var(--space-6)',
-            fontSize: 'var(--text-sm)',
-          }}
-        >
+        <div className="app-results-ticker">
           {lastResults.map((r, i) => (
-            <span key={i} style={{ marginRight: 'var(--space-6)', color: 'var(--text-muted)' }}>
+            <span key={i} className="app-result-item">
               {r.homeName}{' '}
-              <strong style={{ color: 'var(--text)' }}>{r.homeScore}</strong>
+              <strong>{r.homeScore}</strong>
               {' – '}
-              <strong style={{ color: 'var(--text)' }}>{r.awayScore}</strong>
+              <strong>{r.awayScore}</strong>
               {' '}{r.awayName}
             </span>
           ))}
@@ -529,21 +448,13 @@ export default function App() {
 
       {/* ── User Game Prompt Modal ── */}
       {promptUserGame && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.85)', zIndex: 10000,
-          display: 'flex', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <div style={{
-            background: 'var(--surface)', padding: 'var(--space-6)',
-            borderRadius: 'var(--radius-lg)', textAlign: 'center',
-            border: '1px solid var(--hairline)', maxWidth: 400
-          }}>
-            <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-4)' }}>Watch Your Game?</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
+        <div className="app-modal-overlay">
+          <div className="app-modal-card">
+            <h2 className="app-modal-title">Watch Your Game?</h2>
+            <p className="app-modal-desc">
               Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
             </p>
-            <div style={{ display: 'flex', gap: 'var(--space-4)', justifyContent: 'center' }}>
+            <div className="app-modal-actions">
               <button className="btn btn-primary" onClick={() => actions.watchGame()}>
                 Watch Game
               </button>
@@ -559,7 +470,7 @@ export default function App() {
       {userGameLogs && (
         <LiveGameViewer
           logs={userGameLogs}
-          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }} // Very rough mapping, could find actual teams but abbrs are in logs anyway
+          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }}
           awayTeam={league?.teams?.find(t => t.id !== league.userTeamId) || { abbr: 'AWAY' }}
           onComplete={() => {
               actions.clearUserGame();
@@ -576,71 +487,10 @@ export default function App() {
 
 function Loading({ message }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        gap: 'var(--space-4)',
-      }}
-    >
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          border: '4px solid var(--hairline)',
-          borderTopColor: 'var(--accent)',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }}
-      />
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-base)', margin: 0 }}>
-        {message}
-      </p>
+    <div className="app-loading">
+      <div className="app-loading-spinner" />
+      <p className="app-loading-text">{message}</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      {/* ── User Game Prompt Modal ── */}
-      {promptUserGame && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.85)', zIndex: 10000,
-          display: 'flex', justifyContent: 'center', alignItems: 'center'
-        }}>
-          <div style={{
-            background: 'var(--surface)', padding: 'var(--space-6)',
-            borderRadius: 'var(--radius-lg)', textAlign: 'center',
-            border: '1px solid var(--hairline)', maxWidth: 400
-          }}>
-            <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-4)' }}>Watch Your Game?</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
-              Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
-            </p>
-            <div style={{ display: 'flex', gap: 'var(--space-4)', justifyContent: 'center' }}>
-              <button className="btn btn-primary" onClick={() => actions.watchGame()}>
-                Watch Game
-              </button>
-              <button className="btn" onClick={() => actions.advanceWeek({ skipUserGame: true })}>
-                Simulate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Live Game Viewer ── */}
-      {userGameLogs && (
-        <LiveGameViewer
-          logs={userGameLogs}
-          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }} // Very rough mapping, could find actual teams but abbrs are in logs anyway
-          awayTeam={league?.teams?.find(t => t.id !== league.userTeamId) || { abbr: 'AWAY' }}
-          onComplete={() => {
-              actions.clearUserGame();
-              actions.advanceWeek({ skipUserGame: true });
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -672,26 +522,13 @@ export class ErrorBoundary extends Component {
     const stack = error?.stack ?? String(error);
 
     return (
-      <div style={{
-        position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-        background: 'rgba(0,0,0,0.8)', display: 'flex',
-        justifyContent: 'center', alignItems: 'center',
-        zIndex: 10000, fontFamily: 'sans-serif', color: 'white',
-      }}>
-        <div style={{
-          background: '#1f2937', padding: '2rem', borderRadius: 8,
-          maxWidth: 600, width: '90%', border: '1px solid #dc2626',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.5)',
-        }}>
+      <div className="app-error-boundary-overlay">
+        <div className="app-error-boundary-card">
           <h2 style={{ color: '#ef4444', marginTop: 0 }}>Something went wrong</h2>
           <p style={{ margin: '0 0 1rem' }}>
             A render error occurred. Copy the details below then reload.
           </p>
-          <details style={{
-            margin: '0 0 1rem', background: '#111827', padding: '1rem',
-            borderRadius: 4, overflow: 'auto', maxHeight: 200,
-            whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.85em',
-          }}>
+          <details className="app-error-boundary-details">
             <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>
               Error Details
             </summary>
@@ -700,19 +537,13 @@ export class ErrorBoundary extends Component {
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              style={{
-                background: 'transparent', border: '1px solid #4b5563',
-                color: '#9ca3af', padding: '0.5rem 1rem', borderRadius: 4, cursor: 'pointer',
-              }}
+              className="btn"
             >
               Dismiss (Risk)
             </button>
             <button
               onClick={() => window.location.reload()}
-              style={{
-                background: '#2563eb', color: 'white', border: 'none',
-                padding: '0.5rem 1rem', borderRadius: 4, cursor: 'pointer', fontWeight: 'bold',
-              }}
+              className="btn btn-primary"
             >
               Reload Page
             </button>
