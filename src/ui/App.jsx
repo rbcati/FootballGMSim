@@ -446,30 +446,77 @@ export default function App() {
         <MilestoneModal league={league} />
       )}
 
+      {/* ── Simulation Progress Spinner (CSS-only, prevents frozen-UI appearance) ── */}
+      {(simulating || busy) && !promptUserGame && !userGameLogs && !batchSim && (
+        <div className="app-sim-spinner-overlay">
+          <div className="app-sim-spinner" />
+          <p className="app-sim-spinner-text">
+            {simulating ? `Simulating… ${simProgress}%` : 'Processing…'}
+          </p>
+          <style>{`
+            .app-sim-spinner-overlay {
+              position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+              z-index: 2500; display: flex; flex-direction: column;
+              align-items: center; justify-content: center;
+              background: rgba(0,0,0,0.45); pointer-events: none;
+            }
+            .app-sim-spinner {
+              width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2);
+              border-top-color: #0A84FF; border-radius: 50%;
+              animation: simSpin 0.7s linear infinite;
+            }
+            .app-sim-spinner-text {
+              color: #fff; font-size: 14px; margin-top: 12px; opacity: 0.9;
+            }
+            @keyframes simSpin { to { transform: rotate(360deg); } }
+          `}</style>
+        </div>
+      )}
+
       {/* ── User Game Prompt Modal ── */}
       {promptUserGame && (
         <div className="app-modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          zIndex: 9999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.6)',
           pointerEvents: 'auto',
           touchAction: 'manipulation',
           WebkitTapHighlightColor: 'transparent',
+          userSelect: 'none', WebkitUserSelect: 'none',
         }}>
-          <div className="app-modal-card" style={{ pointerEvents: 'auto' }}>
+          <div className="app-modal-card" style={{
+            pointerEvents: 'auto',
+            position: 'relative', zIndex: 10000,
+          }}>
             <h2 className="app-modal-title">Watch Your Game?</h2>
             <p className="app-modal-desc">
               Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
             </p>
             <div className="app-modal-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
               <button
-                className="btn btn-primary"
+                className="btn btn-primary app-modal-watch-btn"
                 onClick={() => actions.watchGame()}
-                style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+                style={{
+                  pointerEvents: 'auto', touchAction: 'manipulation',
+                  userSelect: 'none', WebkitUserSelect: 'none',
+                  minHeight: 48, minWidth: 48,
+                  position: 'relative', zIndex: 10001,
+                  cursor: 'pointer',
+                }}
               >
                 Watch Game
               </button>
               <button
-                className="btn"
+                className="btn app-modal-sim-btn"
                 onClick={() => actions.advanceWeek({ skipUserGame: true })}
-                style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+                style={{
+                  pointerEvents: 'auto', touchAction: 'manipulation',
+                  userSelect: 'none', WebkitUserSelect: 'none',
+                  minHeight: 48, minWidth: 48,
+                  position: 'relative', zIndex: 10001,
+                  cursor: 'pointer',
+                }}
               >
                 Simulate
               </button>
