@@ -49,6 +49,8 @@ const INITIAL_STATE = {
   error:        null,
   /** notification queue */
   notifications:[],
+  promptUserGame: false,
+  userGameLogs: null,
 };
 
 function reducer(state, action) {
@@ -69,6 +71,12 @@ function reducer(state, action) {
       // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
+    case 'PROMPT_USER_GAME':
+      return { ...state, busy: false, simulating: false, promptUserGame: true };
+    case 'PLAY_LOGS':
+      return { ...state, busy: false, promptUserGame: false, userGameLogs: action.logs };
+    case 'CLEAR_USER_GAME':
+      return { ...state, promptUserGame: false, userGameLogs: null };
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0, gameEvents: [] };
     case 'BATCH_SIM_START':
@@ -167,6 +175,12 @@ export function useWorker() {
           break;
         case toUI.STATE_UPDATE:
           dispatch({ type: 'STATE_UPDATE', payload });
+          break;
+        case toUI.PROMPT_USER_GAME:
+          dispatch({ type: 'PROMPT_USER_GAME' });
+          break;
+        case toUI.PLAY_LOGS:
+          dispatch({ type: 'PLAY_LOGS', logs: payload.logs });
           break;
         case toUI.SIM_PROGRESS:
           dispatch({ type: 'SIM_PROGRESS', done: payload.done, total: payload.total });
@@ -317,10 +331,21 @@ export function useWorker() {
       send(toWorker.NEW_LEAGUE, { teams, options });
     },
 
-    /** Simulate the current week. */
-    advanceWeek: () => {
+    /** Watch the user game (returns a Promise resolving to logs). */
+    watchGame: () => request(toWorker.WATCH_GAME, {}, { silent: false }),
+
+    /** Simulate user game directly */
+    simulateUserGame: () => {
       dispatch({ type: 'SIM_START' });
-      send(toWorker.ADVANCE_WEEK);
+      send(toWorker.SIMULATE_USER_GAME);
+    },
+
+    clearUserGame: () => dispatch({ type: 'CLEAR_USER_GAME' }),
+
+    /** Simulate the current week. */
+    advanceWeek: (options = {}) => {
+      dispatch({ type: 'SIM_START' });
+      send(toWorker.ADVANCE_WEEK, options);
     },
 
     /** Fast-forward to a specific week. */

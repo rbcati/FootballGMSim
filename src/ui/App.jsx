@@ -12,6 +12,7 @@ import React, { useEffect, useCallback, useRef, useState, Component } from 'reac
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
+import LiveGameViewer    from './components/LiveGameViewer.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
@@ -28,6 +29,8 @@ export default function App() {
     league, lastResults, gameEvents,
     error, notifications,
     batchSim,
+    promptUserGame,
+    userGameLogs
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
@@ -523,9 +526,51 @@ export default function App() {
       {leagueReady && league && (
         <MilestoneModal league={league} />
       )}
+
+      {/* ── User Game Prompt Modal ── */}
+      {promptUserGame && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div style={{
+            background: 'var(--surface)', padding: 'var(--space-6)',
+            borderRadius: 'var(--radius-lg)', textAlign: 'center',
+            border: '1px solid var(--hairline)', maxWidth: 400
+          }}>
+            <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-4)' }}>Watch Your Game?</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
+              Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--space-4)', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={() => actions.watchGame()}>
+                Watch Game
+              </button>
+              <button className="btn" onClick={() => actions.advanceWeek({ skipUserGame: true })}>
+                Simulate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Live Game Viewer ── */}
+      {userGameLogs && (
+        <LiveGameViewer
+          logs={userGameLogs}
+          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }} // Very rough mapping, could find actual teams but abbrs are in logs anyway
+          awayTeam={league?.teams?.find(t => t.id !== league.userTeamId) || { abbr: 'AWAY' }}
+          onComplete={() => {
+              actions.clearUserGame();
+              actions.advanceWeek({ skipUserGame: true });
+          }}
+        />
+      )}
     </div>
   );
 }
+
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -555,9 +600,51 @@ function Loading({ message }) {
         {message}
       </p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* ── User Game Prompt Modal ── */}
+      {promptUserGame && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.85)', zIndex: 10000,
+          display: 'flex', justifyContent: 'center', alignItems: 'center'
+        }}>
+          <div style={{
+            background: 'var(--surface)', padding: 'var(--space-6)',
+            borderRadius: 'var(--radius-lg)', textAlign: 'center',
+            border: '1px solid var(--hairline)', maxWidth: 400
+          }}>
+            <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-4)' }}>Watch Your Game?</h2>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 'var(--space-6)' }}>
+              Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
+            </p>
+            <div style={{ display: 'flex', gap: 'var(--space-4)', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={() => actions.watchGame()}>
+                Watch Game
+              </button>
+              <button className="btn" onClick={() => actions.advanceWeek({ skipUserGame: true })}>
+                Simulate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Live Game Viewer ── */}
+      {userGameLogs && (
+        <LiveGameViewer
+          logs={userGameLogs}
+          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }} // Very rough mapping, could find actual teams but abbrs are in logs anyway
+          awayTeam={league?.teams?.find(t => t.id !== league.userTeamId) || { abbr: 'AWAY' }}
+          onComplete={() => {
+              actions.clearUserGame();
+              actions.advanceWeek({ skipUserGame: true });
+          }}
+        />
+      )}
     </div>
   );
 }
+
 
 
 // ── ErrorBoundary ─────────────────────────────────────────────────────────────
