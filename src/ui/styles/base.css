@@ -1,6 +1,11 @@
+@import "tailwindcss";
+
 /*
- * Base CSS - Variables, Reset, Typography
+ * Base CSS - Variables, Reset, Typography, Tailwind Integration
  * Part of modular CSS structure
+ *
+ * Tailwind v4 is imported above and provides utility classes.
+ * The existing CSS custom properties design system is preserved.
  */
 
 /* ============================================================================
@@ -106,20 +111,47 @@ body.theme-light {
    BASE STYLES
    ============================================================================ */
 
+/* System-preference light mode (auto-detects OS setting) */
+@media (prefers-color-scheme: light) {
+  :root:not(.force-dark) {
+    --bg: #f5f7fb;
+    --bg-secondary: #e9eef6;
+    --surface: rgba(255, 255, 255, 0.85);
+    --surface-strong: rgba(255, 255, 255, 0.95);
+    --surface-elevated: rgba(255, 255, 255, 0.98);
+    --hairline: rgba(0, 0, 0, 0.06);
+    --hairline-strong: rgba(0, 0, 0, 0.12);
+    --text: #0f172a;
+    --text-muted: #334155;
+    --text-subtle: #475569;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-muted: rgba(37, 99, 235, 0.12);
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(15, 23, 42, 0.08);
+    --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.16);
+    --modal-bg: rgba(255, 255, 255, 0.96);
+    --modal-backdrop: rgba(0, 0, 0, 0.4);
+  }
+}
+
 html, body {
-  background: 
+  background:
     radial-gradient(1400px 1400px at 15% -15%, rgba(20, 35, 60, 0.4), transparent 65%),
     radial-gradient(1000px 1000px at 85% 15%, rgba(0, 120, 255, 0.08), transparent 55%),
     radial-gradient(800px 800px at 50% 100%, rgba(255, 255, 255, 0.02), transparent 50%),
     var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
   line-height: 1.5;
-  font-size: 14px; /* Zen GM style - 14px base */
+  font-size: 14px;
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%; /* Prevent iOS text size inflation */
+  text-size-adjust: 100%;
 }
 
 /* ============================================================================
