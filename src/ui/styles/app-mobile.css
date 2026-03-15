@@ -353,6 +353,9 @@
   justify-content: center;
   align-items: center;
   padding: var(--space-4);
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .app-modal-card {
@@ -363,6 +366,7 @@
   border: 1px solid var(--hairline);
   max-width: 400px;
   width: 100%;
+  pointer-events: auto;
 }
 
 .app-modal-title {
@@ -385,6 +389,8 @@
 .app-modal-actions .btn {
   min-height: 44px;
   min-width: 100px;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 /* ── Loading Screen ─────────────────────────────────────────────────────────── */

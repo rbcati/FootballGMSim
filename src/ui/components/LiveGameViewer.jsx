@@ -60,7 +60,7 @@ export default function LiveGameViewer({ logs, homeTeam, awayTeam, onComplete })
     return (
       <div className="lgv-empty">
         No play data available.
-        <button className="btn btn-primary" onClick={onComplete} style={{ marginTop: 20 }}>Continue</button>
+        <button className="btn btn-primary" onClick={onComplete} style={{ marginTop: 20, pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44 }}>Continue</button>
       </div>
     );
   }
@@ -73,7 +73,7 @@ export default function LiveGameViewer({ logs, homeTeam, awayTeam, onComplete })
   const isHomePoss = currentLog.possession === 'home';
 
   return (
-    <div className="lgv-container">
+    <div className="lgv-container" style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}>
       {/* ── Scorebug Header ── */}
       <div className="lgv-scorebug">
         {/* Away Team */}
@@ -144,10 +144,22 @@ export default function LiveGameViewer({ logs, homeTeam, awayTeam, onComplete })
       </div>
 
       {/* ── Controls ── */}
-      <div className="lgv-controls">
-        <button className={`btn lgv-speed-btn ${speed === 1500 ? 'btn-primary' : ''}`} onClick={() => setSpeed(1500)}>Normal</button>
-        <button className={`btn lgv-speed-btn ${speed === 500 ? 'btn-primary' : ''}`} onClick={() => setSpeed(500)}>Fast</button>
-        <button className="btn btn-danger lgv-speed-btn" onClick={() => setSpeed(0)}>Skip</button>
+      <div className="lgv-controls" style={{ pointerEvents: 'auto' }}>
+        <button
+          className={`btn lgv-speed-btn ${speed === 1500 ? 'btn-primary' : ''}`}
+          onClick={() => setSpeed(1500)}
+          style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+        >Normal</button>
+        <button
+          className={`btn lgv-speed-btn ${speed === 500 ? 'btn-primary' : ''}`}
+          onClick={() => setSpeed(500)}
+          style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+        >Fast</button>
+        <button
+          className="btn btn-danger lgv-speed-btn"
+          onClick={() => setSpeed(0)}
+          style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+        >Skip</button>
       </div>
 
       <style>{`

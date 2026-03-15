@@ -448,17 +448,29 @@ export default function App() {
 
       {/* ── User Game Prompt Modal ── */}
       {promptUserGame && (
-        <div className="app-modal-overlay">
-          <div className="app-modal-card">
+        <div className="app-modal-overlay" style={{
+          pointerEvents: 'auto',
+          touchAction: 'manipulation',
+          WebkitTapHighlightColor: 'transparent',
+        }}>
+          <div className="app-modal-card" style={{ pointerEvents: 'auto' }}>
             <h2 className="app-modal-title">Watch Your Game?</h2>
             <p className="app-modal-desc">
               Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
             </p>
-            <div className="app-modal-actions">
-              <button className="btn btn-primary" onClick={() => actions.watchGame()}>
+            <div className="app-modal-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => actions.watchGame()}
+                style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+              >
                 Watch Game
               </button>
-              <button className="btn" onClick={() => actions.advanceWeek({ skipUserGame: true })}>
+              <button
+                className="btn"
+                onClick={() => actions.advanceWeek({ skipUserGame: true })}
+                style={{ pointerEvents: 'auto', touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}
+              >
                 Simulate
               </button>
             </div>
