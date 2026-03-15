@@ -894,6 +894,8 @@ function DraftBoard({
   const [filterPos, setFilterPos] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [showTradeUp, setShowTradeUp] = useState(false);
+  const [showTradeDown, setShowTradeDown] = useState(false);
+  const [tradeDownProcessing, setTradeDownProcessing] = useState(false);
 
   const {
     currentPick,
@@ -902,6 +904,7 @@ function DraftBoard({
     prospects = [],
     completedPicks = [],
     upcomingPicks = [],
+    pendingTradeProposal = null,
   } = draftState;
 
   const toggleSort = (key) => {
@@ -1220,8 +1223,137 @@ function DraftBoard({
               }}
             >
               <span style={{ fontSize: "1.1rem" }}>★</span>
-              You're on the clock! Round {currentPick?.round}, Pick #
-              {currentPick?.overall} — select a prospect below.
+              <span style={{ flex: 1 }}>
+                You're on the clock! Round {currentPick?.round}, Pick #
+                {currentPick?.overall} — select a prospect below.
+              </span>
+              {pendingTradeProposal && (
+                <button
+                  className="btn"
+                  onClick={() => setShowTradeDown(true)}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: "var(--text-xs)",
+                    fontWeight: 700,
+                    border: "1px solid var(--warning, #FF9F0A)",
+                    color: "var(--warning, #FF9F0A)",
+                    background: "rgba(255,159,10,0.12)",
+                    padding: "var(--space-1) var(--space-3)",
+                    borderRadius: "var(--radius-sm)",
+                    animation: "pulse 2s infinite",
+                  }}
+                >
+                  Trade Down / View Offers
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* AI Trade-Up Proposal popup */}
+          {isUserPick && !isDraftComplete && pendingTradeProposal && showTradeDown && (
+            <div
+              style={{
+                padding: "var(--space-4)",
+                background: "var(--surface-strong)",
+                border: "1px solid var(--warning, #FF9F0A)",
+                borderRadius: "var(--radius-md)",
+                marginBottom: "var(--space-3)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "var(--space-3)",
+                }}
+              >
+                <div style={{ fontWeight: 800, color: "var(--text)" }}>
+                  Trade Offer from {pendingTradeProposal.aiTeamAbbr}
+                </div>
+                <button
+                  className="btn"
+                  onClick={() => setShowTradeDown(false)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    fontSize: 16,
+                    color: "var(--text-muted)",
+                    cursor: "pointer",
+                    lineHeight: 1,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+              <div
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text-muted)",
+                  marginBottom: "var(--space-3)",
+                  lineHeight: 1.5,
+                }}
+              >
+                The <strong style={{ color: "var(--text)" }}>{pendingTradeProposal.aiTeamName}</strong> are
+                offering to trade up for your pick #{pendingTradeProposal.userPickOverall}.
+                They want to draft <strong style={{ color: "var(--text)" }}>
+                  {pendingTradeProposal.targetProspect?.name} ({pendingTradeProposal.targetProspect?.pos},{" "}
+                  {pendingTradeProposal.targetProspect?.ovr} OVR)
+                </strong>.
+              </div>
+              <div
+                style={{
+                  fontSize: "var(--text-sm)",
+                  color: "var(--text)",
+                  marginBottom: "var(--space-3)",
+                  fontWeight: 600,
+                }}
+              >
+                You receive: their pick #{pendingTradeProposal.aiPickOverall} (Round{" "}
+                {pendingTradeProposal.aiPickRound}) + a later pick swap in this draft.
+              </div>
+              <div style={{ display: "flex", gap: "var(--space-3)" }}>
+                <button
+                  className="btn btn-primary"
+                  disabled={tradeDownProcessing}
+                  onClick={async () => {
+                    setTradeDownProcessing(true);
+                    try {
+                      const res = await actions.acceptDraftTrade(pendingTradeProposal);
+                      if (res?.payload) {
+                        setShowTradeDown(false);
+                        // After trade, sim to next user pick
+                        onSimToMyPick();
+                      }
+                    } catch (e) {
+                      console.error("[Draft] acceptDraftTrade failed:", e);
+                    } finally {
+                      setTradeDownProcessing(false);
+                    }
+                  }}
+                  style={{
+                    fontWeight: 700,
+                    fontSize: "var(--text-sm)",
+                    padding: "var(--space-2) var(--space-4)",
+                  }}
+                >
+                  {tradeDownProcessing ? "Processing…" : "Accept Trade"}
+                </button>
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    await actions.rejectDraftTrade?.();
+                    setShowTradeDown(false);
+                  }}
+                  style={{
+                    fontWeight: 600,
+                    fontSize: "var(--text-sm)",
+                    padding: "var(--space-2) var(--space-4)",
+                  }}
+                >
+                  Decline
+                </button>
+              </div>
             </div>
           )}
 

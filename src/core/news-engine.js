@@ -130,6 +130,65 @@ class NewsEngine {
         }
     }
 
+    /**
+     * Log a "Breakout Season" news item — high priority so it appears
+     * immediately on the League Dashboard.
+     */
+    static async logBreakoutSeason(player) {
+        if (!player) return;
+        const team = player.teamId ? cache.getTeam(player.teamId) : null;
+        const teamAbbr = team ? team.abbr : 'FA';
+        const text = `BREAKOUT SEASON: ${player.pos} ${player.name} (${teamAbbr}) has taken a massive leap forward, jumping from ${player.ovrBefore} to ${player.ovrAfter} OVR (+${player.delta}). The league is on notice.`;
+        await this.logNews('BREAKOUT', text, player.teamId ?? null, {
+            playerId: player.id,
+            priority: 'high',
+            ovrBefore: player.ovrBefore,
+            ovrAfter: player.ovrAfter,
+            delta: player.delta,
+        });
+    }
+
+    /**
+     * Log a "Hitting the Wall" news item — high priority for dramatic
+     * physical regression events.
+     */
+    static async logHittingTheWall(player) {
+        if (!player) return;
+        const team = player.teamId ? cache.getTeam(player.teamId) : null;
+        const teamAbbr = team ? team.abbr : 'FA';
+        const text = `HITTING THE WALL: ${player.pos} ${player.name} (${teamAbbr}), age ${player.age}, has lost a step this offseason. Physical decline dropped OVR from ${player.ovrBefore} to ${player.ovrAfter} (${player.delta}).`;
+        await this.logNews('WALL', text, player.teamId ?? null, {
+            playerId: player.id,
+            priority: 'high',
+            ovrBefore: player.ovrBefore,
+            ovrAfter: player.ovrAfter,
+            delta: player.delta,
+        });
+    }
+
+    /**
+     * Log a "Sudden Retirement" news item — high priority shocking event.
+     */
+    static async logSuddenRetirement(player) {
+        if (!player) return;
+        const team = player.teamId ? cache.getTeam(player.teamId) : null;
+        const teamAbbr = team ? team.abbr : 'FA';
+        let reason = '';
+        if (player.reason === 'sudden_injury') {
+            reason = 'Citing the toll of repeated injuries on their body, ';
+        } else if (player.reason === 'sudden_motivation') {
+            reason = 'In a surprise press conference, ';
+        } else {
+            reason = 'Shocking the football world, ';
+        }
+        const text = `SUDDEN RETIREMENT: ${reason}${player.pos} ${player.name} (${teamAbbr}), just ${player.age} years old, has announced their immediate retirement from professional football.`;
+        await this.logNews('SUDDEN_RETIREMENT', text, player.teamId ?? null, {
+            playerId: player.id,
+            priority: 'high',
+            reason: player.reason,
+        });
+    }
+
     static async logAward(type, winner) {
         let text = '';
         let teamId = null;

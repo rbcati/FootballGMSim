@@ -7,6 +7,11 @@
  *  Prime   (Age 26–29): High stability — fluctuate ±1 OVR
  *  Cliff   (Age 30+):   Mean -2 OVR  | 15% Age Cliff: physical AND cognitive traits drop
  *
+ * "Offseason Chaos" additions:
+ *  - **Breakout Seasons**: Age <= 24 + "High Work Ethic" → 10% chance of +5 to +8 spike
+ *  - **Hitting the Wall**: RB 28+ / others 31+ → steep physical regression (-2 to -5
+ *    on Speed, Acceleration, Agility in a single offseason)
+ *
  * Task 3:  Dev traits (Normal / Star / Superstar / X-Factor) now scale growth/decline.
  * Task 6:  nudgeRatingsBy() now only touches OVR-relevant attributes per position.
  * Task 10: Bust probability raised from 5% → 20%; breakout from 10% → 8%.
@@ -23,6 +28,14 @@ import { Constants } from './constants.js';
 // Defined here so they can be tuned without hunting for magic numbers inline.
 const GROWTH_BREAKOUT_PROB = 0.08;   // 8% chance per year (was 10%)
 const GROWTH_BUST_PROB     = 0.20;   // 20% chance per year (was 5%)
+
+// ── "Hitting the Wall" thresholds ──────────────────────────────────────────
+// RBs hit the wall earlier (28) due to the physical toll of the position.
+// All other positions hit the wall at 31.
+const WALL_AGE_RB    = 28;
+const WALL_AGE_OTHER = 31;
+// Probability of hitting the wall each offseason once eligible
+const WALL_PROBABILITY = 0.30;
 
 // ── Dev trait multipliers (Task 3) ────────────────────────────────────────────
 // Growth multiplier scales ovrDelta in growth phase.
@@ -137,12 +150,14 @@ function applyCliffCognitiveDrop(player, secondaryDrop) {
  *   - For Age Cliff events: permanently reduces player.potential
  *
  * @param {Object[]} players  Array of player objects from the cache.
- * @returns {{ gainers: Object[], regressors: Object[] }}
- *   Top gainers and shocking regressors for news generation.
+ * @returns {{ gainers: Object[], regressors: Object[], breakouts: Object[], wallHits: Object[] }}
+ *   Top gainers, shocking regressors, breakout seasons, and "hitting the wall" events.
  */
 export function processPlayerProgression(players) {
   const gainers    = []; // players with progressionDelta >= +4
   const regressors = []; // players with progressionDelta <= -3
+  const breakouts  = []; // explicit Breakout Season events (for news)
+  const wallHits   = []; // "Hitting the Wall" events (for news)
 
   for (const player of players) {
     // Skip draft prospects and retired players
@@ -172,8 +187,32 @@ export function processPlayerProgression(players) {
         }
     }
 
+    let wallEvent = false;
+
+    // ── "Breakout Season" check: Age <= 24 + "High Work Ethic" → 10% ────
+    // This is a distinct mechanic from the normal growth breakout below.
+    // It fires first and overrides the normal growth roll when it triggers.
+    if (age <= 24 && player.personality?.traits?.includes('High Work Ethic')) {
+      if (Utils.random() < 0.10) {
+        const rawDelta = Utils.rand(5, 8);
+        ovrDelta = Math.round(rawDelta * traitMods.growth);
+        breakoutEvent = true;
+      }
+    }
+
+    // ── "Hitting the Wall" check: RB 28+ / others 31+ ───────────────────
+    // Steep physical regression applied BEFORE the normal age-phase logic.
+    // Can co-occur with the cliff phase for devastating combined effect.
+    const wallAge = player.pos === 'RB' ? WALL_AGE_RB : WALL_AGE_OTHER;
+    if (!breakoutEvent && age >= wallAge && Utils.random() < WALL_PROBABILITY) {
+      const physTraits = PHYSICAL_TRAITS[player.pos] ?? PHYSICAL_TRAITS.QB;
+      const wallDrop = -Utils.rand(2, 5);
+      applyRatingDelta(player.ratings, physTraits, wallDrop);
+      wallEvent = true;
+    }
+
     // ── Age 21–25: Growth phase ────────────────────────────────────────────
-    if (age >= 21 && age <= 25) {
+    if (!breakoutEvent && age >= 21 && age <= 25) {
       const roll = Utils.random();
 
       if (roll < effectiveBreakoutProb) {
@@ -193,13 +232,13 @@ export function processPlayerProgression(players) {
     }
 
     // ── Age 26–29: Prime phase ─────────────────────────────────────────────
-    else if (age >= 26 && age <= 29) {
+    else if (!breakoutEvent && age >= 26 && age <= 29) {
       // High stability — small fluctuation ±1 (dev trait has minor dampening)
       ovrDelta = Utils.rand(-1, 1);
     }
 
     // ── Age 30+: Cliff phase ───────────────────────────────────────────────
-    else if (age >= 30) {
+    else if (!breakoutEvent && age >= 30) {
       const roll = Utils.random();
 
       if (roll < 0.15) {
@@ -221,8 +260,8 @@ export function processPlayerProgression(players) {
       }
     }
 
-    // ── Apply non-cliff deltas via position-specific rating nudges (Task 6) ─
-    if (!cliffEvent && ovrDelta !== 0) {
+    // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)
+    if (!cliffEvent && !wallEvent && ovrDelta !== 0) {
       nudgeRatingsBy(player, ovrDelta);
     }
 
@@ -273,6 +312,35 @@ export function processPlayerProgression(players) {
         ovrAfter,
         delta: progressionDelta,
         isCliff: cliffEvent,
+        isWall: wallEvent,
+      });
+    }
+
+    // ── Track explicit Breakout events for high-priority news ────────────
+    if (breakoutEvent) {
+      breakouts.push({
+        id:    player.id,
+        name:  player.name,
+        pos:   player.pos,
+        teamId:player.teamId ?? null,
+        age,
+        ovrBefore,
+        ovrAfter,
+        delta: progressionDelta,
+      });
+    }
+
+    // ── Track "Hitting the Wall" events for high-priority news ───────────
+    if (wallEvent) {
+      wallHits.push({
+        id:    player.id,
+        name:  player.name,
+        pos:   player.pos,
+        teamId:player.teamId ?? null,
+        age,
+        ovrBefore,
+        ovrAfter,
+        delta: progressionDelta,
       });
     }
   }
@@ -280,6 +348,8 @@ export function processPlayerProgression(players) {
   // Sort so the most dramatic changes surface first
   gainers.sort((a, b) => b.delta - a.delta);
   regressors.sort((a, b) => a.delta - b.delta); // most negative first
+  breakouts.sort((a, b) => b.delta - a.delta);
+  wallHits.sort((a, b) => a.delta - b.delta);
 
-  return { gainers, regressors };
+  return { gainers, regressors, breakouts, wallHits };
 }

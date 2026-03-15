@@ -44,6 +44,8 @@ export const toWorker = Object.freeze({
   CONDUCT_PRIVATE_WORKOUT: 'CONDUCT_PRIVATE_WORKOUT', // { playerId }
   UPDATE_DEPTH_CHART: 'UPDATE_DEPTH_CHART', // [ { playerId, newOrder } ]
   SIM_DRAFT_PICK:     'SIM_DRAFT_PICK',    // AI picks until user's turn
+  ACCEPT_DRAFT_TRADE: 'ACCEPT_DRAFT_TRADE', // { tradeProposal } — accept an AI trade-up offer
+  REJECT_DRAFT_TRADE: 'REJECT_DRAFT_TRADE', // {} — dismiss AI trade-up offer
 
   /** Free agency */
   SIGN_PLAYER:        'SIGN_PLAYER',       // { playerId, teamId, contract }
@@ -143,6 +145,8 @@ export const toUI = Object.freeze({
   /** Draft state */
   DRAFT_STATE:        'DRAFT_STATE',          // { picks, currentPick, available }
   DRAFT_PICK_MADE:    'DRAFT_PICK_MADE',      // { pick }
+  DRAFT_TRADE_OFFER:  'DRAFT_TRADE_OFFER',    // { proposal } — AI trade-up proposal for user
+  DRAFT_TRADE_RESULT: 'DRAFT_TRADE_RESULT',   // { accepted, newPickTeamId }
 
   /** Async data responses (lazy history) */
   SEASON_HISTORY:     'SEASON_HISTORY',       // { seasonId, data }

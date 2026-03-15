@@ -108,6 +108,8 @@ function reducer(state, action) {
       };
     case 'GAME_EVENT':
       return { ...state, gameEvents: [...state.gameEvents, action.event] };
+    case 'DRAFT_TRADE_OFFER':
+      return { ...state, draftTradeProposal: action.proposal ?? null };
     case 'ERROR':
       return { ...state, busy: false, simulating: false, error: action.message };
     case 'NOTIFY':
@@ -217,6 +219,10 @@ export function useWorker() {
               year:  payload.year,
             },
           });
+          break;
+        case toUI.DRAFT_TRADE_OFFER:
+          // AI trade-up proposal during draft — store in state for Draft UI to show
+          dispatch({ type: 'DRAFT_TRADE_OFFER', proposal: payload.proposal });
           break;
         case toUI.SAVED:
           dispatch({ type: 'IDLE' });
@@ -473,6 +479,14 @@ export function useWorker() {
     /** AI auto-picks until the user's next turn (or draft ends). Returns a Promise. */
     simDraftPick: () =>
       request(toWorker.SIM_DRAFT_PICK, {}, { silent: true }),
+
+    /** Accept an AI draft trade-up proposal. */
+    acceptDraftTrade: (proposal) =>
+      request(toWorker.ACCEPT_DRAFT_TRADE, { proposal }, { silent: true }),
+
+    /** Reject an AI draft trade-up proposal. */
+    rejectDraftTrade: () =>
+      request(toWorker.REJECT_DRAFT_TRADE, {}, { silent: true }),
 
     /**
      * Run player progression and retirements.

@@ -40,6 +40,7 @@ import NewsEngine from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
+import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
@@ -2511,6 +2512,7 @@ function buildDraftStateView() {
     isDraftComplete:  currentPickIndex >= picks.length,
     totalPicks:       picks.length,
     currentPickIndex,
+    pendingTradeProposal: meta.pendingDraftTradeProposal ?? null,
   };
 }
 
@@ -2809,6 +2811,165 @@ async function handleSimDraftPick(payload, id) {
   }
 
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+
+  // ── AI Trade-Up: generate proposal when the user is now on the clock ────
+  const postSimDraft = postSimMeta.draftState;
+  if (postSimDraft) {
+    const nextPick = postSimDraft.picks[postSimDraft.currentPickIndex];
+    if (nextPick && nextPick.teamId === postSimMeta.userTeamId) {
+      const proposal = generateDraftTradeUpProposal();
+      if (proposal) {
+        post(toUI.DRAFT_TRADE_OFFER, { proposal });
+      }
+    }
+  }
+}
+
+// ── Handler: ACCEPT_DRAFT_TRADE ──────────────────────────────────────────────
+
+/**
+ * Accept an AI team's trade-up proposal during the draft.
+ * The AI team gives the user future pick(s) in exchange for the user's current pick.
+ * After acceptance, the AI team is now on the clock for that pick.
+ */
+async function handleAcceptDraftTrade({ proposal }, id) {
+  const meta = cache.getMeta();
+  if (!meta?.draftState) {
+    post(toUI.ERROR, { message: 'No active draft' }, id);
+    return;
+  }
+
+  if (!proposal) {
+    post(toUI.ERROR, { message: 'No trade proposal provided' }, id);
+    return;
+  }
+
+  const { picks, currentPickIndex } = meta.draftState;
+  const currentPick = picks[currentPickIndex];
+  if (!currentPick || currentPick.teamId !== meta.userTeamId) {
+    post(toUI.ERROR, { message: 'Not your pick to trade' }, id);
+    return;
+  }
+
+  const aiTeamId = proposal.aiTeamId;
+  const aiTeam = cache.getTeam(aiTeamId);
+  if (!aiTeam) {
+    post(toUI.ERROR, { message: 'Invalid trading partner' }, id);
+    return;
+  }
+
+  // Transfer the current pick to the AI team
+  currentPick.teamId = aiTeamId;
+
+  // Give user a future draft pick asset (stored as trade compensation note)
+  // Also swap a later-round pick in this draft if the AI has one
+  const laterPicks = picks.filter(
+    (pk, idx) => idx > currentPickIndex && pk.teamId === aiTeamId && !pk.playerId
+  );
+  if (laterPicks.length > 0) {
+    // Give user the AI's latest available pick in this draft
+    const swapPick = laterPicks[laterPicks.length - 1];
+    swapPick.teamId = meta.userTeamId;
+  }
+
+  // Persist and flush
+  cache.setMeta({ draftState: meta.draftState, pendingDraftTradeProposal: null });
+  await flushDirty();
+
+  // Log news
+  const userTeam = cache.getTeam(meta.userTeamId);
+  await NewsEngine.logNews('TRANSACTION',
+    `DRAFT DAY TRADE: ${aiTeam.abbr} trades up to pick #${currentPick.overall} with ${userTeam?.abbr ?? 'User'}.`,
+    null,
+    { tradeTeamA: aiTeamId, tradeTeamB: meta.userTeamId }
+  );
+
+  post(toUI.DRAFT_TRADE_RESULT, { accepted: true, newPickTeamId: aiTeamId }, id);
+  post(toUI.DRAFT_STATE, buildDraftStateView());
+}
+
+// ── Handler: REJECT_DRAFT_TRADE ─────────────────────────────────────────────
+
+async function handleRejectDraftTrade(payload, id) {
+  cache.setMeta({ pendingDraftTradeProposal: null });
+  post(toUI.DRAFT_TRADE_RESULT, { accepted: false }, id);
+}
+
+// ── AI Draft Trade-Up Logic ──────────────────────────────────────────────────
+
+/**
+ * Evaluate whether any AI team wants to trade up for an elite falling prospect.
+ * Called when the user is on the clock. Only generates ONE proposal per user pick.
+ *
+ * Criteria for AI trade-up:
+ *  - Best available prospect is a QB with OVR >= 78 or any prospect with scoutGrade >= 'A'
+ *  - An AI team within the next 10 picks has a high need at that position
+ *  - That AI team hasn't already proposed this draft
+ *
+ * @returns {Object|null} trade proposal or null
+ */
+function generateDraftTradeUpProposal() {
+  const meta = cache.getMeta();
+  if (!meta?.draftState) return null;
+  if (meta.pendingDraftTradeProposal) return null; // already proposed this pick
+
+  const { picks, currentPickIndex } = meta.draftState;
+  const currentPick = picks[currentPickIndex];
+  if (!currentPick || currentPick.teamId !== meta.userTeamId) return null;
+
+  // Find best available prospect
+  const draftPool = cache.getAllPlayers()
+    .filter(p => p.status === 'draft_eligible')
+    .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+
+  if (draftPool.length === 0) return null;
+
+  const bestProspect = draftPool[0];
+  const isElite = (bestProspect.pos === 'QB' && (bestProspect.ovr ?? 0) >= 78) ||
+                  (bestProspect.ovr ?? 0) >= 82;
+
+  if (!isElite) return null;
+
+  // Look for an AI team in the next 10 picks that desperately needs this position
+  const searchEnd = Math.min(currentPickIndex + 10, picks.length);
+  for (let i = currentPickIndex + 1; i < searchEnd; i++) {
+    const pk = picks[i];
+    if (pk.playerId) continue; // already made
+    if (pk.teamId === meta.userTeamId) continue; // skip user picks
+
+    const aiTeamId = pk.teamId;
+    const needs = AiLogic.calculateTeamNeeds(aiTeamId);
+    const needMult = needs[bestProspect.pos] ?? 1.0;
+
+    // Only trade up if high need (>= 1.5 multiplier)
+    if (needMult < 1.5) continue;
+
+    const aiTeam = cache.getTeam(aiTeamId);
+    if (!aiTeam) continue;
+
+    // Find what the AI is offering: their current pick spot + a future pick description
+    const proposal = {
+      aiTeamId,
+      aiTeamName: aiTeam.name,
+      aiTeamAbbr: aiTeam.abbr,
+      aiPickOverall: pk.overall,
+      aiPickRound: pk.round,
+      targetProspect: {
+        id: bestProspect.id,
+        name: bestProspect.name,
+        pos: bestProspect.pos,
+        ovr: bestProspect.ovr,
+      },
+      userPickOverall: currentPick.overall,
+      userPickRound: currentPick.round,
+    };
+
+    // Store so we don't re-propose this pick
+    cache.setMeta({ pendingDraftTradeProposal: proposal });
+    return proposal;
+  }
+
+  return null;
 }
 
 // ── Stats / Awards Helpers ────────────────────────────────────────────────────
@@ -2945,7 +3106,7 @@ async function handleAdvanceOffseason(payload, id) {
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
   const allPlayers = cache.getAllPlayers();
-  const { gainers, regressors } = processPlayerProgression(allPlayers);
+  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers);
 
   // Flush progression mutations (ratings, ovr, progressionDelta, potential)
   for (const player of allPlayers) {
@@ -2959,62 +3120,75 @@ async function handleAdvanceOffseason(payload, id) {
   }
 
   // ── Step 3: Age all players by 1 year + retirement rolls ─────────────────
+  // Uses the new retirement-system.js which handles both sudden (under 30)
+  // and standard (age-based) retirements with trait/injury modifiers.
   const retired = [];
 
+  // First, age all non-retired/non-draft players
   for (const player of cache.getAllPlayers()) {
     if (player.status === 'draft_eligible' || player.status === 'retired') continue;
-
     const age = (player.age ?? 22) + 1;
-
-    // Retirement: 20% base at 34, +15% per year after, capped at 85%
-    let willRetire = false;
-    if (age >= 34) {
-      const retireChance = Math.min(0.85, 0.20 + (age - 34) * 0.15);
-      willRetire = Utils.random() < retireChance;
-    }
-
-    if (willRetire) {
-      retired.push({ id: player.id, name: player.name, pos: player.pos, age, ovr: player.ovr });
-      if (player.teamId != null) recalculateTeamCap(player.teamId);
-
-      // Calculate Hall of Fame induction
-      // Very basic heuristic for now
-      let isHof = false;
-      if (player.accolades && player.accolades.length > 0) {
-          let score = player.ovr;
-          for (const a of player.accolades) {
-              if (a.type === 'MVP') score += 10;
-              if (a.type === 'SB_MVP') score += 5;
-              if (a.type === 'OPOY' || a.type === 'DPOY') score += 5;
-              if (a.type === 'PRO_BOWL') score += 2;
-          }
-          if (score > 120) isHof = true; // Needs some accolades and high ovr
-      }
-
-      if (isHof) {
-        NewsEngine.logNews('HOF', `⭐️ LEGEND CROWNED: ${player.pos} ${player.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
-    } else if ((player.ovr >= 85) || (age >= 35 && player.ovr >= 75)) {
-        NewsEngine.logNews('RETIREMENT', `END OF AN ERA: ${player.pos} ${player.name} has officially announced their retirement from professional football.`);
-      }
-
-      // Mark as retired instead of deleting — keeps the player record in DB
-      // so GET_PLAYER_CAREER can still resolve name/pos/ovr for history views.
-      cache.updatePlayer(player.id, { status: 'retired', teamId: null, age, hof: isHof });
-    } else {
-      cache.updatePlayer(player.id, { age });
-    }
+    cache.updatePlayer(player.id, { age });
   }
 
-  // ── Step 4: Generate news items for dramatic progressions ─────────────────
+  // Now evaluate retirements on the aged roster
+  const agedPlayers = cache.getAllPlayers();
+  const { retirements } = evaluateRetirements(agedPlayers);
+
+  for (const ret of retirements) {
+    const player = cache.getPlayer(ret.id);
+    if (!player) continue;
+
+    retired.push(ret);
+    if (player.teamId != null) recalculateTeamCap(player.teamId);
+
+    // Calculate Hall of Fame induction
+    let isHof = false;
+    if (player.accolades && player.accolades.length > 0) {
+        let score = player.ovr;
+        for (const a of player.accolades) {
+            if (a.type === 'MVP') score += 10;
+            if (a.type === 'SB_MVP') score += 5;
+            if (a.type === 'OPOY' || a.type === 'DPOY') score += 5;
+            if (a.type === 'PRO_BOWL') score += 2;
+        }
+        if (score > 120) isHof = true;
+    }
+
+    // Log news based on retirement type
+    if (ret.reason && ret.reason.startsWith('sudden_')) {
+      // Sudden retirement — high-priority news
+      await NewsEngine.logSuddenRetirement(ret);
+    } else if (isHof) {
+      NewsEngine.logNews('HOF', `LEGEND CROWNED: ${player.pos} ${player.name} has been enshrined into the Hall of Fame, cementing an unforgettable legacy!`);
+    } else if ((player.ovr >= 85) || (ret.age >= 35 && player.ovr >= 75)) {
+      NewsEngine.logNews('RETIREMENT', `END OF AN ERA: ${player.pos} ${player.name} has officially announced their retirement from professional football.`);
+    }
+
+    cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: isHof });
+  }
+
+  // ── Step 4: Generate news items for chaotic offseason events ──────────────
+
+  // "Breakout Seasons" — individual high-priority news per breakout (up to 3)
+  for (const b of breakouts.slice(0, 3)) {
+    await NewsEngine.logBreakoutSeason(b);
+  }
+
+  // "Hitting the Wall" — individual high-priority news per wall event (up to 3)
+  for (const w of wallHits.slice(0, 3)) {
+    await NewsEngine.logHittingTheWall(w);
+  }
+
   // "Top Offseason Gains" — up to 5 biggest breakouts/growers
   const topGainers = gainers.slice(0, 5);
   if (topGainers.length > 0) {
     const names = topGainers
-      .map(p => `${p.name} (${p.pos}, ${p.isBreakout ? '🌟 Breakout' : ''}+${p.delta} OVR)`)
+      .map(p => `${p.name} (${p.pos}, ${p.isBreakout ? 'Breakout ' : ''}+${p.delta} OVR)`)
       .join(', ');
     await NewsEngine.logNews(
       'PROGRESSION',
-      `🔥 Top Offseason Gains: ${names}`,
+      `Top Offseason Gains: ${names}`,
       null,
       { category: 'top_gains', players: topGainers }
     );
@@ -3024,11 +3198,11 @@ async function handleAdvanceOffseason(payload, id) {
   const topRegressors = regressors.slice(0, 5);
   if (topRegressors.length > 0) {
     const names = topRegressors
-      .map(p => `${p.name} (${p.pos}, ${p.isCliff ? '📉 Age Cliff' : ''}${p.delta} OVR)`)
+      .map(p => `${p.name} (${p.pos}, ${p.isCliff ? 'Age Cliff ' : p.isWall ? 'Hit the Wall ' : ''}${p.delta} OVR)`)
       .join(', ');
     await NewsEngine.logNews(
       'PROGRESSION',
-      `😨 Shocking Regressions: ${names}`,
+      `Shocking Regressions: ${names}`,
       null,
       { category: 'regressions', players: topRegressors }
     );
@@ -3866,6 +4040,8 @@ async function handleMessage(event) {
       case toWorker.CONDUCT_PRIVATE_WORKOUT: return await handleConductPrivateWorkout(payload, id);
       case toWorker.UPDATE_DEPTH_CHART: return await handleUpdateDepthChart(payload, id);
       case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
+      case toWorker.ACCEPT_DRAFT_TRADE: return await handleAcceptDraftTrade(payload, id);
+      case toWorker.REJECT_DRAFT_TRADE: return await handleRejectDraftTrade(payload, id);
       case toWorker.ADVANCE_OFFSEASON:  return await handleAdvanceOffseason(payload, id);
       case toWorker.ADVANCE_FREE_AGENCY_DAY: return await handleAdvanceFreeAgencyDay(payload, id);
       case toWorker.START_NEW_SEASON:   return await handleStartNewSeason(payload, id);
