@@ -1457,8 +1457,9 @@ export function simGameStats(home, away, options = {}) {
      *
      * Returns results for BOTH teams simultaneously to model interaction.
      */
-    const simulateFullGame = (homeStr, awayStr, homeDefStr, awayDefStr, diff, hMods, aMods) => {
+    const simulateFullGame = (homeStr, awayStr, homeDefStr, awayDefStr, diff, hMods, aMods, options) => {
         const result = {
+          playLogs: [],
           home: { score: 0, touchdowns: 0, field_goals: 0, xpMade: 0, twoPtMade: 0,
                   defensiveTDs: 0, turnoversForced: 0, safeties: 0 },
           away: { score: 0, touchdowns: 0, field_goals: 0, xpMade: 0, twoPtMade: 0,
@@ -1525,6 +1526,49 @@ export function simGameStats(home, away, options = {}) {
             if (driveRoll < scoreProb) {
                 // --- SCORING DRIVE ---
                 const typeRoll = U.random();
+                if (options && options.generateLogs) {
+                    const qtr = Math.min(4, Math.floor((d / totalDrives) * 4) + 1);
+                    const clockMins = 15 - Math.floor(( (d % (totalDrives/4)) / (totalDrives/4) ) * 15);
+                    const clockStr = `${clockMins}:00`;
+
+                    const addLog = (text) => {
+                        result.playLogs.push({
+                            scoreHome: result.home.score,
+                            scoreAway: result.away.score,
+                            quarter: qtr,
+                            clock: clockStr,
+                            yardLine: 50,
+                            down: 1,
+                            distance: 10,
+                            possession: possession,
+                            playText: text
+                        });
+                    };
+
+                    const offName = isHome ? "Home" : "Away";
+                    const defName = isHome ? "Away" : "Home";
+
+                    // Filler plays
+                    for(let i=0; i<U.rand(2, 5); i++) {
+                        const gain = U.rand(1, 15);
+                        addLog(U.random() > 0.5 ? `${offName} pass complete for ${gain} yds.` : `${offName} runs for ${gain} yds.`);
+                    }
+
+                    if (driveRoll < scoreProb) {
+                        if (typeRoll < tdShare) {
+                            addLog(`${offName} TOUCHDOWN!`);
+                        } else {
+                            addLog(`${offName} FIELD GOAL is GOOD.`);
+                        }
+                    } else {
+                        if (U.random() < turnoverChance) { // Use hardcoded chance if undefined
+                            addLog(`${offName} TURNOVER! Ball recovered by ${defName}.`);
+                        } else {
+                            addLog(`${offName} PUNTS.`);
+                        }
+                    }
+                }
+
 
                 if (typeRoll < tdShare) {
                     // Touchdown
@@ -1627,7 +1671,7 @@ export function simGameStats(home, away, options = {}) {
 
     const fullGameResult = simulateFullGame(
         homeStrength, awayStrength, homeDefenseStrength, awayDefenseStrength,
-        strengthDiff, homeMods, awayMods
+        strengthDiff, homeMods, awayMods, options
     );
 
     const homeRes = fullGameResult.home;
@@ -2100,6 +2144,7 @@ export function simGameStats(home, away, options = {}) {
       awaySafeties: awayRes.safeties || 0,
       homeTurnoversForced: homeRes.turnoversForced || 0,
       awayTurnoversForced: awayRes.turnoversForced || 0,
+      playLogs: fullGameResult.playLogs || [],
     };
 
   } catch (error) {
@@ -2328,6 +2373,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             home: gameData.homeDefTDs || 0,
             away: gameData.awayDefTDs || 0
         },
+        playLogs: gameData.playLogs || [],
     };
 
     if (gameData.preGameContext) {
@@ -2653,6 +2699,7 @@ export function simulateBatch(games, options = {}) {
                 weather: pair._weather,
                 homeDefTDs: pair._homeDefTDs || 0,
                 awayDefTDs: pair._awayDefTDs || 0,
+                playLogs: gameScores.playLogs || [],
             };
 
             const resultObj = commitGameResult(league, gameData, { persist: false });

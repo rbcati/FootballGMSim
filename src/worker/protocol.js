@@ -27,7 +27,9 @@ export const toWorker = Object.freeze({
   /** Regular-season flow */
   ADVANCE_WEEK:       'ADVANCE_WEEK',      // simulate the current week
   SIM_TO_WEEK:        'SIM_TO_WEEK',       // fast-forward to a specific week
-  SIM_TO_PLAYOFFS:    'SIM_TO_PLAYOFFS',   // sim all remaining reg-season weeks
+  SIM_TO_PLAYOFFS:    'SIM_TO_PLAYOFFS',
+  WATCH_GAME:         'WATCH_GAME',
+  SIMULATE_USER_GAME: 'SIMULATE_USER_GAME',   // sim all remaining reg-season weeks
 
   /** Batch simulation to a target phase */
   SIM_TO_PHASE:       'SIM_TO_PHASE',      // { targetPhase: 'playoffs'|'offseason'|'preseason' }
@@ -128,7 +130,9 @@ export const toUI = Object.freeze({
   GAME_EVENT:         'GAME_EVENT',           // { gameId, event }
 
   /** Simulation of a week is fully done */
-  WEEK_COMPLETE:      'WEEK_COMPLETE',        // { week, results, standings }
+  WEEK_COMPLETE:      'WEEK_COMPLETE',
+  PROMPT_USER_GAME:   'PROMPT_USER_GAME',
+  PLAY_LOGS:          'PLAY_LOGS',        // { week, results, standings }
 
   /** Playoffs round done */
   PLAYOFFS_ROUND_COMPLETE: 'PLAYOFFS_ROUND_COMPLETE',
