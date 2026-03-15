@@ -39,6 +39,8 @@ export const toWorker = Object.freeze({
   GET_DRAFT_STATE:    'GET_DRAFT_STATE',   // fetch current draft state (silent)
   START_DRAFT:        'START_DRAFT',       // initialise draft (idempotent)
   MAKE_DRAFT_PICK:    'MAKE_DRAFT_PICK',   // { playerId }
+  CONDUCT_PRIVATE_WORKOUT: 'CONDUCT_PRIVATE_WORKOUT', // { playerId }
+  UPDATE_DEPTH_CHART: 'UPDATE_DEPTH_CHART', // [ { playerId, newOrder } ]
   SIM_DRAFT_PICK:     'SIM_DRAFT_PICK',    // AI picks until user's turn
 
   /** Free agency */

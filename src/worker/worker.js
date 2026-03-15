@@ -2425,6 +2425,7 @@ function buildDraftStateView() {
   // Completed picks (slim)
   const completedPicks = picks.slice(0, currentPickIndex).map(pk => {
     const team = cache.getTeam(pk.teamId);
+    const p = cache.getPlayer(pk.playerId);
     return {
       overall:    pk.overall,
       round:      pk.round,
@@ -2436,12 +2437,15 @@ function buildDraftStateView() {
       playerName: pk.playerName ?? null,
       playerPos:  pk.playerPos ?? null,
       playerOvr:  pk.playerOvr ?? null,
+      scoutStatus: p?.scoutStatus ?? null,
+      combineStats: p?.combineStats ?? null,
     };
   });
 
   // Next 25 upcoming picks (visible in the order panel)
   const upcomingPicks = picks.slice(currentPickIndex, currentPickIndex + 25).map(pk => {
     const team = cache.getTeam(pk.teamId);
+    const p = cache.getPlayer(pk.playerId);
     return {
       overall:    pk.overall,
       round:      pk.round,
@@ -2549,10 +2553,61 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   cache.setMeta({ draftState });
 }
 
+
+async function handleConductPrivateWorkout({ playerId }, id) {
+  const meta = cache.getMeta();
+  if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
+
+  const team = cache.getTeam(meta.userTeamId);
+  if (!team || team.scoutingPoints < 25) {
+    return post(toUI.ERROR, { message: 'Not enough scouting points (Need 25)' }, id);
+  }
+
+  const player = cache.getPlayer(playerId);
+  if (!player) return post(toUI.ERROR, { message: 'Player not found' }, id);
+
+  if (player.scoutStatus?.fullyScouted) {
+      return post(toUI.ERROR, { message: 'Player is already fully scouted' }, id);
+  }
+
+  // Deduct points
+  cache.updateTeam(team.id, { scoutingPoints: team.scoutingPoints - 25 });
+
+  // Reveal player
+  const newScoutStatus = { ...player.scoutStatus, fullyScouted: true };
+  cache.updatePlayer(playerId, { scoutStatus: newScoutStatus });
+
+  // Flush to DB
+  await flushDirty();
+
+  // Respond with full state update or just acknowledge
+  // Let's just return the draft state if we are in draft, otherwise full state
+  // Draft board uses DRAFT_STATE to update
+  if (meta.phase === 'draft' && meta.draftState) {
+    post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  } else {
+    post(toUI.STATE_UPDATE, buildViewState(), id);
+  }
+}
+
 // ── Handler: GET_DRAFT_STATE ──────────────────────────────────────────────────
+
 
 async function handleGetDraftState(payload, id) {
   post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+}
+
+
+async function handleUpdateDepthChart({ updates }, id) {
+  if (!Array.isArray(updates)) return;
+  updates.forEach(u => {
+      const p = cache.getPlayer(u.playerId);
+      if (p) {
+          cache.updatePlayer(p.id, { depthOrder: u.newOrder });
+      }
+  });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: START_DRAFT ──────────────────────────────────────────────────────
@@ -3791,6 +3846,8 @@ async function handleMessage(event) {
       case toWorker.GET_DRAFT_STATE:    return await handleGetDraftState(payload, id);
       case toWorker.START_DRAFT:        return await handleStartDraft(payload, id);
       case toWorker.MAKE_DRAFT_PICK:    return await handleMakeDraftPick(payload, id);
+      case toWorker.CONDUCT_PRIVATE_WORKOUT: return await handleConductPrivateWorkout(payload, id);
+      case toWorker.UPDATE_DEPTH_CHART: return await handleUpdateDepthChart(payload, id);
       case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
       case toWorker.ADVANCE_OFFSEASON:  return await handleAdvanceOffseason(payload, id);
       case toWorker.ADVANCE_FREE_AGENCY_DAY: return await handleAdvanceFreeAgencyDay(payload, id);

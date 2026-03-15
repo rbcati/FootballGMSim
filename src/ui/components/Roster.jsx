@@ -1049,10 +1049,12 @@ function RosterTable({
 // ── Depth Chart View ──────────────────────────────────────────────────────────
 
 /** Single player card inside a depth chart slot. */
-function DepthCard({ player, isStarter }) {
+function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop }) {
   if (!player) {
     return (
       <div
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         style={{
           minWidth: 130,
           padding: "6px 10px",
@@ -1082,6 +1084,10 @@ function DepthCard({ player, isStarter }) {
 
   return (
     <div
+      draggable
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
       style={{
         minWidth: 130,
         maxWidth: 160,
@@ -1090,6 +1096,7 @@ function DepthCard({ player, isStarter }) {
         borderRadius: "var(--radius-sm)",
         background: isStarter ? "var(--accent-muted)" : "var(--surface)",
         border: borderStyle,
+        cursor: "grab",
       }}
     >
       {/* Name + OVR */}
@@ -1145,7 +1152,18 @@ function DepthCard({ player, isStarter }) {
   );
 }
 
-function DepthChartView({ players }) {
+function DepthChartView({ players, onReorder }) {
+  const handleDragStart = (e, player, posKey) => {
+      e.dataTransfer.setData("text/plain", JSON.stringify({ playerId: player.id, posKey }));
+  };
+  const handleDrop = (e, targetPlayerId, targetPosKey, slotIdx) => {
+      e.preventDefault();
+      try {
+          const data = JSON.parse(e.dataTransfer.getData("text/plain"));
+          if (data.posKey !== targetPosKey) return; // Only allow reordering within same group
+          onReorder(targetPosKey, data.playerId, slotIdx);
+      } catch (err) {}
+  };
   // Build a map: posKey → sorted player array (best OVR first)
   const depthMap = useMemo(() => {
     const map = {};
@@ -1163,6 +1181,14 @@ function DepthChartView({ players }) {
         const aInj = (a.injuryWeeksRemaining || 0) > 0 ? 1 : 0;
         const bInj = (b.injuryWeeksRemaining || 0) > 0 ? 1 : 0;
         if (aInj !== bInj) return aInj - bInj;
+
+        // Use depthOrder if set
+        if (a.depthOrder !== undefined && b.depthOrder !== undefined && (a.depthOrder > 0 || b.depthOrder > 0)) {
+           const aOrder = a.depthOrder > 0 ? a.depthOrder : 999;
+           const bOrder = b.depthOrder > 0 ? b.depthOrder : 999;
+           if (aOrder !== bOrder) return aOrder - bOrder;
+        }
+
         return (b.ovr ?? 0) - (a.ovr ?? 0);
       });
     });
@@ -1292,6 +1318,9 @@ function DepthChartView({ players }) {
                               <DepthCard
                                 player={depth[slotIdx] ?? null}
                                 isStarter={slotIdx === 0}
+                                onDragStart={(e) => depth[slotIdx] && handleDragStart(e, depth[slotIdx], row.key)}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => handleDrop(e, depth[slotIdx]?.id, row.key, slotIdx)}
                               />
                             </td>
                           );
@@ -1344,6 +1373,40 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   useEffect(() => {
     fetchRoster();
   }, [fetchRoster]);
+
+  const handleReorderDepthChart = useCallback((posKey, draggedPlayerId, targetSlotIdx) => {
+      // Find players in this posKey
+      const groupPlayers = DEPTH_ROWS.find((r) => r.key === posKey)
+          ? players.filter(p => DEPTH_ROWS.find((r) => r.key === posKey).match.includes(p.pos))
+          : [];
+
+      let sorted = [...groupPlayers].sort((a, b) => {
+         const aOrder = a.depthOrder > 0 ? a.depthOrder : 999;
+         const bOrder = b.depthOrder > 0 ? b.depthOrder : 999;
+         if (aOrder !== bOrder) return aOrder - bOrder;
+         return (b.ovr ?? 0) - (a.ovr ?? 0);
+      });
+
+      const draggedIdx = sorted.findIndex(p => p.id === draggedPlayerId);
+      if (draggedIdx === -1 || draggedIdx === targetSlotIdx) return;
+
+      const [draggedPlayer] = sorted.splice(draggedIdx, 1);
+      sorted.splice(targetSlotIdx, 0, draggedPlayer);
+
+      // Re-assign order 1-based
+      const updates = sorted.map((p, i) => ({ playerId: p.id, newOrder: i + 1 }));
+
+      // Optimistic update
+      setPlayers(prev => prev.map(p => {
+          const update = updates.find(u => u.playerId === p.id);
+          if (update) return { ...p, depthOrder: update.newOrder };
+          return p;
+      }));
+
+      if (actions.updateDepthChart) {
+          actions.updateDepthChart(updates);
+      }
+  }, [players, actions]);
 
   if (teamId == null) {
     return (
