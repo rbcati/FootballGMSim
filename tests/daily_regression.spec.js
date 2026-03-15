@@ -9,7 +9,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('1. Playability Smoke Test', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
@@ -37,12 +37,15 @@ test.describe('Daily Regression Pass', () => {
         console.log(`Current Week: ${startWeek}`);
 
         // Try different advance buttons
-        const advanceBtnTop = page.locator('#btnAdvanceWeekTop');
+        const advanceBtnTop = page.locator('.app-advance-btn');
         const advanceBtnHQ = page.locator('#btnSimWeekHQ');
         const globalAdvance = page.locator('#btnGlobalAdvance');
 
         if (await advanceBtnTop.isVisible()) {
             await advanceBtnTop.click();
+            // Check if user game prompt appears
+            const simBtn = page.getByRole("button", { name: "Simulate" });
+            if (await simBtn.isVisible()) { await simBtn.click(); }
         } else if (await advanceBtnHQ.isVisible()) {
             await advanceBtnHQ.click();
         } else if (await globalAdvance.isVisible()) {
@@ -69,7 +72,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('2. Strategy Persistence & High Stakes', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
@@ -136,7 +139,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('2b. Mobile UI Scrolling Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
@@ -155,7 +158,7 @@ test.describe('Daily Regression Pass', () => {
         }
 
         // Check Power Rankings Scroll (Standings Tab)
-        await page.click('button.standings-tab:has-text("Standings")');
+        await page.evaluate(() => document.querySelector('.mobile-menu-item, .mobile-nav-btn')?.click());
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const prScrolls = await page.evaluate(() => {
@@ -164,8 +167,16 @@ test.describe('Daily Regression Pass', () => {
         });
         console.log('Standings Scrollable:', prScrolls);
 
+        // Open Mobile Menu to access other tabs
+        await page.evaluate(() => document.querySelector('.mobile-menu-item, .mobile-nav-btn[aria-label="More tabs"]')?.click());
+        await page.waitForTimeout(500);
+
         // Check League Stats Scroll (Stats Tab)
-        await page.click('button.standings-tab:has-text("Stats")');
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('.mobile-menu-item, .mobile-nav-btn'));
+            const statsBtn = btns.find(b => b.innerText.includes('Stats'));
+            if(statsBtn) statsBtn.click();
+        });
         await page.waitForSelector('.stats-table-container, table', { state: 'visible' });
 
         const lsScrolls = await page.evaluate(() => {
@@ -174,8 +185,16 @@ test.describe('Daily Regression Pass', () => {
         });
         console.log('League Stats Scrollable:', lsScrolls);
 
+        // Open Mobile Menu again
+        await page.evaluate(() => document.querySelector('.mobile-menu-item, .mobile-nav-btn[aria-label="More tabs"]')?.click());
+        await page.waitForTimeout(500);
+
         // Check Roster Scroll
-        await page.click('button.standings-tab:has-text("Roster")');
+        await page.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('.mobile-menu-item, .mobile-nav-btn'));
+            const rosterBtn = btns.find(b => b.innerText.includes('Roster'));
+            if(rosterBtn) rosterBtn.click();
+        });
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const rosterScrolls = await page.evaluate(() => {
@@ -191,7 +210,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
         test.setTimeout(60000); // Increase timeout for slow league generation
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
@@ -308,7 +327,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('4. Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);
