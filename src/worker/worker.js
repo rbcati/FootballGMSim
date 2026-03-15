@@ -1964,18 +1964,27 @@ async function handleGetFreeAgents(payload, id) {
   const freeAgents = cache.getAllPlayers()
     .filter(p => !p.teamId || p.status === 'free_agent')
     .map(p => {
-        // Summarize offers for UI
+        // Summarize offers for UI — bidding war edition
         const offers = p.offers || [];
         const userOffer = offers.find(o => o.teamId === userTeamId);
 
-        // Calculate max offer value
+        // Find the top bid (highest total contract value)
+        let topBid = null;
         let topOfferValue = 0;
-        if (offers.length > 0) {
-            topOfferValue = offers.reduce((max, o) => {
-                const c = o.contract;
-                const val = (c.baseAnnual * c.yearsTotal) + c.signingBonus;
-                return val > max ? val : max;
-            }, 0);
+        for (const o of offers) {
+            const c = o.contract;
+            const val = (c.baseAnnual * c.yearsTotal) + (c.signingBonus || 0);
+            if (val > topOfferValue) {
+                topOfferValue = val;
+                topBid = o;
+            }
+        }
+
+        // Calculate user's bid value if they have one
+        let userBidValue = 0;
+        if (userOffer) {
+            const uc = userOffer.contract;
+            userBidValue = (uc.baseAnnual * uc.yearsTotal) + (uc.signingBonus || 0);
         }
 
         return {
@@ -1985,17 +1994,28 @@ async function handleGetFreeAgents(payload, id) {
           age:       p.age,
           ovr:       p.ovr,
           potential: p.potential ?? null,
-          contract:  p.contract ?? null,   // last known contract (asking price reference)
+          contract:  p.contract ?? null,
           traits:    p.traits ?? [],
           offers: {
               count: offers.length,
               userOffered: !!userOffer,
-              topOfferValue: Math.round(topOfferValue * 10) / 10
+              userIsTopBidder: !!userOffer && topBid && topBid.teamId === userTeamId,
+              topOfferValue: Math.round(topOfferValue * 10) / 10,
+              topBidTeam: topBid ? topBid.teamName : null,
+              topBidAnnual: topBid ? Math.round(topBid.contract.baseAnnual * 10) / 10 : 0,
+              topBidYears: topBid ? topBid.contract.yearsTotal : 0,
+              userBidAnnual: userOffer ? Math.round(userOffer.contract.baseAnnual * 10) / 10 : 0,
+              userBidYears: userOffer ? userOffer.contract.yearsTotal : 0,
+              userBidValue: Math.round(userBidValue * 10) / 10,
           }
         };
     });
 
-  post(toUI.FREE_AGENT_DATA, { freeAgents }, id);
+  // Include FA day state for UI
+  const faDay = meta.freeAgencyState?.day ?? 1;
+  const faMaxDays = meta.freeAgencyState?.maxDays ?? 5;
+
+  post(toUI.FREE_AGENT_DATA, { freeAgents, faDay, faMaxDays, phase: meta.phase }, id);
 }
 
 // ── Handler: COACHING ACTIONS ────────────────────────────────────────────────

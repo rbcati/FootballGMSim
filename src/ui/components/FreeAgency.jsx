@@ -302,7 +302,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
   };
 
   const Wrapper = asDiv ? 'div' : 'td';
-  const props = asDiv ? {} : { colSpan: 7 };
+  const props = asDiv ? {} : { colSpan: 9 };
 
   return (
     <Wrapper
@@ -329,7 +329,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
               color: "var(--text)",
             }}
           >
-            {player.name} is asking for:
+            Your bid for {player.name}:
           </div>
           <div
             style={{
@@ -428,7 +428,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
             style={{ fontSize: "var(--text-xs)", padding: "4px 16px" }}
             onClick={handleConfirm}
           >
-            Confirm Sign
+            Confirm Bid
           </button>
         </div>
       </div>
@@ -589,7 +589,7 @@ export default function FreeAgency({
   return (
     <div className="free-agency-container">
       <style>{mobileStyle}</style>
-      {/* Free Agency Status Banner */}
+      {/* Free Agency Bidding War Status Banner */}
       {faState && (
         <div
           className="card"
@@ -600,6 +600,8 @@ export default function FreeAgency({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            flexWrap: "wrap",
+            gap: "var(--space-3)",
           }}
         >
           <div>
@@ -611,7 +613,7 @@ export default function FreeAgency({
                 color: "var(--text-muted)",
               }}
             >
-              Current Phase
+              {faState.phase === "free_agency" ? "Bidding War" : "Current Phase"}
             </div>
             <div
               style={{
@@ -621,19 +623,47 @@ export default function FreeAgency({
               }}
             >
               {faState.phase === "free_agency"
-                ? "Free Agency Wave " + faState.wave
+                ? `Free Agency: Day ${faState.faDay ?? 1} of ${faState.faMaxDays ?? 5}`
                 : faState.phase === "offseason_resign"
                   ? "Offseason Re-Signing"
                   : "In-Season Free Agency"}
             </div>
+            {faState.phase === "free_agency" && (
+              <div
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-muted)",
+                  marginTop: 4,
+                }}
+              >
+                Submit your bids, then advance the day. Players evaluate all offers at day's end.
+              </div>
+            )}
           </div>
           {faState.phase === "free_agency" && (
-            <button
-              className="btn btn-primary"
-              onClick={() => actions.advanceFreeAgencyDay()}
-            >
-              Advance FA Wave →
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+              {/* Day progress pips */}
+              <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                {Array.from({ length: faState.faMaxDays ?? 5 }, (_, i) => (
+                  <span
+                    key={i}
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: i < (faState.faDay ?? 1) ? "var(--accent)" : "var(--hairline)",
+                      border: i === (faState.faDay ?? 1) - 1 ? "2px solid var(--accent)" : "none",
+                    }}
+                  />
+                ))}
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={() => actions.advanceFreeAgencyDay()}
+              >
+                Advance Day {faState.faDay ?? 1} →
+              </button>
+            </div>
           )}
         </div>
       )}
@@ -810,6 +840,16 @@ export default function FreeAgency({
                     >
                       SCHEME FIT
                     </th>
+                    <th
+                      style={{
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text-muted)",
+                        fontWeight: 600,
+                        textAlign: "center",
+                      }}
+                    >
+                      TOP BID
+                    </th>
                     <SortTh
                       label="ASK $/YR"
                       sortKey="ask"
@@ -824,7 +864,7 @@ export default function FreeAgency({
                   {sortedAgents.length === 0 && (
                     <tr>
                       <td
-                        colSpan={8}
+                        colSpan={9}
                         style={{
                           textAlign: "center",
                           padding: "var(--space-8)",
@@ -839,76 +879,74 @@ export default function FreeAgency({
                     const isSigningThis = signingPlayerId === player.id;
                     const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                     const askYrs = suggestedYears(player.age);
+                    const offers = player.offers || {};
+                    const hasBids = offers.count > 0;
+                    const userIsTop = offers.userIsTopBidder;
+
+                    // Top Bid cell (shared between signing & normal rows)
+                    const topBidCell = (
+                      <td style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}>
+                        {hasBids ? (
+                          <div>
+                            <div style={{
+                              fontWeight: 700,
+                              color: userIsTop ? "var(--success)" : "var(--warning)",
+                            }}>
+                              ${offers.topBidAnnual}M/{offers.topBidYears}yr
+                            </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 2 }}>
+                              {offers.topBidTeam ?? "Unknown"}
+                            </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
+                              {offers.count} bid{offers.count !== 1 ? "s" : ""}
+                            </div>
+                            {userIsTop && (
+                              <span style={{
+                                display: "inline-block",
+                                marginTop: 2,
+                                padding: "1px 6px",
+                                borderRadius: "var(--radius-pill)",
+                                background: "var(--success)22",
+                                color: "var(--success)",
+                                fontWeight: 700,
+                                fontSize: "10px",
+                              }}>
+                                YOUR BID LEADS
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span style={{ color: "var(--text-subtle)" }}>No bids</span>
+                        )}
+                      </td>
+                    );
 
                     if (isSigningThis) {
-                      // Two-row pattern: player info row (highlighted) + sign form row
                       return (
                         <React.Fragment key={player.id}>
-                          {/* Highlighted player row */}
                           <tr style={{ background: "var(--accent)0d" }}>
-                            <td
-                              style={{
-                                paddingLeft: "var(--space-5)",
-                                color: "var(--text-subtle)",
-                                fontSize: "var(--text-xs)",
-                                fontWeight: 700,
-                              }}
-                            >
+                            <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                               {idx + 1}
                             </td>
-                            <td>
-                              <PosBadge pos={player.pos} />
-                            </td>
-                            <td
-                              onClick={() =>
-                                onPlayerSelect && onPlayerSelect(player.id)
-                              }
-                              style={{
-                                fontWeight: 600,
-                                color: "var(--text)",
-                                cursor: onPlayerSelect ? "pointer" : "default",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  borderBottom: onPlayerSelect
-                                    ? "1px dotted var(--text-muted)"
-                                    : "none",
-                                }}
-                              >
-                                {player.name}
-                              </span>
+                            <td><PosBadge pos={player.pos} /></td>
+                            <td onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
+                              <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
                             </td>
                             <td style={{ whiteSpace: "nowrap" }}>
-                              {(player.traits || []).map((t) => (
-                                <TraitBadge key={t} traitId={t} />
-                              ))}
+                              {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
                             </td>
-                            <td>
-                              <OvrBadge ovr={player.ovr} />
-                            </td>
-                            <td style={{ color: "var(--text-muted)" }}>
-                              {player.age}
-                            </td>
+                            <td><OvrBadge ovr={player.ovr} /></td>
+                            <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
                             <td style={{ textAlign: "center" }}>
-                              <PipBar
-                                value={player.schemeFit ?? 50}
-                                color="var(--accent)"
-                              />
+                              <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                             </td>
-                            <td
-                              style={{
-                                textAlign: "right",
-                                paddingRight: "var(--space-5)",
-                              }}
-                            >
-                              {/* Keep button rendered but disabled so layout doesn't shift */}
+                            {topBidCell}
+                            <td style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
                               <button className="btn btn-primary" disabled>
-                                {player.offers?.userOffered ? "Update" : "Offer"}
+                                {offers.userOffered ? "Update Bid" : "Submit Bid"}
                               </button>
                             </td>
                           </tr>
-                          {/* Inline form row */}
                           <tr>
                             <SignInlineForm
                               player={player}
@@ -921,98 +959,40 @@ export default function FreeAgency({
                       );
                     }
 
-                    // Normal player row
                     return (
                       <tr key={player.id}>
-                        <td
-                          style={{
-                            paddingLeft: "var(--space-5)",
-                            color: "var(--text-subtle)",
-                            fontSize: "var(--text-xs)",
-                            fontWeight: 700,
-                          }}
-                        >
+                        <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                           {idx + 1}
                         </td>
-                        <td>
-                          <PosBadge pos={player.pos} />
-                        </td>
-                        <td
-                          onClick={() =>
-                            onPlayerSelect && onPlayerSelect(player.id)
-                          }
-                          style={{
-                            fontWeight: 600,
-                            color: "var(--text)",
-                            cursor: onPlayerSelect ? "pointer" : "default",
-                          }}
-                        >
-                          <span
-                            style={{
-                              borderBottom: onPlayerSelect
-                                ? "1px dotted var(--text-muted)"
-                                : "none",
-                            }}
-                          >
-                            {player.name}
-                          </span>
+                        <td><PosBadge pos={player.pos} /></td>
+                        <td onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
+                          <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
                         </td>
                         <td style={{ whiteSpace: "nowrap" }}>
-                          {(player.traits || []).map((t) => (
-                            <TraitBadge key={t} traitId={t} />
-                          ))}
+                          {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
                         </td>
-                        <td>
-                          <OvrBadge ovr={player.ovr} />
-                        </td>
-                        <td style={{ color: "var(--text-muted)" }}>
-                          {player.age}
-                        </td>
+                        <td><OvrBadge ovr={player.ovr} /></td>
+                        <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
                         <td style={{ textAlign: "center" }}>
-                          <PipBar
-                            value={player.schemeFit ?? 50}
-                            color="var(--accent)"
-                          />
+                          <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                         </td>
-                        <td
-                          style={{
-                            textAlign: "right",
-                            paddingRight: "var(--space-5)",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <div
-                            style={{
-                              fontSize: "var(--text-xs)",
-                              color: "var(--text)",
-                              fontWeight: 600,
-                              marginBottom: 4,
-                            }}
-                          >
+                        {topBidCell}
+                        <td style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
+                          <div style={{ fontSize: "var(--text-xs)", color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
                             ${(player._ask ?? 0).toFixed(1)}M{" "}
-                            <span style={{ color: "var(--text-muted)" }}>
-                              / {askYrs}y
-                            </span>
+                            <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
                           </div>
                           {!canAfford ? (
-                            <span
-                              style={{
-                                color: "var(--danger)",
-                                fontSize: "var(--text-xs)",
-                              }}
-                            >
+                            <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
                               Cannot Afford
                             </span>
                           ) : (
                             <button
                               className="btn btn-primary"
-                              style={{
-                                padding: "2px 10px",
-                                fontSize: "var(--text-xs)",
-                              }}
+                              style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
                               onClick={() => setSigningPlayerId(player.id)}
                             >
-                              {player.offers?.userOffered ? "Update" : "Offer"}
+                              {offers.userOffered ? "Update Bid" : "Submit Bid"}
                             </button>
                           )}
                         </td>
@@ -1034,9 +1014,12 @@ export default function FreeAgency({
                   const isSigningThis = signingPlayerId === player.id;
                   const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                   const askYrs = suggestedYears(player.age);
+                  const mOffers = player.offers || {};
+                  const mHasBids = mOffers.count > 0;
+                  const mUserIsTop = mOffers.userIsTopBidder;
 
                   return (
-                     <div key={player.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                     <div key={player.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
                         <div style={{ display: "flex", gap: "var(--space-3)" }}>
                            <PlayerAvatar text={player.pos} teamColor="var(--accent)" size={56} />
                            <div style={{ flex: 1 }}>
@@ -1047,6 +1030,21 @@ export default function FreeAgency({
                                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                                    Age {player.age} · Ask: ${(player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                </div>
+                               {/* Top Bid info on mobile */}
+                               {mHasBids && (
+                                 <div style={{ fontSize: "var(--text-xs)", marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                                   <span style={{ fontWeight: 700, color: mUserIsTop ? "var(--success)" : "var(--warning)" }}>
+                                     Top Bid: ${mOffers.topBidAnnual}M/{mOffers.topBidYears}yr
+                                   </span>
+                                   <span style={{ color: "var(--text-muted)" }}>by {mOffers.topBidTeam ?? "?"}</span>
+                                   <span style={{ color: "var(--text-muted)" }}>({mOffers.count} bid{mOffers.count !== 1 ? "s" : ""})</span>
+                                   {mUserIsTop && (
+                                     <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", background: "var(--success)22", color: "var(--success)", fontWeight: 700, fontSize: "10px" }}>
+                                       YOUR BID LEADS
+                                     </span>
+                                   )}
+                                 </div>
+                               )}
                                <div style={{ marginTop: "var(--space-2)" }}>
                                   {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
                                </div>
@@ -1059,7 +1057,7 @@ export default function FreeAgency({
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                               <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{player.offers?.userOffered ? "Update" : "Offer"}</button>
+                               <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</button>
                             </div>
                         )}
                      </div>

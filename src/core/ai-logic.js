@@ -531,13 +531,14 @@ class AiLogic {
                         details: { playerId: player.id, contract: offer.contract }
                     });
 
-                    if ((player.ovr ?? 0) > 75) {
-                        await NewsEngine.logTransaction('SIGN', {
-                            teamId,
-                            playerId: player.id,
-                            contract: offer.contract
-                        });
-                    }
+                    // Broadcast FA signing news: "[Player] signs a [X]-year, $[Y]M deal with the [Team]"
+                    const signingTeam = cache.getTeam(teamId);
+                    const totalDealValue = Math.round(((offer.contract.baseAnnual * offer.contract.yearsTotal) + (offer.contract.signingBonus || 0)) * 10) / 10;
+                    const signingText = `${player.name} signs a ${offer.contract.yearsTotal}-year, $${totalDealValue}M deal with the ${signingTeam ? signingTeam.name : 'Unknown'}.`;
+                    await NewsEngine.logNews('TRANSACTION', signingText, teamId, {
+                        playerId: player.id,
+                        priority: (player.ovr ?? 0) >= 80 ? 'high' : undefined,
+                    });
                 } else {
                     // Offer rejected due to cap change (team spent money elsewhere)
                     // Remove this offer
@@ -549,9 +550,15 @@ class AiLogic {
     }
 
     /**
-     * Player Decision Matrix — rebalanced weights (Task 8).
-     * Money: 50% (normalized to 0-100), Winning: 30%, Scheme Fit: 20%.
-     * Position-specific money sensitivity adjusts the weights further.
+     * Player Decision Matrix — Bidding War edition.
+     *
+     * Evaluation factors:
+     *  1. Total Contract Value (normalized 0-100)
+     *  2. Prestige Modifier — teams with more wins last season get a boost
+     *  3. Scheme Fit — 0-100
+     *
+     * Position-specific money sensitivity adjusts the weights.
+     * "Divisive" players ignore prestige entirely and strictly chase money.
      * Threshold decreases by 5% per day after day 2 so players eventually commit.
      *
      * @param {object} player
@@ -560,17 +567,26 @@ class AiLogic {
     static evaluateOffers(player, day = 1) {
         if (!player.offers || player.offers.length === 0) return { signed: false, offer: null };
 
-        // Position-specific weight sets (moneyW, winW, fitW)
-        // Money-sensitive: QB, WR — value financial security above rings
-        // Win-sensitive: veteran LB, S — chase championships late career
-        const POS_WEIGHTS = {
-            QB:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
-            WR:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
-            RB:  { moneyW: 0.55, winW: 0.25, fitW: 0.20 },
-            LB:  { moneyW: 0.40, winW: 0.40, fitW: 0.20 },
-            S:   { moneyW: 0.40, winW: 0.40, fitW: 0.20 },
-        };
-        const weights = POS_WEIGHTS[player.pos] ?? { moneyW: 0.50, winW: 0.30, fitW: 0.20 };
+        // Check if player has the "Divisive" trait — strictly chases guaranteed money
+        const isDivisive = (player.traits || []).some(t =>
+            typeof t === 'string' && t.toLowerCase() === 'divisive'
+        );
+
+        // Position-specific weight sets (moneyW, prestigeW, fitW)
+        // Divisive players: 100% money, 0% prestige, 0% fit
+        const POS_WEIGHTS = isDivisive
+            ? { moneyW: 1.00, prestigeW: 0.00, fitW: 0.00 }
+            : (() => {
+                const map = {
+                    QB:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
+                    WR:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
+                    RB:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
+                    LB:  { moneyW: 0.35, prestigeW: 0.40, fitW: 0.25 },
+                    S:   { moneyW: 0.35, prestigeW: 0.40, fitW: 0.25 },
+                };
+                return map[player.pos] ?? { moneyW: 0.45, prestigeW: 0.35, fitW: 0.20 };
+            })();
+        const weights = POS_WEIGHTS;
 
         // Max expected contract value for normalization (~5yr × $50M)
         const MAX_CONTRACT_VALUE = 250;
@@ -583,13 +599,15 @@ class AiLogic {
             if (!team) continue;
 
             const c = offer.contract;
-            const totalValue = (c.baseAnnual * c.yearsTotal) + c.signingBonus;
+            const totalValue = (c.baseAnnual * c.yearsTotal) + (c.signingBonus || 0);
 
             // 1. Financial Value — normalized 0-100
             const normalizedMoney = Math.min(100, (totalValue / MAX_CONTRACT_VALUE) * 100);
 
-            // 2. Team Contender Status — OVR already 0-100
-            const winScore = team.ovr || 75;
+            // 2. Prestige Modifier — based on last season's wins (0-17 range → 0-100)
+            //    Teams with more wins are more attractive destinations.
+            const teamWins = team.wins ?? 0;
+            const prestigeScore = Math.min(100, (teamWins / 17) * 100);
 
             // 3. Scheme Fit — 0-100
             let fitScore = 50;
@@ -601,7 +619,7 @@ class AiLogic {
             }
 
             const score = (normalizedMoney * weights.moneyW * 100)
-                        + (winScore       * weights.winW  * 100)
+                        + (prestigeScore  * weights.prestigeW * 100)
                         + (fitScore       * weights.fitW  * 100);
 
             if (score > bestScore) {
@@ -615,8 +633,8 @@ class AiLogic {
         const askTotalValue = (ask.baseAnnual * ask.yearsTotal) + ask.signingBonus;
         const askNormalized  = Math.min(100, (askTotalValue / MAX_CONTRACT_VALUE) * 100);
         const askScore = askNormalized * weights.moneyW * 100
-                       + 75 * weights.winW * 100   // assume average team baseline
-                       + 50 * weights.fitW * 100;  // assume average fit baseline
+                       + 50 * weights.prestigeW * 100   // assume average prestige baseline
+                       + 50 * weights.fitW * 100;        // assume average fit baseline
 
         const dayPenalty = Math.max(0, day - 2) * 0.05; // 5% per day after day 2
         const threshold  = askScore * (0.95 - dayPenalty);
