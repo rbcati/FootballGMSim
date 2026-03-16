@@ -119,7 +119,7 @@
   font-weight: 500; 
   font-size: var(--text-sm);
   cursor: pointer; 
-  transition: all var(--dur) var(--ease);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
   text-decoration: none;
@@ -131,13 +131,14 @@
   inset: 0;
   background: rgba(255, 255, 255, 0.1);
   opacity: 0;
-  transition: opacity var(--dur) var(--ease);
+  transition: opacity 0.2s ease;
 }
 
 .btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-  border-color: var(--hairline-strong);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  border-color: var(--accent);
+  filter: brightness(1.05);
 }
 
 .btn:hover::before {
@@ -145,7 +146,9 @@
 }
 
 .btn:active {
-  transform: translateY(0);
+  transform: scale(0.97) translateY(1px) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  filter: brightness(0.95);
 }
 
 .btn.primary { 
