@@ -957,11 +957,85 @@ select:disabled {
   100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
 }
 
-.game-event-overlay.touchdown .event-text { color: #FFD700; text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-.game-event-overlay.field-goal .event-text { color: #34C759; text-shadow: 0 0 20px rgba(52, 199, 89, 0.5); }
-.game-event-overlay.turnover .event-text { color: #FF453A; text-shadow: 0 0 20px rgba(255, 69, 58, 0.5); }
-.game-event-overlay.safety .event-text { color: #FF9F0A; text-shadow: 0 0 20px rgba(255, 159, 10, 0.5); }
-.game-event-overlay.sack .event-text { color: #FF9F0A; }
+.game-event-overlay.touchdown .event-text {
+  color: #FFD700;
+  text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
+  animation: goal-celebration 1s ease-out;
+}
+.game-event-overlay.touchdown::before {
+  content: '🙌';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.game-event-overlay.field-goal .event-text {
+  color: #FFD700;
+  text-shadow: 0 0 20px #FFA500;
+  animation: goal-celebration 1s ease-out;
+}
+.game-event-overlay.field-goal::before {
+  content: '👟';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.game-event-overlay.turnover .event-text {
+  color: #FF453A;
+  border: 4px solid #FF453A;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 15px 30px;
+  transform: rotate(-5deg);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255, 69, 58, 0.6);
+  font-family: 'Courier New', monospace;
+  font-weight: 900;
+}
+.game-event-overlay.turnover::before {
+  content: '🛡️';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
+  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.game-event-overlay.sack .event-text {
+  color: #FF9F0A;
+  border: 4px solid #FF9F0A;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 15px 30px;
+  transform: rotate(5deg);
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(255, 159, 10, 0.6);
+  font-family: 'Courier New', monospace;
+  font-weight: 900;
+}
+.game-event-overlay.sack::before {
+  content: '💥';
+  display: block;
+  font-size: 5rem;
+  margin-bottom: 10px;
+  animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.game-event-overlay.safety .event-text {
+  color: #FF9F0A;
+  text-shadow: 0 0 20px rgba(255, 159, 10, 0.5);
+  border: 2px dashed #FF9F0A;
+  padding: 10px 20px;
+}
+.game-event-overlay.safety::before {
+  content: '🛡️';
+  display: block;
+  font-size: 4rem;
+  margin-bottom: 10px;
+  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
 .game-event-overlay.big-play .event-text { color: #0A84FF; text-shadow: 0 0 20px rgba(10, 132, 255, 0.5); }
 
 /* Play log item flash animations */
