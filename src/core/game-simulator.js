@@ -1523,49 +1523,69 @@ export function simGameStats(home, away, options = {}) {
 
             const driveRoll = U.random();
 
+            // Play-by-play log helper (shared by scoring and non-scoring drives)
+            const logDrive = options && options.generateLogs;
+            const offAbbr = isHome ? (options.homeAbbr || 'HOME') : (options.awayAbbr || 'AWAY');
+            const defAbbr = isHome ? (options.awayAbbr || 'AWAY') : (options.homeAbbr || 'HOME');
+            const qtr = Math.min(4, Math.floor((d / totalDrives) * 4) + 1);
+            const minutesPerQtr = 15;
+            const drivesPerQtr = Math.ceil(totalDrives / 4);
+            const driveInQtr = d % drivesPerQtr;
+            const clockMins = Math.max(0, minutesPerQtr - Math.floor((driveInQtr / drivesPerQtr) * minutesPerQtr));
+            const clockSecs = U.rand(0, 5) * 10;
+            const clockStr = `${clockMins}:${String(clockSecs).padStart(2, '0')}`;
+
+            // Track field position through the drive
+            let yardLine = U.rand(20, 35); // starting field position
+            let currentDown = 1;
+            let yardsToGo = 10;
+
+            const addLog = (text, extraYardLine) => {
+                result.playLogs.push({
+                    scoreHome: result.home.score,
+                    scoreAway: result.away.score,
+                    quarter: qtr,
+                    clock: clockStr,
+                    yardLine: extraYardLine != null ? extraYardLine : yardLine,
+                    down: currentDown,
+                    distance: yardsToGo,
+                    possession: possession,
+                    playText: text
+                });
+            };
+
             if (driveRoll < scoreProb) {
                 // --- SCORING DRIVE ---
                 const typeRoll = U.random();
-                if (options && options.generateLogs) {
-                    const qtr = Math.min(4, Math.floor((d / totalDrives) * 4) + 1);
-                    const clockMins = 15 - Math.floor(( (d % (totalDrives/4)) / (totalDrives/4) ) * 15);
-                    const clockStr = `${clockMins}:00`;
-
-                    const addLog = (text) => {
-                        result.playLogs.push({
-                            scoreHome: result.home.score,
-                            scoreAway: result.away.score,
-                            quarter: qtr,
-                            clock: clockStr,
-                            yardLine: 50,
-                            down: 1,
-                            distance: 10,
-                            possession: possession,
-                            playText: text
-                        });
-                    };
-
-                    const offName = isHome ? "Home" : "Away";
-                    const defName = isHome ? "Away" : "Home";
-
-                    // Filler plays
-                    for(let i=0; i<U.rand(2, 5); i++) {
-                        const gain = U.rand(1, 15);
-                        addLog(U.random() > 0.5 ? `${offName} pass complete for ${gain} yds.` : `${offName} runs for ${gain} yds.`);
+                if (logDrive) {
+                    // Simulate a realistic multi-play drive
+                    const numPlays = U.rand(3, 8);
+                    for (let i = 0; i < numPlays; i++) {
+                        const gain = U.rand(-2, 18);
+                        const playRoll = U.random();
+                        if (playRoll < 0.45) {
+                            addLog(`${offAbbr} pass complete for ${Math.max(0, gain)} yds.`);
+                        } else if (playRoll < 0.75) {
+                            addLog(`${offAbbr} runs for ${Math.max(0, gain)} yds.`);
+                        } else if (playRoll < 0.82) {
+                            addLog(`${offAbbr} pass incomplete.`);
+                        } else if (playRoll < 0.88) {
+                            addLog(`${defAbbr} sack! Loss of ${U.rand(3, 10)} yds.`);
+                        } else if (playRoll < 0.93) {
+                            addLog(`Penalty on ${U.random() > 0.5 ? offAbbr : defAbbr}: ${U.rand(5, 15)} yds.`);
+                        } else {
+                            addLog(`${offAbbr} screen pass for ${Math.max(0, gain)} yds.`);
+                        }
+                        yardLine = U.clamp(yardLine + Math.max(0, gain), 1, 99);
+                        yardsToGo -= Math.max(0, gain);
+                        if (yardsToGo <= 0) { currentDown = 1; yardsToGo = 10; }
+                        else { currentDown = Math.min(currentDown + 1, 4); }
                     }
-
-                    if (driveRoll < scoreProb) {
-                        if (typeRoll < tdShare) {
-                            addLog(`${offName} TOUCHDOWN!`);
-                        } else {
-                            addLog(`${offName} FIELD GOAL is GOOD.`);
-                        }
+                    // Scoring play
+                    if (typeRoll < tdShare) {
+                        addLog(`${offAbbr} TOUCHDOWN!`, 100);
                     } else {
-                        if (U.random() < turnoverChance) { // Use hardcoded chance if undefined
-                            addLog(`${offName} TURNOVER! Ball recovered by ${defName}.`);
-                        } else {
-                            addLog(`${offName} PUNTS.`);
-                        }
+                        addLog(`${offAbbr} field goal attempt... GOOD!`, yardLine);
                     }
                 }
 
@@ -1611,14 +1631,20 @@ export function simGameStats(home, away, options = {}) {
                 if (defMods.defIntChance) turnoverChance *= (defMods.defIntChance - 1) * 0.3 + 1;
                 if (defMods.defPressure) turnoverChance *= 1 + (defMods.defPressure - 1) * 0.15;
 
+                let driveEndedInTurnover = false;
+                let driveEndedInSafety = false;
+                let driveEndedInDefTD = false;
+
                 if (U.random() < turnoverChance) {
                     defTeam.turnoversForced++;
+                    driveEndedInTurnover = true;
 
                     // Defensive/Special Teams TD chance (pick-six, fumble return, scoop-and-score)
                     // NFL average: ~5% of turnovers returned for TD
                     const defTDChance = 0.05 + (defStr - 70) * 0.002;
                     if (U.random() < defTDChance) {
                         defTeam.defensiveTDs++;
+                        driveEndedInDefTD = true;
                         const xpRoll = U.random();
                         if (xpRoll < 0.95) {
                             defTeam.score += 7;
@@ -1639,7 +1665,42 @@ export function simGameStats(home, away, options = {}) {
                 if (U.random() < 0.005 + (defStr - offStr) * 0.0001) {
                     defTeam.score += 2;
                     defTeam.safeties++;
+                    driveEndedInSafety = true;
                     momentum += isHome ? -15 : 15;
+                }
+
+                // Generate non-scoring drive logs
+                if (logDrive) {
+                    const numPlays = U.rand(2, 5);
+                    for (let i = 0; i < numPlays; i++) {
+                        const gain = U.rand(-3, 12);
+                        const playRoll = U.random();
+                        if (playRoll < 0.4) {
+                            addLog(`${offAbbr} pass complete for ${Math.max(0, gain)} yds.`);
+                        } else if (playRoll < 0.65) {
+                            addLog(`${offAbbr} runs for ${Math.max(0, gain)} yds.`);
+                        } else if (playRoll < 0.8) {
+                            addLog(`${offAbbr} pass incomplete.`);
+                        } else if (playRoll < 0.9) {
+                            addLog(`${defAbbr} sack! Loss of ${U.rand(3, 8)} yds.`);
+                        } else {
+                            addLog(`Penalty: ${U.rand(5, 15)} yds.`);
+                        }
+                        yardLine = U.clamp(yardLine + Math.max(0, gain), 1, 99);
+                        yardsToGo -= Math.max(0, gain);
+                        if (yardsToGo <= 0) { currentDown = 1; yardsToGo = 10; }
+                        else { currentDown = Math.min(currentDown + 1, 4); }
+                    }
+                    // Drive ending
+                    if (driveEndedInSafety) {
+                        addLog(`SAFETY! ${defAbbr} scores 2 points!`);
+                    } else if (driveEndedInDefTD) {
+                        addLog(`${U.random() > 0.5 ? 'INTERCEPTION' : 'FUMBLE'} returned for a TOUCHDOWN by ${defAbbr}!`);
+                    } else if (driveEndedInTurnover) {
+                        addLog(`${U.random() > 0.5 ? 'INTERCEPTION' : 'FUMBLE'}! ${defAbbr} takes over.`);
+                    } else {
+                        addLog(`${offAbbr} punts.`);
+                    }
                 }
 
                 // Momentum decays towards neutral on non-scoring drives
@@ -2576,7 +2637,7 @@ export function simulateBatch(games, options = {}) {
                 do {
                     // Use simulateMatchup (unified function)
                     // Pass league for scheme fit calculations
-                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff });
+                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr });
                     attempts++;
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 

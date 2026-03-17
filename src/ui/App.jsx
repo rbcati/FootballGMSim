@@ -183,7 +183,7 @@ export default function App() {
     if (['offseason_resign', 'offseason'].includes(league.phase)) return 'Advance';
     if (league.phase === 'free_agency') return 'Next FA Day';
     if (league.phase === 'draft') return 'Draft';
-    return `Week ${league.week}`;
+    return `Sim Week ${league.week}`;
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -474,69 +474,92 @@ export default function App() {
       )}
 
       {/* ── User Game Prompt Modal ── */}
-      {promptUserGame && (
-        <div className="app-modal-overlay" style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          zIndex: 9999,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(0,0,0,0.6)',
-          pointerEvents: 'auto',
-          touchAction: 'manipulation',
-          WebkitTapHighlightColor: 'transparent',
-          userSelect: 'none', WebkitUserSelect: 'none',
-        }}>
-          <div className="app-modal-card" style={{
+      {promptUserGame && (() => {
+        const ut = league?.teams?.find(t => t.id === league.userTeamId);
+        const weekGames = league?.schedule?.weeks?.find(w => w.week === league.week)?.games ?? [];
+        const matchup = weekGames.find(g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId);
+        const isHome = matchup ? Number(matchup.home) === league.userTeamId : true;
+        const oppId = matchup ? (isHome ? Number(matchup.away) : Number(matchup.home)) : null;
+        const opp = oppId != null ? league?.teams?.find(t => t.id === oppId) : null;
+        return (
+          <div className="app-modal-overlay" style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
             pointerEvents: 'auto',
-            position: 'relative', zIndex: 10000,
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            userSelect: 'none', WebkitUserSelect: 'none',
           }}>
-            <h2 className="app-modal-title">Watch Your Game?</h2>
-            <p className="app-modal-desc">
-              Your team has a game scheduled this week. Would you like to watch the play-by-play, or simulate the rest of the week?
-            </p>
-            <div className="app-modal-actions" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              <button
-                className="btn btn-primary app-modal-watch-btn"
-                onClick={() => actions.watchGame()}
-                style={{
-                  pointerEvents: 'auto', touchAction: 'manipulation',
-                  userSelect: 'none', WebkitUserSelect: 'none',
-                  minHeight: 48, minWidth: 48,
-                  position: 'relative', zIndex: 10001,
-                  cursor: 'pointer',
-                }}
-              >
-                Watch Game
-              </button>
-              <button
-                className="btn app-modal-sim-btn"
-                onClick={() => actions.advanceWeek({ skipUserGame: true })}
-                style={{
-                  pointerEvents: 'auto', touchAction: 'manipulation',
-                  userSelect: 'none', WebkitUserSelect: 'none',
-                  minHeight: 48, minWidth: 48,
-                  position: 'relative', zIndex: 10001,
-                  cursor: 'pointer',
-                }}
-              >
-                Simulate
-              </button>
+            <div className="app-modal-card" style={{
+              pointerEvents: 'auto',
+              position: 'relative', zIndex: 10000,
+              maxWidth: 420,
+            }}>
+              <div style={{ fontSize: '2rem', fontWeight: 900, marginBottom: 8, letterSpacing: '-1px' }}>
+                {isHome ? `${opp?.abbr ?? '???'} @ ${ut?.abbr ?? 'YOU'}` : `${ut?.abbr ?? 'YOU'} @ ${opp?.abbr ?? '???'}`}
+              </div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 4 }}>
+                Week {league.week} {league.phase === 'playoffs' ? '· Playoffs' : '· Regular Season'}
+              </div>
+              <h2 className="app-modal-title" style={{ marginTop: 16 }}>Watch Your Game?</h2>
+              <p className="app-modal-desc">
+                Follow the action play-by-play, or skip ahead and simulate.
+              </p>
+              <div className="app-modal-actions" style={{ flexDirection: 'column', gap: 10 }}>
+                <button
+                  className="btn btn-primary app-modal-watch-btn"
+                  onClick={() => actions.watchGame()}
+                  style={{
+                    width: '100%', minHeight: 52, fontSize: 'var(--text-base)', fontWeight: 700,
+                    pointerEvents: 'auto', touchAction: 'manipulation',
+                    userSelect: 'none', WebkitUserSelect: 'none',
+                    position: 'relative', zIndex: 10001,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Watch Game
+                </button>
+                <button
+                  className="btn app-modal-sim-btn"
+                  onClick={() => actions.advanceWeek({ skipUserGame: true })}
+                  style={{
+                    width: '100%', minHeight: 48, fontSize: 'var(--text-sm)',
+                    pointerEvents: 'auto', touchAction: 'manipulation',
+                    userSelect: 'none', WebkitUserSelect: 'none',
+                    position: 'relative', zIndex: 10001,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Simulate
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Live Game Viewer ── */}
-      {userGameLogs && (
-        <LiveGameViewer
-          logs={userGameLogs}
-          homeTeam={league?.teams?.find(t => t.id === league.userTeamId) || { abbr: 'HOME' }}
-          awayTeam={league?.teams?.find(t => t.id !== league.userTeamId) || { abbr: 'AWAY' }}
-          onComplete={() => {
-              actions.clearUserGame();
-              actions.advanceWeek({ skipUserGame: true });
-          }}
-        />
-      )}
+      {userGameLogs && (() => {
+        // Determine actual home/away from the latest game event for the user's team
+        const userEvent = gameEvents?.find(e => e.homeId === league.userTeamId || e.awayId === league.userTeamId);
+        const homeId = userEvent?.homeId ?? league.userTeamId;
+        const awayId = userEvent?.awayId ?? league.teams?.find(t => t.id !== league.userTeamId)?.id;
+        const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME' };
+        const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY' };
+        return (
+          <LiveGameViewer
+            logs={userGameLogs}
+            homeTeam={homeTeam}
+            awayTeam={awayTeam}
+            onComplete={() => {
+                actions.clearUserGame();
+                actions.advanceWeek({ skipUserGame: true });
+            }}
+          />
+        );
+      })()}
     </div>
   );
 }
