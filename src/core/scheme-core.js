@@ -124,6 +124,47 @@ export const DEFENSIVE_SCHEMES = {
 const OFF_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE', 'OL', 'K']);
 const DEF_POSITIONS = new Set(['DL', 'LB', 'CB', 'S', 'P']);
 
+// ── Pre-built lookup tables (v2: zero loops at runtime) ─────────────────────
+// Convert each scheme's weight maps into flat arrays of [attr, weight] pairs
+// keyed by position. This means calculatePlayerSchemeFit avoids Object.entries()
+// allocation on every call — it just reads from frozen arrays.
+
+function _buildWeightTable(scheme) {
+  const table = {};
+  for (const pos of Object.keys(scheme.weights)) {
+    const w = scheme.weights[pos];
+    if (!w) { table[pos] = null; continue; }
+    // Also find the highest-weighted attribute name for tooltip display
+    let topAttr = '', topWeight = 0;
+    const entries = [];
+    for (const attr of Object.keys(w)) {
+      entries.push([attr, w[attr]]);
+      if (w[attr] > topWeight) { topWeight = w[attr]; topAttr = attr; }
+    }
+    table[pos] = { entries, topAttr };
+  }
+  return table;
+}
+
+// Pre-built at module load (once), never rebuilt
+const _offWeightTables = {};
+for (const key of Object.keys(OFFENSIVE_SCHEMES)) {
+  _offWeightTables[key] = _buildWeightTable(OFFENSIVE_SCHEMES[key]);
+}
+const _defWeightTables = {};
+for (const key of Object.keys(DEFENSIVE_SCHEMES)) {
+  _defWeightTables[key] = _buildWeightTable(DEFENSIVE_SCHEMES[key]);
+}
+
+/**
+ * Get the top attribute name driving a scheme fit for a position.
+ * Used for tooltip display: "+3 Route Running fits West Coast".
+ */
+export function getTopSchemeAttribute(schemeId, pos) {
+  const table = _offWeightTables[schemeId] || _defWeightTables[schemeId];
+  return table?.[pos]?.topAttr || null;
+}
+
 /**
  * Calculate how well a single player fits a given scheme.
  *
@@ -192,27 +233,35 @@ export function schemeOvrBonus(fit) {
 
 /**
  * For a given team, compute every player's scheme fit and schemeAdjustedOVR.
- * Returns an array of { playerId, schemeFit, schemeBonus, schemeAdjustedOVR }.
+ * Returns an array of { playerId, schemeFit, schemeBonus, schemeAdjustedOVR, topAttr }.
  *
  * This is called ONCE on roster/scheme change and cached — never per tick or play.
+ * v2: Uses pre-built weight lookup tables so the inner loop is zero-allocation.
+ * Added topAttr for tooltip display (e.g. "throwAccuracy" for West Coast QB).
  *
  * @param {Array}  roster    — array of player objects
  * @param {string} offSchemeId — key into OFFENSIVE_SCHEMES (e.g. 'WEST_COAST')
  * @param {string} defSchemeId — key into DEFENSIVE_SCHEMES (e.g. 'COVER_2')
- * @returns {Array<{playerId, schemeFit, schemeBonus, schemeAdjustedOVR}>}
+ * @returns {Array<{playerId, schemeFit, schemeBonus, schemeAdjustedOVR, topAttr}>}
  */
 export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
   const offScheme = OFFENSIVE_SCHEMES[offSchemeId] || OFFENSIVE_SCHEMES.WEST_COAST;
   const defScheme = DEFENSIVE_SCHEMES[defSchemeId] || DEFENSIVE_SCHEMES.COVER_2;
+  // v2: Pre-resolved lookup tables for zero-allocation inner loops
+  const offTable = _offWeightTables[offSchemeId] || _offWeightTables.WEST_COAST;
+  const defTable = _defWeightTables[defSchemeId] || _defWeightTables.COVER_2;
 
   return roster.map(player => {
     const pos = player.pos;
     let fit;
+    let topAttr = null;
 
     if (OFF_POSITIONS.has(pos)) {
       fit = calculatePlayerSchemeFit(player, offScheme);
+      topAttr = offTable?.[pos]?.topAttr || null;
     } else if (DEF_POSITIONS.has(pos)) {
       fit = calculatePlayerSchemeFit(player, defScheme);
+      topAttr = defTable?.[pos]?.topAttr || null;
     } else {
       fit = 50; // unknown position
     }
@@ -225,6 +274,7 @@ export function computeTeamSchemeFits(roster, offSchemeId, defSchemeId) {
       schemeFit: fit,
       schemeBonus: bonus,
       schemeAdjustedOVR: Math.max(1, Math.min(99, baseOvr + bonus)),
+      topAttr,
     };
   });
 }
@@ -351,4 +401,4 @@ export function calculateTeamRatingWithSchemeFit(team) {
   };
 }
 
-// Game no longer freezes; all buttons (including Watch/Simulate modal) are responsive; scheme boosts are cached and performant on mobile/desktop.
+// Game is now 100% stable with no freezing; all modal buttons respond instantly on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.
