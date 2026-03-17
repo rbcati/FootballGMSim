@@ -107,6 +107,10 @@ export const toWorker = Object.freeze({
 
   /** Mid-season award races & All-Pro projections */
   GET_AWARD_RACES:    'GET_AWARD_RACES',      // {}
+
+  /** Record Book & Hall of Fame */
+  GET_RECORDS:        'GET_RECORDS',          // {} — fetch all-time and single-season records
+  GET_HALL_OF_FAME:   'GET_HALL_OF_FAME',     // {} — fetch all HOF inductees
 });
 
 // ─────────────────────────────────────────────
@@ -177,6 +181,10 @@ export const toUI = Object.freeze({
   DASHBOARD_LEADERS:  'DASHBOARD_LEADERS',    // { league, team }
   ALL_PLAYER_STATS:   'ALL_PLAYER_STATS',     // { stats[] }
   AWARD_RACES:        'AWARD_RACES',          // { week, year, awards, allPro }
+
+  /** Record Book & Hall of Fame */
+  RECORDS:            'RECORDS',              // { records }
+  HALL_OF_FAME:       'HALL_OF_FAME',         // { players[] }
 
   /** Season lifecycle */
   SEASON_START:       'SEASON_START',         // { year, season, phase } — forces UI to Standings tab

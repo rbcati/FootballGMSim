@@ -375,6 +375,12 @@ export function useWorker() {
     /** Fetch all season summaries for the history browser. */
     getAllSeasons: ()             => request(toWorker.GET_ALL_SEASONS, {}, { silent: true }),
 
+    /** Fetch record book data. */
+    getRecords: ()               => request(toWorker.GET_RECORDS, {}, { silent: true }),
+
+    /** Fetch Hall of Fame inductees. */
+    getHallOfFame: ()            => request(toWorker.GET_HALL_OF_FAME, {}, { silent: true }),
+
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
 

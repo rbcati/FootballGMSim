@@ -75,6 +75,7 @@ import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
+import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -1481,6 +1482,84 @@ async function handleGetSeasonHistory({ seasonId }, id) {
 async function handleGetAllSeasons(payload, id) {
   const seasons = await Seasons.loadRecent(200);
   post(toUI.ALL_SEASONS, { seasons }, id);
+}
+
+// ── Handler: GET_RECORDS ──────────────────────────────────────────────────────
+
+async function handleGetRecords(payload, id) {
+  const meta = cache.getMeta();
+  const records = meta?.records ?? createEmptyRecords();
+  post(toUI.RECORDS, { records }, id);
+}
+
+// ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
+
+async function handleGetHallOfFame(payload, id) {
+  // Collect all HOF players from DB (retired + any active HOF)
+  const allDBPlayers = await Players.loadAll();
+  const hofPlayers = allDBPlayers.filter(p => p.hof === true);
+
+  const teamAbbrMap = {};
+  cache.getAllTeams().forEach(t => { teamAbbrMap[t.id] = t.abbr; });
+
+  // Also check active cache for any HOF players still in memory
+  for (const p of cache.getAllPlayers()) {
+    if (p.hof === true && !hofPlayers.some(h => String(h.id) === String(p.id))) {
+      hofPlayers.push(p);
+    }
+  }
+
+  const result = hofPlayers.map(p => {
+    const primaryTeam = getMostPlayedTeam(p, teamAbbrMap);
+    const careerStats = Array.isArray(p.careerStats) ? p.careerStats : [];
+
+    // Aggregate career totals
+    let passYds = 0, rushYds = 0, recYds = 0, passTDs = 0, sacks = 0, gamesPlayed = 0;
+    for (const line of careerStats) {
+      passYds += line.passYds ?? 0;
+      rushYds += line.rushYds ?? 0;
+      recYds += line.recYds ?? 0;
+      passTDs += line.passTDs ?? 0;
+      sacks += line.sacks ?? 0;
+      gamesPlayed += line.gamesPlayed ?? 0;
+    }
+
+    // Find induction year (last year in career + 1, or look at retirement)
+    const lastCareerYear = careerStats.length > 0
+      ? careerStats[careerStats.length - 1].season
+      : null;
+
+    // Find HOF accolade year if available
+    const hofAccolade = (p.accolades || []).find(a => a.type === 'HOF');
+    const inductionYear = hofAccolade?.year ?? (lastCareerYear ? null : null);
+
+    const accolades = Array.isArray(p.accolades) ? p.accolades : [];
+    const mvpCount = accolades.filter(a => a.type === 'MVP').length;
+    const sbCount = accolades.filter(a => a.type === 'SB_RING').length;
+    const proCount = accolades.filter(a => a.type === 'PRO_BOWL').length;
+
+    return {
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      ovr: p.ovr,
+      number: p.number ?? p.jerseyNum ?? null,
+      primaryTeam,
+      teamColor: getTeamColor(primaryTeam, cache.getAllTeams()),
+      inductionYear,
+      seasonsPlayed: careerStats.length,
+      stats: { passYds, rushYds, recYds, passTDs, sacks, gamesPlayed },
+      accoladeSummary: { mvps: mvpCount, superBowls: sbCount, proBowls: proCount },
+    };
+  }).sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+
+  post(toUI.HALL_OF_FAME, { players: result }, id);
+}
+
+function getTeamColor(abbr, teams) {
+  const team = teams.find(t => t.abbr === abbr);
+  return team?.color ?? team?.primaryColor ?? '#555';
 }
 
 // ── Handler: GET_PLAYER_CAREER ────────────────────────────────────────────────
@@ -3504,6 +3583,27 @@ async function archiveSeason(seasonId) {
     // Flush accolade writes to DB
     await flushDirty();
 
+    // ── Record Book: check for broken single-season & all-time records ──────
+    const existingRecords = meta.records ?? null;
+    const allPlayersForRecords = cache.getAllPlayers();
+    const { records: updatedRecords, broken: brokenRecords } = processSeasonRecords(
+      existingRecords, populatedStats, allPlayersForRecords, year, teamAbbrMap
+    );
+    cache.setMeta({ records: updatedRecords });
+
+    // Log broken records as news
+    for (const br of brokenRecords.slice(0, 5)) {
+      const typeLabel = br.type === 'singleSeason' ? 'Single-Season' : 'All-Time Career';
+      await NewsEngine.logNews(
+        'RECORD',
+        `RECORD BROKEN: ${br.player} (${br.pos}, ${br.team}) set a new ${typeLabel} ${br.label} record with ${br.newValue.toLocaleString()}!`,
+        null,
+        { category: 'record_broken', record: br }
+      );
+    }
+
+    await flushDirty();
+
     const seasonSummary = {
       id: seasonId,
       year,
@@ -4117,6 +4217,8 @@ async function handleMessage(event) {
       case toWorker.GET_DASHBOARD_LEADERS: return await handleGetDashboardLeaders(payload, id);
       case toWorker.GET_ALL_PLAYER_STATS: return await handleGetAllPlayerStats(payload, id);
       case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
+      case toWorker.GET_RECORDS:        return await handleGetRecords(payload, id);
+      case toWorker.GET_HALL_OF_FAME:   return await handleGetHallOfFame(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

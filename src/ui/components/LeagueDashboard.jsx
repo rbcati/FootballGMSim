@@ -22,6 +22,7 @@ import FreeAgency from "./FreeAgency.jsx";
 import TradeCenter from "./TradeCenter.jsx";
 import BoxScore from "./BoxScore.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
+import HallOfFame from "./HallOfFame.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
 import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
@@ -51,6 +52,7 @@ const MOBILE_TAB_MAP = {
   player_stats: "Stats",
   awards: "Award Races",
   history: "History",
+  hall_of_fame: "Hall of Fame",
 };
 
 // Reverse map: dashboard tab → MobileNav tab ID
@@ -136,6 +138,7 @@ const BASE_TABS = [
   "Free Agency",
   "Trades",
   "History",
+  "Hall of Fame",
 ];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
@@ -1643,6 +1646,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
             <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Hall of Fame" && (
+          <TabErrorBoundary label="Hall of Fame">
+            <HallOfFame onPlayerSelect={setSelectedPlayerId} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (
