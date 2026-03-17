@@ -446,6 +446,33 @@ export default function App() {
         <MilestoneModal league={league} />
       )}
 
+      {/* ── Simulation Progress Spinner (CSS-only, prevents frozen-UI appearance) ── */}
+      {(simulating || busy) && !promptUserGame && !userGameLogs && !batchSim && (
+        <div className="app-sim-spinner-overlay">
+          <div className="app-sim-spinner" />
+          <p className="app-sim-spinner-text">
+            {simulating ? `Simulating… ${simProgress}%` : 'Processing…'}
+          </p>
+          <style>{`
+            .app-sim-spinner-overlay {
+              position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+              z-index: 2500; display: flex; flex-direction: column;
+              align-items: center; justify-content: center;
+              background: rgba(0,0,0,0.45); pointer-events: none;
+            }
+            .app-sim-spinner {
+              width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.2);
+              border-top-color: #0A84FF; border-radius: 50%;
+              animation: simSpin 0.7s linear infinite;
+            }
+            .app-sim-spinner-text {
+              color: #fff; font-size: 14px; margin-top: 12px; opacity: 0.9;
+            }
+            @keyframes simSpin { to { transform: rotate(360deg); } }
+          `}</style>
+        </div>
+      )}
+
       {/* ── User Game Prompt Modal ── */}
       {promptUserGame && (() => {
         const ut = league?.teams?.find(t => t.id === league.userTeamId);
@@ -455,8 +482,21 @@ export default function App() {
         const oppId = matchup ? (isHome ? Number(matchup.away) : Number(matchup.home)) : null;
         const opp = oppId != null ? league?.teams?.find(t => t.id === oppId) : null;
         return (
-          <div className="app-modal-overlay">
-            <div className="app-modal-card" style={{ maxWidth: 420 }}>
+          <div className="app-modal-overlay" style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.6)',
+            pointerEvents: 'auto',
+            touchAction: 'manipulation',
+            WebkitTapHighlightColor: 'transparent',
+            userSelect: 'none', WebkitUserSelect: 'none',
+          }}>
+            <div className="app-modal-card" style={{
+              pointerEvents: 'auto',
+              position: 'relative', zIndex: 10000,
+              maxWidth: 420,
+            }}>
               <div style={{ fontSize: '2rem', fontWeight: 900, marginBottom: 8, letterSpacing: '-1px' }}>
                 {isHome ? `${opp?.abbr ?? '???'} @ ${ut?.abbr ?? 'YOU'}` : `${ut?.abbr ?? 'YOU'} @ ${opp?.abbr ?? '???'}`}
               </div>
@@ -469,16 +509,28 @@ export default function App() {
               </p>
               <div className="app-modal-actions" style={{ flexDirection: 'column', gap: 10 }}>
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary app-modal-watch-btn"
                   onClick={() => actions.watchGame()}
-                  style={{ width: '100%', minHeight: 52, fontSize: 'var(--text-base)', fontWeight: 700 }}
+                  style={{
+                    width: '100%', minHeight: 52, fontSize: 'var(--text-base)', fontWeight: 700,
+                    pointerEvents: 'auto', touchAction: 'manipulation',
+                    userSelect: 'none', WebkitUserSelect: 'none',
+                    position: 'relative', zIndex: 10001,
+                    cursor: 'pointer',
+                  }}
                 >
                   Watch Game
                 </button>
                 <button
-                  className="btn"
+                  className="btn app-modal-sim-btn"
                   onClick={() => actions.advanceWeek({ skipUserGame: true })}
-                  style={{ width: '100%', minHeight: 48, fontSize: 'var(--text-sm)' }}
+                  style={{
+                    width: '100%', minHeight: 48, fontSize: 'var(--text-sm)',
+                    pointerEvents: 'auto', touchAction: 'manipulation',
+                    userSelect: 'none', WebkitUserSelect: 'none',
+                    position: 'relative', zIndex: 10001,
+                    cursor: 'pointer',
+                  }}
                 >
                   Simulate
                 </button>

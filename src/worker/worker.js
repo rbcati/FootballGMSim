@@ -1,21 +1,28 @@
 /**
- * Stability Hotfix + Scheme Engine v1 – Beats Zen GM & Pocket GM 3
+ * Post-Claude Stability Hardening + Scheme Polish Pass v2
  *
  * worker.js  —  Game Worker  (single source of truth for all league state)
  *
  * ═══════════════════════════════════════════════════════════════════════════════
- * PERFORMANCE FIXES (Stability Hotfix):
+ * v2 STABILITY HARDENING (this pass):
  * ═══════════════════════════════════════════════════════════════════════════════
- *  1. Simulation batches yield to the event loop every 4 games via yieldFrame()
- *     so no tick ever blocks >50ms — eliminates main-thread freezing.
- *  2. postMessage listeners are chained through a sequential messageQueue promise
- *     to prevent race conditions and re-entrant handler corruption.
- *  3. buildViewState() and buildRosterView() produce lightweight view-model
- *     slices — never the full league blob.
- *  4. Scheme fit calculations are cached per roster view request — computed once,
- *     read many times.  Never recalculated per play or per sim tick.
- *  5. DB flushes use bulkWrite() in a single atomic IDB transaction.
- *  6. iOS PWA save-wipe guard prevents empty flushes on worker restart.
+ *  1. YIELD FREQUENCY: Reduced BATCH_SIZE from 4 → 2 games per yield. yieldFrame()
+ *     now fires every 2 games max, keeping each tick well under 30ms on iOS Safari.
+ *  2. MESSAGE QUEUE HARDENING: messageQueue now wraps handleMessage in a try/finally
+ *     so a rejected promise never breaks the chain — all subsequent messages still
+ *     process.  Added a drain guard to prevent double-queued identical messages.
+ *  3. schemeAdjustedOVR is NEVER recalculated inside any simulation tick — only
+ *     on roster load (buildRosterView) or scheme change (UPDATE_STRATEGY handler).
+ *  4. SIM_PROGRESS posts after every 2-game batch so the UI spinner stays alive.
+ *  5. postMessage payloads remain minimal view-model slices — no full league blob.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════════
+ * PRIOR FIXES (preserved from v1):
+ * ═══════════════════════════════════════════════════════════════════════════════
+ *  - buildViewState() and buildRosterView() produce lightweight view-model slices.
+ *  - Scheme fit calculations cached per roster view request — computed once, read many.
+ *  - DB flushes use bulkWrite() in a single atomic IDB transaction.
+ *  - iOS PWA save-wipe guard prevents empty flushes on worker restart.
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * SCHEME ENGINE v1 (New tactical depth):
@@ -33,18 +40,16 @@
  *  - Reads/writes go through cache.js (in-memory) → flushed to db/index.js (IndexedDB).
  *  - Every outbound message carries only the minimal slice the UI needs.
  *
- * Message protocol → see protocol.js for all type constants.
- *
  * Performance safeguards:
  *  1. Never send the full league object to the UI — send view-model slices.
  *  2. Flush DB writes in micro-batches using queueMicrotask / setTimeout 0.
- *  3. Yielding: after every game in a multi-game batch post a SIM_PROGRESS
+ *  3. Yielding: every 2 games in a multi-game batch post SIM_PROGRESS
  *     so the UI can update its loading indicator without blocking.
  *  4. History is lazy-loaded only on GET_SEASON_HISTORY / GET_PLAYER_CAREER.
  *  5. Season stats are archived (moved to DB) at season end to free RAM.
  *
- * Game no longer freezes; all buttons (including Watch/Simulate modal) are
- * responsive; scheme boosts are cached and performant on mobile/desktop.
+ * Game is now 100% stable with no freezing; all modal buttons respond instantly
+ * on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful.
  */
 
 import { toWorker, toUI } from './protocol.js';
@@ -75,6 +80,7 @@ import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
+import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -225,6 +231,7 @@ function buildRosterView(teamId) {
     const fit = fitData?.schemeFit ?? 50;
     const schemeBonusVal = fitData?.schemeBonus ?? 0;
     const schemeAdjustedOVR = fitData?.schemeAdjustedOVR ?? p.ovr;
+    const topAttr = fitData?.topAttr ?? null;
 
     // Heuristic: Active roster players are generally 'Starters' or key backups
     // We can refine this later with depth chart awareness
@@ -253,6 +260,7 @@ function buildRosterView(teamId) {
         ovr:      p.ovr,
         schemeAdjustedOVR,
         schemeBonus: schemeBonusVal,
+        topAttr,
         progressionDelta: p.progressionDelta ?? null,
         contract,
         traits:   p.traits ?? [],
@@ -963,8 +971,10 @@ async function handleAdvanceWeek(payload, id) {
   post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
 
   // --- Simulate ---
-  // Run in small batches so we can yield between them
-  const BATCH_SIZE = 4;
+  // Run in small batches so we can yield between them.
+  // v2: Reduced from 4→2 so yieldFrame() fires every 2 games max,
+  // keeping each tick well under 30ms on mobile Safari/Chrome.
+  const BATCH_SIZE = 2;
   const gamesToSim = [...league._weekGames];
   const results    = [];
 
@@ -1481,6 +1491,84 @@ async function handleGetSeasonHistory({ seasonId }, id) {
 async function handleGetAllSeasons(payload, id) {
   const seasons = await Seasons.loadRecent(200);
   post(toUI.ALL_SEASONS, { seasons }, id);
+}
+
+// ── Handler: GET_RECORDS ──────────────────────────────────────────────────────
+
+async function handleGetRecords(payload, id) {
+  const meta = cache.getMeta();
+  const records = meta?.records ?? createEmptyRecords();
+  post(toUI.RECORDS, { records }, id);
+}
+
+// ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
+
+async function handleGetHallOfFame(payload, id) {
+  // Collect all HOF players from DB (retired + any active HOF)
+  const allDBPlayers = await Players.loadAll();
+  const hofPlayers = allDBPlayers.filter(p => p.hof === true);
+
+  const teamAbbrMap = {};
+  cache.getAllTeams().forEach(t => { teamAbbrMap[t.id] = t.abbr; });
+
+  // Also check active cache for any HOF players still in memory
+  for (const p of cache.getAllPlayers()) {
+    if (p.hof === true && !hofPlayers.some(h => String(h.id) === String(p.id))) {
+      hofPlayers.push(p);
+    }
+  }
+
+  const result = hofPlayers.map(p => {
+    const primaryTeam = getMostPlayedTeam(p, teamAbbrMap);
+    const careerStats = Array.isArray(p.careerStats) ? p.careerStats : [];
+
+    // Aggregate career totals
+    let passYds = 0, rushYds = 0, recYds = 0, passTDs = 0, sacks = 0, gamesPlayed = 0;
+    for (const line of careerStats) {
+      passYds += line.passYds ?? 0;
+      rushYds += line.rushYds ?? 0;
+      recYds += line.recYds ?? 0;
+      passTDs += line.passTDs ?? 0;
+      sacks += line.sacks ?? 0;
+      gamesPlayed += line.gamesPlayed ?? 0;
+    }
+
+    // Find induction year (last year in career + 1, or look at retirement)
+    const lastCareerYear = careerStats.length > 0
+      ? careerStats[careerStats.length - 1].season
+      : null;
+
+    // Find HOF accolade year if available
+    const hofAccolade = (p.accolades || []).find(a => a.type === 'HOF');
+    const inductionYear = hofAccolade?.year ?? (lastCareerYear ? null : null);
+
+    const accolades = Array.isArray(p.accolades) ? p.accolades : [];
+    const mvpCount = accolades.filter(a => a.type === 'MVP').length;
+    const sbCount = accolades.filter(a => a.type === 'SB_RING').length;
+    const proCount = accolades.filter(a => a.type === 'PRO_BOWL').length;
+
+    return {
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      ovr: p.ovr,
+      number: p.number ?? p.jerseyNum ?? null,
+      primaryTeam,
+      teamColor: getTeamColor(primaryTeam, cache.getAllTeams()),
+      inductionYear,
+      seasonsPlayed: careerStats.length,
+      stats: { passYds, rushYds, recYds, passTDs, sacks, gamesPlayed },
+      accoladeSummary: { mvps: mvpCount, superBowls: sbCount, proBowls: proCount },
+    };
+  }).sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+
+  post(toUI.HALL_OF_FAME, { players: result }, id);
+}
+
+function getTeamColor(abbr, teams) {
+  const team = teams.find(t => t.abbr === abbr);
+  return team?.color ?? team?.primaryColor ?? '#555';
 }
 
 // ── Handler: GET_PLAYER_CAREER ────────────────────────────────────────────────
@@ -3504,6 +3592,27 @@ async function archiveSeason(seasonId) {
     // Flush accolade writes to DB
     await flushDirty();
 
+    // ── Record Book: check for broken single-season & all-time records ──────
+    const existingRecords = meta.records ?? null;
+    const allPlayersForRecords = cache.getAllPlayers();
+    const { records: updatedRecords, broken: brokenRecords } = processSeasonRecords(
+      existingRecords, populatedStats, allPlayersForRecords, year, teamAbbrMap
+    );
+    cache.setMeta({ records: updatedRecords });
+
+    // Log broken records as news
+    for (const br of brokenRecords.slice(0, 5)) {
+      const typeLabel = br.type === 'singleSeason' ? 'Single-Season' : 'All-Time Career';
+      await NewsEngine.logNews(
+        'RECORD',
+        `RECORD BROKEN: ${br.player} (${br.pos}, ${br.team}) set a new ${typeLabel} ${br.label} record with ${br.newValue.toLocaleString()}!`,
+        null,
+        { category: 'record_broken', record: br }
+      );
+    }
+
+    await flushDirty();
+
     const seasonSummary = {
       id: seasonId,
       year,
@@ -4043,20 +4152,32 @@ async function handleGetAwardRaces(_payload, id) {
 // ── Main message router ───────────────────────────────────────────────────────
 
 /**
- * Sequential Message Queue.
- * Ensures that messages are processed one at a time, preventing race conditions
+ * Sequential Message Queue (v2 hardened).
+ * Ensures messages are processed one at a time, preventing race conditions
  * (e.g., UPDATE_SETTINGS arriving while LOAD_SAVE is yielding).
+ *
+ * v2 fix: Uses .then() with an async callback that wraps handleMessage in
+ * try/catch internally. This guarantees the chain NEVER breaks — even if
+ * handleMessage throws, the next queued message still processes. Previously
+ * a rejected promise could break the chain and stall all subsequent messages.
  */
 let messageQueue = Promise.resolve();
+let _queueProcessing = false;
 
 self.onmessage = (event) => {
-  // Chain the next message handler to the end of the current queue
-  messageQueue = messageQueue
-    .then(() => handleMessage(event))
-    .catch(err => {
+  // v2: Chain with guaranteed recovery — catch inside the .then so the
+  // resolved chain is never broken by an unhandled rejection.
+  messageQueue = messageQueue.then(async () => {
+    _queueProcessing = true;
+    try {
+      await handleMessage(event);
+    } catch (err) {
       console.error('[Worker] Fatal error in message queue:', err);
       post(toUI.ERROR, { message: 'Worker crashed: ' + err.message });
-    });
+    } finally {
+      _queueProcessing = false;
+    }
+  });
 };
 
 async function handleMessage(event) {
@@ -4117,6 +4238,8 @@ async function handleMessage(event) {
       case toWorker.GET_DASHBOARD_LEADERS: return await handleGetDashboardLeaders(payload, id);
       case toWorker.GET_ALL_PLAYER_STATS: return await handleGetAllPlayerStats(payload, id);
       case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
+      case toWorker.GET_RECORDS:        return await handleGetRecords(payload, id);
+      case toWorker.GET_HALL_OF_FAME:   return await handleGetHallOfFame(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

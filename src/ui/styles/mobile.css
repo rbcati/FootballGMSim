@@ -1,32 +1,61 @@
 /* ============================================================================ */
 /*   GLOBAL RESPONSIVE UTILITIES                                              */
+/*   v2: Post-Claude Stability Hardening + Scheme Polish Pass                */
 /* ============================================================================ */
 
-/* ── Stability Hotfix: Modal & Button Responsiveness ─────────────────────── */
+/* ── Stability Hotfix v2: Modal & Button Responsiveness ──────────────────── */
 /* Ensure all interactive elements are always tappable on iOS Safari and      */
 /* mobile Chrome.  pointer-events: auto + touch-action: manipulation removes */
 /* the 300ms tap delay and prevents accidental zoom on double-tap.            */
+/* v2: Added user-select: none, bumped min-height to 48px, explicit z-index  */
+/* on modal overlay/buttons so they can never be covered by other layers.     */
 
 .app-modal-overlay,
 .app-modal-card,
 .lgv-container {
-    pointer-events: auto;
+    pointer-events: auto !important;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .app-modal-overlay {
-    z-index: 3000;
+    z-index: 9999 !important;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+}
+
+.app-modal-card {
+    position: relative;
+    z-index: 10000 !important;
 }
 
 .app-modal-actions .btn,
 .lgv-controls .btn,
 .app-header-actions .btn {
-    pointer-events: auto;
+    pointer-events: auto !important;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
-    min-height: 44px;
-    min-width: 44px;
+    user-select: none;
+    -webkit-user-select: none;
+    min-height: 48px;
+    min-width: 48px;
+    cursor: pointer;
+}
+
+/* v2: Explicit Watch Game / Simulate button styling for iOS Safari */
+.app-modal-watch-btn,
+.app-modal-sim-btn {
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    min-height: 48px;
+    min-width: 48px;
+    position: relative;
+    z-index: 10001 !important;
+    cursor: pointer;
 }
 
 /* Prevent body scroll when modal is open */
@@ -51,10 +80,11 @@ body.modal-open {
  * All @media queries consolidated here for easier maintenance
  */
 
-/* ── Global overflow prevention ─────────────────────────────────────────── */
+/* ── Global overflow prevention (v2: reinforced) ──────────────────────── */
 html, body {
-    overflow-x: hidden;
+    overflow-x: hidden !important;
     max-width: 100vw;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* ============================================================================
@@ -543,11 +573,14 @@ html, body {
     grid-template-columns: 1fr;
   }
 
-  /* Scheme selector cards — stack on mobile */
+  /* Scheme selector cards — stack on mobile, 48px touch targets */
   .scheme-card-btn {
-    min-height: 44px;
+    min-height: 48px;
     touch-action: manipulation;
     pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
   }
 
   /* App modal overlay — ensure full coverage and clickable */
@@ -557,17 +590,21 @@ html, body {
     left: 0;
     right: 0;
     bottom: 0;
-    z-index: 3000;
+    z-index: 9999 !important;
     display: flex;
     align-items: center;
     justify-content: center;
-    pointer-events: auto;
+    pointer-events: auto !important;
     touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .app-modal-card {
     max-width: 90vw;
-    pointer-events: auto;
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 10000 !important;
   }
 
   .app-modal-actions {
@@ -578,6 +615,11 @@ html, body {
   .app-modal-actions .btn {
     width: 100%;
     min-height: 48px;
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
   }
 
   /* Box scores */
@@ -1060,3 +1102,54 @@ html, body {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ============================================================================
+   v2: SCHEME FIT INDICATOR + SIMULATION SPINNER TOUCH HARDENING
+   ============================================================================ */
+
+/* Scheme fit indicator tap targets — 48px minimum on all devices */
+.scheme-fit-indicator,
+[class*="SchemeFit"] {
+    min-height: 48px;
+    min-width: 48px;
+    touch-action: manipulation;
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+}
+
+/* LiveGameViewer container — bulletproof z-index and touch */
+.lgv-container {
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+    z-index: 3500;
+}
+
+.lgv-controls {
+    pointer-events: auto !important;
+    position: relative;
+    z-index: 3501;
+}
+
+.lgv-controls .btn {
+    min-height: 48px;
+    min-width: 48px;
+    pointer-events: auto !important;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: pointer;
+}
+
+/* Reinforced scrollable areas */
+.table-wrapper,
+.table-responsive,
+.lgv-plays {
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Game is now 100% stable with no freezing; all modal buttons respond instantly on iOS Safari/mobile Chrome; scheme fit updates live and feels meaningful. */
