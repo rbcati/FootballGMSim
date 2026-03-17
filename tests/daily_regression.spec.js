@@ -9,24 +9,15 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('1. Playability Smoke Test', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
-        // Handle Onboarding / Dashboard
-        const createBtn = await page.isVisible('#create-league-btn');
-        if (createBtn) {
-            await page.click('#create-league-btn');
-            await page.waitForSelector('.team-select-btn', { state: 'visible' });
-            await page.locator('.team-select-btn').first().click();
-            await page.click('#start-career-btn');
-        } else if (await page.isVisible('#start-career-btn')) {
-             // Already in setup
-            await page.locator('.team-select-btn').first().click();
-            await page.click('#start-career-btn');
-        } else {
-            // Assuming already in game or hub
-            console.log('Assuming game already loaded...');
-        }
+        // Ensure game loaded
+        await page.evaluate(async () => {
+            if (!window.state?.league) {
+                await window.gameController.startNewLeague();
+            }
+        });
 
         await page.waitForSelector('.hub-header', { state: 'visible', timeout: 60000 });
         const hubVisible = await page.isVisible('.hub-header');
@@ -37,19 +28,22 @@ test.describe('Daily Regression Pass', () => {
         console.log(`Current Week: ${startWeek}`);
 
         // Try different advance buttons
-        const advanceBtnTop = page.locator('#btnAdvanceWeekTop');
-        const advanceBtnHQ = page.locator('#btnSimWeekHQ');
-        const globalAdvance = page.locator('#btnGlobalAdvance');
+        const advanceBtnTop = page.locator('.app-advance-btn');
 
         if (await advanceBtnTop.isVisible()) {
             await advanceBtnTop.click();
-        } else if (await advanceBtnHQ.isVisible()) {
-            await advanceBtnHQ.click();
-        } else if (await globalAdvance.isVisible()) {
-            await globalAdvance.click();
         } else {
             console.log('No advance button found, forcing via JS');
             await page.evaluate(() => window.handleGlobalAdvance());
+        }
+
+        // Handle User Game Prompt if it appears
+        try {
+            const simulateBtn = page.locator('button:has-text("Simulate")');
+            await simulateBtn.waitFor({ state: 'visible', timeout: 5000 });
+            await simulateBtn.click();
+        } catch (e) {
+            // Prompt did not appear, ignore
         }
 
         // Wait for week to increment
@@ -69,7 +63,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('2. Strategy Persistence & High Stakes', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
@@ -136,7 +130,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('2b. Mobile UI Scrolling Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
@@ -154,8 +148,12 @@ test.describe('Daily Regression Pass', () => {
             throw e;
         }
 
-        // Check Power Rankings Scroll (Standings Tab)
-        await page.click('button.standings-tab:has-text("Standings")');
+        // Open Navigation Menu
+        await page.click('.mobile-nav-hamburger');
+        await page.waitForSelector('.mobile-nav-panel.open', { state: 'visible' });
+
+        // Check Standings Scroll
+        await page.click('.mobile-nav-item:has-text("Standings")');
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const prScrolls = await page.evaluate(() => {
@@ -165,7 +163,8 @@ test.describe('Daily Regression Pass', () => {
         console.log('Standings Scrollable:', prScrolls);
 
         // Check League Stats Scroll (Stats Tab)
-        await page.click('button.standings-tab:has-text("Stats")');
+        await page.click('.mobile-nav-hamburger');
+        await page.click('.mobile-nav-item:has-text("Stats")');
         await page.waitForSelector('.stats-table-container, table', { state: 'visible' });
 
         const lsScrolls = await page.evaluate(() => {
@@ -175,7 +174,8 @@ test.describe('Daily Regression Pass', () => {
         console.log('League Stats Scrollable:', lsScrolls);
 
         // Check Roster Scroll
-        await page.click('button.standings-tab:has-text("Roster")');
+        await page.click('.mobile-nav-hamburger');
+        await page.click('.mobile-nav-item:has-text("Roster")');
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const rosterScrolls = await page.evaluate(() => {
@@ -191,7 +191,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
         test.setTimeout(60000); // Increase timeout for slow league generation
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
@@ -308,7 +308,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('4. Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);

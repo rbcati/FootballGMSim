@@ -640,8 +640,10 @@ function ScheduleTab({
                         padding: "2px 8px",
                         borderRadius: "var(--radius-pill)",
                         background:
-                          nextGameStakes > 80
+                          nextGameStakes > 90
                             ? "var(--danger)"
+                            : nextGameStakes > 75
+                            ? "#FF4500" // Orange for high tension
                             : "var(--warning)",
                         color: "#fff",
                         fontWeight: 700,
@@ -650,9 +652,12 @@ function ScheduleTab({
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 4,
+                        boxShadow: nextGameStakes > 90 ? "0 0 8px rgba(255, 69, 58, 0.6)" : "none",
+                        animation: nextGameStakes > 90 ? "pulse 2s infinite" : "none"
                       }}
+                      title={`Stakes Rating: ${nextGameStakes}`}
                     >
-                      {nextGameStakes > 80 ? "🔥 RIVALRY" : "⚠️ STAKES"}
+                      {nextGameStakes > 90 ? "🔥 MUST WIN" : nextGameStakes > 75 ? "⚔️ RIVALRY" : "⚠️ STAKES"}
                     </span>
                   )}
                 </div>
