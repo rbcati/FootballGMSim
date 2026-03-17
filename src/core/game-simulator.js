@@ -2699,7 +2699,7 @@ export function simulateBatch(games, options = {}) {
                 weather: pair._weather,
                 homeDefTDs: pair._homeDefTDs || 0,
                 awayDefTDs: pair._awayDefTDs || 0,
-                playLogs: gameScores.playLogs || [],
+                playLogs: typeof gameScores !== 'undefined' && gameScores ? gameScores.playLogs || [] : [],
             };
 
             const resultObj = commitGameResult(league, gameData, { persist: false });
