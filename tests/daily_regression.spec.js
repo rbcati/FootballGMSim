@@ -9,22 +9,21 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('1. Playability Smoke Test', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
-        const createBtn = await page.isVisible('#create-league-btn');
-        if (createBtn) {
-            await page.click('#create-league-btn');
+        const createBtn = await page.isVisible('.app-save-btn'); // If this is visible, we're in game
+        if (!createBtn) {
+            const newLeagueBtn = page.locator('button:has-text("+ Create New League")');
+            if (await newLeagueBtn.isVisible()) {
+                await newLeagueBtn.click();
+            }
+
             await page.waitForSelector('.team-select-btn', { state: 'visible' });
             await page.locator('.team-select-btn').first().click();
-            await page.click('#start-career-btn');
-        } else if (await page.isVisible('#start-career-btn')) {
-             // Already in setup
-            await page.locator('.team-select-btn').first().click();
-            await page.click('#start-career-btn');
+            await page.click('button:has-text("Start Career")');
         } else {
-            // Assuming already in game or hub
             console.log('Assuming game already loaded...');
         }
 
@@ -37,19 +36,19 @@ test.describe('Daily Regression Pass', () => {
         console.log(`Current Week: ${startWeek}`);
 
         // Try different advance buttons
-        const advanceBtnTop = page.locator('#btnAdvanceWeekTop');
-        const advanceBtnHQ = page.locator('#btnSimWeekHQ');
-        const globalAdvance = page.locator('#btnGlobalAdvance');
+        const advanceBtnTop = page.locator('.app-advance-btn');
 
         if (await advanceBtnTop.isVisible()) {
             await advanceBtnTop.click();
-        } else if (await advanceBtnHQ.isVisible()) {
-            await advanceBtnHQ.click();
-        } else if (await globalAdvance.isVisible()) {
-            await globalAdvance.click();
         } else {
             console.log('No advance button found, forcing via JS');
             await page.evaluate(() => window.handleGlobalAdvance());
+        }
+
+        // If a game prompt appears, simulate it
+        const simModalBtn = page.locator('.app-modal-sim-btn');
+        if (await simModalBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+            await simModalBtn.click();
         }
 
         // Wait for week to increment
@@ -69,7 +68,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('2. Strategy Persistence & High Stakes', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
@@ -136,7 +135,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('2b. Mobile UI Scrolling Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
@@ -154,8 +153,15 @@ test.describe('Daily Regression Pass', () => {
             throw e;
         }
 
+        // Reveal hidden tabs on mobile via nav menu toggle
+        const moreTabsBtn = page.locator('button[aria-label="More tabs"]');
+        if (await moreTabsBtn.isVisible()) {
+            await moreTabsBtn.click();
+            await page.waitForTimeout(500); // Wait for animation
+        }
+
         // Check Power Rankings Scroll (Standings Tab)
-        await page.click('button.standings-tab:has-text("Standings")');
+        await page.locator('.mobile-nav-panel').locator('button:has-text("Standings")').click();
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const prScrolls = await page.evaluate(() => {
@@ -164,8 +170,13 @@ test.describe('Daily Regression Pass', () => {
         });
         console.log('Standings Scrollable:', prScrolls);
 
+        if (await moreTabsBtn.isVisible()) {
+            await moreTabsBtn.click();
+            await page.waitForTimeout(500);
+        }
+
         // Check League Stats Scroll (Stats Tab)
-        await page.click('button.standings-tab:has-text("Stats")');
+        await page.locator('.mobile-nav-panel').locator('button:has-text("Stats")').click();
         await page.waitForSelector('.stats-table-container, table', { state: 'visible' });
 
         const lsScrolls = await page.evaluate(() => {
@@ -174,8 +185,13 @@ test.describe('Daily Regression Pass', () => {
         });
         console.log('League Stats Scrollable:', lsScrolls);
 
+        if (await moreTabsBtn.isVisible()) {
+            await moreTabsBtn.click();
+            await page.waitForTimeout(500);
+        }
+
         // Check Roster Scroll
-        await page.click('button.standings-tab:has-text("Roster")');
+        await page.locator('.mobile-nav-panel').locator('button:has-text("Roster")').click();
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const rosterScrolls = await page.evaluate(() => {
@@ -191,7 +207,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
         test.setTimeout(60000); // Increase timeout for slow league generation
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
@@ -308,7 +324,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('4. Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);
