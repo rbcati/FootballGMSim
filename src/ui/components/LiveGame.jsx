@@ -505,10 +505,7 @@ export default function LiveGame({
               onClick={handleSkip}
               style={{
                 marginLeft: "auto",
-                background: "var(--surface-strong)",
-                border: "1px solid var(--hairline)",
                 borderRadius: "var(--radius-sm)",
-                cursor: "pointer",
                 fontSize: "var(--text-xs)",
                 color: "var(--text-muted)",
                 padding: "3px 10px",
@@ -535,13 +532,10 @@ export default function LiveGame({
 
         {!simulating && (
           <button
-            className="btn"
+            className="close"
             onClick={() => setVisible(false)}
             style={{
               marginLeft: "auto",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
               fontSize: 20,
               color: "var(--text-muted)",
               padding: "0 var(--space-1)",

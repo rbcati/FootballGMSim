@@ -76,21 +76,19 @@
 }
 
 /* Goal Variants */
-.game-event-overlay.goal::before { content: '🙌'; }
-.game-event-overlay.goal.touchdown::before { content: '🙌'; }
-.game-event-overlay.goal.field-goal::before { content: '👟'; }
-.game-event-overlay.goal.victory::before { content: '🏆'; }
+.game-event-overlay.touchdown::before { content: '🙌'; }
+.game-event-overlay.field-goal-made::before { content: '👟'; }
+.game-event-overlay.victory::before { content: '🏆'; }
 
 /* Save Variants */
-.game-event-overlay.save::before { content: '🛡️'; }
-.game-event-overlay.save.turnover::before { content: '🛑'; }
-.game-event-overlay.save.sack::before { content: '💥'; }
-.game-event-overlay.save.safety::before { content: '⚠️'; }
-.game-event-overlay.save.defeat::before { content: '💀'; }
-.game-event-overlay.save.stop::before { content: '😤'; }
+.game-event-overlay.turnover::before { content: '🛑'; }
+.game-event-overlay.sack::before { content: '💥'; }
+.game-event-overlay.safety::before { content: '⚠️'; }
+.game-event-overlay.defeat::before { content: '💀'; }
+.game-event-overlay.stop::before { content: '😤'; }
 
 /* Kick Variants */
-.game-event-overlay.kick::before { content: '🦶'; }
+.game-event-overlay.big-play::before { content: '🦶'; }
 
 /* Text Styles */
 .game-event-overlay .event-text {
@@ -100,14 +98,17 @@
     letter-spacing: 2px;
 }
 
-.game-event-overlay.goal .event-text {
+.game-event-overlay.touchdown .event-text,
+.game-event-overlay.field-goal-made .event-text {
     color: #FFD700;
     font-size: 4rem;
     text-shadow: 0 0 20px rgba(255, 215, 0, 0.6), 0 0 40px rgba(255, 69, 0, 0.4);
-    font-family: "Arial Black", "Impact", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
 }
 
-.game-event-overlay.save .event-text {
+.game-event-overlay.turnover .event-text,
+.game-event-overlay.sack .event-text,
+.game-event-overlay.safety .event-text {
     color: #FF453A;
     font-size: 3.5rem;
     border: 4px solid currentColor;
@@ -115,14 +116,14 @@
     transform: rotate(-3deg);
     background: rgba(0, 0, 0, 0.9);
     box-shadow: 0 10px 30px rgba(0,0,0,0.6);
-    font-family: "Courier New", monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
-.game-event-overlay.kick .event-text {
+.game-event-overlay.big-play .event-text {
     color: #0A84FF;
     font-size: 3rem;
     text-shadow: 0 0 15px rgba(10, 132, 255, 0.5);
-    font-family: "Arial Black", sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
 }
 
 /* Quarter/Game End */
