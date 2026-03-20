@@ -1226,254 +1226,69 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
   return (
     <div>
-      {/* ── Hub Header ── */}
-      <div className="hub-header">
-        <div className="hub-header-content">
-          <div className="team-identity">
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-4)",
-              }}
-            >
-              <TeamLogo abbr={userAbbr} size={56} isUser />
-              <div>
-                <div className="team-name-large">
-                  {userTeam?.name ?? "No Team Selected"}
-                </div>
-                <div className="team-record-large">
-                  {userRecord}
-                  {userTeam && (
-                    <span className="division-rank-badge">
-                      {userTeam.conf} {userTeam.div}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
+      {/* ── Hub Header — compact single row ── */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--space-3)",
+        padding: "var(--space-3) 0",
+        marginBottom: "var(--space-2)",
+        borderBottom: "1px solid var(--hairline)",
+      }}>
+        <TeamLogo abbr={userAbbr} size={40} isUser />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: "var(--text)", lineHeight: 1.1 }}>
+            {userTeam?.name ?? "No Team Selected"}
           </div>
-          <div className="season-context">
-            <div className="current-week-large">
-              {league.week ? `Week ${league.week}` : "Offseason"}
-            </div>
-            <div className="season-year-large">
-              {league.year ?? 2025} Season · {league.phase}
-            </div>
-            <div style={{ marginTop: 8, display: "flex", gap: 16 }}>
-              <div
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                  color: "var(--text-muted)",
-                }}
-              >
-                Owner:{" "}
-                <span
-                  style={{
-                    color:
-                      (league.ownerApproval ?? 75) >= 70
-                        ? "var(--success)"
-                        : (league.ownerApproval ?? 75) >= 50
-                          ? "var(--warning)"
-                          : "var(--danger)",
-                  }}
-                >
-                  {league.ownerApproval ?? 75}%
-                </span>
-                {(league.ownerApproval ?? 75) < 50 && (
-                  <span style={{ color: "var(--danger)", marginLeft: 4 }}>
-                    (Seat Hot)
-                  </span>
-                )}
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 600,
-                  color: "var(--text-muted)",
-                }}
-              >
-                Fan:{" "}
-                <span
-                  style={{
-                    color:
-                      (league.fanApproval ?? 65) >= 70
-                        ? "var(--success)"
-                        : (league.fanApproval ?? 65) >= 50
-                          ? "var(--warning)"
-                          : "var(--danger)",
-                  }}
-                >
-                  {league.fanApproval ?? 65}%
-                </span>
-              </div>
-            </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 1 }}>
+            <span style={{ fontWeight: 700, color: "var(--text)" }}>{userRecord}</span>
+            {userTeam && <span> · {userTeam.conf} {userTeam.div}</span>}
+            {league.week && <span> · Week {league.week}</span>}
+            {" · "}
+            <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? "var(--success)" : (league.ownerApproval ?? 75) >= 50 ? "var(--warning)" : "var(--danger)" }}>
+              Owner {league.ownerApproval ?? 75}%
+            </span>
           </div>
+        </div>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontWeight: 700, color: "var(--text-muted)" }}>{league.year ?? 2025}</div>
+          <div style={{ textTransform: "capitalize" }}>{league.phase}</div>
         </div>
       </div>
 
-      {/* ── Expiring Contracts Banner ── */}
+      {/* ── Contextual Action Banners (compact) ── */}
       {league.phase === "offseason_resign" && (
-        <div
-          onClick={() => setActiveTab("Roster")}
-          style={{
-            background: "rgba(52, 199, 89, 0.15)",
-            border: "1px solid var(--success)",
-            color: "var(--success)",
-            padding: "var(--space-4)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "var(--space-6)",
-            fontWeight: 700,
-            textAlign: "center",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "var(--space-3)",
-            fontSize: "var(--text-lg)",
-          }}
-        >
-          <span>✍️</span>
-          <span>Expiring Contracts</span>
-          <span
-            style={{
-              fontWeight: 400,
-              fontSize: "var(--text-base)",
-              color: "var(--text)",
-            }}
-          >
-            — Review and extend players before Free Agency.
-          </span>
+        <div onClick={() => setActiveTab("Roster")} className="action-banner action-banner-success">
+          ✍️ <strong>Expiring Contracts</strong> — review before Free Agency
         </div>
       )}
-
-      {/* ── Preseason Cutdown Banner ── */}
       {league.phase === "preseason" && (
-        <div
-          style={{
-            background: "rgba(255,159,10,0.15)",
-            border: "1px solid var(--warning)",
-            color: "var(--warning)",
-            padding: "var(--space-4)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "var(--space-6)",
-            fontWeight: 700,
-            textAlign: "center",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "var(--space-3)",
-            fontSize: "var(--text-lg)",
-          }}
-        >
-          <span>⚠️</span>
-          <span>
-            Roster Cutdown:{" "}
-            <span
-              style={{
-                color:
-                  (userTeam?.rosterCount ?? 0) > 53
-                    ? "var(--danger)"
-                    : "var(--success)",
-              }}
-            >
-              {userTeam?.rosterCount ?? 0}
-            </span>{" "}
-            / 53
+        <div className="action-banner action-banner-warning">
+          ⚠️ <strong>Roster Cutdown:</strong>{" "}
+          <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? "var(--danger)" : "var(--success)" }}>
+            {userTeam?.rosterCount ?? 0}
           </span>
-          <span
-            style={{
-              fontWeight: 400,
-              fontSize: "var(--text-base)",
-              color: "var(--text-muted)",
-            }}
-          >
-            — You must release{" "}
-            {(userTeam?.rosterCount ?? 0) > 53 ? userTeam.rosterCount - 53 : 0}{" "}
-            players to advance.
-          </span>
+          {" "}/ 53 — must release {Math.max(0, (userTeam?.rosterCount ?? 0) - 53)} players
         </div>
       )}
-
-      {/* ── Postseason Banner ── */}
       {league.phase === "playoffs" && activeTab !== "Postseason" && (
-        <div
-          onClick={() => setActiveTab("Postseason")}
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(255,215,0,0.12), rgba(192,192,192,0.08))",
-            border: "1px solid rgba(255,215,0,0.3)",
-            color: "#FFD700",
-            padding: "var(--space-4)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "var(--space-6)",
-            fontWeight: 700,
-            textAlign: "center",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "var(--space-3)",
-            fontSize: "var(--text-lg)",
-          }}
-        >
-          <span style={{ fontSize: "1.3rem" }}>&#127942;</span>
-          <span>PLAYOFF BRACKET</span>
-          <span
-            style={{
-              fontWeight: 400,
-              fontSize: "var(--text-base)",
-              color: "var(--text)",
-            }}
-          >
-            — Click to view the bracket and matchups.
-          </span>
+        <div onClick={() => setActiveTab("Postseason")} className="action-banner action-banner-gold">
+          🏆 <strong>PLAYOFFS</strong> — click to view bracket
         </div>
       )}
-
-      {/* ── Draft Active Banner ── */}
       {league.phase === "draft" && activeTab !== "Draft" && (
-        <div
-          onClick={() => setActiveTab("Draft")}
-          style={{
-            background: "rgba(10,132,255,0.15)",
-            border: "1px solid var(--accent)",
-            color: "var(--accent)",
-            padding: "var(--space-4)",
-            borderRadius: "var(--radius-md)",
-            marginBottom: "var(--space-6)",
-            fontWeight: 700,
-            textAlign: "center",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "var(--space-3)",
-            fontSize: "var(--text-lg)",
-          }}
-        >
-          <span>🏈</span>
-          <span>Draft Board is Open</span>
-          <span
-            style={{
-              fontWeight: 400,
-              fontSize: "var(--text-base)",
-              color: "var(--text)",
-            }}
-          >
-            — Click here to make your picks.
-          </span>
+        <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
+          🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
 
-      {/* ── Status Grid (3-col: Cap Space | Standings | Last Game + Scores) ── */}
-      <div
+      {/* ── Status Grid — shown only when NOT on the Home tab (Home tab has its own rich cards) ── */}
+      {activeTab !== "Home" && <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
           gap: "var(--space-4)",
-          marginBottom: "var(--space-6)",
+          marginBottom: "var(--space-4)",
         }}
       >
         {/* Cap Space widget — consolidated financials */}
@@ -1693,25 +1508,35 @@ export default function LeagueDashboard({ league, busy, actions }) {
           })()}
         </div>
 
-        {/* News Feed */}
-        <NewsFeed league={league} />
+      </div>}
 
-        {/* Stat Leaders Widget */}
-        {league.phase !== "preseason" && (
-          <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} />
-        )}
-      </div>
-
-      {/* ── Tab Navigation ── */}
+      {/* ── Tab Navigation ── sticky, horizontally scrollable, no wrap ── */}
       <div
         className="standings-tabs"
-        style={{ marginBottom: "var(--space-6)", flexWrap: "wrap" }}
+        style={{
+          marginBottom: "var(--space-4)",
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          background: "var(--bg)",
+          paddingTop: "var(--space-2)",
+          paddingBottom: "var(--space-2)",
+          margin: "0 calc(var(--space-4) * -1) var(--space-4)",
+          padding: "var(--space-2) var(--space-4)",
+          borderBottom: "1px solid var(--hairline)",
+        }}
       >
         {TABS.map((tab) => (
           <button
             key={tab}
             className={`standings-tab${activeTab === tab ? " active" : ""}`}
             onClick={() => setActiveTab(tab)}
+            style={{ flexShrink: 0 }}
           >
             {tab}
           </button>
@@ -1728,6 +1553,11 @@ export default function LeagueDashboard({ league, busy, actions }) {
               onPlayerSelect={setSelectedPlayerId}
               onTabChange={setActiveTab}
             />
+            {league.phase !== "preseason" && (
+              <div style={{ marginTop: "var(--space-4)" }}>
+                <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} />
+              </div>
+            )}
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (

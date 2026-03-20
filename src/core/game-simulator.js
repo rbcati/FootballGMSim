@@ -1540,17 +1540,48 @@ export function simGameStats(home, away, options = {}) {
             let currentDown = 1;
             let yardsToGo = 10;
 
-            const addLog = (text, extraYardLine) => {
+            const addLog = (text, extraYardLine, playType) => {
+                const yl = extraYardLine != null ? extraYardLine : yardLine;
+                // Infer yards gained from text if not provided
+                const yardsMatch = text.match(/for\s+(-?\d+)\s+yds?/i);
+                const yards = yardsMatch ? parseInt(yardsMatch[1], 10) : 0;
+                // Infer type from text
+                const lc = text.toLowerCase();
+                const type = playType || (
+                    lc.includes('touchdown') ? 'touchdown' :
+                    lc.includes('field goal') ? 'field_goal' :
+                    lc.includes('interception') ? 'interception' :
+                    lc.includes('fumble') ? 'fumble' :
+                    lc.includes('sack') ? 'sack' :
+                    lc.includes('safety') ? 'safety' :
+                    lc.includes('punt') ? 'punt' : 'play'
+                );
+                // Win probability: simple logistic from score diff + quarter
+                const scoreDiff = result.home.score - result.away.score;
+                const qtrFactor = qtr / 4;
+                const rawWP = 0.5 + scoreDiff * 0.02 * (0.5 + qtrFactor * 0.5);
+                const homeWinProb = Math.max(0.03, Math.min(0.97, rawWP));
+
                 result.playLogs.push({
-                    scoreHome: result.home.score,
-                    scoreAway: result.away.score,
+                    // Score fields — new names (SeasonSimViewer) + legacy aliases (LiveGameViewer)
+                    homeScore: result.home.score,
+                    awayScore: result.away.score,
+                    scoreHome: result.home.score,   // LiveGameViewer alias
+                    scoreAway: result.away.score,   // LiveGameViewer alias
                     quarter: qtr,
+                    timeLeft: clockStr,
                     clock: clockStr,
-                    yardLine: extraYardLine != null ? extraYardLine : yardLine,
+                    // Field / play metadata
+                    fieldPosition: yl,
+                    yardLine: yl,
                     down: currentDown,
                     distance: yardsToGo,
-                    possession: possession,
-                    playText: text
+                    yards,
+                    possession,
+                    type,
+                    text,
+                    playText: text,                 // LiveGameViewer alias
+                    homeWinProb,
                 });
             };
 
