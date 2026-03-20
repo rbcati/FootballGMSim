@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('Daily Regression Pass', () => {
 
@@ -9,7 +9,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('1. Playability Smoke Test', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
@@ -28,8 +28,8 @@ test.describe('Daily Regression Pass', () => {
             console.log('Assuming game already loaded...');
         }
 
-        await page.waitForSelector('.hub-header', { state: 'visible', timeout: 60000 });
-        const hubVisible = await page.isVisible('.hub-header');
+        await page.waitForSelector('.app-season-info', { state: 'visible', timeout: 60000 });
+        const hubVisible = await page.isVisible('.app-season-info');
         expect(hubVisible).toBeTruthy();
 
         // 3. Advance Week (Smoke Test Requirement)
@@ -69,7 +69,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('2. Strategy Persistence & High Stakes', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
@@ -78,7 +78,7 @@ test.describe('Daily Regression Pass', () => {
                 await window.gameController.startNewLeague();
             }
         });
-        await page.waitForSelector('.hub-header', { state: 'visible', timeout: 30000 });
+        await page.waitForSelector('.app-season-info', { state: 'visible', timeout: 30000 });
 
         // 1. Test Strategy Persistence
         // Switch to the Strategy tab
@@ -104,14 +104,14 @@ test.describe('Daily Regression Pass', () => {
             // In case reloading takes us to the saves screen, click the save
             await page.waitForTimeout(1000);
             // Wait for App to render either saves or the dashboard or create-league
-            await page.waitForSelector('.hub-header, .save-card, #create-league-btn', { state: 'visible', timeout: 30000 });
+            await page.waitForSelector('.app-season-info, .save-card, #create-league-btn', { state: 'visible', timeout: 30000 });
 
             // In case reloading takes us to the saves screen, click the save
             const saveCardVisible = await page.isVisible('.save-card');
             if (saveCardVisible) {
                 // Click the first "Load" button inside the save card
                 await page.click('.save-card button.btn.primary');
-                await page.waitForSelector('.hub-header', { state: 'visible', timeout: 30000 });
+                await page.waitForSelector('.app-season-info', { state: 'visible', timeout: 30000 });
             } else if (await page.isVisible('#create-league-btn')) {
                  // Uh oh, IDB lost the save. We can't verify strategy without mocking.
                  console.warn("Save was lost after reload. This is a known issue in Playwright IDB isolated contexts.");
@@ -136,7 +136,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('2b. Mobile UI Scrolling Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
@@ -147,7 +147,7 @@ test.describe('Daily Regression Pass', () => {
         });
         await page.waitForFunction(() => window.state && window.state.league);
         try {
-            await page.waitForSelector('.hub-header', { state: 'visible', timeout: 60000 });
+            await page.waitForSelector('.app-season-info', { state: 'visible', timeout: 60000 });
         } catch (e) {
             const errorText = await page.evaluate(() => document.body.innerText);
             console.log('DUMP ON TIMEOUT:', errorText);
@@ -155,7 +155,16 @@ test.describe('Daily Regression Pass', () => {
         }
 
         // Check Power Rankings Scroll (Standings Tab)
-        await page.click('button.standings-tab:has-text("Standings")');
+        try {
+            // First try clicking the standard tab
+            await page.click('button.standings-tab:has-text("Standings")');
+        } catch (e) {
+            // If standard tab isn't visible (e.g. mobile view), open the nav and use the bottom tab/nav menu
+            console.log('Falling back to mobile nav for Standings tab');
+            await page.click('[aria-label="More tabs"], .nav-toggle, [aria-label="Open navigation menu"]');
+            await page.waitForTimeout(500); // Wait for menu animation
+            await page.click('button:has-text("Standings")');
+        }
         await page.waitForSelector('.standings-table', { state: 'visible' });
 
         const prScrolls = await page.evaluate(() => {
@@ -191,7 +200,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
         test.setTimeout(60000); // Increase timeout for slow league generation
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
@@ -201,7 +210,7 @@ test.describe('Daily Regression Pass', () => {
             }
         });
         await page.waitForFunction(() => window.state && window.state.league);
-        await page.waitForSelector('.hub-header', { state: 'visible', timeout: 20000 });
+        await page.waitForSelector('.app-season-info', { state: 'visible', timeout: 20000 });
 
         // Release a player to ensure roster spot
         await page.click('button.standings-tab:has-text("Roster")');
@@ -308,7 +317,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('4. Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);
