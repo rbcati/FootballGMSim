@@ -26,6 +26,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
+import PlayerComparison from "./PlayerComparison.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 
@@ -625,6 +626,17 @@ function RosterTable({
   const [sortDir, setSortDir] = useState("desc");
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
+  // Compare mode: up to 2 players selected for side-by-side comparison
+  const [compareIds, setCompareIds] = useState([]);
+  const [showComparison, setShowComparison] = useState(false);
+
+  const toggleCompare = (player) => {
+    setCompareIds(prev => {
+      if (prev.includes(player.id)) return prev.filter(id => id !== player.id);
+      if (prev.length >= 2) return [prev[1], player.id]; // replace oldest
+      return [...prev, player.id];
+    });
+  };
 
   const displayed = useMemo(() => {
     let filtered = players;
@@ -692,6 +704,9 @@ function RosterTable({
     onRefetch();
   };
 
+  const comparePlayerA = players.find(p => p.id === compareIds[0]);
+  const comparePlayerB = players.find(p => p.id === compareIds[1]);
+
   return (
     <>
       {extending && (
@@ -705,6 +720,62 @@ function RosterTable({
             onRefetch();
           }}
         />
+      )}
+      {/* Player comparison modal */}
+      {showComparison && comparePlayerA && comparePlayerB && (
+        <PlayerComparison
+          playerA={comparePlayerA}
+          playerB={comparePlayerB}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
+      {/* Compare bar — shown when 1-2 players are selected for comparison */}
+      {compareIds.length > 0 && (
+        <div style={{
+          padding: "var(--space-3) var(--space-4)",
+          background: "rgba(10,132,255,0.08)",
+          border: "1px solid var(--accent)",
+          borderRadius: "var(--radius-md)",
+          marginBottom: "var(--space-3)",
+          display: "flex", alignItems: "center", gap: "var(--space-3)",
+          flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--accent)" }}>
+            Compare ({compareIds.length}/2):
+          </span>
+          {compareIds.map(id => {
+            const p = players.find(pl => pl.id === id);
+            return p ? (
+              <span key={id} style={{
+                padding: "2px 10px", borderRadius: "var(--radius-pill)",
+                background: "var(--accent-muted)", color: "var(--accent)",
+                fontSize: "var(--text-xs)", fontWeight: 600,
+                display: "flex", alignItems: "center", gap: 4,
+              }}>
+                {p.name}
+                <button
+                  onClick={() => toggleCompare(p)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 14, lineHeight: 1, padding: 0 }}
+                >×</button>
+              </span>
+            ) : null;
+          })}
+          {compareIds.length === 2 && (
+            <button
+              className="btn"
+              onClick={() => setShowComparison(true)}
+              style={{ marginLeft: "auto", fontSize: "var(--text-xs)", padding: "4px 14px", background: "var(--accent)", color: "#fff", border: "none" }}
+            >
+              Compare →
+            </button>
+          )}
+          <button
+            onClick={() => setCompareIds([])}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}
+          >
+            Clear
+          </button>
+        </div>
       )}
       {/* Position filter pills */}
       <div
@@ -844,6 +915,19 @@ function RosterTable({
                 <th
                   style={{
                     textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: "var(--text-xs)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                    width: 30,
+                  }}
+                  title="Add to comparison"
+                >
+                  ⊕
+                </th>
+                <th
+                  style={{
+                    textAlign: "center",
                     paddingRight: "var(--space-3)",
                     color: "var(--text-muted)",
                     fontSize: "var(--text-xs)",
@@ -859,7 +943,7 @@ function RosterTable({
               {displayed.length === 0 && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     style={{
                       textAlign: "center",
                       padding: "var(--space-8)",
@@ -1047,6 +1131,24 @@ function RosterTable({
                           {morale}
                         </span>
                       </div>
+                    </td>
+                    {/* Compare checkbox */}
+                    <td style={{ textAlign: "center", padding: "0 var(--space-1)" }}>
+                      <button
+                        title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"}
+                        onClick={() => toggleCompare(player)}
+                        style={{
+                          width: 22, height: 22,
+                          borderRadius: "var(--radius-sm)",
+                          border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`,
+                          background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent",
+                          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)",
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {compareIds.includes(player.id) ? "✓" : "⊕"}
+                      </button>
                     </td>
                     {/* Release / Extend */}
                     <td
