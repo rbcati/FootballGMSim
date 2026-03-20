@@ -968,6 +968,21 @@ async function handleAdvanceWeek(payload, id) {
   // Build a temporary league-style object for GameRunner (read-only view of cache)
   const league = buildLeagueForSim(schedule, week, seasonId);
 
+  // ── DEFENSIVE: If no games found for this week, bail without marking played ──
+  if (league._weekGames.length === 0) {
+    console.warn(`[Worker] ADVANCE_WEEK: No unplayed games found for week ${week}. Skipping.`);
+    post(toUI.WEEK_COMPLETE, {
+      week,
+      results:    [],
+      standings:  buildStandings(),
+      nextWeek:   week,       // do NOT advance — nothing happened
+      phase:      cache.getPhase(),
+      isSeasonOver: false,
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState());
+    return;
+  }
+
   post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
 
   // --- Simulate ---
@@ -980,10 +995,20 @@ async function handleAdvanceWeek(payload, id) {
 
   for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
     const batch = gamesToSim.slice(i, i + BATCH_SIZE);
-    const batchResults = simulateBatch(batch, {
-      league,
-      isPlayoff: meta.phase === 'playoffs'
-    });
+    let batchResults;
+    try {
+      batchResults = simulateBatch(batch, {
+        league,
+        isPlayoff: meta.phase === 'playoffs'
+      });
+    } catch (simErr) {
+      console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
+      batchResults = [];
+    }
+    if (batchResults.length === 0 && batch.length > 0) {
+      console.warn(`[Worker] simulateBatch returned 0 results for ${batch.length} games (batch at index ${i}). Games:`,
+        batch.map(g => `${g.home?.abbr ?? g.home?.id ?? '?'} vs ${g.away?.abbr ?? g.away?.id ?? '?'}`).join(', '));
+    }
     results.push(...batchResults);
 
     // Apply each game result to cache and emit GAME_EVENT per game
@@ -1048,6 +1073,22 @@ if (res.injuries && res.injuries.length > 0) {
     await yieldFrame();
   }
 
+  // SAFETY: If simulation produced 0 results, don't advance the week
+  if (results.length === 0) {
+    console.error(`[Worker] ADVANCE_WEEK: Simulation completed with 0 results for week ${week} (${gamesToSim.length} games). NOT advancing week.`);
+    post(toUI.WEEK_COMPLETE, {
+      week,
+      results:    [],
+      standings:  buildStandings(),
+      nextWeek:   week,       // stay on same week
+      phase:      cache.getPhase(),
+      isSeasonOver: false,
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState());
+    post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.` });
+    return;
+  }
+
   // --- Advance week / phase ---
   const TOTAL_REG_WEEKS    = 18;
   const isRegSeasonEnd     = meta.phase === 'regular' && week >= TOTAL_REG_WEEKS;
@@ -1056,7 +1097,12 @@ if (res.injuries && res.injuries.length > 0) {
 
   // Mark all games in the just-simulated week as played
   // (scores were already written into the slim schedule by applyGameResultToCache)
-  markWeekPlayed(meta.schedule, week);
+  // SAFETY: Only mark played when we actually simulated games — prevents phantom ties
+  if (results.length > 0) {
+    markWeekPlayed(meta.schedule, week);
+  } else {
+    console.warn(`[Worker] ADVANCE_WEEK: Simulation produced 0 results for week ${week} (${gamesToSim.length} games attempted). Not marking week as played.`);
+  }
 
   let nextWeekNum   = week + 1;   // may be overridden below
   let seasonEndFlag = false;
@@ -1221,6 +1267,23 @@ function buildLeagueForSim(schedule, week, seasonId) {
     })
     .filter(Boolean);
 
+  // Defensive logging: if weekGames is empty, log why
+  if (weekGames.length === 0) {
+    const rawGames = weekData?.games ?? [];
+    const unplayed = rawGames.filter(g => !g.played);
+    console.warn(`[Worker] buildLeagueForSim: 0 weekGames for week ${week}.`,
+      `weekData found: ${!!weekData}, total games: ${rawGames.length}, unplayed: ${unplayed.length},`,
+      `teams in cache: ${teamsWithRosters.length}`);
+    // Log first few games for debugging
+    unplayed.slice(0, 3).forEach((g, i) => {
+      const hId = g.home?.id ?? g.home;
+      const aId = g.away?.id ?? g.away;
+      const foundH = teamsWithRosters.find(t => t.id === hId || t.id === g.home?.id);
+      const foundA = teamsWithRosters.find(t => t.id === aId || t.id === g.away?.id);
+      console.warn(`  Game ${i}: home=${hId}(found:${!!foundH}), away=${aId}(found:${!!foundA})`);
+    });
+  }
+
   // Rebuild a league-compatible object (only what GameRunner reads)
   const leagueObj = {
     teams:       teamsWithRosters,
@@ -1252,7 +1315,10 @@ function applyGameResultToCache(result, week, seasonId) {
   const rawA = result.away      ?? result.awayTeamId;
   const hId  = Number(typeof rawH === 'object' ? rawH?.id : rawH);
   const aId  = Number(typeof rawA === 'object' ? rawA?.id : rawA);
-  if (isNaN(hId) || isNaN(aId)) return;
+  if (isNaN(hId) || isNaN(aId)) {
+    console.error(`[Worker] applyGameResultToCache: Invalid team IDs — home=${rawH}, away=${rawA} → hId=${hId}, aId=${aId}`);
+    return;
+  }
 
   const scoreHome = result.scoreHome ?? result.homeScore ?? 0;
   const scoreAway = result.scoreAway ?? result.awayScore ?? 0;
@@ -1296,6 +1362,8 @@ function applyGameResultToCache(result, week, seasonId) {
       if (game) {
         game.homeScore = scoreHome;
         game.awayScore = scoreAway;
+      } else {
+        console.warn(`[Worker] applyGameResultToCache: Could not find game ${hId} vs ${aId} in week ${week} schedule (${weekData.games.length} games in week)`);
       }
     }
   }
