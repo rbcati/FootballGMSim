@@ -173,17 +173,21 @@ export default function App() {
 
   // ── Advance button label ──────────────────────────────────────────────────
   const getAdvanceLabel = () => {
-    if (batchSim) return `Simming…`;
-    if (simulating) return `Sim ${simProgress}%`;
+    if (batchSim) return `Simulating…`;
+    if (simulating) return `Simulating ${simProgress}%`;
     if (busy) return 'Working…';
     if (!league) return 'Advance';
     const isCutdownRequired = league.phase === 'preseason' && ((league?.teams?.find(t => t.id === league.userTeamId)?.rosterCount ?? 0) > 53);
-    if (isCutdownRequired) return `Cut to 53`;
-    if (league.phase === 'preseason') return 'Start Season';
-    if (['offseason_resign', 'offseason'].includes(league.phase)) return 'Advance';
-    if (league.phase === 'free_agency') return 'Next FA Day';
-    if (league.phase === 'draft') return 'Draft';
-    return `Sim Week ${league.week}`;
+    if (isCutdownRequired) return 'Cut to 53';
+    if (league.phase === 'preseason') return '▶ Start Season';
+    if (['offseason_resign', 'offseason'].includes(league.phase)) return '▶ Advance';
+    if (league.phase === 'free_agency') return '▶ Next FA Day';
+    if (league.phase === 'draft') return '▶ Draft';
+    if (league.phase === 'playoffs') {
+      const roundNames = { 19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Champ', 22: 'Super Bowl' };
+      return `▶ ${roundNames[league.week] || `Playoffs Wk ${league.week}`}`;
+    }
+    return `▶ Sim Week ${league.week}`;
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -269,25 +273,42 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-left">
           <h1 className="app-title">Football GM</h1>
-          <span className="app-season-info">
-            {league.year ?? league.seasonId}
-            {' · '}
-            {league.week ? `Wk ${league.week}` : 'Off'}
-            {' · '}
-            <span className="app-phase-badge">{league.phase}</span>
-          </span>
+          <div className="app-season-info">
+            <span className="app-season-year">{league.year ?? league.seasonId}</span>
+            <span className="app-season-sep">&middot;</span>
+            <span>{league.week ? `Week ${league.week}` : 'Offseason'}</span>
+            <span className="app-season-sep">&middot;</span>
+            <span className="app-phase-badge">{
+              league.phase === 'regular' ? 'Regular Season' :
+              league.phase === 'playoffs' ? 'Playoffs' :
+              league.phase === 'preseason' ? 'Preseason' :
+              league.phase === 'offseason_resign' ? 'Re-Signing' :
+              league.phase === 'offseason' ? 'Offseason' :
+              league.phase === 'free_agency' ? 'Free Agency' :
+              league.phase === 'draft' ? 'Draft' :
+              league.phase
+            }</span>
+            {userTeam && (
+              <>
+                <span className="app-season-sep">&middot;</span>
+                <span className="app-user-record">
+                  {userTeam.abbr} ({userTeam.wins ?? 0}-{userTeam.losses ?? 0})
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="app-header-actions">
           <button
             className="btn btn-primary app-advance-btn"
             onClick={handleAdvanceWeek}
-            disabled={busy || simulating || isCutdownRequired || !!batchSim}
+            disabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
           >
             {getAdvanceLabel()}
           </button>
-          {/* Sim to... buttons — only show during regular season */}
+          {/* Sim to... buttons — show during regular season and playoffs */}
           {league.phase === 'regular' && !batchSim && (
             <>
               <button
@@ -309,6 +330,17 @@ export default function App() {
                 <span className="app-sim-btn-short">→ Off</span>
               </button>
             </>
+          )}
+          {league.phase === 'playoffs' && !batchSim && (
+            <button
+              className="btn app-sim-btn"
+              onClick={() => handleSimToPhase('offseason')}
+              disabled={busy || simulating}
+              title="Simulate remaining playoff games to offseason"
+            >
+              <span className="app-sim-btn-full">Sim to Offseason</span>
+              <span className="app-sim-btn-short">→ Off</span>
+            </button>
           )}
           {/* During offseason phases, offer Sim to Season */}
           {['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase) && !batchSim && (
@@ -422,15 +454,25 @@ export default function App() {
       {/* ── Last results ticker ────────────────────────────────────────── */}
       {lastResults && lastResults.length > 0 && (
         <div className="app-results-ticker">
-          {lastResults.map((r, i) => (
-            <span key={i} className="app-result-item">
-              {r.homeName}{' '}
-              <strong>{r.homeScore}</strong>
-              {' – '}
-              <strong>{r.awayScore}</strong>
-              {' '}{r.awayName}
-            </span>
-          ))}
+          {lastResults.map((r, i) => {
+            const homeWin = r.homeScore > r.awayScore;
+            const isUserGame = r.homeId === league.userTeamId || r.awayId === league.userTeamId;
+            return (
+              <span key={i} className={`app-result-item ${isUserGame ? 'app-result-user' : ''}`}>
+                <span style={{ fontWeight: homeWin ? 700 : 400, color: homeWin ? 'var(--text)' : 'var(--text-muted)' }}>
+                  {r.homeName}
+                </span>
+                {' '}
+                <strong>{r.homeScore}</strong>
+                {' - '}
+                <strong>{r.awayScore}</strong>
+                {' '}
+                <span style={{ fontWeight: !homeWin ? 700 : 400, color: !homeWin ? 'var(--text)' : 'var(--text-muted)' }}>
+                  {r.awayName}
+                </span>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -474,7 +516,7 @@ export default function App() {
       )}
 
       {/* ── User Game Prompt Modal ── */}
-      {promptUserGame && (() => {
+      {promptUserGame && !userGameLogs && (() => {
         const ut = league?.teams?.find(t => t.id === league.userTeamId);
         const weekGames = league?.schedule?.weeks?.find(w => w.week === league.week)?.games ?? [];
         const matchup = weekGames.find(g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId);
@@ -482,57 +524,66 @@ export default function App() {
         const oppId = matchup ? (isHome ? Number(matchup.away) : Number(matchup.home)) : null;
         const opp = oppId != null ? league?.teams?.find(t => t.id === oppId) : null;
         return (
-          <div className="app-modal-overlay" style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          <div style={{
+            position: 'fixed', inset: 0,
             zIndex: 9999,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(0,0,0,0.75)',
+            backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
             pointerEvents: 'auto',
             touchAction: 'manipulation',
-            WebkitTapHighlightColor: 'transparent',
-            userSelect: 'none', WebkitUserSelect: 'none',
           }}>
-            <div className="app-modal-card" style={{
+            <div style={{
               pointerEvents: 'auto',
-              position: 'relative', zIndex: 10000,
-              maxWidth: 420,
+              background: 'var(--surface-strong, #1e1e2e)',
+              border: '1px solid var(--hairline)',
+              borderRadius: 'var(--radius-xl, 20px)',
+              padding: '32px 28px',
+              maxWidth: 400, width: '90%',
+              textAlign: 'center',
             }}>
-              <div style={{ fontSize: '2rem', fontWeight: 900, marginBottom: 8, letterSpacing: '-1px' }}>
+              <div style={{
+                fontSize: '2.2rem', fontWeight: 900,
+                marginBottom: 8, letterSpacing: '-1px',
+                color: 'var(--text)',
+              }}>
                 {isHome ? `${opp?.abbr ?? '???'} @ ${ut?.abbr ?? 'YOU'}` : `${ut?.abbr ?? 'YOU'} @ ${opp?.abbr ?? '???'}`}
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginBottom: 4 }}>
+              <div style={{
+                color: 'var(--text-muted)', fontSize: 'var(--text-sm)',
+                marginBottom: 24,
+              }}>
                 Week {league.week} {league.phase === 'playoffs' ? '· Playoffs' : '· Regular Season'}
               </div>
-              <h2 className="app-modal-title" style={{ marginTop: 16 }}>Watch Your Game?</h2>
-              <p className="app-modal-desc">
-                Follow the action play-by-play, or skip ahead and simulate.
-              </p>
-              <div className="app-modal-actions" style={{ flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <button
-                  className="btn btn-primary app-modal-watch-btn"
+                  className="btn btn-primary"
                   onClick={() => actions.watchGame()}
+                  disabled={busy}
                   style={{
-                    width: '100%', minHeight: 52, fontSize: 'var(--text-base)', fontWeight: 700,
-                    pointerEvents: 'auto', touchAction: 'manipulation',
-                    userSelect: 'none', WebkitUserSelect: 'none',
-                    position: 'relative', zIndex: 10001,
+                    width: '100%', minHeight: 52,
+                    fontSize: 'var(--text-base)', fontWeight: 800,
                     cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  Watch Game
+                  {busy ? 'Loading...' : '🏈 Watch Game'}
                 </button>
                 <button
-                  className="btn app-modal-sim-btn"
-                  onClick={() => actions.advanceWeek({ skipUserGame: true })}
+                  className="btn"
+                  onClick={() => {
+                    actions.clearUserGame();
+                    actions.advanceWeek({ skipUserGame: true });
+                  }}
+                  disabled={busy}
                   style={{
-                    width: '100%', minHeight: 48, fontSize: 'var(--text-sm)',
-                    pointerEvents: 'auto', touchAction: 'manipulation',
-                    userSelect: 'none', WebkitUserSelect: 'none',
-                    position: 'relative', zIndex: 10001,
+                    width: '100%', minHeight: 48,
+                    fontSize: 'var(--text-sm)', fontWeight: 600,
                     cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  Simulate
+                  Simulate (Skip)
                 </button>
               </div>
             </div>
@@ -544,8 +595,10 @@ export default function App() {
       {userGameLogs && (() => {
         // Determine actual home/away from the latest game event for the user's team
         const userEvent = gameEvents?.find(e => e.homeId === league.userTeamId || e.awayId === league.userTeamId);
-        const homeId = userEvent?.homeId ?? league.userTeamId;
-        const awayId = userEvent?.awayId ?? league.teams?.find(t => t.id !== league.userTeamId)?.id;
+        const weekGames = league?.schedule?.weeks?.find(w => w.week === league.week)?.games ?? [];
+        const userMatchup = weekGames.find(g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId);
+        const homeId = userEvent?.homeId ?? (userMatchup ? Number(userMatchup.home) : league.userTeamId);
+        const awayId = userEvent?.awayId ?? (userMatchup ? Number(userMatchup.away) : league.teams?.find(t => t.id !== league.userTeamId)?.id);
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME' };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY' };
         return (
@@ -555,7 +608,10 @@ export default function App() {
             awayTeam={awayTeam}
             onComplete={() => {
                 actions.clearUserGame();
-                actions.advanceWeek({ skipUserGame: true });
+                // Small delay to let state settle before advancing
+                setTimeout(() => {
+                  actions.advanceWeek({ skipUserGame: true });
+                }, 100);
             }}
           />
         );

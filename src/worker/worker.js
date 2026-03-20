@@ -1438,8 +1438,9 @@ async function handleSimToPhase({ targetPhase }, id) {
     });
 
     // Advance based on current phase
+    // Pass skipUserGame:true during batch sim to avoid prompting the user
     if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
-      await handleAdvanceWeek({}, null);
+      await handleAdvanceWeek({ skipUserGame: true }, null);
     } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
       await handleAdvanceOffseason({}, null);
     } else if (currentMeta.phase === 'free_agency') {
@@ -4312,9 +4313,26 @@ async function handleWatchGame(payload, id) {
         awayScore: res.scoreAway ?? res.awayScore ?? 0,
     });
 
-    // Remove the user game from the week's schedule so when ADVANCE_WEEK is called, it doesn't re-simulate it
-    // Wait, applyGameResultToCache already marks it as `played = true` in the meta schedule,
-    // so buildLeagueForSim in ADVANCE_WEEK will filter it out automatically!
+    // Mark the user game as played in the slim schedule so ADVANCE_WEEK
+    // (called after LiveGameViewer completes) won't re-simulate it.
+    // applyGameResultToCache writes scores but does NOT set played=true;
+    // that is normally done by markWeekPlayed for the whole week.
+    const slimSchedule = cache.getMeta()?.schedule;
+    if (slimSchedule?.weeks) {
+      const weekData = slimSchedule.weeks.find(w => w.week === week);
+      if (weekData) {
+        const slimGame = weekData.games.find(
+          g => (Number(g.home) === homeId && Number(g.away) === awayId) ||
+               (Number(g.home) === awayId && Number(g.away) === homeId)
+        );
+        if (slimGame) {
+          slimGame.played = true;
+          slimGame.homeScore = res.scoreHome ?? res.homeScore ?? 0;
+          slimGame.awayScore = res.scoreAway ?? res.awayScore ?? 0;
+          cache.setMeta({ schedule: slimSchedule });
+        }
+      }
+    }
 
     await flushDirty();
 
