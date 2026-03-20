@@ -13,7 +13,7 @@
  *  - Trades      — Side-by-side roster trade interface
  */
 
-import React, { useState, useMemo, useEffect, Component } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef, Component } from "react";
 import DonutChart from "./DonutChart";
 import HomeDashboard from "./HomeDashboard.jsx";
 import Roster from "./Roster.jsx";
@@ -1194,6 +1194,115 @@ export default function LeagueDashboard({ league, busy, actions }) {
     }
   }, [league?.phase]);
 
+  // ── Keyboard Shortcuts ──────────────────────────────────────────────────
+  // Alt+1..9 → switch tabs, Esc → close modals, Alt+H → Home
+  useEffect(() => {
+    const handleKey = (e) => {
+      // Escape: close any open modal
+      if (e.key === "Escape") {
+        if (selectedPlayerId) { setSelectedPlayerId(null); return; }
+        if (selectedTeamId != null) { setSelectedTeamId(null); return; }
+        if (selectedGameId) { setSelectedGameId(null); return; }
+        return;
+      }
+
+      // Don't intercept if user is typing in an input
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable) return;
+
+      // Alt + number → switch tabs
+      if (e.altKey && e.key >= "1" && e.key <= "9") {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        if (idx < TABS.length) setActiveTab(TABS[idx]);
+        return;
+      }
+
+      // Alt+H → Home tab
+      if (e.altKey && e.key.toLowerCase() === "h") {
+        e.preventDefault();
+        setActiveTab("Home");
+        return;
+      }
+
+      // Alt+R → Roster Hub
+      if (e.altKey && e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        setActiveTab("Roster Hub");
+        return;
+      }
+
+      // Alt+D → Draft Room
+      if (e.altKey && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        setActiveTab("Draft Room");
+        return;
+      }
+
+      // Alt+T → Trade Finder
+      if (e.altKey && e.key.toLowerCase() === "t") {
+        e.preventDefault();
+        setActiveTab("Trade Finder");
+        return;
+      }
+
+      // Alt+F → FA Hub
+      if (e.altKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setActiveTab("FA Hub");
+        return;
+      }
+
+      // Alt+Left / Alt+Right → prev/next tab
+      if (e.altKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+        e.preventDefault();
+        const curIdx = TABS.indexOf(activeTab);
+        if (curIdx < 0) return;
+        const next = e.key === "ArrowRight"
+          ? (curIdx + 1) % TABS.length
+          : (curIdx - 1 + TABS.length) % TABS.length;
+        setActiveTab(TABS[next]);
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [TABS, activeTab, selectedPlayerId, selectedTeamId, selectedGameId]);
+
+  // ── Mobile Swipe Gestures ───────────────────────────────────────────────
+  // Swipe left/right on the tab content area to navigate between tabs
+  const touchStartRef = useRef(null);
+  const touchContentRef = useRef(null);
+
+  const onTouchStart = useCallback((e) => {
+    const touch = e.touches[0];
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, time: Date.now() };
+  }, []);
+
+  const onTouchEnd = useCallback((e) => {
+    if (!touchStartRef.current) return;
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const dt = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    // Must be a fast horizontal swipe (>60px, <300ms, more horizontal than vertical)
+    if (Math.abs(dx) < 60 || dt > 300 || Math.abs(dy) > Math.abs(dx)) return;
+
+    const curIdx = TABS.indexOf(activeTab);
+    if (curIdx < 0) return;
+
+    if (dx < 0) {
+      // Swipe left → next tab
+      const next = (curIdx + 1) % TABS.length;
+      setActiveTab(TABS[next]);
+    } else {
+      // Swipe right → prev tab
+      const prev = (curIdx - 1 + TABS.length) % TABS.length;
+      setActiveTab(TABS[prev]);
+    }
+  }, [TABS, activeTab]);
+
   if (!league) return null;
 
   // NOTE: a missing schedule only affects the Schedule tab.
@@ -1719,7 +1828,8 @@ export default function LeagueDashboard({ league, busy, actions }) {
       </div>
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
-      <div className="fade-in" key={activeTab}>
+      {/* Swipe left/right to navigate tabs on mobile */}
+      <div className="fade-in" key={activeTab} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         {activeTab === "Home" && (
           <TabErrorBoundary label="Home">
             <HomeDashboard

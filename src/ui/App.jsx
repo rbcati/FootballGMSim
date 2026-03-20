@@ -48,6 +48,7 @@ import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
+import SoundToggle         from './components/SoundToggle.jsx';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -302,6 +303,7 @@ export default function App() {
         </div>
 
         <div className="app-header-actions">
+          <SoundToggle compact />
           <ThemeToggle compact />
           <button
             className="btn btn-primary app-advance-btn"
@@ -594,7 +596,7 @@ export default function App() {
         );
       })()}
 
-      {/* ── Live Game Viewer ── */}
+      {/* ── Live Game Viewer (uses SeasonSimViewer for premium SVG field experience) ── */}
       {userGameLogs && (() => {
         // Determine actual home/away from the latest game event for the user's team
         const userEvent = gameEvents?.find(e => e.homeId === league.userTeamId || e.awayId === league.userTeamId);
@@ -605,7 +607,7 @@ export default function App() {
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME' };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY' };
         return (
-          <LiveGameViewer
+          <SeasonSimViewer
             logs={userGameLogs}
             homeTeam={homeTeam}
             awayTeam={awayTeam}

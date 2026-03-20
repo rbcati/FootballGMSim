@@ -12,6 +12,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import WinProbabilityWidget from "./WinProbabilityWidget.jsx";
+import { playSound } from "./SoundToggle.jsx";
 
 const QUARTER_NAMES = ["Q1", "Q2", "HALF", "Q3", "Q4", "OT"];
 
@@ -214,6 +215,15 @@ export default function SeasonSimViewer({ logs = [], homeTeam, awayTeam, onCompl
     if (!isPlaying || currentIndex >= logs.length) {
       if (timerRef.current) clearTimeout(timerRef.current);
       return;
+    }
+
+    // Play sound on scoring/big plays
+    if (currentIndex > 0 && currentIndex <= logs.length) {
+      const play = logs[currentIndex - 1];
+      const text = (play?.text || play?.description || "").toLowerCase();
+      if (text.includes("touchdown")) playSound("touchdown");
+      else if (text.includes("field goal")) playSound("field_goal");
+      else if (text.includes("interception") || text.includes("fumble")) playSound("turnover");
     }
 
     const delay = Math.max(100, 800 / speed);

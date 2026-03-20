@@ -16,6 +16,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import PlayerRadarChart, { getPlayerRadarAttributes } from "./PlayerRadarChart.jsx";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import { launchConfetti } from "../../confetti.js";
+import { playSound } from "./SoundToggle.jsx";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -237,9 +238,11 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
   useEffect(() => {
     if (draftPicks.length > lastPickCountRef.current) {
       const newPicks = draftPicks.slice(lastPickCountRef.current);
-      const userPick = newPicks.find(p => p.teamId === league?.userTeamId && p.overall <= 10);
+      const userPick = newPicks.find(p => p.teamId === league?.userTeamId);
       if (userPick) {
-        launchConfetti();
+        playSound("draft_pick");
+        // Confetti on first-round picks (top 32)
+        if (userPick.overall <= 32) launchConfetti();
       }
       lastPickCountRef.current = draftPicks.length;
     }

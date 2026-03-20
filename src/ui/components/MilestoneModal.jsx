@@ -10,6 +10,8 @@
 
 import React, { useState, useEffect } from "react";
 import { teamColor } from "../../data/team-utils.js";
+import { launchConfetti } from "../../confetti.js";
+import { playSound } from "./SoundToggle.jsx";
 
 // ── Playoff Bracket Modal ────────────────────────────────────────────────────
 
@@ -279,9 +281,12 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
       }}
     >
       <div
+        className="trophy-glow"
         style={{
           fontSize: 64,
           lineHeight: 1,
+          borderRadius: "50%",
+          padding: 16,
         }}
       >
         🏆
@@ -383,6 +388,7 @@ export default function MilestoneModal({
     ) {
       setShowPlayoffs(true);
       setSeenPlayoffSeeds(league.playoffSeeds);
+      playSound("playoffs");
     }
   }, [league?.phase, league?.playoffSeeds]);
 
@@ -395,6 +401,9 @@ export default function MilestoneModal({
     ) {
       setShowChampion(true);
       setSeenChampion(league.championTeamId);
+      // Big moment: confetti + sound for championship
+      launchConfetti();
+      playSound("champion");
     }
   }, [league?.phase, league?.championTeamId]);
 

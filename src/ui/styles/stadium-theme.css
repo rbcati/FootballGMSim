@@ -1036,6 +1036,188 @@ body.theme-light .team-card-logo {
   border-radius: 2px;
 }
 
+/* ── Big Moments ─────────────────────────────────────────────────── */
+
+/* Trophy glow for championship / playoff clinch */
+.trophy-glow {
+  position: relative;
+  animation: trophyPulse 2s ease-in-out infinite;
+}
+.trophy-glow::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,215,0,0.25), rgba(255,179,0,0.1));
+  border: 2px solid rgba(255,215,0,0.4);
+  pointer-events: none;
+  animation: trophyShimmer 3s ease-in-out infinite;
+}
+@keyframes trophyPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+@keyframes trophyShimmer {
+  0%, 100% { opacity: 0.4; border-color: rgba(255,215,0,0.2); }
+  50% { opacity: 1; border-color: rgba(255,215,0,0.6); }
+}
+
+/* Draft pick announcement card */
+.draft-pick-announce {
+  animation: draftPickReveal 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards,
+             draftPickGlow 2s ease-in-out 0.6s infinite;
+  transform-origin: center;
+}
+@keyframes draftPickGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(10,132,255,0.2); }
+  50% { box-shadow: 0 0 40px rgba(10,132,255,0.5), 0 0 80px rgba(10,132,255,0.15); }
+}
+
+/* First-round pick special gold treatment */
+.draft-pick-first-round {
+  border: 2px solid rgba(255,215,0,0.5) !important;
+  background: linear-gradient(135deg, rgba(255,215,0,0.08), rgba(10,132,255,0.05)) !important;
+}
+.draft-pick-first-round::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, transparent 30%, rgba(255,215,0,0.1) 50%, transparent 70%);
+  animation: shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Playoff clinch celebration banner */
+.clinch-banner {
+  background: linear-gradient(135deg, rgba(255,215,0,0.12), rgba(52,199,89,0.08));
+  border: 1px solid rgba(255,215,0,0.3);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-6);
+  text-align: center;
+  animation: clinchAppear 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes clinchAppear {
+  0% { opacity: 0; transform: scale(0.9) translateY(10px); }
+  60% { transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Touchdown celebration flash */
+.td-flash {
+  animation: touchdownFlash 0.6s ease-out;
+}
+@keyframes touchdownFlash {
+  0% { background: rgba(52,199,89,0.3); }
+  100% { background: transparent; }
+}
+
+/* Big play highlight pulse */
+.big-play-highlight {
+  animation: bigPlayPulse 0.5s ease-out;
+}
+@keyframes bigPlayPulse {
+  0% { transform: scale(1.05); box-shadow: 0 0 20px rgba(255,159,10,0.4); }
+  100% { transform: scale(1); box-shadow: none; }
+}
+
+/* Season champion banner */
+.champion-banner {
+  background: var(--gradient-gold);
+  color: #1a1a1a;
+  padding: var(--space-6);
+  border-radius: var(--radius-xl);
+  text-align: center;
+  font-weight: 900;
+  position: relative;
+  overflow: hidden;
+}
+.champion-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(255,255,255,0.3) 50%, transparent 60%);
+  animation: shimmer 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Scoreboard SVG field styling */
+.field-container {
+  position: relative;
+  width: 100%;
+  height: 80px;
+  background: linear-gradient(90deg, #1a5e1a 0%, #2d8a2d 10%, #1a7a1a 50%, #2d8a2d 90%, #1a5e1a 100%);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.field-endzone-left,
+.field-endzone-right {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10%;
+}
+.field-endzone-left { left: 0; border-right: 2px solid rgba(255,255,255,0.3); }
+.field-endzone-right { right: 0; border-left: 2px solid rgba(255,255,255,0.3); }
+
+/* Scoreboard layout */
+.scoreboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--hairline);
+}
+.scoreboard-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+}
+.scoreboard-abbr {
+  font-weight: 700;
+  color: var(--text);
+}
+.scoreboard-score {
+  font-size: 2rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+}
+.scoreboard-separator {
+  font-size: 1.5rem;
+  color: var(--text-muted);
+  font-weight: 300;
+}
+.scoreboard-info {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Keyboard shortcut hint badge */
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  color: var(--text-muted);
+  background: var(--surface-strong);
+  border: 1px solid var(--hairline);
+  border-radius: 3px;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+
 /* Responsive adjustments for new components */
 @media (max-width: 640px) {
   .trade-sides {
@@ -1045,4 +1227,30 @@ body.theme-light .team-card-logo {
   .prospect-grid {
     grid-template-columns: 1fr !important;
   }
+
+  .scoreboard {
+    gap: var(--space-2);
+    padding: var(--space-2);
+  }
+  .scoreboard-score {
+    font-size: 1.4rem;
+  }
+
+  .field-container {
+    height: 60px;
+  }
+
+  /* Hide keyboard hints on mobile */
+  .kbd-hint {
+    display: none;
+  }
+}
+
+/* Fade-in-up for play entries */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
 }
