@@ -540,6 +540,8 @@ export default function LiveGame({
       setOverlayEvent({ type: "safety", text: "SAFETY" });
     } else if (lowerText.includes("deep pass complete")) {
       setOverlayEvent({ type: "big-play", text: "BIG PLAY" });
+    } else if (lowerText.includes("punt")) {
+      setOverlayEvent({ type: "punt", text: "PUNT" });
     } else {
       setOverlayEvent(null);
     }
