@@ -1075,7 +1075,7 @@ if (res.injuries && res.injuries.length > 0) {
 
   // SAFETY: If simulation produced 0 results, don't advance the week
   if (results.length === 0) {
-    console.error(`[Worker] ADVANCE_WEEK: Simulation completed with 0 results for week ${week} (${gamesToSim.length} games). NOT advancing week.`);
+    console.error(`[Worker] ADVANCE_WEEK: simulateBatch returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
     post(toUI.WEEK_COMPLETE, {
       week,
       results:    [],
@@ -1085,7 +1085,7 @@ if (res.injuries && res.injuries.length > 0) {
       isSeasonOver: false,
     }, id);
     post(toUI.STATE_UPDATE, buildViewState());
-    post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.` });
+    post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.`, retryable: true });
     return;
   }
 
@@ -1267,12 +1267,15 @@ function buildLeagueForSim(schedule, week, seasonId) {
     })
     .filter(Boolean);
 
+  // Diagnostic logging for schedule population
+  console.log(`[Worker] Week ${week} schedule entries: ${weekData?.games?.length ?? 0}, unplayed: ${weekGames.length}`);
+
   // Defensive logging: if weekGames is empty, log why
   if (weekGames.length === 0) {
     const rawGames = weekData?.games ?? [];
     const unplayed = rawGames.filter(g => !g.played);
     console.warn(`[Worker] buildLeagueForSim: 0 weekGames for week ${week}.`,
-      `weekData found: ${!!weekData}, total games: ${rawGames.length}, unplayed: ${unplayed.length},`,
+      `weekData found: ${!!weekData}, total games in slim schedule: ${rawGames.length}, unplayed: ${unplayed.length},`,
       `teams in cache: ${teamsWithRosters.length}`);
     // Log first few games for debugging
     unplayed.slice(0, 3).forEach((g, i) => {

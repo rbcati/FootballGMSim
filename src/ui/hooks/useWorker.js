@@ -117,7 +117,7 @@ function reducer(state, action) {
         ...state,
         notifications: [
           ...state.notifications.slice(-9),   // keep last 10
-          { id: Date.now(), level: action.level, message: action.message },
+          { id: Date.now(), level: action.level, message: action.message, retryable: action.retryable ?? false },
         ],
       };
     case 'DISMISS_NOTIFY':
@@ -243,7 +243,7 @@ export function useWorker() {
           dispatch({ type: 'GAME_EVENT', event: payload });
           break;
         case toUI.NOTIFICATION:
-          dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message });
+          dispatch({ type: 'NOTIFY', level: payload.level, message: payload.message, retryable: payload.retryable ?? false });
           break;
         case toUI.RELOAD_REQUIRED:
           // The IDB was blocked or version-changed — a page reload is the only
