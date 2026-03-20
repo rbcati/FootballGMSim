@@ -36,6 +36,12 @@
   flex-direction: column;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 @media (min-width: 768px) {
@@ -44,34 +50,49 @@
     align-items: center;
     gap: var(--space-4);
     flex-wrap: wrap;
+    padding: var(--space-3) var(--space-5);
   }
 }
 
 .app-header-left {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+@media (min-width: 768px) {
+  .app-header-left {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+  }
 }
 
 .app-title {
   margin: 0;
-  font-size: var(--text-xl);
-  font-weight: 800;
+  font-size: var(--text-lg);
+  font-weight: 900;
   letter-spacing: -0.5px;
   white-space: nowrap;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 @media (min-width: 768px) {
   .app-title {
-    font-size: var(--text-2xl);
+    font-size: var(--text-xl);
   }
 }
 
 .app-season-info {
   color: var(--text-muted);
   font-size: var(--text-xs);
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 @media (min-width: 768px) {
@@ -80,15 +101,42 @@
   }
 }
 
+.app-season-year {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.app-season-sep {
+  color: var(--text-subtle);
+  opacity: 0.5;
+}
+
+.app-user-record {
+  font-weight: 700;
+  color: var(--accent);
+}
+
 .app-phase-badge {
   display: inline-block;
-  padding: 1px 6px;
+  padding: 2px 8px;
   background: var(--accent-muted);
   border-radius: var(--radius-pill);
   font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: capitalize;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--accent);
+}
+
+/* Postseason badge glow */
+.theme-playoffs .app-phase-badge {
+  background: rgba(255,215,0,0.15);
+  color: #FFD60A;
+}
+
+.theme-draft .app-phase-badge {
+  background: rgba(255,183,3,0.15);
+  color: #ffb703;
 }
 
 .app-header-actions {
@@ -340,6 +388,14 @@
 
 .app-result-item strong {
   color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-result-user {
+  background: var(--accent-muted);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(10,132,255,0.2);
 }
 
 /* ── Modals ──────────────────────────────────────────────────────────────────── */

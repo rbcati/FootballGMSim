@@ -72,13 +72,13 @@ function reducer(state, action) {
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
     case 'PROMPT_USER_GAME':
-      return { ...state, busy: false, simulating: false, promptUserGame: true };
+      return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
     case 'PLAY_LOGS':
-      return { ...state, busy: false, promptUserGame: false, userGameLogs: action.logs };
+      return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs };
     case 'CLEAR_USER_GAME':
       return { ...state, promptUserGame: false, userGameLogs: null };
     case 'SIM_START':
-      return { ...state, simulating: true, simProgress: 0, gameEvents: [] };
+      return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null };
     case 'BATCH_SIM_START':
       return { ...state, busy: true, batchSim: { currentWeek: 0, phase: '', targetPhase: action.targetPhase } };
     case 'BATCH_SIM_PROGRESS':
