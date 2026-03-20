@@ -33,6 +33,105 @@ import React, {
   useCallback,
 } from "react";
 
+// ── Momentum Bar ───────────────────────────────────────────────────────────────
+// Shows which team has the momentum based on recent plays.
+
+function MomentumBar({ homeAbbr, awayAbbr, momentum }) {
+  // momentum: -100 (all away) to +100 (all home). 0 = neutral.
+  const clampedMom = Math.max(-100, Math.min(100, momentum));
+  const homeColor = teamColor(homeAbbr);
+  const awayColor = teamColor(awayAbbr);
+  // Map -100..+100 to left%: 0%=all away, 50%=neutral, 100%=all home
+  const filledPct = (clampedMom + 100) / 2; // 0-100
+
+  return (
+    <div style={{ padding: "var(--space-2) var(--space-4)", borderBottom: "1px solid var(--hairline)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginBottom: 4 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: awayColor, minWidth: 28 }}>{awayAbbr}</span>
+        <div style={{ flex: 1, height: 6, background: "var(--surface-strong)", borderRadius: "var(--radius-pill)", overflow: "hidden", position: "relative" }}>
+          {/* Away momentum (red side) */}
+          <div style={{
+            position: "absolute", top: 0, left: 0, bottom: 0,
+            width: `${Math.max(0, 50 - filledPct)}%`,
+            background: awayColor, opacity: 0.7,
+            borderRadius: "var(--radius-pill)",
+            transition: "width 0.8s cubic-bezier(0.2,0.8,0.2,1)",
+          }} />
+          {/* Home momentum (blue side) */}
+          <div style={{
+            position: "absolute", top: 0, right: 0, bottom: 0,
+            width: `${Math.max(0, filledPct - 50)}%`,
+            background: homeColor, opacity: 0.7,
+            borderRadius: "var(--radius-pill)",
+            transition: "width 0.8s cubic-bezier(0.2,0.8,0.2,1)",
+          }} />
+          {/* Center marker */}
+          <div style={{ position: "absolute", top: -1, bottom: -1, left: "50%", width: 2, background: "var(--hairline-strong)", transform: "translateX(-50%)" }} />
+        </div>
+        <span style={{ fontSize: 10, fontWeight: 700, color: homeColor, minWidth: 28, textAlign: "right" }}>{homeAbbr}</span>
+      </div>
+      <div style={{ textAlign: "center", fontSize: 9, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+        Momentum
+        {Math.abs(clampedMom) > 25 && (
+          <span style={{ marginLeft: 4, color: clampedMom > 0 ? homeColor : awayColor }}>
+            → {clampedMom > 0 ? homeAbbr : awayAbbr}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Quarter Score Display ──────────────────────────────────────────────────────
+
+function QuarterScores({ homeAbbr, awayAbbr, quarterScores }) {
+  // quarterScores: { home: [q1,q2,q3,q4], away: [q1,q2,q3,q4] }
+  const { home = [], away = [] } = quarterScores ?? {};
+  const labels = ["Q1","Q2","Q3","Q4","OT"];
+
+  const maxQ = Math.max(home.length, away.length, 4);
+  const cols = Array.from({ length: maxQ }, (_, i) => i);
+
+  return (
+    <div style={{
+      padding: "var(--space-2) var(--space-4)",
+      borderBottom: "1px solid var(--hairline)",
+      overflowX: "auto",
+    }}>
+      <div className="quarter-scores">
+        {/* Header */}
+        <div className="q-cell q-header" />
+        {cols.map(i => (
+          <div key={i} className="q-cell q-header">{labels[i] ?? `Q${i+1}`}</div>
+        ))}
+        <div className="q-cell q-header">T</div>
+
+        {/* Away row */}
+        <div className="q-cell q-team" style={{ color: "var(--text)", fontWeight: 700, fontSize: "var(--text-xs)" }}>{awayAbbr}</div>
+        {cols.map(i => (
+          <div key={i} className="q-cell q-score" style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>
+            {away[i] ?? (i < maxQ ? "—" : "")}
+          </div>
+        ))}
+        <div className="q-cell q-total" style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>
+          {away.reduce((s, v) => s + v, 0)}
+        </div>
+
+        {/* Home row */}
+        <div className="q-cell q-team" style={{ color: "var(--accent)", fontWeight: 700, fontSize: "var(--text-xs)" }}>{homeAbbr}</div>
+        {cols.map(i => (
+          <div key={i} className="q-cell q-score" style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>
+            {home[i] ?? (i < maxQ ? "—" : "")}
+          </div>
+        ))}
+        <div className="q-cell q-total" style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>
+          {home.reduce((s, v) => s + v, 0)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Palette helper ─────────────────────────────────────────────────────────────
 
 function teamColor(abbr = "") {
@@ -299,6 +398,9 @@ export default function LiveGame({
   const [skipping, setSkipping] = useState(false);
   const [prevSim, setPrevSim] = useState(false);
   const [overlayEvent, setOverlayEvent] = useState(null);
+  const [momentum, setMomentum] = useState(0); // -100 to +100 (positive = home momentum)
+  const [quarterScores, setQuarterScores] = useState({ home: [], away: [] });
+  const [driveCount, setDriveCount] = useState(0);
   const playLogRef = useRef(null);
   const intervalRef = useRef(null);
   const playCountRef = useRef(0);
@@ -359,6 +461,9 @@ export default function LiveGame({
       setVisible(true);
       setPlays([]);
       setSkipping(false);
+      setMomentum(0);
+      setQuarterScores({ home: [], away: [] });
+      setDriveCount(0);
       playCountRef.current = 0;
     }
     setPrevSim(simulating);
@@ -370,9 +475,56 @@ export default function LiveGame({
     if (skipping) return;
     const n = playCountRef.current++;
     const text = generatePlay(userHomeAbbr, userAwayAbbr, n);
-    setPlays((prev) => [...prev.slice(-49), { id: n, text }]); // keep last 50 entries
 
     const lowerText = text.toLowerCase();
+    const isHomePossession = lowerText.startsWith(userHomeAbbr.toLowerCase());
+
+    // Update momentum: positive plays shift momentum toward the offensive team
+    setMomentum(prev => {
+      let delta = 0;
+      if (lowerText.includes("touchdown"))      delta = isHomePossession ? 30 : -30;
+      else if (lowerText.includes("field goal attempt... good")) delta = isHomePossession ? 15 : -15;
+      else if (lowerText.includes("interception") || lowerText.includes("fumble")) delta = isHomePossession ? -25 : 25;
+      else if (lowerText.includes("sack"))      delta = isHomePossession ? -10 : 10;
+      else if (lowerText.includes("deep pass")) delta = isHomePossession ? 12 : -12;
+      else if (lowerText.includes("safety"))    delta = isHomePossession ? -20 : 20;
+      else                                      delta = isHomePossession ? 3 : -3;
+      // Decay toward 0 (regression to mean)
+      return Math.max(-100, Math.min(100, prev * 0.88 + delta));
+    });
+
+    // Simulate quarter score progression (roughly every 8 plays = 1 quarter)
+    const quarterIdx = Math.floor(n / 8);
+    if (lowerText.includes("touchdown") || lowerText.includes("field goal attempt... good")) {
+      const pts = lowerText.includes("touchdown") ? 7 : 3;
+      setQuarterScores(prev => {
+        const q = Math.min(quarterIdx, 3);
+        const newHome = [...prev.home];
+        const newAway = [...prev.away];
+        while (newHome.length <= q) newHome.push(0);
+        while (newAway.length <= q) newAway.push(0);
+        if (isHomePossession) newHome[q] += pts;
+        else newAway[q] += pts;
+        return { home: newHome, away: newAway };
+      });
+    }
+
+    // Add drive summary every ~6 plays
+    let entry = { id: n, text, isDrive: false, driveType: null };
+    if (n > 0 && n % 6 === 0) {
+      const driveTypes = [
+        { type: "td", label: "Drive: TOUCHDOWN! 6+1 pts" },
+        { type: "fg", label: "Drive: Field Goal. 3 pts" },
+        { type: "punt", label: "Drive: 3-and-out. Punt." },
+        { type: "to",  label: "Drive: Turnover on downs." },
+      ];
+      const dtIdx = (n * 3 + driveCount) % driveTypes.length;
+      entry = { id: n, text, isDrive: true, ...driveTypes[dtIdx] };
+      setDriveCount(c => c + 1);
+    }
+
+    setPlays((prev) => [...prev.slice(-59), entry]); // keep last 60 entries
+
     if (lowerText.includes("touchdown")) {
       setOverlayEvent({ type: "touchdown", text: "TOUCHDOWN" });
     } else if (lowerText.includes("field goal attempt... good")) {
@@ -391,7 +543,7 @@ export default function LiveGame({
     } else {
       setOverlayEvent(null);
     }
-  }, [skipping, userHomeAbbr, userAwayAbbr]);
+  }, [skipping, userHomeAbbr, userAwayAbbr, driveCount]);
 
   useEffect(() => {
     if (!simulating || skipping) {
@@ -566,6 +718,24 @@ export default function LiveGame({
             }}
           />
         </div>
+      )}
+
+      {/* ── Momentum Bar (only shown when user has a game) ── */}
+      {simulating && !skipping && (userGame || userEvent) && userHomeAbbr !== "???" && (
+        <MomentumBar
+          homeAbbr={userHomeAbbr}
+          awayAbbr={userAwayAbbr}
+          momentum={momentum}
+        />
+      )}
+
+      {/* ── Quarter Scores (shown when scores have started accumulating) ── */}
+      {simulating && !skipping && (userGame || userEvent) && (quarterScores.home.length > 0 || quarterScores.away.length > 0) && (
+        <QuarterScores
+          homeAbbr={userHomeAbbr}
+          awayAbbr={userAwayAbbr}
+          quarterScores={quarterScores}
+        />
       )}
 
       {/* ── Body: split scoreboard / play-by-play ── */}
@@ -751,22 +921,34 @@ export default function LiveGame({
               </p>
             )}
             {plays.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)",
-                  lineHeight: 1.45,
-                  borderBottom: "1px solid var(--hairline)",
-                  paddingBottom: "var(--space-1)",
-                  animation:
-                    p.id === plays[plays.length - 1]?.id
-                      ? "lgFadeIn 0.22s ease"
-                      : "none",
-                }}
-              >
-                {p.text}
-              </div>
+              p.isDrive ? (
+                <div
+                  key={p.id}
+                  className={`drive-summary ${p.driveType ?? ""}`}
+                  style={{
+                    animation: p.id === plays[plays.length - 1]?.id ? "lgFadeIn 0.22s ease" : "none",
+                  }}
+                >
+                  {p.label}
+                </div>
+              ) : (
+                <div
+                  key={p.id}
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    lineHeight: 1.45,
+                    borderBottom: "1px solid var(--hairline)",
+                    paddingBottom: "var(--space-1)",
+                    animation:
+                      p.id === plays[plays.length - 1]?.id
+                        ? "lgFadeIn 0.22s ease"
+                        : "none",
+                  }}
+                >
+                  {p.text}
+                </div>
+              )
             ))}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
           </div>

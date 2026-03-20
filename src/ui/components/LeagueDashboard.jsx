@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo, useEffect, Component } from "react";
 import DonutChart from "./DonutChart";
+import HomeDashboard from "./HomeDashboard.jsx";
 import Roster from "./Roster.jsx";
 import Draft from "./Draft.jsx";
 import Coaches from "./Coaches.jsx";
@@ -37,7 +38,8 @@ import MobileNav from "./MobileNav.jsx";
 
 // Map MobileNav tab IDs → LeagueDashboard tab names
 const MOBILE_TAB_MAP = {
-  hub: "Standings",
+  hub: "Home",
+  home: "Home",
   standings: "Standings",
   schedule: "Schedule",
   roster: "Roster",
@@ -125,6 +127,7 @@ class TabErrorBoundary extends Component {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BASE_TABS = [
+  "Home",
   "Standings",
   "Schedule",
   "Stats",
@@ -227,26 +230,21 @@ function winPct(wins, losses, ties) {
   return ((wins + ties * 0.5) / games).toFixed(3).replace(/^0/, "");
 }
 
-/** Colour-coded OVR pill. */
-function OvrPill({ ovr }) {
-  let cls = "rating-color-avg";
-  if (ovr >= 85) cls = "rating-color-elite";
-  else if (ovr >= 75) cls = "rating-color-good";
-  else if (ovr < 65) cls = "rating-color-bad";
+/** Six-tier colour-coded OVR pill (Madden-style). */
+export function OvrPill({ ovr, size = "sm" }) {
+  let cls = "rating-color-bad";
+  let label = "";
+  if (ovr >= 95)      { cls = "rating-color-goat";  label = "GOAT"; }
+  else if (ovr >= 88) { cls = "rating-color-elite"; label = "ELITE"; }
+  else if (ovr >= 78) { cls = "rating-color-star";  label = "STAR"; }
+  else if (ovr >= 68) { cls = "rating-color-good";  label = ""; }
+  else if (ovr >= 58) { cls = "rating-color-avg";   label = ""; }
 
   return (
     <span
-      style={{
-        display: "inline-block",
-        width: 32,
-        padding: "2px 0",
-        borderRadius: "var(--radius-pill)",
-        fontSize: "var(--text-xs)",
-        fontWeight: 700,
-        textAlign: "center",
-        color: "#fff",
-      }}
-      className={cls}
+      className={`ovr-pill ${cls}`}
+      title={label ? `${label} (${ovr} OVR)` : `${ovr} OVR`}
+      style={size === "lg" ? { minWidth: 42, fontSize: "var(--text-sm)", padding: "3px 8px" } : {}}
     >
       {ovr}
     </span>
@@ -255,8 +253,139 @@ function OvrPill({ ovr }) {
 
 // ── Standings Tab ─────────────────────────────────────────────────────────────
 
+// Helper: compute streak from recentResults array (["W","L","W",...])
+function computeStreak(results = []) {
+  if (!results.length) return null;
+  const last = results[results.length - 1];
+  let count = 0;
+  for (let i = results.length - 1; i >= 0; i--) {
+    if (results[i] === last) count++;
+    else break;
+  }
+  return { type: last, count };
+}
+
+// Compute conference standings for playoff picture
+function getConferenceRankings(teams, confVal) {
+  const ci = typeof confVal === "string" ? (confVal === "AFC" ? 0 : 1) : confVal;
+  const confTeams = teams
+    .filter(t => confIdx(t.conf) === ci)
+    .sort((a, b) => {
+      const pa = parseFloat(winPct(a.wins, a.losses, a.ties));
+      const pb = parseFloat(winPct(b.wins, b.losses, b.ties));
+      return pb - pa || b.wins - a.wins;
+    });
+
+  // 7 teams make playoffs: 4 division winners (seeds 1-4) + 3 wild cards (seeds 5-7)
+  // For simplicity: top team from each division gets a div seed, rest sorted for WC
+  const divMap = {};
+  confTeams.forEach(t => {
+    const d = divIdx(t.div);
+    if (!divMap[d] || parseFloat(winPct(t.wins, t.losses, t.ties)) > parseFloat(winPct(divMap[d].wins, divMap[d].losses, divMap[d].ties))) {
+      divMap[d] = t;
+    }
+  });
+  const divWinners = new Set(Object.values(divMap).map(t => t.id));
+  const divWinnerList = Object.values(divMap).sort((a, b) => parseFloat(winPct(b.wins, b.losses, b.ties)) - parseFloat(winPct(a.wins, a.losses, a.ties)));
+  const wildcards = confTeams.filter(t => !divWinners.has(t.id));
+
+  return { divWinnerList, wildcards, divWinners, confTeams };
+}
+
+function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
+  const ci = activeConf === "AFC" ? 0 : 1;
+  const { divWinnerList, wildcards, divWinners } = useMemo(
+    () => getConferenceRankings(teams, ci),
+    [teams, ci]
+  );
+
+  const allRanked = [...divWinnerList, ...wildcards];
+  const cutoff = 7; // 7 playoff teams
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+      {/* Section headers */}
+      <div style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--success)", marginBottom: "var(--space-1)" }}>
+        In Playoffs (Top 7)
+      </div>
+
+      {allRanked.map((team, i) => {
+        const isIn = i < cutoff;
+        const seed = i + 1;
+        const isDivWin = divWinners.has(team.id);
+        const isUser = team.id === userTeamId;
+        const divName = ["East","North","South","West"][divIdx(team.div)] ?? "";
+        const gamesPlayed = team.wins + team.losses + team.ties;
+
+        return (
+          <React.Fragment key={team.id}>
+            {i === cutoff && (
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", margin: "var(--space-2) 0" }}>
+                <div style={{ flex: 1, height: 1, background: "var(--danger)", opacity: 0.5 }} />
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--danger)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  Out of Playoffs
+                </span>
+                <div style={{ flex: 1, height: 1, background: "var(--danger)", opacity: 0.5 }} />
+              </div>
+            )}
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: "var(--space-3)",
+                padding: "var(--space-2) var(--space-3)",
+                background: isUser ? "var(--accent-muted)" : isIn ? "var(--surface)" : "rgba(255,69,58,0.04)",
+                borderRadius: "var(--radius-sm)",
+                border: `1px solid ${isUser ? "var(--accent)" : isIn && i === cutoff - 1 ? "rgba(52,199,89,0.2)" : "var(--hairline)"}`,
+                cursor: "pointer", transition: "background 0.15s",
+              }}
+              onClick={() => onTeamSelect?.(team.id)}
+            >
+              {/* Seed */}
+              <span style={{ width: 22, textAlign: "center", fontWeight: 800, fontSize: "var(--text-sm)", color: i < 4 ? "var(--warning)" : "var(--text-muted)" }}>
+                {seed}
+              </span>
+
+              {/* Team logo */}
+              <TeamLogo abbr={team.abbr} size={28} isUser={isUser} />
+
+              {/* Name */}
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: isUser ? 700 : 500, fontSize: "var(--text-sm)", color: isUser ? "var(--accent)" : "var(--text)" }}>
+                  {team.abbr}
+                  {isUser && <span style={{ marginLeft: 4, color: "var(--accent)", fontSize: 10 }}>★</span>}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                  {divName}{isDivWin ? " ✓" : ""}
+                </div>
+              </div>
+
+              {/* Record */}
+              <span style={{ fontSize: "var(--text-xs)", fontVariantNumeric: "tabular-nums", color: "var(--text-muted)" }}>
+                {team.wins}-{team.losses}{team.ties > 0 ? `-${team.ties}` : ""}
+              </span>
+
+              {/* Playoff badge */}
+              {isIn ? (
+                <span className={`playoff-badge ${isDivWin ? "playoff-badge-div" : i < cutoff - 1 ? "playoff-badge-in" : "playoff-badge-bubble"}`}>
+                  {isDivWin ? `DIV ${["AFC","NFC"][ci]}` : "WC"}
+                </span>
+              ) : (
+                i === cutoff ? (
+                  <span className="playoff-badge playoff-badge-bubble">BUBBLE</span>
+                ) : (
+                  <span className="playoff-badge playoff-badge-out">OUT</span>
+                )
+              )}
+            </div>
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
 function StandingsTab({ teams, userTeamId, onTeamSelect }) {
   const [activeConf, setActiveConf] = useState("AFC");
+  const [viewMode, setViewMode] = useState("division"); // "division" | "playoff"
 
   // Normalise activeConf label → numeric index for comparison
   const activeConfIdx = activeConf === "AFC" ? 0 : 1;
@@ -289,23 +418,45 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
 
   return (
     <div>
-      {/* Conference tab pills */}
+      {/* Conference tab pills + view mode toggle */}
       <div
-        className="standings-tabs"
-        style={{ marginBottom: "var(--space-6)" }}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}
       >
-        {CONFS.map((c) => (
+        <div className="standings-tabs">
+          {CONFS.map((c) => (
+            <button
+              key={c}
+              className={`standings-tab${activeConf === c ? " active" : ""}`}
+              onClick={() => setActiveConf(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+        <div className="standings-tabs">
           <button
-            key={c}
-            className={`standings-tab${activeConf === c ? " active" : ""}`}
-            onClick={() => setActiveConf(c)}
+            className={`standings-tab${viewMode === "division" ? " active" : ""}`}
+            onClick={() => setViewMode("division")}
           >
-            {c}
+            Divisions
           </button>
-        ))}
+          <button
+            className={`standings-tab${viewMode === "playoff" ? " active" : ""}`}
+            onClick={() => setViewMode("playoff")}
+          >
+            Playoff Picture
+          </button>
+        </div>
       </div>
 
-      {/* Division blocks */}
+      {viewMode === "playoff" ? (
+        <PlayoffPictureView
+          teams={teams}
+          activeConf={activeConf}
+          userTeamId={userTeamId}
+          onTeamSelect={onTeamSelect}
+        />
+      ) : (
       <div style={{ display: "grid", gap: "var(--space-6)" }}>
         {grouped.map(({ div, teams: divTeams }) => (
           <div
@@ -347,6 +498,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                     <th style={{ textAlign: "center" }}>PCT</th>
                     <th style={{ textAlign: "center" }}>PF</th>
                     <th style={{ textAlign: "center" }}>PA</th>
+                    <th style={{ textAlign: "center" }}>STRK</th>
                     <th style={{ textAlign: "center" }}>OVR</th>
                     <th
                       style={{
@@ -444,6 +596,17 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                           {team.ptsAgainst}
                         </td>
                         <td style={{ textAlign: "center" }}>
+                          {(() => {
+                            const streak = computeStreak(team.recentResults ?? []);
+                            if (!streak) return <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>—</span>;
+                            return (
+                              <span className={`streak-badge streak-${streak.type.toLowerCase()}`}>
+                                {streak.type}{streak.count}
+                              </span>
+                            );
+                          })()}
+                        </td>
+                        <td style={{ textAlign: "center" }}>
                           <OvrPill ovr={team.ovr} />
                         </td>
                         <td
@@ -477,6 +640,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
           </div>
         )}
       </div>
+      )} {/* end playoff/division ternary */}
     </div>
   );
 }
@@ -977,7 +1141,7 @@ function QuickJumpFab({ onNavigate }) {
 }
 
 export default function LeagueDashboard({ league, busy, actions }) {
-  const [activeTab, setActiveTab] = useState("Standings");
+  const [activeTab, setActiveTab] = useState("Home");
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
@@ -1010,7 +1174,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
     if (league?.phase === "draft") {
       setActiveTab("Draft");
     } else if (prevPhase === "draft" && league?.phase === "preseason") {
-      setActiveTab("Standings");
+      setActiveTab("Home");
     } else if (league?.phase === "playoffs" && prevPhase !== "playoffs") {
       setActiveTab("Postseason");
     }
@@ -1542,6 +1706,16 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
+        {activeTab === "Home" && (
+          <TabErrorBoundary label="Home">
+            <HomeDashboard
+              league={league}
+              onTeamSelect={setSelectedTeamId}
+              onPlayerSelect={setSelectedPlayerId}
+              onTabChange={setActiveTab}
+            />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Standings" && (
           <TabErrorBoundary label="Standings">
             <StandingsTab
