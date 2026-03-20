@@ -17,14 +17,19 @@ import React, { useState, useMemo, useEffect, Component } from "react";
 import DonutChart from "./DonutChart";
 import HomeDashboard from "./HomeDashboard.jsx";
 import Roster from "./Roster.jsx";
+import RosterHub from "./RosterHub.jsx";
 import Draft from "./Draft.jsx";
+import RookieDraft from "./RookieDraft.jsx";
 import Coaches from "./Coaches.jsx";
 import FreeAgency from "./FreeAgency.jsx";
+import FreeAgencyHub from "./FreeAgencyHub.jsx";
 import TradeCenter from "./TradeCenter.jsx";
+import TradeFinder from "./TradeFinder.jsx";
 import BoxScore from "./BoxScore.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
 import HallOfFame from "./HallOfFame.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
+import PlayerDetailModal from "./PlayerDetailModal.jsx";
 import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
 import AwardRaces from "./AwardRaces.jsx";
@@ -43,14 +48,18 @@ const MOBILE_TAB_MAP = {
   standings: "Standings",
   schedule: "Schedule",
   roster: "Roster",
+  roster_hub: "Roster Hub",
   leaders: "Leaders",
   free_agency: "Free Agency",
+  fa_hub: "FA Hub",
   trades: "Trades",
+  trade_finder: "Trade Finder",
   draft: "Draft",
+  draft_room: "Draft Room",
   coaches: "Coaches",
   financials: "Financials",
   strategy: "Strategy",
-  news: "Standings", // News is on the hub/standings page
+  news: "Standings",
   player_stats: "Stats",
   awards: "Award Races",
   history: "History",
@@ -135,11 +144,15 @@ const BASE_TABS = [
   "Award Races",
   "Strategy",
   "Roster",
+  "Roster Hub",
   "Financials",
   "Draft",
+  "Draft Room",
   "Coaches",
   "Free Agency",
+  "FA Hub",
   "Trades",
+  "Trade Finder",
   "History",
   "Hall of Fame",
 ];
@@ -1145,6 +1158,7 @@ export default function LeagueDashboard({ league, busy, actions }) {
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [comparePlayerId, setComparePlayerId] = useState(null);
 
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
@@ -1780,6 +1794,15 @@ export default function LeagueDashboard({ league, busy, actions }) {
             />
           </TabErrorBoundary>
         )}
+        {activeTab === "Roster Hub" && (
+          <TabErrorBoundary label="Roster Hub">
+            <RosterHub
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Financials" && (
           <TabErrorBoundary label="Financials">
             <FinancialsView league={league} actions={actions} />
@@ -1788,6 +1811,15 @@ export default function LeagueDashboard({ league, busy, actions }) {
         {activeTab === "Draft" && (
           <TabErrorBoundary label="Draft">
             <Draft
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Draft Room" && (
+          <TabErrorBoundary label="Draft Room">
+            <RookieDraft
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
@@ -1808,9 +1840,27 @@ export default function LeagueDashboard({ league, busy, actions }) {
             />
           </TabErrorBoundary>
         )}
+        {activeTab === "FA Hub" && (
+          <TabErrorBoundary label="FA Hub">
+            <FreeAgencyHub
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Trades" && (
           <TabErrorBoundary label="Trades">
             <TradeCenter
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Trade Finder" && (
+          <TabErrorBoundary label="Trade Finder">
+            <TradeFinder
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}

@@ -910,3 +910,139 @@ body.theme-light {
 body.theme-light .team-card-logo {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+/* ============================================================================
+   PHASE 2: ROSTER HUB, DRAFT ROOM, TRADE FINDER EXTENSIONS
+   ============================================================================ */
+
+/* Draft room gradient background */
+.draft-room-bg {
+  background:
+    var(--stadium-glow),
+    var(--gradient-draft);
+  min-height: 100vh;
+}
+
+/* Prospect card on-clock pulse */
+.prospect-on-clock {
+  animation: pulseGlow 1.5s ease-in-out infinite, borderPulse 2s ease-in-out infinite;
+}
+
+/* Draft pick announcement animation */
+@keyframes draftPickReveal {
+  0% { opacity: 0; transform: scale(0.8) translateY(20px); }
+  50% { transform: scale(1.05) translateY(-4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.draft-pick-reveal {
+  animation: draftPickReveal 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Trophy glow for big moments */
+.moment-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+  border: 2px solid rgba(255, 215, 0, 0.4);
+  box-shadow:
+    0 0 20px rgba(255, 215, 0, 0.1),
+    inset 0 0 20px rgba(255, 215, 0, 0.05);
+}
+
+/* Trade value bar animation */
+@keyframes tradeBarFill {
+  from { width: 0; }
+}
+
+.trade-value-bar {
+  animation: tradeBarFill 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Player comparison mode overlay */
+.compare-mode-active {
+  border-color: #FF9F0A;
+  box-shadow: 0 0 16px rgba(255, 159, 10, 0.2);
+}
+
+/* Form dots (W/L/T indicators) */
+.form-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.form-dot-w {
+  background: rgba(52, 199, 89, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+}
+
+.form-dot-l {
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--danger);
+  border: 1px solid rgba(255, 69, 58, 0.3);
+}
+
+.form-dot-t {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(156, 163, 175, 0.3);
+}
+
+/* Bidding modal amount controls */
+.bid-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  touch-action: manipulation;
+}
+
+.bid-control-btn:active {
+  transform: scale(0.9);
+  background: var(--accent-muted);
+}
+
+/* Game viewer play log scroll */
+.play-log-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.play-log-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.play-log-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.play-log-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+/* Responsive adjustments for new components */
+@media (max-width: 640px) {
+  .trade-sides {
+    grid-template-columns: 1fr !important;
+  }
+
+  .prospect-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
