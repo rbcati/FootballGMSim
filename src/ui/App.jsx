@@ -40,7 +40,6 @@ import React, { useEffect, useCallback, useRef, useState, Component } from 'reac
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
-import LiveGameViewer    from './components/LiveGameViewer.jsx';
 import SeasonSimViewer   from './components/SeasonSimViewer.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
@@ -605,10 +604,11 @@ export default function App() {
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME' };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY' };
         return (
-          <LiveGameViewer
+          <SeasonSimViewer
             logs={userGameLogs}
             homeTeam={homeTeam}
             awayTeam={awayTeam}
+            userTeamId={league?.userTeamId}
             onComplete={() => {
                 actions.clearUserGame();
                 // Small delay to let state settle before advancing

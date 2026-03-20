@@ -270,28 +270,31 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
         <StatCard label="Injured" value={injuredCount} color={injuredCount > 3 ? "var(--danger)" : "var(--text)"} />
       </div>
 
-      {/* ── Search + Filters ── */}
+      {/* ── Search + Sort ── */}
       <div style={{
-        display: "flex", flexWrap: "wrap", gap: "var(--space-3)",
-        marginBottom: "var(--space-4)", alignItems: "center",
+        display: "flex", gap: "var(--space-2)",
+        marginBottom: "var(--space-3)", alignItems: "center",
       }}>
         <input
           type="text"
-          placeholder="Search players..."
+          placeholder="Search..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="settings-input"
-          style={{ flex: "1 1 200px", maxWidth: 300 }}
+          style={{ flex: 1, minWidth: 0 }}
         />
-
-        {/* Sort buttons */}
-        <div style={{ display: "flex", gap: "var(--space-1)" }}>
+        {/* Sort buttons — scrollable */}
+        <div style={{
+          display: "flex", gap: "var(--space-1)",
+          overflowX: "auto", flexShrink: 0,
+          scrollbarWidth: "none",
+        }}>
           {SORT_OPTIONS.map(opt => (
             <button
               key={opt.key}
               className={`division-tab${sortKey === opt.key ? " active" : ""}`}
               onClick={() => handleSortToggle(opt.key)}
-              style={{ fontSize: 11 }}
+              style={{ fontSize: 11, flexShrink: 0 }}
             >
               {opt.label}
               {sortKey === opt.key && (
@@ -302,14 +305,25 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
         </div>
       </div>
 
-      {/* ── Position Filter Pills ── */}
-      <div className="division-tabs" style={{ marginBottom: "var(--space-4)" }}>
+      {/* ── Position Filter Pills — horizontally scrollable ── */}
+      <div
+        className="division-tabs"
+        style={{
+          marginBottom: "var(--space-3)",
+          flexWrap: "nowrap",
+          overflowX: "auto",
+          WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
         {POSITION_GROUPS.map(g => (
           <button
             key={g.label}
             className={`division-tab${posFilter === g.label ? " active" : ""}`}
             onClick={() => setPosFilter(g.label)}
             style={{
+              flexShrink: 0,
               ...(g.label !== "ALL" && g.label !== "OFF" && g.label !== "DEF" && g.label !== "ST"
                 ? { borderColor: POS_COLORS[g.label] + "40", color: posFilter === g.label ? "#fff" : POS_COLORS[g.label] }
                 : {}),
@@ -325,10 +339,15 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
         ))}
       </div>
 
-      {/* ── Player List ── */}
-      <div>
+      {/* ── Player Grid — 2-col on wider screens ── */}
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+        gap: "var(--space-2)",
+      }}>
         {filtered.length === 0 && (
           <div style={{
+            gridColumn: "1 / -1",
             textAlign: "center", padding: "var(--space-8)",
             color: "var(--text-muted)", fontSize: "var(--text-sm)",
           }}>
