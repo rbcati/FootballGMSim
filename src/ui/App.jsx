@@ -433,6 +433,18 @@ export default function App() {
               className={`app-notification ${n.level === 'warn' ? 'app-notification-warn' : 'app-notification-info'}`}
             >
               <span>{n.message}</span>
+              {n.retryable && (
+                <button
+                  onClick={() => {
+                    actions.dismissNotification(n.id);
+                    handleAdvanceWeek();
+                  }}
+                  className="app-notification-retry"
+                  disabled={busy || simulating}
+                >
+                  Retry
+                </button>
+              )}
               <button
                 onClick={() => actions.dismissNotification(n.id)}
                 className="app-notification-dismiss"

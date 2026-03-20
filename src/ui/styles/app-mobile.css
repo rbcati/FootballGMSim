@@ -353,6 +353,22 @@
   flex-shrink: 0;
 }
 
+.app-notification-retry {
+  background: var(--warning);
+  color: #000;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  flex-shrink: 0;
+}
+.app-notification-retry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Results Ticker ─────────────────────────────────────────────────────────── */
 
 .app-results-ticker {

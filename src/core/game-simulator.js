@@ -2658,6 +2658,8 @@ export function simulateBatch(games, options = {}) {
 
             let schemeNote = null;
             let gameInjuries = [];
+            // Declared here (not inside else) so it's accessible when building gameData below
+            let gameScores = null;
 
             if (overrideResult) {
                 sH = overrideResult.scoreHome;
@@ -2666,7 +2668,6 @@ export function simulateBatch(games, options = {}) {
                 awayPlayerStats = overrideResult.boxScore?.away || {};
             } else {
                 // 0-0 Prevention Loop
-                let gameScores;
                 let attempts = 0;
                 const stakes = pair.preGameContext?.stakes || 0;
                 do {
@@ -2795,7 +2796,7 @@ export function simulateBatch(games, options = {}) {
                 weather: pair._weather,
                 homeDefTDs: pair._homeDefTDs || 0,
                 awayDefTDs: pair._awayDefTDs || 0,
-                playLogs: gameScores.playLogs || [],
+                playLogs: gameScores?.playLogs || [],
             };
 
             let resultObj;
