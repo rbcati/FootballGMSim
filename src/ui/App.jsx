@@ -445,13 +445,16 @@ export default function App() {
       )}
 
       {/* ── Live game viewer (visible during simulation + results) ────── */}
-      <LiveGame
-        simulating={simulating}
-        simProgress={simProgress}
-        league={league}
-        lastResults={lastResults}
-        gameEvents={gameEvents}
-      />
+      {/* Hide when user game prompt is active to avoid stale empty state behind modal */}
+      {!state.promptUserGame && (
+        <LiveGame
+          simulating={simulating}
+          simProgress={simProgress}
+          league={league}
+          lastResults={lastResults}
+          gameEvents={gameEvents}
+        />
+      )}
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
       {lastResults && lastResults.length > 0 && (

@@ -2308,7 +2308,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
 
         // Strategy 1: Look in current week (if structured with weeks)
-        const weekSchedule = scheduleWeeks[weekIndex];
+        // Use .find() by week property first, fall back to array index
+        const weekSchedule = scheduleWeeks.find?.(w => w && w.week === league.week) || scheduleWeeks[weekIndex];
         if (weekSchedule && weekSchedule.games) {
             scheduledGame = weekSchedule.games.find(g =>
                 g && g.home !== undefined && g.away !== undefined &&
@@ -2599,9 +2600,12 @@ export function simulateBatch(games, options = {}) {
 
     if (league.schedule && !league._scheduleMap) {
         league._scheduleMap = {};
-        const weekIndex = (league.week || 1) - 1;
+        const currentWeek = league.week || 1;
         const scheduleWeeks = league.schedule?.weeks || league.schedule || [];
-        const weekSchedule = scheduleWeeks[weekIndex];
+        // Use .find() by week property instead of array index — safer for non-sequential weeks
+        const weekSchedule = Array.isArray(scheduleWeeks)
+          ? scheduleWeeks.find(w => w && w.week === currentWeek) || scheduleWeeks[currentWeek - 1]
+          : null;
         if (weekSchedule && weekSchedule.games) {
             for (let i = 0; i < weekSchedule.games.length; i++) {
                 const g = weekSchedule.games[i];
@@ -2794,23 +2798,42 @@ export function simulateBatch(games, options = {}) {
                 playLogs: gameScores.playLogs || [],
             };
 
-            const resultObj = commitGameResult(league, gameData, { persist: false });
+            let resultObj;
+            try {
+                resultObj = commitGameResult(league, gameData, { persist: false });
+            } catch (commitErr) {
+                console.error(`[SIM] commitGameResult threw for ${home?.abbr} vs ${away?.abbr}:`, commitErr?.message);
+                // Fallback: create a minimal result object so the game isn't lost
+                resultObj = {
+                    id: `g_fallback_${Date.now()}_${index}`,
+                    home: home.id,
+                    away: away.id,
+                    scoreHome: sH,
+                    scoreAway: sA,
+                    homeWin: sH > sA,
+                    homeTeamName: home.name,
+                    awayTeamName: away.name,
+                    homeTeamAbbr: home.abbr,
+                    awayTeamAbbr: away.abbr,
+                    boxScore: { home: homePlayerStats, away: awayPlayerStats },
+                    injuries: gameInjuries,
+                    week: league.week,
+                    year: league.year,
+                    isPlayoff: options.isPlayoff || false,
+                    playLogs: gameScores?.playLogs || [],
+                };
+            }
             if (resultObj) {
                 resultObj.feats = allFeats;
-            }
-            if (schemeNote && resultObj) {
-                resultObj.schemeNote = schemeNote;
-            }
-            if (resultObj && pair._weather) {
-                resultObj.weather = pair._weather;
-            }
-
-            if (resultObj) {
+                if (schemeNote) resultObj.schemeNote = schemeNote;
+                if (pair._weather) resultObj.weather = pair._weather;
                 results.push(resultObj);
+            } else {
+                console.warn(`[SIM] commitGameResult returned null for game ${index}: ${home?.abbr ?? '?'} vs ${away?.abbr ?? '?'}`);
             }
 
         } catch (error) {
-            console.error(`[SIM-DEBUG] Error simulating game ${index}:`, error);
+            console.error(`[SIM] Error simulating game ${index} (${pair?.home?.abbr ?? '?'} vs ${pair?.away?.abbr ?? '?'}):`, error?.message, error?.stack);
         }
     });
 

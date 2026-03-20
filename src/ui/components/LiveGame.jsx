@@ -817,7 +817,7 @@ export default function LiveGame({
                 />
               ))}
 
-            {userResolvedEvents.length === 0 && !simulating && (
+            {userResolvedEvents.length === 0 && userLastResults.length === 0 && !simulating && (
               <p
                 style={{
                   color: "var(--text-subtle)",
