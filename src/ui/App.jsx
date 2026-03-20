@@ -41,6 +41,7 @@ import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
 import LiveGameViewer    from './components/LiveGameViewer.jsx';
+import SeasonSimViewer   from './components/SeasonSimViewer.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
