@@ -10,6 +10,7 @@ import './styles/components.css';
 import './styles/hub.css';
 import './styles/mobile.css';
 import './styles/app-mobile.css';
+import './styles/stadium-theme.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

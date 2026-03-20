@@ -46,6 +46,7 @@ import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
+import ThemeToggle         from './components/ThemeToggle.jsx';
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -300,6 +301,7 @@ export default function App() {
         </div>
 
         <div className="app-header-actions">
+          <ThemeToggle compact />
           <button
             className="btn btn-primary app-advance-btn"
             onClick={handleAdvanceWeek}
