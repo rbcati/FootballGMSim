@@ -806,12 +806,17 @@ export default function StaffManagement({ league, actions }) {
       setScouts(prev => prev.filter(s => s.id !== member.id));
       setScoutCandidates(prev => [...prev, { ...member, id: member.id + "_rehire" }]);
     } else if (type === "physio") {
-      setMedStaff(prev => prev.filter(s => s.id !== member.id));
+      setMedStaff(prev => {
+        const next = prev.filter(s => s.id !== member.id);
+        // Sync fired physio staff to worker
+        if (actions?.updateMedicalStaff) actions.updateMedicalStaff(teamId, next);
+        return next;
+      });
       setPhysioCandidates(prev => [...prev, { ...member, id: member.id + "_rehire" }]);
     }
 
     setFireTarget(null);
-  }, [fireTarget]);
+  }, [fireTarget, actions, teamId]);
 
   const handleHireScout = useCallback((candidate) => {
     if (candidate.salary > budgetRemaining) return;
@@ -822,10 +827,15 @@ export default function StaffManagement({ league, actions }) {
 
   const handleHirePhysio = useCallback((candidate) => {
     if (candidate.salary > budgetRemaining) return;
-    setMedStaff(prev => [...prev, candidate]);
+    setMedStaff(prev => {
+      const next = [...prev, candidate];
+      // Sync hired physio staff to worker so traits reduce injury chance in sim
+      if (actions?.updateMedicalStaff) actions.updateMedicalStaff(teamId, next);
+      return next;
+    });
     setPhysioCandidates(prev => prev.filter(c => c.id !== candidate.id));
     setHiringPanel(null);
-  }, [budgetRemaining]);
+  }, [budgetRemaining, actions, teamId]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 

@@ -965,6 +965,19 @@ async function handleAdvanceWeek(payload, id) {
   }
 
 
+  // ── Clear weekly training boosts (single-game lifespan) ──────────────────
+  // Boosts are applied by CONDUCT_DRILL and consumed once during this sim.
+  // Clear them now so they don't carry over to future weeks.
+  {
+    const allPlayers = cache.getAllPlayers();
+    for (const p of allPlayers) {
+      if (p.weeklyTrainingBoost) {
+        cache.updatePlayer(p.id, { weeklyTrainingBoost: 0 });
+        p.weeklyTrainingBoost = 0;
+      }
+    }
+  }
+
   // Build a temporary league-style object for GameRunner (read-only view of cache)
   const league = buildLeagueForSim(schedule, week, seasonId);
 
@@ -2273,6 +2286,106 @@ async function handleFireCoach({ teamId, role }, id) {
 
     await flushDirty();
     await handleGetRoster({ teamId }, id);
+}
+
+// ── Handler: CONDUCT_DRILL ───────────────────────────────────────────────────
+// Applies temporary weekly training boosts to players in the specified position
+// groups based on drill intensity and type.  Boosts are stored on each player as
+// `weeklyTrainingBoost` (a small integer OVR delta) and are consumed by the
+// simulation engine.  They are cleared when the week advances.
+
+async function handleConductDrill({ teamId, intensity, drillType, positionGroups }, id) {
+    const numId = Number(teamId ?? meta?.userTeamId);
+    const team = cache.getTeam(numId);
+    if (!team) {
+        post(toUI.ERROR, { message: 'Team not found for drill' }, id);
+        return;
+    }
+
+    const players = cache.getPlayersByTeam(numId);
+    if (!players || !players.length) {
+        post(toUI.STATE_UPDATE, buildViewState(), id);
+        return;
+    }
+
+    // Intensity → development multiplier and boost magnitude
+    const INTENSITY_CFG = {
+        light:  { devMult: 0.6, maxBoost: 1, injRisk: 0.005 },
+        normal: { devMult: 1.0, maxBoost: 1, injRisk: 0.010 },
+        hard:   { devMult: 1.5, maxBoost: 2, injRisk: 0.020 },
+    };
+    const cfg = INTENSITY_CFG[intensity] || INTENSITY_CFG.normal;
+
+    // Position groups filter (all if empty)
+    const focusSet = new Set(
+        (positionGroups && positionGroups.length)
+            ? positionGroups.map(g => g.toUpperCase())
+            : []
+    );
+    const POS_GROUP_MAP = {
+        QB: ['QB'], RB: ['RB'], WR: ['WR', 'TE'], OL: ['OL', 'C', 'G', 'T'],
+        DL: ['DL', 'DE', 'DT', 'NT'], LB: ['LB', 'MLB', 'OLB'],
+        DB: ['CB', 'S', 'FS', 'SS'], ST: ['K', 'P'],
+    };
+    const activePosSet = new Set();
+    if (focusSet.size === 0) {
+        players.forEach(p => activePosSet.add(p.pos));
+    } else {
+        for (const grp of focusSet) {
+            (POS_GROUP_MAP[grp] || [grp]).forEach(pos => activePosSet.add(pos));
+        }
+    }
+
+    // Drill type bonus: Technique/Conditioning/TeamDrills/FilmStudy
+    // Each unlocks slightly different boosts
+    const drillBonus = (drillType === 'technique' || drillType === 'team_drills') ? 1 : 0;
+
+    const dirtyPlayers = [];
+    for (const p of players) {
+        if (!activePosSet.has(p.pos)) continue;
+        // Chance to get a boost: 40-60% depending on intensity
+        const roll = Math.random();
+        const chance = 0.35 + cfg.devMult * 0.15;
+        if (roll < chance) {
+            const boost = cfg.maxBoost + drillBonus;
+            // Accumulate: existing boost + new boost (cap at 3)
+            const current = p.weeklyTrainingBoost || 0;
+            p.weeklyTrainingBoost = Math.min(3, current + boost);
+            cache.updatePlayer(p.id, { weeklyTrainingBoost: p.weeklyTrainingBoost });
+            dirtyPlayers.push(p.id);
+        }
+        // Small injury risk from hard training (drill-only, not game injury)
+        if (cfg.injRisk > 0 && Math.random() < cfg.injRisk && !p.injured) {
+            p.injured = true;
+            p.injuryWeeksRemaining = 1;
+            cache.updatePlayer(p.id, { injured: true, injuryWeeksRemaining: 1 });
+            dirtyPlayers.push(p.id);
+        }
+    }
+
+    if (dirtyPlayers.length) await flushDirty();
+
+    // Return updated roster so UI can reflect new boost values
+    await handleGetRoster({ teamId: numId }, id);
+}
+
+// ── Handler: UPDATE_MEDICAL_STAFF ──────────────────────────────────────────
+// Persists medical/physio staff to team.staff.medStaff so the sim engine can
+// read their traits when computing in-game injury chances.
+
+async function handleUpdateMedicalStaff({ teamId, medStaff }, id) {
+    const numId = Number(teamId ?? meta?.userTeamId);
+    const team = cache.getTeam(numId);
+    if (!team) {
+        post(toUI.ERROR, { message: 'Team not found for medical staff update' }, id);
+        return;
+    }
+
+    if (!team.staff) team.staff = {};
+    team.staff.medStaff = medStaff || [];
+
+    await flushDirty();
+    post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: EXTENSION ──────────────────────────────────────────────────────
@@ -4282,6 +4395,8 @@ async function handleMessage(event) {
       case toWorker.GET_AVAILABLE_COACHES: return await handleGetAvailableCoaches(payload, id);
       case toWorker.HIRE_COACH:         return await handleHireCoach(payload, id);
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
+      case toWorker.CONDUCT_DRILL:      return await handleConductDrill(payload, id);
+      case toWorker.UPDATE_MEDICAL_STAFF: return await handleUpdateMedicalStaff(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);

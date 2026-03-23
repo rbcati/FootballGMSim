@@ -5,7 +5,7 @@
 
 import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
-import { calculateGamePerformance, getCoachingMods } from './coach-system.js';
+import { calculateGamePerformance, getCoachingMods, getHCMods, getMedicalStaffInjuryMod } from './coach-system.js';
 import { updateAdvancedStats, getZeroStats, updatePlayerGameLegacy, calculateMorale } from './player.js';
 import { getStrategyModifiers } from './strategy.js';
 import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core.js';
@@ -26,9 +26,15 @@ export function groupPlayersByPosition(roster) {
     if (!groups[pos]) groups[pos] = [];
     groups[pos].push(player);
   }
-  // Sort by OVR descending
+  // Sort by depthOrder ascending (user-set starters first), then by OVR descending as tiebreaker.
+  // depthOrder === 0 or unset means no explicit ordering → fall back to OVR.
   for (const pos in groups) {
-    groups[pos].sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
+    groups[pos].sort((a, b) => {
+      const aOrder = (a.depthOrder != null && a.depthOrder > 0) ? a.depthOrder : 9999;
+      const bOrder = (b.depthOrder != null && b.depthOrder > 0) ? b.depthOrder : 9999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (b.ovr || 0) - (a.ovr || 0);
+    });
   }
   return groups;
 }
@@ -1236,6 +1242,9 @@ export function simGameStats(home, away, options = {}) {
         // Use imported getEffectiveRating
         rating = getEffectiveRating(p);
 
+        // Apply weekly training boost (set by CONDUCT_DRILL worker handler)
+        if (p.weeklyTrainingBoost) rating = Math.min(99, rating + p.weeklyTrainingBoost);
+
         // Create proxy player to avoid mutating original
         const proxyPlayer = { ...p, ovr: rating, ratings: { ...(p.ratings || {}), overall: rating } };
         const effectivePerf = calculateGamePerformance(proxyPlayer, tenureYears);
@@ -1295,6 +1304,35 @@ export function simGameStats(home, away, options = {}) {
     // --- STAFF PERKS & STRATEGY INTEGRATION ---
     const homeMods = getCoachingMods(home.staff);
     const awayMods = getCoachingMods(away.staff);
+
+    // --- HEAD COACH ARCHETYPE MODIFIERS ---
+    const homeHCMods = getHCMods(home.staff?.headCoach);
+    const awayHCMods = getHCMods(away.staff?.headCoach);
+
+    // HC strength bonus (Strategist archetype)
+    if (homeHCMods.strengthBonus) homeStrength += homeHCMods.strengthBonus;
+    if (awayHCMods.strengthBonus) awayStrength += awayHCMods.strengthBonus;
+
+    // HC scheme fit multiplier (Strategist) — applied after scheme fit calc below if present
+    // Stored on mods for use inside simulateFullGame
+    if (homeHCMods.momentumMultiplier) homeMods.momentumMultiplier = homeHCMods.momentumMultiplier;
+    if (awayHCMods.momentumMultiplier) awayMods.momentumMultiplier = awayHCMods.momentumMultiplier;
+    if (homeHCMods.turnoverReduction) homeMods.turnoverReduction = homeHCMods.turnoverReduction;
+    if (awayHCMods.turnoverReduction) awayMods.turnoverReduction = awayHCMods.turnoverReduction;
+
+    // --- MEDICAL STAFF INJURY MODIFIER ---
+    // Per-team injury chance multiplier; used when rolling for in-game injuries
+    const homeInjuryMod = getMedicalStaffInjuryMod(home.staff?.medStaff);
+    const awayInjuryMod = getMedicalStaffInjuryMod(away.staff?.medStaff);
+
+    // Also apply HC Team Builder / Disciplinarian injury mod
+    const homeHCInjMod = homeHCMods.injuryChanceMod || 1.0;
+    const awayHCInjMod = awayHCMods.injuryChanceMod || 1.0;
+    const homeTotalInjMod = homeInjuryMod * homeHCInjMod;
+    const awayTotalInjMod = awayInjuryMod * awayHCInjMod;
+    // Attach injury modifier to mods so generateStatsForTeam can use it
+    homeMods.injuryChanceMod = homeTotalInjMod;
+    awayMods.injuryChanceMod = awayTotalInjMod;
 
     // Determine strategy modifiers
     // New logic: Read directly from team.strategies (supported for both User and AI)
@@ -1394,8 +1432,9 @@ export function simGameStats(home, away, options = {}) {
     // Cache morale per team per batch (only changes weekly, not per-game)
     if (home._cachedMorale === undefined) home._cachedMorale = calculateTeamMorale(homeActive, home);
     if (away._cachedMorale === undefined) away._cachedMorale = calculateTeamMorale(awayActive, away);
-    const homeMorale = home._cachedMorale;
-    const awayMorale = away._cachedMorale;
+    // Apply HC morale bonus (Motivator / Team Builder archetypes)
+    const homeMorale = Math.min(100, home._cachedMorale + (homeHCMods.moraleBonus || 0));
+    const awayMorale = Math.min(100, away._cachedMorale + (awayHCMods.moraleBonus || 0));
 
     // Morale Mod: 50 is neutral. 100 is +2%, 0 is -2% strength impact
     // Formula: 1.0 + ((morale - 50) / 50) * 0.02
@@ -1645,13 +1684,15 @@ export function simGameStats(home, away, options = {}) {
                 }
 
                 // Momentum shift towards scoring team
+                // HC Motivator archetype amplifies momentum swings
+                const momentumMult = mods.momentumMultiplier || 1.0;
                 if (lastScoringTeam === possession) {
                     scoringStreak++;
-                    momentum += (isHome ? 12 : -12) * Math.min(scoringStreak, 3);
+                    momentum += (isHome ? 12 : -12) * Math.min(scoringStreak, 3) * momentumMult;
                 } else {
                     scoringStreak = 1;
                     lastScoringTeam = possession;
-                    momentum += isHome ? 10 : -10;
+                    momentum += (isHome ? 10 : -10) * momentumMult;
                 }
             } else {
                 // --- NON-SCORING DRIVE ---
@@ -1661,6 +1702,8 @@ export function simGameStats(home, away, options = {}) {
                 if (mods.intChance) turnoverChance *= (mods.intChance - 1) * 0.3 + 1;
                 if (defMods.defIntChance) turnoverChance *= (defMods.defIntChance - 1) * 0.3 + 1;
                 if (defMods.defPressure) turnoverChance *= 1 + (defMods.defPressure - 1) * 0.15;
+                // HC Disciplinarian reduces own turnovers (applied to OFFENSIVE team's chance)
+                if (mods.turnoverReduction) turnoverChance *= mods.turnoverReduction;
 
                 let driveEndedInTurnover = false;
                 let driveEndedInSafety = false;
@@ -1902,16 +1945,9 @@ export function simGameStats(home, away, options = {}) {
           let backupShare = 0;
           let injury = null;
 
-          // Roll for injury on starter
+          // Roll for injury on starter (mods.injuryChanceMod from medical staff / HC)
           if (starter && generateInjury && canPlayerPlay(starter)) {
-             // Roll for in-game injury
-             const dur = starter.ratings?.durability || 80;
-             // Modulate chance based on durability (already handled in generateInjury, but we might want extra 'in-game' factor)
-             // generateInjury handles the probability.
-
-             // We need to simulate "did they get injured during this game"
-             // If we call generateInjury(starter), it returns an injury object if they get hurt.
-             injury = generateInjury(starter);
+             injury = generateInjury(starter, { injuryChanceMod: mods.injuryChanceMod || 1.0 });
 
              if (injury) {
                  // They got hurt. Determine when.
@@ -2012,8 +2048,9 @@ export function simGameStats(home, away, options = {}) {
 
       allReceivers.forEach(rec => {
           if (generateInjury && canPlayerPlay(rec)) {
-              if (!rec.injured && U.random() < 0.015) { // 1.5% chance per game
-                   const injury = generateInjury(rec);
+              const recInjChance = 0.015 * (mods.injuryChanceMod || 1.0);
+              if (!rec.injured && U.random() < recInjChance) {
+                   const injury = generateInjury(rec, { injuryChanceMod: 1.0 }); // already pre-multiplied above
                    if (injury) {
                        if (!rec.injuries) rec.injuries = [];
                        rec.injuries.push(injury);
