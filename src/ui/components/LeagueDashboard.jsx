@@ -39,6 +39,13 @@ import NewsFeed from "./NewsFeed.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
 import PostseasonHub from "./PostseasonHub.jsx";
+import TrainingCamp from "./TrainingCamp.jsx";
+import StaffManagement from "./StaffManagement.jsx";
+import SaveExportImport from "./SaveExportImport.jsx";
+import MockDraft from "./MockDraft.jsx";
+import InjuryReport from "./InjuryReport.jsx";
+import GodMode from "./GodMode.jsx";
+import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
 
 // Map MobileNav tab IDs → LeagueDashboard tab names
@@ -56,7 +63,9 @@ const MOBILE_TAB_MAP = {
   trade_finder: "Trade Finder",
   draft: "Draft",
   draft_room: "Draft Room",
+  mock_draft: "Mock Draft",
   coaches: "Coaches",
+  staff: "Staff",
   financials: "Financials",
   strategy: "Strategy",
   news: "Standings",
@@ -64,6 +73,11 @@ const MOBILE_TAB_MAP = {
   awards: "Award Races",
   history: "History",
   hall_of_fame: "Hall of Fame",
+  training: "Training",
+  injuries: "Injuries",
+  god_mode: "God Mode",
+  saves: "Saves",
+  season_recap: "Season Recap",
 };
 
 // Reverse map: dashboard tab → MobileNav tab ID
@@ -145,16 +159,23 @@ const BASE_TABS = [
   "Strategy",
   "Roster",
   "Roster Hub",
+  "Training",
+  "Injuries",
   "Financials",
   "Draft",
   "Draft Room",
+  "Mock Draft",
   "Coaches",
+  "Staff",
   "Free Agency",
   "FA Hub",
   "Trades",
   "Trade Finder",
   "History",
   "Hall of Fame",
+  "Season Recap",
+  "Saves",
+  "God Mode",
 ];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
@@ -1710,6 +1731,56 @@ export default function LeagueDashboard({ league, busy, actions }) {
         {activeTab === "Postseason" && (
           <TabErrorBoundary label="Postseason">
             <PostseasonHub league={league} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Training" && (
+          <TabErrorBoundary label="Training">
+            <TrainingCamp
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Staff" && (
+          <TabErrorBoundary label="Staff">
+            <StaffManagement league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Saves" && (
+          <TabErrorBoundary label="Saves">
+            <SaveExportImport league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Mock Draft" && (
+          <TabErrorBoundary label="Mock Draft">
+            <MockDraft
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Injuries" && (
+          <TabErrorBoundary label="Injuries">
+            <InjuryReport
+              league={league}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "God Mode" && (
+          <TabErrorBoundary label="God Mode">
+            <GodMode league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Season Recap" && (
+          <TabErrorBoundary label="Season Recap">
+            <SeasonRecap
+              league={league}
+              onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
+            />
           </TabErrorBoundary>
         )}
       </div>
