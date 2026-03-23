@@ -54,43 +54,111 @@ function isTurnover(log) {
 
 const SPEED_DELAYS = { 1: 900, 2: 400, 4: 150, instant: 20 };
 
-const COMMENTARY_LINES = {
-  touchdown: [
-    "TOUCHDOWN! The crowd goes absolutely wild!",
-    "HE'S IN! That's six points!",
-    "WHAT A SCORE! The fans are on their feet!",
-  ],
-  interception: [
-    "PICKED OFF! The defense comes up HUGE!",
-    "INTERCEPTION! What a read by the safety!",
-    "TURNOVER! The momentum completely shifts!",
-  ],
-  fumble: [
-    "FUMBLE! Loose ball on the field!",
-    "The ball is out! Who's got it?!",
-    "FUMBLE RECOVERED! The defense is pumped up!",
-  ],
-  bigPlay: [
-    "Big gain on the play!",
-    "He breaks a tackle and picks up chunks!",
-    "That's a HUGE chunk of yards!",
-  ],
-  sack: [
-    "SACKED! The defense brings him down!",
-    "He's got nowhere to go — taken down for a loss!",
-    "Great pressure off the edge!",
-  ],
-};
+// ── Commentary system with 30+ player-name-aware lines ───────────────────────
+
+function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function getCommentary(log) {
   const txt = (log.text || log.playText || log.description || "").toLowerCase();
-  if (isTouchdown(log)) return COMMENTARY_LINES.touchdown[Math.floor(Math.random() * 3)];
-  if (isTurnover(log)) {
-    if (txt.includes("fumble")) return COMMENTARY_LINES.fumble[Math.floor(Math.random() * 3)];
-    return COMMENTARY_LINES.interception[Math.floor(Math.random() * 3)];
+  const p = log.player;
+  const pn = p ? (p.name || "").split(" ").pop() : null; // last name
+  const passer = log.passer;
+  const pnPasser = passer ? (passer.name || "").split(" ").pop() : null;
+
+  if (isTouchdown(log)) {
+    const tdType = log.tdType;
+    if (tdType === "pass" && pn && pnPasser) {
+      return _rand([
+        `TOUCHDOWN! ${pnPasser} to ${pn} — pure brilliance!`,
+        `${pnPasser} finds ${pn} in the end zone! SIX POINTS!`,
+        `${pn} hauls it in! ${pnPasser} with the perfect throw!`,
+        `That's a TOUCHDOWN! ${pn} makes it look easy!`,
+        `${pnPasser} delivers and ${pn} comes down with it — TOUCHDOWN!`,
+      ]);
+    }
+    if (tdType === "rush" && pn) {
+      return _rand([
+        `TOUCHDOWN! ${pn} refuses to be stopped!`,
+        `${pn} bulldozes into the end zone! Six points!`,
+        `There's no stopping ${pn} today — TOUCHDOWN!`,
+        `${pn} with power and purpose — TOUCHDOWN!`,
+      ]);
+    }
+    if ((tdType === "int_return" || tdType === "fumble_return") && pn) {
+      return _rand([
+        `DEFENSIVE TOUCHDOWN! ${pn} takes it all the way!`,
+        `${pn} with the big return — the defense scores!`,
+        `Unbelievable! ${pn} with the pick-six!`,
+      ]);
+    }
+    return _rand([
+      "TOUCHDOWN! The crowd goes absolutely wild!",
+      "HE'S IN! That's six points!",
+      "WHAT A SCORE! The fans are on their feet!",
+      "A momentum-shifting score! The stadium erupts!",
+    ]);
   }
-  if (txt.includes("sack")) return COMMENTARY_LINES.sack[Math.floor(Math.random() * 3)];
-  if ((log.yards ?? 0) >= 20) return COMMENTARY_LINES.bigPlay[Math.floor(Math.random() * 3)];
+
+  if (isTurnover(log)) {
+    if (txt.includes("fumble")) {
+      return _rand([
+        "FUMBLE! Loose ball on the field!",
+        "The ball is out! Who's got it?!",
+        "FUMBLE RECOVERED! The defense is pumped up!",
+        `${pn ? pn + " loses it" : "Turnover"} — huge momentum swing!`,
+      ]);
+    }
+    // Interception
+    if (pn && log.intedQB) {
+      const qbLast = (log.intedQB.name || "").split(" ").pop();
+      return _rand([
+        `PICKED OFF! ${pn} reads ${qbLast} perfectly!`,
+        `${pn} with the interception — what a play!`,
+        `${qbLast} throws it right to ${pn}! INTERCEPTION!`,
+        `TURNOVER! ${pn} jumps the route and comes down with it!`,
+      ]);
+    }
+    return _rand([
+      "PICKED OFF! The defense comes up HUGE!",
+      "INTERCEPTION! What a read by the secondary!",
+      "TURNOVER! The momentum completely shifts!",
+    ]);
+  }
+
+  if (txt.includes("sack")) {
+    if (pn && log.sackedQB) {
+      const qbLast = (log.sackedQB.name || "").split(" ").pop();
+      return _rand([
+        `SACKED! ${pn} brings down ${qbLast} for a loss!`,
+        `${pn} gets home! ${qbLast} goes down!`,
+        `Great pressure from ${pn} — the QB is down!`,
+        `${pn} beats the block and sacks ${qbLast}!`,
+      ]);
+    }
+    return _rand([
+      "SACKED! The defense brings him down!",
+      "He's got nowhere to go — taken down for a loss!",
+      "Great pressure off the edge!",
+    ]);
+  }
+
+  if ((log.yards ?? 0) >= 20) {
+    if (pn) {
+      return _rand([
+        `${pn} takes it the distance — what a gain!`,
+        `Big play by ${pn}! Over 20 yards on the move!`,
+        `${pn} finds the open field — chunk yards!`,
+        `That's a HUGE pickup by ${pn}!`,
+        `${pn} makes the defense look foolish — big gain!`,
+      ]);
+    }
+    return _rand([
+      "Big gain on the play!",
+      "He breaks a tackle and picks up chunks!",
+      "That's a HUGE chunk of yards!",
+    ]);
+  }
+
   return null;
 }
 
@@ -213,6 +281,92 @@ function MomentumMeter({ momentum = 0, homeColor, awayColor, homeAbbr, awayAbbr 
   );
 }
 
+// ── Live Stats Strip ──────────────────────────────────────────────────────────
+// Shows top QB stat line + top receiver/rusher from play logs accumulated so far
+
+function LiveStatsStrip({ logs, visibleCount }) {
+  const stats = useMemo(() => {
+    const acc = {}; // playerId -> { name, pos, passAtt, passComp, passYds, passTDs, rushAtt, rushYds, rushTDs, receptions, recYds, recTDs, sacks, ints }
+    for (let i = 0; i < visibleCount && i < logs.length; i++) {
+      const l = logs[i];
+      const addP = (p, key, val = 1) => {
+        if (!p) return;
+        const id = String(p.id ?? p.name ?? "?");
+        if (!acc[id]) acc[id] = { name: p.name, pos: p.pos };
+        acc[id][key] = (acc[id][key] || 0) + val;
+      };
+      // Pass plays
+      if (l.passer) {
+        addP(l.passer, "passAtt");
+        if (l.completed) { addP(l.passer, "passComp"); addP(l.passer, "passYds", l.passYds || l.yards || 0); }
+        if (l.isTouchdown && (l.tdType === "pass")) addP(l.passer, "passTDs");
+      }
+      // Rush plays
+      if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
+        addP(l.player, "rushAtt");
+        addP(l.player, "rushYds", l.rushYds || l.yards || 0);
+        if (l.isTouchdown) addP(l.player, "rushTDs");
+      }
+      // Receiving
+      if (l.recYds != null && l.player && (l.completed || l.isTouchdown)) {
+        addP(l.player, "receptions");
+        addP(l.player, "recYds", l.recYds || l.yards || 0);
+        if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
+      }
+      // Defense
+      if (l.type === "sack" && l.player) addP(l.player, "sacks");
+      if (l.type === "interception" && l.player) { addP(l.player, "ints"); }
+    }
+    return acc;
+  }, [logs, visibleCount]);
+
+  // Top QB, top receiver, top rusher
+  const players = Object.values(stats);
+  const topQB = players.filter(p => p.pos === "QB").sort((a, b) => (b.passYds || 0) - (a.passYds || 0))[0];
+  const topRec = players.filter(p => p.pos !== "QB" && (p.recYds || 0) > 0).sort((a, b) => (b.recYds || 0) - (a.recYds || 0))[0];
+  const topRusher = players.filter(p => (p.rushYds || 0) > 0 && p.pos !== "QB").sort((a, b) => (b.rushYds || 0) - (a.rushYds || 0))[0];
+
+  if (!topQB && !topRec && !topRusher) return null;
+
+  const lastName = (name) => (name || "?").split(" ").pop();
+
+  const pills = [];
+  if (topQB) {
+    const comp = topQB.passComp || 0, att = topQB.passAtt || 0, yds = topQB.passYds || 0, tds = topQB.passTDs || 0;
+    pills.push({ key: "qb", label: `${lastName(topQB.name)} ${comp}/${att} ${yds} yds${tds > 0 ? ` ${tds} TD` : ""}`, color: "#FF9F0A" });
+  }
+  if (topRec) {
+    const rec = topRec.receptions || 0, yds = topRec.recYds || 0, tds = topRec.recTDs || 0;
+    pills.push({ key: "rec", label: `${lastName(topRec.name)} ${rec} rec ${yds} yds${tds > 0 ? ` ${tds} TD` : ""}`, color: "#0A84FF" });
+  }
+  if (topRusher && topRusher !== topRec) {
+    const att = topRusher.rushAtt || 0, yds = topRusher.rushYds || 0, tds = topRusher.rushTDs || 0;
+    pills.push({ key: "rush", label: `${lastName(topRusher.name)} ${att} car ${yds} yds${tds > 0 ? ` ${tds} TD` : ""}`, color: "#34C759" });
+  }
+
+  if (!pills.length) return null;
+
+  return (
+    <div style={{
+      display: "flex", gap: 6, padding: "5px 14px", flexShrink: 0,
+      background: "rgba(0,0,0,0.35)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      overflowX: "auto", WebkitOverflowScrolling: "touch",
+    }}>
+      {pills.map(pill => (
+        <div key={pill.key} style={{
+          fontSize: "0.65rem", fontWeight: 700, color: pill.color,
+          background: `${pill.color}14`,
+          border: `1px solid ${pill.color}30`,
+          borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", flexShrink: 0,
+        }}>
+          {pill.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PlayFeedEntry({ log, isLatest }) {
   const txt = log.text || log.playText || log.description || "Play";
   const score = isTouchdown(log);
@@ -273,37 +427,51 @@ function BigPlayPopup({ log, onDismiss }) {
   const txt = log.text || log.playText || log.description || "";
   const score = isTouchdown(log);
   const turnover = isTurnover(log);
+  const isSack = (txt.toLowerCase().includes("sack"));
 
-  const color = score ? "#34C759" : turnover ? "#FF453A" : "#FFD60A";
-  const emoji = score ? "🏆" : turnover ? "🔄" : "⚡";
-  const label = score ? "TOUCHDOWN!" : turnover ? "TURNOVER!" : "BIG PLAY!";
+  const color = score ? "#34C759" : turnover ? "#FF453A" : isSack ? "#FF9F0A" : "#FFD60A";
+  const emoji = score ? "🏈" : turnover ? "🔄" : isSack ? "💥" : "⚡";
+  const label = score ? "TOUCHDOWN!" : turnover ? "TURNOVER!" : isSack ? "SACK!" : "BIG PLAY!";
+
+  // Player chip
+  const player = log.player;
+  const pChip = player ? `${player.pos || ""} ${player.name || ""}`.trim() : null;
 
   return (
     <div style={{
       position: "absolute", top: "50%", left: "50%",
       transform: "translate(-50%, -50%)",
       zIndex: 50, pointerEvents: "auto",
-      background: "rgba(0,0,0,0.92)",
+      background: "rgba(0,0,0,0.93)",
       border: `2px solid ${color}`,
       borderRadius: 16,
-      padding: "20px 28px",
+      padding: "20px 24px",
       textAlign: "center",
       maxWidth: 300, width: "90%",
       animation: "bigPlayPop 0.3s cubic-bezier(0.2,0.8,0.2,1)",
       boxShadow: `0 0 40px ${color}44`,
     }}>
-      <div style={{ fontSize: "2.5rem", lineHeight: 1, marginBottom: 6 }}>{emoji}</div>
+      <div style={{ fontSize: "2.2rem", lineHeight: 1, marginBottom: 6 }}>{emoji}</div>
       <div style={{
-        fontSize: "1.3rem", fontWeight: 900, color,
-        letterSpacing: "1px", marginBottom: 8,
+        fontSize: "1.25rem", fontWeight: 900, color,
+        letterSpacing: "1px", marginBottom: pChip ? 6 : 8,
       }}>{label}</div>
-      <div style={{ fontSize: "0.8rem", color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 16 }}>
+      {pChip && (
+        <div style={{
+          display: "inline-block", background: `${color}20`, border: `1px solid ${color}50`,
+          borderRadius: 20, padding: "3px 12px", fontSize: "0.75rem", fontWeight: 800,
+          color, marginBottom: 8, letterSpacing: "0.3px",
+        }}>
+          {pChip}
+        </div>
+      )}
+      <div style={{ fontSize: "0.77rem", color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 14 }}>
         {txt}
       </div>
       <button
         onClick={onDismiss}
         style={{
-          background: color, color: color === "#FFD60A" ? "#000" : "#fff",
+          background: color, color: color === "#FFD60A" || color === "#FF9F0A" ? "#000" : "#fff",
           border: "none", borderRadius: 8, padding: "8px 20px",
           fontWeight: 800, fontSize: "0.82rem", cursor: "pointer",
         }}
@@ -594,6 +762,9 @@ export default function GameSimulation({
         awayAbbr={awayTeam?.abbr}
       />
 
+      {/* ── Live Stats Strip ── */}
+      <LiveStatsStrip logs={effectiveLogs} visibleCount={index} />
+
       {/* ── Animated Field ── */}
       <div style={{ flexShrink: 0, position: "relative" }}>
         <AnimatedField
@@ -685,13 +856,29 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
       ? `${homeTeam?.abbr ?? "HOME"} WIN!`
       : `${awayTeam?.abbr ?? "AWAY"} WIN!`;
 
-  // Find MVP: player who scored or had most yards
+  // Find MVP: top passer or top scorer by accumulated yards in logs
   const mvpPlayer = useMemo(() => {
-    // Look for a player mention in TD plays
-    for (const l of [...logs].reverse()) {
-      if (isTouchdown(l) && l.player) return l.player;
+    const acc = {};
+    for (const l of logs) {
+      const addP = (p, key, val = 1) => {
+        if (!p) return;
+        const id = String(p.id ?? p.name ?? "?");
+        if (!acc[id]) acc[id] = { player: p, score: 0 };
+        acc[id].score += val;
+      };
+      if (l.passer && l.completed) addP(l.passer, "passYds", (l.passYds || l.yards || 0) * 0.05);
+      if (l.passer && l.isTouchdown) addP(l.passer, "passTD", 6);
+      if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
+        addP(l.player, "rushYds", (l.rushYds || l.yards || 0) * 0.1);
+        if (l.isTouchdown) addP(l.player, "rushTD", 6);
+      }
+      if (l.recYds != null && l.player && l.completed) {
+        addP(l.player, "recYds", (l.recYds || l.yards || 0) * 0.1);
+        if (l.isTouchdown) addP(l.player, "recTD", 6);
+      }
     }
-    return null;
+    const sorted = Object.values(acc).sort((a, b) => b.score - a.score);
+    return sorted[0]?.player || null;
   }, [logs]);
 
   return (

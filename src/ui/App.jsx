@@ -60,7 +60,8 @@ export default function App() {
     error, notifications,
     batchSim,
     promptUserGame,
-    userGameLogs
+    userGameLogs,
+    userGameLiveStats,
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
@@ -633,7 +634,7 @@ export default function App() {
             awayTeam={awayTeam}
             userTeamId={league?.userTeamId}
             onComplete={(scores) => {
-              // Capture final scores for PostGameScreen, then clear the viewer
+              // Capture final scores + logs for PostGameScreen, then clear the viewer
               setPostGameResult({
                 homeTeam,
                 awayTeam,
@@ -642,6 +643,7 @@ export default function App() {
                 userTeamId: league?.userTeamId,
                 week: league?.week,
                 phase: league?.phase,
+                logs: userGameLogs || [],
               });
               actions.clearUserGame();
             }}
@@ -659,6 +661,7 @@ export default function App() {
           userTeamId={postGameResult.userTeamId}
           week={postGameResult.week}
           phase={postGameResult.phase}
+          logs={postGameResult.logs || []}
           onContinue={() => {
             setPostGameResult(null);
             setTimeout(() => {

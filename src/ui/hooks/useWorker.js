@@ -51,6 +51,7 @@ const INITIAL_STATE = {
   notifications:[],
   promptUserGame: false,
   userGameLogs: null,
+  userGameLiveStats: null,
 };
 
 function reducer(state, action) {
@@ -74,9 +75,9 @@ function reducer(state, action) {
     case 'PROMPT_USER_GAME':
       return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
     case 'PLAY_LOGS':
-      return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs };
+      return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs, userGameLiveStats: action.liveStats || null };
     case 'CLEAR_USER_GAME':
-      return { ...state, promptUserGame: false, userGameLogs: null };
+      return { ...state, promptUserGame: false, userGameLogs: null, userGameLiveStats: null };
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null };
     case 'BATCH_SIM_START':
@@ -182,7 +183,7 @@ export function useWorker() {
           dispatch({ type: 'PROMPT_USER_GAME' });
           break;
         case toUI.PLAY_LOGS:
-          dispatch({ type: 'PLAY_LOGS', logs: payload.logs });
+          dispatch({ type: 'PLAY_LOGS', logs: payload.logs, liveStats: payload.liveStats });
           break;
         case toUI.SIM_PROGRESS:
           dispatch({ type: 'SIM_PROGRESS', done: payload.done, total: payload.total });

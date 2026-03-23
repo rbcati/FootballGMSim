@@ -4522,7 +4522,7 @@ async function handleWatchGame(payload, id) {
 
     await flushDirty();
 
-    post(toUI.PLAY_LOGS, { logs: res.playLogs || [] }, id);
+    post(toUI.PLAY_LOGS, { logs: res.playLogs || [], liveStats: res.liveStats || {} }, id);
   } else {
     post(toUI.ERROR, { message: 'Simulation failed' }, id);
   }

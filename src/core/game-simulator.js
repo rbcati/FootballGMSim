@@ -1496,7 +1496,7 @@ export function simGameStats(home, away, options = {}) {
      *
      * Returns results for BOTH teams simultaneously to model interaction.
      */
-    const simulateFullGame = (homeStr, awayStr, homeDefStr, awayDefStr, diff, hMods, aMods, options) => {
+    const simulateFullGame = (homeStr, awayStr, homeDefStr, awayDefStr, diff, hMods, aMods, options, hGroups, aGroups) => {
         const result = {
           playLogs: [],
           home: { score: 0, touchdowns: 0, field_goals: 0, xpMade: 0, twoPtMade: 0,
@@ -1507,6 +1507,81 @@ export function simGameStats(home, away, options = {}) {
 
         // Momentum tracker: -100 (away hot) to +100 (home hot)
         let momentum = 0;
+
+        // ── Player selection helpers for player-specific play text ─────────
+        // Pick starter-weighted player from a position group
+        const _pick = (groups, pos) => {
+            if (!groups) return null;
+            const pool = (groups[pos] || []).filter(p => !p.injured);
+            if (!pool.length) return null;
+            const weights = pool.map((p, i) => {
+                let w = (p.ovr || 70) + (p.weeklyTrainingBoost || 0);
+                if (i === 0) w *= 2.2;
+                else if (i === 1) w *= 1.3;
+                return Math.max(1, w);
+            });
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
+        // Pick pass-catcher weighted by awareness/speed/OVR (WR>TE>RB)
+        const _pickRec = (groups) => {
+            if (!groups) return null;
+            const wrs = (groups['WR'] || []).slice(0, 4).filter(p => !p.injured);
+            const tes = (groups['TE'] || []).slice(0, 2).filter(p => !p.injured);
+            const rbs = (groups['RB'] || []).slice(0, 2).filter(p => !p.injured);
+            const pool = [...wrs, ...tes, ...rbs];
+            if (!pool.length) return null;
+            const weights = pool.map((p) => {
+                const r = p.ratings || {};
+                let w = ((r.awareness || 60) * 0.4) + ((r.speed || 60) * 0.3) + ((p.ovr || 70) * 0.3);
+                if (p.pos === 'WR') w *= (wrs.indexOf(p) === 0 ? 1.6 : 1.2);
+                return Math.max(1, w);
+            });
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
+        // Pick pass-rusher (DL/LB) for sacks
+        const _pickRusher = (groups) => {
+            if (!groups) return null;
+            const dl = (groups['DL'] || []).slice(0, 3).filter(p => !p.injured);
+            const lb = (groups['LB'] || []).slice(0, 3).filter(p => !p.injured);
+            const pool = [...dl, ...lb];
+            if (!pool.length) return null;
+            const weights = pool.map(p => Math.max(1, p.ovr || 70));
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
+        // Pick DB (CB/S) for interceptions
+        const _pickDB = (groups) => {
+            if (!groups) return null;
+            const cb = (groups['CB'] || []).slice(0, 3).filter(p => !p.injured);
+            const s  = (groups['S']  || []).slice(0, 2).filter(p => !p.injured);
+            const pool = [...cb, ...s];
+            if (!pool.length) return _pickRusher(groups);
+            const weights = pool.map(p => Math.max(1, p.ovr || 70));
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
+        // Format: "QB Patrick Mahomes" → pos + full name
+        const _n = (p) => p ? `${p.pos || ''} ${p.name || '?'}`.trim() : null;
+
+        // Live per-play stat fields (accumulated over logs for live display)
+        const liveStats = {};
+        const _addStat = (p, key, amt = 1) => {
+            if (!p) return;
+            const id = String(p.id);
+            if (!liveStats[id]) liveStats[id] = { id: p.id, name: p.name, pos: p.pos };
+            liveStats[id][key] = (liveStats[id][key] || 0) + amt;
+        };
+        // ── end player helpers ─────────────────────────────────────────────
 
         // NFL game: ~22 total possessions (11 per team)
         const totalDrives = U.rand(20, 26);
@@ -1579,7 +1654,7 @@ export function simGameStats(home, away, options = {}) {
             let currentDown = 1;
             let yardsToGo = 10;
 
-            const addLog = (text, extraYardLine, playType) => {
+            const addLog = (text, extraYardLine, playType, playerRef, extraFields) => {
                 const yl = extraYardLine != null ? extraYardLine : yardLine;
                 // Infer yards gained from text if not provided
                 const yardsMatch = text.match(/for\s+(-?\d+)\s+yds?/i);
@@ -1621,6 +1696,9 @@ export function simGameStats(home, away, options = {}) {
                     text,
                     playText: text,                 // LiveGameViewer alias
                     homeWinProb,
+                    // Player-specific fields (Priority 1 + 2)
+                    player: playerRef || null,
+                    ...(extraFields || {}),
                 });
             };
 
@@ -1628,23 +1706,60 @@ export function simGameStats(home, away, options = {}) {
                 // --- SCORING DRIVE ---
                 const typeRoll = U.random();
                 if (logDrive) {
+                    // Resolve player groups for this possession
+                    const offGrp = isHome ? hGroups : aGroups;
+                    const defGrp = isHome ? aGroups : hGroups;
                     // Simulate a realistic multi-play drive
                     const numPlays = U.rand(3, 8);
                     for (let i = 0; i < numPlays; i++) {
                         const gain = U.rand(-2, 18);
+                        const catchYds = Math.max(0, gain);
                         const playRoll = U.random();
+                        const qb = _pick(offGrp, 'QB');
                         if (playRoll < 0.45) {
-                            addLog(`${offAbbr} pass complete for ${Math.max(0, gain)} yds.`);
+                            const rec = _pickRec(offGrp);
+                            if (qb && rec) {
+                                _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', catchYds);
+                                _addStat(rec, 'targets'); _addStat(rec, 'receptions'); _addStat(rec, 'recYds', catchYds);
+                                addLog(`${_n(qb)} finds ${_n(rec)} for ${catchYds} yds.`, null, 'pass', rec,
+                                    { passer: qb, passYds: catchYds, completed: true });
+                            } else {
+                                addLog(`${offAbbr} pass complete for ${catchYds} yds.`);
+                            }
                         } else if (playRoll < 0.75) {
-                            addLog(`${offAbbr} runs for ${Math.max(0, gain)} yds.`);
+                            const rb = _pick(offGrp, 'RB') || qb;
+                            if (rb) {
+                                _addStat(rb, 'rushAtt'); _addStat(rb, 'rushYds', catchYds);
+                                addLog(`${_n(rb)} rushes for ${catchYds} yds.`, null, 'run', rb,
+                                    { rushYds: catchYds });
+                            } else {
+                                addLog(`${offAbbr} runs for ${catchYds} yds.`);
+                            }
                         } else if (playRoll < 0.82) {
-                            addLog(`${offAbbr} pass incomplete.`);
+                            const rec = _pickRec(offGrp);
+                            if (qb) {
+                                _addStat(qb, 'passAtt'); _addStat(rec, 'targets');
+                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}.`, null, 'pass', qb,
+                                    { passer: qb, completed: false });
+                            } else { addLog(`${offAbbr} pass incomplete.`); }
                         } else if (playRoll < 0.88) {
-                            addLog(`${defAbbr} sack! Loss of ${U.rand(3, 10)} yds.`);
+                            const rusher = _pickRusher(defGrp);
+                            const sackYds = U.rand(3, 10);
+                            if (rusher && qb) {
+                                _addStat(rusher, 'sacks');
+                                addLog(`${_n(rusher)} sacks ${_n(qb)}! Loss of ${sackYds} yds.`, null, 'sack', rusher,
+                                    { sackedQB: qb });
+                            } else { addLog(`${defAbbr} sack! Loss of ${sackYds} yds.`); }
                         } else if (playRoll < 0.93) {
                             addLog(`Penalty on ${U.random() > 0.5 ? offAbbr : defAbbr}: ${U.rand(5, 15)} yds.`);
                         } else {
-                            addLog(`${offAbbr} screen pass for ${Math.max(0, gain)} yds.`);
+                            const rec = _pickRec(offGrp);
+                            if (qb && rec) {
+                                _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', catchYds);
+                                _addStat(rec, 'targets'); _addStat(rec, 'receptions'); _addStat(rec, 'recYds', catchYds);
+                                addLog(`${_n(qb)} dumps off to ${_n(rec)} for ${catchYds} yds.`, null, 'pass', rec,
+                                    { passer: qb, passYds: catchYds, completed: true });
+                            } else { addLog(`${offAbbr} screen pass for ${catchYds} yds.`); }
                         }
                         yardLine = U.clamp(yardLine + Math.max(0, gain), 1, 99);
                         yardsToGo -= Math.max(0, gain);
@@ -1653,9 +1768,34 @@ export function simGameStats(home, away, options = {}) {
                     }
                     // Scoring play
                     if (typeRoll < tdShare) {
-                        addLog(`${offAbbr} TOUCHDOWN!`, 100);
+                        const qb = _pick(offGrp, 'QB');
+                        const isTDPass = U.random() < 0.65 && qb;
+                        const tdYds = U.rand(3, 42);
+                        if (isTDPass) {
+                            const rec = _pickRec(offGrp);
+                            if (rec) {
+                                _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', tdYds);
+                                _addStat(qb, 'passTDs');
+                                _addStat(rec, 'targets'); _addStat(rec, 'receptions'); _addStat(rec, 'recYds', tdYds);
+                                _addStat(rec, 'recTDs');
+                                addLog(`TOUCHDOWN! ${_n(rec)} catches ${tdYds}-yard TD pass from ${_n(qb)}!`, 100, 'touchdown', rec,
+                                    { passer: qb, passYds: tdYds, recYds: tdYds, isTouchdown: true, tdType: 'pass' });
+                            } else {
+                                _addStat(qb, 'passTDs');
+                                addLog(`TOUCHDOWN! ${offAbbr} passing TD!`, 100, 'touchdown', qb, { isTouchdown: true, tdType: 'pass' });
+                            }
+                        } else {
+                            const rb = _pick(offGrp, 'RB') || qb;
+                            if (rb) {
+                                _addStat(rb, 'rushAtt'); _addStat(rb, 'rushYds', tdYds); _addStat(rb, 'rushTDs');
+                                addLog(`TOUCHDOWN! ${_n(rb)} punches it in from ${tdYds} yards out!`, 100, 'touchdown', rb,
+                                    { rushYds: tdYds, isTouchdown: true, tdType: 'rush' });
+                            } else {
+                                addLog(`${offAbbr} TOUCHDOWN!`, 100, 'touchdown');
+                            }
+                        }
                     } else {
-                        addLog(`${offAbbr} field goal attempt... GOOD!`, yardLine);
+                        addLog(`${offAbbr} field goal attempt... GOOD!`, yardLine, 'field_goal');
                     }
                 }
 
@@ -1745,18 +1885,43 @@ export function simGameStats(home, away, options = {}) {
 
                 // Generate non-scoring drive logs
                 if (logDrive) {
+                    const offGrp = isHome ? hGroups : aGroups;
+                    const defGrp = isHome ? aGroups : hGroups;
                     const numPlays = U.rand(2, 5);
                     for (let i = 0; i < numPlays; i++) {
                         const gain = U.rand(-3, 12);
+                        const catchYds = Math.max(0, gain);
                         const playRoll = U.random();
+                        const qb = _pick(offGrp, 'QB');
                         if (playRoll < 0.4) {
-                            addLog(`${offAbbr} pass complete for ${Math.max(0, gain)} yds.`);
+                            const rec = _pickRec(offGrp);
+                            if (qb && rec) {
+                                _addStat(qb, 'passAtt'); _addStat(qb, 'passComp'); _addStat(qb, 'passYds', catchYds);
+                                _addStat(rec, 'targets'); _addStat(rec, 'receptions'); _addStat(rec, 'recYds', catchYds);
+                                addLog(`${_n(qb)} connects with ${_n(rec)} for ${catchYds} yds.`, null, 'pass', rec,
+                                    { passer: qb, passYds: catchYds, completed: true });
+                            } else { addLog(`${offAbbr} pass complete for ${catchYds} yds.`); }
                         } else if (playRoll < 0.65) {
-                            addLog(`${offAbbr} runs for ${Math.max(0, gain)} yds.`);
+                            const rb = _pick(offGrp, 'RB') || qb;
+                            if (rb) {
+                                _addStat(rb, 'rushAtt'); _addStat(rb, 'rushYds', catchYds);
+                                addLog(`${_n(rb)} carries for ${catchYds} yds.`, null, 'run', rb, { rushYds: catchYds });
+                            } else { addLog(`${offAbbr} runs for ${catchYds} yds.`); }
                         } else if (playRoll < 0.8) {
-                            addLog(`${offAbbr} pass incomplete.`);
+                            const rec = _pickRec(offGrp);
+                            if (qb) {
+                                _addStat(qb, 'passAtt'); _addStat(rec, 'targets');
+                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}.`, null, 'pass', qb,
+                                    { completed: false });
+                            } else { addLog(`${offAbbr} pass incomplete.`); }
                         } else if (playRoll < 0.9) {
-                            addLog(`${defAbbr} sack! Loss of ${U.rand(3, 8)} yds.`);
+                            const rusher = _pickRusher(defGrp);
+                            const sackYds = U.rand(3, 8);
+                            if (rusher && qb) {
+                                _addStat(rusher, 'sacks');
+                                addLog(`${_n(rusher)} sacks ${_n(qb)}! Loss of ${sackYds} yds.`, null, 'sack', rusher,
+                                    { sackedQB: qb });
+                            } else { addLog(`${defAbbr} sack! Loss of ${sackYds} yds.`); }
                         } else {
                             addLog(`Penalty: ${U.rand(5, 15)} yds.`);
                         }
@@ -1765,15 +1930,48 @@ export function simGameStats(home, away, options = {}) {
                         if (yardsToGo <= 0) { currentDown = 1; yardsToGo = 10; }
                         else { currentDown = Math.min(currentDown + 1, 4); }
                     }
-                    // Drive ending
+                    // Drive ending plays
+                    const _offGrp = isHome ? hGroups : aGroups;
+                    const _defGrp = isHome ? aGroups : hGroups;
                     if (driveEndedInSafety) {
-                        addLog(`SAFETY! ${defAbbr} scores 2 points!`);
+                        addLog(`SAFETY! ${defAbbr} scores 2 points!`, null, 'safety');
                     } else if (driveEndedInDefTD) {
-                        addLog(`${U.random() > 0.5 ? 'INTERCEPTION' : 'FUMBLE'} returned for a TOUCHDOWN by ${defAbbr}!`);
+                        const isInt = U.random() > 0.5;
+                        const offQB = _pick(_offGrp, 'QB');
+                        const defPlayer = isInt ? _pickDB(_defGrp) : _pickRusher(_defGrp);
+                        const retYds = U.rand(25, 98);
+                        if (isInt && defPlayer && offQB) {
+                            _addStat(defPlayer, 'ints'); _addStat(defPlayer, 'intTDs');
+                            addLog(`INTERCEPTION by ${_n(defPlayer)}! Picks off ${_n(offQB)} and takes it ${retYds} yards for a TOUCHDOWN!`,
+                                null, 'touchdown', defPlayer, { isTouchdown: true, tdType: 'int_return', intedQB: offQB });
+                        } else if (defPlayer) {
+                            _addStat(defPlayer, 'fumbleRecs');
+                            addLog(`FUMBLE recovered by ${_n(defPlayer)}! Returned ${retYds} yards for a TOUCHDOWN!`,
+                                null, 'touchdown', defPlayer, { isTouchdown: true, tdType: 'fumble_return' });
+                        } else {
+                            addLog(`${U.random() > 0.5 ? 'INTERCEPTION' : 'FUMBLE'} returned for a TOUCHDOWN by ${defAbbr}!`,
+                                null, 'touchdown');
+                        }
                     } else if (driveEndedInTurnover) {
-                        addLog(`${U.random() > 0.5 ? 'INTERCEPTION' : 'FUMBLE'}! ${defAbbr} takes over.`);
+                        const isInt = U.random() > 0.5;
+                        const offQB = _pick(_offGrp, 'QB');
+                        if (isInt) {
+                            const db = _pickDB(_defGrp);
+                            if (db && offQB) {
+                                _addStat(db, 'ints');
+                                addLog(`INTERCEPTION by ${_n(db)}! Picks off ${_n(offQB)}. ${defAbbr} ball.`,
+                                    null, 'interception', db, { intedQB: offQB });
+                            } else { addLog(`INTERCEPTION! ${defAbbr} takes over.`, null, 'interception'); }
+                        } else {
+                            const rb = _pick(_offGrp, 'RB');
+                            const dl = _pickRusher(_defGrp);
+                            if (rb) {
+                                addLog(`FUMBLE by ${_n(rb)}!${dl ? ` Recovered by ${_n(dl)}.` : ''} ${defAbbr} takes over.`,
+                                    null, 'fumble', rb);
+                            } else { addLog(`FUMBLE! ${defAbbr} takes over.`, null, 'fumble'); }
+                        }
                     } else {
-                        addLog(`${offAbbr} punts.`);
+                        addLog(`${offAbbr} punts.`, null, 'punt');
                     }
                 }
 
@@ -1801,12 +1999,13 @@ export function simGameStats(home, away, options = {}) {
         checkReturnTD(result.home, awayDefStr);
         checkReturnTD(result.away, homeDefStr);
 
+        result.liveStats = liveStats;
         return result;
     };
 
     const fullGameResult = simulateFullGame(
         homeStrength, awayStrength, homeDefenseStrength, awayDefenseStrength,
-        strengthDiff, homeMods, awayMods, options
+        strengthDiff, homeMods, awayMods, options, homeGroups, awayGroups
     );
 
     const homeRes = fullGameResult.home;
@@ -2274,6 +2473,7 @@ export function simGameStats(home, away, options = {}) {
       homeTurnoversForced: homeRes.turnoversForced || 0,
       awayTurnoversForced: awayRes.turnoversForced || 0,
       playLogs: fullGameResult.playLogs || [],
+      liveStats: fullGameResult.liveStats || {},
     };
 
   } catch (error) {
@@ -2728,6 +2928,7 @@ export function simulateBatch(games, options = {}) {
                 pair._weather = gameScores.weather || null;
                 pair._homeDefTDs = gameScores.homeDefTDs || 0;
                 pair._awayDefTDs = gameScores.awayDefTDs || 0;
+                pair._liveStats = gameScores.liveStats || {};
 
                 // Capture stats for box score.
                 // Always key by String(player.id) so numeric and string IDs
@@ -2834,6 +3035,7 @@ export function simulateBatch(games, options = {}) {
                 homeDefTDs: pair._homeDefTDs || 0,
                 awayDefTDs: pair._awayDefTDs || 0,
                 playLogs: gameScores?.playLogs || [],
+                liveStats: pair._liveStats || {},
             };
 
             let resultObj;
@@ -2859,6 +3061,7 @@ export function simulateBatch(games, options = {}) {
                     year: league.year,
                     isPlayoff: options.isPlayoff || false,
                     playLogs: gameScores?.playLogs || [],
+                    liveStats: pair._liveStats || {},
                 };
             }
             if (resultObj) {
