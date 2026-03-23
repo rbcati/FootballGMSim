@@ -15,6 +15,8 @@
 
 import React, { useState, useMemo, useEffect, Component } from "react";
 import DonutChart from "./DonutChart";
+import NotificationCenter from "./NotificationCenter.jsx";
+import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
 import HomeDashboard from "./HomeDashboard.jsx";
 import Roster from "./Roster.jsx";
 import RosterHub from "./RosterHub.jsx";
@@ -160,6 +162,7 @@ const BASE_TABS = [
   "Award Races",
   "Strategy",
   "Roster",
+  "Depth Chart",
   "Roster Hub",
   "Training",
   "Injuries",
@@ -1176,7 +1179,7 @@ function QuickJumpFab({ onNavigate }) {
   );
 }
 
-export default function LeagueDashboard({ league, busy, actions }) {
+export default function LeagueDashboard({ league, busy, simulating, actions, onAdvanceWeek, notifications = [], onDismissNotification }) {
   const [activeTab, setActiveTab] = useState("Weekly Hub");
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
@@ -1273,9 +1276,18 @@ export default function LeagueDashboard({ league, busy, actions }) {
             </span>
           </div>
         </div>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "right", flexShrink: 0 }}>
-          <div style={{ fontWeight: 700, color: "var(--text-muted)" }}>{league.year ?? 2025}</div>
-          <div style={{ textTransform: "capitalize" }}>{league.phase}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "right" }}>
+            <div style={{ fontWeight: 700, color: "var(--text-muted)" }}>{league.year ?? 2025}</div>
+            <div style={{ textTransform: "capitalize" }}>{league.phase}</div>
+          </div>
+          <NotificationCenter
+            notifications={notifications}
+            onDismiss={onDismissNotification}
+            onDismissAll={() => {
+              notifications.forEach(n => onDismissNotification?.(n.id));
+            }}
+          />
         </div>
       </div>
 
@@ -1575,6 +1587,9 @@ export default function LeagueDashboard({ league, busy, actions }) {
               actions={actions}
               onNavigate={setActiveTab}
               onPlayerSelect={setSelectedPlayerId}
+              onAdvanceWeek={onAdvanceWeek}
+              busy={busy}
+              simulating={simulating}
             />
           </TabErrorBoundary>
         )}
@@ -1651,6 +1666,15 @@ export default function LeagueDashboard({ league, busy, actions }) {
         {activeTab === "Roster" && (
           <TabErrorBoundary label="Roster">
             <Roster
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Depth Chart" && (
+          <TabErrorBoundary label="Depth Chart">
+            <DragAndDropDepthChart
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}

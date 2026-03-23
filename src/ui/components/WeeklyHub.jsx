@@ -17,6 +17,137 @@
 import React, { useMemo, useState } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 
+// ── Advance Week Button ────────────────────────────────────────────────────────
+
+function AdvanceWeekButton({ league, busy, simulating, onAdvanceWeek }) {
+  const [pressed, setPressed] = useState(false);
+  if (!league) return null;
+
+  const phase = league.phase ?? "regular";
+  const disabled = busy || simulating;
+
+  let label, sublabel, color, emoji;
+
+  if (simulating) {
+    label = "Simulating…";
+    sublabel = "Please wait";
+    color = "#636366";
+    emoji = "⏳";
+  } else if (busy) {
+    label = "Working…";
+    sublabel = "Please wait";
+    color = "#636366";
+    emoji = "⏳";
+  } else if (phase === "preseason") {
+    const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+    const rosterCount = userTeam?.rosterCount ?? 0;
+    if (rosterCount > 53) {
+      label = "Cut Roster to 53";
+      sublabel = `${rosterCount - 53} players over limit`;
+      color = "#FF453A";
+      emoji = "✂️";
+    } else {
+      label = "Start Season";
+      sublabel = "Begin regular season";
+      color = "#34C759";
+      emoji = "▶";
+    }
+  } else if (phase === "regular") {
+    label = `Sim Week ${league.week ?? ""}`;
+    sublabel = "Simulate next game";
+    color = "#0A84FF";
+    emoji = "🏈";
+  } else if (phase === "playoffs") {
+    const roundNames = { 19: "Wild Card", 20: "Divisional", 21: "Conf. Champ", 22: "Super Bowl" };
+    const round = roundNames[league.week] || `Playoffs Wk ${league.week}`;
+    label = `Sim ${round}`;
+    sublabel = "Playoff game";
+    color = "#FFD60A";
+    emoji = "🏆";
+  } else if (phase === "free_agency") {
+    label = "Next FA Day";
+    sublabel = "Advance free agency";
+    color = "#FF9F0A";
+    emoji = "✍️";
+  } else if (phase === "draft") {
+    label = "Draft";
+    sublabel = "Go to draft board";
+    color = "#BF5AF2";
+    emoji = "📋";
+  } else if (["offseason_resign", "offseason"].includes(phase)) {
+    label = "Advance Offseason";
+    sublabel = "Move to next phase";
+    color = "#64D2FF";
+    emoji = "📅";
+  } else {
+    label = "Advance";
+    sublabel = "";
+    color = "var(--accent)";
+    emoji = "▶";
+  }
+
+  return (
+    <button
+      onClick={disabled ? undefined : onAdvanceWeek}
+      onMouseDown={() => !disabled && setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => setPressed(false)}
+      disabled={disabled}
+      style={{
+        width: "100%",
+        background: disabled
+          ? "rgba(255,255,255,0.04)"
+          : pressed
+            ? `${color}dd`
+            : `linear-gradient(135deg, ${color}ee, ${color}bb)`,
+        border: `1.5px solid ${disabled ? "var(--hairline)" : color}`,
+        borderRadius: "var(--radius-lg)",
+        padding: "16px 20px",
+        cursor: disabled ? "not-allowed" : "pointer",
+        display: "flex", alignItems: "center", gap: 14,
+        transition: "all 0.15s",
+        transform: pressed ? "scale(0.98)" : "scale(1)",
+        boxShadow: disabled ? "none" : `0 4px 24px ${color}44`,
+        opacity: disabled ? 0.6 : 1,
+        textAlign: "left",
+        marginBottom: 16,
+      }}
+    >
+      <div style={{
+        width: 44, height: 44, borderRadius: 12,
+        background: "rgba(0,0,0,0.25)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "1.4rem", flexShrink: 0,
+      }}>
+        {emoji}
+      </div>
+      <div>
+        <div style={{
+          fontSize: "1rem", fontWeight: 900,
+          color: disabled ? "var(--text-muted)" : "#fff",
+          lineHeight: 1.2,
+        }}>
+          {label}
+        </div>
+        {sublabel && (
+          <div style={{
+            fontSize: "0.72rem", fontWeight: 600,
+            color: disabled ? "var(--text-subtle)" : "rgba(255,255,255,0.75)",
+            marginTop: 2,
+          }}>
+            {sublabel}
+          </div>
+        )}
+      </div>
+      {!disabled && (
+        <div style={{ marginLeft: "auto", fontSize: "1.2rem", color: "rgba(255,255,255,0.6)" }}>
+          →
+        </div>
+      )}
+    </button>
+  );
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function teamColor(abbr = "") {
@@ -425,7 +556,7 @@ function RecentNews({ news = [], onNavigate }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect }) {
+export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect, onAdvanceWeek, busy, simulating }) {
   const nextGame  = useMemo(() => getNextGame(league),     [league]);
   const injuries  = useMemo(() => getInjuries(league),     [league]);
   const news      = useMemo(() => league?.news ?? [],      [league?.news]);
@@ -492,9 +623,16 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect 
     }] : []),
     {
       icon: "📊", label: "Roster",
-      sublabel: capSpace != null ? `$${Number(capSpace).toFixed(0)}M cap space` : "Manage depth chart",
+      sublabel: capSpace != null ? `$${Number(capSpace).toFixed(0)}M cap space` : "Manage roster",
       color: "#9FB0C2",
       tab: "Roster",
+      badge: null,
+    },
+    {
+      icon: "📋", label: "Depth Chart",
+      sublabel: "Set starters & depth",
+      color: "#5E5CE6",
+      tab: "Depth Chart",
       badge: null,
     },
   ];
@@ -504,6 +642,16 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect 
 
       {/* ── Season Progress ── */}
       <SeasonProgressBar league={league} />
+
+      {/* ── Advance Week CTA ── */}
+      {onAdvanceWeek && (
+        <AdvanceWeekButton
+          league={league}
+          busy={!!busy}
+          simulating={!!simulating}
+          onAdvanceWeek={onAdvanceWeek}
+        />
+      )}
 
       {/* ── Next Game Preview ── */}
       <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />

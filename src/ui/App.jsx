@@ -40,7 +40,7 @@ import React, { useEffect, useCallback, useRef, useState, Component } from 'reac
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
-import SeasonSimViewer   from './components/SeasonSimViewer.jsx';
+import GameSimulation      from './components/GameSimulation.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
@@ -497,7 +497,11 @@ export default function App() {
       <LeagueDashboard
         league={leagueReady ? league : null}
         busy={busy}
+        simulating={simulating}
         actions={actions}
+        onAdvanceWeek={handleAdvanceWeek}
+        notifications={notifications}
+        onDismissNotification={actions.dismissNotification}
       />
 
       {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
@@ -608,7 +612,7 @@ export default function App() {
         );
       })()}
 
-      {/* ── Live Game Viewer ── */}
+      {/* ── Live Game Viewer (premium GameSimulation) ── */}
       {userGameLogs && (() => {
         // Determine actual home/away from the latest game event for the user's team
         const userEvent = gameEvents?.find(e => e.homeId === league.userTeamId || e.awayId === league.userTeamId);
@@ -616,10 +620,10 @@ export default function App() {
         const userMatchup = weekGames.find(g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId);
         const homeId = userEvent?.homeId ?? (userMatchup ? Number(userMatchup.home) : league.userTeamId);
         const awayId = userEvent?.awayId ?? (userMatchup ? Number(userMatchup.away) : league.teams?.find(t => t.id !== league.userTeamId)?.id);
-        const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME' };
-        const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY' };
+        const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME', id: homeId };
+        const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY', id: awayId };
         return (
-          <SeasonSimViewer
+          <GameSimulation
             logs={userGameLogs}
             homeTeam={homeTeam}
             awayTeam={awayTeam}
