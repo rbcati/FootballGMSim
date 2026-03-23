@@ -54,6 +54,102 @@ function isTurnover(log) {
 
 const SPEED_DELAYS = { 1: 900, 2: 400, 4: 150, instant: 20 };
 
+// ── Play call definitions ─────────────────────────────────────────────────────
+
+const PLAY_CALLS = [
+  { id: "run_left",    label: "Run Left",     icon: "←🏃", type: "run",  desc: "Off-tackle run to the left side" },
+  { id: "run_right",   label: "Run Right",    icon: "🏃→", type: "run",  desc: "Off-tackle run to the right side" },
+  { id: "short_pass",  label: "Short Pass",   icon: "↗✋", type: "pass", desc: "Quick 3-step drop, 5-8 yard target" },
+  { id: "deep_pass",   label: "Deep Pass",    icon: "🚀",  type: "pass", desc: "7-step drop, vertical routes" },
+  { id: "play_action", label: "Play Action",  icon: "🎭",  type: "pass", desc: "Fake hand-off, bootleg pass" },
+  { id: "screen",      label: "Screen Pass",  icon: "🏈↩", type: "pass", desc: "RB or WR screen to the flat" },
+  { id: "draw",        label: "Draw Play",    icon: "🎯🏃", type: "run", desc: "Delayed handoff off pass drop" },
+  { id: "punt",        label: "Punt",         icon: "👟",  type: "kick", desc: "Kick it away on 4th down" },
+];
+
+function PlayCallPanel({ onSelectPlay, scheme, possession, down, distance }) {
+  const [chosen, setChosen] = useState(null);
+
+  const handlePick = (play) => {
+    setChosen(play.id);
+    setTimeout(() => onSelectPlay(play), 300);
+  };
+
+  // Scheme synergy hints
+  const synergyHint = (play) => {
+    if (!scheme) return null;
+    const s = scheme.toLowerCase();
+    if (s.includes("smash") && play.type === "run") return "+15% success";
+    if (s.includes("air_raid") && play.type === "pass" && play.id === "deep_pass") return "+12% success";
+    if (s.includes("west_coast") && play.type === "pass" && play.id === "short_pass") return "+10% success";
+    return null;
+  };
+
+  return (
+    <div style={{
+      position: "absolute", inset: 0, zIndex: 60,
+      background: "rgba(0,0,0,0.92)",
+      backdropFilter: "blur(8px)",
+      display: "flex", flexDirection: "column",
+      alignItems: "center", justifyContent: "center",
+      padding: "16px 12px",
+      animation: "bigPlayPop 0.2s ease-out",
+    }}>
+      <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
+        textTransform: "uppercase", letterSpacing: "1.2px", marginBottom: 10 }}>
+        📋 Call Your Play — {down ? `${down}${["st","nd","rd","th"][Math.min((down||1)-1,3)]} & ${distance ?? 10}` : ""}
+      </div>
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr 1fr",
+        gap: 7, width: "100%", maxWidth: 360,
+      }}>
+        {PLAY_CALLS.map(play => {
+          const hint = synergyHint(play);
+          const active = chosen === play.id;
+          return (
+            <button
+              key={play.id}
+              onClick={() => handlePick(play)}
+              style={{
+                padding: "10px 8px",
+                background: active ? "rgba(10,132,255,0.3)" : "rgba(255,255,255,0.06)",
+                border: `1px solid ${active ? "#0A84FF" : "rgba(255,255,255,0.1)"}`,
+                borderRadius: 10,
+                cursor: "pointer",
+                textAlign: "left",
+                transition: "all 0.15s ease",
+                position: "relative",
+              }}
+            >
+              <div style={{ fontSize: "1.1rem", marginBottom: 3 }}>{play.icon}</div>
+              <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text)", marginBottom: 2 }}>
+                {play.label}
+              </div>
+              <div style={{ fontSize: "0.62rem", color: "var(--text-muted)", lineHeight: 1.3 }}>
+                {play.desc}
+              </div>
+              {hint && (
+                <div style={{
+                  position: "absolute", top: 5, right: 6,
+                  fontSize: "0.55rem", fontWeight: 800,
+                  color: "#34C759", background: "rgba(52,199,89,0.15)",
+                  border: "1px solid #34C75933", borderRadius: 4,
+                  padding: "1px 5px",
+                }}>
+                  {hint}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: "0.62rem", color: "var(--text-subtle)", marginTop: 10 }}>
+        Tap to call the play
+      </div>
+    </div>
+  );
+}
+
 // ── Commentary system with 30+ player-name-aware lines ───────────────────────
 
 function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
@@ -540,6 +636,7 @@ export default function GameSimulation({
   awayTeam,
   userTeamId,
   onComplete,
+  offenseScheme = null,  // e.g. "SMASHMOUTH"
 }) {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -547,6 +644,9 @@ export default function GameSimulation({
   const [keyPlaysOnly, setKeyPlaysOnly] = useState(false);
   const [showBigPlay, setShowBigPlay] = useState(null); // log entry or null
   const [showFinal, setShowFinal] = useState(false);
+  const [callPlaysMode, setCallPlaysMode] = useState(false);
+  const [pendingPlayCall, setPendingPlayCall] = useState(null); // waiting for user to pick
+  const [lastCalledPlay, setLastCalledPlay] = useState(null);
   const feedRef = useRef(null);
   const timerRef = useRef(null);
 
@@ -562,15 +662,31 @@ export default function GameSimulation({
   const isComplete = index >= effectiveLogs.length && effectiveLogs.length > 0;
   const currentLog = effectiveLogs[index - 1] ?? null;
 
+  // Detect drive-start plays (1st down from scrimmage) for play call prompt
+  const isNewDrive = useMemo(() => {
+    const l = effectiveLogs[index];
+    if (!l) return false;
+    // Show play call UI at beginning of drives (1st & 10 after possession change or kickoff)
+    return callPlaysMode && l.down === 1 && l.distance >= 10 && l.type !== "kickoff" && l.type !== "punt";
+  }, [effectiveLogs, index, callPlaysMode]);
+
+  // Pause when play call UI should show
+  useEffect(() => {
+    if (isNewDrive && pendingPlayCall === null && !isComplete) {
+      setPlaying(false);
+      setPendingPlayCall("waiting");
+    }
+  }, [isNewDrive]); // eslint-disable-line
+
   // Auto-advance
   useEffect(() => {
-    if (!playing || isComplete || showBigPlay) return;
+    if (!playing || isComplete || showBigPlay || pendingPlayCall) return;
     const delay = SPEED_DELAYS[speed] ?? 400;
     timerRef.current = setTimeout(() => {
       setIndex(i => i + 1);
     }, delay);
     return () => clearTimeout(timerRef.current);
-  }, [playing, index, isComplete, showBigPlay, speed]);
+  }, [playing, index, isComplete, showBigPlay, speed, pendingPlayCall]);
 
   // Auto-complete on empty logs
   useEffect(() => {
@@ -637,9 +753,10 @@ export default function GameSimulation({
     return { homeScore, awayScore, quarter, timeLeft, ballOn, down, distance, possession, momentum };
   }, [effectiveLogs, index]);
 
-  // Current AnimatedField play data
+  // Current AnimatedField play data — include key player refs for highlighting
   const fieldPlay = useMemo(() => {
     if (!currentLog) return null;
+    const txt = (currentLog.text || currentLog.playText || currentLog.description || "").toLowerCase();
     return {
       ballOn: state.ballOn,
       distance: state.distance,
@@ -654,6 +771,13 @@ export default function GameSimulation({
         ? (currentLog.yards > 0 ? `+${currentLog.yards} yards` : `${currentLog.yards} yards`)
         : "",
       description: currentLog.text || currentLog.playText || currentLog.description || "",
+      // Key player refs for AnimatedField highlighting
+      passer:     currentLog.passer     || null,
+      player:     currentLog.player     || null,
+      tackler:    currentLog.tackler    || null,
+      defender:   currentLog.defender   || null,
+      isTouchdown: isTouchdown(currentLog),
+      isTurnover:  isTurnover(currentLog),
     };
   }, [currentLog, state]);
 
@@ -767,6 +891,21 @@ export default function GameSimulation({
             🔑 Key Plays
           </button>
           <button
+            onClick={() => {
+              const next = !callPlaysMode;
+              setCallPlaysMode(next);
+              if (!next) setPendingPlayCall(null);
+            }}
+            style={{
+              padding: "4px 9px", borderRadius: 6, border: "none",
+              background: callPlaysMode ? "rgba(10,132,255,0.25)" : "rgba(255,255,255,0.06)",
+              color: callPlaysMode ? "#0A84FF" : "var(--text-muted)",
+              fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
+            }}
+          >
+            📋 Call Plays
+          </button>
+          <button
             onClick={() => setPlaying(p => !p)}
             style={{
               padding: "4px 12px", borderRadius: 6, border: "none",
@@ -817,6 +956,35 @@ export default function GameSimulation({
         {/* Big play popup overlay */}
         {showBigPlay && (
           <BigPlayPopup log={showBigPlay} onDismiss={dismissBigPlay} />
+        )}
+        {/* Play call panel — shown on drive starts when callPlaysMode is on */}
+        {pendingPlayCall === "waiting" && !showBigPlay && (
+          <PlayCallPanel
+            onSelectPlay={(play) => {
+              setLastCalledPlay(play);
+              setPendingPlayCall(null);
+              setPlaying(true);
+            }}
+            scheme={offenseScheme}
+            possession={state.possession}
+            down={state.down}
+            distance={state.distance}
+          />
+        )}
+        {/* Called play indicator strip */}
+        {lastCalledPlay && callPlaysMode && pendingPlayCall !== "waiting" && (
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0,
+            background: "rgba(10,132,255,0.15)",
+            borderTop: "1px solid rgba(10,132,255,0.3)",
+            padding: "4px 10px",
+            fontSize: "0.65rem", fontWeight: 700,
+            color: "#0A84FF",
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            <span>{lastCalledPlay.icon}</span>
+            <span>Called: {lastCalledPlay.label}</span>
+          </div>
         )}
       </div>
 

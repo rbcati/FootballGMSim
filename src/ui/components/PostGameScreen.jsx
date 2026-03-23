@@ -10,8 +10,43 @@
  *  - Continue button
  */
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState, Component } from "react";
 import PlayerCard from "./PlayerCard.jsx";
+import AdvancedStats from "./AdvancedStats.jsx";
+
+// ── Error boundary so a crash here never freezes the whole app ────────────────
+class PostGameErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { crashed: false }; }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(err) { console.error('[PostGameScreen] render crash:', err); }
+  render() {
+    if (!this.state.crashed) return this.props.children;
+    return (
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 9700,
+        background: "rgba(0,0,0,0.92)", display: "flex",
+        alignItems: "center", justifyContent: "center", flexDirection: "column",
+        gap: 16, padding: 24,
+      }}>
+        <div style={{ fontSize: "1.1rem", fontWeight: 800, color: "#FF453A" }}>
+          Game recap failed
+        </div>
+        <div style={{ fontSize: "0.85rem", color: "var(--text-muted)", textAlign: "center" }}>
+          Returning you to the Weekly Hub…
+        </div>
+        <button
+          onClick={this.props.onContinue}
+          style={{
+            padding: "12px 28px", background: "#0A84FF", color: "#fff",
+            border: "none", borderRadius: 10, fontWeight: 800, cursor: "pointer",
+          }}
+        >
+          Back to Hub →
+        </button>
+      </div>
+    );
+  }
+}
 
 function teamColor(abbr = "") {
   const palette = [
@@ -79,45 +114,52 @@ function Confetti({ colors }) {
 // Derive game leaders from play logs (accumulated stats per player)
 function useGameLeaders(logs) {
   return useMemo(() => {
-    if (!Array.isArray(logs) || !logs.length) return { qb: null, receiver: null, rusher: null, defender: null };
-    const acc = {};
-    const addP = (p, key, val = 1) => {
-      if (!p) return;
-      const id = String(p.id ?? p.name ?? "?");
-      if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0, tackles: 0, passDefls: 0, forcedFumbles: 0 };
-      acc[id][key] = (acc[id][key] || 0) + val;
-    };
-    for (const l of logs) {
-      if (l.passer) {
-        addP(l.passer, "passAtt");
-        if (l.completed) { addP(l.passer, "passComp"); addP(l.passer, "passYds", l.passYds || l.yards || 0); }
-        if (l.isTouchdown && l.tdType === "pass") addP(l.passer, "passTDs");
+    const empty = { qb: null, receiver: null, rusher: null, defender: null };
+    try {
+      if (!Array.isArray(logs) || !logs.length) return empty;
+      const acc = {};
+      const addP = (p, key, val = 1) => {
+        if (!p || typeof p !== "object") return;
+        const id = String(p.id ?? p.name ?? "?");
+        if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0, tackles: 0, passDefls: 0, forcedFumbles: 0 };
+        acc[id][key] = (acc[id][key] || 0) + (Number(val) || 0);
+      };
+      for (const l of logs) {
+        if (!l || typeof l !== "object") continue;
+        if (l.passer) {
+          addP(l.passer, "passAtt");
+          if (l.completed) { addP(l.passer, "passComp"); addP(l.passer, "passYds", l.passYds || l.yards || 0); }
+          if (l.isTouchdown && l.tdType === "pass") addP(l.passer, "passTDs");
+        }
+        if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
+          addP(l.player, "rushAtt");
+          addP(l.player, "rushYds", l.rushYds || l.yards || 0);
+          if (l.isTouchdown) addP(l.player, "rushTDs");
+        }
+        if (l.recYds != null && l.player && l.completed) {
+          addP(l.player, "receptions");
+          addP(l.player, "recYds", l.recYds || l.yards || 0);
+          if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
+        }
+        if (l.type === "sack" && l.player) addP(l.player, "sacks");
+        if (l.type === "interception" && l.player) addP(l.player, "ints");
+        if (l.tackler) addP(l.tackler, "tackles");
+        if (l.defender) addP(l.defender, "passDefls");
+        if (l.forcedFumble) addP(l.forcedFumble, "forcedFumbles");
       }
-      if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
-        addP(l.player, "rushAtt");
-        addP(l.player, "rushYds", l.rushYds || l.yards || 0);
-        if (l.isTouchdown) addP(l.player, "rushTDs");
-      }
-      if (l.recYds != null && l.player && l.completed) {
-        addP(l.player, "receptions");
-        addP(l.player, "recYds", l.recYds || l.yards || 0);
-        if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
-      }
-      if (l.type === "sack" && l.player) addP(l.player, "sacks");
-      if (l.type === "interception" && l.player) addP(l.player, "ints");
-      if (l.tackler) addP(l.tackler, "tackles");
-      if (l.defender) addP(l.defender, "passDefls");
-      if (l.forcedFumble) addP(l.forcedFumble, "forcedFumbles");
+      const players = Object.values(acc);
+      const qb = players.filter(p => p.ref?.pos === "QB").sort((a, b) => b.passYds - a.passYds)[0] || null;
+      const receiver = players.filter(p => p.ref?.pos !== "QB" && p.recYds > 0).sort((a, b) => b.recYds - a.recYds)[0] || null;
+      const rusher = players.filter(p => p.ref?.pos !== "QB" && p.rushYds > 0 && p !== receiver).sort((a, b) => b.rushYds - a.rushYds)[0] || null;
+      const defender = players
+        .filter(p => p.sacks > 0 || p.ints > 0 || p.tackles > 0 || p.passDefls > 0 || p.forcedFumbles > 0)
+        .sort((a, b) => (b.sacks * 4 + b.ints * 5 + b.tackles * 1 + b.passDefls * 2 + b.forcedFumbles * 3)
+                      - (a.sacks * 4 + a.ints * 5 + a.tackles * 1 + a.passDefls * 2 + a.forcedFumbles * 3))[0] || null;
+      return { qb, receiver, rusher, defender };
+    } catch (err) {
+      console.error('[useGameLeaders] error:', err);
+      return empty;
     }
-    const players = Object.values(acc);
-    const qb = players.filter(p => p.ref?.pos === "QB").sort((a, b) => b.passYds - a.passYds)[0] || null;
-    const receiver = players.filter(p => p.ref?.pos !== "QB" && p.recYds > 0).sort((a, b) => b.recYds - a.recYds)[0] || null;
-    const rusher = players.filter(p => p.ref?.pos !== "QB" && p.rushYds > 0 && p !== receiver).sort((a, b) => b.rushYds - a.rushYds)[0] || null;
-    const defender = players
-      .filter(p => p.sacks > 0 || p.ints > 0 || p.tackles > 0 || p.passDefls > 0 || p.forcedFumbles > 0)
-      .sort((a, b) => (b.sacks * 4 + b.ints * 5 + b.tackles * 1 + b.passDefls * 2 + b.forcedFumbles * 3)
-                    - (a.sacks * 4 + a.ints * 5 + a.tackles * 1 + a.passDefls * 2 + a.forcedFumbles * 3))[0] || null;
-    return { qb, receiver, rusher, defender };
   }, [logs]);
 }
 
@@ -153,7 +195,7 @@ function LeaderCard({ label, statLine, player, color }) {
   );
 }
 
-export default function PostGameScreen({
+function PostGameScreenInner({
   homeTeam,
   awayTeam,
   homeScore,
@@ -180,6 +222,7 @@ export default function PostGameScreen({
   const resultEmoji = userWon ? "🏆" : userLost ? "😔" : tied ? "🤝" : "🏈";
   const resultLabel = userWon ? "VICTORY!" : userLost ? "DEFEAT" : tied ? "TIE" : "FINAL";
 
+  const [activeTab, setActiveTab] = useState("leaders"); // "leaders" | "grades"
   const { qb, receiver, rusher, defender } = useGameLeaders(logs);
 
   // Build leader stat lines
@@ -330,16 +373,34 @@ export default function PostGameScreen({
             </div>
           )}
 
+          {/* ── Tab switcher (Leaders / Grades) ── */}
+          {(showLeaders || logs.length > 0) && (
+            <div style={{
+              display: "flex", background: "var(--surface)",
+              border: "1px solid var(--hairline)", borderRadius: 10,
+              padding: 3, marginBottom: 12, gap: 3,
+            }}>
+              {[["leaders","🎖 Leaders"], ["grades","📊 Grades"]].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  style={{
+                    flex: 1, padding: "7px 0",
+                    background: activeTab === key ? resultColor : "transparent",
+                    color: activeTab === key ? (resultColor === "#FFD60A" ? "#000" : "#fff") : "var(--text-muted)",
+                    border: "none", borderRadius: 8,
+                    fontWeight: 800, fontSize: "0.75rem", cursor: "pointer",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* ── Game Leaders ── */}
-          {showLeaders && (
+          {activeTab === "leaders" && showLeaders && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{
-                fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
-                textTransform: "uppercase", letterSpacing: "1px",
-                marginBottom: 10, paddingLeft: 2,
-              }}>
-                🎖 Game Leaders
-              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {qb && qbLine && (
                   <LeaderCard label="Passing" statLine={qbLine} player={qb} color="#FF9F0A" />
@@ -354,6 +415,13 @@ export default function PostGameScreen({
                   <LeaderCard label="Defense" statLine={defLine} player={defender} color="#FF453A" />
                 )}
               </div>
+            </div>
+          )}
+
+          {/* ── PFF Grades tab ── */}
+          {activeTab === "grades" && logs.length > 0 && (
+            <div style={{ marginBottom: 16, background: "var(--surface)", borderRadius: 12, overflow: "hidden", border: "1px solid var(--hairline)" }}>
+              <AdvancedStats logs={logs} homeTeam={homeTeam} awayTeam={awayTeam} />
             </div>
           )}
 
@@ -389,5 +457,14 @@ export default function PostGameScreen({
         </div>
       </div>
     </>
+  );
+}
+
+// Wrap with error boundary so a crash here returns user to hub gracefully
+export default function PostGameScreen(props) {
+  return (
+    <PostGameErrorBoundary onContinue={props.onContinue}>
+      <PostGameScreenInner {...props} />
+    </PostGameErrorBoundary>
   );
 }
