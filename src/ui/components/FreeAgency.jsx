@@ -32,6 +32,7 @@ import React, {
 import TraitBadge from "./TraitBadge";
 import PlayerAvatar from "./PlayerAvatar";
 import DonutChart from "./DonutChart";
+import PlayerCard from "./PlayerCard.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -436,6 +437,107 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
   );
 }
 
+// ── Player Preview Bottom Sheet ──────────────────────────────────────────────
+
+function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
+  const [phase, setPhase] = useState("view"); // "view" | "bid"
+  const offers = player?.offers || {};
+
+  if (!player) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 1000,
+          backdropFilter: "blur(4px)",
+        }}
+      />
+      {/* Sheet */}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0, left: 0, right: 0,
+          maxHeight: "85vh",
+          background: "var(--bg-secondary)",
+          borderRadius: "20px 20px 0 0",
+          zIndex: 1001,
+          overflow: "auto",
+          padding: "8px 0 32px",
+          boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+        }}
+      >
+        {/* Drag handle */}
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--hairline-strong)", margin: "0 auto 16px" }} />
+
+        <div style={{ padding: "0 16px" }}>
+          {/* PlayerCard hero */}
+          <PlayerCard player={player} variant="hero" onClose={onClose} />
+
+          {/* Bid form or trigger */}
+          <div style={{ marginTop: 16 }}>
+            {phase === "view" ? (
+              <div style={{ display: "flex", gap: 10 }}>
+                {offers.userOffered && (
+                  <div style={{
+                    flex: 1, padding: "10px 14px",
+                    background: "#34C75918", border: "1px solid #34C75944",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.78rem", color: "#34C759", fontWeight: 700,
+                    textAlign: "center",
+                  }}>
+                    {offers.userIsTopBidder ? "✓ Your bid leads!" : "Bid submitted"}
+                  </div>
+                )}
+                {(player._ask ?? 0) > capRoom ? (
+                  <div style={{
+                    flex: 1, padding: "10px 14px",
+                    background: "#FF453A18", border: "1px solid #FF453A44",
+                    borderRadius: "var(--radius-md)",
+                    fontSize: "0.78rem", color: "#FF453A", fontWeight: 700,
+                    textAlign: "center",
+                  }}>
+                    Insufficient cap space
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setPhase("bid")}
+                    style={{
+                      flex: 1, padding: "12px",
+                      background: "var(--accent)", color: "#fff",
+                      border: "none", borderRadius: "var(--radius-md)",
+                      fontWeight: 800, fontSize: "0.9rem", cursor: "pointer",
+                    }}
+                  >
+                    {offers.userOffered ? "Update Bid" : "Submit Bid"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ background: "var(--surface)", borderRadius: "var(--radius-lg)", padding: 16 }}>
+                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 12, textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                  Contract Offer
+                </div>
+                <SignInlineForm
+                  player={player}
+                  capRoom={capRoom}
+                  asDiv
+                  onCancel={() => setPhase("view")}
+                  onSubmit={(c) => { onSubmitBid(player.id, c); onClose(); }}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Main Export ──────────────────────────────────────────────────────────────
 
 const mobileStyle = `
@@ -467,6 +569,7 @@ export default function FreeAgency({
   const [signingPlayerId, setSigningPlayerId] = useState(null);
   const [signedIds, setSignedIds] = useState(new Set()); // Optimistic hides
   const [flash, setFlash] = useState(null);
+  const [previewPlayer, setPreviewPlayer] = useState(null);
 
   // Keep ref to avoid stale closure during mount load
   const loadCountRef = useRef(0);
@@ -929,8 +1032,8 @@ export default function FreeAgency({
                               {idx + 1}
                             </td>
                             <td><PosBadge pos={player.pos} /></td>
-                            <td onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
-                              <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
+                            <td onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
+                              <span style={{ borderBottom: "1px dotted var(--text-muted)" }}>{player.name}</span>
                             </td>
                             <td style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1024,7 +1127,7 @@ export default function FreeAgency({
                            <PlayerAvatar text={player.pos} teamColor="var(--accent)" size={56} />
                            <div style={{ flex: 1 }}>
                                <div style={{ fontWeight: 700, fontSize: "var(--text-base)", color: "var(--text)", display: "flex", justifyContent: "space-between" }}>
-                                   <span onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ cursor: "pointer", borderBottom: "1px dotted" }}>{idx + 1}. {player.name}</span>
+                                   <span onClick={() => setPreviewPlayer(player)} style={{ cursor: "pointer", borderBottom: "1px dotted" }}>{idx + 1}. {player.name}</span>
                                    <OvrBadge ovr={player.ovr} />
                                </div>
                                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
@@ -1056,7 +1159,8 @@ export default function FreeAgency({
                                <SignInlineForm player={player} capRoom={capRoom} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
                             </div>
                         ) : (
-                            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                               <button className="btn" onClick={() => setPreviewPlayer(player)} style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}>View Card</button>
                                <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</button>
                             </div>
                         )}
@@ -1080,6 +1184,16 @@ export default function FreeAgency({
         {displayed.length} shown · {Math.max(0, faPool.length - signedIds.size)}{" "}
         available in pool
       </div>
+
+      {/* Player Preview Sheet */}
+      {previewPlayer && (
+        <PlayerPreviewSheet
+          player={previewPlayer}
+          capRoom={capRoom}
+          onClose={() => setPreviewPlayer(null)}
+          onSubmitBid={handleSign}
+        />
+      )}
     </div>
   );
 }
