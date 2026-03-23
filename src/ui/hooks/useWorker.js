@@ -513,6 +513,26 @@ export function useWorker() {
     updateDepthChart: (positions) =>
       request(toWorker.UPDATE_DEPTH_CHART, { positions }),
 
+    /**
+     * Run a training drill for the user's team.
+     * @param {string} teamId
+     * @param {string} intensity - 'light' | 'normal' | 'hard'
+     * @param {string} drillType - 'technique' | 'conditioning' | 'team_drills' | 'film_study'
+     * @param {string[]} positionGroups - e.g. ['QB','WR'] or [] for all
+     * Returns a Promise resolving to updated ROSTER_DATA.
+     */
+    conductDrill: (teamId, intensity, drillType, positionGroups) =>
+      request(toWorker.CONDUCT_DRILL, { teamId, intensity, drillType, positionGroups }),
+
+    /**
+     * Persist hired medical/physio staff to the worker so their traits reduce
+     * in-game injury chances.
+     * @param {string|number} teamId
+     * @param {Array} medStaff - Array of physio staff objects from StaffManagement
+     */
+    updateMedicalStaff: (teamId, medStaff) =>
+      send(toWorker.UPDATE_MEDICAL_STAFF, { teamId, medStaff }),
+
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),

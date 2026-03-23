@@ -140,6 +140,75 @@ export function getStaffModifiers(staff) {
 }
 
 /**
+ * Returns gameplay modifiers for a Head Coach based on their archetype and level.
+ * HC archetypes: 'Strategist', 'Motivator', 'Team Builder', 'Disciplinarian'
+ *
+ * Returned keys (read in simGameStats):
+ *   momentumMultiplier  – scales momentum swing magnitude (>1 = bigger swings)
+ *   moraleBonus         – flat addition to team morale score before sim
+ *   turnoverReduction   – multiplier on opponent's turnover chance (< 1 = fewer turnovers forced ON us)
+ *   strengthBonus       – flat addition to team strength rating
+ *   injuryChanceMod     – multiplier on in-game injury chance (< 1 = safer)
+ */
+export function getHCMods(hc) {
+    if (!hc) return {};
+    const archetype = hc.archetype || hc.perk || '';
+    const level = Math.max(1, Math.min(5, hc.level || 1));
+    // Scale modifiers with level (level 1 = base, level 5 = max)
+    const lvlFactor = (level - 1) / 4; // 0 at lvl1, 1.0 at lvl5
+
+    switch (archetype) {
+        case 'Motivator':
+            // Bigger momentum swings — high ceiling and high floor
+            return {
+                momentumMultiplier: 1.15 + lvlFactor * 0.20,  // 1.15 → 1.35
+                moraleBonus: 3 + Math.round(lvlFactor * 7),    // +3 → +10
+            };
+        case 'Strategist':
+            // Better scheme usage — boosts overall team strength
+            return {
+                strengthBonus: 0.5 + lvlFactor * 1.5,          // +0.5 → +2.0
+                schemeFitMultiplier: 1.05 + lvlFactor * 0.10,   // 1.05 → 1.15
+            };
+        case 'Team Builder':
+            // Keeps morale high + slight injury reduction
+            return {
+                moraleBonus: 5 + Math.round(lvlFactor * 10),   // +5 → +15
+                injuryChanceMod: 0.95 - lvlFactor * 0.05,       // 0.95 → 0.90
+            };
+        case 'Disciplinarian':
+            // Reduces own turnovers + small injury protection
+            return {
+                turnoverReduction: 0.92 - lvlFactor * 0.07,    // 0.92 → 0.85
+                injuryChanceMod: 0.97 - lvlFactor * 0.04,       // 0.97 → 0.93
+            };
+        default:
+            return {};
+    }
+}
+
+/**
+ * Computes the injury chance multiplier from a team's medical staff.
+ * Each staff member with injury_prevention reduces chance by ~8%,
+ * conditioning_expert by ~5%.  Stacks multiplicatively, capped at 0.55.
+ * @param {Array} medStaff - Array of physio/medical staff objects
+ * @returns {number} Multiplier (<=1 means fewer injuries)
+ */
+export function getMedicalStaffInjuryMod(medStaff) {
+    if (!medStaff || !medStaff.length) return 1.0;
+    let mod = 1.0;
+    for (const member of medStaff) {
+        const traits = member.traits || [];
+        for (const t of traits) {
+            const tid = t.id || t;
+            if (tid === 'injury_prevention') mod *= 0.92;
+            else if (tid === 'conditioning_expert') mod *= 0.95;
+        }
+    }
+    return Math.max(0.55, mod);
+}
+
+/**
  * Gets combined modifiers for an entire coaching staff.
  * @param {Object} staffList - The team.staff object containing { offCoordinator, defCoordinator, etc. }
  * @returns {Object} Combined modifiers.
@@ -165,7 +234,8 @@ export function getCoachingMods(staffList) {
     if (staffList.defCoordinator) {
         apply(getStaffModifiers(staffList.defCoordinator));
     }
-    // Head coach? (Future expansion)
+    // HC-specific mods are handled via getHCMods() in the sim engine.
+    // Leave this call for legacy/OC-style archetypes on HC objects.
     if (staffList.headCoach) {
         apply(getStaffModifiers(staffList.headCoach));
     }

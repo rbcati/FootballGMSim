@@ -96,6 +96,12 @@ export const toWorker = Object.freeze({
   FIRE_COACH:         'FIRE_COACH',           // { teamId, role }
   GET_AVAILABLE_COACHES: 'GET_AVAILABLE_COACHES', // {}
 
+  /** Training Camp / Weekly Practice */
+  CONDUCT_DRILL:      'CONDUCT_DRILL',        // { teamId, intensity, drillType, positionGroups }
+
+  /** Medical Staff */
+  UPDATE_MEDICAL_STAFF: 'UPDATE_MEDICAL_STAFF', // { teamId, medStaff: [...] }
+
   /** Box score retrieval */
   GET_BOX_SCORE:      'GET_BOX_SCORE',        // { gameId }
 

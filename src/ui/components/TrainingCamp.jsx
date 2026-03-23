@@ -186,7 +186,14 @@ export default function TrainingCamp({ league, actions, onPlayerSelect }) {
 
     setResults(newResults);
     setDrillsRun(prev => prev + 1);
-  }, [roster, intensity, focusGroups, drillsRun, drillsRemaining, league]);
+
+    // Persist training boosts to the worker so the sim engine can use them
+    if (actions?.conductDrill) {
+      const teamId = league?.userTeamId;
+      const posGroups = focusGroups.size > 0 ? Array.from(focusGroups) : [];
+      actions.conductDrill(teamId, intensity, drillType, posGroups);
+    }
+  }, [roster, intensity, focusGroups, drillType, drillsRun, drillsRemaining, league, actions]);
 
   // Summary stats
   const summary = useMemo(() => {

@@ -44,6 +44,11 @@ export function generateInjury(player, context = {}) {
     // Age modifier (older players slightly more prone)
     if (player.age > 30) chance *= 1.2;
 
+    // Medical staff / HC modifier (values < 1 reduce injury chance)
+    if (context.injuryChanceMod && context.injuryChanceMod !== 1.0) {
+        chance *= Math.max(0.3, context.injuryChanceMod);
+    }
+
     // Roll for injury
     if (U.random() < chance) {
         const injuryTemplate = U.choice(INJURIES);
