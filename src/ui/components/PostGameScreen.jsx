@@ -84,7 +84,7 @@ function useGameLeaders(logs) {
     const addP = (p, key, val = 1) => {
       if (!p) return;
       const id = String(p.id ?? p.name ?? "?");
-      if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0 };
+      if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0, tackles: 0, passDefls: 0, forcedFumbles: 0 };
       acc[id][key] = (acc[id][key] || 0) + val;
     };
     for (const l of logs) {
@@ -105,12 +105,18 @@ function useGameLeaders(logs) {
       }
       if (l.type === "sack" && l.player) addP(l.player, "sacks");
       if (l.type === "interception" && l.player) addP(l.player, "ints");
+      if (l.tackler) addP(l.tackler, "tackles");
+      if (l.defender) addP(l.defender, "passDefls");
+      if (l.forcedFumble) addP(l.forcedFumble, "forcedFumbles");
     }
     const players = Object.values(acc);
     const qb = players.filter(p => p.ref?.pos === "QB").sort((a, b) => b.passYds - a.passYds)[0] || null;
     const receiver = players.filter(p => p.ref?.pos !== "QB" && p.recYds > 0).sort((a, b) => b.recYds - a.recYds)[0] || null;
     const rusher = players.filter(p => p.ref?.pos !== "QB" && p.rushYds > 0 && p !== receiver).sort((a, b) => b.rushYds - a.rushYds)[0] || null;
-    const defender = players.filter(p => p.sacks > 0 || p.ints > 0).sort((a, b) => (b.sacks * 3 + b.ints * 4) - (a.sacks * 3 + a.ints * 4))[0] || null;
+    const defender = players
+      .filter(p => p.sacks > 0 || p.ints > 0 || p.tackles > 0 || p.passDefls > 0 || p.forcedFumbles > 0)
+      .sort((a, b) => (b.sacks * 4 + b.ints * 5 + b.tackles * 1 + b.passDefls * 2 + b.forcedFumbles * 3)
+                    - (a.sacks * 4 + a.ints * 5 + a.tackles * 1 + a.passDefls * 2 + a.forcedFumbles * 3))[0] || null;
     return { qb, receiver, rusher, defender };
   }, [logs]);
 }
@@ -187,7 +193,13 @@ export default function PostGameScreen({
     ? `${rusher.rushAtt} car · ${rusher.rushYds} yds${rusher.rushTDs > 0 ? ` · ${rusher.rushTDs} TD` : ""}`
     : null;
   const defLine = defender
-    ? [defender.sacks > 0 ? `${defender.sacks} sack${defender.sacks > 1 ? "s" : ""}` : "", defender.ints > 0 ? `${defender.ints} INT` : ""].filter(Boolean).join(" · ")
+    ? [
+        defender.tackles > 0 ? `${defender.tackles} tkl` : "",
+        defender.sacks > 0 ? `${defender.sacks} sack${defender.sacks > 1 ? "s" : ""}` : "",
+        defender.ints > 0 ? `${defender.ints} INT` : "",
+        defender.passDefls > 0 ? `${defender.passDefls} PD` : "",
+        defender.forcedFumbles > 0 ? `${defender.forcedFumbles} FF` : "",
+      ].filter(Boolean).join(" · ")
     : null;
 
   const showLeaders = qb || receiver || rusher || defender;
