@@ -459,11 +459,7 @@ export default function GameSimulation({
     setPlaying(true);
   }, []);
 
-  const handleFinish = useCallback(() => {
-    if (onComplete) onComplete();
-  }, [onComplete]);
-
-  // Final game data
+  // Final game data — must be before handleFinish so they're in scope for deps
   const finalHomeScore = useMemo(() => {
     let s = 0;
     for (const l of effectiveLogs) {
@@ -480,6 +476,10 @@ export default function GameSimulation({
     }
     return s;
   }, [effectiveLogs]);
+
+  const handleFinish = useCallback(() => {
+    if (onComplete) onComplete({ homeScore: finalHomeScore, awayScore: finalAwayScore });
+  }, [onComplete, finalHomeScore, finalAwayScore]);
 
   return (
     <div style={{

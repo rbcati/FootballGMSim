@@ -509,6 +509,10 @@ export function useWorker() {
     /** Finalise offseason → generate new schedule → Week 1. */
     startNewSeason: () => send(toWorker.START_NEW_SEASON),
 
+    /** Update depth chart order for the user's team. */
+    updateDepthChart: (positions) =>
+      request(toWorker.UPDATE_DEPTH_CHART, { positions }),
+
     /** Dismiss a notification. */
     dismissNotification: (id) =>
       dispatch({ type: 'DISMISS_NOTIFY', id }),
