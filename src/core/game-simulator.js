@@ -1570,6 +1570,43 @@ export function simGameStats(home, away, options = {}) {
             for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
             return pool[0];
         };
+        // Pick tackler (LB/S/DL) for run stops and open-field tackles
+        const _pickTackler = (groups) => {
+            if (!groups) return null;
+            const lb = (groups['LB'] || []).slice(0, 3).filter(p => !p.injured);
+            const s  = (groups['S']  || []).slice(0, 2).filter(p => !p.injured);
+            const dl = (groups['DL'] || []).slice(0, 2).filter(p => !p.injured);
+            const pool = [...lb, ...s, ...dl];
+            if (!pool.length) return null;
+            const weights = pool.map((p, i) => {
+                const r = p.ratings || {};
+                let w = ((r.tackle || r.strength || 60) * 0.5) + ((p.ovr || 70) * 0.5);
+                if (i === 0) w *= 1.8; // starter-weighted
+                return Math.max(1, w);
+            });
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
+        // Pick coverage defender (CB/S) for pass deflections / broken-up passes
+        const _pickCoverage = (groups) => {
+            if (!groups) return null;
+            const cb = (groups['CB'] || []).slice(0, 3).filter(p => !p.injured);
+            const s  = (groups['S']  || []).slice(0, 2).filter(p => !p.injured);
+            const pool = [...cb, ...s];
+            if (!pool.length) return null;
+            const weights = pool.map((p) => {
+                const r = p.ratings || {};
+                let w = ((r.awareness || r.speed || 60) * 0.4) + ((p.ovr || 70) * 0.6);
+                if (p.pos === 'CB' && cb.indexOf(p) === 0) w *= 1.7;
+                return Math.max(1, w);
+            });
+            const total = weights.reduce((a, b) => a + b, 0);
+            let r = U.random() * total;
+            for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+            return pool[0];
+        };
         // Format: "QB Patrick Mahomes" → pos + full name
         const _n = (p) => p ? `${p.pos || ''} ${p.name || '?'}`.trim() : null;
 
@@ -1728,19 +1765,25 @@ export function simGameStats(home, away, options = {}) {
                             }
                         } else if (playRoll < 0.75) {
                             const rb = _pick(offGrp, 'RB') || qb;
+                            const tackler = _pickTackler(defGrp);
                             if (rb) {
                                 _addStat(rb, 'rushAtt'); _addStat(rb, 'rushYds', catchYds);
-                                addLog(`${_n(rb)} rushes for ${catchYds} yds.`, null, 'run', rb,
-                                    { rushYds: catchYds });
+                                if (tackler) _addStat(tackler, 'tackles');
+                                const tackleText = tackler ? `, tackled by ${_n(tackler)}` : '';
+                                addLog(`${_n(rb)} rushes for ${catchYds} yds${tackleText}.`, null, 'run', rb,
+                                    { rushYds: catchYds, tackler });
                             } else {
                                 addLog(`${offAbbr} runs for ${catchYds} yds.`);
                             }
                         } else if (playRoll < 0.82) {
                             const rec = _pickRec(offGrp);
+                            const coverage = _pickCoverage(defGrp);
                             if (qb) {
-                                _addStat(qb, 'passAtt'); _addStat(rec, 'targets');
-                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}.`, null, 'pass', qb,
-                                    { passer: qb, completed: false });
+                                _addStat(qb, 'passAtt'); if (rec) _addStat(rec, 'targets');
+                                if (coverage) _addStat(coverage, 'passDefls');
+                                const defText = coverage ? `, broken up by ${_n(coverage)}` : '';
+                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}${defText}.`, null, 'pass', qb,
+                                    { passer: qb, completed: false, defender: coverage });
                             } else { addLog(`${offAbbr} pass incomplete.`); }
                         } else if (playRoll < 0.88) {
                             const rusher = _pickRusher(defGrp);
@@ -1903,16 +1946,23 @@ export function simGameStats(home, away, options = {}) {
                             } else { addLog(`${offAbbr} pass complete for ${catchYds} yds.`); }
                         } else if (playRoll < 0.65) {
                             const rb = _pick(offGrp, 'RB') || qb;
+                            const tackler = _pickTackler(defGrp);
                             if (rb) {
                                 _addStat(rb, 'rushAtt'); _addStat(rb, 'rushYds', catchYds);
-                                addLog(`${_n(rb)} carries for ${catchYds} yds.`, null, 'run', rb, { rushYds: catchYds });
+                                if (tackler) _addStat(tackler, 'tackles');
+                                const tackleText = tackler ? `, tackled by ${_n(tackler)}` : '';
+                                addLog(`${_n(rb)} carries for ${catchYds} yds${tackleText}.`, null, 'run', rb,
+                                    { rushYds: catchYds, tackler });
                             } else { addLog(`${offAbbr} runs for ${catchYds} yds.`); }
                         } else if (playRoll < 0.8) {
                             const rec = _pickRec(offGrp);
+                            const coverage = _pickCoverage(defGrp);
                             if (qb) {
-                                _addStat(qb, 'passAtt'); _addStat(rec, 'targets');
-                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}.`, null, 'pass', qb,
-                                    { completed: false });
+                                _addStat(qb, 'passAtt'); if (rec) _addStat(rec, 'targets');
+                                if (coverage) _addStat(coverage, 'passDefls');
+                                const defText = coverage ? `, broken up by ${_n(coverage)}` : '';
+                                addLog(`${_n(qb)} incomplete${rec ? ` toward ${_n(rec)}` : ''}${defText}.`, null, 'pass', qb,
+                                    { completed: false, defender: coverage });
                             } else { addLog(`${offAbbr} pass incomplete.`); }
                         } else if (playRoll < 0.9) {
                             const rusher = _pickRusher(defGrp);
@@ -1966,8 +2016,10 @@ export function simGameStats(home, away, options = {}) {
                             const rb = _pick(_offGrp, 'RB');
                             const dl = _pickRusher(_defGrp);
                             if (rb) {
-                                addLog(`FUMBLE by ${_n(rb)}!${dl ? ` Recovered by ${_n(dl)}.` : ''} ${defAbbr} takes over.`,
-                                    null, 'fumble', rb);
+                                if (dl) { _addStat(dl, 'forcedFumbles'); _addStat(dl, 'fumbleRecs'); }
+                                const forcedText = dl ? ` Forced and recovered by ${_n(dl)}.` : '';
+                                addLog(`FUMBLE by ${_n(rb)}!${forcedText} ${defAbbr} takes over.`,
+                                    null, 'fumble', rb, { defender: dl, forcedFumble: dl });
                             } else { addLog(`FUMBLE! ${defAbbr} takes over.`, null, 'fumble'); }
                         }
                     } else {

@@ -142,6 +142,31 @@ function getCommentary(log) {
     ]);
   }
 
+  // Pass deflection (broken up by coverage defender)
+  if (log.type === "pass" && log.completed === false && log.defender) {
+    const defLast = (log.defender.name || "").split(" ").pop();
+    const qbLast = pnPasser || pn;
+    return _rand([
+      `${defLast} in excellent coverage — pass broken up!`,
+      `${defLast} with the pass deflection! Great defense!`,
+      `${qbLast ? qbLast + " can't find a window" : "Incomplete"} — ${defLast} was all over it!`,
+      `Outstanding coverage by ${defLast}! Ball falls incomplete.`,
+    ]);
+  }
+
+  // Tackle on a run play
+  if (log.tackler && (log.type === "run" || log.rushYds != null)) {
+    const tacklerLast = (log.tackler.name || "").split(" ").pop();
+    const carrierLast = pn;
+    if (carrierLast && tacklerLast) {
+      return _rand([
+        `${tacklerLast} makes the stop on ${carrierLast}!`,
+        `${tacklerLast} wraps up ${carrierLast} for the tackle.`,
+        `Good read by ${tacklerLast} — shuts down the run!`,
+      ]);
+    }
+  }
+
   if ((log.yards ?? 0) >= 20) {
     if (pn) {
       return _rand([
@@ -286,7 +311,7 @@ function MomentumMeter({ momentum = 0, homeColor, awayColor, homeAbbr, awayAbbr 
 
 function LiveStatsStrip({ logs, visibleCount }) {
   const stats = useMemo(() => {
-    const acc = {}; // playerId -> { name, pos, passAtt, passComp, passYds, passTDs, rushAtt, rushYds, rushTDs, receptions, recYds, recTDs, sacks, ints }
+    const acc = {};
     for (let i = 0; i < visibleCount && i < logs.length; i++) {
       const l = logs[i];
       const addP = (p, key, val = 1) => {
@@ -313,20 +338,25 @@ function LiveStatsStrip({ logs, visibleCount }) {
         addP(l.player, "recYds", l.recYds || l.yards || 0);
         if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
       }
-      // Defense
+      // Defense — sacks, INTs, tackles, pass deflections, forced fumbles
       if (l.type === "sack" && l.player) addP(l.player, "sacks");
-      if (l.type === "interception" && l.player) { addP(l.player, "ints"); }
+      if (l.type === "interception" && l.player) addP(l.player, "ints");
+      if (l.tackler) addP(l.tackler, "tackles");
+      if (l.defender) addP(l.defender, "passDefls");
+      if (l.forcedFumble) addP(l.forcedFumble, "forcedFumbles");
     }
     return acc;
   }, [logs, visibleCount]);
 
-  // Top QB, top receiver, top rusher
+  // Top QB, top receiver, top rusher, top tackler, sack leader
   const players = Object.values(stats);
   const topQB = players.filter(p => p.pos === "QB").sort((a, b) => (b.passYds || 0) - (a.passYds || 0))[0];
   const topRec = players.filter(p => p.pos !== "QB" && (p.recYds || 0) > 0).sort((a, b) => (b.recYds || 0) - (a.recYds || 0))[0];
   const topRusher = players.filter(p => (p.rushYds || 0) > 0 && p.pos !== "QB").sort((a, b) => (b.rushYds || 0) - (a.rushYds || 0))[0];
+  const topTackler = players.filter(p => (p.tackles || 0) > 0).sort((a, b) => (b.tackles || 0) - (a.tackles || 0))[0];
+  const sackLeader = players.filter(p => (p.sacks || 0) > 0).sort((a, b) => (b.sacks || 0) - (a.sacks || 0))[0];
 
-  if (!topQB && !topRec && !topRusher) return null;
+  if (!topQB && !topRec && !topRusher && !topTackler && !sackLeader) return null;
 
   const lastName = (name) => (name || "?").split(" ").pop();
 
@@ -342,6 +372,14 @@ function LiveStatsStrip({ logs, visibleCount }) {
   if (topRusher && topRusher !== topRec) {
     const att = topRusher.rushAtt || 0, yds = topRusher.rushYds || 0, tds = topRusher.rushTDs || 0;
     pills.push({ key: "rush", label: `${lastName(topRusher.name)} ${att} car ${yds} yds${tds > 0 ? ` ${tds} TD` : ""}`, color: "#34C759" });
+  }
+  if (topTackler) {
+    const tkl = topTackler.tackles || 0;
+    pills.push({ key: "tkl", label: `${lastName(topTackler.name)} ${tkl} tkl`, color: "#FF453A" });
+  }
+  if (sackLeader && sackLeader !== topTackler) {
+    const sks = sackLeader.sacks || 0;
+    pills.push({ key: "sack", label: `${lastName(sackLeader.name)} ${sks} sack${sks !== 1 ? "s" : ""}`, color: "#FF6B35" });
   }
 
   if (!pills.length) return null;
