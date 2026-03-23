@@ -12,7 +12,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const NAV_SECTIONS = [
-  { id: 'hub', label: 'Home', icon: HomeIcon },
+  { id: 'hub', label: 'Weekly Hub', icon: WeeklyHubIcon },
+  { id: 'home', label: 'Home', icon: HomeIcon },
   { id: 'standings', label: 'Standings', icon: StandingsIcon },
   { id: 'schedule', label: 'Schedule', icon: ScheduleIcon },
   { id: 'roster', label: 'Roster', icon: RosterIcon },
@@ -38,7 +39,7 @@ const NAV_SECTIONS = [
 ];
 
 // Bottom tab bar shows the 5 most-used tabs
-const BOTTOM_TABS = ['hub', 'roster', 'standings', 'schedule', 'leaders'];
+const BOTTOM_TABS = ['hub', 'home', 'roster', 'standings', 'schedule'];
 
 export default function MobileNav({ activeTab, onTabChange, league }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -153,6 +154,15 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
 }
 
 // ── SVG Icon Components (inline, no external deps) ──────────────────────────
+
+function WeeklyHubIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
 
 function HomeIcon({ size = 24 }) {
   return (

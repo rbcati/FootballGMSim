@@ -47,10 +47,11 @@ import InjuryReport from "./InjuryReport.jsx";
 import GodMode from "./GodMode.jsx";
 import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
+import WeeklyHub from "./WeeklyHub.jsx";
 
 // Map MobileNav tab IDs → LeagueDashboard tab names
 const MOBILE_TAB_MAP = {
-  hub: "Home",
+  hub: "Weekly Hub",
   home: "Home",
   standings: "Standings",
   schedule: "Schedule",
@@ -150,6 +151,7 @@ class TabErrorBoundary extends Component {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BASE_TABS = [
+  "Weekly Hub",
   "Home",
   "Standings",
   "Schedule",
@@ -1175,7 +1177,7 @@ function QuickJumpFab({ onNavigate }) {
 }
 
 export default function LeagueDashboard({ league, busy, actions }) {
-  const [activeTab, setActiveTab] = useState("Home");
+  const [activeTab, setActiveTab] = useState("Weekly Hub");
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
@@ -1566,6 +1568,16 @@ export default function LeagueDashboard({ league, busy, actions }) {
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
+        {activeTab === "Weekly Hub" && (
+          <TabErrorBoundary label="Weekly Hub">
+            <WeeklyHub
+              league={league}
+              actions={actions}
+              onNavigate={setActiveTab}
+              onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Home" && (
           <TabErrorBoundary label="Home">
             <HomeDashboard

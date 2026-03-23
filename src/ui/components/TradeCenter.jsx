@@ -33,6 +33,7 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import PlayerCard from "./PlayerCard.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -517,64 +518,111 @@ function PickSelector({ side, picks, onChange }) {
 
 // ── TradeResult banner ────────────────────────────────────────────────────────
 
+// ── Player Preview Sheet (reused from FreeAgency pattern) ─────────────────────
+
+function TradePlayerSheet({ player, onClose }) {
+  if (!player) return null;
+  return (
+    <>
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 1000,
+          backdropFilter: "blur(4px)",
+        }}
+      />
+      <div style={{
+        position: "fixed",
+        bottom: 0, left: 0, right: 0,
+        maxHeight: "80vh",
+        background: "var(--bg-secondary)",
+        borderRadius: "20px 20px 0 0",
+        zIndex: 1001,
+        overflow: "auto",
+        padding: "8px 16px 32px",
+        boxShadow: "0 -8px 40px rgba(0,0,0,0.5)",
+      }}>
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "var(--hairline-strong)", margin: "0 auto 16px" }} />
+        <PlayerCard player={player} variant="hero" onClose={onClose} />
+      </div>
+    </>
+  );
+}
+
+// ── Enhanced TradeResult with counter-offer hints ─────────────────────────────
+
 function TradeResult({ result, onDismiss }) {
   if (!result) return null;
+
+  // Compute counter-offer hint when rejected
+  const valueDiff  = (result.receiveValue ?? 0) - (result.offerValue ?? 0);
+  const rejected   = !result.accepted;
+  const counterHint = rejected && valueDiff > 50 ? (() => {
+    if (valueDiff > 2000) return "Consider offering a top-tier player or multiple assets.";
+    if (valueDiff > 800)  return "Adding a 1st-round pick could sweeten the deal.";
+    if (valueDiff > 300)  return "A 2nd-round pick or a rotational player may close the gap.";
+    return "Slightly increase your offer — the gap is small.";
+  })() : null;
+
   return (
-    <div
-      style={{
-        borderRadius: "var(--radius-md)",
-        border: `1px solid ${result.accepted ? "var(--success)" : "var(--danger)"}`,
-        background: result.accepted
-          ? "rgba(52,199,89,0.08)"
-          : "rgba(255,69,58,0.08)",
-        padding: "var(--space-4) var(--space-5)",
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-4)",
-      }}
-    >
-      <div style={{ fontSize: "1.8rem" }}>{result.accepted ? "✅" : "❌"}</div>
-      <div style={{ flex: 1 }}>
-        <div
-          style={{
-            fontWeight: 700,
-            fontSize: "var(--text-base)",
-            color: result.accepted ? "var(--success)" : "var(--danger)",
-          }}
-        >
-          {result.accepted ? "Trade Accepted!" : "Trade Rejected"}
-        </div>
-        <div
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-muted)",
-            marginTop: 2,
-          }}
-        >
-          {result.reason}
-          {result.offerValue !== undefined && (
-            <span style={{ marginLeft: 8 }}>
-              · Your value: {result.offerValue?.toLocaleString()} / Their value:{" "}
-              {result.receiveValue?.toLocaleString()}
-            </span>
-          )}
-        </div>
-      </div>
-      <button
-        className="btn"
-        onClick={onDismiss}
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div
         style={{
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          fontSize: 20,
-          color: "var(--text-muted)",
-          lineHeight: 1,
-          flexShrink: 0,
+          borderRadius: "var(--radius-md)",
+          border: `1.5px solid ${result.accepted ? "var(--success)" : "var(--danger)"}`,
+          background: result.accepted ? "rgba(52,199,89,0.08)" : "rgba(255,69,58,0.08)",
+          padding: "var(--space-4) var(--space-5)",
+          display: "flex", alignItems: "center", gap: "var(--space-4)",
         }}
       >
-        ×
-      </button>
+        <div style={{ fontSize: "1.8rem" }}>{result.accepted ? "✅" : "❌"}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: result.accepted ? "var(--success)" : "var(--danger)" }}>
+            {result.accepted ? "Trade Accepted!" : "Trade Rejected"}
+          </div>
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: 2 }}>
+            {result.reason}
+            {result.offerValue !== undefined && (
+              <span style={{ marginLeft: 8, color: "var(--text-subtle)" }}>
+                · Your value: <strong style={{ color: "var(--text)" }}>{result.offerValue?.toLocaleString()}</strong>
+                {" "}/ Their ask: <strong style={{ color: "var(--text)" }}>{result.receiveValue?.toLocaleString()}</strong>
+              </span>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={onDismiss}
+          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-muted)", lineHeight: 1, flexShrink: 0 }}
+        >×</button>
+      </div>
+
+      {/* Counter-offer hint */}
+      {counterHint && (
+        <div style={{
+          borderRadius: "var(--radius-md)",
+          border: "1px solid #FF9F0A44",
+          background: "rgba(255,159,10,0.07)",
+          padding: "10px 14px",
+          display: "flex", alignItems: "flex-start", gap: 10,
+        }}>
+          <span style={{ fontSize: "1rem", flexShrink: 0 }}>💡</span>
+          <div>
+            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "#FF9F0A", marginBottom: 2 }}>
+              Counter-Offer Suggestion
+            </div>
+            <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+              {counterHint}
+              {valueDiff > 0 && (
+                <span style={{ marginLeft: 6, color: "var(--text-subtle)" }}>
+                  (Value gap: ~{valueDiff.toLocaleString()})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -788,6 +836,7 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
   const [tradeResult, setTradeResult] = useState(null);
   const [searchMy, setSearchMy] = useState("");
   const [searchTheir, setSearchTheir] = useState("");
+  const [previewPlayer, setPreviewPlayer] = useState(null);
 
   // All teams the user can trade with
   const otherTeams = useMemo(
@@ -1209,7 +1258,7 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
                     player={p}
                     checked={offering.has(p.id)}
                     onChange={toggleOffering}
-                    onNameClick={onPlayerSelect}
+                    onNameClick={() => setPreviewPlayer(p)}
                   />
                 ))}
                 {myFiltered.length === 0 && (
@@ -1304,7 +1353,7 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
                     player={p}
                     checked={receiving.has(p.id)}
                     onChange={toggleReceiving}
-                    onNameClick={onPlayerSelect}
+                    onNameClick={() => setPreviewPlayer(p)}
                   />
                 ))}
                 {theirFiltered.length === 0 && (
@@ -1339,6 +1388,14 @@ export default function TradeCenter({ league, actions, onPlayerSelect }) {
             theirPicks={theirPicks}
           />
         </>
+      )}
+
+      {/* Player preview sheet */}
+      {previewPlayer && (
+        <TradePlayerSheet
+          player={previewPlayer}
+          onClose={() => setPreviewPlayer(null)}
+        />
       )}
     </div>
   );

@@ -1,0 +1,566 @@
+/**
+ * WeeklyHub.jsx — Central weekly management screen
+ *
+ * Ties together every aspect of a GM week into one premium hub:
+ *
+ *   PHASE BAR  →  week progress + current phase label
+ *   ACTION GRID →  Training | Staff | Injuries | Strategy | Free Agency | Sim
+ *   NEXT GAME PREVIEW  →  matchup card with team records
+ *   INJURY ALERTS      →  top 3 injuries with recovery timeline
+ *   TOP PERFORMERS     →  last week's stars (if available)
+ *   RECENT NEWS        →  last 4 news items
+ *
+ * All "Navigate to …" cards call props.onNavigate(tabName) so the parent
+ * (LeagueDashboard) can switch tabs without any routing library.
+ */
+
+import React, { useMemo, useState } from "react";
+import PlayerCard from "./PlayerCard.jsx";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function teamColor(abbr = "") {
+  const palette = [
+    "#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
+    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF",
+    "#FF6B35","#B4A0E5",
+  ];
+  let h = 0;
+  for (let i = 0; i < abbr.length; i++) h = abbr.charCodeAt(i) + ((h << 5) - h);
+  return palette[Math.abs(h) % palette.length];
+}
+
+function winPct(w, l, t) {
+  const g = w + l + t;
+  return g === 0 ? ".000" : ((w + t * 0.5) / g).toFixed(3).replace(/^0/, "");
+}
+
+function phaseInfo(phase) {
+  const map = {
+    preseason:  { label: "Pre-Season",   color: "#64D2FF", icon: "🏕️" },
+    regular:    { label: "Regular Season",color: "#0A84FF", icon: "🏈" },
+    playoffs:   { label: "Playoffs",      color: "#FFD60A", icon: "🏆" },
+    draft:      { label: "Draft",         color: "#BF5AF2", icon: "📋" },
+    offseason:  { label: "Off-Season",    color: "#34C759", icon: "🌅" },
+    fa:         { label: "Free Agency",   color: "#FF9F0A", icon: "✍️"  },
+  };
+  return map[phase] || { label: phase ?? "Season", color: "#9FB0C2", icon: "📅" };
+}
+
+// Find next unplayed user game
+function getNextGame(league) {
+  if (!league?.schedule?.weeks) return null;
+  const userId = league.userTeamId;
+  for (const week of league.schedule.weeks) {
+    for (const game of week.games ?? []) {
+      if (game.played) continue;
+      const homeId = typeof game.home === "object" ? game.home.id : Number(game.home);
+      const awayId = typeof game.away === "object" ? game.away.id : Number(game.away);
+      if (homeId === userId || awayId === userId) {
+        const isHome = homeId === userId;
+        const oppId  = isHome ? awayId : homeId;
+        const teamById = Object.fromEntries((league.teams || []).map(t => [t.id, t]));
+        const opp      = teamById[oppId];
+        const user     = teamById[userId];
+        return { week: week.week, isHome, opp, user };
+      }
+    }
+  }
+  return null;
+}
+
+// Get injured players from user's roster
+function getInjuries(league) {
+  if (!league?.teams) return [];
+  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  if (!userTeam?.roster) return [];
+  return userTeam.roster.filter(p => p.injury || p.injuredWeeks > 0).slice(0, 4);
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function SectionHeader({ title, emoji }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      {emoji && <span style={{ fontSize: "1rem" }}>{emoji}</span>}
+      <h3 style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1.2px", margin: 0 }}>
+        {title}
+      </h3>
+    </div>
+  );
+}
+
+function TeamCircle({ abbr, size = 44 }) {
+  const color = teamColor(abbr);
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: `${color}22`, border: `2.5px solid ${color}`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontWeight: 900, fontSize: size * 0.28, color, flexShrink: 0,
+      letterSpacing: "-0.5px",
+    }}>
+      {abbr?.slice(0, 3) ?? "?"}
+    </div>
+  );
+}
+
+// ── Action Card ───────────────────────────────────────────────────────────────
+
+function ActionCard({ icon, label, sublabel, color, onClick, badge, disabled }) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      onMouseDown={() => !disabled && setPressed(true)}
+      onMouseUp={() => setPressed(false)}
+      onMouseLeave={() => setPressed(false)}
+      style={{
+        background: disabled ? "var(--surface)" : pressed
+          ? `${color}22`
+          : "var(--surface)",
+        border: `1.5px solid ${disabled ? "var(--hairline)" : `${color}44`}`,
+        borderRadius: "var(--radius-lg)",
+        padding: "14px 12px",
+        cursor: disabled ? "not-allowed" : "pointer",
+        textAlign: "left",
+        transition: "background 0.12s, transform 0.1s, box-shadow 0.12s",
+        transform: pressed ? "scale(0.97)" : "scale(1)",
+        boxShadow: pressed ? "none" : "var(--shadow-sm)",
+        opacity: disabled ? 0.45 : 1,
+        position: "relative",
+        overflow: "hidden",
+        minHeight: 80,
+        display: "flex", flexDirection: "column", justifyContent: "space-between",
+      }}
+    >
+      {/* Subtle corner gradient */}
+      {!disabled && (
+        <div style={{
+          position: "absolute", top: 0, right: 0,
+          width: 48, height: 48,
+          background: `radial-gradient(circle at top right, ${color}18, transparent 70%)`,
+          pointerEvents: "none",
+        }} />
+      )}
+
+      {/* Badge */}
+      {badge != null && badge > 0 && (
+        <div style={{
+          position: "absolute", top: 8, right: 8,
+          background: "#FF453A", color: "#fff",
+          borderRadius: "50%", width: 18, height: 18,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "0.62rem", fontWeight: 900,
+        }}>{badge > 9 ? "9+" : badge}</div>
+      )}
+
+      <div>
+        <div style={{ fontSize: "1.4rem", marginBottom: 6, lineHeight: 1 }}>{icon}</div>
+        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: disabled ? "var(--text-subtle)" : "var(--text)", marginBottom: 2 }}>
+          {label}
+        </div>
+      </div>
+      {sublabel && (
+        <div style={{ fontSize: "0.68rem", color: disabled ? "var(--text-subtle)" : "var(--text-muted)", lineHeight: 1.3 }}>
+          {sublabel}
+        </div>
+      )}
+    </button>
+  );
+}
+
+// ── Next Game Preview ─────────────────────────────────────────────────────────
+
+function NextGameCard({ nextGame, league, onNavigate }) {
+  if (!nextGame) return null;
+  const { week, isHome, opp, user } = nextGame;
+  const userTeam = user || league.teams?.find(t => t.id === league.userTeamId);
+
+  return (
+    <div style={{
+      background: "var(--surface)",
+      border: "1.5px solid var(--hairline)",
+      borderRadius: "var(--radius-lg)",
+      padding: "16px",
+      marginBottom: 16,
+    }}>
+      <SectionHeader title={`Week ${week ?? "?"} — Next Game`} emoji="🏈" />
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        {/* User team */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <TeamCircle abbr={userTeam?.abbr ?? "YOU"} size={52} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text)" }}>{userTeam?.abbr ?? "Your Team"}</div>
+            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{winPct(userTeam?.wins??0,userTeam?.losses??0,userTeam?.ties??0)} • {userTeam?.wins??0}-{userTeam?.losses??0}</div>
+          </div>
+          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#34C759", background: "#34C75920", padding: "2px 6px", borderRadius: 4 }}>
+            {isHome ? "HOME" : "AWAY"}
+          </span>
+        </div>
+
+        {/* VS */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)", letterSpacing: "1px" }}>VS</div>
+        </div>
+
+        {/* Opponent */}
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <TeamCircle abbr={opp?.abbr ?? "OPP"} size={52} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text)" }}>{opp?.abbr ?? "Opponent"}</div>
+            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{winPct(opp?.wins??0,opp?.losses??0,opp?.ties??0)} • {opp?.wins??0}-{opp?.losses??0}</div>
+          </div>
+          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#FF9F0A", background: "#FF9F0A20", padding: "2px 6px", borderRadius: 4 }}>
+            {isHome ? "AWAY" : "HOME"}
+          </span>
+        </div>
+      </div>
+
+      <button
+        onClick={() => onNavigate?.("Strategy")}
+        style={{
+          width: "100%", marginTop: 14,
+          background: "var(--accent)", color: "#fff",
+          border: "none", borderRadius: "var(--radius-md)",
+          padding: "10px", fontWeight: 800, fontSize: "0.85rem",
+          cursor: "pointer", letterSpacing: "0.3px",
+        }}
+      >
+        Game Plan →
+      </button>
+    </div>
+  );
+}
+
+// ── Injury Alert ──────────────────────────────────────────────────────────────
+
+function InjuryAlerts({ injuries, onNavigate, onPlayerSelect }) {
+  if (!injuries.length) return null;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="Injury Report" emoji="🏥" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {injuries.map(p => {
+          const inj = p.injury || {};
+          const weeks = inj.weeksLeft ?? inj.weeks ?? p.injuredWeeks ?? 0;
+          const severity = weeks >= 6 ? "high" : weeks >= 3 ? "med" : "low";
+          const color = severity === "high" ? "#FF453A" : severity === "med" ? "#FF9F0A" : "#FFD60A";
+          return (
+            <div
+              key={p.id}
+              onClick={() => onPlayerSelect?.(p.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 12px",
+                background: `${color}0d`,
+                border: `1px solid ${color}33`,
+                borderRadius: "var(--radius-md)",
+                cursor: onPlayerSelect ? "pointer" : "default",
+              }}
+            >
+              <div style={{
+                width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text)" }}>{p.name}</span>
+                <span style={{ marginLeft: 6, fontSize: "0.7rem", color: "var(--text-muted)" }}>{p.pos}</span>
+              </div>
+              <div style={{ fontSize: "0.72rem", color, fontWeight: 700 }}>
+                {inj.type ?? inj.description ?? "Injured"}
+              </div>
+              {weeks > 0 && (
+                <div style={{ fontSize: "0.68rem", color: "var(--text-subtle)", flexShrink: 0 }}>
+                  {weeks}w out
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <button
+        onClick={() => onNavigate?.("Injuries")}
+        style={{
+          background: "none", border: "none", color: "var(--accent)",
+          fontSize: "0.75rem", fontWeight: 700, cursor: "pointer",
+          padding: "6px 0 0", width: "100%", textAlign: "right",
+        }}
+      >
+        View Full Report →
+      </button>
+    </div>
+  );
+}
+
+// ── Top Performers ────────────────────────────────────────────────────────────
+
+function TopPerformers({ league, onPlayerSelect }) {
+  const performers = useMemo(() => {
+    if (!league?.lastResults?.length) return [];
+    const seen = new Set();
+    const out  = [];
+    for (const result of league.lastResults) {
+      for (const p of result.stars ?? result.topPlayers ?? []) {
+        if (p && !seen.has(p.id)) {
+          seen.add(p.id);
+          out.push(p);
+        }
+      }
+    }
+    return out.slice(0, 3);
+  }, [league?.lastResults]);
+
+  if (!performers.length) return null;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="Last Week's Stars" emoji="⭐" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {performers.map(p => (
+          <PlayerCard
+            key={p.id}
+            player={p}
+            variant="compact"
+            onClick={onPlayerSelect ? () => onPlayerSelect(p.id) : undefined}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Season Progress Bar ───────────────────────────────────────────────────────
+
+function SeasonProgressBar({ league }) {
+  const week  = league?.week ?? league?.currentWeek ?? 0;
+  const total = league?.phase === "playoffs" ? 18 : 17;
+  const pct   = Math.min(100, Math.round((week / total) * 100));
+  const phase = phaseInfo(league?.phase);
+
+  return (
+    <div style={{
+      background: "var(--surface)",
+      border: "1.5px solid var(--hairline)",
+      borderRadius: "var(--radius-lg)",
+      padding: "14px 16px",
+      marginBottom: 16,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: "1.1rem" }}>{phase.icon}</span>
+          <div>
+            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text)" }}>
+              {phase.label}
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+              {league?.year ?? "Season"} · Week {week} of {total}
+            </div>
+          </div>
+        </div>
+        <div style={{
+          fontSize: "1.6rem", fontWeight: 900, color: phase.color,
+          lineHeight: 1,
+        }}>
+          {week}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 3, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", width: `${pct}%`,
+          background: `linear-gradient(90deg, ${phase.color}cc, ${phase.color})`,
+          borderRadius: 3,
+          transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
+        }} />
+      </div>
+
+      {/* Team record */}
+      {league?.userTeam && (
+        <div style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--text-muted)" }}>
+          {league.userTeam.name} · {league.userTeam.wins ?? 0}-{league.userTeam.losses ?? 0}
+          {league.userTeam.ties > 0 ? `-${league.userTeam.ties}` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Recent News ───────────────────────────────────────────────────────────────
+
+function RecentNews({ news = [], onNavigate }) {
+  if (!news.length) return null;
+  const slice = news.slice(0, 4);
+
+  const icons = { injury: "🏥", trade: "🔄", signing: "✍️", draft: "📋", award: "🏆", retirement: "👴", default: "📰" };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="Latest News" emoji="📰" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {slice.map((item, i) => {
+          const cat = item.category ?? item.type ?? "default";
+          const icon = icons[cat] ?? icons.default;
+          return (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 10,
+              padding: "8px 12px",
+              background: "var(--surface)",
+              border: "1px solid var(--hairline)",
+              borderRadius: "var(--radius-md)",
+            }}>
+              <span style={{ fontSize: "0.9rem", flexShrink: 0 }}>{icon}</span>
+              <span style={{ fontSize: "0.78rem", color: "var(--text-muted)", lineHeight: 1.4 }}>
+                {item.text ?? item.headline ?? item.message}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect }) {
+  const nextGame  = useMemo(() => getNextGame(league),     [league]);
+  const injuries  = useMemo(() => getInjuries(league),     [league]);
+  const news      = useMemo(() => league?.news ?? [],      [league?.news]);
+
+  const injuryCount   = injuries.length;
+  const userTeam      = league?.teams?.find(t => t.id === league.userTeamId);
+  const capSpace      = userTeam?.capSpace ?? userTeam?.capRoom ?? null;
+  const faCount       = league?.freeAgentCount ?? league?.freeAgents?.length ?? 0;
+  const phase         = league?.phase ?? "regular";
+
+  const isDraftPhase  = phase === "draft";
+  const isFAPhase     = phase === "fa" || phase === "offseason";
+
+  // Action grid config
+  const actions_grid = [
+    {
+      icon: "🏋️", label: "Training",
+      sublabel: "Develop your roster",
+      color: "#34C759",
+      tab: "Training",
+      badge: null,
+    },
+    {
+      icon: "👥", label: "Staff",
+      sublabel: "Coaching & scouts",
+      color: "#BF5AF2",
+      tab: "Staff",
+      badge: null,
+    },
+    {
+      icon: "🏥", label: "Injuries",
+      sublabel: injuryCount > 0 ? `${injuryCount} player${injuryCount !== 1 ? "s" : ""} out` : "No injuries",
+      color: injuryCount > 0 ? "#FF453A" : "#34C759",
+      tab: "Injuries",
+      badge: injuryCount,
+    },
+    {
+      icon: "🎯", label: "Strategy",
+      sublabel: "Set your game plan",
+      color: "#0A84FF",
+      tab: "Strategy",
+      badge: null,
+    },
+    {
+      icon: "✍️", label: "Free Agency",
+      sublabel: faCount > 0 ? `${faCount} available` : "Browse market",
+      color: "#FF9F0A",
+      tab: isFAPhase ? "FA Hub" : "Free Agency",
+      badge: null,
+    },
+    {
+      icon: "🔄", label: "Trades",
+      sublabel: "Build your team",
+      color: "#64D2FF",
+      tab: "Trades",
+      badge: null,
+    },
+    ...(isDraftPhase ? [{
+      icon: "📋", label: "Draft Room",
+      sublabel: "Make your picks",
+      color: "#BF5AF2",
+      tab: "Draft Room",
+      badge: null,
+    }] : []),
+    {
+      icon: "📊", label: "Roster",
+      sublabel: capSpace != null ? `$${Number(capSpace).toFixed(0)}M cap space` : "Manage depth chart",
+      color: "#9FB0C2",
+      tab: "Roster",
+      badge: null,
+    },
+  ];
+
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 0 80px" }}>
+
+      {/* ── Season Progress ── */}
+      <SeasonProgressBar league={league} />
+
+      {/* ── Next Game Preview ── */}
+      <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />
+
+      {/* ── Action Grid ── */}
+      <div style={{ marginBottom: 16 }}>
+        <SectionHeader title="This Week" emoji="📅" />
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: 10,
+        }}>
+          {actions_grid.map(a => (
+            <ActionCard
+              key={a.tab}
+              icon={a.icon}
+              label={a.label}
+              sublabel={a.sublabel}
+              color={a.color}
+              badge={a.badge}
+              onClick={() => onNavigate?.(a.tab)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* ── Injury Alerts ── */}
+      <InjuryAlerts injuries={injuries} onNavigate={onNavigate} onPlayerSelect={onPlayerSelect} />
+
+      {/* ── Top Performers ── */}
+      <TopPerformers league={league} onPlayerSelect={onPlayerSelect} />
+
+      {/* ── Recent News ── */}
+      <RecentNews news={news} onNavigate={onNavigate} />
+
+      {/* ── Cap Space Banner ── */}
+      {capSpace != null && (
+        <div style={{
+          background: capSpace > 20
+            ? "rgba(52,199,89,0.08)"
+            : capSpace > 5
+              ? "rgba(255,159,10,0.08)"
+              : "rgba(255,69,58,0.08)",
+          border: `1px solid ${capSpace > 20 ? "#34C75933" : capSpace > 5 ? "#FF9F0A33" : "#FF453A33"}`,
+          borderRadius: "var(--radius-md)",
+          padding: "10px 14px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Cap Space Remaining</span>
+          <span style={{
+            fontWeight: 900, fontSize: "1rem",
+            color: capSpace > 20 ? "#34C759" : capSpace > 5 ? "#FF9F0A" : "#FF453A",
+          }}>
+            ${Number(capSpace).toFixed(1)}M
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
