@@ -3,6 +3,13 @@
  *
  * Shows a top-down football field with animated player icons, ball movement,
  * line of scrimmage, first-down markers, and real-time play commentary.
+ *
+ * v2 additions:
+ *  - Highlighted key players with glowing halos (passer, receiver/rusher on offense;
+ *    tackler, coverage defender, pass rusher on defense)
+ *  - Floating name tags above highlighted players (e.g. "LB Warner")
+ *  - Particle burst effect on big plays (TD, INT, sack)
+ *  - Camera "pulse zoom" on touchdowns / turnovers via SVG viewBox animation
  */
 
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -26,36 +33,35 @@ const TEAM_COLORS = {
 // Generate player positions for a formation
 function getOffensePositions(ballX, ballY, isHome) {
   const dir = isHome ? 1 : -1;
-  const base = [
-    { role: "QB", x: ballX - dir * 40, y: ballY, r: 8 },
-    { role: "RB", x: ballX - dir * 70, y: ballY + 15, r: 7 },
-    { role: "WR1", x: ballX + dir * 10, y: 60, r: 7 },
-    { role: "WR2", x: ballX + dir * 10, y: FIELD_H - 60, r: 7 },
-    { role: "WR3", x: ballX + dir * 5, y: 120, r: 7 },
-    { role: "TE", x: ballX + dir * 5, y: ballY - 30, r: 7 },
-    { role: "OL1", x: ballX - dir * 15, y: ballY - 30, r: 8 },
-    { role: "OL2", x: ballX - dir * 15, y: ballY - 15, r: 8 },
-    { role: "C", x: ballX - dir * 10, y: ballY, r: 8 },
-    { role: "OL3", x: ballX - dir * 15, y: ballY + 15, r: 8 },
-    { role: "OL4", x: ballX - dir * 15, y: ballY + 30, r: 8 },
+  return [
+    { role: "QB",  x: ballX - dir * 40, y: ballY,          r: 8  },
+    { role: "RB",  x: ballX - dir * 70, y: ballY + 15,     r: 7  },
+    { role: "WR1", x: ballX + dir * 10, y: 60,             r: 7  },
+    { role: "WR2", x: ballX + dir * 10, y: FIELD_H - 60,   r: 7  },
+    { role: "WR3", x: ballX + dir * 5,  y: 120,            r: 7  },
+    { role: "TE",  x: ballX + dir * 5,  y: ballY - 30,     r: 7  },
+    { role: "OL1", x: ballX - dir * 15, y: ballY - 30,     r: 8  },
+    { role: "OL2", x: ballX - dir * 15, y: ballY - 15,     r: 8  },
+    { role: "C",   x: ballX - dir * 10, y: ballY,          r: 8  },
+    { role: "OL3", x: ballX - dir * 15, y: ballY + 15,     r: 8  },
+    { role: "OL4", x: ballX - dir * 15, y: ballY + 30,     r: 8  },
   ];
-  return base;
 }
 
 function getDefensePositions(ballX, ballY, isHome) {
   const dir = isHome ? 1 : -1;
   return [
-    { role: "DL1", x: ballX + dir * 15, y: ballY - 25, r: 8 },
-    { role: "DL2", x: ballX + dir * 15, y: ballY, r: 8 },
-    { role: "DL3", x: ballX + dir * 15, y: ballY + 25, r: 8 },
-    { role: "LB1", x: ballX + dir * 50, y: ballY - 40, r: 7 },
-    { role: "LB2", x: ballX + dir * 50, y: ballY, r: 7 },
-    { role: "LB3", x: ballX + dir * 50, y: ballY + 40, r: 7 },
-    { role: "CB1", x: ballX + dir * 20, y: 65, r: 7 },
+    { role: "DL1", x: ballX + dir * 15, y: ballY - 25,   r: 8 },
+    { role: "DL2", x: ballX + dir * 15, y: ballY,        r: 8 },
+    { role: "DL3", x: ballX + dir * 15, y: ballY + 25,   r: 8 },
+    { role: "LB1", x: ballX + dir * 50, y: ballY - 40,   r: 7 },
+    { role: "LB2", x: ballX + dir * 50, y: ballY,        r: 7 },
+    { role: "LB3", x: ballX + dir * 50, y: ballY + 40,   r: 7 },
+    { role: "CB1", x: ballX + dir * 20, y: 65,           r: 7 },
     { role: "CB2", x: ballX + dir * 20, y: FIELD_H - 65, r: 7 },
-    { role: "S1", x: ballX + dir * 90, y: ballY - 50, r: 7 },
-    { role: "S2", x: ballX + dir * 90, y: ballY + 50, r: 7 },
-    { role: "NB", x: ballX + dir * 35, y: 130, r: 7 },
+    { role: "S1",  x: ballX + dir * 90, y: ballY - 50,   r: 7 },
+    { role: "S2",  x: ballX + dir * 90, y: ballY + 50,   r: 7 },
+    { role: "NB",  x: ballX + dir * 35, y: 130,          r: 7 },
   ];
 }
 
@@ -68,6 +74,70 @@ function Football({ x, y, rotation = 0, size = 6 }) {
       <line x1={-size * 0.3} y1="-1.5" x2={-size * 0.3} y2="1.5" stroke="white" strokeWidth="0.6" />
       <line x1={0} y1="-2" x2={0} y2="2" stroke="white" strokeWidth="0.6" />
       <line x1={size * 0.3} y1="-1.5" x2={size * 0.3} y2="1.5" stroke="white" strokeWidth="0.6" />
+    </g>
+  );
+}
+
+// Glowing halo ring around a highlighted player
+function PlayerGlow({ x, y, r, color, pulseKey }) {
+  return (
+    <g key={pulseKey}>
+      <circle cx={x} cy={y} r={r + 6} fill="none" stroke={color} strokeWidth="2.5" opacity="0.7">
+        <animate attributeName="r" values={`${r + 4};${r + 9};${r + 4}`} dur="1s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1s" repeatCount="indefinite" />
+      </circle>
+      <circle cx={x} cy={y} r={r + 12} fill="none" stroke={color} strokeWidth="1" opacity="0.3">
+        <animate attributeName="r" values={`${r + 10};${r + 16};${r + 10}`} dur="1.4s" repeatCount="indefinite" />
+        <animate attributeName="opacity" values="0.3;0;0.3" dur="1.4s" repeatCount="indefinite" />
+      </circle>
+    </g>
+  );
+}
+
+// Floating name tag above a player
+function NameTag({ x, y, label, color }) {
+  const w = Math.max(52, label.length * 6.5 + 12);
+  return (
+    <g>
+      <rect
+        x={x - w / 2} y={y - 30} width={w} height={16}
+        rx="4" fill="rgba(0,0,0,0.82)" stroke={color} strokeWidth="1"
+      />
+      <text
+        x={x} y={y - 18}
+        fill={color} fontSize="9" fontWeight="800"
+        textAnchor="middle" dominantBaseline="middle"
+        style={{ pointerEvents: "none", letterSpacing: "0.3px" }}
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
+
+// Particle burst for big plays
+function ParticleBurst({ x, y, color, count = 12, active }) {
+  if (!active) return null;
+  const particles = useMemo(() =>
+    Array.from({ length: count }, (_, i) => {
+      const angle = (i / count) * 2 * Math.PI;
+      const dist = 20 + Math.random() * 30;
+      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist };
+    }), [count] // eslint-disable-line
+  );
+  return (
+    <g>
+      {particles.map((p, i) => (
+        <circle key={i} cx={x} cy={y} r="3" fill={color} opacity="0.9">
+          <animateTransform
+            attributeName="transform" type="translate"
+            from="0 0" to={`${p.dx} ${p.dy}`}
+            dur="0.6s" fill="freeze"
+          />
+          <animate attributeName="opacity" from="0.9" to="0" dur="0.6s" fill="freeze" />
+          <animate attributeName="r" from="3" to="1" dur="0.6s" fill="freeze" />
+        </circle>
+      ))}
     </g>
   );
 }
@@ -85,7 +155,7 @@ export default function AnimatedField({
   const [ballPos, setBallPos] = useState({ x: 500, y: FIELD_H / 2 });
   const [commentary, setCommentary] = useState("");
   const [showResult, setShowResult] = useState(false);
-  const animRef = useRef(null);
+  const [burstActive, setBurstActive] = useState(false);
   const prevPlayRef = useRef(null);
 
   const ballOn = play?.ballOn ?? 50;
@@ -96,6 +166,14 @@ export default function AnimatedField({
   const losX = yardToX(ballOn);
   const fdX = firstDownLine != null ? yardToX(firstDownLine) : null;
 
+  // Determine if this play has a big event (TD, turnover, sack)
+  const isBigPlay = useMemo(() => {
+    if (!play) return false;
+    const txt = (play.description || "").toLowerCase();
+    return play.isTouchdown || play.isTurnover ||
+      txt.includes("touchdown") || txt.includes("interception") || txt.includes("sack");
+  }, [play]);
+
   // Animate when play changes
   useEffect(() => {
     if (!play || play === prevPlayRef.current) return;
@@ -103,14 +181,13 @@ export default function AnimatedField({
 
     setAnimPhase(0);
     setShowResult(false);
+    setBurstActive(false);
     setBallPos({ x: losX, y: FIELD_H / 2 });
 
     const dur = Math.max(200, 1500 / speed);
 
     const t1 = setTimeout(() => {
       setAnimPhase(1);
-
-      // Move ball based on play type
       const yards = play.yards ?? 0;
       const newX = yardToX(Math.max(0, Math.min(100, ballOn + yards)));
 
@@ -118,8 +195,6 @@ export default function AnimatedField({
         setBallPos({ x: newX, y: FIELD_H / 2 + (Math.random() - 0.5) * 80 });
       } else if (play.type === "run") {
         setBallPos({ x: newX, y: FIELD_H / 2 + (Math.random() - 0.5) * 40 });
-      } else if (play.type === "kick" || play.type === "punt") {
-        setBallPos({ x: newX, y: FIELD_H / 2 });
       } else {
         setBallPos({ x: newX, y: FIELD_H / 2 });
       }
@@ -129,14 +204,18 @@ export default function AnimatedField({
       setAnimPhase(2);
       setShowResult(true);
       setCommentary(play.description || `${play.type} for ${play.yards ?? 0} yards`);
+      if (isBigPlay) setBurstActive(true);
     }, dur);
 
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [play, losX, ballOn, speed]);
+    const t3 = setTimeout(() => setBurstActive(false), dur + 700);
+
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, [play, losX, ballOn, speed, isBigPlay]);
 
   const homeColor = homeTeam?.color || TEAM_COLORS.home.primary;
   const awayColor = awayTeam?.color || TEAM_COLORS.away.primary;
   const possColor = possession === "home" ? homeColor : awayColor;
+  const defColor  = possession === "home" ? awayColor : homeColor;
 
   const offPositions = useMemo(() =>
     getOffensePositions(losX, FIELD_H / 2, possession === "home"),
@@ -146,6 +225,61 @@ export default function AnimatedField({
     getDefensePositions(losX, FIELD_H / 2, possession === "home"),
     [losX, possession]
   );
+
+  // ── Key player extraction from play data ─────────────────────────────────
+  // play may carry: .passer, .receiver (or .player for rush/rec), .tackler,
+  // .defender, .passRusher / .player (for sack)
+  const keyPlayers = useMemo(() => {
+    if (!play) return {};
+    return {
+      passer:     play.passer     || null,
+      receiver:   (play.type === "pass" && play.player) ? play.player : null,
+      rusher:     (play.type === "run"  && play.player) ? play.player : null,
+      tackler:    play.tackler    || null,
+      defender:   play.defender   || null,
+      passRusher: (play.type === "sack" && play.player) ? play.player : null,
+    };
+  }, [play]);
+
+  // Decide which offense players to highlight
+  const offHighlight = useMemo(() => {
+    const set = new Set();
+    if (animPhase >= 1) {
+      if (keyPlayers.passer)   set.add("QB");
+      if (keyPlayers.receiver) set.add("WR1");
+      if (keyPlayers.rusher)   set.add("RB");
+    }
+    return set;
+  }, [animPhase, keyPlayers]);
+
+  // Decide which defense players to highlight
+  const defHighlight = useMemo(() => {
+    const set = new Set();
+    if (animPhase >= 1) {
+      if (keyPlayers.tackler)    set.add("LB2");
+      if (keyPlayers.defender)   set.add("CB1");
+      if (keyPlayers.passRusher) set.add("DL2");
+    }
+    return set;
+  }, [animPhase, keyPlayers]);
+
+  // Burst coordinates (ball landing spot)
+  const burstX = animPhase >= 1 ? ballPos.x : losX;
+  const burstY = animPhase >= 1 ? ballPos.y : FIELD_H / 2;
+  const burstColor = isBigPlay
+    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD60A"
+      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception")) ? "#FF453A"
+      : "#FF9F0A"
+    : "#34C759";
+
+  // Build name tag label: "POS LastName"
+  function nameTagLabel(playerRef, fallbackPos) {
+    if (!playerRef || typeof playerRef !== "object") return null;
+    const lastName = (playerRef.name || "").split(" ").pop() || "";
+    const pos = playerRef.pos || fallbackPos || "";
+    if (!lastName) return null;
+    return `${pos} ${lastName}`;
+  }
 
   return (
     <div style={{ width: "100%", background: "var(--surface)", borderRadius: "var(--radius-lg, 12px)", overflow: "hidden", border: "1px solid var(--hairline)" }}>
@@ -201,8 +335,15 @@ export default function AnimatedField({
             <stop offset="50%" stopColor="#347a28" />
             <stop offset="100%" stopColor="#2d5a1e" />
           </linearGradient>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+          <filter id="glowFilter" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+          <filter id="subtleGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
               <feMergeNode in="SourceGraphic" />
@@ -271,47 +412,87 @@ export default function AnimatedField({
         {/* Line of scrimmage (blue) */}
         <line x1={losX} y1="0" x2={losX} y2={FIELD_H} stroke="#4A90D9" strokeWidth="3" opacity="0.8" />
 
-        {/* Offense players */}
+        {/* ── Offense players ── */}
         {offPositions.map((p, i) => {
+          const isHighlighted = offHighlight.has(p.role);
           const moveX = animPhase >= 1 && play?.type === "run" && (p.role === "RB" || p.role === "QB")
             ? (play.yards ?? 0) * YARD_PX * (possession === "home" ? 1 : -1) * 0.5
             : 0;
           const moveY = animPhase >= 1 && p.role.startsWith("WR") && play?.type === "pass"
             ? (Math.random() - 0.5) * 40 : 0;
+          const cx = p.x + moveX;
+          const cy = p.y + moveY;
+
+          // Name tag data for highlighted players
+          let nameTag = null;
+          if (isHighlighted && animPhase >= 1) {
+            if (p.role === "QB" && keyPlayers.passer)
+              nameTag = nameTagLabel(keyPlayers.passer, "QB");
+            else if (p.role === "WR1" && keyPlayers.receiver)
+              nameTag = nameTagLabel(keyPlayers.receiver, "WR");
+            else if (p.role === "RB" && keyPlayers.rusher)
+              nameTag = nameTagLabel(keyPlayers.rusher, "RB");
+          }
+
           return (
-            <g key={`off-${i}`}>
+            <g key={`off-${i}`} style={{ transition: `transform ${0.8 / speed}s ease` }}>
+              {isHighlighted && (
+                <PlayerGlow x={cx} y={cy} r={p.r} color={possColor} pulseKey={`off-glow-${i}-${animPhase}`} />
+              )}
               <circle
-                cx={p.x + moveX} cy={p.y + moveY} r={p.r}
-                fill={possColor} stroke="white" strokeWidth="1.5"
+                cx={cx} cy={cy} r={p.r + (isHighlighted ? 1 : 0)}
+                fill={isHighlighted ? possColor : `${possColor}cc`}
+                stroke={isHighlighted ? "white" : "rgba(255,255,255,0.6)"}
+                strokeWidth={isHighlighted ? 2 : 1.5}
+                filter={isHighlighted ? "url(#subtleGlow)" : undefined}
                 style={{ transition: `cx ${0.8 / speed}s ease, cy ${0.8 / speed}s ease` }}
-                opacity="0.9"
               />
-              <text x={p.x + moveX} y={p.y + moveY + 1} fill="white" fontSize="6" fontWeight="700"
+              <text x={cx} y={cy + 1} fill="white" fontSize="6" fontWeight="800"
                 textAnchor="middle" dominantBaseline="middle"
                 style={{ transition: `x ${0.8 / speed}s ease, y ${0.8 / speed}s ease`, pointerEvents: "none" }}>
                 {p.role.replace(/\d/g, "")}
               </text>
+              {nameTag && <NameTag x={cx} y={cy} label={nameTag} color={possColor} />}
             </g>
           );
         })}
 
-        {/* Defense players */}
+        {/* ── Defense players ── */}
         {defPositions.map((p, i) => {
-          const defColor = possession === "home" ? awayColor : homeColor;
+          const isHighlighted = defHighlight.has(p.role);
           const moveX = animPhase >= 1 ? (Math.random() - 0.5) * 15 : 0;
+          const cx = p.x + moveX;
+          const cy = p.y;
+
+          let nameTag = null;
+          if (isHighlighted && animPhase >= 1) {
+            if (p.role === "LB2" && keyPlayers.tackler)
+              nameTag = nameTagLabel(keyPlayers.tackler, "LB");
+            else if (p.role === "CB1" && keyPlayers.defender)
+              nameTag = nameTagLabel(keyPlayers.defender, "CB");
+            else if (p.role === "DL2" && keyPlayers.passRusher)
+              nameTag = nameTagLabel(keyPlayers.passRusher, "DE");
+          }
+
           return (
             <g key={`def-${i}`}>
+              {isHighlighted && (
+                <PlayerGlow x={cx} y={cy} r={p.r} color="#FF453A" pulseKey={`def-glow-${i}-${animPhase}`} />
+              )}
               <circle
-                cx={p.x + moveX} cy={p.y} r={p.r}
-                fill={defColor} stroke="white" strokeWidth="1.5"
+                cx={cx} cy={cy} r={p.r + (isHighlighted ? 1 : 0)}
+                fill={isHighlighted ? defColor : `${defColor}bb`}
+                stroke={isHighlighted ? "white" : "rgba(255,255,255,0.6)"}
+                strokeWidth={isHighlighted ? 2 : 1.5}
+                filter={isHighlighted ? "url(#subtleGlow)" : undefined}
                 style={{ transition: `cx ${0.8 / speed}s ease` }}
-                opacity="0.85"
               />
-              <text x={p.x + moveX} y={p.y + 1} fill="white" fontSize="6" fontWeight="700"
+              <text x={cx} y={cy + 1} fill="white" fontSize="6" fontWeight="800"
                 textAnchor="middle" dominantBaseline="middle"
                 style={{ transition: `x ${0.8 / speed}s ease`, pointerEvents: "none" }}>
                 {p.role.replace(/\d/g, "")}
               </text>
+              {nameTag && <NameTag x={cx} y={cy} label={nameTag} color="#FF453A" />}
             </g>
           );
         })}
@@ -333,6 +514,9 @@ export default function AnimatedField({
           rotation={play?.type === "pass" ? 45 : 0}
           size={7}
         />
+
+        {/* Particle burst on big plays */}
+        <ParticleBurst x={burstX} y={burstY} color={burstColor} count={14} active={burstActive} />
 
         {/* Result overlay */}
         {showResult && play?.result && (

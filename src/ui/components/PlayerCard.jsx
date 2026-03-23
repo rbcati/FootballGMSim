@@ -207,6 +207,61 @@ function AttrBar({ label, value }) {
   );
 }
 
+// ── Award badges ──────────────────────────────────────────────────────────────
+// player.awards = [{ label: "2025 NFL MVP", year: 2025, type: "mvp" }, ...]
+
+const AWARD_STYLES = {
+  mvp:       { color: "#FFD60A", bg: "#FFD60A18", icon: "🏆" },
+  opoy:      { color: "#FF9F0A", bg: "#FF9F0A18", icon: "⚔️"  },
+  dpoy:      { color: "#FF453A", bg: "#FF453A18", icon: "🛡️"  },
+  roty:      { color: "#34C759", bg: "#34C75918", icon: "⭐"  },
+  sb_mvp:    { color: "#FFD60A", bg: "#FFD60A18", icon: "🏈"  },
+  allpro:    { color: "#BF5AF2", bg: "#BF5AF218", icon: "✦"   },
+  probowl:   { color: "#0A84FF", bg: "#0A84FF18", icon: "🌟"  },
+  hof:       { color: "#FFD60A", bg: "#FFD60A18", icon: "🏛️"  },
+};
+
+function AwardBadges({ player, maxShow = 3 }) {
+  const awards = player?.awards;
+  if (!Array.isArray(awards) || awards.length === 0) return null;
+  const shown = awards.slice(0, maxShow);
+  const extra = awards.length - shown.length;
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+      {shown.map((award, i) => {
+        const type = award.type || "allpro";
+        const style = AWARD_STYLES[type] || AWARD_STYLES.allpro;
+        return (
+          <span
+            key={i}
+            title={award.label || type}
+            style={{
+              fontSize: "0.58rem", fontWeight: 800, color: style.color,
+              background: style.bg,
+              border: `1px solid ${style.color}44`,
+              borderRadius: 5, padding: "1px 5px",
+              display: "flex", alignItems: "center", gap: 3,
+              letterSpacing: "0.2px",
+            }}
+          >
+            <span style={{ fontSize: "0.7rem" }}>{style.icon}</span>
+            {award.label || award.year || type.toUpperCase()}
+          </span>
+        );
+      })}
+      {extra > 0 && (
+        <span style={{
+          fontSize: "0.58rem", fontWeight: 700, color: "var(--text-subtle)",
+          background: "rgba(255,255,255,0.06)", borderRadius: 5, padding: "1px 5px",
+        }}>
+          +{extra} more
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── Injury indicator ──────────────────────────────────────────────────────────
 
 function InjuryBadge({ player }) {
@@ -346,6 +401,7 @@ function StandardCard({ player, onClick, isSelected }) {
               })}
             </div>
           )}
+          <AwardBadges player={player} maxShow={3} />
         </div>
       </div>
 
@@ -444,7 +500,7 @@ function HeroCard({ player, onClick, onClose }) {
 
         {/* Traits */}
         {traits.length > 0 && (
-          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
             {traits.map(t => {
               const ts = traitStyle(t);
               return (
@@ -457,6 +513,9 @@ function HeroCard({ player, onClick, onClose }) {
             })}
           </div>
         )}
+
+        {/* Award badges — hero size shows all */}
+        <AwardBadges player={player} maxShow={8} />
 
         {/* Attribute grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>

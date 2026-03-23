@@ -663,10 +663,19 @@ export default function App() {
           phase={postGameResult.phase}
           logs={postGameResult.logs || []}
           onContinue={() => {
-            setPostGameResult(null);
-            setTimeout(() => {
-              actions.advanceWeek({ skipUserGame: true });
-            }, 100);
+            try {
+              setPostGameResult(null);
+              setTimeout(() => {
+                try {
+                  actions.advanceWeek({ skipUserGame: true });
+                } catch (err) {
+                  console.error('[PostGame] advanceWeek failed:', err);
+                }
+              }, 150);
+            } catch (err) {
+              console.error('[PostGame] onContinue failed:', err);
+              setPostGameResult(null);
+            }
           }}
         />
       )}

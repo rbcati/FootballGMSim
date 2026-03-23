@@ -19,6 +19,7 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { teamColor } from "../../data/team-utils.js";
+import AdvancedStats from "./AdvancedStats.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -256,7 +257,7 @@ function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr }) {
 
 // ── Tab config ────────────────────────────────────────────────────────────────
 
-const TABS = ["Passing", "Rushing", "Receiving", "Defense"];
+const TABS = ["Passing", "Rushing", "Receiving", "Defense", "Grades"];
 
 const TAB_CONFIG = {
   Passing: {
@@ -674,13 +675,21 @@ export default function BoxScore({ gameId, actions, onClose }) {
                 ))}
               </div>
 
-              <PlayerTable
-                columns={TAB_CONFIG[activeTab].columns}
-                homeRows={homeRows}
-                awayRows={awayRows}
-                homeAbbr={homeAbbr}
-                awayAbbr={awayAbbr}
-              />
+              {activeTab === "Grades" ? (
+                <AdvancedStats
+                  logs={game?.playLogs || game?.logs || []}
+                  homeTeam={{ abbr: homeAbbr }}
+                  awayTeam={{ abbr: awayAbbr }}
+                />
+              ) : (
+                <PlayerTable
+                  columns={TAB_CONFIG[activeTab].columns}
+                  homeRows={homeRows}
+                  awayRows={awayRows}
+                  homeAbbr={homeAbbr}
+                  awayAbbr={awayAbbr}
+                />
+              )}
 
               {/* No stats warning */}
               {!game.stats && (
