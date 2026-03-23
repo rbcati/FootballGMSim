@@ -5,7 +5,7 @@
  * Displays:
  *  - Final score hero
  *  - W/L/T result for the user team
- *  - Game MVP using PlayerCard (hero variant)
+ *  - Game Leaders (QB stat line, top receiver, top rusher) via PlayerCards
  *  - Key stat highlights
  *  - Continue button
  */
@@ -76,14 +76,86 @@ function Confetti({ colors }) {
   );
 }
 
+// Derive game leaders from play logs (accumulated stats per player)
+function useGameLeaders(logs) {
+  return useMemo(() => {
+    if (!Array.isArray(logs) || !logs.length) return { qb: null, receiver: null, rusher: null, defender: null };
+    const acc = {};
+    const addP = (p, key, val = 1) => {
+      if (!p) return;
+      const id = String(p.id ?? p.name ?? "?");
+      if (!acc[id]) acc[id] = { ref: p, passAtt: 0, passComp: 0, passYds: 0, passTDs: 0, rushAtt: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, sacks: 0, ints: 0 };
+      acc[id][key] = (acc[id][key] || 0) + val;
+    };
+    for (const l of logs) {
+      if (l.passer) {
+        addP(l.passer, "passAtt");
+        if (l.completed) { addP(l.passer, "passComp"); addP(l.passer, "passYds", l.passYds || l.yards || 0); }
+        if (l.isTouchdown && l.tdType === "pass") addP(l.passer, "passTDs");
+      }
+      if (l.rushYds != null && l.player && (l.type === "run" || l.tdType === "rush")) {
+        addP(l.player, "rushAtt");
+        addP(l.player, "rushYds", l.rushYds || l.yards || 0);
+        if (l.isTouchdown) addP(l.player, "rushTDs");
+      }
+      if (l.recYds != null && l.player && l.completed) {
+        addP(l.player, "receptions");
+        addP(l.player, "recYds", l.recYds || l.yards || 0);
+        if (l.isTouchdown && l.tdType === "pass") addP(l.player, "recTDs");
+      }
+      if (l.type === "sack" && l.player) addP(l.player, "sacks");
+      if (l.type === "interception" && l.player) addP(l.player, "ints");
+    }
+    const players = Object.values(acc);
+    const qb = players.filter(p => p.ref?.pos === "QB").sort((a, b) => b.passYds - a.passYds)[0] || null;
+    const receiver = players.filter(p => p.ref?.pos !== "QB" && p.recYds > 0).sort((a, b) => b.recYds - a.recYds)[0] || null;
+    const rusher = players.filter(p => p.ref?.pos !== "QB" && p.rushYds > 0 && p !== receiver).sort((a, b) => b.rushYds - a.rushYds)[0] || null;
+    const defender = players.filter(p => p.sacks > 0 || p.ints > 0).sort((a, b) => (b.sacks * 3 + b.ints * 4) - (a.sacks * 3 + a.ints * 4))[0] || null;
+    return { qb, receiver, rusher, defender };
+  }, [logs]);
+}
+
+function LeaderCard({ label, statLine, player, color }) {
+  if (!player) return null;
+  const p = player.ref;
+  return (
+    <div style={{
+      background: "var(--surface)", border: "1px solid var(--hairline)",
+      borderRadius: 12, padding: "12px 14px",
+      display: "flex", alignItems: "center", gap: 12,
+    }}>
+      <div style={{
+        width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+        background: `${color}20`, border: `2px solid ${color}`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "0.68rem", fontWeight: 900, color,
+      }}>
+        {p?.pos || "?"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "0.62rem", fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.8px", marginBottom: 2 }}>
+          {label}
+        </div>
+        <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {p?.name || "?"}
+        </div>
+        <div style={{ fontSize: "0.72rem", color, fontWeight: 700, marginTop: 1 }}>
+          {statLine}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PostGameScreen({
   homeTeam,
   awayTeam,
   homeScore,
   awayScore,
   userTeamId,
-  mvpPlayer,          // optional player object
+  mvpPlayer,          // optional player object (legacy)
   stats = {},         // { totalYards, passYards, rushYards, turnovers }
+  logs = [],          // play-by-play logs for deriving leaders
   onContinue,
   week,
   phase,
@@ -102,9 +174,23 @@ export default function PostGameScreen({
   const resultEmoji = userWon ? "🏆" : userLost ? "😔" : tied ? "🤝" : "🏈";
   const resultLabel = userWon ? "VICTORY!" : userLost ? "DEFEAT" : tied ? "TIE" : "FINAL";
 
-  const winnerAbbr = homeWon ? homeTeam?.abbr : awayTeam?.abbr;
-  const winnerScore = homeWon ? homeScore : awayScore;
-  const loserScore = homeWon ? awayScore : homeScore;
+  const { qb, receiver, rusher, defender } = useGameLeaders(logs);
+
+  // Build leader stat lines
+  const qbLine = qb
+    ? `${qb.passComp}/${qb.passAtt} · ${qb.passYds} yds${qb.passTDs > 0 ? ` · ${qb.passTDs} TD` : ""}`
+    : null;
+  const recLine = receiver
+    ? `${receiver.receptions} rec · ${receiver.recYds} yds${receiver.recTDs > 0 ? ` · ${receiver.recTDs} TD` : ""}`
+    : null;
+  const rushLine = rusher
+    ? `${rusher.rushAtt} car · ${rusher.rushYds} yds${rusher.rushTDs > 0 ? ` · ${rusher.rushTDs} TD` : ""}`
+    : null;
+  const defLine = defender
+    ? [defender.sacks > 0 ? `${defender.sacks} sack${defender.sacks > 1 ? "s" : ""}` : "", defender.ints > 0 ? `${defender.ints} INT` : ""].filter(Boolean).join(" · ")
+    : null;
+
+  const showLeaders = qb || receiver || rusher || defender;
 
   return (
     <>
@@ -232,8 +318,35 @@ export default function PostGameScreen({
             </div>
           )}
 
-          {/* MVP card */}
-          {mvpPlayer && (
+          {/* ── Game Leaders ── */}
+          {showLeaders && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{
+                fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
+                textTransform: "uppercase", letterSpacing: "1px",
+                marginBottom: 10, paddingLeft: 2,
+              }}>
+                🎖 Game Leaders
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {qb && qbLine && (
+                  <LeaderCard label="Passing" statLine={qbLine} player={qb} color="#FF9F0A" />
+                )}
+                {receiver && recLine && (
+                  <LeaderCard label="Receiving" statLine={recLine} player={receiver} color="#0A84FF" />
+                )}
+                {rusher && rushLine && (
+                  <LeaderCard label="Rushing" statLine={rushLine} player={rusher} color="#34C759" />
+                )}
+                {defender && defLine && (
+                  <LeaderCard label="Defense" statLine={defLine} player={defender} color="#FF453A" />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Legacy MVP card (fallback when no logs) */}
+          {!showLeaders && mvpPlayer && (
             <div style={{ marginBottom: 16 }}>
               <div style={{
                 fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)",
