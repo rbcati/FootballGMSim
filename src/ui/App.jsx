@@ -41,6 +41,7 @@ import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
 import GameSimulation      from './components/GameSimulation.jsx';
+import PostGameScreen      from './components/PostGameScreen.jsx';
 import SaveManager         from './components/SaveManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
@@ -63,6 +64,9 @@ export default function App() {
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
+
+  // Post-game result shown after GameSimulation completes (before advancing week)
+  const [postGameResult, setPostGameResult] = useState(null);
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
   const advancingRef = useRef(false);
@@ -628,16 +632,41 @@ export default function App() {
             homeTeam={homeTeam}
             awayTeam={awayTeam}
             userTeamId={league?.userTeamId}
-            onComplete={() => {
-                actions.clearUserGame();
-                // Small delay to let state settle before advancing
-                setTimeout(() => {
-                  actions.advanceWeek({ skipUserGame: true });
-                }, 100);
+            onComplete={(scores) => {
+              // Capture final scores for PostGameScreen, then clear the viewer
+              setPostGameResult({
+                homeTeam,
+                awayTeam,
+                homeScore: scores?.homeScore ?? 0,
+                awayScore: scores?.awayScore ?? 0,
+                userTeamId: league?.userTeamId,
+                week: league?.week,
+                phase: league?.phase,
+              });
+              actions.clearUserGame();
             }}
           />
         );
       })()}
+
+      {/* ── Post-Game Screen (shown after GameSimulation, before advancing) ── */}
+      {postGameResult && (
+        <PostGameScreen
+          homeTeam={postGameResult.homeTeam}
+          awayTeam={postGameResult.awayTeam}
+          homeScore={postGameResult.homeScore}
+          awayScore={postGameResult.awayScore}
+          userTeamId={postGameResult.userTeamId}
+          week={postGameResult.week}
+          phase={postGameResult.phase}
+          onContinue={() => {
+            setPostGameResult(null);
+            setTimeout(() => {
+              actions.advanceWeek({ skipUserGame: true });
+            }, 100);
+          }}
+        />
+      )}
     </div>
   );
 }
