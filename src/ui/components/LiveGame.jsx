@@ -404,6 +404,7 @@ export default function LiveGame({
   const playLogRef = useRef(null);
   const intervalRef = useRef(null);
   const playCountRef = useRef(0);
+  const overlayTimeoutRef = useRef(null);
 
   // ── Build fast-lookup maps ───────────────────────────────────────────────
 
@@ -525,23 +526,29 @@ export default function LiveGame({
 
     setPlays((prev) => [...prev.slice(-59), entry]); // keep last 60 entries
 
+    const triggerOverlay = (eventObj) => {
+      setOverlayEvent(eventObj);
+      if (overlayTimeoutRef.current) clearTimeout(overlayTimeoutRef.current);
+      overlayTimeoutRef.current = setTimeout(() => {
+        setOverlayEvent(null);
+      }, 1500);
+    };
+
     if (lowerText.includes("touchdown")) {
-      setOverlayEvent({ type: "touchdown", text: "TOUCHDOWN" });
+      triggerOverlay({ type: "goal touchdown", text: "TOUCHDOWN", key: Date.now() });
     } else if (lowerText.includes("field goal attempt... good")) {
-      setOverlayEvent({ type: "field-goal-made", text: "FIELD GOAL" });
+      triggerOverlay({ type: "goal field-goal", text: "FIELD GOAL", key: Date.now() });
     } else if (
       lowerText.includes("interception") ||
       lowerText.includes("fumble")
     ) {
-      setOverlayEvent({ type: "turnover", text: "TURNOVER" });
+      triggerOverlay({ type: "save turnover", text: "TURNOVER", key: Date.now() });
     } else if (lowerText.includes("sack")) {
-      setOverlayEvent({ type: "sack", text: "SACK" });
+      triggerOverlay({ type: "save sack", text: "SACK", key: Date.now() });
     } else if (lowerText.includes("safety")) {
-      setOverlayEvent({ type: "safety", text: "SAFETY" });
+      triggerOverlay({ type: "save safety", text: "SAFETY", key: Date.now() });
     } else if (lowerText.includes("deep pass complete")) {
-      setOverlayEvent({ type: "big-play", text: "BIG PLAY" });
-    } else {
-      setOverlayEvent(null);
+      triggerOverlay({ type: "big-play", text: "BIG PLAY", key: Date.now() });
     }
   }, [skipping, userHomeAbbr, userAwayAbbr, driveCount]);
 
@@ -875,8 +882,7 @@ export default function LiveGame({
           >
             {overlayEvent && (
               <div
-                className={`game-event-overlay ${overlayEvent.type}`}
-                key={Date.now()}
+                key={overlayEvent.key || overlayEvent.type} className={`game-event-overlay ${overlayEvent.type}`}
               >
                 <span className="event-text">{overlayEvent.text}</span>
               </div>

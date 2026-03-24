@@ -2830,3 +2830,115 @@ body {
 .impact-pulse {
   animation: impact-pulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+
+/* ============================================================================
+   UI POLISH - Improved Interactive States and Animations
+   ============================================================================ */
+
+/* Unified Tactile Button Feedback */
+.btn:active,
+.control-btn:active,
+.play-call-btn:active,
+.nav-item:active {
+  transform: scale(0.96) translateY(1px) !important;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+  filter: brightness(0.95);
+}
+
+.btn:hover,
+.control-btn:hover,
+.play-call-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Smoother View Transitions */
+@keyframes fadeInScale {
+  from { opacity: 0; transform: scale(0.98) translateY(5px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes fadeOutScale {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(1.02); }
+}
+
+.fade-in {
+  animation: fadeInScale 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+}
+
+.fade-out {
+  animation: fadeOutScale 0.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+  pointer-events: none;
+}
+
+/* Enhanced Game Event Overlay Positioning & Behavior */
+.game-event-overlay {
+  /* Ensure centered */
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2000;
+  width: auto;
+  min-width: 300px;
+  text-align: center;
+  animation: overlayPopIn 1.5s ease-out forwards;
+}
+
+/* Icon Animation */
+@keyframes iconPop {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  60% { transform: scale(1.2) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.game-event-overlay::before {
+  font-size: 6rem;
+  margin-bottom: 10px;
+  filter: drop-shadow(0 0 15px rgba(255,255,255,0.2));
+  animation: iconPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: block;
+}
+
+/* Icon Map for Game Events */
+.game-event-overlay.goal::before { content: '🙌'; }
+.game-event-overlay.touchdown::before { content: '🙌'; }
+.game-event-overlay.field-goal::before { content: '👟'; }
+.game-event-overlay.victory::before { content: '🏆'; }
+.game-event-overlay.two-point::before { content: '✌️'; }
+
+.game-event-overlay.save::before { content: '🛡️'; }
+.game-event-overlay.turnover::before { content: '🛑'; }
+.game-event-overlay.sack::before { content: '💥'; }
+.game-event-overlay.safety::before { content: '⚠️'; }
+.game-event-overlay.defeat::before { content: '💀'; }
+.game-event-overlay.defense-stop::before { content: '😤'; }
+
+.game-event-overlay.kick::before { content: '🦶'; }
+.game-event-overlay.punt::before { content: '🦶'; }
+.game-event-overlay.kickoff::before { content: '🦶'; }
+
+.game-event-overlay.quarter-end::before { content: '⏱️'; }
+
+/* Improved Overlay Typography */
+.game-event-overlay .event-text {
+    font-weight: 900;
+    text-transform: uppercase;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+    letter-spacing: 2px;
+}
+
+/* Base Override for the overlayPopIn animation to handle absolute centering */
+@keyframes overlayPopIn {
+  0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+  25% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.2); opacity: 0; }
+}
