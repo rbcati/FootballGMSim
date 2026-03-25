@@ -302,7 +302,7 @@ function ActionCard({ icon, label, sublabel, color, onClick, badge, disabled }) 
           {sublabel}
         </div>
       )}
-    </button>
+    </Button>
   );
 }
 
@@ -354,7 +354,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
         </div>
       </div>
 
-      <button
+      <Button
         onClick={() => onNavigate?.("Strategy")}
         style={{
           width: "100%", marginTop: 14,
@@ -365,7 +365,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
         }}
       >
         Game Plan →
-      </button>
+      </Button>
     </div>
   );
 }
@@ -416,7 +416,7 @@ function InjuryAlerts({ injuries, onNavigate, onPlayerSelect }) {
           );
         })}
       </div>
-      <button
+      <Button
         onClick={() => onNavigate?.("Injuries")}
         style={{
           background: "none", border: "none", color: "var(--accent)",
@@ -425,7 +425,7 @@ function InjuryAlerts({ injuries, onNavigate, onPlayerSelect }) {
         }}
       >
         View Full Report →
-      </button>
+      </Button>
     </div>
   );
 }

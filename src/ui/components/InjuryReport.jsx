@@ -184,10 +184,10 @@ function InjuryCard({ player, onPlayerSelect, showTeam = false }) {
             display: "flex", alignItems: "center", gap: 6, marginTop: 2,
             fontSize: 12, color: "var(--text-muted)",
           }}>
-            <span style={{
+            <Badge variant="outline" style={{
               fontWeight: 700, fontSize: 10, padding: "1px 6px", borderRadius: 4,
               background: `${posColor}18`, color: posColor,
-            }}>{pos}</span>
+            }}>{pos}</Badge>
             <span>OVR {player.ovr ?? "?"}</span>
             {showTeam && <span>· {player.teamAbbr}</span>}
           </div>
@@ -447,13 +447,13 @@ export default function InjuryReport({ league, onPlayerSelect }) {
         }}>
           🏥 Injury Report
         </h1>
-        <span style={{
+        <Badge variant="outline" style={{
           fontSize: 12, color: "var(--text-muted)",
           background: "var(--surface)", padding: "4px 10px", borderRadius: 6,
           border: "1px solid var(--hairline)",
         }}>
           Season {league.season ?? "?"} · Week {league.week ?? "?"}
-        </span>
+        </Badge>
       </div>
 
       {/* Quick Stats */}
