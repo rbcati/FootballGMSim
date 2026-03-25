@@ -810,13 +810,8 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
       </Card>
 
       {/* Step 2: Start Draft */}
-      <div
-        className="card"
-        style={{
-          padding: "var(--space-5)",
-          opacity: progressionDone ? 1 : 0.55,
-        }}
-      >
+      <Card className="card-premium" style={{ opacity: progressionDone ? 1 : 0.55 }}>
+        <CardContent style={{ padding: "var(--space-5)" }}>
         <div
           style={{
             display: "flex",
@@ -873,16 +868,17 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               first; Super Bowl winner picks last. 5 rounds.
             </p>
           </div>
-          <button
+          <Button
             className="btn btn-primary"
             disabled={!progressionDone || starting}
             onClick={handleStartDraft}
             style={{ flexShrink: 0, minWidth: 120 }}
           >
             {starting ? "Starting…" : "Start Draft"}
-          </button>
+          </Button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -978,10 +974,8 @@ function DraftBoard({
           }}
         >
           {/* Current pick clock */}
-          <div
-            className="card"
-            style={{ padding: "var(--space-4)", overflow: "hidden" }}
-          >
+          <Card className="card-premium" style={{ overflow: "hidden" }}>
+          <CardContent style={{ padding: "var(--space-4)" }}>
             {isDraftComplete ? (
               <div style={{ textAlign: "center", padding: "var(--space-3)" }}>
                 <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>🏈</div>
