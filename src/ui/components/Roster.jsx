@@ -29,6 +29,13 @@ import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -412,10 +419,10 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 justifyContent: "flex-end",
               }}
             >
-              <button className="btn" onClick={onClose}>
+              <Button className="btn" onClick={onClose}>
                 Reject
-              </button>
-              <button
+              </Button>
+              <Button
                 className="btn btn-primary"
                 onClick={handleAccept}
                 style={{
@@ -425,15 +432,15 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 }}
               >
                 Accept Deal
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <div>
             <p>Player refuses to negotiate at this time.</p>
-            <button className="btn" onClick={onClose}>
+            <Button className="btn" onClick={onClose}>
               Close
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -522,7 +529,7 @@ function SortTh({
 }) {
   const active = currentSort === sortKey;
   return (
-    <th
+    <TableHead
       onClick={() => onSort(sortKey)}
       style={{
         cursor: "pointer",
@@ -538,7 +545,7 @@ function SortTh({
     >
       {label}
       {active ? (currentDir === "asc" ? " ▲" : " ▼") : ""}
-    </th>
+    </TableHead>
   );
 }
 
@@ -568,7 +575,8 @@ function StatusBadge({ injuryWeeks }) {
 function OvrBadge({ ovr }) {
   const col = ovrColor(ovr);
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
         display: "inline-block",
         minWidth: 32,
@@ -582,13 +590,14 @@ function OvrBadge({ ovr }) {
       }}
     >
       {ovr}
-    </span>
+    </Badge>
   );
 }
 
 function PosBadge({ pos }) {
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
         display: "inline-block",
         minWidth: 32,
@@ -602,7 +611,7 @@ function PosBadge({ pos }) {
       }}
     >
       {pos}
-    </span>
+    </Badge>
   );
 }
 
@@ -753,28 +762,28 @@ function RosterTable({
                 display: "flex", alignItems: "center", gap: 4,
               }}>
                 {p.name}
-                <button
+                <Button
                   onClick={() => toggleCompare(p)}
                   style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 14, lineHeight: 1, padding: 0 }}
-                >×</button>
+                >×</Button>
               </span>
             ) : null;
           })}
           {compareIds.length === 2 && (
-            <button
+            <Button
               className="btn"
               onClick={() => setShowComparison(true)}
               style={{ marginLeft: "auto", fontSize: "var(--text-xs)", padding: "4px 14px", background: "var(--accent)", color: "#fff", border: "none" }}
             >
               Compare →
-            </button>
+            </Button>
           )}
-          <button
+          <Button
             onClick={() => setCompareIds([])}
             style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}
           >
             Clear
-          </button>
+          </Button>
         </div>
       )}
       {/* Position filter pills */}
@@ -787,8 +796,9 @@ function RosterTable({
         }}
       >
         {activeFilters.map((pos) => (
-          <button
+          <Button
             key={pos}
+            variant={posFilter === pos ? "default" : "ghost"}
             className={`standings-tab${posFilter === pos ? " active" : ""}`}
             onClick={() => setPosFilter(pos)}
             style={{
@@ -800,17 +810,17 @@ function RosterTable({
             }}
           >
             {pos}
-          </button>
+          </Button>
         ))}
       </div>
 
       {/* Table */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}><CardContent style={{ padding: 0 }}>
         <div
           className="table-wrapper"
           style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}
         >
-          <table
+          <Table
             className="standings-table"
             style={{
               width: "100%",
@@ -818,9 +828,9 @@ function RosterTable({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            <thead>
-              <tr>
-                <th
+            <TableHeader>
+              <TableRow>
+                <TableHead
                   style={{
                     paddingLeft: "var(--space-2)",
                     width: 28,
@@ -829,7 +839,7 @@ function RosterTable({
                   }}
                 >
                   #
-                </th>
+                </TableHead>
                 <SortTh
                   label="POS"
                   sortKey="pos"

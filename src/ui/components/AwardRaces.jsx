@@ -544,13 +544,13 @@ function AllProTab({ allPro, onPlayerSelect }) {
           { key: "first", label: "1st Team All-Pro" },
           { key: "second", label: "2nd Team All-Pro" },
         ].map(({ key, label }) => (
-          <button
+          <Button
             key={key}
             className={`standings-tab${activeTeam === key ? " active" : ""}`}
             onClick={() => setActiveTeam(key)}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -625,7 +625,8 @@ function AllProTab({ allPro, onPlayerSelect }) {
                   />
                 ))}
               </div>
-            </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
@@ -770,13 +771,13 @@ export default function AwardRaces({ onPlayerSelect, actions }) {
             style={{ marginBottom: "var(--space-6)", flexWrap: "wrap" }}
           >
             {AWARD_TABS.map(({ key, label }) => (
-              <button
+              <Button
                 key={key}
                 className={`standings-tab${activeTab === key ? " active" : ""}`}
                 onClick={() => setActiveTab(key)}
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
 

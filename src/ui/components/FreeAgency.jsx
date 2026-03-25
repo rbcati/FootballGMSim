@@ -33,6 +33,12 @@ import TraitBadge from "./TraitBadge";
 import PlayerAvatar from "./PlayerAvatar";
 import DonutChart from "./DonutChart";
 import PlayerCard from "./PlayerCard.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -121,28 +127,26 @@ function OvrBadge({ ovr }) {
 
 function PosBadge({ pos }) {
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
-        display: "inline-block",
         minWidth: 32,
-        padding: "1px 6px",
-        borderRadius: "var(--radius-pill)",
-        background: "var(--surface-strong)",
         fontSize: "var(--text-xs)",
         fontWeight: 700,
         color: "var(--text-muted)",
+        borderColor: "var(--hairline)",
         textAlign: "center",
       }}
     >
       {pos}
-    </span>
+    </Badge>
   );
 }
 
 function SortTh({ label, sortKey, current, dir, onSort, right = false }) {
   const active = current === sortKey;
   return (
-    <th
+    <TableHead
       onClick={() => onSort(sortKey)}
       style={{
         textAlign: right ? "right" : "left",
@@ -159,7 +163,7 @@ function SortTh({ label, sortKey, current, dir, onSort, right = false }) {
     >
       {label}
       {active ? (dir === "asc" ? " ▲" : " ▼") : ""}
-    </th>
+    </TableHead>
   );
 }
 
@@ -200,76 +204,77 @@ function CapBanner({ userTeam }) {
         : "var(--success)";
 
   return (
-    <div
-      className="card"
+    <Card
+      className="card-premium"
       style={{
         marginBottom: "var(--space-4)",
-        padding: "var(--space-4) var(--space-5)",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-3)",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              color: "var(--text-muted)",
-              marginBottom: 4,
-              fontWeight: 700,
-            }}
-          >
-            Salary Cap Room
+      <CardContent style={{ padding: "var(--space-4) var(--space-5)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "var(--space-3)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                color: "var(--text-muted)",
+                marginBottom: 4,
+                fontWeight: 700,
+              }}
+            >
+              Salary Cap Room
+            </div>
+            <div
+              style={{
+                fontSize: "1.75rem",
+                fontWeight: 800,
+                color: roomCol,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              ${capRoom.toFixed(1)}M
+            </div>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-muted)",
+                marginTop: 4,
+              }}
+            >
+              Used: ${capUsed.toFixed(1)}M · Dead: ${deadCap.toFixed(1)}M
+            </div>
           </div>
-          <div
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: roomCol,
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            ${capRoom.toFixed(1)}M
-          </div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginTop: 4,
-            }}
-          >
-            Used: ${capUsed.toFixed(1)}M · Dead: ${deadCap.toFixed(1)}M
-          </div>
-        </div>
 
-        <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginBottom: 4,
-            }}
-          >
-            League Ceiling: ${capTotal.toFixed(0)}M
+          <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-muted)",
+                marginBottom: 4,
+              }}
+            >
+              League Ceiling: ${capTotal.toFixed(0)}M
+            </div>
+            <DonutChart data={[
+                { value: capUsed, color: "var(--accent)" },
+                { value: deadCap, color: "var(--danger)" },
+                { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
+            ]} size={48} strokeWidth={8} />
           </div>
-          <DonutChart data={[
-              { value: capUsed, color: "var(--accent)" },
-              { value: deadCap, color: "var(--danger)" },
-              { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
-          ]} size={48} strokeWidth={8} />
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -348,7 +353,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ fontSize: "var(--text-sm)" }}>$</span>
-            <input
+            <Input
               type="number"
               step="0.1"
               min="0.75"
@@ -376,7 +381,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
           </div>
           <span style={{ color: "var(--hairline)" }}>×</span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
+            <Input
               type="number"
               min="1"
               max="7"
@@ -417,20 +422,20 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
               {err}
             </span>
           )}
-          <button
+          <Button
             className="btn"
             style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}
             onClick={onCancel}
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             className="btn btn-primary"
             style={{ fontSize: "var(--text-xs)", padding: "4px 16px" }}
             onClick={handleConfirm}
           >
             Confirm Bid
-          </button>
+          </Button>
         </div>
       </div>
     </Wrapper>
@@ -504,7 +509,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                     Insufficient cap space
                   </div>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => setPhase("bid")}
                     style={{
                       flex: 1, padding: "12px",
@@ -514,7 +519,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                     }}
                   >
                     {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                  </button>
+                  </Button>
                 )}
               </div>
             ) : (

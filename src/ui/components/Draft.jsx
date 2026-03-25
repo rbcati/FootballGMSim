@@ -19,6 +19,13 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerProfile from "./PlayerProfile";
 import PlayerPreview from "./PlayerPreview";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -385,7 +392,7 @@ function TradeUpModal({
               {currentPick?.round}
             </div>
           </div>
-          <button
+          <Button
             className="btn"
             onClick={onClose}
             style={{
@@ -397,7 +404,7 @@ function TradeUpModal({
             }}
           >
             x
-          </button>
+          </Button>
         </div>
 
         {/* Result banner */}
@@ -439,14 +446,14 @@ function TradeUpModal({
             style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
           >
             {[1, 2, 3, 4, 5].map((r) => (
-              <button
+              <Button
                 key={r}
                 className="btn"
                 style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
                 onClick={() => addPick(r)}
               >
                 + R{r}
-              </button>
+              </Button>
             ))}
           </div>
           {myPicks.length > 0 && (
@@ -473,7 +480,7 @@ function TradeUpModal({
                   }}
                 >
                   {pk.year} R{pk.round}
-                  <button
+                  <Button
                     className="btn"
                     onClick={() => removePick(pk.id)}
                     style={{
@@ -486,7 +493,7 @@ function TradeUpModal({
                     }}
                   >
                     x
-                  </button>
+                  </Button>
                 </span>
               ))}
             </div>
@@ -544,7 +551,7 @@ function TradeUpModal({
                       : "transparent",
                   }}
                 >
-                  <input
+                  <Input
                     type="checkbox"
                     checked={offering.has(p.id)}
                     onChange={() => togglePlayer(p.id)}
@@ -554,7 +561,8 @@ function TradeUpModal({
                       height: 12,
                     }}
                   />
-                  <span
+                  <Badge
+                    variant="outline"
                     style={{
                       padding: "0 3px",
                       borderRadius: "var(--radius-pill)",
@@ -565,7 +573,7 @@ function TradeUpModal({
                     }}
                   >
                     {p.ovr}
-                  </span>
+                  </Badge>
                   <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>
                     {p.pos}
                   </span>
@@ -580,14 +588,14 @@ function TradeUpModal({
         </div>
 
         {/* Propose */}
-        <button
+        <Button
           className="btn btn-primary"
           onClick={handlePropose}
           disabled={!hasSelection || loading}
           style={{ width: "100%", fontWeight: 700 }}
         >
           {loading ? "Evaluating..." : "Propose Trade"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -595,7 +603,8 @@ function TradeUpModal({
 
 function OvrBadge({ ovr }) {
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
         display: "inline-block",
         minWidth: 32,
@@ -610,7 +619,7 @@ function OvrBadge({ ovr }) {
       }}
     >
       {ovr}
-    </span>
+    </Badge>
   );
 }
 
@@ -694,10 +703,8 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
       )}
 
       {/* Step 1: Player Progression */}
-      <div
-        className="card"
-        style={{ marginBottom: "var(--space-5)", padding: "var(--space-5)" }}
-      >
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardContent style={{ padding: "var(--space-5)" }}>
         <div
           style={{
             display: "flex",
@@ -786,7 +793,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               </div>
             )}
           </div>
-          <button
+          <Button
             className="btn"
             disabled={progressing || progressionDone}
             onClick={handleProgression}
@@ -797,9 +804,10 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               : progressionDone
                 ? "Completed"
                 : "Run Progression"}
-          </button>
+          </Button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Step 2: Start Draft */}
       <div
