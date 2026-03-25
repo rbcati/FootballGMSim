@@ -19,6 +19,13 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerProfile from "./PlayerProfile";
 import PlayerPreview from "./PlayerPreview";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -385,7 +392,7 @@ function TradeUpModal({
               {currentPick?.round}
             </div>
           </div>
-          <button
+          <Button
             className="btn"
             onClick={onClose}
             style={{
@@ -397,7 +404,7 @@ function TradeUpModal({
             }}
           >
             x
-          </button>
+          </Button>
         </div>
 
         {/* Result banner */}
@@ -439,14 +446,14 @@ function TradeUpModal({
             style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}
           >
             {[1, 2, 3, 4, 5].map((r) => (
-              <button
+              <Button
                 key={r}
                 className="btn"
                 style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}
                 onClick={() => addPick(r)}
               >
                 + R{r}
-              </button>
+              </Button>
             ))}
           </div>
           {myPicks.length > 0 && (
@@ -473,7 +480,7 @@ function TradeUpModal({
                   }}
                 >
                   {pk.year} R{pk.round}
-                  <button
+                  <Button
                     className="btn"
                     onClick={() => removePick(pk.id)}
                     style={{
@@ -486,7 +493,7 @@ function TradeUpModal({
                     }}
                   >
                     x
-                  </button>
+                  </Button>
                 </span>
               ))}
             </div>
@@ -544,7 +551,7 @@ function TradeUpModal({
                       : "transparent",
                   }}
                 >
-                  <input
+                  <Input
                     type="checkbox"
                     checked={offering.has(p.id)}
                     onChange={() => togglePlayer(p.id)}
@@ -554,7 +561,8 @@ function TradeUpModal({
                       height: 12,
                     }}
                   />
-                  <span
+                  <Badge
+                    variant="outline"
                     style={{
                       padding: "0 3px",
                       borderRadius: "var(--radius-pill)",
@@ -565,7 +573,7 @@ function TradeUpModal({
                     }}
                   >
                     {p.ovr}
-                  </span>
+                  </Badge>
                   <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>
                     {p.pos}
                   </span>
@@ -580,14 +588,14 @@ function TradeUpModal({
         </div>
 
         {/* Propose */}
-        <button
+        <Button
           className="btn btn-primary"
           onClick={handlePropose}
           disabled={!hasSelection || loading}
           style={{ width: "100%", fontWeight: 700 }}
         >
           {loading ? "Evaluating..." : "Propose Trade"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -595,7 +603,8 @@ function TradeUpModal({
 
 function OvrBadge({ ovr }) {
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
         display: "inline-block",
         minWidth: 32,
@@ -610,7 +619,7 @@ function OvrBadge({ ovr }) {
       }}
     >
       {ovr}
-    </span>
+    </Badge>
   );
 }
 
@@ -694,10 +703,8 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
       )}
 
       {/* Step 1: Player Progression */}
-      <div
-        className="card"
-        style={{ marginBottom: "var(--space-5)", padding: "var(--space-5)" }}
-      >
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardContent style={{ padding: "var(--space-5)" }}>
         <div
           style={{
             display: "flex",
@@ -786,7 +793,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               </div>
             )}
           </div>
-          <button
+          <Button
             className="btn"
             disabled={progressing || progressionDone}
             onClick={handleProgression}
@@ -797,18 +804,14 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               : progressionDone
                 ? "Completed"
                 : "Run Progression"}
-          </button>
+          </Button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Step 2: Start Draft */}
-      <div
-        className="card"
-        style={{
-          padding: "var(--space-5)",
-          opacity: progressionDone ? 1 : 0.55,
-        }}
-      >
+      <Card className="card-premium" style={{ opacity: progressionDone ? 1 : 0.55 }}>
+        <CardContent style={{ padding: "var(--space-5)" }}>
         <div
           style={{
             display: "flex",
@@ -865,16 +868,17 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               first; Super Bowl winner picks last. 5 rounds.
             </p>
           </div>
-          <button
+          <Button
             className="btn btn-primary"
             disabled={!progressionDone || starting}
             onClick={handleStartDraft}
             style={{ flexShrink: 0, minWidth: 120 }}
           >
             {starting ? "Starting…" : "Start Draft"}
-          </button>
+          </Button>
         </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -970,10 +974,8 @@ function DraftBoard({
           }}
         >
           {/* Current pick clock */}
-          <div
-            className="card"
-            style={{ padding: "var(--space-4)", overflow: "hidden" }}
-          >
+          <Card className="card-premium" style={{ overflow: "hidden" }}>
+          <CardContent style={{ padding: "var(--space-4)" }}>
             {isDraftComplete ? (
               <div style={{ textAlign: "center", padding: "var(--space-3)" }}>
                 <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>🏈</div>
@@ -1046,23 +1048,24 @@ function DraftBoard({
                 </div>
               </>
             )}
-          </div>
+          </CardContent>
+          </Card>
 
           {/* Sim button (only when AI is picking) */}
           {!isDraftComplete && !isUserPick && (
-            <button
+            <Button
               className="btn btn-primary"
               disabled={simming}
               onClick={onSimToMyPick}
               style={{ width: "100%" }}
             >
               {simming ? "Simulating…" : "Sim to My Pick"}
-            </button>
+            </Button>
           )}
 
           {/* Trade for this Pick button (only when AI is picking and we have actions) */}
           {!isDraftComplete && !isUserPick && actions && (
-            <button
+            <Button
               className="btn"
               onClick={() => setShowTradeUp(true)}
               disabled={simming}
@@ -1075,27 +1078,19 @@ function DraftBoard({
               }}
             >
               Trade for Pick #{currentPick?.overall}
-            </button>
+            </Button>
           )}
 
           {/* Upcoming order */}
           {!isDraftComplete && upcomingPicks.length > 0 && (
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div
-                style={{
-                  padding: "var(--space-2) var(--space-3)",
-                  background: "var(--surface-strong)",
-                  borderBottom: "1px solid var(--hairline)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Pick Order
-              </div>
-              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+              <CardHeader style={{ padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
+                <CardTitle style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>
+                  Pick Order
+                </CardTitle>
+              </CardHeader>
+              <CardContent style={{ padding: 0 }}>
+              <ScrollArea style={{ maxHeight: 320 }}>
                 {upcomingPicks.map((pk, i) => (
                   <div
                     key={pk.overall}
@@ -1145,28 +1140,21 @@ function DraftBoard({
                     </span>
                   </div>
                 ))}
-              </div>
-            </div>
+              </ScrollArea>
+              </CardContent>
+            </Card>
           )}
 
           {/* Recently completed (last 10) */}
           {completedPicks.length > 0 && (
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div
-                style={{
-                  padding: "var(--space-2) var(--space-3)",
-                  background: "var(--surface-strong)",
-                  borderBottom: "1px solid var(--hairline)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Recent Picks
-              </div>
-              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+              <CardHeader style={{ padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
+                <CardTitle style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>
+                  Recent Picks
+                </CardTitle>
+              </CardHeader>
+              <CardContent style={{ padding: 0 }}>
+              <ScrollArea style={{ maxHeight: 240 }}>
                 {[...completedPicks]
                   .reverse()
                   .slice(0, 10)
@@ -1194,8 +1182,9 @@ function DraftBoard({
                       </div>
                     </div>
                   ))}
-              </div>
-            </div>
+              </ScrollArea>
+              </CardContent>
+            </Card>
           )}
         </div>
 
@@ -1228,7 +1217,7 @@ function DraftBoard({
                 {currentPick?.overall} — select a prospect below.
               </span>
               {pendingTradeProposal && (
-                <button
+                <Button
                   className="btn"
                   onClick={() => setShowTradeDown(true)}
                   style={{
@@ -1244,7 +1233,7 @@ function DraftBoard({
                   }}
                 >
                   Trade Down / View Offers
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -1271,7 +1260,7 @@ function DraftBoard({
                 <div style={{ fontWeight: 800, color: "var(--text)" }}>
                   Trade Offer from {pendingTradeProposal.aiTeamAbbr}
                 </div>
-                <button
+                <Button
                   className="btn"
                   onClick={() => setShowTradeDown(false)}
                   style={{
@@ -1284,7 +1273,7 @@ function DraftBoard({
                   }}
                 >
                   ×
-                </button>
+                </Button>
               </div>
               <div
                 style={{
@@ -1313,7 +1302,7 @@ function DraftBoard({
                 {pendingTradeProposal.aiPickRound}) + a later pick swap in this draft.
               </div>
               <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                <button
+                <Button
                   className="btn btn-primary"
                   disabled={tradeDownProcessing}
                   onClick={async () => {
@@ -1338,8 +1327,8 @@ function DraftBoard({
                   }}
                 >
                   {tradeDownProcessing ? "Processing…" : "Accept Trade"}
-                </button>
-                <button
+                </Button>
+                <Button
                   className="btn"
                   onClick={async () => {
                     await actions.rejectDraftTrade?.();
@@ -1352,7 +1341,7 @@ function DraftBoard({
                   }}
                 >
                   Decline
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1366,7 +1355,7 @@ function DraftBoard({
               alignItems: "center",
             }}
           >
-            <input
+            <Input
               type="text"
               placeholder="Search name…"
               value={nameFilter}
@@ -1413,15 +1402,16 @@ function DraftBoard({
           </div>
 
           {/* Prospects table */}
-          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+            <CardContent style={{ padding: 0 }}>
             <div className="table-wrapper" style={{ overflowX: "auto" }}>
-              <table
+              <Table
                 className="standings-table"
                 style={{ width: "100%", fontSize: "var(--text-sm)" }}
               >
-                <thead>
-                  <tr>
-                    <th
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
                       style={{
                         width: 36,
                         textAlign: "center",
@@ -1429,7 +1419,7 @@ function DraftBoard({
                       }}
                     >
                       #
-                    </th>
+                    </TableHead>
                     {[
                       { key: "pos", label: "POS" },
                       { key: "name", label: "NAME" },
@@ -1439,7 +1429,7 @@ function DraftBoard({
                       { key: "potential", label: "POT" },
                       { key: "college", label: "COLLEGE" },
                     ].map((col) => (
-                      <th
+                      <TableHead
                         key={col.key}
                         onClick={() => toggleSort(col.key)}
                         style={{
@@ -1450,24 +1440,24 @@ function DraftBoard({
                       >
                         {col.label}
                         <SortIcon active={sortKey === col.key} dir={sortDir} />
-                      </th>
+                      </TableHead>
                     ))}
                     {isUserPick && !isDraftComplete && (
-                      <th
+                      <TableHead
                         style={{
                           textAlign: "right",
                           paddingRight: "var(--space-4)",
                         }}
                       >
                         ACTION
-                      </th>
+                      </TableHead>
                     )}
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {sortedProspects.length === 0 && (
-                    <tr>
-                      <td
+                    <TableRow>
+                      <TableCell
                         colSpan={isUserPick ? 8 : 7}
                         style={{
                           textAlign: "center",
@@ -1478,12 +1468,12 @@ function DraftBoard({
                         {isDraftComplete
                           ? "All prospects have been drafted."
                           : "No prospects match the filter."}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                   {sortedProspects.map((p, i) => (
-                    <tr key={p.id}>
-                      <td
+                    <TableRow key={p.id}>
+                      <TableCell
                         style={{
                           textAlign: "center",
                           color: "var(--text-subtle)",
@@ -1493,9 +1483,10 @@ function DraftBoard({
                         }}
                       >
                         {i + 1}
-                      </td>
-                      <td>
-                        <span
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
                           style={{
                             display: "inline-block",
                             padding: "1px 6px",
@@ -1508,9 +1499,9 @@ function DraftBoard({
                           }}
                         >
                           {p.pos}
-                        </span>
-                      </td>
-                      <td
+                        </Badge>
+                      </TableCell>
+                      <TableCell
                         style={{
                           fontWeight: 600,
                           color: "var(--text)",
@@ -1532,25 +1523,25 @@ function DraftBoard({
                             {p.name}
                           </span>
                         </PlayerPreview>
-                      </td>
-                      <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                      </TableCell>
+                      <TableCell style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                         {(p.traits || []).map((t) => (
                           <TraitBadge key={t} traitId={t} />
                         ))}
-                      </td>
-                      <td style={{ color: "var(--text-muted)" }}>{p.age}</td>
-                      <td>
+                      </TableCell>
+                      <TableCell style={{ color: "var(--text-muted)" }}>{p.age}</TableCell>
+                      <TableCell>
                         <OvrBadge ovr={p.ovr} />
-                      </td>
-                      <td
+                      </TableCell>
+                      <TableCell
                         style={{
                           color: "var(--text-subtle)",
                           fontSize: "var(--text-xs)",
                         }}
                       >
                         {p.potential ?? "—"}
-                      </td>
-                      <td
+                      </TableCell>
+                      <TableCell
                         style={{
                           color: "var(--text-muted)",
                           fontSize: "var(--text-xs)",
@@ -1561,15 +1552,15 @@ function DraftBoard({
                         }}
                       >
                         {p.college ?? "—"}
-                      </td>
+                      </TableCell>
                       {isUserPick && !isDraftComplete && (
-                        <td
+                        <TableCell
                           style={{
                             textAlign: "right",
                             paddingRight: "var(--space-3)",
                           }}
                         >
-                          <button
+                          <Button
                             className="btn btn-primary"
                             style={{
                               padding: "3px 12px",
@@ -1578,15 +1569,16 @@ function DraftBoard({
                             onClick={() => onDraftPlayer(p.id)}
                           >
                             Draft
-                          </button>
-                        </td>
+                          </Button>
+                        </TableCell>
                       )}
-                    </tr>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
@@ -1630,53 +1622,46 @@ function DraftCompletePanel({ actions, draftState }) {
           {totalPicks} picks made. Your team added {userPicks.length} new player
           {userPicks.length !== 1 ? "s" : ""}.
         </p>
-        <button
+        <Button
           className="btn btn-primary"
           style={{ fontSize: "var(--text-base)" }}
           onClick={() => actions.startNewSeason()}
         >
           Start New Season →
-        </button>
+        </Button>
       </div>
 
       {/* Full pick history */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div
-          style={{
-            padding: "var(--space-3) var(--space-5)",
-            background: "var(--surface-strong)",
-            borderBottom: "1px solid var(--hairline)",
-            fontWeight: 700,
-            fontSize: "var(--text-xs)",
-            textTransform: "uppercase",
-            letterSpacing: "1px",
-            color: "var(--text-muted)",
-          }}
-        >
-          All Picks
-        </div>
+      <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+        <CardHeader style={{ padding: "var(--space-3) var(--space-5)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
+          <CardTitle style={{ fontWeight: 700, fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>
+            All Picks
+          </CardTitle>
+        </CardHeader>
+        <CardContent style={{ padding: 0 }}>
+        <ScrollArea style={{ maxHeight: 480 }}>
         <div
           className="table-wrapper"
-          style={{ overflowX: "auto", maxHeight: 480, overflowY: "auto" }}
+          style={{ overflowX: "auto" }}
         >
-          <table
+          <Table
             className="standings-table"
             style={{ width: "100%", fontSize: "var(--text-sm)" }}
           >
-            <thead>
-              <tr>
-                <th style={{ paddingLeft: "var(--space-4)" }}>#</th>
-                <th>Round</th>
-                <th>Team</th>
-                <th>Player</th>
-                <th>POS</th>
-                <th style={{ paddingRight: "var(--space-4)" }}>OVR</th>
-              </tr>
-            </thead>
-            <tbody>
+            <TableHeader>
+              <TableRow>
+                <TableHead style={{ paddingLeft: "var(--space-4)" }}>#</TableHead>
+                <TableHead>Round</TableHead>
+                <TableHead>Team</TableHead>
+                <TableHead>Player</TableHead>
+                <TableHead>POS</TableHead>
+                <TableHead style={{ paddingRight: "var(--space-4)" }}>OVR</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {completedPicks.map((pk) => (
-                <tr key={pk.overall} className={pk.isUser ? "selected" : ""}>
-                  <td
+                <TableRow key={pk.overall} className={pk.isUser ? "selected" : ""}>
+                  <TableCell
                     style={{
                       paddingLeft: "var(--space-4)",
                       color: "var(--text-subtle)",
@@ -1684,9 +1669,9 @@ function DraftCompletePanel({ actions, draftState }) {
                     }}
                   >
                     {pk.overall}
-                  </td>
-                  <td style={{ color: "var(--text-muted)" }}>R{pk.round}</td>
-                  <td
+                  </TableCell>
+                  <TableCell style={{ color: "var(--text-muted)" }}>R{pk.round}</TableCell>
+                  <TableCell
                     style={{
                       fontWeight: pk.isUser ? 700 : 400,
                       color: pk.isUser ? "var(--accent)" : "var(--text)",
@@ -1694,24 +1679,26 @@ function DraftCompletePanel({ actions, draftState }) {
                   >
                     {pk.teamAbbr}
                     {pk.isUser && <span style={{ marginLeft: 4 }}>★</span>}
-                  </td>
-                  <td style={{ fontWeight: 600 }}>{pk.playerName ?? "—"}</td>
-                  <td style={{ color: "var(--text-muted)" }}>
+                  </TableCell>
+                  <TableCell style={{ fontWeight: 600 }}>{pk.playerName ?? "—"}</TableCell>
+                  <TableCell style={{ color: "var(--text-muted)" }}>
                     {pk.playerPos ?? "—"}
-                  </td>
-                  <td style={{ paddingRight: "var(--space-4)" }}>
+                  </TableCell>
+                  <TableCell style={{ paddingRight: "var(--space-4)" }}>
                     {pk.playerOvr != null ? (
                       <OvrBadge ovr={pk.playerOvr} />
                     ) : (
                       "—"
                     )}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
+        </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -1878,13 +1865,13 @@ export default function Draft({ league, actions }) {
           }}
         >
           <span>{error}</span>
-          <button
+          <Button
             className="btn"
             style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
             onClick={() => setError(null)}
           >
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 

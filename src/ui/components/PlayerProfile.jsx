@@ -7,6 +7,12 @@ import React, { useEffect, useState } from "react";
 import TraitBadge from "./TraitBadge";
 import RadarChart from "./RadarChart";
 import { getTeamIdentity } from "../../data/team-utils.js";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -245,8 +251,8 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
         zIndex: 10000,
       }}
     >
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           width: 400,
           padding: "var(--space-6)",
@@ -254,6 +260,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
           background: "var(--surface)",
         }}
       >
+        <CardContent>
         <h3 style={{ marginTop: 0 }}>Extend {player.name}</h3>
         {loading ? (
           <div
@@ -307,10 +314,10 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 justifyContent: "flex-end",
               }}
             >
-              <button className="btn" onClick={onClose}>
+              <Button className="btn" onClick={onClose}>
                 Reject
-              </button>
-              <button
+              </Button>
+              <Button
                 className="btn btn-primary"
                 onClick={handleAccept}
                 style={{
@@ -320,18 +327,19 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 }}
               >
                 Accept Deal
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <div>
             <p>Player refuses to negotiate at this time.</p>
-            <button className="btn" onClick={onClose}>
+            <Button className="btn" onClick={onClose}>
               Close
-            </button>
+            </Button>
           </div>
         )}
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -459,7 +467,7 @@ export default function PlayerProfile({
             >
               ★ You're on the clock! Draft {player.name}?
             </span>
-            <button
+            <Button
               className="btn"
               style={{
                 background: "#fff",
@@ -474,7 +482,7 @@ export default function PlayerProfile({
               onClick={() => onDraftPlayer(player.id)}
             >
               Draft This Player
-            </button>
+            </Button>
           </div>
         )}
 
@@ -634,7 +642,7 @@ export default function PlayerProfile({
                 {/* Extension button */}
                 {player.status === "active" && player.contract?.years === 1 && (
                   <div style={{ marginTop: "var(--space-3)" }}>
-                    <button
+                    <Button
                       className="btn"
                       onClick={() => setExtending(true)}
                       style={{
@@ -645,7 +653,7 @@ export default function PlayerProfile({
                       }}
                     >
                       Negotiate Extension
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -654,7 +662,7 @@ export default function PlayerProfile({
             <div style={{ color: "var(--text-muted)" }}>Player not found</div>
           )}
 
-          <button
+          <Button
             className="btn"
             onClick={onClose}
             style={{
@@ -669,7 +677,7 @@ export default function PlayerProfile({
             }}
           >
             ×
-          </button>
+          </Button>
         </div>
 
         {/* ── Career Stats ── */}
@@ -692,32 +700,32 @@ export default function PlayerProfile({
             </p>
           ) : (
             <div className="table-wrapper" style={{ overflowX: "auto" }}>
-              <table
+              <Table
                 className="standings-table"
                 style={{ width: "100%", minWidth: 480 }}
               >
-                <thead>
-                  <tr>
-                    <th
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
                       style={{
                         paddingLeft: "var(--space-4)",
                         textAlign: "left",
                       }}
                     >
                       Year
-                    </th>
-                    <th style={{ textAlign: "left" }}>Team</th>
+                    </TableHead>
+                    <TableHead style={{ textAlign: "left" }}>Team</TableHead>
                     {columns.map((col) => (
-                      <th
+                      <TableHead
                         key={col.key}
                         style={{ textAlign: "center", whiteSpace: "nowrap" }}
                       >
                         {col.label}
-                      </th>
+                      </TableHead>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {[...stats]
                     .sort((a, b) =>
                       (b.seasonId || "").localeCompare(a.seasonId || ""),
@@ -725,16 +733,16 @@ export default function PlayerProfile({
                     .map((s, i) => {
                       const t = s.totals || {};
                       return (
-                        <tr key={i}>
-                          <td
+                        <TableRow key={i}>
+                          <TableCell
                             style={{
                               paddingLeft: "var(--space-4)",
                               fontWeight: 600,
                             }}
                           >
                             {seasonYear(s.seasonId)}
-                          </td>
-                          <td
+                          </TableCell>
+                          <TableCell
                             style={{
                               color: "var(--text-muted)",
                               fontSize: "var(--text-xs)",
@@ -743,9 +751,9 @@ export default function PlayerProfile({
                             {s.teamId != null
                               ? getTeamName(s.teamId, teams)
                               : "FA"}
-                          </td>
+                          </TableCell>
                           {columns.map((col) => (
-                            <td
+                            <TableCell
                               key={col.key}
                               style={{
                                 textAlign: "center",
@@ -756,13 +764,13 @@ export default function PlayerProfile({
                               }}
                             >
                               {fmt(t, col)}
-                            </td>
+                            </TableCell>
                           ))}
-                        </tr>
+                        </TableRow>
                       );
                     })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
 
@@ -840,7 +848,7 @@ export default function PlayerProfile({
                 Season Log
               </h3>
               <div className="table-wrapper" style={{ overflowX: "auto" }}>
-                <table
+                <Table
                   className="standings-table"
                   style={{
                     width: "100%",
@@ -848,138 +856,138 @@ export default function PlayerProfile({
                     minWidth: 360,
                   }}
                 >
-                  <thead>
-                    <tr>
-                      <th
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead
                         style={{
                           textAlign: "left",
                           paddingLeft: "var(--space-4)",
                         }}
                       >
                         Season
-                      </th>
-                      <th style={{ textAlign: "left" }}>Team</th>
-                      <th style={{ textAlign: "center" }}>GP</th>
+                      </TableHead>
+                      <TableHead style={{ textAlign: "left" }}>Team</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>GP</TableHead>
                       {["QB"].includes(player.pos) && (
                         <>
-                          <th style={{ textAlign: "center" }}>YDS</th>
-                          <th style={{ textAlign: "center" }}>TD</th>
-                          <th style={{ textAlign: "center" }}>INT</th>
-                          <th style={{ textAlign: "center" }}>CMP%</th>
+                          <TableHead style={{ textAlign: "center" }}>YDS</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>TD</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>INT</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>CMP%</TableHead>
                         </>
                       )}
                       {["RB", "FB"].includes(player.pos) && (
                         <>
-                          <th style={{ textAlign: "center" }}>RYDS</th>
-                          <th style={{ textAlign: "center" }}>RTD</th>
-                          <th style={{ textAlign: "center" }}>REC</th>
-                          <th style={{ textAlign: "center" }}>RCYDS</th>
+                          <TableHead style={{ textAlign: "center" }}>RYDS</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>RTD</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>REC</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>RCYDS</TableHead>
                         </>
                       )}
                       {["WR", "TE"].includes(player.pos) && (
                         <>
-                          <th style={{ textAlign: "center" }}>REC</th>
-                          <th style={{ textAlign: "center" }}>YDS</th>
-                          <th style={{ textAlign: "center" }}>TD</th>
+                          <TableHead style={{ textAlign: "center" }}>REC</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>YDS</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>TD</TableHead>
                         </>
                       )}
                       {["DE", "DT", "LB", "CB", "S", "DL"].includes(
                         player.pos,
                       ) && (
                         <>
-                          <th style={{ textAlign: "center" }}>TKL</th>
-                          <th style={{ textAlign: "center" }}>SCK</th>
-                          <th style={{ textAlign: "center" }}>FF</th>
+                          <TableHead style={{ textAlign: "center" }}>TKL</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>SCK</TableHead>
+                          <TableHead style={{ textAlign: "center" }}>FF</TableHead>
                         </>
                       )}
-                      <th style={{ textAlign: "center" }}>OVR</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {[...player.careerStats].reverse().map((line, i) => (
-                      <tr key={i}>
-                        <td
+                      <TableRow key={i}>
+                        <TableCell
                           style={{
                             paddingLeft: "var(--space-4)",
                             fontWeight: 600,
                           }}
                         >
                           {line.season}
-                        </td>
-                        <td
+                        </TableCell>
+                        <TableCell
                           style={{
                             color: "var(--text-muted)",
                             fontSize: "var(--text-xs)",
                           }}
                         >
                           {line.team}
-                        </td>
-                        <td style={{ textAlign: "center" }}>
+                        </TableCell>
+                        <TableCell style={{ textAlign: "center" }}>
                           {line.gamesPlayed}
-                        </td>
+                        </TableCell>
                         {["QB"].includes(player.pos) && (
                           <>
-                            <td style={{ textAlign: "center" }}>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.passYds?.toLocaleString()}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.passTDs}
-                            </td>
-                            <td style={{ textAlign: "center" }}>{line.ints}</td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>{line.ints}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.compPct?.toFixed(1)}%
-                            </td>
+                            </TableCell>
                           </>
                         )}
                         {["RB", "FB"].includes(player.pos) && (
                           <>
-                            <td style={{ textAlign: "center" }}>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.rushYds?.toLocaleString()}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.rushTDs}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.receptions}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.recYds?.toLocaleString()}
-                            </td>
+                            </TableCell>
                           </>
                         )}
                         {["WR", "TE"].includes(player.pos) && (
                           <>
-                            <td style={{ textAlign: "center" }}>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.receptions}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.recYds?.toLocaleString()}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.recTDs}
-                            </td>
+                            </TableCell>
                           </>
                         )}
                         {["DE", "DT", "LB", "CB", "S", "DL"].includes(
                           player.pos,
                         ) && (
                           <>
-                            <td style={{ textAlign: "center" }}>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.tackles}
-                            </td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               {line.sacks}
-                            </td>
-                            <td style={{ textAlign: "center" }}>{line.ffum}</td>
+                            </TableCell>
+                            <TableCell style={{ textAlign: "center" }}>{line.ffum}</TableCell>
                           </>
                         )}
-                        <td style={{ textAlign: "center" }}>
+                        <TableCell style={{ textAlign: "center" }}>
                           <strong>{line.ovr}</strong>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}

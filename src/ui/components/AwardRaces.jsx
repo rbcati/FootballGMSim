@@ -12,6 +12,11 @@
  */
 
 import React, { useEffect, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -168,8 +173,8 @@ function AwardCard({
 }) {
   if (candidates.length === 0)
     return (
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           padding: "var(--space-5)",
           color: "var(--text-muted)",
@@ -177,12 +182,15 @@ function AwardCard({
           fontSize: "var(--text-sm)",
         }}
       >
-        No candidates yet — play through more weeks to see the race take shape.
-      </div>
+        <CardContent>
+          No candidates yet — play through more weeks to see the race take shape.
+        </CardContent>
+      </Card>
     );
 
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+    <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+      <CardContent style={{ padding: 0 }}>
       <div
         style={{
           padding: "var(--space-3) var(--space-4)",
@@ -225,7 +233,8 @@ function AwardCard({
           showConf={showConf}
         />
       ))}
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -535,13 +544,13 @@ function AllProTab({ allPro, onPlayerSelect }) {
           { key: "first", label: "1st Team All-Pro" },
           { key: "second", label: "2nd Team All-Pro" },
         ].map(({ key, label }) => (
-          <button
+          <Button
             key={key}
             className={`standings-tab${activeTeam === key ? " active" : ""}`}
             onClick={() => setActiveTeam(key)}
           >
             {label}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -555,11 +564,12 @@ function AllProTab({ allPro, onPlayerSelect }) {
         {ALL_PRO_POSITIONS.map(({ key, label, slots }) => {
           const players = team[key] ?? [];
           return (
-            <div
+            <Card
               key={key}
-              className="card"
+              className="card-premium"
               style={{ padding: 0, overflow: "hidden" }}
             >
+              <CardContent style={{ padding: 0 }}>
               {/* Position header */}
               <div
                 style={{
@@ -615,7 +625,8 @@ function AllProTab({ allPro, onPlayerSelect }) {
                   />
                 ))}
               </div>
-            </div>
+              </CardContent>
+            </Card>
           );
         })}
       </div>
@@ -760,13 +771,13 @@ export default function AwardRaces({ onPlayerSelect, actions }) {
             style={{ marginBottom: "var(--space-6)", flexWrap: "wrap" }}
           >
             {AWARD_TABS.map(({ key, label }) => (
-              <button
+              <Button
                 key={key}
                 className={`standings-tab${activeTab === key ? " active" : ""}`}
                 onClick={() => setActiveTab(key)}
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
 

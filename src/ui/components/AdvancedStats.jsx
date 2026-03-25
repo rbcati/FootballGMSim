@@ -11,6 +11,11 @@
  */
 
 import React, { useMemo, useState } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Grade computation from play logs ─────────────────────────────────────────
 
@@ -177,6 +182,16 @@ function gradeColor(g) {
   return "#636366";
 }
 
+// ── Grade tier label ───────────────────────────────────────────────────────────
+
+function gradeTierLabel(g) {
+  if (g >= 90) return "Elite";
+  if (g >= 80) return "Star";
+  if (g >= 70) return "Good";
+  if (g >= 60) return "Average";
+  return "Poor";
+}
+
 // ── Radar bar ─────────────────────────────────────────────────────────────────
 
 function RadarBar({ label, value, maxValue = 100 }) {
@@ -201,6 +216,7 @@ function PlayerGradeCard({ entry }) {
   const [expanded, setExpanded] = useState(false);
   const { ref, pos, overall, sub, stats } = entry;
   const color = gradeColor(overall);
+  const tierLabel = gradeTierLabel(overall);
 
   const subKeys = Object.keys(sub || {});
 
@@ -229,9 +245,16 @@ function PlayerGradeCard({ entry }) {
           <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {ref?.name || "?"}
           </div>
-          <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 1 }}>
-            {pos}
-            {stats.snapCount > 0 && <span style={{ marginLeft: 6 }}>{stats.snapCount} snaps</span>}
+          <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 1, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>{pos}</span>
+            {stats.snapCount > 0 && <span>{stats.snapCount} snaps</span>}
+            <Badge
+              variant="outline"
+              className="text-xs px-1 py-0 h-4"
+              style={{ color, borderColor: color + "66", fontSize: "0.6rem" }}
+            >
+              {tierLabel}
+            </Badge>
           </div>
         </div>
         {/* Quick stat */}
@@ -277,8 +300,6 @@ function PlayerGradeCard({ entry }) {
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function AdvancedStats({ logs, homeTeam, awayTeam }) {
-  const [tab, setTab] = useState("offense"); // offense | defense | all
-
   const graded = useMemo(() => computeGrades(logs || []), [logs]);
   const entries = Object.values(graded);
 
@@ -290,8 +311,6 @@ export default function AdvancedStats({ logs, homeTeam, awayTeam }) {
     .sort((a, b) => b.overall - a.overall);
   const allPlayers = [...entries].sort((a, b) => b.overall - a.overall);
 
-  const displayed = tab === "offense" ? offPlayers : tab === "defense" ? defPlayers : allPlayers;
-
   if (!logs?.length) {
     return (
       <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--text-muted)" }}>
@@ -301,46 +320,67 @@ export default function AdvancedStats({ logs, homeTeam, awayTeam }) {
   }
 
   return (
-    <div style={{ paddingBottom: 16 }}>
-      {/* Title */}
-      <div style={{ padding: "12px 16px 8px", fontSize: "0.65rem", fontWeight: 800,
-        color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "1px" }}>
-        PFF-Style Performance Grades
-      </div>
+    <Card className="card-premium" style={{ paddingBottom: 16 }}>
+      <CardHeader style={{ padding: "12px 16px 8px" }}>
+        <CardTitle style={{ fontSize: "0.65rem", fontWeight: 800,
+          color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "1px" }}>
+          PFF-Style Performance Grades
+        </CardTitle>
+      </CardHeader>
+      <CardContent style={{ padding: 0 }}>
+        <Tabs defaultValue="offense">
+          <TabsList style={{ margin: "0 16px 12px", gap: 6 }}>
+            <TabsTrigger value="offense">⚔️ Offense</TabsTrigger>
+            <TabsTrigger value="defense">🛡️ Defense</TabsTrigger>
+            <TabsTrigger value="all">All Players</TabsTrigger>
+          </TabsList>
 
-      {/* Tabs */}
-      <div style={{
-        display: "flex", gap: 6, padding: "0 16px", marginBottom: 12,
-      }}>
-        {[["offense","⚔️ Offense"], ["defense","🛡️ Defense"], ["all","All Players"]].map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            style={{
-              padding: "6px 12px", borderRadius: 8, border: "none",
-              background: tab === key ? "var(--accent, #0A84FF)" : "var(--surface)",
-              color: tab === key ? "#fff" : "var(--text-muted)",
-              fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
-              borderWidth: 1, borderStyle: "solid",
-              borderColor: tab === key ? "transparent" : "var(--hairline)",
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+          <TabsContent value="offense">
+            <ScrollArea className="h-[500px]">
+              <div style={{ padding: "0 16px" }}>
+                {offPlayers.slice(0, 12).map((entry, i) => (
+                  <PlayerGradeCard key={i} entry={entry} />
+                ))}
+                {offPlayers.length === 0 && (
+                  <div style={{ textAlign: "center", padding: 24, color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    No players in this category.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
 
-      {/* Grade leaderboard */}
-      <div style={{ padding: "0 16px" }}>
-        {displayed.slice(0, 12).map((entry, i) => (
-          <PlayerGradeCard key={i} entry={entry} />
-        ))}
-        {displayed.length === 0 && (
-          <div style={{ textAlign: "center", padding: 24, color: "var(--text-muted)", fontSize: "0.85rem" }}>
-            No players in this category.
-          </div>
-        )}
-      </div>
-    </div>
+          <TabsContent value="defense">
+            <ScrollArea className="h-[500px]">
+              <div style={{ padding: "0 16px" }}>
+                {defPlayers.slice(0, 12).map((entry, i) => (
+                  <PlayerGradeCard key={i} entry={entry} />
+                ))}
+                {defPlayers.length === 0 && (
+                  <div style={{ textAlign: "center", padding: 24, color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    No players in this category.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="all">
+            <ScrollArea className="h-[500px]">
+              <div style={{ padding: "0 16px" }}>
+                {allPlayers.slice(0, 12).map((entry, i) => (
+                  <PlayerGradeCard key={i} entry={entry} />
+                ))}
+                {allPlayers.length === 0 && (
+                  <div style={{ textAlign: "center", padding: 24, color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    No players in this category.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
   );
 }

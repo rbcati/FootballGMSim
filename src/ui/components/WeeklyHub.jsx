@@ -16,6 +16,11 @@
 
 import React, { useMemo, useState } from "react";
 import PlayerCard from "./PlayerCard.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Advance Week Button ────────────────────────────────────────────────────────
 
@@ -87,7 +92,7 @@ function AdvanceWeekButton({ league, busy, simulating, onAdvanceWeek }) {
   }
 
   return (
-    <button
+    <Button
       onClick={disabled ? undefined : onAdvanceWeek}
       onMouseDown={() => !disabled && setPressed(true)}
       onMouseUp={() => setPressed(false)}
@@ -144,7 +149,7 @@ function AdvanceWeekButton({ league, busy, simulating, onAdvanceWeek }) {
           →
         </div>
       )}
-    </button>
+    </Button>
   );
 }
 
@@ -241,7 +246,7 @@ function TeamCircle({ abbr, size = 44 }) {
 function ActionCard({ icon, label, sublabel, color, onClick, badge, disabled }) {
   const [pressed, setPressed] = useState(false);
   return (
-    <button
+    <Button
       onClick={disabled ? undefined : onClick}
       onMouseDown={() => !disabled && setPressed(true)}
       onMouseUp={() => setPressed(false)}
@@ -297,7 +302,7 @@ function ActionCard({ icon, label, sublabel, color, onClick, badge, disabled }) 
           {sublabel}
         </div>
       )}
-    </button>
+    </Button>
   );
 }
 
@@ -349,7 +354,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
         </div>
       </div>
 
-      <button
+      <Button
         onClick={() => onNavigate?.("Strategy")}
         style={{
           width: "100%", marginTop: 14,
@@ -360,7 +365,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
         }}
       >
         Game Plan →
-      </button>
+      </Button>
     </div>
   );
 }
@@ -411,7 +416,7 @@ function InjuryAlerts({ injuries, onNavigate, onPlayerSelect }) {
           );
         })}
       </div>
-      <button
+      <Button
         onClick={() => onNavigate?.("Injuries")}
         style={{
           background: "none", border: "none", color: "var(--accent)",
@@ -420,7 +425,7 @@ function InjuryAlerts({ injuries, onNavigate, onPlayerSelect }) {
         }}
       >
         View Full Report →
-      </button>
+      </Button>
     </div>
   );
 }

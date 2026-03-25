@@ -6,6 +6,11 @@
  */
 
 import React, { useMemo } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 function teamColor(abbr = "") {
   const palette = [
@@ -169,7 +174,8 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam }) {
 
       {/* Status badge */}
       <div style={{ textAlign: "center", marginTop: "var(--space-1)" }}>
-        <span
+        <Badge
+          variant="outline"
           style={{
             fontSize: 10,
             fontWeight: 700,
@@ -180,7 +186,7 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam }) {
           }}
         >
           {game.played ? "FINAL" : "UPCOMING"}
-        </span>
+        </Badge>
       </div>
     </div>
   );
@@ -328,7 +334,8 @@ export default function PostseasonHub({ league }) {
                   {roundLabel}
                 </div>
                 {isCurrent && (
-                  <span
+                  <Badge
+                    variant="outline"
                     style={{
                       padding: "2px 8px",
                       borderRadius: "var(--radius-pill)",
@@ -339,10 +346,11 @@ export default function PostseasonHub({ league }) {
                     }}
                   >
                     CURRENT
-                  </span>
+                  </Badge>
                 )}
                 {allPlayed && (
-                  <span
+                  <Badge
+                    variant="outline"
                     style={{
                       padding: "2px 8px",
                       borderRadius: "var(--radius-pill)",
@@ -353,7 +361,7 @@ export default function PostseasonHub({ league }) {
                     }}
                   >
                     COMPLETE
-                  </span>
+                  </Badge>
                 )}
               </div>
 

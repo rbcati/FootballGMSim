@@ -10,6 +10,11 @@
 import React, { useEffect, useState } from "react";
 import { useWorker } from "../hooks/useWorker.js";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function HallOfFame({ onPlayerSelect }) {
   const { actions } = useWorker();
@@ -63,9 +68,9 @@ export default function HallOfFame({ onPlayerSelect }) {
         <h2 className="text-xl font-black text-[color:var(--text)] m-0">
           Hall of Fame
         </h2>
-        <span className="text-sm font-medium text-[color:var(--text-muted)] bg-[color:var(--surface-strong)] px-2.5 py-0.5 rounded-full">
+        <Badge variant="secondary">
           {players.length} {players.length === 1 ? "Legend" : "Legends"}
-        </span>
+        </Badge>
       </div>
 
       {/* Gallery Grid */}
@@ -89,109 +94,112 @@ function HofCard({ player, onPlayerSelect }) {
   const primaryStat = getPrimaryStat(player);
 
   return (
-    <div
-      className="relative rounded-xl overflow-hidden cursor-pointer
-                 bg-[color:var(--surface)] border-2 border-yellow-500/40
+    <Card
+      className="card-premium relative rounded-xl overflow-hidden cursor-pointer
+                 border-2 border-yellow-500/40
                  hover:border-yellow-400 hover:shadow-lg hover:shadow-yellow-500/10
                  transition-all duration-200 group"
       onClick={() => onPlayerSelect?.(player.id)}
     >
-      {/* Gold gradient header */}
-      <div className="relative bg-gradient-to-r from-yellow-600/20 via-yellow-500/10 to-yellow-600/20
-                      dark:from-yellow-500/15 dark:via-yellow-400/5 dark:to-yellow-500/15
-                      px-4 pt-4 pb-3">
-        <div className="flex items-center gap-3">
-          {/* Avatar with gold ring */}
-          <div className="relative shrink-0">
-            <div className="rounded-full p-0.5 bg-gradient-to-br from-yellow-400 to-yellow-600
-                            shadow-md shadow-yellow-500/20">
-              <div className="rounded-full overflow-hidden bg-[color:var(--surface)]">
-                <ResponsivePlayerAvatar
-                  teamColor={player.teamColor || "#555"}
-                  text={player.number ?? player.pos ?? "?"}
-                  position={player.pos}
-                  showPositionBadge
-                  style={{ width: 56, height: 56 }}
-                />
+      <CardContent className="p-0">
+        {/* Gold gradient header */}
+        <div className="relative bg-gradient-to-r from-yellow-600/20 via-yellow-500/10 to-yellow-600/20
+                        dark:from-yellow-500/15 dark:via-yellow-400/5 dark:to-yellow-500/15
+                        px-4 pt-4 pb-3">
+          <div className="flex items-center gap-3">
+            {/* Avatar with gold ring */}
+            <div className="relative shrink-0">
+              <div className="rounded-full p-0.5 bg-gradient-to-br from-yellow-400 to-yellow-600
+                              shadow-md shadow-yellow-500/20">
+                <div className="rounded-full overflow-hidden bg-[color:var(--surface)]">
+                  <ResponsivePlayerAvatar
+                    teamColor={player.teamColor || "#555"}
+                    text={player.number ?? player.pos ?? "?"}
+                    position={player.pos}
+                    showPositionBadge
+                    style={{ width: 56, height: 56 }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Name & info */}
+            <div className="min-w-0 flex-1">
+              <div className="font-black text-base text-[color:var(--text)] truncate
+                              group-hover:text-yellow-500 transition-colors">
+                {player.name}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold text-[color:var(--accent)]">{player.pos}</span>
+                <span className="text-[color:var(--text-muted)]">&middot;</span>
+                <span className="text-[color:var(--text-muted)]">{player.primaryTeam || "N/A"}</span>
+              </div>
+              <div className="text-xs text-[color:var(--text-muted)] mt-0.5">
+                {player.seasonsPlayed > 0 && `${player.seasonsPlayed} season${player.seasonsPlayed !== 1 ? "s" : ""}`}
+                {player.inductionYear && ` \u00B7 Inducted ${player.inductionYear}`}
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Name & info */}
-          <div className="min-w-0 flex-1">
-            <div className="font-black text-base text-[color:var(--text)] truncate
-                            group-hover:text-yellow-500 transition-colors">
-              {player.name}
+        {/* Stats Section */}
+        <div className="px-4 py-3 space-y-3">
+          {/* Accolades row */}
+          {(accoladeSummary.mvps > 0 || accoladeSummary.superBowls > 0 || accoladeSummary.proBowls > 0) && (
+            <div className="flex flex-wrap gap-1.5">
+              {accoladeSummary.mvps > 0 && (
+                <AccoladeBadge label={`${accoladeSummary.mvps}x MVP`} gold />
+              )}
+              {accoladeSummary.superBowls > 0 && (
+                <AccoladeBadge label={`${accoladeSummary.superBowls}x SB`} gold />
+              )}
+              {accoladeSummary.proBowls > 0 && (
+                <AccoladeBadge label={`${accoladeSummary.proBowls}x Pro Bowl`} />
+              )}
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-semibold text-[color:var(--accent)]">{player.pos}</span>
-              <span className="text-[color:var(--text-muted)]">&middot;</span>
-              <span className="text-[color:var(--text-muted)]">{player.primaryTeam || "N/A"}</span>
-            </div>
-            <div className="text-xs text-[color:var(--text-muted)] mt-0.5">
-              {player.seasonsPlayed > 0 && `${player.seasonsPlayed} season${player.seasonsPlayed !== 1 ? "s" : ""}`}
-              {player.inductionYear && ` \u00B7 Inducted ${player.inductionYear}`}
-            </div>
+          )}
+
+          {/* Career stat grid */}
+          <div className="grid grid-cols-3 gap-2">
+            {primaryStat.map(({ label, value }) => (
+              <div key={label} className="text-center">
+                <div className="text-sm font-black text-[color:var(--text)]">
+                  {typeof value === "number" ? value.toLocaleString() : value}
+                </div>
+                <div className="text-[10px] uppercase tracking-wider text-[color:var(--text-muted)] font-medium">
+                  {label}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* Stats Section */}
-      <div className="px-4 py-3 space-y-3">
-        {/* Accolades row */}
-        {(accoladeSummary.mvps > 0 || accoladeSummary.superBowls > 0 || accoladeSummary.proBowls > 0) && (
-          <div className="flex flex-wrap gap-1.5">
-            {accoladeSummary.mvps > 0 && (
-              <AccoladeBadge label={`${accoladeSummary.mvps}x MVP`} gold />
-            )}
-            {accoladeSummary.superBowls > 0 && (
-              <AccoladeBadge label={`${accoladeSummary.superBowls}x SB`} gold />
-            )}
-            {accoladeSummary.proBowls > 0 && (
-              <AccoladeBadge label={`${accoladeSummary.proBowls}x Pro Bowl`} />
-            )}
+        {/* HOF badge */}
+        <div className="absolute top-2 right-2">
+          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600
+                          flex items-center justify-center shadow-sm">
+            <svg viewBox="0 0 20 20" className="w-4 h-4 text-white fill-current">
+              <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.27 5.23 15.71l.91-5.32L2.27 6.62l5.34-.78L10 1z" />
+            </svg>
           </div>
-        )}
-
-        {/* Career stat grid */}
-        <div className="grid grid-cols-3 gap-2">
-          {primaryStat.map(({ label, value }) => (
-            <div key={label} className="text-center">
-              <div className="text-sm font-black text-[color:var(--text)]">
-                {typeof value === "number" ? value.toLocaleString() : value}
-              </div>
-              <div className="text-[10px] uppercase tracking-wider text-[color:var(--text-muted)] font-medium">
-                {label}
-              </div>
-            </div>
-          ))}
         </div>
-      </div>
-
-      {/* HOF badge */}
-      <div className="absolute top-2 right-2">
-        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600
-                        flex items-center justify-center shadow-sm">
-          <svg viewBox="0 0 20 20" className="w-4 h-4 text-white fill-current">
-            <path d="M10 1l2.39 4.84 5.34.78-3.87 3.77.91 5.32L10 13.27 5.23 15.71l.91-5.32L2.27 6.62l5.34-.78L10 1z" />
-          </svg>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function AccoladeBadge({ label, gold }) {
   return (
-    <span
-      className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full
+    <Badge
+      variant="outline"
+      className={`text-[10px] font-bold uppercase tracking-wide
         ${gold
-          ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30"
-          : "bg-[color:var(--surface-strong)] text-[color:var(--text-muted)] border border-[color:var(--hairline)]"
+          ? "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30"
+          : "bg-[color:var(--surface-strong)] text-[color:var(--text-muted)] border-[color:var(--hairline)]"
         }`}
     >
       {label}
-    </span>
+    </Badge>
   );
 }
 

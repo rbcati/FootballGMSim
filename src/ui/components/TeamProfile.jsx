@@ -7,6 +7,11 @@
 import React, { useEffect, useState } from "react";
 import { useWorker } from "../hooks/useWorker.js";
 import RelocateModal from "./RelocateModal.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,7 +239,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
           ) : (
             <div style={{ color: "var(--text-muted)" }}>Team not found</div>
           )}
-          <button
+          <Button
             className="btn"
             onClick={onClose}
             style={{
@@ -249,7 +254,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
             }}
           >
             ×
-          </button>
+          </Button>
         </div>
 
         {/* ── Body ── */}
@@ -358,51 +363,51 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                   Season History (last {franchise.seasonHistory.length})
                 </h3>
                 <div className="table-wrapper" style={{ overflowX: "auto" }}>
-                  <table
+                  <Table
                     className="standings-table"
                     style={{ width: "100%", minWidth: 420 }}
                   >
-                    <thead>
-                      <tr>
-                        <th
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead
                           style={{
                             textAlign: "left",
                             paddingLeft: "var(--space-3)",
                           }}
                         >
                           Year
-                        </th>
-                        <th style={{ textAlign: "center" }}>W</th>
-                        <th style={{ textAlign: "center" }}>L</th>
-                        <th style={{ textAlign: "center" }}>T</th>
-                        <th style={{ textAlign: "center" }}>PCT</th>
-                        <th style={{ textAlign: "center" }}>PF</th>
-                        <th style={{ textAlign: "center" }}>PA</th>
-                        <th style={{ textAlign: "center" }}>Titles</th>
-                      </tr>
-                    </thead>
-                    <tbody>
+                        </TableHead>
+                        <TableHead style={{ textAlign: "center" }}>W</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>L</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>T</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>PCT</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>PF</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>PA</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>Titles</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
                       {franchise.seasonHistory.map((row, i) => (
-                        <tr key={i} className={row.champion ? "selected" : ""}>
-                          <td
+                        <TableRow key={i} className={row.champion ? "selected" : ""}>
+                          <TableCell
                             style={{
                               paddingLeft: "var(--space-3)",
                               fontWeight: 600,
                             }}
                           >
                             {row.year}
-                          </td>
-                          <td style={{ textAlign: "center", fontWeight: 700 }}>
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center", fontWeight: 700 }}>
                             {row.wins}
-                          </td>
-                          <td style={{ textAlign: "center" }}>{row.losses}</td>
-                          <td style={{ textAlign: "center" }}>{row.ties}</td>
-                          <td style={{ textAlign: "center", fontWeight: 600 }}>
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{row.losses}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{row.ties}</TableCell>
+                          <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
                             {winPct(row.wins, row.losses, row.ties)}
-                          </td>
-                          <td style={{ textAlign: "center" }}>{row.pf}</td>
-                          <td style={{ textAlign: "center" }}>{row.pa}</td>
-                          <td style={{ textAlign: "center" }}>
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{row.pf}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{row.pa}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>
                             {row.champion && (
                               <span title="Super Bowl Champion">🏆</span>
                             )}
@@ -414,11 +419,11 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                                 🥇
                               </span>
                             )}
-                          </td>
-                        </tr>
+                          </TableCell>
+                        </TableRow>
                       ))}
-                    </tbody>
-                  </table>
+                    </TableBody>
+                  </Table>
                 </div>
               </section>
             )}
@@ -460,7 +465,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                         cursor: onPlayerSelect ? "pointer" : "default",
                       }}
                     >
-                      <span
+                      <Badge
+                        variant="outline"
                         style={{
                           fontSize: "var(--text-xs)",
                           fontWeight: 700,
@@ -473,7 +479,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                         }}
                       >
                         {p.pos}
-                      </span>
+                      </Badge>
                       <span
                         style={{
                           fontSize: "var(--text-sm)",
@@ -486,7 +492,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                       >
                         {p.name}
                       </span>
-                      <span
+                      <Badge
+                        variant="outline"
                         style={{
                           fontSize: "var(--text-xs)",
                           fontWeight: 700,
@@ -496,7 +503,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
                         }}
                       >
                         {p.ovr}
-                      </span>
+                      </Badge>
                     </div>
                   ))}
                 </div>

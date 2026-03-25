@@ -33,6 +33,12 @@ import TraitBadge from "./TraitBadge";
 import PlayerAvatar from "./PlayerAvatar";
 import DonutChart from "./DonutChart";
 import PlayerCard from "./PlayerCard.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -121,28 +127,26 @@ function OvrBadge({ ovr }) {
 
 function PosBadge({ pos }) {
   return (
-    <span
+    <Badge
+      variant="outline"
       style={{
-        display: "inline-block",
         minWidth: 32,
-        padding: "1px 6px",
-        borderRadius: "var(--radius-pill)",
-        background: "var(--surface-strong)",
         fontSize: "var(--text-xs)",
         fontWeight: 700,
         color: "var(--text-muted)",
+        borderColor: "var(--hairline)",
         textAlign: "center",
       }}
     >
       {pos}
-    </span>
+    </Badge>
   );
 }
 
 function SortTh({ label, sortKey, current, dir, onSort, right = false }) {
   const active = current === sortKey;
   return (
-    <th
+    <TableHead
       onClick={() => onSort(sortKey)}
       style={{
         textAlign: right ? "right" : "left",
@@ -159,7 +163,7 @@ function SortTh({ label, sortKey, current, dir, onSort, right = false }) {
     >
       {label}
       {active ? (dir === "asc" ? " ▲" : " ▼") : ""}
-    </th>
+    </TableHead>
   );
 }
 
@@ -200,76 +204,77 @@ function CapBanner({ userTeam }) {
         : "var(--success)";
 
   return (
-    <div
-      className="card"
+    <Card
+      className="card-premium"
       style={{
         marginBottom: "var(--space-4)",
-        padding: "var(--space-4) var(--space-5)",
       }}
     >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-3)",
-        }}
-      >
-        <div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              textTransform: "uppercase",
-              letterSpacing: "1px",
-              color: "var(--text-muted)",
-              marginBottom: 4,
-              fontWeight: 700,
-            }}
-          >
-            Salary Cap Room
+      <CardContent style={{ padding: "var(--space-4) var(--space-5)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "var(--space-3)",
+            marginBottom: "var(--space-3)",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                textTransform: "uppercase",
+                letterSpacing: "1px",
+                color: "var(--text-muted)",
+                marginBottom: 4,
+                fontWeight: 700,
+              }}
+            >
+              Salary Cap Room
+            </div>
+            <div
+              style={{
+                fontSize: "1.75rem",
+                fontWeight: 800,
+                color: roomCol,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              ${capRoom.toFixed(1)}M
+            </div>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-muted)",
+                marginTop: 4,
+              }}
+            >
+              Used: ${capUsed.toFixed(1)}M · Dead: ${deadCap.toFixed(1)}M
+            </div>
           </div>
-          <div
-            style={{
-              fontSize: "1.75rem",
-              fontWeight: 800,
-              color: roomCol,
-              lineHeight: 1,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            ${capRoom.toFixed(1)}M
-          </div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginTop: 4,
-            }}
-          >
-            Used: ${capUsed.toFixed(1)}M · Dead: ${deadCap.toFixed(1)}M
-          </div>
-        </div>
 
-        <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginBottom: 4,
-            }}
-          >
-            League Ceiling: ${capTotal.toFixed(0)}M
+          <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-muted)",
+                marginBottom: 4,
+              }}
+            >
+              League Ceiling: ${capTotal.toFixed(0)}M
+            </div>
+            <DonutChart data={[
+                { value: capUsed, color: "var(--accent)" },
+                { value: deadCap, color: "var(--danger)" },
+                { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
+            ]} size={48} strokeWidth={8} />
           </div>
-          <DonutChart data={[
-              { value: capUsed, color: "var(--accent)" },
-              { value: deadCap, color: "var(--danger)" },
-              { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
-          ]} size={48} strokeWidth={8} />
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -348,7 +353,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
             <span style={{ fontSize: "var(--text-sm)" }}>$</span>
-            <input
+            <Input
               type="number"
               step="0.1"
               min="0.75"
@@ -376,7 +381,7 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
           </div>
           <span style={{ color: "var(--hairline)" }}>×</span>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input
+            <Input
               type="number"
               min="1"
               max="7"
@@ -417,20 +422,20 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
               {err}
             </span>
           )}
-          <button
+          <Button
             className="btn"
             style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}
             onClick={onCancel}
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             className="btn btn-primary"
             style={{ fontSize: "var(--text-xs)", padding: "4px 16px" }}
             onClick={handleConfirm}
           >
             Confirm Bid
-          </button>
+          </Button>
         </div>
       </div>
     </Wrapper>
@@ -504,7 +509,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                     Insufficient cap space
                   </div>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => setPhase("bid")}
                     style={{
                       flex: 1, padding: "12px",
@@ -514,7 +519,7 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
                     }}
                   >
                     {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                  </button>
+                  </Button>
                 )}
               </div>
             ) : (
@@ -694,81 +699,86 @@ export default function FreeAgency({
       <style>{mobileStyle}</style>
       {/* Free Agency Bidding War Status Banner */}
       {faState && (
-        <div
-          className="card"
+        <Card
+          className="card-premium"
           style={{
             marginBottom: "var(--space-4)",
-            padding: "var(--space-4)",
-            background: "var(--surface-strong)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "var(--space-3)",
           }}
         >
-          <div>
-            <div
-              style={{
-                fontSize: "var(--text-xs)",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                color: "var(--text-muted)",
-              }}
-            >
-              {faState.phase === "free_agency" ? "Bidding War" : "Current Phase"}
-            </div>
-            <div
-              style={{
-                fontSize: "var(--text-base)",
-                fontWeight: 700,
-                color: "var(--text)",
-              }}
-            >
-              {faState.phase === "free_agency"
-                ? `Free Agency: Day ${faState.faDay ?? 1} of ${faState.faMaxDays ?? 5}`
-                : faState.phase === "offseason_resign"
-                  ? "Offseason Re-Signing"
-                  : "In-Season Free Agency"}
-            </div>
-            {faState.phase === "free_agency" && (
+          <CardContent
+            style={{
+              padding: "var(--space-4)",
+              background: "var(--surface-strong)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "var(--space-3)",
+            }}
+          >
+            <div>
               <div
                 style={{
                   fontSize: "var(--text-xs)",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
                   color: "var(--text-muted)",
-                  marginTop: 4,
                 }}
               >
-                Submit your bids, then advance the day. Players evaluate all offers at day's end.
+                {faState.phase === "free_agency" ? "Bidding War" : "Current Phase"}
+              </div>
+              <div
+                style={{
+                  fontSize: "var(--text-base)",
+                  fontWeight: 700,
+                  color: "var(--text)",
+                }}
+              >
+                {faState.phase === "free_agency"
+                  ? `Free Agency: Day ${faState.faDay ?? 1} of ${faState.faMaxDays ?? 5}`
+                  : faState.phase === "offseason_resign"
+                    ? "Offseason Re-Signing"
+                    : "In-Season Free Agency"}
+              </div>
+              {faState.phase === "free_agency" && (
+                <div
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    marginTop: 4,
+                  }}
+                >
+                  Submit your bids, then advance the day. Players evaluate all offers at day's end.
+                </div>
+              )}
+            </div>
+            {faState.phase === "free_agency" && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                {/* Day progress pips */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                  {Array.from({ length: faState.faMaxDays ?? 5 }, (_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        background: i < (faState.faDay ?? 1) ? "var(--accent)" : "var(--hairline)",
+                        border: i === (faState.faDay ?? 1) - 1 ? "2px solid var(--accent)" : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+                <Button
+                  className="btn btn-primary"
+                  onClick={() => actions.advanceFreeAgencyDay()}
+                >
+                  Advance Day {faState.faDay ?? 1} →
+                </Button>
               </div>
             )}
-          </div>
-          {faState.phase === "free_agency" && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-              {/* Day progress pips */}
-              <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                {Array.from({ length: faState.faMaxDays ?? 5 }, (_, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: i < (faState.faDay ?? 1) ? "var(--accent)" : "var(--hairline)",
-                      border: i === (faState.faDay ?? 1) - 1 ? "2px solid var(--accent)" : "none",
-                    }}
-                  />
-                ))}
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={() => actions.advanceFreeAgencyDay()}
-              >
-                Advance Day {faState.faDay ?? 1} →
-              </button>
-            </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       <CapBanner userTeam={userTeam} />
@@ -791,93 +801,98 @@ export default function FreeAgency({
       )}
 
       {/* Filters Toolbar */}
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           marginBottom: "var(--space-4)",
-          padding: "var(--space-4)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--space-4)",
         }}
       >
-        {/* Top row: search & OVR */}
-        <div
+        <CardContent
           style={{
+            padding: "var(--space-4)",
             display: "flex",
+            flexDirection: "column",
             gap: "var(--space-4)",
-            flexWrap: "wrap",
-            alignItems: "center",
           }}
         >
-          <input
-            type="text"
-            placeholder="Search players..."
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
+          {/* Top row: search & OVR */}
+          <div
             style={{
-              padding: "6px 12px",
-              background: "var(--surface-strong)",
-              border: "1px solid var(--hairline)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--text)",
-              fontSize: "var(--text-sm)",
-              flex: "1 1 200px",
+              display: "flex",
+              gap: "var(--space-4)",
+              flexWrap: "wrap",
+              alignItems: "center",
             }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-              Min OVR:
-            </span>
-            <input
-              type="number"
-              min="0"
-              max="99"
-              value={minOvr}
-              onChange={(e) => setMinOvr(Number(e.target.value))}
+          >
+            <Input
+              type="text"
+              placeholder="Search players..."
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
               style={{
-                width: 60,
-                padding: "4px 8px",
+                padding: "6px 12px",
                 background: "var(--surface-strong)",
                 border: "1px solid var(--hairline)",
                 borderRadius: "var(--radius-sm)",
                 color: "var(--text)",
                 fontSize: "var(--text-sm)",
+                flex: "1 1 200px",
               }}
             />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+                Min OVR:
+              </span>
+              <Input
+                type="number"
+                min="0"
+                max="99"
+                value={minOvr}
+                onChange={(e) => setMinOvr(Number(e.target.value))}
+                style={{
+                  width: 60,
+                  padding: "4px 8px",
+                  background: "var(--surface-strong)",
+                  border: "1px solid var(--hairline)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text)",
+                  fontSize: "var(--text-sm)",
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Bottom row: Position Pills */}
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-          {POSITIONS.map((pos) => (
-            <button
-              key={pos}
-              onClick={() => setPosFilter(pos)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: "var(--radius-pill)",
-                border:
-                  pos === posFilter
-                    ? "1px solid var(--accent)"
-                    : "1px solid var(--hairline)",
-                background:
-                  pos === posFilter ? "var(--accent-muted)" : "var(--surface)",
-                color: pos === posFilter ? "var(--accent)" : "var(--text)",
-                fontSize: "var(--text-xs)",
-                fontWeight: pos === posFilter ? 700 : 500,
-                cursor: "pointer",
-                transition: "all 0.2s",
-              }}
-            >
-              {pos}
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Bottom row: Position Pills */}
+          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            {POSITIONS.map((pos) => (
+              <Button
+                key={pos}
+                onClick={() => setPosFilter(pos)}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "var(--radius-pill)",
+                  border:
+                    pos === posFilter
+                      ? "1px solid var(--accent)"
+                      : "1px solid var(--hairline)",
+                  background:
+                    pos === posFilter ? "var(--accent-muted)" : "var(--surface)",
+                  color: pos === posFilter ? "var(--accent)" : "var(--text)",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: pos === posFilter ? 700 : 500,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {pos}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Table Card */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <div
             style={{
@@ -891,10 +906,10 @@ export default function FreeAgency({
         ) : (
           <div>
             <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
-              <table className="standings-table" style={{ width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th
+              <Table className="standings-table" style={{ width: "100%" }}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
                       style={{
                         paddingLeft: "var(--space-5)",
                         width: 36,
@@ -903,7 +918,7 @@ export default function FreeAgency({
                       }}
                     >
                       #
-                    </th>
+                    </TableHead>
                     <SortTh
                       label="POS"
                       sortKey="pos"
@@ -918,7 +933,7 @@ export default function FreeAgency({
                       dir={sortDir}
                       onSort={handleSort}
                     />
-                    <th>TRAITS</th>
+                    <TableHead>TRAITS</TableHead>
                     <SortTh
                       label="OVR"
                       sortKey="ovr"
@@ -933,7 +948,7 @@ export default function FreeAgency({
                       dir={sortDir}
                       onSort={handleSort}
                     />
-                    <th
+                    <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
                         color: "var(--text-muted)",
@@ -942,8 +957,8 @@ export default function FreeAgency({
                       }}
                     >
                       SCHEME FIT
-                    </th>
-                    <th
+                    </TableHead>
+                    <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
                         color: "var(--text-muted)",
@@ -952,7 +967,7 @@ export default function FreeAgency({
                       }}
                     >
                       TOP BID
-                    </th>
+                    </TableHead>
                     <SortTh
                       label="ASK $/YR"
                       sortKey="ask"
@@ -961,12 +976,12 @@ export default function FreeAgency({
                       onSort={handleSort}
                       right
                     />
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {sortedAgents.length === 0 && (
-                    <tr>
-                      <td
+                    <TableRow>
+                      <TableCell
                         colSpan={9}
                         style={{
                           textAlign: "center",
@@ -975,8 +990,8 @@ export default function FreeAgency({
                         }}
                       >
                         No free agents match your filter.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                   {sortedAgents.slice(0, 100).map((player, idx) => {
                     const isSigningThis = signingPlayerId === player.id;
@@ -988,7 +1003,7 @@ export default function FreeAgency({
 
                     // Top Bid cell (shared between signing & normal rows)
                     const topBidCell = (
-                      <td style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}>
+                      <TableCell style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}>
                         {hasBids ? (
                           <div>
                             <div style={{
@@ -1021,66 +1036,66 @@ export default function FreeAgency({
                         ) : (
                           <span style={{ color: "var(--text-subtle)" }}>No bids</span>
                         )}
-                      </td>
+                      </TableCell>
                     );
 
                     if (isSigningThis) {
                       return (
                         <React.Fragment key={player.id}>
-                          <tr style={{ background: "var(--accent)0d" }}>
-                            <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                          <TableRow style={{ background: "var(--accent)0d" }}>
+                            <TableCell style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                               {idx + 1}
-                            </td>
-                            <td><PosBadge pos={player.pos} /></td>
-                            <td onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
+                            </TableCell>
+                            <TableCell><PosBadge pos={player.pos} /></TableCell>
+                            <TableCell onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
                               <span style={{ borderBottom: "1px dotted var(--text-muted)" }}>{player.name}</span>
-                            </td>
-                            <td style={{ whiteSpace: "nowrap" }}>
+                            </TableCell>
+                            <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
-                            </td>
-                            <td><OvrBadge ovr={player.ovr} /></td>
-                            <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
+                            <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
-                            </td>
+                            </TableCell>
                             {topBidCell}
-                            <td style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
-                              <button className="btn btn-primary" disabled>
+                            <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
+                              <Button className="btn btn-primary" disabled>
                                 {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                              </button>
-                            </td>
-                          </tr>
-                          <tr>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
                             <SignInlineForm
                               player={player}
                               capRoom={capRoom}
                               onCancel={() => setSigningPlayerId(null)}
                               onSubmit={(c) => handleSign(player.id, c)}
                             />
-                          </tr>
+                          </TableRow>
                         </React.Fragment>
                       );
                     }
 
                     return (
-                      <tr key={player.id}>
-                        <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                      <TableRow key={player.id}>
+                        <TableCell style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                           {idx + 1}
-                        </td>
-                        <td><PosBadge pos={player.pos} /></td>
-                        <td onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
+                        </TableCell>
+                        <TableCell><PosBadge pos={player.pos} /></TableCell>
+                        <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
                           <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
-                        </td>
-                        <td style={{ whiteSpace: "nowrap" }}>
+                        </TableCell>
+                        <TableCell style={{ whiteSpace: "nowrap" }}>
                           {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
-                        </td>
-                        <td><OvrBadge ovr={player.ovr} /></td>
-                        <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
-                        <td style={{ textAlign: "center" }}>
+                        </TableCell>
+                        <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
+                        <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                        <TableCell style={{ textAlign: "center" }}>
                           <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
-                        </td>
+                        </TableCell>
                         {topBidCell}
-                        <td style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
+                        <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
                           <div style={{ fontSize: "var(--text-xs)", color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
                             ${(player._ask ?? 0).toFixed(1)}M{" "}
                             <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
@@ -1090,20 +1105,20 @@ export default function FreeAgency({
                               Cannot Afford
                             </span>
                           ) : (
-                            <button
+                            <Button
                               className="btn btn-primary"
                               style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
                               onClick={() => setSigningPlayerId(player.id)}
                             >
                               {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                            </button>
+                            </Button>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             {/* Mobile Card Layout */}
@@ -1122,7 +1137,7 @@ export default function FreeAgency({
                   const mUserIsTop = mOffers.userIsTopBidder;
 
                   return (
-                     <div key={player.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                     <Card key={player.id} className="card-premium" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
                         <div style={{ display: "flex", gap: "var(--space-3)" }}>
                            <PlayerAvatar text={player.pos} teamColor="var(--accent)" size={56} />
                            <div style={{ flex: 1 }}>
@@ -1160,17 +1175,17 @@ export default function FreeAgency({
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                               <button className="btn" onClick={() => setPreviewPlayer(player)} style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}>View Card</button>
-                               <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</button>
+                               <Button className="btn" onClick={() => setPreviewPlayer(player)} style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}>View Card</Button>
+                               <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</Button>
                             </div>
                         )}
-                     </div>
+                     </Card>
                   );
                })}
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Pool count footer */}
       <div

@@ -1,6 +1,11 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { DEFAULT_TEAMS } from "../../data/default-teams.js";
 import { teamColor } from "../../data/team-utils.js";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const CONF_NAMES = ["AFC", "NFC"];
 const DIV_NAMES = ["East", "North", "South", "West"];
@@ -131,13 +136,13 @@ export default function NewLeagueSetup({ actions, onCancel }) {
           {/* Filter tabs */}
           <div className="division-tabs">
             {FILTERS.map((f, i) => (
-              <button
+              <Button
                 key={i}
                 className={`division-tab ${activeFilter === i ? "active" : ""}`}
                 onClick={() => setActiveFilter(i)}
               >
                 {f.label}
-              </button>
+              </Button>
             ))}
           </div>
 
@@ -146,7 +151,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
             {filteredTeams.map((team, idx) => {
               const color = teamColor(team.abbr);
               return (
-                <button
+                <Button
                   key={team.id}
                   className={`team-card ${selectedTeam === team.id ? "selected" : ""}`}
                   onClick={() => setSelectedTeam(team.id)}
@@ -174,7 +179,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                       ✓
                     </div>
                   )}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -191,7 +196,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
             {/* League Name */}
             <div className="settings-group">
               <label className="settings-label">League Name</label>
-              <input
+              <Input
                 className="settings-input"
                 type="text"
                 value={leagueName}
@@ -204,7 +209,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
             {/* Starting Year */}
             <div className="settings-group">
               <label className="settings-label">Starting Year</label>
-              <input
+              <Input
                 className="settings-input"
                 type="number"
                 value={year}
@@ -219,7 +224,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
               <label className="settings-label">Difficulty</label>
               <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                 {DIFFICULTY_OPTIONS.map(opt => (
-                  <button
+                  <Button
                     key={opt.value}
                     onClick={() => setDifficulty(opt.value)}
                     style={{
@@ -250,13 +255,13 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                         fontSize: 12, color: "#fff", flexShrink: 0,
                       }}>✓</div>
                     )}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
             {/* Advanced Settings Toggle */}
-            <button
+            <Button
               onClick={() => setShowAdvanced(!showAdvanced)}
               style={{
                 width: "100%", padding: "var(--space-3) var(--space-4)",
@@ -277,7 +282,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                 transition: "transform 0.2s ease",
                 fontSize: 12,
               }}>▼</span>
-            </button>
+            </Button>
 
             {/* Advanced Settings Panel */}
             {showAdvanced && (
@@ -287,7 +292,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                   <label className="settings-label">Playoff Format</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                     {PLAYOFF_FORMATS.map(opt => (
-                      <button
+                      <Button
                         key={opt.value}
                         onClick={() => setPlayoffFormat(opt.value)}
                         style={{
@@ -305,7 +310,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                           {opt.desc}
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -315,7 +320,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                   <label className="settings-label">Draft Order</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
                     {DRAFT_ORDER_TYPES.map(opt => (
-                      <button
+                      <Button
                         key={opt.value}
                         onClick={() => setDraftOrder(opt.value)}
                         style={{
@@ -333,7 +338,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                           {opt.desc}
                         </div>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </div>
@@ -342,7 +347,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                 <div className="settings-group">
                   <label className="settings-label">Salary Cap ($M)</label>
                   <p className="settings-description">Hard cap per team. Default: $301.2M</p>
-                  <input
+                  <Input
                     className="settings-input"
                     type="number"
                     value={salaryCap}
@@ -472,7 +477,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
       {/* Bottom action bar */}
       <div className="action-bar">
         <div className="action-bar-inner">
-          <button
+          <Button
             className="btn"
             onClick={() => (step > 0 ? setStep(step - 1) : onCancel())}
             disabled={creating}
@@ -484,8 +489,8 @@ export default function NewLeagueSetup({ actions, onCancel }) {
             }}
           >
             {step > 0 ? "Back" : "Cancel"}
-          </button>
-          <button
+          </Button>
+          <Button
             id="start-career-btn"
             className="btn-premium btn-primary-premium"
             onClick={() => {
@@ -503,7 +508,7 @@ export default function NewLeagueSetup({ actions, onCancel }) {
               : step < 2
               ? "Continue"
               : "Start Dynasty"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
