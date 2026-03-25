@@ -7,6 +7,12 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import ContractNegotiation from "./ContractNegotiation.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -23,14 +29,16 @@ const SORT_KEYS = [
 
 function MiniStat({ label, value, color = "var(--text)" }) {
   return (
-    <div className="card-premium" style={{ padding: "var(--space-2) var(--space-3)", textAlign: "center" }}>
-      <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>
-        {label}
-      </div>
-      <div style={{ fontSize: "var(--text-base)", fontWeight: 900, color, fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </div>
-    </div>
+    <Card className="card-premium" style={{ padding: "var(--space-2) var(--space-3)", textAlign: "center" }}>
+      <CardContent className="p-0">
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>
+          {label}
+        </div>
+        <div style={{ fontSize: "var(--text-base)", fontWeight: 900, color, fontVariantNumeric: "tabular-nums" }}>
+          {value}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -143,12 +151,11 @@ export default function FreeAgencyHub({ league, actions }) {
 
       {/* Controls (original) */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-4)", alignItems: "center" }}>
-        <input
+        <Input
           type="text"
           placeholder="Search free agents..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="settings-input"
           style={{ flex: "1 1 180px", maxWidth: 280 }}
         />
         <div style={{ display: "flex", gap: "var(--space-1)" }}>
@@ -178,51 +185,62 @@ export default function FreeAgencyHub({ league, actions }) {
         ))}
       </div>
 
-      {/* FA Grid (original) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--space-3)" }}>
-        {filtered.slice(0, 60).map((fa, i) => {
-          const pos = fa.pos || fa.position;
-          const posColor = POS_COLORS[pos] || "#9ca3af";
-          const currentBid = aiBids[fa.id] || { bid: fa.baseAnnual || 4, teamAbbr: "—", timeLeft: 48 };
+      {/* FA Grid */}
+      <Card className="card-premium hover-lift">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Free Agents ({filtered.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <ScrollArea className="h-[600px]">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+              {filtered.slice(0, 60).map((fa, i) => {
+                const pos = fa.pos || fa.position;
+                const posColor = POS_COLORS[pos] || "#9ca3af";
+                const currentBid = aiBids[fa.id] || null;
 
-          return (
-            <div
-              key={fa.id}
-              className={`card-premium hover-lift fade-in stagger-${Math.min(i + 1, 8)}`}
-              style={{ padding: "var(--space-3) var(--space-4)", borderLeft: `3px solid ${posColor}`, cursor: "pointer" }}
-              onClick={() => setBiddingPlayer(fa)}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                {/* Avatar */}
-                <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${posColor}22`, border: `2px solid ${posColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 12, color: posColor, flexShrink: 0 }}>
-                  {fa.name?.split(" ").map(n => n[0]).join("").slice(0, 2)}
-                </div>
+                return (
+                  <div
+                    key={fa.id}
+                    className={`card-premium hover-lift fade-in stagger-${Math.min(i + 1, 8)}`}
+                    style={{ padding: "var(--space-3) var(--space-4)", borderLeft: `3px solid ${posColor}`, cursor: "pointer" }}
+                    onClick={() => setBiddingPlayer(fa)}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+                      {/* Avatar */}
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${posColor}22`, border: `2px solid ${posColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 12, color: posColor, flexShrink: 0 }}>
+                        {fa.name?.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                      </div>
 
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {fa.name}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 2 }}>
-                    <span className={`pos-badge pos-${pos?.toLowerCase()}`}>{pos}</span>
-                    <PlayerCard player={fa} variant="compact" style={{ margin: 0, padding: 0 }} />
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Age {fa.age}</span>
-                  </div>
-                </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {fa.name}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 2 }}>
+                          <Badge className="text-[10px] font-bold" style={{ background: `${posColor}22`, color: posColor, borderColor: posColor }}>
+                            {pos}
+                          </Badge>
+                          <PlayerCard player={fa} variant="compact" style={{ margin: 0, padding: 0 }} />
+                          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Age {fa.age}</span>
+                        </div>
+                      </div>
 
-                {/* Bid info */}
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>
-                    {currentBid.bid.toFixed(1)}M
+                      {/* Bid info */}
+                      <div className="text-right">
+                        <div className="text-sm font-bold tabular-nums" style={{ color: "var(--success)" }}>
+                          {currentBid ? `${currentBid.bid.toFixed(1)}M` : "No bids"}
+                        </div>
+                        <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                          {currentBid?.teamAbbr ?? "—"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
-                    {currentBid.teamAbbr}
-                  </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
 
       {/* Contract Negotiation Sheet */}
       {biddingPlayer && (

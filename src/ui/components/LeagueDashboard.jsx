@@ -51,6 +51,13 @@ import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
 import WeeklyHub from "./WeeklyHub.jsx";
 
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+
 // Map MobileNav tab IDs → LeagueDashboard tab names
 const MOBILE_TAB_MAP = {
   hub: "Weekly Hub",
@@ -458,34 +465,18 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
   return (
     <div>
       {/* Conference tab pills + view mode toggle */}
-      <div
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}
-      >
-        <div className="standings-tabs">
-          {CONFS.map((c) => (
-            <button
-              key={c}
-              className={`standings-tab${activeConf === c ? " active" : ""}`}
-              onClick={() => setActiveConf(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-        <div className="standings-tabs">
-          <button
-            className={`standings-tab${viewMode === "division" ? " active" : ""}`}
-            onClick={() => setViewMode("division")}
-          >
-            Divisions
-          </button>
-          <button
-            className={`standings-tab${viewMode === "playoff" ? " active" : ""}`}
-            onClick={() => setViewMode("playoff")}
-          >
-            Playoff Picture
-          </button>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
+        <Tabs value={activeConf} onValueChange={setActiveConf}>
+          <TabsList>
+            {CONFS.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
+          </TabsList>
+        </Tabs>
+        <Tabs value={viewMode} onValueChange={setViewMode}>
+          <TabsList>
+            <TabsTrigger value="division">Divisions</TabsTrigger>
+            <TabsTrigger value="playoff">Playoff Picture</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {viewMode === "playoff" ? (
@@ -498,173 +489,144 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
       ) : (
       <div style={{ display: "grid", gap: "var(--space-6)" }}>
         {grouped.map(({ div, teams: divTeams }) => (
-          <div
-            key={div}
-            className="card"
-            style={{ padding: 0, overflow: "hidden" }}
-          >
-            <div
-              style={{
-                padding: "var(--space-3) var(--space-5)",
-                background: "var(--surface-strong)",
-                borderBottom: "1px solid var(--hairline)",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                {activeConf} {div}
-              </span>
-            </div>
-
-            <div
-              className="table-wrapper"
-              style={{ padding: "0 var(--space-2)" }}
-            >
-              <table className="standings-table" style={{ width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th style={{ paddingLeft: "var(--space-5)" }}>Team</th>
-                    <th style={{ textAlign: "center" }}>W</th>
-                    <th style={{ textAlign: "center" }}>L</th>
-                    <th style={{ textAlign: "center" }}>T</th>
-                    <th style={{ textAlign: "center" }}>PCT</th>
-                    <th style={{ textAlign: "center" }}>PF</th>
-                    <th style={{ textAlign: "center" }}>PA</th>
-                    <th style={{ textAlign: "center" }}>STRK</th>
-                    <th style={{ textAlign: "center" }}>OVR</th>
-                    <th
-                      style={{
-                        textAlign: "right",
-                        paddingRight: "var(--space-5)",
-                      }}
-                    >
-                      CAP
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {divTeams.map((team, idx) => {
-                    const isUser = team.id === userTeamId;
-                    return (
-                      <tr
-                        key={team.id}
-                        className={isUser ? "user-team-row" : ""}
-                      >
-                        <td style={{ paddingLeft: "var(--space-4)" }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "var(--space-3)",
-                            }}
-                          >
-                            <span
+          <Card key={div} className="card-premium">
+            <CardHeader>
+              <CardTitle className="text-xs uppercase tracking-widest text-[color:var(--text-muted)]">{activeConf} {div}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead style={{ paddingLeft: "var(--space-5)" }}>Team</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>W</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>L</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>T</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>PCT</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>PF</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>PA</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>STRK</TableHead>
+                      <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
+                      <TableHead style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>CAP</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {divTeams.map((team, idx) => {
+                      const isUser = team.id === userTeamId;
+                      return (
+                        <TableRow
+                          key={team.id}
+                          className={isUser ? "user-team-row" : ""}
+                        >
+                          <TableCell style={{ paddingLeft: "var(--space-4)" }}>
+                            <div
                               style={{
-                                width: 20,
-                                textAlign: "center",
-                                color: "var(--text-subtle)",
-                                fontSize: "var(--text-xs)",
-                                fontWeight: 700,
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "var(--space-3)",
                               }}
                             >
-                              {idx + 1}
-                            </span>
-                            <TeamLogo
-                              abbr={team.abbr}
-                              size={32}
-                              isUser={isUser}
-                            />
-                            <div>
-                              <div
+                              <span
                                 style={{
-                                  fontWeight: 600,
-                                  color: "var(--text)",
-                                  fontSize: "var(--text-sm)",
-                                  cursor: "pointer",
-                                }}
-                                onClick={() => onTeamSelect?.(team.id)}
-                              >
-                                {team.name}
-                                {isUser && (
-                                  <span
-                                    style={{
-                                      marginLeft: 6,
-                                      fontSize: "var(--text-xs)",
-                                      color: "var(--accent)",
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    ★
-                                  </span>
-                                )}
-                              </div>
-                              <div
-                                style={{
-                                  fontSize: "var(--text-xs)",
+                                  width: 20,
+                                  textAlign: "center",
                                   color: "var(--text-subtle)",
+                                  fontSize: "var(--text-xs)",
+                                  fontWeight: 700,
                                 }}
                               >
-                                {team.abbr}
+                                {idx + 1}
+                              </span>
+                              <TeamLogo
+                                abbr={team.abbr}
+                                size={32}
+                                isUser={isUser}
+                              />
+                              <div>
+                                <div
+                                  style={{
+                                    fontWeight: 600,
+                                    color: "var(--text)",
+                                    fontSize: "var(--text-sm)",
+                                    cursor: "pointer",
+                                  }}
+                                  onClick={() => onTeamSelect?.(team.id)}
+                                >
+                                  {team.name}
+                                  {isUser && (
+                                    <span
+                                      style={{
+                                        marginLeft: 6,
+                                        fontSize: "var(--text-xs)",
+                                        color: "var(--accent)",
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      ★
+                                    </span>
+                                  )}
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: "var(--text-xs)",
+                                    color: "var(--text-subtle)",
+                                  }}
+                                >
+                                  {team.abbr}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </td>
-                        <td
-                          style={{
-                            textAlign: "center",
-                            fontWeight: 700,
-                            color: "var(--text)",
-                          }}
-                        >
-                          {team.wins}
-                        </td>
-                        <td style={{ textAlign: "center" }}>{team.losses}</td>
-                        <td style={{ textAlign: "center" }}>{team.ties}</td>
-                        <td style={{ textAlign: "center", fontWeight: 600 }}>
-                          {winPct(team.wins, team.losses, team.ties)}
-                        </td>
-                        <td style={{ textAlign: "center" }}>{team.ptsFor}</td>
-                        <td style={{ textAlign: "center" }}>
-                          {team.ptsAgainst}
-                        </td>
-                        <td style={{ textAlign: "center" }}>
-                          {(() => {
-                            const streak = computeStreak(team.recentResults ?? []);
-                            if (!streak) return <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>—</span>;
-                            return (
-                              <span className={`streak-badge streak-${streak.type.toLowerCase()}`}>
-                                {streak.type}{streak.count}
-                              </span>
-                            );
-                          })()}
-                        </td>
-                        <td style={{ textAlign: "center" }}>
-                          <OvrPill ovr={team.ovr} />
-                        </td>
-                        <td
-                          style={{
-                            textAlign: "right",
-                            paddingRight: "var(--space-4)",
-                            color: "var(--success)",
-                            fontSize: "var(--text-sm)",
-                          }}
-                        >
-                          ${(team.capRoom ?? 0).toFixed(1)}M
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                          </TableCell>
+                          <TableCell
+                            style={{
+                              textAlign: "center",
+                              fontWeight: 700,
+                              color: "var(--text)",
+                            }}
+                          >
+                            {team.wins}
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{team.losses}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{team.ties}</TableCell>
+                          <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
+                            {winPct(team.wins, team.losses, team.ties)}
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{team.ptsFor}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>
+                            {team.ptsAgainst}
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>
+                            {(() => {
+                              const streak = computeStreak(team.recentResults ?? []);
+                              if (!streak) return <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>—</span>;
+                              return (
+                                <span className={`streak-badge streak-${streak.type.toLowerCase()}`}>
+                                  {streak.type}{streak.count}
+                                </span>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell style={{ textAlign: "center" }}>
+                            <OvrPill ovr={team.ovr} />
+                          </TableCell>
+                          <TableCell
+                            style={{
+                              textAlign: "right",
+                              paddingRight: "var(--space-4)",
+                              color: "var(--success)",
+                              fontSize: "var(--text-sm)",
+                            }}
+                          >
+                            ${(team.capRoom ?? 0).toFixed(1)}M
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
         ))}
 
         {grouped.length === 0 && (

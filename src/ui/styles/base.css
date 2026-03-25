@@ -84,6 +84,28 @@
   /* Modal specific variables */
   --modal-bg: rgba(10, 12, 16, 0.95);
   --modal-backdrop: rgba(0, 0, 0, 0.7);
+
+  /* shadcn/ui CSS variable mappings */
+  --background: 222 47% 6%;
+  --foreground: 213 31% 91%;
+  --card: 222 40% 9%;
+  --card-foreground: 213 31% 91%;
+  --popover: 222 40% 9%;
+  --popover-foreground: 213 31% 91%;
+  --primary: 211 100% 51%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 30% 14%;
+  --secondary-foreground: 213 31% 91%;
+  --muted: 222 30% 14%;
+  --muted-foreground: 215 20% 65%;
+  --accent: 211 100% 51%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 222 20% 18%;
+  --input: 222 20% 18%;
+  --ring: 211 100% 51%;
+  --radius: 0.75rem;
 }
 
 body.theme-light {
@@ -105,6 +127,27 @@ body.theme-light {
   --glass-shadow: 0 8px 32px rgba(15, 23, 42, 0.16);
   --modal-bg: rgba(255, 255, 255, 0.96);
   --modal-backdrop: rgba(0, 0, 0, 0.4);
+
+  /* shadcn/ui CSS variable mappings - light theme */
+  --background: 220 20% 97%;
+  --foreground: 222 47% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 10%;
+  --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 220 14% 93%;
+  --secondary-foreground: 222 47% 10%;
+  --muted: 220 14% 93%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 221 83% 53%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214 32% 88%;
+  --input: 214 32% 88%;
+  --ring: 221 83% 53%;
 }
 
 /* ============================================================================

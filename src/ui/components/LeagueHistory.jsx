@@ -10,6 +10,11 @@
 import React, { useEffect, useState } from "react";
 import { useWorker } from "../hooks/useWorker.js";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -67,43 +72,19 @@ export default function LeagueHistory({ onPlayerSelect }) {
 
   return (
     <div className="space-y-4">
-      {/* Tab Switcher */}
-      <div className="flex gap-2 px-1">
-        <TabButton
-          active={activeTab === "champions"}
-          onClick={() => setActiveTab("champions")}
-          label="Champions"
-        />
-        <TabButton
-          active={activeTab === "records"}
-          onClick={() => setActiveTab("records")}
-          label="Record Book"
-        />
-      </div>
-
-      {activeTab === "champions" && (
-        <ChampionsTable seasons={seasons} onPlayerSelect={onPlayerSelect} />
-      )}
-
-      {activeTab === "records" && (
-        <RecordBook records={records} onPlayerSelect={onPlayerSelect} />
-      )}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="champions">Champions</TabsTrigger>
+          <TabsTrigger value="records">Record Book</TabsTrigger>
+        </TabsList>
+        <TabsContent value="champions">
+          <ChampionsTable seasons={seasons} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
+        <TabsContent value="records">
+          <RecordBook records={records} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
+      </Tabs>
     </div>
-  );
-}
-
-function TabButton({ active, onClick, label }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all min-h-touch
-        ${active
-          ? "bg-[color:var(--accent)] text-white shadow-md"
-          : "bg-[color:var(--surface-strong)] text-[color:var(--text-muted)] hover:text-[color:var(--text)]"
-        }`}
-    >
-      {label}
-    </button>
   );
 }
 
@@ -119,108 +100,108 @@ function ChampionsTable({ seasons, onPlayerSelect }) {
   }
 
   return (
-    <div className="rounded-xl overflow-hidden bg-[color:var(--surface)] border border-[color:var(--hairline)]">
-      <div className="px-5 py-3 bg-[color:var(--surface-strong)] border-b border-[color:var(--hairline)]">
-        <h3 className="text-base font-bold text-[color:var(--text)] m-0">
-          Super Bowl Champions
-        </h3>
-      </div>
+    <Card className="card-premium">
+      <CardHeader>
+        <CardTitle>Super Bowl Champions</CardTitle>
+      </CardHeader>
 
       {/* Mobile: card layout, Desktop: table */}
-      <div className="hidden md:block">
-        <div className="table-wrapper">
-          <table className="standings-table w-full">
-            <thead>
-              <tr>
-                <th className="pl-5">Year</th>
-                <th>Champion</th>
-                <th>Best Record</th>
-                <th>MVP</th>
-                <th>OPOY</th>
-                <th>DPOY</th>
-              </tr>
-            </thead>
-            <tbody>
-              {seasons.map((s) => {
-                const bestTeam = s.standings?.sort((a, b) => b.pct - a.pct)[0];
-                const bestRecord = bestTeam
-                  ? `${bestTeam.wins}-${bestTeam.losses}${bestTeam.ties > 0 ? "-" + bestTeam.ties : ""}`
-                  : "-";
+      <CardContent className="p-0">
+        <div className="hidden md:block">
+          <ScrollArea className="h-[500px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-5">Year</TableHead>
+                  <TableHead>Champion</TableHead>
+                  <TableHead>Best Record</TableHead>
+                  <TableHead>MVP</TableHead>
+                  <TableHead>OPOY</TableHead>
+                  <TableHead>DPOY</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {seasons.map((s) => {
+                  const bestTeam = s.standings?.sort((a, b) => b.pct - a.pct)[0];
+                  const bestRecord = bestTeam
+                    ? `${bestTeam.wins}-${bestTeam.losses}${bestTeam.ties > 0 ? "-" + bestTeam.ties : ""}`
+                    : "-";
 
-                return (
-                  <tr key={s.id}>
-                    <td className="pl-5 font-bold">{s.year}</td>
-                    <td>
-                      {s.champion ? (
-                        <span className="font-semibold text-[color:var(--text)]">
-                          {s.champion.name}{" "}
-                          <span className="text-xs text-[color:var(--text-muted)]">
-                            ({s.champion.abbr})
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="pl-5 font-bold">{s.year}</TableCell>
+                      <TableCell>
+                        {s.champion ? (
+                          <span className="font-semibold text-[color:var(--text)]">
+                            {s.champion.name}{" "}
+                            <span className="text-xs text-[color:var(--text-muted)]">
+                              ({s.champion.abbr})
+                            </span>
                           </span>
-                        </span>
-                      ) : "N/A"}
-                    </td>
-                    <td>
-                      {bestTeam ? (
-                        <span>
-                          {bestTeam.abbr}{" "}
-                          <span className="text-[color:var(--text-muted)]">{bestRecord}</span>
-                        </span>
-                      ) : "-"}
-                    </td>
-                    <td>
-                      <AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} highlight />
-                    </td>
-                    <td>
-                      <AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} />
-                    </td>
-                    <td>
-                      <AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        ) : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {bestTeam ? (
+                          <span>
+                            {bestTeam.abbr}{" "}
+                            <span className="text-[color:var(--text-muted)]">{bestRecord}</span>
+                          </span>
+                        ) : "-"}
+                      </TableCell>
+                      <TableCell>
+                        <AwardCell award={s.awards?.mvp} onPlayerSelect={onPlayerSelect} highlight />
+                      </TableCell>
+                      <TableCell>
+                        <AwardCell award={s.awards?.opoy} onPlayerSelect={onPlayerSelect} />
+                      </TableCell>
+                      <TableCell>
+                        <AwardCell award={s.awards?.dpoy} onPlayerSelect={onPlayerSelect} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
         </div>
-      </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden divide-y divide-[color:var(--hairline)]">
-        {seasons.map((s) => {
-          const bestTeam = s.standings?.sort((a, b) => b.pct - a.pct)[0];
-          const bestRecord = bestTeam
-            ? `${bestTeam.wins}-${bestTeam.losses}${bestTeam.ties > 0 ? "-" + bestTeam.ties : ""}`
-            : "";
-          return (
-            <div key={s.id} className="px-4 py-3 space-y-1">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-[color:var(--text)]">{s.year}</span>
+        {/* Mobile cards */}
+        <div className="md:hidden divide-y divide-[color:var(--hairline)]">
+          {seasons.map((s) => {
+            const bestTeam = s.standings?.sort((a, b) => b.pct - a.pct)[0];
+            const bestRecord = bestTeam
+              ? `${bestTeam.wins}-${bestTeam.losses}${bestTeam.ties > 0 ? "-" + bestTeam.ties : ""}`
+              : "";
+            return (
+              <div key={s.id} className="px-4 py-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-[color:var(--text)]">{s.year}</span>
+                  {s.champion && (
+                    <span className="font-semibold text-sm text-[color:var(--accent)]">
+                      {s.champion.abbr}
+                    </span>
+                  )}
+                </div>
                 {s.champion && (
-                  <span className="font-semibold text-sm text-[color:var(--accent)]">
-                    {s.champion.abbr}
-                  </span>
+                  <div className="text-sm text-[color:var(--text)]">{s.champion.name}</div>
                 )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--text-muted)]">
+                  {bestTeam && <span>Best: {bestTeam.abbr} {bestRecord}</span>}
+                  {s.awards?.mvp && (
+                    <span
+                      className="cursor-pointer text-[color:var(--accent)] font-semibold"
+                      onClick={() => onPlayerSelect?.(s.awards.mvp.playerId)}
+                    >
+                      MVP: {s.awards.mvp.name}
+                    </span>
+                  )}
+                </div>
               </div>
-              {s.champion && (
-                <div className="text-sm text-[color:var(--text)]">{s.champion.name}</div>
-              )}
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--text-muted)]">
-                {bestTeam && <span>Best: {bestTeam.abbr} {bestRecord}</span>}
-                {s.awards?.mvp && (
-                  <span
-                    className="cursor-pointer text-[color:var(--accent)] font-semibold"
-                    onClick={() => onPlayerSelect?.(s.awards.mvp.playerId)}
-                  >
-                    MVP: {s.awards.mvp.name}
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -255,69 +236,89 @@ function RecordBook({ records, onPlayerSelect }) {
   return (
     <div className="space-y-4">
       {/* Record type tabs */}
-      <div className="flex gap-2 px-1">
-        <TabButton
-          active={recordTab === "singleSeason"}
-          onClick={() => setRecordTab("singleSeason")}
-          label="Single Season"
-        />
-        <TabButton
-          active={recordTab === "allTime"}
-          onClick={() => setRecordTab("allTime")}
-          label="All-Time Career"
-        />
-      </div>
-
-      {!hasData ? (
-        <div className="py-8 text-center text-[color:var(--text-muted)]">
-          No {recordTab === "singleSeason" ? "single-season" : "all-time"} records yet.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {Object.entries(RECORD_LABELS).map(([key, label]) => {
-            const rec = data?.[key];
-            if (!rec?.playerId) return null;
-            return (
-              <RecordCard
-                key={key}
-                label={label}
-                record={rec}
-                isCareer={recordTab === "allTime"}
-                onPlayerSelect={onPlayerSelect}
-              />
-            );
-          })}
-        </div>
-      )}
+      <Tabs value={recordTab} onValueChange={setRecordTab}>
+        <TabsList>
+          <TabsTrigger value="singleSeason">Single Season</TabsTrigger>
+          <TabsTrigger value="allTime">All-Time Career</TabsTrigger>
+        </TabsList>
+        <TabsContent value="singleSeason">
+          {!hasData ? (
+            <div className="py-8 text-center text-[color:var(--text-muted)]">
+              No single-season records yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(RECORD_LABELS).map(([key, label]) => {
+                const rec = data?.[key];
+                if (!rec?.playerId) return null;
+                return (
+                  <RecordCard
+                    key={key}
+                    label={label}
+                    record={rec}
+                    isCareer={recordTab === "allTime"}
+                    onPlayerSelect={onPlayerSelect}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent value="allTime">
+          {!hasData ? (
+            <div className="py-8 text-center text-[color:var(--text-muted)]">
+              No all-time records yet.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {Object.entries(RECORD_LABELS).map(([key, label]) => {
+                const rec = data?.[key];
+                if (!rec?.playerId) return null;
+                return (
+                  <RecordCard
+                    key={key}
+                    label={label}
+                    record={rec}
+                    isCareer={recordTab === "allTime"}
+                    onPlayerSelect={onPlayerSelect}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Record History Log */}
       {records.history && records.history.length > 0 && (
-        <div className="rounded-xl overflow-hidden bg-[color:var(--surface)] border border-[color:var(--hairline)]">
-          <div className="px-5 py-3 bg-[color:var(--surface-strong)] border-b border-[color:var(--hairline)]">
-            <h4 className="text-sm font-bold text-[color:var(--text)] m-0">
+        <Card className="rounded-xl overflow-hidden bg-[color:var(--surface)] border border-[color:var(--hairline)]">
+          <CardHeader className="px-5 py-3 bg-[color:var(--surface-strong)] border-b border-[color:var(--hairline)]">
+            <CardTitle className="text-sm font-bold text-[color:var(--text)] m-0">
               Record History
-            </h4>
-          </div>
-          <div className="divide-y divide-[color:var(--hairline)] max-h-64 overflow-y-auto">
-            {[...records.history].reverse().slice(0, 20).map((entry, i) => (
-              <div key={i} className="px-4 py-2 text-sm flex items-center gap-2">
-                <span className="text-[color:var(--text-muted)] text-xs font-mono shrink-0">
-                  {entry.year}
-                </span>
-                <span className="text-[color:var(--text)]">
-                  <span className="font-semibold">{entry.player}</span>
-                  {" "}
-                  <span className="text-[color:var(--text-muted)]">({entry.pos}, {entry.team})</span>
-                  {" "}set {entry.type === "singleSeason" ? "single-season" : "all-time"}{" "}
-                  {entry.label} record:{" "}
-                  <span className="font-bold text-[color:var(--accent)]">
-                    {entry.newValue.toLocaleString()}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-[color:var(--hairline)] max-h-64 overflow-y-auto">
+              {[...records.history].reverse().slice(0, 20).map((entry, i) => (
+                <div key={i} className="px-4 py-2 text-sm flex items-center gap-2">
+                  <span className="text-[color:var(--text-muted)] text-xs font-mono shrink-0">
+                    {entry.year}
                   </span>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+                  <span className="text-[color:var(--text)]">
+                    <span className="font-semibold">{entry.player}</span>
+                    {" "}
+                    <span className="text-[color:var(--text-muted)]">({entry.pos}, {entry.team})</span>
+                    {" "}set {entry.type === "singleSeason" ? "single-season" : "all-time"}{" "}
+                    {entry.label} record:{" "}
+                    <span className="font-bold text-[color:var(--accent)]">
+                      {entry.newValue.toLocaleString()}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

@@ -7,6 +7,9 @@
 import React, { useMemo } from "react";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import PlayerCard from "./PlayerCard.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 // ── Helpers (100% original) ────────────────────────────────────────────────────
 
@@ -102,45 +105,38 @@ function getNextGame(schedule, teamId, teamById) {
 // ── Premium SectionCard (glassmorphism + hover-lift) ───────────────────────────
 function SectionCard({ title, icon, children, accent }) {
   return (
-    <div className="card-premium hover-lift" style={{
+    <Card className="card-premium hover-lift" style={{
       border: accent ? `1px solid ${accent}33` : undefined,
     }}>
-      <div style={{
-        padding: "var(--space-3) var(--space-5)",
-        borderBottom: "1px solid var(--hairline)",
+      <CardHeader className="flex flex-row items-center gap-2 py-3 px-5 border-b border-[color:var(--hairline)]" style={{
         background: accent ? `${accent}0a` : "var(--surface-strong)",
-        display: "flex", alignItems: "center", gap: "var(--space-2)",
       }}>
         {icon && <span style={{ fontSize: "1rem" }}>{icon}</span>}
-        <span style={{
-          fontSize: "var(--text-xs)", fontWeight: 700,
-          textTransform: "uppercase", letterSpacing: "1px",
-          color: accent ?? "var(--text-muted)",
-        }}>
+        <CardTitle className="text-xs font-bold uppercase tracking-widest" style={{ color: accent ?? "var(--text-muted)" }}>
           {title}
-        </span>
-      </div>
-      <div style={{ padding: "var(--space-4) var(--space-5)" }}>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 px-5">
         {children}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 // ── NEW: Large Advance Week CTA ────────────────────────────────────────────────
 function AdvanceWeekCTA({ phase, week, onAdvanceWeek, isBusy }) {
-  const label = phase === "regular" ? `Sim Week ${week}` : 
-                phase === "preseason" ? "Start Season" : 
+  const label = phase === "regular" ? `Sim Week ${week}` :
+                phase === "preseason" ? "Start Season" :
                 phase === "free_agency" ? "Enter Draft" : "Advance Phase";
   return (
-    <button
+    <Button
       onClick={onAdvanceWeek}
       disabled={isBusy}
       className="btn-premium w-full py-4 text-xl font-bold mb-6"
       style={{ minHeight: "68px" }}
     >
       {isBusy ? "Simulating..." : label}
-    </button>
+    </Button>
   );
 }
 
@@ -299,7 +295,7 @@ function RecentFormCard({ form }) {
         {form.length > 0 && (
           <div style={{ display: "flex", gap: "var(--space-4)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
             <span>W: <strong style={{ color: "var(--success)" }}>{form.filter(r => r === "W").length}</strong></span>
-            <span>L: <strong style={{ color: "var(--danger)" }}>{form.filter(r === "L").length}</strong></span>
+            <span>L: <strong style={{ color: "var(--danger)" }}>{form.filter(r => r === "L").length}</strong></span>
             {form.includes("T") && <span>T: <strong style={{ color: "var(--warning)" }}>{form.filter(r => r === "T").length}</strong></span>}
           </div>
         )}
@@ -337,14 +333,11 @@ function InjuryReportCard({ injuries = [], onPlayerSelect }) {
             }}
             onClick={() => onPlayerSelect?.(inj.playerId)}
           >
-            <span style={{
-              fontSize: "var(--text-xs)", fontWeight: 700,
-              padding: "2px 6px", borderRadius: "var(--radius-pill)",
-              background: inj.weeksLeft > 4 ? "rgba(255,69,58,0.15)" : "rgba(255,159,10,0.15)",
-              color: inj.weeksLeft > 4 ? "var(--danger)" : "var(--warning)",
-            }}>
-              {inj.type ?? "Injured"}
-            </span>
+            {inj.weeksLeft > 4 ? (
+              <Badge variant="destructive" className="text-[10px]">{inj.type ?? "Injured"}</Badge>
+            ) : (
+              <Badge variant="warning" className="text-[10px]">{inj.type ?? "Injured"}</Badge>
+            )}
             <span style={{ flex: 1, fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--text)" }}>
               {inj.playerName ?? "Unknown"}
             </span>
@@ -606,30 +599,32 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
           {phase === "playoffs" && league?.week ? ` · Round ${league.week - 18}` : ""}
         </span>
         {phase === "playoffs" && (
-          <button
+          <Button
+            variant="outline"
             onClick={() => onTabChange?.("Postseason")}
             style={{
               marginLeft: "auto", padding: "4px 12px",
               background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.3)",
               borderRadius: "var(--radius-pill)", color: "#FFD700",
-              fontSize: "var(--text-xs)", fontWeight: 700, cursor: "pointer",
+              fontSize: "var(--text-xs)", fontWeight: 700,
             }}
           >
             View Bracket →
-          </button>
+          </Button>
         )}
         {phase === "draft" && (
-          <button
+          <Button
+            variant="outline"
             onClick={() => onTabChange?.("Draft")}
             style={{
               marginLeft: "auto", padding: "4px 12px",
               background: "var(--accent-muted)", border: "1px solid var(--accent)",
               borderRadius: "var(--radius-pill)", color: "var(--accent)",
-              fontSize: "var(--text-xs)", fontWeight: 700, cursor: "pointer",
+              fontSize: "var(--text-xs)", fontWeight: 700,
             }}
           >
             Open Draft Board →
-          </button>
+          </Button>
         )}
       </div>
 

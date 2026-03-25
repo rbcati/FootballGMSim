@@ -7,6 +7,9 @@
  */
 import React, { useEffect, useState, useMemo } from "react";
 import { useWorker } from "../hooks/useWorker.js";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -70,142 +73,126 @@ const STAT_LABELS = {
 function LeaderTable({ title, rows, onPlayerSelect, userTeamId }) {
   if (!rows || rows.length === 0) return null;
   return (
-    <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-      <div
-        style={{
-          padding: "var(--space-3) var(--space-4)",
-          background: "var(--surface-strong)",
-          borderBottom: "1px solid var(--hairline)",
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-2)",
-        }}
+    <Card className="card-premium hover-lift">
+      <CardHeader
+        className="py-3 px-4 border-b border-[color:var(--hairline)]"
+        style={{ background: "var(--surface-strong)" }}
       >
-        <span
-          style={{
-            fontSize: "var(--text-xs)",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "1px",
-            color: "var(--text-muted)",
-          }}
-        >
+        <CardTitle className="text-xs font-bold uppercase tracking-widest text-[color:var(--text-muted)]">
           {title}
-        </span>
-      </div>
-      <div style={{ padding: "var(--space-1) 0" }}>
-        {rows.map((row, i) => {
-          const isUserTeam = userTeamId != null && row.teamId === userTeamId;
-          return (
-            <div
-              key={row.playerId ?? i}
-              onClick={() => onPlayerSelect?.(row.playerId)}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "var(--space-3)",
-                padding: "var(--space-2) var(--space-4)",
-                borderBottom:
-                  i < rows.length - 1 ? "1px solid var(--hairline)" : "none",
-                cursor:
-                  onPlayerSelect && row.playerId != null
-                    ? "pointer"
-                    : "default",
-                transition: "background 0.1s",
-                background: isUserTeam ? "rgba(10, 132, 255, 0.08)" : undefined,
-                borderLeft: isUserTeam ? "3px solid var(--accent)" : undefined,
-              }}
-              onMouseEnter={(e) => {
-                if (onPlayerSelect)
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div style={{ padding: "var(--space-1) 0" }}>
+          {rows.map((row, i) => {
+            const isUserTeam = userTeamId != null && row.teamId === userTeamId;
+            const rankColor =
+              i === 0
+                ? "#FFD60A"
+                : i === 1
+                  ? "#C0C0C0"
+                  : i === 2
+                    ? "#CD7F32"
+                    : "var(--text-subtle)";
+            return (
+              <div
+                key={row.playerId ?? i}
+                onClick={() => onPlayerSelect?.(row.playerId)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "var(--space-3)",
+                  padding: "var(--space-2) var(--space-4)",
+                  borderBottom:
+                    i < rows.length - 1 ? "1px solid var(--hairline)" : "none",
+                  cursor:
+                    onPlayerSelect && row.playerId != null ? "pointer" : "default",
+                  transition: "background 0.1s",
+                  background: isUserTeam ? "rgba(10, 132, 255, 0.08)" : undefined,
+                  borderLeft: isUserTeam ? "3px solid var(--accent)" : undefined,
+                }}
+                onMouseEnter={(e) => {
+                  if (onPlayerSelect)
+                    e.currentTarget.style.background = isUserTeam
+                      ? "rgba(10, 132, 255, 0.14)"
+                      : "var(--surface-strong)";
+                }}
+                onMouseLeave={(e) => {
                   e.currentTarget.style.background = isUserTeam
-                    ? "rgba(10, 132, 255, 0.14)"
-                    : "var(--surface-strong)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = isUserTeam
-                  ? "rgba(10, 132, 255, 0.08)"
-                  : "";
-              }}
-            >
-              {/* Rank */}
-              <span
-                style={{
-                  width: 20,
-                  textAlign: "center",
-                  fontWeight: 700,
-                  fontSize: "var(--text-sm)",
-                  color:
-                    i === 0
-                      ? "#FFD60A"
-                      : i === 1
-                        ? "#C0C0C0"
-                        : i === 2
-                          ? "#CD7F32"
-                          : "var(--text-subtle)",
+                    ? "rgba(10, 132, 255, 0.08)"
+                    : "";
                 }}
               >
-                {i + 1}
-              </span>
+                {/* Rank */}
+                <span
+                  style={{
+                    width: 20,
+                    textAlign: "center",
+                    fontWeight: 700,
+                    fontSize: "var(--text-sm)",
+                    color: rankColor,
+                  }}
+                >
+                  {i + 1}
+                </span>
 
-              {/* POS badge */}
-              <span
-                style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  padding: "1px 5px",
-                  borderRadius: "var(--radius-pill)",
-                  color: "#fff",
-                  background: posColor(row.pos),
-                  minWidth: 28,
-                  textAlign: "center",
-                }}
-              >
-                {row.pos ?? "?"}
-              </span>
+                {/* POS badge */}
+                <Badge
+                  variant="outline"
+                  className="text-[10px] font-bold px-1.5 py-0 min-w-[28px] justify-center"
+                  style={{
+                    background: posColor(row.pos),
+                    color: "#fff",
+                    borderColor: posColor(row.pos),
+                  }}
+                >
+                  {row.pos ?? "?"}
+                </Badge>
 
-              {/* Name + user star */}
-              <span
-                style={{
-                  flex: 1,
-                  fontSize: "var(--text-sm)",
-                  fontWeight: 500,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {row.name ?? `Player ${row.playerId}`}
-                {isUserTeam && (
-                  <span
-                    style={{
-                      marginLeft: 4,
-                      fontSize: 10,
-                      color: "var(--accent)",
-                      fontWeight: 700,
-                    }}
-                  >
-                    ★
-                  </span>
-                )}
-              </span>
+                {/* Name + user star */}
+                <span
+                  style={{
+                    flex: 1,
+                    fontSize: "var(--text-sm)",
+                    fontWeight: 500,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {row.name ?? `Player ${row.playerId}`}
+                  {isUserTeam && (
+                    <span
+                      style={{
+                        marginLeft: 4,
+                        fontSize: 10,
+                        color: "var(--accent)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      ★
+                    </span>
+                  )}
+                </span>
 
-              {/* Value */}
-              <span
-                style={{
-                  fontSize: "var(--text-base)",
-                  fontWeight: 800,
-                  color: "var(--text)",
-                }}
-              >
-                {typeof row.value === "number"
-                  ? row.value.toLocaleString()
-                  : row.value}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+                {/* Value */}
+                <span
+                  style={{
+                    fontSize: "var(--text-base)",
+                    fontWeight: 800,
+                    color: "var(--text)",
+                  }}
+                >
+                  {typeof row.value === "number"
+                    ? row.value.toLocaleString()
+                    : row.value}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -280,7 +267,6 @@ export default function Leaders({ onPlayerSelect, userTeamId }) {
   const categories = data?.categories ?? {};
   const categoryKeys = Object.keys(categories);
 
-  // Determine whether there is any real data
   const hasData = categoryKeys.some((k) =>
     Object.values(categories[k] ?? {}).some((rows) => rows?.length > 0),
   );
@@ -297,21 +283,12 @@ export default function Leaders({ onPlayerSelect, userTeamId }) {
           flexWrap: "wrap",
         }}
       >
-        {/* Mode toggle */}
-        <div className="standings-tabs">
-          {[
-            { key: "season", label: "Season Leaders" },
-            { key: "alltime", label: "All-Time Records" },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              className={`standings-tab${mode === key ? " active" : ""}`}
-              onClick={() => setMode(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs value={mode} onValueChange={setMode}>
+          <TabsList>
+            <TabsTrigger value="season">Season Leaders</TabsTrigger>
+            <TabsTrigger value="alltime">All-Time Records</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {data?.year && (
           <span
@@ -324,19 +301,16 @@ export default function Leaders({ onPlayerSelect, userTeamId }) {
 
       {/* ── Category nav ── */}
       {!loading && hasData && (
-        <div
-          className="standings-tabs"
-          style={{ marginBottom: "var(--space-6)", flexWrap: "wrap" }}
-        >
-          {categoryKeys.map((k) => (
-            <button
-              key={k}
-              className={`standings-tab${activeCategory === k ? " active" : ""}`}
-              onClick={() => setActiveCategory(k)}
-            >
-              {CATEGORY_LABELS[k] ?? k}
-            </button>
-          ))}
+        <div style={{ marginBottom: "var(--space-6)" }}>
+          <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+            <TabsList>
+              {categoryKeys.map((k) => (
+                <TabsTrigger key={k} value={k}>
+                  {CATEGORY_LABELS[k] ?? k}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
         </div>
       )}
 
