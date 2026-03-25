@@ -66,7 +66,7 @@ export default function FreeAgencyHub({ league, actions }) {
       setAiBids(updated);
     }, 2500);
     return () => clearInterval(interval);
-  }, [freeAgents]);
+  }, [freeAgents, aiBids]);
 
   const filtered = useMemo(() => {
     let players = [...freeAgents];
@@ -212,5 +212,28 @@ export default function FreeAgencyHub({ league, actions }) {
                 {/* Bid info */}
                 <div style={{ textAlign: "right" }}>
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--success)", fontVariantNumeric: "tabular-nums" }}>
-                    ${currentBid.bid.toFixed(1)}M
+                    {currentBid.bid.toFixed(1)}M
                   </div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+                    {currentBid.teamAbbr}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Contract Negotiation Sheet */}
+      {biddingPlayer && (
+        <ContractNegotiation
+          player={biddingPlayer}
+          capRoom={capRoom}
+          onOffer={handleOffer}
+          onSignImmediately={handleSignImmediately}
+          onClose={() => setBiddingPlayer(null)}
+        />
+      )}
+    </div>
+  );
+}
