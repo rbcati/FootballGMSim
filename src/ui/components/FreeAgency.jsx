@@ -906,10 +906,10 @@ export default function FreeAgency({
         ) : (
           <div>
             <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
-              <table className="standings-table" style={{ width: "100%" }}>
-                <thead>
-                  <tr>
-                    <th
+              <Table className="standings-table" style={{ width: "100%" }}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
                       style={{
                         paddingLeft: "var(--space-5)",
                         width: 36,
@@ -918,7 +918,7 @@ export default function FreeAgency({
                       }}
                     >
                       #
-                    </th>
+                    </TableHead>
                     <SortTh
                       label="POS"
                       sortKey="pos"
@@ -933,7 +933,7 @@ export default function FreeAgency({
                       dir={sortDir}
                       onSort={handleSort}
                     />
-                    <th>TRAITS</th>
+                    <TableHead>TRAITS</TableHead>
                     <SortTh
                       label="OVR"
                       sortKey="ovr"
@@ -948,7 +948,7 @@ export default function FreeAgency({
                       dir={sortDir}
                       onSort={handleSort}
                     />
-                    <th
+                    <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
                         color: "var(--text-muted)",
@@ -957,8 +957,8 @@ export default function FreeAgency({
                       }}
                     >
                       SCHEME FIT
-                    </th>
-                    <th
+                    </TableHead>
+                    <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
                         color: "var(--text-muted)",
@@ -967,7 +967,7 @@ export default function FreeAgency({
                       }}
                     >
                       TOP BID
-                    </th>
+                    </TableHead>
                     <SortTh
                       label="ASK $/YR"
                       sortKey="ask"
@@ -976,12 +976,12 @@ export default function FreeAgency({
                       onSort={handleSort}
                       right
                     />
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {sortedAgents.length === 0 && (
-                    <tr>
-                      <td
+                    <TableRow>
+                      <TableCell
                         colSpan={9}
                         style={{
                           textAlign: "center",
@@ -990,8 +990,8 @@ export default function FreeAgency({
                         }}
                       >
                         No free agents match your filter.
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   )}
                   {sortedAgents.slice(0, 100).map((player, idx) => {
                     const isSigningThis = signingPlayerId === player.id;
@@ -1003,7 +1003,7 @@ export default function FreeAgency({
 
                     // Top Bid cell (shared between signing & normal rows)
                     const topBidCell = (
-                      <td style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}>
+                      <TableCell style={{ textAlign: "center", whiteSpace: "nowrap", fontSize: "var(--text-xs)" }}>
                         {hasBids ? (
                           <div>
                             <div style={{
@@ -1036,66 +1036,66 @@ export default function FreeAgency({
                         ) : (
                           <span style={{ color: "var(--text-subtle)" }}>No bids</span>
                         )}
-                      </td>
+                      </TableCell>
                     );
 
                     if (isSigningThis) {
                       return (
                         <React.Fragment key={player.id}>
-                          <tr style={{ background: "var(--accent)0d" }}>
-                            <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                          <TableRow style={{ background: "var(--accent)0d" }}>
+                            <TableCell style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                               {idx + 1}
-                            </td>
-                            <td><PosBadge pos={player.pos} /></td>
-                            <td onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
+                            </TableCell>
+                            <TableCell><PosBadge pos={player.pos} /></TableCell>
+                            <TableCell onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
                               <span style={{ borderBottom: "1px dotted var(--text-muted)" }}>{player.name}</span>
-                            </td>
-                            <td style={{ whiteSpace: "nowrap" }}>
+                            </TableCell>
+                            <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
-                            </td>
-                            <td><OvrBadge ovr={player.ovr} /></td>
-                            <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
-                            <td style={{ textAlign: "center" }}>
+                            </TableCell>
+                            <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
+                            <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}>
                               <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
-                            </td>
+                            </TableCell>
                             {topBidCell}
-                            <td style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
-                              <button className="btn btn-primary" disabled>
+                            <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
+                              <Button className="btn btn-primary" disabled>
                                 {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                              </button>
-                            </td>
-                          </tr>
-                          <tr>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          <TableRow>
                             <SignInlineForm
                               player={player}
                               capRoom={capRoom}
                               onCancel={() => setSigningPlayerId(null)}
                               onSubmit={(c) => handleSign(player.id, c)}
                             />
-                          </tr>
+                          </TableRow>
                         </React.Fragment>
                       );
                     }
 
                     return (
-                      <tr key={player.id}>
-                        <td style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
+                      <TableRow key={player.id}>
+                        <TableCell style={{ paddingLeft: "var(--space-5)", color: "var(--text-subtle)", fontSize: "var(--text-xs)", fontWeight: 700 }}>
                           {idx + 1}
-                        </td>
-                        <td><PosBadge pos={player.pos} /></td>
-                        <td onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
+                        </TableCell>
+                        <TableCell><PosBadge pos={player.pos} /></TableCell>
+                        <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
                           <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
-                        </td>
-                        <td style={{ whiteSpace: "nowrap" }}>
+                        </TableCell>
+                        <TableCell style={{ whiteSpace: "nowrap" }}>
                           {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
-                        </td>
-                        <td><OvrBadge ovr={player.ovr} /></td>
-                        <td style={{ color: "var(--text-muted)" }}>{player.age}</td>
-                        <td style={{ textAlign: "center" }}>
+                        </TableCell>
+                        <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
+                        <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                        <TableCell style={{ textAlign: "center" }}>
                           <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
-                        </td>
+                        </TableCell>
                         {topBidCell}
-                        <td style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
+                        <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
                           <div style={{ fontSize: "var(--text-xs)", color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
                             ${(player._ask ?? 0).toFixed(1)}M{" "}
                             <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
@@ -1105,20 +1105,20 @@ export default function FreeAgency({
                               Cannot Afford
                             </span>
                           ) : (
-                            <button
+                            <Button
                               className="btn btn-primary"
                               style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
                               onClick={() => setSigningPlayerId(player.id)}
                             >
                               {offers.userOffered ? "Update Bid" : "Submit Bid"}
-                            </button>
+                            </Button>
                           )}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
 
             {/* Mobile Card Layout */}
@@ -1137,7 +1137,7 @@ export default function FreeAgency({
                   const mUserIsTop = mOffers.userIsTopBidder;
 
                   return (
-                     <div key={player.id} className="card" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
+                     <Card key={player.id} className="card-premium" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
                         <div style={{ display: "flex", gap: "var(--space-3)" }}>
                            <PlayerAvatar text={player.pos} teamColor="var(--accent)" size={56} />
                            <div style={{ flex: 1 }}>
@@ -1175,11 +1175,11 @@ export default function FreeAgency({
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                               <button className="btn" onClick={() => setPreviewPlayer(player)} style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}>View Card</button>
-                               <button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</button>
+                               <Button className="btn" onClick={() => setPreviewPlayer(player)} style={{ fontSize: "var(--text-xs)", padding: "4px 12px" }}>View Card</Button>
+                               <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>{mOffers.userOffered ? "Update Bid" : "Submit Bid"}</Button>
                             </div>
                         )}
-                     </div>
+                     </Card>
                   );
                })}
             </div>
