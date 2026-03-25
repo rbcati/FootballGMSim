@@ -10,6 +10,12 @@
  */
 
 import React, { useState, useMemo } from "react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -171,11 +177,7 @@ function InjuryCard({ player, onPlayerSelect, showTeam = false }) {
               {player.name || "Unknown"}
             </span>
             {isIR && (
-              <span style={{
-                fontSize: 9, fontWeight: 800, padding: "1px 5px", borderRadius: 4,
-                background: "rgba(239,68,68,0.15)", color: "#ef4444",
-                letterSpacing: 0.5,
-              }}>IR</span>
+              <Badge variant="destructive" className="text-xs px-1 py-0">IR</Badge>
             )}
           </div>
           <div style={{
@@ -192,12 +194,12 @@ function InjuryCard({ player, onPlayerSelect, showTeam = false }) {
         </div>
 
         {/* Severity badge */}
-        <div style={{
-          padding: "3px 8px", borderRadius: 6, fontSize: 11, fontWeight: 700,
-          background: severity.bg, color: severity.color, whiteSpace: "nowrap",
-        }}>
+        <Badge
+          style={{ background: severity.bg, color: severity.color, border: "none" }}
+          className="text-xs font-bold whitespace-nowrap"
+        >
           {severity.label}
-        </div>
+        </Badge>
       </div>
 
       {/* Injury info */}
@@ -245,13 +247,12 @@ function QuickStats({ players }) {
       gap: 10, marginBottom: 20,
     }}>
       {stats.map(s => (
-        <div key={s.label} className="stat-box" style={{
-          background: "var(--surface)", border: "1px solid var(--hairline)",
-          borderRadius: 10, padding: "12px 14px", textAlign: "center",
-        }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
-          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{s.label}</div>
-        </div>
+        <Card key={s.label} className="card-premium">
+          <CardContent className="p-3 text-center">
+            <div style={{ fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{s.label}</div>
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -262,22 +263,19 @@ function QuickStats({ players }) {
 function FilterBar({ posFilter, setPosFilter, sevFilter, setSevFilter, teamFilter,
   setTeamFilter, sortKey, setSortKey, teams }) {
 
-  const pillStyle = (active) => ({
-    padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600,
-    border: "1px solid var(--hairline)", cursor: "pointer",
-    background: active ? "var(--accent)" : "var(--surface)",
-    color: active ? "#fff" : "var(--text-muted)",
-    transition: "all 0.15s",
-    whiteSpace: "nowrap",
-  });
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
       {/* Position filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
         {POS_FILTERS.map(p => (
-          <button key={p} style={pillStyle(posFilter === p)}
-            onClick={() => setPosFilter(p)}>{p}</button>
+          <Button
+            key={p}
+            variant={posFilter === p ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPosFilter(p)}
+          >
+            {p}
+          </Button>
         ))}
       </div>
 
@@ -317,8 +315,14 @@ function FilterBar({ posFilter, setPosFilter, sevFilter, setSevFilter, teamFilte
         <div style={{ marginLeft: "auto", display: "flex", gap: 4, alignItems: "center" }}>
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Sort:</span>
           {SORT_OPTIONS.map(o => (
-            <button key={o.key} style={pillStyle(sortKey === o.key)}
-              onClick={() => setSortKey(o.key)}>{o.label}</button>
+            <Button
+              key={o.key}
+              variant={sortKey === o.key ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSortKey(o.key)}
+            >
+              {o.label}
+            </Button>
           ))}
         </div>
       </div>
@@ -456,98 +460,99 @@ export default function InjuryReport({ league, onPlayerSelect }) {
       <QuickStats players={allInjured} />
 
       {/* ── My Team Section ─────────────────────────────────────────────── */}
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--hairline)",
-        borderRadius: 12, padding: 16, marginBottom: 24,
-      }}>
-        <h2 style={{
-          fontSize: 16, fontWeight: 700, color: "var(--text)",
-          marginBottom: 14, display: "flex", alignItems: "center", gap: 8,
-        }}>
-          ⭐ My Team
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-            background: myTeamInjured.length > 0 ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.12)",
-            color: myTeamInjured.length > 0 ? "#ef4444" : "#22c55e",
+      <Card className="card-premium" style={{ marginBottom: 24 }}>
+        <CardContent className="p-4">
+          <h2 style={{
+            fontSize: 16, fontWeight: 700, color: "var(--text)",
+            marginBottom: 14, display: "flex", alignItems: "center", gap: 8,
           }}>
-            {myTeamInjured.length} {myTeamInjured.length === 1 ? "injury" : "injuries"}
-          </span>
-        </h2>
+            ⭐ My Team
+            <Badge
+              style={{
+                background: myTeamInjured.length > 0 ? "rgba(239,68,68,0.12)" : "rgba(34,197,94,0.12)",
+                color: myTeamInjured.length > 0 ? "#ef4444" : "#22c55e",
+                border: "none",
+              }}
+              className="text-xs font-semibold"
+            >
+              {myTeamInjured.length} {myTeamInjured.length === 1 ? "injury" : "injuries"}
+            </Badge>
+          </h2>
 
-        {myTeamInjured.length === 0 ? (
-          <div style={{
-            textAlign: "center", padding: "24px 0",
-            color: "var(--text-muted)", fontSize: 13,
-          }}>
-            ✅ No injuries on your team — full strength!
-          </div>
-        ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: 12,
-          }}>
-            {myTeamInjured.map(p => (
-              <InjuryCard
-                key={p.id ?? p.pid ?? p.name}
-                player={p}
-                onPlayerSelect={onPlayerSelect}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          {myTeamInjured.length === 0 ? (
+            <div style={{
+              textAlign: "center", padding: "24px 0",
+              color: "var(--text-muted)", fontSize: 13,
+            }}>
+              ✅ No injuries on your team — full strength!
+            </div>
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: 12,
+            }}>
+              {myTeamInjured.map(p => (
+                <InjuryCard
+                  key={p.id ?? p.pid ?? p.name}
+                  player={p}
+                  onPlayerSelect={onPlayerSelect}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── League Injuries Section ─────────────────────────────────────── */}
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--hairline)",
-        borderRadius: 12, padding: 16,
-      }}>
-        <h2 style={{
-          fontSize: 16, fontWeight: 700, color: "var(--text)",
-          marginBottom: 14, display: "flex", alignItems: "center", gap: 8,
-        }}>
-          🏈 League Injuries
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 10,
-            background: "rgba(99,102,241,0.12)", color: "#6366f1",
+      <Card className="card-premium">
+        <CardContent className="p-4">
+          <h2 style={{
+            fontSize: 16, fontWeight: 700, color: "var(--text)",
+            marginBottom: 14, display: "flex", alignItems: "center", gap: 8,
           }}>
-            {filteredLeague.length} players
-          </span>
-        </h2>
+            🏈 League Injuries
+            <Badge
+              style={{ background: "rgba(99,102,241,0.12)", color: "#6366f1", border: "none" }}
+              className="text-xs font-semibold"
+            >
+              {filteredLeague.length} players
+            </Badge>
+          </h2>
 
-        <FilterBar
-          posFilter={posFilter} setPosFilter={setPosFilter}
-          sevFilter={sevFilter} setSevFilter={setSevFilter}
-          teamFilter={teamFilter} setTeamFilter={setTeamFilter}
-          sortKey={sortKey} setSortKey={setSortKey}
-          teams={teams}
-        />
+          <FilterBar
+            posFilter={posFilter} setPosFilter={setPosFilter}
+            sevFilter={sevFilter} setSevFilter={setSevFilter}
+            teamFilter={teamFilter} setTeamFilter={setTeamFilter}
+            sortKey={sortKey} setSortKey={setSortKey}
+            teams={teams}
+          />
 
-        {filteredLeague.length === 0 ? (
-          <div style={{
-            textAlign: "center", padding: "32px 0",
-            color: "var(--text-muted)", fontSize: 13,
-          }}>
-            No injuries match current filters.
-          </div>
-        ) : (
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: 12,
-          }}>
-            {filteredLeague.map(p => (
-              <InjuryCard
-                key={`${p.teamId}-${p.id ?? p.pid ?? p.name}`}
-                player={p}
-                onPlayerSelect={onPlayerSelect}
-                showTeam
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          {filteredLeague.length === 0 ? (
+            <div style={{
+              textAlign: "center", padding: "32px 0",
+              color: "var(--text-muted)", fontSize: 13,
+            }}>
+              No injuries match current filters.
+            </div>
+          ) : (
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+              gap: 12,
+            }}>
+              {filteredLeague.map(p => (
+                <InjuryCard
+                  key={`${p.teamId}-${p.id ?? p.pid ?? p.name}`}
+                  player={p}
+                  onPlayerSelect={onPlayerSelect}
+                  showTeam
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── Injury History Log ──────────────────────────────────────────── */}
       <InjuryHistoryLog league={league} />
