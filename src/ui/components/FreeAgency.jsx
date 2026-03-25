@@ -699,81 +699,86 @@ export default function FreeAgency({
       <style>{mobileStyle}</style>
       {/* Free Agency Bidding War Status Banner */}
       {faState && (
-        <div
-          className="card"
+        <Card
+          className="card-premium"
           style={{
             marginBottom: "var(--space-4)",
-            padding: "var(--space-4)",
-            background: "var(--surface-strong)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            flexWrap: "wrap",
-            gap: "var(--space-3)",
           }}
         >
-          <div>
-            <div
-              style={{
-                fontSize: "var(--text-xs)",
-                textTransform: "uppercase",
-                letterSpacing: "1px",
-                color: "var(--text-muted)",
-              }}
-            >
-              {faState.phase === "free_agency" ? "Bidding War" : "Current Phase"}
-            </div>
-            <div
-              style={{
-                fontSize: "var(--text-base)",
-                fontWeight: 700,
-                color: "var(--text)",
-              }}
-            >
-              {faState.phase === "free_agency"
-                ? `Free Agency: Day ${faState.faDay ?? 1} of ${faState.faMaxDays ?? 5}`
-                : faState.phase === "offseason_resign"
-                  ? "Offseason Re-Signing"
-                  : "In-Season Free Agency"}
-            </div>
-            {faState.phase === "free_agency" && (
+          <CardContent
+            style={{
+              padding: "var(--space-4)",
+              background: "var(--surface-strong)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: "var(--space-3)",
+            }}
+          >
+            <div>
               <div
                 style={{
                   fontSize: "var(--text-xs)",
+                  textTransform: "uppercase",
+                  letterSpacing: "1px",
                   color: "var(--text-muted)",
-                  marginTop: 4,
                 }}
               >
-                Submit your bids, then advance the day. Players evaluate all offers at day's end.
+                {faState.phase === "free_agency" ? "Bidding War" : "Current Phase"}
+              </div>
+              <div
+                style={{
+                  fontSize: "var(--text-base)",
+                  fontWeight: 700,
+                  color: "var(--text)",
+                }}
+              >
+                {faState.phase === "free_agency"
+                  ? `Free Agency: Day ${faState.faDay ?? 1} of ${faState.faMaxDays ?? 5}`
+                  : faState.phase === "offseason_resign"
+                    ? "Offseason Re-Signing"
+                    : "In-Season Free Agency"}
+              </div>
+              {faState.phase === "free_agency" && (
+                <div
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    marginTop: 4,
+                  }}
+                >
+                  Submit your bids, then advance the day. Players evaluate all offers at day's end.
+                </div>
+              )}
+            </div>
+            {faState.phase === "free_agency" && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                {/* Day progress pips */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                  {Array.from({ length: faState.faMaxDays ?? 5 }, (_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        background: i < (faState.faDay ?? 1) ? "var(--accent)" : "var(--hairline)",
+                        border: i === (faState.faDay ?? 1) - 1 ? "2px solid var(--accent)" : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+                <Button
+                  className="btn btn-primary"
+                  onClick={() => actions.advanceFreeAgencyDay()}
+                >
+                  Advance Day {faState.faDay ?? 1} →
+                </Button>
               </div>
             )}
-          </div>
-          {faState.phase === "free_agency" && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-              {/* Day progress pips */}
-              <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                {Array.from({ length: faState.faMaxDays ?? 5 }, (_, i) => (
-                  <span
-                    key={i}
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: "50%",
-                      background: i < (faState.faDay ?? 1) ? "var(--accent)" : "var(--hairline)",
-                      border: i === (faState.faDay ?? 1) - 1 ? "2px solid var(--accent)" : "none",
-                    }}
-                  />
-                ))}
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={() => actions.advanceFreeAgencyDay()}
-              >
-                Advance Day {faState.faDay ?? 1} →
-              </button>
-            </div>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
 
       <CapBanner userTeam={userTeam} />
@@ -796,93 +801,98 @@ export default function FreeAgency({
       )}
 
       {/* Filters Toolbar */}
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           marginBottom: "var(--space-4)",
-          padding: "var(--space-4)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--space-4)",
         }}
       >
-        {/* Top row: search & OVR */}
-        <div
+        <CardContent
           style={{
+            padding: "var(--space-4)",
             display: "flex",
+            flexDirection: "column",
             gap: "var(--space-4)",
-            flexWrap: "wrap",
-            alignItems: "center",
           }}
         >
-          <input
-            type="text"
-            placeholder="Search players..."
-            value={nameFilter}
-            onChange={(e) => setNameFilter(e.target.value)}
+          {/* Top row: search & OVR */}
+          <div
             style={{
-              padding: "6px 12px",
-              background: "var(--surface-strong)",
-              border: "1px solid var(--hairline)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--text)",
-              fontSize: "var(--text-sm)",
-              flex: "1 1 200px",
+              display: "flex",
+              gap: "var(--space-4)",
+              flexWrap: "wrap",
+              alignItems: "center",
             }}
-          />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
-              Min OVR:
-            </span>
-            <input
-              type="number"
-              min="0"
-              max="99"
-              value={minOvr}
-              onChange={(e) => setMinOvr(Number(e.target.value))}
+          >
+            <Input
+              type="text"
+              placeholder="Search players..."
+              value={nameFilter}
+              onChange={(e) => setNameFilter(e.target.value)}
               style={{
-                width: 60,
-                padding: "4px 8px",
+                padding: "6px 12px",
                 background: "var(--surface-strong)",
                 border: "1px solid var(--hairline)",
                 borderRadius: "var(--radius-sm)",
                 color: "var(--text)",
                 fontSize: "var(--text-sm)",
+                flex: "1 1 200px",
               }}
             />
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: "var(--text-sm)", fontWeight: 600 }}>
+                Min OVR:
+              </span>
+              <Input
+                type="number"
+                min="0"
+                max="99"
+                value={minOvr}
+                onChange={(e) => setMinOvr(Number(e.target.value))}
+                style={{
+                  width: 60,
+                  padding: "4px 8px",
+                  background: "var(--surface-strong)",
+                  border: "1px solid var(--hairline)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text)",
+                  fontSize: "var(--text-sm)",
+                }}
+              />
+            </div>
           </div>
-        </div>
 
-        {/* Bottom row: Position Pills */}
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-          {POSITIONS.map((pos) => (
-            <button
-              key={pos}
-              onClick={() => setPosFilter(pos)}
-              style={{
-                padding: "4px 12px",
-                borderRadius: "var(--radius-pill)",
-                border:
-                  pos === posFilter
-                    ? "1px solid var(--accent)"
-                    : "1px solid var(--hairline)",
-                background:
-                  pos === posFilter ? "var(--accent-muted)" : "var(--surface)",
-                color: pos === posFilter ? "var(--accent)" : "var(--text)",
-                fontSize: "var(--text-xs)",
-                fontWeight: pos === posFilter ? 700 : 500,
-                cursor: "pointer",
-                transition: "all 0.2s",
-              }}
-            >
-              {pos}
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Bottom row: Position Pills */}
+          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+            {POSITIONS.map((pos) => (
+              <Button
+                key={pos}
+                onClick={() => setPosFilter(pos)}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: "var(--radius-pill)",
+                  border:
+                    pos === posFilter
+                      ? "1px solid var(--accent)"
+                      : "1px solid var(--hairline)",
+                  background:
+                    pos === posFilter ? "var(--accent-muted)" : "var(--surface)",
+                  color: pos === posFilter ? "var(--accent)" : "var(--text)",
+                  fontSize: "var(--text-xs)",
+                  fontWeight: pos === posFilter ? 700 : 500,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {pos}
+              </Button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Table Card */}
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+      <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
           <div
             style={{

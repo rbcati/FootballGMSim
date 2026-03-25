@@ -848,7 +848,7 @@ function RosterTable({
                   onSort={handleSort}
                   style={{ textAlign: "left" }}
                 />
-                <th
+                <TableHead
                   style={{
                     textAlign: "left",
                     color: "var(--text-muted)",
@@ -858,7 +858,7 @@ function RosterTable({
                   }}
                 >
                   Name
-                </th>
+                </TableHead>
                 <SortTh
                   label="OVR"
                   sortKey="ovr"
@@ -883,7 +883,7 @@ function RosterTable({
                   onSort={handleSort}
                   style={{ textAlign: "right", paddingRight: "var(--space-3)" }}
                 />
-                <th
+                <TableHead
                   style={{
                     textAlign: "right",
                     paddingRight: "var(--space-3)",
@@ -894,8 +894,8 @@ function RosterTable({
                   }}
                 >
                   Yrs
-                </th>
-                <th
+                </TableHead>
+                <TableHead
                   style={{
                     textAlign: "center",
                     color: "var(--text-muted)",
@@ -905,7 +905,7 @@ function RosterTable({
                   }}
                 >
                   Traits
-                </th>
+                </TableHead>
                 <SortTh
                   label="Fit"
                   sortKey="fit"
@@ -922,7 +922,7 @@ function RosterTable({
                   onSort={handleSort}
                   style={{ textAlign: "center" }}
                 />
-                <th
+                <TableHead
                   style={{
                     textAlign: "center",
                     color: "var(--text-muted)",
@@ -934,8 +934,8 @@ function RosterTable({
                   title="Add to comparison"
                 >
                   ⊕
-                </th>
-                <th
+                </TableHead>
+                <TableHead
                   style={{
                     textAlign: "center",
                     paddingRight: "var(--space-3)",
@@ -946,13 +946,13 @@ function RosterTable({
                   }}
                 >
                   Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {displayed.length === 0 && (
-                <tr>
-                  <td
+                <TableRow>
+                  <TableCell
                     colSpan={11}
                     style={{
                       textAlign: "center",
@@ -961,8 +961,8 @@ function RosterTable({
                     }}
                   >
                     No players match this filter.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
               {displayed.map((player, idx) => {
                 const isReleasing = releasing === player.id;
@@ -986,9 +986,9 @@ function RosterTable({
                     : {};
 
                 return (
-                  <tr key={player.id} style={rowStyle}>
+                  <TableRow key={player.id} style={rowStyle}>
                     {/* # */}
-                    <td
+                    <TableCell
                       style={{
                         paddingLeft: "var(--space-2)",
                         color: "var(--text-subtle)",
@@ -997,13 +997,13 @@ function RosterTable({
                       }}
                     >
                       {idx + 1}
-                    </td>
+                    </TableCell>
                     {/* POS */}
-                    <td>
+                    <TableCell>
                       <PosBadge pos={player.pos} />
-                    </td>
+                    </TableCell>
                     {/* Name */}
-                    <td
+                    <TableCell
                       onClick={() =>
                         onPlayerSelect && onPlayerSelect(player.id)
                       }
@@ -1033,9 +1033,9 @@ function RosterTable({
                           EXPIRING
                         </span>
                       )}
-                    </td>
+                    </TableCell>
                     {/* OVR */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "right",
                         paddingRight: "var(--space-3)",
@@ -1061,9 +1061,9 @@ function RosterTable({
                             {player.progressionDelta})
                           </span>
                         )}
-                    </td>
+                    </TableCell>
                     {/* Age */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "right",
                         paddingRight: "var(--space-3)",
@@ -1072,9 +1072,9 @@ function RosterTable({
                       }}
                     >
                       {player.age}
-                    </td>
+                    </TableCell>
                     {/* Salary */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "right",
                         paddingRight: "var(--space-3)",
@@ -1084,9 +1084,9 @@ function RosterTable({
                       }}
                     >
                       {fmtSalary(player.contract?.baseAnnual)}
-                    </td>
+                    </TableCell>
                     {/* Years */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "right",
                         paddingRight: "var(--space-3)",
@@ -1098,24 +1098,24 @@ function RosterTable({
                       }}
                     >
                       {fmtYears(player.contract)}
-                    </td>
+                    </TableCell>
                     {/* Traits */}
-                    <td style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                    <TableCell style={{ textAlign: "center", whiteSpace: "nowrap" }}>
                       {(player.traits || []).map((t) => (
                         <TraitBadge key={t} traitId={t} />
                       ))}
-                    </td>
+                    </TableCell>
                     {/* Scheme Fit — color-coded puzzle icon + bonus */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "center",
                         padding: "0 var(--space-2)",
                       }}
                     >
                       <SchemeFitIndicator fit={fit} bonus={player.schemeBonus ?? 0} topAttr={player.topAttr} schemeName={schemeName} />
-                    </td>
+                    </TableCell>
                     {/* Morale */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "center",
                         padding: "0 var(--space-2)",
@@ -1141,10 +1141,10 @@ function RosterTable({
                           {morale}
                         </span>
                       </div>
-                    </td>
+                    </TableCell>
                     {/* Compare checkbox */}
-                    <td style={{ textAlign: "center", padding: "0 var(--space-1)" }}>
-                      <button
+                    <TableCell style={{ textAlign: "center", padding: "0 var(--space-1)" }}>
+                      <Button
                         title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"}
                         onClick={() => toggleCompare(player)}
                         style={{
@@ -1158,10 +1158,10 @@ function RosterTable({
                         }}
                       >
                         {compareIds.includes(player.id) ? "✓" : "⊕"}
-                      </button>
-                    </td>
+                      </Button>
+                    </TableCell>
                     {/* Release / Extend */}
-                    <td
+                    <TableCell
                       style={{
                         textAlign: "center",
                         paddingRight: "var(--space-3)",
@@ -1175,7 +1175,7 @@ function RosterTable({
                             justifyContent: "center",
                           }}
                         >
-                          <button
+                          <Button
                             className="btn btn-danger"
                             style={{
                               fontSize: "var(--text-xs)",
@@ -1184,8 +1184,8 @@ function RosterTable({
                             onClick={() => handleRelease(player)}
                           >
                             Confirm
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             className="btn"
                             style={{
                               fontSize: "var(--text-xs)",
@@ -1194,7 +1194,7 @@ function RosterTable({
                             onClick={() => setReleasing(null)}
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </div>
                       ) : (
                         <div
@@ -1205,7 +1205,7 @@ function RosterTable({
                           }}
                         >
                           {isExpiring && (
-                            <button
+                            <Button
                               className="btn"
                               style={{
                                 fontSize: "var(--text-xs)",
@@ -1225,9 +1225,9 @@ function RosterTable({
                               onClick={() => setExtending(player)}
                             >
                               Extend
-                            </button>
+                            </Button>
                           )}
-                          <button
+                          <Button
                             className="btn"
                             style={{
                               fontSize: "var(--text-xs)",
@@ -1238,17 +1238,17 @@ function RosterTable({
                             onClick={() => handleRelease(player)}
                           >
                             Cut
-                          </button>
+                          </Button>
                         </div>
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 );
               })}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
-      </div>
+      </CardContent></Card>
     </>
   );
 }

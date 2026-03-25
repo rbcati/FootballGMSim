@@ -1083,22 +1083,14 @@ function DraftBoard({
 
           {/* Upcoming order */}
           {!isDraftComplete && upcomingPicks.length > 0 && (
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div
-                style={{
-                  padding: "var(--space-2) var(--space-3)",
-                  background: "var(--surface-strong)",
-                  borderBottom: "1px solid var(--hairline)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Pick Order
-              </div>
-              <div style={{ maxHeight: 320, overflowY: "auto" }}>
+            <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+              <CardHeader style={{ padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
+                <CardTitle style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>
+                  Pick Order
+                </CardTitle>
+              </CardHeader>
+              <CardContent style={{ padding: 0 }}>
+              <ScrollArea style={{ maxHeight: 320 }}>
                 {upcomingPicks.map((pk, i) => (
                   <div
                     key={pk.overall}
@@ -1148,28 +1140,21 @@ function DraftBoard({
                     </span>
                   </div>
                 ))}
-              </div>
-            </div>
+              </ScrollArea>
+              </CardContent>
+            </Card>
           )}
 
           {/* Recently completed (last 10) */}
           {completedPicks.length > 0 && (
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div
-                style={{
-                  padding: "var(--space-2) var(--space-3)",
-                  background: "var(--surface-strong)",
-                  borderBottom: "1px solid var(--hairline)",
-                  fontSize: "var(--text-xs)",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                  color: "var(--text-muted)",
-                }}
-              >
-                Recent Picks
-              </div>
-              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+            <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
+              <CardHeader style={{ padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
+                <CardTitle style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)" }}>
+                  Recent Picks
+                </CardTitle>
+              </CardHeader>
+              <CardContent style={{ padding: 0 }}>
+              <ScrollArea style={{ maxHeight: 240 }}>
                 {[...completedPicks]
                   .reverse()
                   .slice(0, 10)
@@ -1197,8 +1182,9 @@ function DraftBoard({
                       </div>
                     </div>
                   ))}
-              </div>
-            </div>
+              </ScrollArea>
+              </CardContent>
+            </Card>
           )}
         </div>
 
@@ -1231,7 +1217,7 @@ function DraftBoard({
                 {currentPick?.overall} — select a prospect below.
               </span>
               {pendingTradeProposal && (
-                <button
+                <Button
                   className="btn"
                   onClick={() => setShowTradeDown(true)}
                   style={{
@@ -1247,7 +1233,7 @@ function DraftBoard({
                   }}
                 >
                   Trade Down / View Offers
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -1274,7 +1260,7 @@ function DraftBoard({
                 <div style={{ fontWeight: 800, color: "var(--text)" }}>
                   Trade Offer from {pendingTradeProposal.aiTeamAbbr}
                 </div>
-                <button
+                <Button
                   className="btn"
                   onClick={() => setShowTradeDown(false)}
                   style={{
@@ -1287,7 +1273,7 @@ function DraftBoard({
                   }}
                 >
                   ×
-                </button>
+                </Button>
               </div>
               <div
                 style={{
@@ -1316,7 +1302,7 @@ function DraftBoard({
                 {pendingTradeProposal.aiPickRound}) + a later pick swap in this draft.
               </div>
               <div style={{ display: "flex", gap: "var(--space-3)" }}>
-                <button
+                <Button
                   className="btn btn-primary"
                   disabled={tradeDownProcessing}
                   onClick={async () => {
@@ -1341,8 +1327,8 @@ function DraftBoard({
                   }}
                 >
                   {tradeDownProcessing ? "Processing…" : "Accept Trade"}
-                </button>
-                <button
+                </Button>
+                <Button
                   className="btn"
                   onClick={async () => {
                     await actions.rejectDraftTrade?.();
@@ -1355,7 +1341,7 @@ function DraftBoard({
                   }}
                 >
                   Decline
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1369,7 +1355,7 @@ function DraftBoard({
               alignItems: "center",
             }}
           >
-            <input
+            <Input
               type="text"
               placeholder="Search name…"
               value={nameFilter}
