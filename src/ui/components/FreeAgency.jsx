@@ -1185,7 +1185,7 @@ export default function FreeAgency({
             </div>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Pool count footer */}
       <div
