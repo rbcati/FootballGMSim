@@ -15,6 +15,12 @@
 import React, { useState, useMemo } from "react";
 import PlayerRadarChart, { getPlayerRadarAttributes } from "./PlayerRadarChart.jsx";
 import { OvrPill } from "./LeagueDashboard.jsx";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -170,368 +176,377 @@ export default function PlayerDetailModal({
 }) {
   const [activeSection, setActiveSection] = useState("overview");
 
-  if (!player) return null;
-
-  const pos = player.pos || player.position;
+  const pos = player ? (player.pos || player.position) : null;
   const posColor = POS_COLORS[pos] || "#9ca3af";
-  const radarAttrs = getPlayerRadarAttributes({ ...player, ...(player.ratings || {}) });
+  const radarAttrs = player
+    ? getPlayerRadarAttributes({ ...player, ...(player.ratings || {}) })
+    : null;
   const compareAttrs = comparePlayer
     ? getPlayerRadarAttributes({ ...comparePlayer, ...(comparePlayer.ratings || {}) })
     : null;
 
-  const ratings = getRatingCategories(player);
-  const salary = player.baseAnnual || player.contract?.baseAnnual || 0;
-  const yearsLeft = player.years ?? player.contract?.years ?? 0;
-  const isInjured = (player.injuryWeeksRemaining || 0) > 0;
+  const ratings = player ? getRatingCategories(player) : { physical: [], skill: [] };
+  const salary = player ? (player.baseAnnual || player.contract?.baseAnnual || 0) : 0;
+  const yearsLeft = player ? (player.years ?? player.contract?.years ?? 0) : 0;
+  const isInjured = player ? (player.injuryWeeksRemaining || 0) > 0 : false;
 
-  const seasonStats = player.stats?.season || {};
-  const careerStats = player.stats?.career || {};
+  const seasonStats = player?.stats?.season || {};
+  const careerStats = player?.stats?.career || {};
 
-  const devLabel = player.devTrait === "X-Factor" ? "X-Factor" :
-                   player.devTrait === "Superstar" ? "Superstar" :
-                   player.devTrait === "Star" ? "Star" : "Normal";
+  const devLabel = player?.devTrait === "X-Factor" ? "X-Factor" :
+                   player?.devTrait === "Superstar" ? "Superstar" :
+                   player?.devTrait === "Star" ? "Star" : "Normal";
 
   const sections = ["overview", "ratings", "stats", "contract"];
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9000,
-        background: "rgba(0,0,0,0.75)",
-        backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-        display: "flex", alignItems: "flex-start", justifyContent: "center",
-        padding: "var(--space-4)", paddingTop: "env(safe-area-inset-top, 20px)",
-        overflowY: "auto",
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
+    <Dialog open={!!player} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
         className="card-premium fade-in-up"
         style={{
-          width: "100%", maxWidth: 520, padding: 0,
+          width: "100%",
+          maxWidth: 520,
+          padding: 0,
           borderTop: `3px solid ${posColor}`,
-          maxHeight: "90vh", overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
+          maxHeight: "90vh",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        {/* ── Header ── */}
-        <div style={{
-          padding: "var(--space-5) var(--space-5) var(--space-4)",
-          background: `linear-gradient(180deg, ${posColor}10, transparent)`,
-        }}>
-          {/* Close button */}
-          <button
-            onClick={onClose}
-            style={{
-              position: "absolute", top: 12, right: 12,
-              background: "var(--surface)", border: "1px solid var(--hairline)",
-              borderRadius: "var(--radius-md)", width: 32, height: 32,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: "var(--text-muted)", fontSize: 16,
-            }}
-          >
-            x
-          </button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
-            {/* Avatar circle */}
-            <div style={{
-              width: 64, height: 64, borderRadius: "50%",
-              background: `${posColor}22`, border: `3px solid ${posColor}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontWeight: 900, fontSize: 20, color: posColor,
+        {player && (
+          <>
+            <DialogHeader style={{
+              padding: "var(--space-5) var(--space-5) var(--space-4)",
+              background: `linear-gradient(180deg, ${posColor}10, transparent)`,
               flexShrink: 0,
             }}>
-              {player.name?.split(" ").map(n => n[0]).join("").slice(0, 2)}
-            </div>
+              {/* Close button */}
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                style={{
+                  position: "absolute", top: 12, right: 12,
+                  background: "var(--surface)", border: "1px solid var(--hairline)",
+                  borderRadius: "var(--radius-md)", width: 32, height: 32,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", color: "var(--text-muted)", fontSize: 16,
+                  padding: 0,
+                }}
+              >
+                x
+              </Button>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{
-                fontSize: "var(--text-lg)", fontWeight: 900, color: "var(--text)",
-                letterSpacing: "-0.5px",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}>
-                {player.name}
-              </div>
-              <div style={{
-                display: "flex", alignItems: "center", gap: "var(--space-2)",
-                marginTop: 4,
-              }}>
-                <span className={`pos-badge pos-${pos?.toLowerCase()}`}>{pos}</span>
-                <OvrPill ovr={player.ovr || 50} size="lg" />
-                {player.devTrait && player.devTrait !== "Normal" && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, padding: "2px 6px",
-                    borderRadius: "var(--radius-sm)",
-                    background: player.devTrait === "X-Factor" ? "rgba(255,215,0,0.15)" : "rgba(168,85,247,0.15)",
-                    color: player.devTrait === "X-Factor" ? "#FFD700" : "#a855f7",
-                  }}>
-                    {devLabel}
-                  </span>
-                )}
-                {isInjured && (
-                  <span style={{
-                    fontSize: 10, fontWeight: 800, padding: "2px 6px",
-                    borderRadius: "var(--radius-sm)",
-                    background: "rgba(255,69,58,0.15)", color: "var(--danger)",
-                  }}>
-                    INJ {player.injuryWeeksRemaining}w
-                  </span>
-                )}
-              </div>
-              <div style={{
-                display: "flex", gap: "var(--space-4)", marginTop: "var(--space-2)",
-              }}>
-                <StatLine label="Age" value={player.age} />
-                <StatLine label="POT" value={player.potential || "—"} />
-                <StatLine label="Morale" value={player.morale ?? "—"} />
-                <StatLine label="College" value={player.college?.slice(0, 8) || "—"} />
-              </div>
-            </div>
-          </div>
-
-          {/* Personality traits */}
-          {player.personality?.traits?.length > 0 && (
-            <div style={{
-              display: "flex", gap: "var(--space-2)", marginTop: "var(--space-3)",
-              flexWrap: "wrap",
-            }}>
-              {player.personality.traits.map(t => (
-                <span key={t} style={{
-                  fontSize: 10, fontWeight: 700, padding: "2px 8px",
-                  borderRadius: "var(--radius-pill)",
-                  background: "var(--surface-strong)", color: "var(--text-muted)",
-                  border: "1px solid var(--hairline)",
+              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
+                {/* Avatar circle */}
+                <div style={{
+                  width: 64, height: 64, borderRadius: "50%",
+                  background: `${posColor}22`, border: `3px solid ${posColor}`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 900, fontSize: 20, color: posColor,
+                  flexShrink: 0,
                 }}>
-                  {t}
-                </span>
+                  {player.name?.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <DialogTitle style={{
+                    fontSize: "var(--text-lg)", fontWeight: 900, color: "var(--text)",
+                    letterSpacing: "-0.5px",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                  }}>
+                    {player.name}
+                  </DialogTitle>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "var(--space-2)",
+                    marginTop: 4,
+                  }}>
+                    <span className={`pos-badge pos-${pos?.toLowerCase()}`}>{pos}</span>
+                    <OvrPill ovr={player.ovr || 50} size="lg" />
+                    {player.devTrait && player.devTrait !== "Normal" && (
+                      <Badge
+                        style={{
+                          fontSize: 10, fontWeight: 800, padding: "2px 6px",
+                          borderRadius: "var(--radius-sm)",
+                          background: player.devTrait === "X-Factor" ? "rgba(255,215,0,0.15)" : "rgba(168,85,247,0.15)",
+                          color: player.devTrait === "X-Factor" ? "#FFD700" : "#a855f7",
+                          border: "none",
+                        }}
+                      >
+                        {devLabel}
+                      </Badge>
+                    )}
+                    {isInjured && (
+                      <Badge
+                        style={{
+                          fontSize: 10, fontWeight: 800, padding: "2px 6px",
+                          borderRadius: "var(--radius-sm)",
+                          background: "rgba(255,69,58,0.15)", color: "var(--danger)",
+                          border: "none",
+                        }}
+                      >
+                        INJ {player.injuryWeeksRemaining}w
+                      </Badge>
+                    )}
+                  </div>
+                  <div style={{
+                    display: "flex", gap: "var(--space-4)", marginTop: "var(--space-2)",
+                  }}>
+                    <StatLine label="Age" value={player.age} />
+                    <StatLine label="POT" value={player.potential || "—"} />
+                    <StatLine label="Morale" value={player.morale ?? "—"} />
+                    <StatLine label="College" value={player.college?.slice(0, 8) || "—"} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Personality traits */}
+              {player.personality?.traits?.length > 0 && (
+                <div style={{
+                  display: "flex", gap: "var(--space-2)", marginTop: "var(--space-3)",
+                  flexWrap: "wrap",
+                }}>
+                  {player.personality.traits.map(t => (
+                    <Badge key={t} style={{
+                      fontSize: 10, fontWeight: 700, padding: "2px 8px",
+                      borderRadius: "var(--radius-pill)",
+                      background: "var(--surface-strong)", color: "var(--text-muted)",
+                      border: "1px solid var(--hairline)",
+                    }}>
+                      {t}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </DialogHeader>
+
+            {/* ── Section tabs ── */}
+            <div className="division-tabs" style={{
+              padding: "0 var(--space-4)", borderBottom: "1px solid var(--hairline)",
+              marginBottom: 0,
+              flexShrink: 0,
+            }}>
+              {sections.map(s => (
+                <Button
+                  key={s}
+                  variant="ghost"
+                  className={`division-tab${activeSection === s ? " active" : ""}`}
+                  onClick={() => setActiveSection(s)}
+                  style={{ textTransform: "capitalize" }}
+                >
+                  {s}
+                </Button>
               ))}
             </div>
-          )}
-        </div>
 
-        {/* ── Section tabs ── */}
-        <div className="division-tabs" style={{
-          padding: "0 var(--space-4)", borderBottom: "1px solid var(--hairline)",
-          marginBottom: 0,
-        }}>
-          {sections.map(s => (
-            <button
-              key={s}
-              className={`division-tab${activeSection === s ? " active" : ""}`}
-              onClick={() => setActiveSection(s)}
-              style={{ textTransform: "capitalize" }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
+            {/* ── Section Content ── */}
+            <ScrollArea className="max-h-[70vh]" style={{ flex: 1 }}>
+              <div style={{ padding: "var(--space-4) var(--space-5) var(--space-5)" }}>
 
-        {/* ── Section Content ── */}
-        <div style={{ padding: "var(--space-4) var(--space-5) var(--space-5)" }}>
+                {activeSection === "overview" && (
+                  <div className="fade-in">
+                    {/* Radar Chart */}
+                    <PlayerRadarChart
+                      attributes={radarAttrs}
+                      size={240}
+                      color={posColor}
+                      compareAttributes={compareAttrs}
+                      compareColor="#FF9F0A"
+                    />
 
-          {activeSection === "overview" && (
-            <div className="fade-in">
-              {/* Radar Chart */}
-              <PlayerRadarChart
-                attributes={radarAttrs}
-                size={240}
-                color={posColor}
-                compareAttributes={compareAttrs}
-                compareColor="#FF9F0A"
-              />
+                    {comparePlayer && (
+                      <div style={{
+                        textAlign: "center", fontSize: "var(--text-xs)",
+                        color: "var(--text-muted)", marginTop: "var(--space-2)",
+                      }}>
+                        Comparing with: <strong style={{ color: "#FF9F0A" }}>{comparePlayer.name}</strong>
+                      </div>
+                    )}
 
-              {comparePlayer && (
-                <div style={{
-                  textAlign: "center", fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)", marginTop: "var(--space-2)",
-                }}>
-                  Comparing with: <strong style={{ color: "#FF9F0A" }}>{comparePlayer.name}</strong>
-                </div>
-              )}
+                    {onCompareSelect && (
+                      <Button
+                        variant="ghost"
+                        className="btn-premium"
+                        onClick={() => onCompareSelect(player.id)}
+                        style={{
+                          width: "100%", marginTop: "var(--space-3)",
+                          background: "var(--surface-strong)", color: "var(--text-muted)",
+                          border: "1px solid var(--hairline)",
+                        }}
+                      >
+                        {comparePlayer ? "Change Comparison" : "Compare Player"}
+                      </Button>
+                    )}
 
-              {onCompareSelect && (
-                <button
-                  className="btn-premium"
-                  onClick={() => onCompareSelect(player.id)}
-                  style={{
-                    width: "100%", marginTop: "var(--space-3)",
-                    background: "var(--surface-strong)", color: "var(--text-muted)",
-                    border: "1px solid var(--hairline)",
-                  }}
-                >
-                  {comparePlayer ? "Change Comparison" : "Compare Player"}
-                </button>
-              )}
-
-              {/* Combine stats */}
-              {player.combineStats && (
-                <div style={{
-                  marginTop: "var(--space-4)", padding: "var(--space-3)",
-                  background: "var(--bg)", borderRadius: "var(--radius-md)",
-                  fontSize: "var(--text-xs)", color: "var(--text-muted)",
-                  fontFamily: "monospace", textAlign: "center",
-                }}>
-                  {player.combineStats}
-                </div>
-              )}
-            </div>
-          )}
-
-          {activeSection === "ratings" && (
-            <div className="fade-in">
-              {ratings.physical.length > 0 && (
-                <div style={{ marginBottom: "var(--space-4)" }}>
-                  <div style={{
-                    fontSize: "var(--text-xs)", fontWeight: 700,
-                    color: "var(--text-muted)", textTransform: "uppercase",
-                    letterSpacing: "0.5px", marginBottom: "var(--space-2)",
-                  }}>
-                    Physical
+                    {/* Combine stats */}
+                    {player.combineStats && (
+                      <div style={{
+                        marginTop: "var(--space-4)", padding: "var(--space-3)",
+                        background: "var(--bg)", borderRadius: "var(--radius-md)",
+                        fontSize: "var(--text-xs)", color: "var(--text-muted)",
+                        fontFamily: "monospace", textAlign: "center",
+                      }}>
+                        {player.combineStats}
+                      </div>
+                    )}
                   </div>
-                  {ratings.physical.map(r => (
-                    <RatingBar key={r.label} label={r.label} value={r.value} />
-                  ))}
-                </div>
-              )}
-              {ratings.skill.length > 0 && (
-                <div>
-                  <div style={{
-                    fontSize: "var(--text-xs)", fontWeight: 700,
-                    color: "var(--text-muted)", textTransform: "uppercase",
-                    letterSpacing: "0.5px", marginBottom: "var(--space-2)",
-                  }}>
-                    Position Skills
-                  </div>
-                  {ratings.skill.map(r => (
-                    <RatingBar key={r.label} label={r.label} value={r.value} />
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                )}
 
-          {activeSection === "stats" && (
-            <div className="fade-in">
-              <div style={{
-                fontSize: "var(--text-xs)", fontWeight: 700,
-                color: "var(--text-muted)", textTransform: "uppercase",
-                letterSpacing: "0.5px", marginBottom: "var(--space-3)",
-              }}>
-                Season Stats
-              </div>
-              <StatsGrid pos={pos} stats={seasonStats} label="Season" />
-
-              {player.careerStats?.length > 0 && (
-                <div style={{ marginTop: "var(--space-5)" }}>
-                  <div style={{
-                    fontSize: "var(--text-xs)", fontWeight: 700,
-                    color: "var(--text-muted)", textTransform: "uppercase",
-                    letterSpacing: "0.5px", marginBottom: "var(--space-3)",
-                  }}>
-                    Career Log
-                  </div>
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{
-                      width: "100%", fontSize: "var(--text-xs)",
-                      borderCollapse: "collapse",
-                    }}>
-                      <thead>
-                        <tr>
-                          <th style={thStyle}>YR</th>
-                          <th style={thStyle}>GP</th>
-                          <th style={thStyle}>OVR</th>
-                          {pos === "QB" && <><th style={thStyle}>YDS</th><th style={thStyle}>TD</th><th style={thStyle}>INT</th></>}
-                          {pos === "RB" && <><th style={thStyle}>YDS</th><th style={thStyle}>TD</th></>}
-                          {["WR", "TE"].includes(pos) && <><th style={thStyle}>REC</th><th style={thStyle}>YDS</th><th style={thStyle}>TD</th></>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {player.careerStats.map((cs, i) => (
-                          <tr key={i}>
-                            <td style={tdStyle}>{cs.season || i + 1}</td>
-                            <td style={tdStyle}>{cs.gamesPlayed || 0}</td>
-                            <td style={tdStyle}>{cs.ovr || "—"}</td>
-                            {pos === "QB" && <><td style={tdStyle}>{cs.passYds || 0}</td><td style={tdStyle}>{cs.passTDs || 0}</td><td style={tdStyle}>{cs.ints || 0}</td></>}
-                            {pos === "RB" && <><td style={tdStyle}>{cs.rushYds || 0}</td><td style={tdStyle}>{cs.rushTDs || 0}</td></>}
-                            {["WR", "TE"].includes(pos) && <><td style={tdStyle}>{cs.receptions || 0}</td><td style={tdStyle}>{cs.recYds || 0}</td><td style={tdStyle}>{cs.recTDs || 0}</td></>}
-                          </tr>
+                {activeSection === "ratings" && (
+                  <div className="fade-in">
+                    {ratings.physical.length > 0 && (
+                      <div style={{ marginBottom: "var(--space-4)" }}>
+                        <div style={{
+                          fontSize: "var(--text-xs)", fontWeight: 700,
+                          color: "var(--text-muted)", textTransform: "uppercase",
+                          letterSpacing: "0.5px", marginBottom: "var(--space-2)",
+                        }}>
+                          Physical
+                        </div>
+                        {ratings.physical.map(r => (
+                          <RatingBar key={r.label} label={r.label} value={r.value} />
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    )}
+                    {ratings.skill.length > 0 && (
+                      <div>
+                        <div style={{
+                          fontSize: "var(--text-xs)", fontWeight: 700,
+                          color: "var(--text-muted)", textTransform: "uppercase",
+                          letterSpacing: "0.5px", marginBottom: "var(--space-2)",
+                        }}>
+                          Position Skills
+                        </div>
+                        {ratings.skill.map(r => (
+                          <RatingBar key={r.label} label={r.label} value={r.value} />
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
 
-          {activeSection === "contract" && (
-            <div className="fade-in">
-              <div style={{
-                display: "grid", gridTemplateColumns: "1fr 1fr",
-                gap: "var(--space-3)", marginBottom: "var(--space-4)",
-              }}>
-                <ContractStat label="Base Annual" value={`$${salary.toFixed(1)}M`} />
-                <ContractStat label="Years Left" value={`${yearsLeft}`}
-                  color={yearsLeft <= 1 ? "var(--warning)" : "var(--text)"} />
-                <ContractStat label="Signing Bonus"
-                  value={`$${(player.signingBonus || 0).toFixed(1)}M`} />
-                <ContractStat label="Guaranteed"
-                  value={`${Math.round((player.guaranteedPct || 0.5) * 100)}%`} />
-              </div>
-
-              {/* Scout grade */}
-              {player.scoutStatus?.grade && (
-                <div style={{
-                  padding: "var(--space-3)", background: "var(--bg)",
-                  borderRadius: "var(--radius-md)", textAlign: "center",
-                  marginBottom: "var(--space-3)",
-                }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>
-                    Scout Grade
-                  </div>
-                  <div style={{ fontWeight: 800, color: "var(--accent)" }}>
-                    {player.scoutStatus.grade}
-                  </div>
-                </div>
-              )}
-
-              {/* XP / Progression */}
-              {player.progression && (
-                <div style={{
-                  padding: "var(--space-3)", background: "var(--bg)",
-                  borderRadius: "var(--radius-md)",
-                }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>
-                    Progression
-                  </div>
-                  <div style={{
-                    display: "flex", justifyContent: "space-between",
-                    fontSize: "var(--text-xs)", color: "var(--text)",
-                    marginBottom: 4,
-                  }}>
-                    <span>XP: {player.progression.xp}/1000</span>
-                    <span>SP: {player.progression.skillPoints}</span>
-                  </div>
-                  <div style={{
-                    height: 6, borderRadius: 3,
-                    background: "var(--hairline)", overflow: "hidden",
-                  }}>
+                {activeSection === "stats" && (
+                  <div className="fade-in">
                     <div style={{
-                      height: "100%", borderRadius: 3,
-                      background: "var(--accent)",
-                      width: `${Math.min(100, (player.progression.xp / 1000) * 100)}%`,
-                      transition: "width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)",
-                    }} />
+                      fontSize: "var(--text-xs)", fontWeight: 700,
+                      color: "var(--text-muted)", textTransform: "uppercase",
+                      letterSpacing: "0.5px", marginBottom: "var(--space-3)",
+                    }}>
+                      Season Stats
+                    </div>
+                    <StatsGrid pos={pos} stats={seasonStats} label="Season" />
+
+                    {player.careerStats?.length > 0 && (
+                      <div style={{ marginTop: "var(--space-5)" }}>
+                        <div style={{
+                          fontSize: "var(--text-xs)", fontWeight: 700,
+                          color: "var(--text-muted)", textTransform: "uppercase",
+                          letterSpacing: "0.5px", marginBottom: "var(--space-3)",
+                        }}>
+                          Career Log
+                        </div>
+                        <div style={{ overflowX: "auto" }}>
+                          <Table style={{
+                            width: "100%", fontSize: "var(--text-xs)",
+                          }}>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead style={thStyle}>YR</TableHead>
+                                <TableHead style={thStyle}>GP</TableHead>
+                                <TableHead style={thStyle}>OVR</TableHead>
+                                {pos === "QB" && <><TableHead style={thStyle}>YDS</TableHead><TableHead style={thStyle}>TD</TableHead><TableHead style={thStyle}>INT</TableHead></>}
+                                {pos === "RB" && <><TableHead style={thStyle}>YDS</TableHead><TableHead style={thStyle}>TD</TableHead></>}
+                                {["WR", "TE"].includes(pos) && <><TableHead style={thStyle}>REC</TableHead><TableHead style={thStyle}>YDS</TableHead><TableHead style={thStyle}>TD</TableHead></>}
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {player.careerStats.map((cs, i) => (
+                                <TableRow key={i}>
+                                  <TableCell style={tdStyle}>{cs.season || i + 1}</TableCell>
+                                  <TableCell style={tdStyle}>{cs.gamesPlayed || 0}</TableCell>
+                                  <TableCell style={tdStyle}>{cs.ovr || "—"}</TableCell>
+                                  {pos === "QB" && <><TableCell style={tdStyle}>{cs.passYds || 0}</TableCell><TableCell style={tdStyle}>{cs.passTDs || 0}</TableCell><TableCell style={tdStyle}>{cs.ints || 0}</TableCell></>}
+                                  {pos === "RB" && <><TableCell style={tdStyle}>{cs.rushYds || 0}</TableCell><TableCell style={tdStyle}>{cs.rushTDs || 0}</TableCell></>}
+                                  {["WR", "TE"].includes(pos) && <><TableCell style={tdStyle}>{cs.receptions || 0}</TableCell><TableCell style={tdStyle}>{cs.recYds || 0}</TableCell><TableCell style={tdStyle}>{cs.recTDs || 0}</TableCell></>}
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+                )}
+
+                {activeSection === "contract" && (
+                  <div className="fade-in">
+                    <div style={{
+                      display: "grid", gridTemplateColumns: "1fr 1fr",
+                      gap: "var(--space-3)", marginBottom: "var(--space-4)",
+                    }}>
+                      <ContractStat label="Base Annual" value={`$${salary.toFixed(1)}M`} />
+                      <ContractStat label="Years Left" value={`${yearsLeft}`}
+                        color={yearsLeft <= 1 ? "var(--warning)" : "var(--text)"} />
+                      <ContractStat label="Signing Bonus"
+                        value={`$${(player.signingBonus || 0).toFixed(1)}M`} />
+                      <ContractStat label="Guaranteed"
+                        value={`${Math.round((player.guaranteedPct || 0.5) * 100)}%`} />
+                    </div>
+
+                    {/* Scout grade */}
+                    {player.scoutStatus?.grade && (
+                      <div style={{
+                        padding: "var(--space-3)", background: "var(--bg)",
+                        borderRadius: "var(--radius-md)", textAlign: "center",
+                        marginBottom: "var(--space-3)",
+                      }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 2 }}>
+                          Scout Grade
+                        </div>
+                        <div style={{ fontWeight: 800, color: "var(--accent)" }}>
+                          {player.scoutStatus.grade}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* XP / Progression */}
+                    {player.progression && (
+                      <div style={{
+                        padding: "var(--space-3)", background: "var(--bg)",
+                        borderRadius: "var(--radius-md)",
+                      }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>
+                          Progression
+                        </div>
+                        <div style={{
+                          display: "flex", justifyContent: "space-between",
+                          fontSize: "var(--text-xs)", color: "var(--text)",
+                          marginBottom: 4,
+                        }}>
+                          <span>XP: {player.progression.xp}/1000</span>
+                          <span>SP: {player.progression.skillPoints}</span>
+                        </div>
+                        <div style={{
+                          height: 6, borderRadius: 3,
+                          background: "var(--hairline)", overflow: "hidden",
+                        }}>
+                          <div style={{
+                            height: "100%", borderRadius: 3,
+                            background: "var(--accent)",
+                            width: `${Math.min(100, (player.progression.xp / 1000) * 100)}%`,
+                            transition: "width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)",
+                          }} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
