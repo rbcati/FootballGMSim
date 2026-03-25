@@ -119,6 +119,8 @@ function PlayCallPanel({ onSelectPlay, scheme, possession, down, distance }) {
                 textAlign: "left",
                 transition: "all 0.15s ease",
                 position: "relative",
+                transform: active ? "scale(0.95)" : "scale(1)",
+                filter: active ? "brightness(1.2)" : "none"
               }}
             >
               <div style={{ fontSize: "1.1rem", marginBottom: 3 }}>{play.icon}</div>
@@ -562,10 +564,12 @@ function BigPlayPopup({ log, onDismiss }) {
   const score = isTouchdown(log);
   const turnover = isTurnover(log);
   const isSack = (txt.toLowerCase().includes("sack"));
+  const isGoal = txt.toLowerCase().includes("field goal");
+  const isSave = txt.toLowerCase().includes("missed fg") || txt.toLowerCase().includes("blocked");
 
-  const color = score ? "#34C759" : turnover ? "#FF453A" : isSack ? "#FF9F0A" : "#FFD60A";
-  const emoji = score ? "🏈" : turnover ? "🔄" : isSack ? "💥" : "⚡";
-  const label = score ? "TOUCHDOWN!" : turnover ? "TURNOVER!" : isSack ? "SACK!" : "BIG PLAY!";
+  const color = score || isGoal ? "#34C759" : turnover || isSave ? "#FF453A" : isSack ? "#FF9F0A" : "#FFD60A";
+  const emoji = score ? "🏈" : isGoal ? "👟" : turnover ? "🔄" : isSave ? "🛡️" : isSack ? "💥" : "⚡";
+  const label = score ? "TOUCHDOWN!" : isGoal ? "FIELD GOAL!" : turnover ? "TURNOVER!" : isSave ? "SAVE!" : isSack ? "SACK!" : "BIG PLAY!";
 
   // Player chip
   const player = log.player;

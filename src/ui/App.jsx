@@ -201,7 +201,7 @@ export default function App() {
   if (!workerReady) {
     if (error) {
       return (
-        <div className="app-error-screen">
+        <div className="app-error-screen fade-in">
           <div className="app-error-icon">⚠️</div>
           <h2 className="app-error-title">Initialization Failed</h2>
           <p className="app-error-detail">{error}</p>
@@ -251,7 +251,7 @@ export default function App() {
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
 
   return (
-    <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
+    <div className={`app-shell fade-in ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
 
       {/* Phase-based Theming */}
       <style>{`
@@ -308,7 +308,7 @@ export default function App() {
         <div className="app-header-actions">
           <ThemeToggle compact />
           <button
-            className="btn btn-primary app-advance-btn"
+            className={`btn btn-primary app-advance-btn ${(busy || simulating || batchSim) ? "pulsing-btn" : ""}`}
             onClick={handleAdvanceWeek}
             disabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
@@ -688,7 +688,7 @@ export default function App() {
 
 function Loading({ message }) {
   return (
-    <div className="app-loading">
+    <div className="app-loading fade-in">
       <div className="app-loading-spinner" />
       <p className="app-loading-text">{message}</p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
