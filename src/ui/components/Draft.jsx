@@ -1048,23 +1048,24 @@ function DraftBoard({
                 </div>
               </>
             )}
-          </div>
+          </CardContent>
+          </Card>
 
           {/* Sim button (only when AI is picking) */}
           {!isDraftComplete && !isUserPick && (
-            <button
+            <Button
               className="btn btn-primary"
               disabled={simming}
               onClick={onSimToMyPick}
               style={{ width: "100%" }}
             >
               {simming ? "Simulating…" : "Sim to My Pick"}
-            </button>
+            </Button>
           )}
 
           {/* Trade for this Pick button (only when AI is picking and we have actions) */}
           {!isDraftComplete && !isUserPick && actions && (
-            <button
+            <Button
               className="btn"
               onClick={() => setShowTradeUp(true)}
               disabled={simming}
@@ -1077,7 +1078,7 @@ function DraftBoard({
               }}
             >
               Trade for Pick #{currentPick?.overall}
-            </button>
+            </Button>
           )}
 
           {/* Upcoming order */}
