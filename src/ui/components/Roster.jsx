@@ -355,14 +355,14 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
         zIndex: 1000,
       }}
     >
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           width: 400,
           padding: "var(--space-6)",
           boxShadow: "var(--shadow-lg)",
         }}
-      >
+      ><CardContent>
         <h3 style={{ marginTop: 0 }}>
           Extend {player.name}
           <StatusBadge injuryWeeks={player.injuryWeeksRemaining} />
@@ -443,7 +443,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
             </Button>
           </div>
         )}
-      </div>
+      </CardContent></Card>
     </div>
   );
 }
@@ -1434,10 +1434,10 @@ function DepthChartView({ players, onReorder }) {
 
             {/* Slot column headers */}
             <div className="table-wrapper">
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th
+              <Table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead
                       style={{
                         textAlign: "left",
                         padding: "4px 12px 4px 0",
@@ -1451,9 +1451,9 @@ function DepthChartView({ players, onReorder }) {
                       }}
                     >
                       Position
-                    </th>
+                    </TableHead>
                     {Array.from({ length: maxSlots }, (_, i) => (
-                      <th
+                      <TableHead
                         key={i}
                         style={{
                           padding: "4px 6px",
@@ -1467,15 +1467,15 @@ function DepthChartView({ players, onReorder }) {
                         }}
                       >
                         {SLOT_LABELS[i] ?? `${i + 1}th`}
-                      </th>
+                      </TableHead>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {rows.map((row, rowIdx) => {
                     const depth = depthMap[row.key] ?? [];
                     return (
-                      <tr
+                      <TableRow
                         key={row.key}
                         style={{
                           borderTop:
@@ -1486,7 +1486,7 @@ function DepthChartView({ players, onReorder }) {
                         }}
                       >
                         {/* Position label */}
-                        <td
+                        <TableCell
                           style={{
                             padding: "8px 12px 8px 0",
                             whiteSpace: "nowrap",
@@ -1510,15 +1510,15 @@ function DepthChartView({ players, onReorder }) {
                           >
                             {depth.length} on roster
                           </div>
-                        </td>
+                        </TableCell>
                         {/* Depth slots */}
                         {Array.from({ length: maxSlots }, (_, slotIdx) => {
                           // Only render up to this row's designated slots; hide extras
                           if (slotIdx >= row.slots) {
-                            return <td key={slotIdx} />;
+                            return <TableCell key={slotIdx} />;
                           }
                           return (
-                            <td key={slotIdx} style={{ padding: "6px" }}>
+                            <TableCell key={slotIdx} style={{ padding: "6px" }}>
                               <DepthCard
                                 player={depth[slotIdx] ?? null}
                                 isStarter={slotIdx === 0}
@@ -1526,14 +1526,14 @@ function DepthChartView({ players, onReorder }) {
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => handleDrop(e, depth[slotIdx]?.id, row.key, slotIdx)}
                               />
-                            </td>
+                            </TableCell>
                           );
                         })}
-                      </tr>
+                      </TableRow>
                     );
                   })}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </div>
         );
@@ -1640,13 +1640,13 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   return (
     <div>
       {/* ── Team cap header ── */}
-      <div
-        className="card"
+      <Card
+        className="card-premium"
         style={{
           marginBottom: "var(--space-4)",
           padding: "var(--space-4) var(--space-5)",
         }}
-      >
+      ><CardContent>
         <div
           style={{
             display: "flex",
@@ -1717,20 +1717,22 @@ export default function Roster({ league, actions, onPlayerSelect }) {
 
             {/* View toggle pills */}
             <div className="standings-tabs">
-              <button
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
                 className={`standings-tab${viewMode === "table" ? " active" : ""}`}
                 onClick={() => setViewMode("table")}
                 style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
               >
                 Roster
-              </button>
-              <button
+              </Button>
+              <Button
+                variant={viewMode === "depth" ? "default" : "ghost"}
                 className={`standings-tab${viewMode === "depth" ? " active" : ""}`}
                 onClick={() => setViewMode("depth")}
                 style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
               >
                 Depth Chart
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1754,7 +1756,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             <span style={{ color: "#0A84FF", fontWeight: 700 }}>●</span> Morale
           </span>
         </div>
-      </div>
+      </CardContent></Card>
 
       {/* ── Loading state ── */}
       {loading && (
@@ -1789,7 +1791,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
 
       {/* ── Depth chart view ── */}
       {!loading && viewMode === "depth" && (
-        <div className="card" style={{ padding: "var(--space-5)" }}>
+        <Card className="card-premium"><CardContent style={{ padding: "var(--space-5)" }}>
           {players.length === 0 ? (
             <div
               style={{
@@ -1803,7 +1805,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           ) : (
             <DepthChartView players={players} />
           )}
-        </div>
+        </CardContent></Card>
       )}
     </div>
   );
