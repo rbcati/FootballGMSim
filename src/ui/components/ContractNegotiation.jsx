@@ -9,8 +9,8 @@ import PlayerCard from "./PlayerCard.jsx";
 
 export default function ContractNegotiation({
   player,
-  userTeam,
-  onSubmitOffer,
+  capRoom,
+  onOffer,
   onSignImmediately,
   onClose,
 }) {
@@ -31,14 +31,12 @@ export default function ContractNegotiation({
   }, [totalValue, guaranteePct]);
 
   const capRoomAfter = useMemo(() => {
-    return Math.round((userTeam.capRoom - capHitThisYear) * 10) / 10;
-  }, [userTeam.capRoom, capHitThisYear]);
+    return Math.round(((capRoom ?? 0) - capHitThisYear) * 10) / 10;
+  }, [capRoom, capHitThisYear]);
 
   const schemeFit = useMemo(() => {
-    // Simple example using existing team.strategies
-    const fit = (player.ovr > 80 && userTeam.strategies?.offPlanId === "BALANCED") ? "Excellent" : "Good";
-    return fit;
-  }, [player, userTeam]);
+    return player.ovr > 80 ? "Excellent" : "Good";
+  }, [player]);
 
   return (
     <div
@@ -179,7 +177,7 @@ export default function ContractNegotiation({
           </button>
           <button
             className="btn-premium btn-primary-premium"
-            onClick={() => onSubmitOffer({ years, annual, guaranteePct, bonus })}
+            onClick={() => onOffer({ years, annual, guaranteePct, bonus })}
             style={{ flex: 2 }}
           >
             Submit Offer
