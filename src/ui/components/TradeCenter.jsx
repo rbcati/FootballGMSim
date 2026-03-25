@@ -6,6 +6,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import PlayerCard from "./PlayerCard.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -38,9 +42,9 @@ function fmtSalary(annual) {
 function OvrBadge({ ovr }) {
   const col = ovrColor(ovr);
   return (
-    <span style={{ display: "inline-block", minWidth: 28, padding: "1px 3px", borderRadius: "var(--radius-pill)", background: col + "22", color: col, fontWeight: 800, fontSize: 11, textAlign: "center" }}>
+    <Badge variant="outline" style={{ color: col, borderColor: col + '44', background: col + '22', fontWeight: 800, minWidth: 28, textAlign: 'center' }}>
       {ovr}
-    </span>
+    </Badge>
   );
 }
 
@@ -109,11 +113,11 @@ function PickSelector({ side, picks, onChange }) {
       <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "2px 4px", fontSize: "var(--text-xs)" }}>
         {[0,1,2].map(d => { const y = new Date().getFullYear() + 1 + d; return <option key={y} value={y}>{y}</option>; })}
       </select>
-      <button className="btn" style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }} onClick={addPick}>+ Add</button>
+      <Button className="btn" style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }} onClick={addPick}>+ Add</Button>
       {picks.map(pk => (
         <span key={pk.id} style={{ fontSize: "var(--text-xs)", background: "var(--accent)22", color: "var(--accent)", padding: "1px 6px", borderRadius: "var(--radius-pill)", display: "inline-flex", alignItems: "center", gap: 4 }}>
           {pk.year} R{pk.round}
-          <button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12 }} onClick={() => onChange(side, pk, true)}>×</button>
+          <Button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12 }} onClick={() => onChange(side, pk, true)}>×</Button>
         </span>
       ))}
     </div>
@@ -132,7 +136,7 @@ function TradeResult({ result, onDismiss }) {
           <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: result.accepted ? "var(--success)" : "var(--danger)" }}>{result.accepted ? "Trade Accepted!" : "Trade Rejected"}</div>
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{result.reason}</div>
         </div>
-        <button onClick={onDismiss} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-muted)" }}>×</button>
+        <Button onClick={onDismiss} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-muted)" }}>×</Button>
       </div>
       {counterHint && (
         <div style={{ borderRadius: "var(--radius-md)", border: "1px solid #FF9F0A44", background: "rgba(255,159,10,0.07)", padding: "10px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
@@ -282,7 +286,7 @@ export default function TradeCenter({ league, actions }) {
   };
 
   return (
-    <div>
+    <Card className="card-premium"><CardContent className="p-4">
       {/* Header + propose button (original) */}
       <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", flexWrap: "wrap" }}>
@@ -293,7 +297,7 @@ export default function TradeCenter({ league, actions }) {
               {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
             </select>
           </div>
-          {targetId && <button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : "Propose Trade"}</button>}
+          {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : "Propose Trade"}</Button>}
         </div>
       </div>
 
@@ -346,6 +350,6 @@ export default function TradeCenter({ league, actions }) {
           {previewPlayer && <TradePlayerSheet player={previewPlayer} onClose={() => setPreviewPlayer(null)} />}
         </>
       )}
-    </div>
+    </CardContent></Card>
   );
 }
