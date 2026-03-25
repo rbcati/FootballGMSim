@@ -18,6 +18,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { Badge } from "@/components/ui/badge";
 
 // ── OVR tier system ────────────────────────────────────────────────────────────
 
@@ -174,15 +175,15 @@ function OvrBadge({ ovr, size = 52 }) {
 
 function PosBadge({ pos, size = "sm" }) {
   const color = posColor(pos);
-  const fs = size === "lg" ? "0.85rem" : "0.7rem";
+  const sizeClass = size === "lg" ? "text-xs px-2 py-0.5" : "text-[10px] px-1.5 py-0";
   return (
-    <span style={{
-      background: `${color}22`, border: `1px solid ${color}66`,
-      color, fontWeight: 800, fontSize: fs,
-      padding: "2px 6px", borderRadius: 4, letterSpacing: "0.5px",
-    }}>
+    <Badge
+      variant="outline"
+      className={`font-bold ${sizeClass}`}
+      style={{ background: `${color}22`, borderColor: `${color}66`, color }}
+    >
       {pos}
-    </span>
+    </Badge>
   );
 }
 
@@ -269,13 +270,9 @@ function InjuryBadge({ player }) {
   if (!inj) return null;
   const weeks = typeof inj === "object" ? inj.weeksLeft ?? inj.weeks : inj;
   return (
-    <span style={{
-      background: "#FF453A22", border: "1px solid #FF453A66",
-      color: "#FF453A", fontWeight: 700, fontSize: "0.62rem",
-      padding: "1px 5px", borderRadius: 4,
-    }}>
+    <Badge variant="destructive" className="text-[10px] font-bold px-1.5 py-0">
       INJ{weeks > 0 ? ` ${weeks}w` : ""}
-    </span>
+    </Badge>
   );
 }
 
@@ -335,7 +332,7 @@ function CompactCard({ player, onClick, isSelected }) {
 
 // ── Standard card ─────────────────────────────────────────────────────────────
 
-function StandardCard({ player, onClick, isSelected }) {
+function StandardCard({ player, onClick, isSelected, leagueLeaders = null }) {
   const tier    = ovrTier(player.ovr ?? 70);
   const attrKeys = (POS_ATTRS[player.pos] || POS_ATTRS.QB).slice(0, 4);
   const attrs    = getAttrs(player, attrKeys);
@@ -412,6 +409,15 @@ function StandardCard({ player, onClick, isSelected }) {
         ))}
       </div>
 
+      {/* League-leading stat indicator */}
+      {player.isLeagueLeader && (
+        <div className="mt-2 pt-2 border-t border-[color:var(--hairline)]">
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
+            League Leader
+          </Badge>
+        </div>
+      )}
+
       {/* Contract footer */}
       {(contract.salary || contract.years) && (
         <div style={{
@@ -435,7 +441,7 @@ function StandardCard({ player, onClick, isSelected }) {
 
 // ── Hero card (full detail) ───────────────────────────────────────────────────
 
-function HeroCard({ player, onClick, onClose }) {
+function HeroCard({ player, onClick, onClose, isSelected, leagueLeaders = null }) {
   const tier     = ovrTier(player.ovr ?? 70);
   const attrKeys = POS_ATTRS[player.pos] || POS_ATTRS.QB;
   const attrs    = getAttrs(player, attrKeys);
@@ -517,6 +523,13 @@ function HeroCard({ player, onClick, onClose }) {
         {/* Award badges — hero size shows all */}
         <AwardBadges player={player} maxShow={8} />
 
+        {/* League leader badge */}
+        {player.isLeagueLeader && (
+          <div style={{ marginTop: 6 }}>
+            <Badge variant="default">League Leader</Badge>
+          </div>
+        )}
+
         {/* Attribute grid */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
           {attrKeys.map((key, i) => key && (
@@ -564,6 +577,7 @@ function HeroCard({ player, onClick, onClose }) {
  * @param {function} [props.onClick]   — makes the card tappable
  * @param {function} [props.onClose]   — hero-only: renders a close button
  * @param {boolean}  [props.isSelected]
+ * @param {object}   [props.leagueLeaders] — optional league leader data
  */
 export default function PlayerCard({
   player,
@@ -571,12 +585,12 @@ export default function PlayerCard({
   onClick,
   onClose,
   isSelected = false,
+  leagueLeaders = null,
 }) {
   if (!player) return null;
-
   if (variant === "compact")  return <CompactCard  player={player} onClick={onClick} isSelected={isSelected} />;
-  if (variant === "hero")     return <HeroCard     player={player} onClick={onClick} onClose={onClose} isSelected={isSelected} />;
-  return                             <StandardCard player={player} onClick={onClick} isSelected={isSelected} />;
+  if (variant === "hero")     return <HeroCard     player={player} onClick={onClick} onClose={onClose} isSelected={isSelected} leagueLeaders={leagueLeaders} />;
+  return                             <StandardCard player={player} onClick={onClick} isSelected={isSelected} leagueLeaders={leagueLeaders} />;
 }
 
 // ── CSS keyframe injection (card-pop + badge-pulse) ───────────────────────────

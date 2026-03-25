@@ -10,12 +10,21 @@
     "test": "playwright test"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-select": "^2.2.6",
+    "@radix-ui/react-slot": "^1.2.4",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@tailwindcss/vite": "^4.2.1",
     "chart.js": "^4.4.7",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "localforage": "^1.10.0",
+    "lucide-react": "^1.6.0",
     "react": "^19.2.4",
     "react-chartjs-2": "^5.3.0",
     "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
     "vite": "^7.3.1"
   },

@@ -15,6 +15,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import DonutChart from "./DonutChart";
 import { getAvailableCap } from "../../data/team-utils.js";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -317,32 +322,12 @@ export default function FinancialsView({ league, actions }) {
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
           Cap Management
         </h2>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: 12,
-            background: "rgba(255,255,255,0.08)",
-            color: "var(--text-secondary)",
-          }}
-        >
+        <Badge variant="secondary">
           {june1} Rule Active
-        </span>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: 12,
-            background: isOverCap
-              ? "rgba(255,69,58,0.15)"
-              : "rgba(52,199,89,0.12)",
-            color: isOverCap ? "var(--danger)" : "var(--success)",
-          }}
-        >
+        </Badge>
+        <Badge variant={isOverCap ? "destructive" : "secondary"}>
           Hard Cap: ${hardCap.toFixed(1)}M
-        </span>
+        </Badge>
       </div>
 
       {/* ── Notification ── */}
@@ -384,7 +369,14 @@ export default function FinancialsView({ league, actions }) {
       )}
 
       {/* ── Cap Bar ── */}
-      <CapBar activeCap={activeCap} deadCap={deadCap} total={hardCap} />
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardHeader>
+          <CardTitle>Cap Usage</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <CapBar activeCap={activeCap} deadCap={deadCap} total={hardCap} />
+        </CardContent>
+      </Card>
 
       {/* ── Stat Boxes ── */}
       <div
@@ -447,204 +439,186 @@ export default function FinancialsView({ league, actions }) {
       </div>
 
       {/* ── Player Cap Hit Table ── */}
-      <div
-        style={{
-          background: "var(--bg-secondary, #1e1e2e)",
-          borderRadius: 10,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        <div
-          style={{
-            padding: "12px 16px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <span style={{ fontWeight: 700, fontSize: 14 }}>
-            Player Contracts
-          </span>
-          <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>
-            {enriched.length} players · Total cap hit:{" "}
-            {fmt(enriched.reduce((s, p) => s + p.capHit, 0))}
-          </span>
-        </div>
+      <Card className="card-premium">
+        <CardHeader>
+          <CardTitle style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span>Player Contracts</span>
+            <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-secondary)" }}>
+              {enriched.length} players · Total cap hit:{" "}
+              {fmt(enriched.reduce((s, p) => s + p.capHit, 0))}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent style={{ padding: 0 }}>
+          <ScrollArea className="h-[500px]">
+            <Table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <TableHeader>
+                <TableRow>
+                  <TableHead style={thStyle("name")} onClick={() => handleSort("name")}>
+                    Name
+                    <SortArrow col="name" />
+                  </TableHead>
+                  <TableHead style={thStyle("pos")} onClick={() => handleSort("pos")}>
+                    Pos
+                    <SortArrow col="pos" />
+                  </TableHead>
+                  <TableHead style={thStyle("ovr")} onClick={() => handleSort("ovr")}>
+                    OVR
+                    <SortArrow col="ovr" />
+                  </TableHead>
+                  <TableHead style={thStyle("age")} onClick={() => handleSort("age")}>
+                    Age
+                    <SortArrow col="age" />
+                  </TableHead>
+                  <TableHead
+                    style={thStyle("baseAnnual")}
+                    onClick={() => handleSort("baseAnnual")}
+                  >
+                    Base Salary
+                    <SortArrow col="baseAnnual" />
+                  </TableHead>
+                  <TableHead
+                    style={thStyle("signingBonus")}
+                    onClick={() => handleSort("signingBonus")}
+                  >
+                    Bonus
+                    <SortArrow col="signingBonus" />
+                  </TableHead>
+                  <TableHead
+                    style={thStyle("yearsRemaining")}
+                    onClick={() => handleSort("yearsRemaining")}
+                  >
+                    Yrs Left
+                    <SortArrow col="yearsRemaining" />
+                  </TableHead>
+                  <TableHead
+                    style={thStyle("capHit")}
+                    onClick={() => handleSort("capHit")}
+                  >
+                    Cap Hit
+                    <SortArrow col="capHit" />
+                  </TableHead>
+                  <TableHead style={{ ...thStyle("name"), textAlign: "center" }}>
+                    Actions
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sorted.map((player, idx) => {
+                  const isRestructuring = restructuring === player.id;
+                  const rowBg =
+                    idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)";
+                  const isHighCap = player.capHit > 20;
+                  const isExpiring = player.yearsRemaining === 1;
 
-        <div style={{ overflowX: "auto" }}>
-          <table
-            style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}
-          >
-            <thead>
-              <tr>
-                <th style={thStyle("name")} onClick={() => handleSort("name")}>
-                  Name
-                  <SortArrow col="name" />
-                </th>
-                <th style={thStyle("pos")} onClick={() => handleSort("pos")}>
-                  Pos
-                  <SortArrow col="pos" />
-                </th>
-                <th style={thStyle("ovr")} onClick={() => handleSort("ovr")}>
-                  OVR
-                  <SortArrow col="ovr" />
-                </th>
-                <th style={thStyle("age")} onClick={() => handleSort("age")}>
-                  Age
-                  <SortArrow col="age" />
-                </th>
-                <th
-                  style={thStyle("baseAnnual")}
-                  onClick={() => handleSort("baseAnnual")}
-                >
-                  Base Salary
-                  <SortArrow col="baseAnnual" />
-                </th>
-                <th
-                  style={thStyle("signingBonus")}
-                  onClick={() => handleSort("signingBonus")}
-                >
-                  Bonus
-                  <SortArrow col="signingBonus" />
-                </th>
-                <th
-                  style={thStyle("yearsRemaining")}
-                  onClick={() => handleSort("yearsRemaining")}
-                >
-                  Yrs Left
-                  <SortArrow col="yearsRemaining" />
-                </th>
-                <th
-                  style={thStyle("capHit")}
-                  onClick={() => handleSort("capHit")}
-                >
-                  Cap Hit
-                  <SortArrow col="capHit" />
-                </th>
-                <th style={{ ...thStyle("name"), textAlign: "center" }}>
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((player, idx) => {
-                const isRestructuring = restructuring === player.id;
-                const rowBg =
-                  idx % 2 === 0 ? "transparent" : "rgba(255,255,255,0.02)";
-                const isHighCap = player.capHit > 20;
-
-                return (
-                  <tr key={player.id} style={{ background: rowBg }}>
-                    <td style={{ ...tdStyle("left"), fontWeight: 600 }}>
-                      {player.name}
-                    </td>
-                    <td style={{ ...tdStyle("left") }}>
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          background: "rgba(255,255,255,0.07)",
-                        }}
-                      >
-                        {player.pos}
-                      </span>
-                    </td>
-                    <td style={tdStyle()}>
-                      <span
-                        style={{
-                          fontWeight: 700,
-                          color:
-                            player.ovr >= 85
-                              ? "var(--success)"
-                              : player.ovr >= 75
-                                ? "var(--text-primary)"
-                                : "var(--text-secondary)",
-                        }}
-                      >
-                        {player.ovr}
-                      </span>
-                    </td>
-                    <td
-                      style={{ ...tdStyle(), color: "var(--text-secondary)" }}
-                    >
-                      {player.age}
-                    </td>
-                    <td
-                      style={{ ...tdStyle(), color: "var(--text-secondary)" }}
-                    >
-                      {fmt(player.baseAnnual)}
-                    </td>
-                    <td
-                      style={{ ...tdStyle(), color: "var(--text-secondary)" }}
-                    >
-                      {player.signingBonus > 0 ? fmt(player.signingBonus) : "—"}
-                    </td>
-                    <td style={tdStyle()}>
-                      {player.yearsRemaining > 0 ? player.yearsRemaining : "—"}
-                    </td>
-                    <td
-                      style={{
-                        ...tdStyle(),
-                        fontWeight: 700,
-                        color: isHighCap ? "#FF9F0A" : "var(--text-primary)",
-                      }}
-                    >
-                      {fmt(player.capHit)}
-                    </td>
-                    <td style={{ ...tdStyle(), textAlign: "center" }}>
-                      {player.canRestructure ? (
-                        <button
-                          className="btn"
-                          disabled={isRestructuring}
-                          onClick={() => handleRestructure(player)}
-                          style={{
-                            fontSize: 11,
-                            padding: "4px 10px",
-                            borderRadius: 6,
-                            border: "1px solid rgba(10,132,255,0.4)",
-                            background: "rgba(10,132,255,0.1)",
-                            color: "var(--accent, #0A84FF)",
-                            cursor: isRestructuring ? "wait" : "pointer",
-                            fontWeight: 600,
-                            opacity: isRestructuring ? 0.5 : 1,
-                          }}
-                        >
-                          {isRestructuring ? "…" : "Restructure"}
-                        </button>
-                      ) : (
+                  return (
+                    <TableRow key={player.id} style={{ background: rowBg }}>
+                      <TableCell style={{ ...tdStyle("left"), fontWeight: 600 }}>
+                        {player.name}
+                      </TableCell>
+                      <TableCell style={{ ...tdStyle("left") }}>
                         <span
                           style={{
                             fontSize: 11,
-                            color: "rgba(255,255,255,0.2)",
+                            fontWeight: 700,
+                            padding: "2px 6px",
+                            borderRadius: 4,
+                            background: "rgba(255,255,255,0.07)",
                           }}
                         >
-                          —
+                          {player.pos}
                         </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </TableCell>
+                      <TableCell style={tdStyle()}>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color:
+                              player.ovr >= 85
+                                ? "var(--success)"
+                                : player.ovr >= 75
+                                  ? "var(--text-primary)"
+                                  : "var(--text-secondary)",
+                          }}
+                        >
+                          {player.ovr}
+                        </span>
+                      </TableCell>
+                      <TableCell
+                        style={{ ...tdStyle(), color: "var(--text-secondary)" }}
+                      >
+                        {player.age}
+                      </TableCell>
+                      <TableCell
+                        style={{ ...tdStyle(), color: "var(--text-secondary)" }}
+                      >
+                        {fmt(player.baseAnnual)}
+                      </TableCell>
+                      <TableCell
+                        style={{ ...tdStyle(), color: "var(--text-secondary)" }}
+                      >
+                        {player.signingBonus > 0 ? fmt(player.signingBonus) : "—"}
+                      </TableCell>
+                      <TableCell style={tdStyle()}>
+                        {isExpiring ? (
+                          <Badge variant="destructive" className="text-xs">
+                            Expiring
+                          </Badge>
+                        ) : (
+                          player.yearsRemaining > 0 ? player.yearsRemaining : "—"
+                        )}
+                      </TableCell>
+                      <TableCell
+                        style={{
+                          ...tdStyle(),
+                          fontWeight: 700,
+                          color: isHighCap ? "#FF9F0A" : "var(--text-primary)",
+                        }}
+                      >
+                        {fmt(player.capHit)}
+                      </TableCell>
+                      <TableCell style={{ ...tdStyle(), textAlign: "center" }}>
+                        {player.canRestructure ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 px-2"
+                            disabled={isRestructuring}
+                            onClick={() => handleRestructure(player)}
+                          >
+                            {isRestructuring ? "…" : "Restructure"}
+                          </Button>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "rgba(255,255,255,0.2)",
+                            }}
+                          >
+                            —
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </ScrollArea>
 
-        {sorted.length === 0 && (
-          <div
-            style={{
-              padding: 32,
-              textAlign: "center",
-              color: "var(--text-secondary)",
-            }}
-          >
-            No players under contract.
-          </div>
-        )}
-      </div>
+          {sorted.length === 0 && (
+            <div
+              style={{
+                padding: 32,
+                textAlign: "center",
+                color: "var(--text-secondary)",
+              }}
+            >
+              No players under contract.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ── RFA Prep Notice ── */}
       <div

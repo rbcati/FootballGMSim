@@ -20,6 +20,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { teamColor } from "../../data/team-utils.js";
 import AdvancedStats from "./AdvancedStats.jsx";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,14 +107,14 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
 
   return (
     <div className="table-wrapper">
-      <table className="standings-table" style={{ width: "100%" }}>
-        <thead>
-          <tr>
-            <th style={{ width: "40%", paddingLeft: "var(--space-4)" }}>
+      <Table className="standings-table" style={{ width: "100%" }}>
+        <TableHeader>
+          <TableRow>
+            <TableHead style={{ width: "40%", paddingLeft: "var(--space-4)" }}>
               {awayAbbr}
-            </th>
-            <th style={{ textAlign: "center" }}>Stat</th>
-            <th
+            </TableHead>
+            <TableHead style={{ textAlign: "center" }}>Stat</TableHead>
+            <TableHead
               style={{
                 width: "40%",
                 textAlign: "right",
@@ -116,13 +122,13 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
               }}
             >
               {homeAbbr}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map(({ label, h, a }) => (
-            <tr key={label}>
-              <td
+            <TableRow key={label}>
+              <TableCell
                 style={{
                   paddingLeft: "var(--space-4)",
                   fontWeight: 600,
@@ -130,8 +136,8 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
                 }}
               >
                 {typeof a === "number" ? stat(a) : a === "0/0" ? "—" : a}
-              </td>
-              <td
+              </TableCell>
+              <TableCell
                 style={{
                   textAlign: "center",
                   fontSize: "var(--text-xs)",
@@ -139,8 +145,8 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
                 }}
               >
                 {label}
-              </td>
-              <td
+              </TableCell>
+              <TableCell
                 style={{
                   textAlign: "right",
                   paddingRight: "var(--space-4)",
@@ -149,11 +155,11 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
                 }}
               >
                 {typeof h === "number" ? stat(h) : h === "0/0" ? "—" : h}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -179,26 +185,26 @@ function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr }) {
           {teamAbbr}
         </div>
         <div className="table-wrapper">
-          <table className="standings-table" style={{ width: "100%" }}>
-            <thead>
-              <tr>
-                <th style={{ paddingLeft: "var(--space-4)", width: "30%" }}>
+          <Table className="standings-table" style={{ width: "100%" }}>
+            <TableHeader>
+              <TableRow>
+                <TableHead style={{ paddingLeft: "var(--space-4)", width: "30%" }}>
                   Player
-                </th>
+                </TableHead>
                 {columns.map((c) => (
-                  <th
+                  <TableHead
                     key={c.key}
                     style={{ textAlign: "center", minWidth: c.minWidth ?? 40 }}
                   >
                     {c.label}
-                  </th>
+                  </TableHead>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rows.map((row, i) => (
-                <tr key={i}>
-                  <td style={{ paddingLeft: "var(--space-4)" }}>
+                <TableRow key={i}>
+                  <TableCell style={{ paddingLeft: "var(--space-4)" }}>
                     <div
                       style={{
                         fontWeight: 600,
@@ -216,19 +222,19 @@ function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr }) {
                     >
                       {row.pos}
                     </div>
-                  </td>
+                  </TableCell>
                   {columns.map((c) => (
-                    <td
+                    <TableCell
                       key={c.key}
                       style={{ textAlign: "center", color: "var(--text)" }}
                     >
                       {c.format ? c.format(row) : stat(row.stats?.[c.key])}
-                    </td>
+                    </TableCell>
                   ))}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       </div>
     );
@@ -486,16 +492,18 @@ export default function BoxScore({ gameId, actions, onClose }) {
               </div>
 
               <div style={{ flex: 1, textAlign: "center" }}>
-                <div
+                <Badge
                   style={{
-                    fontSize: "var(--text-xs)",
+                    background: "rgba(0,200,100,0.15)",
                     color: "var(--success)",
                     fontWeight: 700,
+                    fontSize: "var(--text-xs)",
                     marginBottom: 4,
+                    display: "inline-block",
                   }}
                 >
                   FINAL
-                </div>
+                </Badge>
                 <div
                   style={{
                     fontSize: "var(--text-xs)",
@@ -572,8 +580,8 @@ export default function BoxScore({ gameId, actions, onClose }) {
           )}
 
           {/* Close button */}
-          <button
-            className="btn"
+          <Button
+            variant="ghost"
             onClick={onClose}
             style={{
               marginLeft: "auto",
@@ -589,11 +597,11 @@ export default function BoxScore({ gameId, actions, onClose }) {
             aria-label="Close box score"
           >
             ×
-          </button>
+          </Button>
         </div>
 
         {/* ── Scrollable content ── */}
-        <div style={{ overflowY: "auto", flex: 1 }}>
+        <ScrollArea style={{ flex: 1 }}>
           {loading && (
             <div
               style={{
@@ -656,8 +664,9 @@ export default function BoxScore({ gameId, actions, onClose }) {
                 }}
               >
                 {TABS.map((tab) => (
-                  <button
+                  <Button
                     key={tab}
+                    variant="ghost"
                     className={`standings-tab${activeTab === tab ? " active" : ""}`}
                     onClick={() => setActiveTab(tab)}
                     style={{
@@ -671,7 +680,7 @@ export default function BoxScore({ gameId, actions, onClose }) {
                     }}
                   >
                     {tab}
-                  </button>
+                  </Button>
                 ))}
               </div>
 
@@ -706,7 +715,7 @@ export default function BoxScore({ gameId, actions, onClose }) {
               )}
             </>
           )}
-        </div>
+        </ScrollArea>
       </div>
     </>
   );
