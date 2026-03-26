@@ -151,11 +151,11 @@ function TradeResult({ result, onDismiss }) {
   );
 }
 
-function TradeBlockSummary({ myRoster, theirRoster, offering, receiving, myPicks, theirPicks }) {
+function TradeBlockSummary({ myRosterMap, theirRosterMap, offering, receiving, myPicks, theirPicks }) {
   const hasAnything = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
   if (!hasAnything) return null;
-  const offeredPlayers = [...offering].map(id => myRoster.find(p => p.id === id)).filter(Boolean);
-  const receivedPlayers = [...receiving].map(id => theirRoster.find(p => p.id === id)).filter(Boolean);
+  const offeredPlayers = [...offering].map(id => myRosterMap.get(id)).filter(Boolean);
+  const receivedPlayers = [...receiving].map(id => theirRosterMap.get(id)).filter(Boolean);
   return (
     <div className="card" style={{ padding: "var(--space-4) var(--space-5)", marginTop: "var(--space-4)" }}>
       <div style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", marginBottom: "var(--space-3)" }}>Trade Block Summary</div>
@@ -216,6 +216,9 @@ export default function TradeCenter({ league, actions }) {
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
+  const myRosterMap = useMemo(() => new Map(myRoster.map(p => [p.id, p])), [myRoster]);
+  const theirRosterMap = useMemo(() => new Map(theirRoster.map(p => [p.id, p])), [theirRoster]);
+
   const fetchRosters = useCallback(async (tId) => {
     if (!actions?.getRoster || myTeamId == null) return;
     setLoading(true);
@@ -232,22 +235,22 @@ export default function TradeCenter({ league, actions }) {
   const liveMyTeam = useMemo(() => league?.teams?.find(t => t.id === myTeamId) ?? myTeam, [league?.teams, myTeamId, myTeam]);
   const liveTheirTeam = useMemo(() => targetId != null ? (league?.teams?.find(t => t.id === targetId) ?? theirTeam) : theirTeam, [league?.teams, targetId, theirTeam]);
 
-  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRoster.find(p => p.id === id)), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRoster, myPicks]);
-  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRoster.find(p => p.id === id)), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRoster, theirPicks]);
+  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(id)), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
+  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(id)), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
 
   const myCapAfter = useMemo(() => {
     const base = liveMyTeam?.capRoom ?? 0;
-    const freed = [...offering].reduce((s, id) => s + (myRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
-    const absorbed = [...receiving].reduce((s, id) => s + (theirRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
+    const freed = [...offering].reduce((s, id) => s + (myRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
+    const absorbed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
-  }, [offering, receiving, myRoster, theirRoster, liveMyTeam]);
+  }, [offering, receiving, myRosterMap, theirRosterMap, liveMyTeam]);
 
   const theirCapAfter = useMemo(() => {
     const base = liveTheirTeam?.capRoom ?? 0;
-    const freed = [...receiving].reduce((s, id) => s + (theirRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
-    const absorbed = [...offering].reduce((s, id) => s + (myRoster.find(p => p.id === id)?.contract?.baseAnnual ?? 0), 0);
+    const freed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
+    const absorbed = [...offering].reduce((s, id) => s + (myRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
-  }, [offering, receiving, myRoster, theirRoster, liveTheirTeam]);
+  }, [offering, receiving, myRosterMap, theirRosterMap, liveTheirTeam]);
 
   const toggleOffering = (id, checked) => setOffering(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s; });
   const toggleReceiving = (id, checked) => setReceiving(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s; });
@@ -344,7 +347,7 @@ export default function TradeCenter({ league, actions }) {
           </div>
 
           {/* Trade block summary (original) */}
-          <TradeBlockSummary myRoster={myRoster} theirRoster={theirRoster} offering={offering} receiving={receiving} myPicks={myPicks} theirPicks={theirPicks} />
+          <TradeBlockSummary myRosterMap={myRosterMap} theirRosterMap={theirRosterMap} offering={offering} receiving={receiving} myPicks={myPicks} theirPicks={theirPicks} />
 
           {/* Player preview sheet (original) */}
           {previewPlayer && <TradePlayerSheet player={previewPlayer} onClose={() => setPreviewPlayer(null)} />}
