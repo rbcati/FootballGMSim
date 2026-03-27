@@ -266,10 +266,13 @@ export default function AnimatedField({
   // Burst coordinates (ball landing spot)
   const burstX = animPhase >= 1 ? ballPos.x : losX;
   const burstY = animPhase >= 1 ? ballPos.y : FIELD_H / 2;
+
+  // Visual feedback: Gold for Goal/TD, Blue for Kick/Field Goal, Red for Save/Turnover/Sack
   const burstColor = isBigPlay
-    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD60A"
-      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception")) ? "#FF453A"
-      : "#FF9F0A"
+    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD700" // Gold
+      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception") || (play?.description || "").toLowerCase().includes("sack")) ? "#FF453A" // Red
+      : (play?.description || "").toLowerCase().includes("field goal") ? "#0A84FF" // Blue
+      : "#FF9F0A" // Default big play
     : "#34C759";
 
   // Build name tag label: "POS LastName"

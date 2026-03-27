@@ -1244,9 +1244,6 @@ select:disabled {
 }
 
 /* Ensure fade-in is available globally */
-.fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
 
 /* Hard Shake */
 @keyframes shake-hard {
@@ -1812,13 +1809,21 @@ select:disabled {
 
 /* Smooth Fade Transitions */
 .fade-out {
-  opacity: 0 !important;
-  transition: opacity 0.3s ease-out;
+  animation: fadeOut 0.3s var(--ease) forwards;
 }
 
 .fade-in {
-  opacity: 1 !important;
-  transition: opacity 0.3s ease-in;
+  animation: fadeIn 0.3s var(--ease) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
 }
 
 /* Enhanced Field Marker Transitions */
@@ -2396,7 +2401,8 @@ body {
    ============================================ */
 
 /* Generic Goal Style (Touchdown, Field Goal) */
-.game-event-overlay.goal .event-text {
+.game-event-overlay.goal .event-text,
+.game-event-overlay.touchdown .event-text {
   color: #FFD700;
   text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
   font-family: 'Arial Black', sans-serif;
@@ -2404,7 +2410,8 @@ body {
   animation: goal-celebration 1s ease-out;
 }
 
-.game-event-overlay.goal::before {
+.game-event-overlay.goal::before,
+.game-event-overlay.touchdown::before {
   content: '🙌'; /* Hands up */
   display: block;
   font-size: 5rem;
@@ -2413,14 +2420,16 @@ body {
 }
 
 /* Specific Kick Style (Punt, Kickoff) */
-.game-event-overlay.kick .event-text {
+.game-event-overlay.kick .event-text,
+.game-event-overlay.field-goal-made .event-text {
   color: #0A84FF;
   text-shadow: 0 0 15px #0056b3;
   font-family: 'Arial Black', sans-serif;
   letter-spacing: 1px;
 }
 
-.game-event-overlay.kick::before {
+.game-event-overlay.kick::before,
+.game-event-overlay.field-goal-made::before {
   content: '🦶'; /* Foot */
   display: block;
   font-size: 4rem;
@@ -2428,8 +2437,11 @@ body {
   animation: kick-flash 0.3s ease-out;
 }
 
-/* Generic Save Style (Turnover, Defense Stop, Safety) */
-.game-event-overlay.save .event-text {
+/* Generic Save Style (Turnover, Defense Stop, Safety, Sack) */
+.game-event-overlay.save .event-text,
+.game-event-overlay.turnover .event-text,
+.game-event-overlay.sack .event-text,
+.game-event-overlay.safety .event-text {
   color: #FF453A;
   border: 4px solid #FF453A;
   background: rgba(0, 0, 0, 0.85);
@@ -2441,7 +2453,10 @@ body {
   font-weight: 900;
 }
 
-.game-event-overlay.save::before {
+.game-event-overlay.save::before,
+.game-event-overlay.turnover::before,
+.game-event-overlay.sack::before,
+.game-event-overlay.safety::before {
   content: '🛡️'; /* Shield */
   display: block;
   font-size: 5rem;
@@ -2463,15 +2478,6 @@ body {
 }
 
 /* Fade Out Animation for View Transitions */
-@keyframes fadeOut {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-10px); }
-}
-
-.fade-out {
-  animation: fadeOut 0.2s ease-out forwards !important;
-  pointer-events: none; /* Prevent clicks during exit */
-}
 
 /* Quarter End Style */
 .game-event-overlay.quarter-end .event-text {
@@ -2590,12 +2596,20 @@ body {
    ============================================ */
 
 /* Unified Tactile Button Feedback */
-.btn:active,
+.btn:active:not(:disabled),
 .play-call-btn:active,
 .nav-item:active {
   transform: scale(0.96) translateY(1px) !important;
-  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.2) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
   filter: brightness(0.95);
+}
+
+.btn:hover:not(:disabled),
+.play-call-btn:hover,
+.nav-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  filter: brightness(1.05);
 }
 
 /* Animations for Field Effects */
