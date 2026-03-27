@@ -185,7 +185,7 @@ html, body {
     radial-gradient(800px 800px at 50% 100%, rgba(255, 255, 255, 0.02), transparent 50%),
     var(--bg);
   color: var(--text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-size: 14px;
   min-height: 100vh;
@@ -264,6 +264,24 @@ p {
 
 .view:not([hidden]) {
   display: block;
+}
+
+.fade-in {
+  animation: fadeIn 0.3s var(--ease) forwards;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s var(--ease) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
 }
 
 /* ============================================================================
