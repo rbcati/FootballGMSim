@@ -516,6 +516,81 @@ function QuickStatsCard({ userTeam, league }) {
   );
 }
 
+// ── Coach Approval Card ────────────────────────────────────────────────────────
+
+function approvalColor(val) {
+  if (val >= 75) return "#34C759";
+  if (val >= 55) return "#FF9F0A";
+  return "#FF453A";
+}
+
+function CoachApprovalCard({ league }) {
+  if (!league) return null;
+
+  const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+  const base = Math.round(league.ownerApproval ?? 75);
+  const wins = userTeam?.wins ?? 0;
+  const losses = userTeam?.losses ?? 0;
+  const total = wins + losses;
+  const winRate = total > 0 ? wins / total : 0.5;
+
+  const seed = ((league.year ?? 2025) * 31 + (league.week ?? 1) * 7) | 0;
+  const fuzz = (offset) => {
+    let s = (seed + offset * 1664525 + 1013904223) & 0xffff;
+    return (s / 0xffff - 0.5) * 10;
+  };
+
+  const categories = [
+    { label: "GM",      value: base },
+    { label: "Staff",   value: Math.round(Math.min(99, Math.max(1, base + fuzz(1) * 0.5))) },
+    { label: "Players", value: Math.round(Math.min(99, Math.max(1, base * 0.88 + winRate * 12 + fuzz(2)))) },
+    { label: "Fans",    value: Math.round(Math.min(99, Math.max(1, winRate * 84 + 15 + fuzz(3)))) },
+    { label: "Media",   value: Math.round(Math.min(99, Math.max(1, winRate * 60 + base * 0.38 + fuzz(4)))) },
+  ];
+
+  const avg = Math.round(categories.reduce((s, c) => s + c.value, 0) / categories.length);
+  const overallColor = approvalColor(avg);
+
+  return (
+    <SectionCard title="Coach Approval" icon="🏟️" accent={overallColor}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Overall rating this week</span>
+        <span style={{ fontSize: "1.3rem", fontWeight: 900, color: overallColor, lineHeight: 1 }}>
+          {avg}<span style={{ fontSize: "0.7rem", fontWeight: 700 }}>%</span>
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        {categories.map(({ label, value }) => {
+          const c = approvalColor(value);
+          return (
+            <div key={label} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{
+                fontSize: "0.6rem", color: "var(--text-subtle)",
+                fontWeight: 700, letterSpacing: "0.3px", marginBottom: 4,
+              }}>
+                {label}
+              </div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 900, color: c, marginBottom: 4 }}>
+                {value}
+              </div>
+              <div style={{
+                height: 4, background: "rgba(255,255,255,0.07)",
+                borderRadius: 2, overflow: "hidden",
+              }}>
+                <div style={{
+                  height: "100%", width: `${value}%`, background: c,
+                  borderRadius: 2,
+                  transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
 // ── Main Export ────────────────────────────────────────────────────────────────
 
 export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, onTabChange, onAdvanceWeek, isBusy }) {
@@ -637,6 +712,7 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
         <NextGameCard nextGame={nextGame} league={league} />
         <RecentFormCard form={recentForm} />
         <QuickStatsCard userTeam={userTeam} league={league} />
+        <CoachApprovalCard league={league} />
         <InjuryReportCard injuries={injuries} onPlayerSelect={onPlayerSelect} />
 
         <SectionCard title="Top Performers" icon="🔥">

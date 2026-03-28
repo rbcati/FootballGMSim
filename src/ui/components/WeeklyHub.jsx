@@ -213,6 +213,143 @@ function getInjuries(league) {
   return userTeam.roster.filter(p => p.injury || p.injuredWeeks > 0).slice(0, 4);
 }
 
+// ── Coach Approval Snippet ─────────────────────────────────────────────────────
+
+function approvalColor(val) {
+  if (val >= 75) return "#34C759";
+  if (val >= 55) return "#FF9F0A";
+  return "#FF453A";
+}
+
+/**
+ * CoachApprovalSnippet — shows GM/Staff/Players/Fans/Media approval ratings.
+ * Values are synthesised deterministically from league state so they update
+ * after every simulated week without requiring a dedicated worker call.
+ */
+function CoachApprovalSnippet({ league }) {
+  if (!league) return null;
+
+  const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+  const base  = Math.round(league.ownerApproval ?? 75);
+  const wins  = userTeam?.wins  ?? 0;
+  const losses = userTeam?.losses ?? 0;
+  const total  = wins + losses;
+  const winRate = total > 0 ? wins / total : 0.5;
+
+  // Deterministic fuzz per category — changes each week but never flickers
+  const seed = ((league.year ?? 2025) * 31 + (league.week ?? 1) * 7) | 0;
+  const fuzz = (offset) => {
+    let s = (seed + offset * 1664525 + 1013904223) & 0xffff;
+    return (s / 0xffff - 0.5) * 10;
+  };
+
+  const categories = [
+    {
+      label: "GM",
+      emoji: "🏢",
+      value: base,
+    },
+    {
+      label: "Staff",
+      emoji: "👔",
+      value: Math.round(Math.min(99, Math.max(1, base + fuzz(1) * 0.5))),
+    },
+    {
+      label: "Players",
+      emoji: "🏈",
+      value: Math.round(Math.min(99, Math.max(1, base * 0.88 + winRate * 12 + fuzz(2)))),
+    },
+    {
+      label: "Fans",
+      emoji: "📣",
+      value: Math.round(Math.min(99, Math.max(1, winRate * 84 + 15 + fuzz(3)))),
+    },
+    {
+      label: "Media",
+      emoji: "📺",
+      value: Math.round(Math.min(99, Math.max(1, winRate * 60 + base * 0.38 + fuzz(4)))),
+    },
+  ];
+
+  const avg = Math.round(
+    categories.reduce((s, c) => s + c.value, 0) / categories.length
+  );
+  const overallColor = approvalColor(avg);
+  const trendEmoji   = avg >= 78 ? "📈" : avg >= 58 ? "➡️" : "📉";
+
+  return (
+    <div style={{
+      background: "var(--surface)",
+      border: "1.5px solid var(--hairline)",
+      borderLeft: `3px solid ${overallColor}`,
+      borderRadius: "var(--radius-lg)",
+      padding: "12px 14px 10px",
+      marginBottom: 14,
+    }}>
+      {/* Header row */}
+      <div style={{
+        display: "flex", alignItems: "center",
+        justifyContent: "space-between", marginBottom: 10,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: "0.95rem" }}>🏟️</span>
+          <span style={{
+            fontSize: "0.72rem", fontWeight: 800,
+            color: "var(--text-muted)",
+            textTransform: "uppercase", letterSpacing: "1.1px",
+          }}>
+            Coach Approval
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ fontSize: "0.75rem" }}>{trendEmoji}</span>
+          <span style={{
+            fontSize: "1.15rem", fontWeight: 900,
+            color: overallColor, lineHeight: 1,
+          }}>
+            {avg}<span style={{ fontSize: "0.7rem", fontWeight: 700 }}>%</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Five category columns */}
+      <div style={{ display: "flex", gap: 6 }}>
+        {categories.map(({ label, value }) => {
+          const c = approvalColor(value);
+          return (
+            <div key={label} style={{ flex: 1, textAlign: "center" }}>
+              <div style={{
+                fontSize: "0.58rem", color: "var(--text-subtle)",
+                fontWeight: 700, letterSpacing: "0.3px", marginBottom: 3,
+              }}>
+                {label}
+              </div>
+              <div style={{
+                fontSize: "0.82rem", fontWeight: 900,
+                color: c, lineHeight: 1.1, marginBottom: 4,
+              }}>
+                {value}
+              </div>
+              <div style={{
+                height: 3, background: "rgba(255,255,255,0.07)",
+                borderRadius: 2, overflow: "hidden",
+              }}>
+                <div style={{
+                  height: "100%",
+                  width: `${value}%`,
+                  background: c,
+                  borderRadius: 2,
+                  transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
+                }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function SectionHeader({ title, emoji }) {
@@ -648,6 +785,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Season Progress ── */}
       <SeasonProgressBar league={league} />
 
+      {/* ── Coach Approval Ratings ── */}
+      <CoachApprovalSnippet league={league} />
+
       {/* ── Advance Week CTA ── */}
       {onAdvanceWeek && (
         <AdvanceWeekButton
@@ -692,28 +832,50 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Recent News ── */}
       <RecentNews news={news} onNavigate={onNavigate} />
 
-      {/* ── Cap Space Banner ── */}
-      {capSpace != null && (
-        <div style={{
-          background: capSpace > 20
-            ? "rgba(52,199,89,0.08)"
-            : capSpace > 5
-              ? "rgba(255,159,10,0.08)"
-              : "rgba(255,69,58,0.08)",
-          border: `1px solid ${capSpace > 20 ? "#34C75933" : capSpace > 5 ? "#FF9F0A33" : "#FF453A33"}`,
-          borderRadius: "var(--radius-md)",
-          padding: "10px 14px",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-        }}>
-          <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Cap Space Remaining</span>
-          <span style={{
-            fontWeight: 900, fontSize: "1rem",
-            color: capSpace > 20 ? "#34C759" : capSpace > 5 ? "#FF9F0A" : "#FF453A",
+      {/* ── Cap Space Footer ── */}
+      {capSpace != null && (() => {
+        const capTotal  = userTeam?.capTotal ?? 255;
+        const capUsed   = userTeam?.capUsed  ?? (capTotal - capSpace);
+        const capColor  = capSpace > 20 ? "#34C759" : capSpace > 5 ? "#FF9F0A" : "#FF453A";
+        const usedPct   = Math.min(100, Math.round((capUsed / capTotal) * 100));
+
+        return (
+          <div style={{
+            background: `${capColor}0a`,
+            border: `1px solid ${capColor}30`,
+            borderRadius: "var(--radius-lg)",
+            padding: "12px 14px",
           }}>
-            ${Number(capSpace).toFixed(1)}M
-          </span>
-        </div>
-      )}
+            {/* Row 1: label + value */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: "0.9rem" }}>💰</span>
+                <span style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px" }}>
+                  Salary Cap
+                </span>
+              </div>
+              <span style={{ fontWeight: 900, fontSize: "1rem", color: capColor }}>
+                ${Number(capSpace).toFixed(1)}M remaining
+              </span>
+            </div>
+
+            {/* Cap usage bar */}
+            <div style={{ height: 5, background: "rgba(255,255,255,0.07)", borderRadius: 3, overflow: "hidden", marginBottom: 6 }}>
+              <div style={{
+                height: "100%", width: `${usedPct}%`,
+                background: `linear-gradient(90deg, var(--accent), ${capColor})`,
+                borderRadius: 3, transition: "width 1s",
+              }} />
+            </div>
+
+            {/* Row 3: used / total */}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.65rem", color: "var(--text-subtle)" }}>
+              <span>${Number(capUsed).toFixed(1)}M used ({usedPct}%)</span>
+              <span>${Number(capTotal).toFixed(0)}M cap ceiling</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
