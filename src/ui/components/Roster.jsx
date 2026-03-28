@@ -1542,6 +1542,454 @@ function DepthChartView({ players, onReorder }) {
   );
 }
 
+// ── Player Card Components ─────────────────────────────────────────────────────
+// Beautiful card-based roster view — the primary display mode for the Roster tab.
+
+/** Position brand colours (matches PlayerDetailModal.jsx). */
+const CARD_POS_COLORS = {
+  QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
+  OL: "#f59e0b", DL: "#ec4899", LB: "#0ea5e9", CB: "#14b8a6",
+  S: "#6366f1", K: "#9ca3af", P: "#6b7280",
+};
+
+/**
+ * Return the 3 most-representative attributes for a player's position.
+ * Values are taken from player.ratings first, then player-level fallbacks.
+ */
+function getCardKeyAttrs(player) {
+  const r = player.ratings || {};
+  const pos = player.pos || "";
+  const get = (k) => {
+    const v = r[k] ?? player[k];
+    return v != null ? Math.round(Number(v) || 0) : null;
+  };
+
+  let attrs = [];
+  if (pos === "QB") {
+    attrs = [
+      { label: "Accuracy", value: get("throwAccuracy") },
+      { label: "Arm Power", value: get("throwPower") },
+      { label: "Awareness", value: get("awareness") },
+    ];
+  } else if (pos === "RB") {
+    attrs = [
+      { label: "Speed", value: get("speed") },
+      { label: "Trucking", value: get("trucking") },
+      { label: "Juking", value: get("juking") },
+    ];
+  } else if (pos === "WR") {
+    attrs = [
+      { label: "Speed", value: get("speed") },
+      { label: "Catching", value: get("catching") },
+      { label: "Accel", value: get("acceleration") },
+    ];
+  } else if (pos === "TE") {
+    attrs = [
+      { label: "Catching", value: get("catching") },
+      { label: "Run Block", value: get("runBlock") },
+      { label: "Speed", value: get("speed") },
+    ];
+  } else if (pos === "OL") {
+    attrs = [
+      { label: "Pass Block", value: get("passBlock") },
+      { label: "Run Block", value: get("runBlock") },
+      { label: "Awareness", value: get("awareness") },
+    ];
+  } else if (pos === "DL") {
+    attrs = [
+      { label: "Pass Rush", value: get("passRushSpeed") },
+      { label: "PR Power", value: get("passRushPower") },
+      { label: "Run Stop", value: get("runStop") },
+    ];
+  } else if (pos === "LB") {
+    attrs = [
+      { label: "Coverage", value: get("coverage") },
+      { label: "Run Stop", value: get("runStop") },
+      { label: "Pass Rush", value: get("passRushSpeed") },
+    ];
+  } else if (pos === "CB") {
+    attrs = [
+      { label: "Coverage", value: get("coverage") },
+      { label: "Speed", value: get("speed") },
+      { label: "Awareness", value: get("awareness") },
+    ];
+  } else if (pos === "S") {
+    attrs = [
+      { label: "Coverage", value: get("coverage") },
+      { label: "Speed", value: get("speed") },
+      { label: "Run Stop", value: get("runStop") },
+    ];
+  } else if (pos === "K" || pos === "P") {
+    attrs = [
+      { label: "Power", value: get("kickPower") },
+      { label: "Accuracy", value: get("kickAccuracy") },
+    ];
+  } else {
+    attrs = [
+      { label: "Speed", value: get("speed") },
+      { label: "Awareness", value: get("awareness") },
+    ];
+  }
+  return attrs.filter((a) => a.value != null);
+}
+
+/** Compact attribute row: label + fill bar + numeric value. */
+function CardAttrBar({ label, value }) {
+  if (value == null) return null;
+  const pct = Math.min(100, (value / 99) * 100);
+  const color =
+    value >= 90 ? "#FFD700" :
+    value >= 80 ? "#34C759" :
+    value >= 70 ? "#0A84FF" :
+    value >= 60 ? "#FF9F0A" : "#FF453A";
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+      <span style={{
+        width: 62, fontSize: 10, color: "var(--text-subtle)",
+        flexShrink: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>
+        {label}
+      </span>
+      <div style={{
+        flex: 1, height: 4, background: "var(--hairline)", borderRadius: 2, overflow: "hidden",
+      }}>
+        <div style={{
+          height: "100%", width: `${pct}%`, background: color, borderRadius: 2,
+        }} />
+      </div>
+      <span style={{
+        width: 24, fontSize: 10, fontWeight: 800, color,
+        textAlign: "right", fontVariantNumeric: "tabular-nums", flexShrink: 0,
+      }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Single player card — tappable, opens the PlayerProfile modal via onSelect(id).
+ *
+ * Displays: position badge, OVR (colour-coded), name, age, contract, key
+ * attributes, and optional INJURED / EXPIRING / ELITE POT badges.
+ */
+function PlayerCard({ player, onSelect }) {
+  const pos = player.pos || "";
+  const posColor = CARD_POS_COLORS[pos] || "#9ca3af";
+  const ovr = player.ovr ?? 70;
+  const ovrColor =
+    ovr >= 90 ? "#FFD700" :
+    ovr >= 80 ? "#34C759" :
+    ovr >= 70 ? "#0A84FF" :
+    ovr >= 60 ? "#FF9F0A" : "#FF453A";
+
+  const salary =
+    player.contract?.baseAnnual ?? player.baseAnnual ?? 0;
+  const yearsLeft =
+    player.contract?.yearsLeft ??
+    player.contract?.yearsRemaining ??
+    player.contract?.years ??
+    0;
+  const isInjured =
+    (player.injury?.weeksRemaining ?? player.injuryWeeksRemaining ?? 0) > 0;
+  const isExpiring = yearsLeft <= 1;
+  const potential = player.potential ?? 0;
+  const keyAttrs = getCardKeyAttrs(player);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`View ${player.name} profile`}
+      onClick={() => onSelect?.(player.id)}
+      onKeyDown={(e) => e.key === "Enter" && onSelect?.(player.id)}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-3px)";
+        e.currentTarget.style.boxShadow = `0 8px 24px rgba(0,0,0,0.35), 0 0 0 1px ${posColor}44`;
+        e.currentTarget.style.borderColor = `${posColor}66`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "";
+        e.currentTarget.style.boxShadow = "";
+        e.currentTarget.style.borderColor = "var(--hairline)";
+      }}
+      style={{
+        background: "var(--surface)",
+        border: "1px solid var(--hairline)",
+        borderTop: `3px solid ${posColor}`,
+        borderRadius: "var(--radius-md)",
+        padding: "var(--space-4)",
+        cursor: "pointer",
+        transition: "transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease",
+        position: "relative",
+        display: "flex",
+        flexDirection: "column",
+        minHeight: 180,
+        /* 48px touch target maintained via card height */
+        WebkitTapHighlightColor: "transparent",
+        userSelect: "none",
+      }}
+    >
+      {/* ── Top row: position badge + OVR ── */}
+      <div style={{
+        display: "flex", alignItems: "center",
+        justifyContent: "space-between", marginBottom: "var(--space-2)",
+      }}>
+        {/* Position pill */}
+        <span style={{
+          background: `${posColor}22`,
+          color: posColor,
+          fontSize: 10,
+          fontWeight: 800,
+          letterSpacing: "0.5px",
+          padding: "2px 8px",
+          borderRadius: "var(--radius-pill)",
+          border: `1px solid ${posColor}44`,
+          flexShrink: 0,
+        }}>
+          {pos}
+        </span>
+
+        {/* Injury badge + OVR number */}
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          {isInjured && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: "var(--danger)",
+              background: "rgba(255,69,58,0.12)", padding: "1px 5px",
+              borderRadius: 4, border: "1px solid rgba(255,69,58,0.3)",
+            }}>
+              INJ
+            </span>
+          )}
+          <span style={{
+            fontSize: "var(--text-2xl)", fontWeight: 900,
+            color: ovrColor, fontVariantNumeric: "tabular-nums", lineHeight: 1,
+          }}>
+            {ovr}
+          </span>
+        </div>
+      </div>
+
+      {/* ── Player name ── */}
+      <div style={{
+        fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)",
+        marginBottom: 2,
+        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+      }}>
+        {player.name}
+      </div>
+
+      {/* ── Age + Contract ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 5,
+        fontSize: "var(--text-xs)", color: "var(--text-muted)",
+        marginBottom: "var(--space-3)", flexWrap: "wrap",
+      }}>
+        <span>{player.age ?? "?"}yo</span>
+        <span style={{ color: "var(--hairline)" }}>·</span>
+        <span style={{ color: isExpiring ? "var(--warning)" : "var(--text-muted)" }}>
+          {yearsLeft}yr
+        </span>
+        <span style={{ color: "var(--hairline)" }}>·</span>
+        <span>${salary.toFixed(1)}M</span>
+      </div>
+
+      {/* ── Key attribute bars ── */}
+      <div style={{ flex: 1 }}>
+        {keyAttrs.map((attr) => (
+          <CardAttrBar key={attr.label} label={attr.label} value={attr.value} />
+        ))}
+      </div>
+
+      {/* ── Bottom status badges ── */}
+      {(isExpiring || potential >= 90) && (
+        <div style={{ display: "flex", gap: 4, marginTop: "var(--space-2)", flexWrap: "wrap" }}>
+          {isExpiring && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: "var(--warning)",
+              background: "rgba(255,159,10,0.12)", padding: "1px 5px",
+              borderRadius: 4, border: "1px solid rgba(255,159,10,0.3)",
+            }}>
+              EXPIRING
+            </span>
+          )}
+          {potential >= 90 && (
+            <span style={{
+              fontSize: 9, fontWeight: 700, color: "#FFD700",
+              background: "rgba(255,215,0,0.12)", padding: "1px 5px",
+              borderRadius: 4, border: "1px solid rgba(255,215,0,0.3)",
+            }}>
+              ELITE POT
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Full card grid with position-filter pills and sort controls.
+ * Mirrors the RosterTable filter/sort UI but renders PlayerCard tiles instead of rows.
+ */
+function PlayerCardGrid({ players, onPlayerSelect, phase }) {
+  const isResignPhase = phase === "offseason_resign";
+  const [posFilter, setPosFilter] = useState(isResignPhase ? "EXPIRING" : "ALL");
+  const [sortKey, setSortKey] = useState("ovr");
+  const [sortDir, setSortDir] = useState("desc");
+
+  const activeFilters = isResignPhase ? ["EXPIRING", ...POSITIONS] : POSITIONS;
+
+  const displayed = useMemo(() => {
+    let filtered = players;
+    if (posFilter === "EXPIRING") {
+      filtered = players.filter(
+        (p) => (p.contract?.years ?? p.contract?.yearsLeft ?? p.contract?.yearsRemaining ?? 0) <= 1,
+      );
+    } else if (posFilter !== "ALL") {
+      filtered = players.filter(
+        (p) => p.pos === posFilter ||
+          DEPTH_ROWS.find((r) => r.key === posFilter)?.match.includes(p.pos),
+      );
+    }
+    return sortPlayers(filtered, sortKey, sortDir);
+  }, [players, posFilter, sortKey, sortDir]);
+
+  const handleSort = (key) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("desc"); }
+  };
+
+  const SORT_OPTIONS = [
+    { key: "ovr", label: "OVR" },
+    { key: "salary", label: "Salary" },
+    { key: "age", label: "Age" },
+    { key: "name", label: "Name" },
+  ];
+
+  return (
+    <div>
+      {/* ── Filter + Sort toolbar ── */}
+      <div style={{
+        background: "var(--surface)",
+        border: "1px solid var(--hairline)",
+        borderRadius: "var(--radius-md)",
+        padding: "var(--space-3) var(--space-4)",
+        marginBottom: "var(--space-4)",
+        display: "flex",
+        flexDirection: "column",
+        gap: "var(--space-3)",
+      }}>
+
+        {/* Position filter pills */}
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.5px", flexShrink: 0 }}>
+            Position
+          </span>
+          {activeFilters.map((pos) => {
+            const isActive = posFilter === pos;
+            const posCol = CARD_POS_COLORS[pos];
+            return (
+              <button
+                key={pos}
+                onClick={() => setPosFilter(pos)}
+                style={{
+                  padding: "4px 11px",
+                  borderRadius: "var(--radius-pill)",
+                  fontSize: 11,
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: "pointer",
+                  border: `1px solid ${isActive ? (posCol || "var(--accent)") : "var(--hairline)"}`,
+                  background: isActive
+                    ? posCol ? `${posCol}22` : "var(--accent-muted)"
+                    : "transparent",
+                  color: isActive ? (posCol || "var(--accent)") : "var(--text-muted)",
+                  transition: "all 0.1s ease",
+                  minHeight: 28, /* accessible tap target */
+                }}
+              >
+                {pos}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sort controls */}
+        <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.5px", flexShrink: 0 }}>
+            Sort
+          </span>
+          {SORT_OPTIONS.map((s) => {
+            const isActive = sortKey === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => handleSort(s.key)}
+                style={{
+                  padding: "3px 10px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: 11,
+                  fontWeight: isActive ? 700 : 500,
+                  cursor: "pointer",
+                  border: `1px solid ${isActive ? "var(--accent)" : "var(--hairline)"}`,
+                  background: isActive ? "var(--accent-muted)" : "transparent",
+                  color: isActive ? "var(--accent)" : "var(--text-muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 3,
+                  transition: "all 0.1s ease",
+                  minHeight: 28,
+                }}
+              >
+                {s.label}
+                {isActive && (
+                  <span style={{ fontSize: 10 }}>
+                    {sortDir === "desc" ? "↓" : "↑"}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Result count ── */}
+      <div style={{
+        fontSize: "var(--text-xs)", color: "var(--text-muted)",
+        marginBottom: "var(--space-3)",
+      }}>
+        {displayed.length} player{displayed.length !== 1 ? "s" : ""}
+        {posFilter !== "ALL" ? ` · ${posFilter}` : ""}
+      </div>
+
+      {/* ── Card grid ── */}
+      {displayed.length === 0 ? (
+        <div style={{
+          textAlign: "center", color: "var(--text-muted)",
+          padding: "var(--space-8)",
+        }}>
+          No players found.
+        </div>
+      ) : (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(182px, 1fr))",
+          gap: "var(--space-3)",
+        }}>
+          {displayed.map((player) => (
+            <PlayerCard
+              key={player.id}
+              player={player}
+              onSelect={onPlayerSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Roster({ league, actions, onPlayerSelect }) {
@@ -1550,7 +1998,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
-  const [viewMode, setViewMode] = useState("table"); // 'table' | 'depth'
+  const [viewMode, setViewMode] = useState("cards"); // 'cards' | 'table' | 'depth'
 
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
@@ -1718,12 +2166,20 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             {/* View toggle pills */}
             <div className="standings-tabs">
               <Button
+                variant={viewMode === "cards" ? "default" : "ghost"}
+                className={`standings-tab${viewMode === "cards" ? " active" : ""}`}
+                onClick={() => setViewMode("cards")}
+                style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
+              >
+                Cards
+              </Button>
+              <Button
                 variant={viewMode === "table" ? "default" : "ghost"}
                 className={`standings-tab${viewMode === "table" ? " active" : ""}`}
                 onClick={() => setViewMode("table")}
                 style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
               >
-                Roster
+                Table
               </Button>
               <Button
                 variant={viewMode === "depth" ? "default" : "ghost"}
@@ -1731,7 +2187,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
                 onClick={() => setViewMode("depth")}
                 style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
               >
-                Depth Chart
+                Depth
               </Button>
             </div>
           </div>
@@ -1769,6 +2225,15 @@ export default function Roster({ league, actions, onPlayerSelect }) {
         >
           Loading roster…
         </div>
+      )}
+
+      {/* ── Cards view (default) ── */}
+      {!loading && viewMode === "cards" && (
+        <PlayerCardGrid
+          players={players}
+          onPlayerSelect={onPlayerSelect}
+          phase={league?.phase}
+        />
       )}
 
       {/* ── Table view ── */}
