@@ -2830,3 +2830,18 @@ body {
 .impact-pulse {
   animation: impact-pulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+
+.game-event-overlay.momentum-shift .event-text {
+  background: linear-gradient(90deg, #00BFFF, #FF4500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 4rem;
+  font-weight: 900;
+}
+
+.game-event-overlay.momentum-shift::before {
+  content: '⚡';
+  font-size: 5rem;
+  display: block;
+  margin-bottom: 10px;
+}

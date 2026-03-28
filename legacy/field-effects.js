@@ -120,6 +120,8 @@ export class FieldEffects {
         const y = this.canvas.height / 2; // Middle of field mostly
 
         const count = type === 'touchdown' ? 100 : // Increased from 80
+                      type === 'combo' ? 30 :
+                      type === 'momentum_shift' ? 40 :
                       type === 'sack' ? 30 :
                       type === 'kick' ? 15 :
                       type === 'catch' ? 10 :
@@ -284,6 +286,16 @@ export class FieldEffects {
              p.decay = 0.05;
              p.size = Math.random() * 4 + 2;
              p.life = 0.8;
+        } else if (type === 'combo') {
+             p.color = '#FFD700';
+             p.vy = -2 + (window.Utils?.random || Math.random)() * -2;
+             p.life = 0.8;
+             p.size = (window.Utils?.random || Math.random)() * 3 + 1;
+        } else if (type === 'momentum_shift') {
+             p.color = (window.Utils?.random || Math.random)() > 0.5 ? '#00BFFF' : '#FF4500';
+             p.vx = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+             p.vy = ((window.Utils?.random || Math.random)() - 0.5) * 6;
+             p.life = 1.2;
         }
 
         return p;
