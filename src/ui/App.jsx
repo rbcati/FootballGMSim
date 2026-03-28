@@ -559,7 +559,7 @@ export default function App() {
             pointerEvents: 'auto',
             touchAction: 'manipulation',
           }}>
-            <div style={{
+            <div className="fade-in" style={{
               pointerEvents: 'auto',
               background: 'var(--surface-strong, #1e1e2e)',
               border: '1px solid var(--hairline)',
@@ -628,8 +628,9 @@ export default function App() {
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME', id: homeId };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY', id: awayId };
         return (
-          <GameSimulation
-            logs={userGameLogs}
+          <div className="fade-in" style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg)' }}>
+            <GameSimulation
+              logs={userGameLogs}
             homeTeam={homeTeam}
             awayTeam={awayTeam}
             userTeamId={league?.userTeamId}
@@ -646,15 +647,17 @@ export default function App() {
                 logs: userGameLogs || [],
               });
               actions.clearUserGame();
-            }}
-          />
+              }}
+            />
+          </div>
         );
       })()}
 
       {/* ── Post-Game Screen (shown after GameSimulation, before advancing) ── */}
       {postGameResult && (
-        <PostGameScreen
-          homeTeam={postGameResult.homeTeam}
+        <div className="fade-in" style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg)' }}>
+          <PostGameScreen
+            homeTeam={postGameResult.homeTeam}
           awayTeam={postGameResult.awayTeam}
           homeScore={postGameResult.homeScore}
           awayScore={postGameResult.awayScore}
@@ -676,8 +679,9 @@ export default function App() {
               console.error('[PostGame] onContinue failed:', err);
               setPostGameResult(null);
             }
-          }}
-        />
+            }}
+          />
+        </div>
       )}
     </div>
   );
