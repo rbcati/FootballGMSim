@@ -37,6 +37,7 @@ import Leaders from "./Leaders.jsx";
 import AwardRaces from "./AwardRaces.jsx";
 import PlayerStats from "./PlayerStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
+import GamePlanScreen from "./GamePlanScreen.jsx";
 import NewsFeed from "./NewsFeed.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
@@ -78,6 +79,7 @@ const MOBILE_TAB_MAP = {
   staff: "Staff",
   financials: "Financials",
   strategy: "Strategy",
+  game_plan: "Game Plan",
   news: "Standings",
   player_stats: "Stats",
   awards: "Award Races",
@@ -168,6 +170,7 @@ const BASE_TABS = [
   "Leaders",
   "Award Races",
   "Strategy",
+  "Game Plan",
   "Roster",
   "Depth Chart",
   "Roster Hub",
@@ -1623,6 +1626,11 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
         {activeTab === "Strategy" && (
           <TabErrorBoundary label="Strategy">
             <StrategyPanel league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Game Plan" && (
+          <TabErrorBoundary label="Game Plan">
+            <GamePlanScreen league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Roster" && (
