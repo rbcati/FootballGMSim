@@ -1,4 +1,4 @@
-import { commitGameResult } from './game-simulator.js';
+import { commitGameResult } from '../src/core/game-simulator.js';
 import soundManager from './sound-manager.js';
 import { launchConfetti } from './confetti.js';
 import { FieldEffects } from './field-effects.js';
@@ -35,6 +35,7 @@ class LiveGameViewer {
     this.lastFireTime = 0; // Throttle for momentum fire effects
 
     this.timeouts = new Set(); // Track active timeouts
+    this.rafIds = new Set(); // Track active animation frames
   }
 
   /**
@@ -68,6 +69,12 @@ class LiveGameViewer {
     if (this.timeouts) {
         this.timeouts.forEach(id => clearTimeout(id));
         this.timeouts.clear();
+    }
+
+    // Clear all tracked animation frames
+    if (this.rafIds) {
+        this.rafIds.forEach(id => cancelAnimationFrame(id));
+        this.rafIds.clear();
     }
 
     // Cleanup effects
@@ -302,11 +309,18 @@ class LiveGameViewer {
     // Attach listeners
     container.querySelector('#btnPlayPause').addEventListener('click', () => this.togglePause());
     container.querySelector('#btnNextPlay').addEventListener('click', () => {
+        if (this.isProcessingTurn || this.isSkipping) return;
         this.isPaused = true;
         this.displayNextPlay();
     });
-    container.querySelector('#btnNextDrive').addEventListener('click', () => this.skipToNextDrive());
-    container.querySelector('#btnSkipEnd').addEventListener('click', () => this.skipToEnd());
+    container.querySelector('#btnNextDrive').addEventListener('click', () => {
+        if (this.isProcessingTurn || this.isSkipping) return;
+        this.skipToNextDrive();
+    });
+    container.querySelector('#btnSkipEnd').addEventListener('click', () => {
+        if (this.isProcessingTurn || this.isSkipping) return;
+        this.skipToEnd();
+    });
 
     container.querySelectorAll('[data-tempo]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -421,7 +435,7 @@ class LiveGameViewer {
    * Update field markers with smooth transitions or fading
    */
   updateFieldState(yardLine, isHomePossession) {
-      if (!this.checkUI()) return;
+      if (!this.checkUI() || this.isSkipping) return;
       const parent = this.viewMode ? this.container : this.modal;
       if (!parent) return;
 
@@ -611,8 +625,6 @@ class LiveGameViewer {
           else if (options.easing === 'easeInOutCubic') easing = easeInOutCubic;
           else if (options.easing === 'bounce') easing = easeBounce;
 
-          // Pre-calculate field width for transform logic
-          const fieldWidth = element.offsetParent ? element.offsetParent.offsetWidth : 0;
           // Set initial left position just once
           element.style.left = `${startX}%`;
           if (shadowEl) shadowEl.style.left = `${startX}%`;
@@ -623,6 +635,9 @@ class LiveGameViewer {
                   if (options.animationClass) element.classList.remove(options.animationClass);
                   return resolve();
               }
+
+              // Calculate field width inside loop to handle resize
+              const fieldWidth = element.offsetParent ? element.offsetParent.offsetWidth : 0;
 
               // RACE CONDITION FIX: Check skipping flag INSIDE loop
               if (this.isSkipping) {
@@ -720,7 +735,8 @@ class LiveGameViewer {
               }
 
               if (progress < 1) {
-                  requestAnimationFrame(animate);
+                  const rafId = requestAnimationFrame(animate);
+                  this.rafIds.add(rafId);
               } else {
                   // Finalize state - Commit the final 'left' position and reset transform
                   // This ensures responsive resizing works after animation ends
@@ -742,7 +758,9 @@ class LiveGameViewer {
               }
           };
 
-          this.animationFrameId = requestAnimationFrame(animate);
+          const rafId = requestAnimationFrame(animate);
+          this.rafIds.add(rafId);
+          this.animationFrameId = rafId;
       });
   }
 
@@ -3751,6 +3769,11 @@ class LiveGameViewer {
   destroy() {
     // Ensure all timers and loops are stopped
     this.stopGame();
+
+    if (this.rafIds) {
+        this.rafIds.forEach(id => cancelAnimationFrame(id));
+        this.rafIds.clear();
+    }
 
     if (this.animationFrameId) {
         cancelAnimationFrame(this.animationFrameId);
