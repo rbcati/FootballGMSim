@@ -12,6 +12,8 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { OvrPill } from "./LeagueDashboard.jsx";
+import PlayerCardGrid from "./PlayerCardGrid.jsx";
+import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
 
 // ── Position color map (matches stadium-theme.css pos-badge classes) ──
 const POS_COLORS = {
@@ -176,7 +178,46 @@ function PlayerRow({ player, isUser, onSelect, teamColor }) {
   );
 }
 
+// ── View-mode toggle ─────────────────────────────────────────────────────────
+
+function ViewToggle({ mode, onChange }) {
+  const modes = [
+    { key: "cards", label: "Cards" },
+    { key: "table", label: "Table" },
+    { key: "depth", label: "Depth" },
+  ];
+  return (
+    <div style={{
+      display: "flex", gap: 2,
+      background: "var(--surface)", border: "1px solid var(--hairline)",
+      borderRadius: "var(--radius-md)", padding: 2,
+      flexShrink: 0,
+    }}>
+      {modes.map(m => (
+        <button
+          key={m.key}
+          onClick={() => onChange(m.key)}
+          style={{
+            padding: "5px 14px",
+            borderRadius: "var(--radius-sm)",
+            border: "none",
+            background: mode === m.key ? "var(--accent)" : "transparent",
+            color: mode === m.key ? "#fff" : "var(--text-muted)",
+            fontSize: "0.72rem", fontWeight: 700,
+            cursor: "pointer",
+            transition: "background 0.12s, color 0.12s",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {m.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
+  const [viewMode, setViewMode] = useState("cards"); // default to cards view
   const [search, setSearch] = useState("");
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -257,123 +298,148 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
 
   return (
     <div className="fade-in">
-      {/* ── Header Stats ── */}
+      {/* ── Header Stats + View Toggle ── */}
       <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-        gap: "var(--space-3)",
-        marginBottom: "var(--space-5)",
+        display: "flex", alignItems: "flex-start",
+        gap: "var(--space-3)", marginBottom: "var(--space-4)",
+        flexWrap: "wrap",
       }}>
-        <StatCard label="Players" value={rosterSize} sub="/53" />
-        <StatCard label="Avg OVR" value={avgOvr} color={avgOvr >= 78 ? "var(--success)" : avgOvr >= 68 ? "var(--accent)" : "var(--warning)"} />
-        <StatCard label="Payroll" value={`$${totalSalary.toFixed(1)}M`} />
-        <StatCard label="Injured" value={injuredCount} color={injuredCount > 3 ? "var(--danger)" : "var(--text)"} />
-      </div>
-
-      {/* ── Search + Sort ── */}
-      <div style={{
-        display: "flex", gap: "var(--space-2)",
-        marginBottom: "var(--space-3)", alignItems: "center",
-      }}>
-        <input
-          type="text"
-          placeholder="Search..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="settings-input"
-          style={{ flex: 1, minWidth: 0 }}
-        />
-        {/* Sort buttons — scrollable */}
         <div style={{
-          display: "flex", gap: "var(--space-1)",
-          overflowX: "auto", flexShrink: 0,
-          scrollbarWidth: "none",
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+          gap: "var(--space-2)",
+          flex: 1, minWidth: 0,
         }}>
-          {SORT_OPTIONS.map(opt => (
-            <button
-              key={opt.key}
-              className={`division-tab${sortKey === opt.key ? " active" : ""}`}
-              onClick={() => handleSortToggle(opt.key)}
-              style={{ fontSize: 11, flexShrink: 0 }}
-            >
-              {opt.label}
-              {sortKey === opt.key && (
-                <span style={{ marginLeft: 2 }}>{sortDesc ? "↓" : "↑"}</span>
-              )}
-            </button>
-          ))}
+          <StatCard label="Players" value={rosterSize} sub="/53" />
+          <StatCard label="Avg OVR" value={avgOvr} color={avgOvr >= 78 ? "var(--success)" : avgOvr >= 68 ? "var(--accent)" : "var(--warning)"} />
+          <StatCard label="Payroll" value={`$${totalSalary.toFixed(1)}M`} />
+          <StatCard label="Injured" value={injuredCount} color={injuredCount > 3 ? "var(--danger)" : "var(--text)"} />
         </div>
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
       </div>
 
-      {/* ── Position Filter Pills — horizontally scrollable ── */}
-      <div
-        className="division-tabs"
-        style={{
-          marginBottom: "var(--space-3)",
-          flexWrap: "nowrap",
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
-        }}
-      >
-        {POSITION_GROUPS.map(g => (
-          <button
-            key={g.label}
-            className={`division-tab${posFilter === g.label ? " active" : ""}`}
-            onClick={() => setPosFilter(g.label)}
+      {/* ── Cards view ── */}
+      {viewMode === "cards" && (
+        <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
+      )}
+
+      {/* ── Depth Chart view ── */}
+      {viewMode === "depth" && (
+        <DragAndDropDepthChart
+          league={league}
+          actions={actions}
+          onPlayerSelect={onPlayerSelect}
+        />
+      )}
+
+      {/* ── Table view (existing list with search/filter/sort) ── */}
+      {viewMode === "table" && (
+        <>
+          {/* Search + Sort */}
+          <div style={{
+            display: "flex", gap: "var(--space-2)",
+            marginBottom: "var(--space-3)", alignItems: "center",
+          }}>
+            <input
+              type="text"
+              placeholder="Search..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="settings-input"
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <div style={{
+              display: "flex", gap: "var(--space-1)",
+              overflowX: "auto", flexShrink: 0,
+              scrollbarWidth: "none",
+            }}>
+              {SORT_OPTIONS.map(opt => (
+                <button
+                  key={opt.key}
+                  className={`division-tab${sortKey === opt.key ? " active" : ""}`}
+                  onClick={() => handleSortToggle(opt.key)}
+                  style={{ fontSize: 11, flexShrink: 0 }}
+                >
+                  {opt.label}
+                  {sortKey === opt.key && (
+                    <span style={{ marginLeft: 2 }}>{sortDesc ? "↓" : "↑"}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Position Filter Pills */}
+          <div
+            className="division-tabs"
             style={{
-              flexShrink: 0,
-              ...(g.label !== "ALL" && g.label !== "OFF" && g.label !== "DEF" && g.label !== "ST"
-                ? { borderColor: POS_COLORS[g.label] + "40", color: posFilter === g.label ? "#fff" : POS_COLORS[g.label] }
-                : {}),
+              marginBottom: "var(--space-3)",
+              flexWrap: "nowrap",
+              overflowX: "auto",
+              WebkitOverflowScrolling: "touch",
+              scrollbarWidth: "none",
+              msOverflowStyle: "none",
             }}
           >
-            {g.label}
-            {g.positions && (
-              <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.7 }}>
-                {roster.filter(p => g.positions.includes(p.pos || p.position)).length}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+            {POSITION_GROUPS.map(g => (
+              <button
+                key={g.label}
+                className={`division-tab${posFilter === g.label ? " active" : ""}`}
+                onClick={() => setPosFilter(g.label)}
+                style={{
+                  flexShrink: 0,
+                  ...(g.label !== "ALL" && g.label !== "OFF" && g.label !== "DEF" && g.label !== "ST"
+                    ? { borderColor: POS_COLORS[g.label] + "40", color: posFilter === g.label ? "#fff" : POS_COLORS[g.label] }
+                    : {}),
+                }}
+              >
+                {g.label}
+                {g.positions && (
+                  <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.7 }}>
+                    {roster.filter(p => g.positions.includes(p.pos || p.position)).length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
 
-      {/* ── Player Grid — 2-col on wider screens ── */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-        gap: "var(--space-2)",
-      }}>
-        {filtered.length === 0 && (
+          {/* Player list */}
           <div style={{
-            gridColumn: "1 / -1",
-            textAlign: "center", padding: "var(--space-8)",
-            color: "var(--text-muted)", fontSize: "var(--text-sm)",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: "var(--space-2)",
           }}>
-            {search ? `No players matching "${search}"` : "No players found"}
+            {filtered.length === 0 && (
+              <div style={{
+                gridColumn: "1 / -1",
+                textAlign: "center", padding: "var(--space-8)",
+                color: "var(--text-muted)", fontSize: "var(--text-sm)",
+              }}>
+                {search ? `No players matching "${search}"` : "No players found"}
+              </div>
+            )}
+            {filtered.map((player, i) => (
+              <div key={player.id} className={`stagger-${Math.min(i + 1, 8)}`}>
+                <PlayerRow
+                  player={player}
+                  isUser={isUserTeam}
+                  onSelect={onPlayerSelect}
+                />
+              </div>
+            ))}
           </div>
-        )}
-        {filtered.map((player, i) => (
-          <div key={player.id} className={`stagger-${Math.min(i + 1, 8)}`}>
-            <PlayerRow
-              player={player}
-              isUser={isUserTeam}
-              onSelect={onPlayerSelect}
-            />
-          </div>
-        ))}
-      </div>
 
-      {/* ── Summary Footer ── */}
-      <div style={{
-        marginTop: "var(--space-4)", padding: "var(--space-3)",
-        fontSize: "var(--text-xs)", color: "var(--text-subtle)",
-        textAlign: "center", fontVariantNumeric: "tabular-nums",
-      }}>
-        Showing {filtered.length} of {rosterSize} players
-        {team && ` · Cap Room: $${(team.capRoom ?? 0).toFixed(1)}M`}
-      </div>
+          {/* Summary Footer */}
+          <div style={{
+            marginTop: "var(--space-4)", padding: "var(--space-3)",
+            fontSize: "var(--text-xs)", color: "var(--text-subtle)",
+            textAlign: "center", fontVariantNumeric: "tabular-nums",
+          }}>
+            Showing {filtered.length} of {rosterSize} players
+            {team && ` · Cap Room: $${(team.capRoom ?? 0).toFixed(1)}M`}
+          </div>
+        </>
+      )}
     </div>
   );
 }

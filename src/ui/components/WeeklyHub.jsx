@@ -355,7 +355,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
       </div>
 
       <Button
-        onClick={() => onNavigate?.("Strategy")}
+        onClick={() => onNavigate?.("Game Plan")}
         style={{
           width: "100%", marginTop: 14,
           background: "var(--accent)", color: "#fff",
@@ -599,10 +599,10 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       badge: injuryCount,
     },
     {
-      icon: "🎯", label: "Strategy",
+      icon: "🎯", label: "Game Plan",
       sublabel: "Set your game plan",
       color: "#0A84FF",
-      tab: "Strategy",
+      tab: "Game Plan",
       badge: null,
     },
     {
