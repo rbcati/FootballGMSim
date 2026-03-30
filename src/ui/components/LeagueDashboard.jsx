@@ -1555,7 +1555,12 @@ export default function LeagueDashboard({
             key={tab}
             className={`standings-tab${activeTab === tab ? " active" : ""}`}
             onClick={() => setActiveTab(tab)}
-            style={{ flexShrink: 0 }}
+            style={{
+              flexShrink: 0,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              fontSize: "11px",
+            }}
           >
             {tab}
           </button>
