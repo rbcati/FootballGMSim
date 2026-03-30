@@ -1531,7 +1531,7 @@ export default function LeagueDashboard({
 
       {/* ── Tab Navigation ── sticky, horizontally scrollable, no wrap ── */}
       <div
-        className="standings-tabs"
+        className="standings-tabs dashboard-main-tabs"
         style={{
           marginBottom: "var(--space-4)",
           flexWrap: "nowrap",
