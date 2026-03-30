@@ -477,7 +477,7 @@ html, body {
   font-weight: 500;
   font-size: var(--text-sm);
   cursor: pointer;
-  transition: all var(--dur) var(--ease);
+  transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
   overflow: hidden;
   text-decoration: none;
@@ -489,12 +489,13 @@ html, body {
   inset: 0;
   background: rgba(255, 255, 255, 0.1);
   opacity: 0;
-  transition: opacity var(--dur) var(--ease);
+  transition: opacity 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: var(--shadow-md);
+  filter: brightness(1.05);
   border-color: var(--hairline-strong);
 }
 
@@ -503,8 +504,9 @@ html, body {
 }
 
 .btn:active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  transform: scale(0.96) translateY(1px) !important;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  filter: brightness(0.95);
 }
 
 .btn.primary {
@@ -1239,13 +1241,13 @@ select:disabled {
 .game-over-score {
     font-size: 2rem;
     margin-bottom: 30px;
-    font-family: monospace; /* Fallback */
-    font-family: var(--font-mono);
+
+    font-variant-numeric: tabular-nums;
 }
 
 /* Ensure fade-in is available globally */
 .fade-in {
-  animation: fadeIn 0.3s ease-out;
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Hard Shake */
@@ -1441,7 +1443,7 @@ select:disabled {
 .score-overlay.field-goal {
   color: #FFD700; /* Gold */
   text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 2px;
 }
 
@@ -1449,7 +1451,7 @@ select:disabled {
   color: #FFFFFF;
   background: #FF453A;
   text-shadow: 2px 2px 0px #8B0000;
-  font-family: 'Courier New', monospace;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   font-weight: 900;
   border: 4px solid #fff;
   padding: 15px 30px;
@@ -1520,7 +1522,7 @@ select:disabled {
     font-size: 0.95em;
     font-weight: 500;
     flex: 1;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
     position: relative;
     overflow: hidden;
 }
@@ -1528,13 +1530,15 @@ select:disabled {
 .play-call-btn:hover {
     background: var(--surface-strong);
     border-color: var(--accent);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+    filter: brightness(1.05);
 }
 
 .play-call-btn:active {
-    transform: scale(0.98);
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+    transform: scale(0.96) translateY(1px) !important;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    filter: brightness(0.95);
 }
 
 .play-call-btn.selected {
@@ -1813,12 +1817,12 @@ select:disabled {
 /* Smooth Fade Transitions */
 .fade-out {
   opacity: 0 !important;
-  transition: opacity 0.3s ease-out;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .fade-in {
   opacity: 1 !important;
-  transition: opacity 0.3s ease-in;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Enhanced Field Marker Transitions */
@@ -1901,7 +1905,7 @@ select:disabled {
   font-size: 1.5rem;
   color: #E6EDF3;
   text-transform: none;
-  font-family: monospace;
+  font-variant-numeric: tabular-nums;
   text-shadow: none;
   white-space: normal;
 }
@@ -2166,7 +2170,7 @@ select:disabled {
 
 .command-center .info-value {
     font-weight: bold;
-    font-family: monospace;
+    font-variant-numeric: tabular-nums;
     font-size: 1rem;
     color: var(--accent);
 }
@@ -2399,7 +2403,7 @@ body {
 .game-event-overlay.goal .event-text {
   color: #FFD700;
   text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 2px;
   animation: goal-celebration 1s ease-out;
 }
@@ -2416,7 +2420,7 @@ body {
 .game-event-overlay.kick .event-text {
   color: #0A84FF;
   text-shadow: 0 0 15px #0056b3;
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 1px;
 }
 
@@ -2437,7 +2441,7 @@ body {
   transform: rotate(-5deg);
   border-radius: 12px;
   box-shadow: 0 0 20px rgba(255, 69, 58, 0.6);
-  font-family: 'Courier New', monospace;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   font-weight: 900;
 }
 
@@ -2469,7 +2473,7 @@ body {
 }
 
 .fade-out {
-  animation: fadeOut 0.2s ease-out forwards !important;
+  animation: fadeOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
   pointer-events: none; /* Prevent clicks during exit */
 }
 
@@ -2477,7 +2481,7 @@ body {
 .game-event-overlay.quarter-end .event-text {
   color: #fff;
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 2px;
 }
 .game-event-overlay.quarter-end::before {
@@ -2701,7 +2705,7 @@ body {
 .game-event-overlay.goal .event-text {
   color: #FFD700;
   text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 2px;
   animation: goal-celebration 1s ease-out;
 }
@@ -2718,7 +2722,7 @@ body {
 .game-event-overlay.kick .event-text {
   color: #0A84FF;
   text-shadow: 0 0 15px #0056b3;
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 1px;
 }
 
@@ -2739,7 +2743,7 @@ body {
   transform: rotate(-5deg);
   border-radius: 12px;
   box-shadow: 0 0 20px rgba(255, 69, 58, 0.6);
-  font-family: 'Courier New', monospace;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   font-weight: 900;
 }
 
@@ -2771,7 +2775,7 @@ body {
 }
 
 .fade-out {
-  animation: fadeOut 0.2s ease-out forwards !important;
+  animation: fadeOut 0.2s cubic-bezier(0.4, 0, 0.2, 1) forwards !important;
   pointer-events: none; /* Prevent clicks during exit */
 }
 
@@ -2779,7 +2783,7 @@ body {
 .game-event-overlay.quarter-end .event-text {
   color: #fff;
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-  font-family: 'Arial Black', sans-serif;
+  font-variant-numeric: tabular-nums; font-weight: 900;
   letter-spacing: 2px;
 }
 .game-event-overlay.quarter-end::before {
