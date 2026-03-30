@@ -1433,8 +1433,48 @@ export function simGameStats(home, away, options = {}) {
     if (home._cachedMorale === undefined) home._cachedMorale = calculateTeamMorale(homeActive, home);
     if (away._cachedMorale === undefined) away._cachedMorale = calculateTeamMorale(awayActive, away);
     // Apply HC morale bonus (Motivator / Team Builder archetypes)
-    const homeMorale = Math.min(100, home._cachedMorale + (homeHCMods.moraleBonus || 0));
-    const awayMorale = Math.min(100, away._cachedMorale + (awayHCMods.moraleBonus || 0));
+    let homeMorale = Math.min(100, home._cachedMorale + (homeHCMods.moraleBonus || 0));
+    let awayMorale = Math.min(100, away._cachedMorale + (awayHCMods.moraleBonus || 0));
+
+    // Revenge bump: if a notable player or head coach recently came from this opponent,
+    // they are extra motivated for this matchup. We detect this via optional fields;
+    // if the data is missing these checks are simply no-ops.
+    const hasRevengeAngle = (team, opponent) => {
+        try {
+            // Players who used to be on the opponent
+            if (Array.isArray(team.roster)) {
+                for (const p of team.roster) {
+                    if (
+                        p.previousTeamId === opponent.id ||
+                        p.lastTeamId === opponent.id ||
+                        p.formerTeamId === opponent.id ||
+                        p.draftedBy === opponent.id && p.yearsWithTeam === 0
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            // Head coach who used to work for the opponent
+            const hc = team.staff?.headCoach;
+            if (hc && (
+                hc.previousTeamId === opponent.id ||
+                hc.lastTeamId === opponent.id ||
+                (Array.isArray(hc.pastTeams) && hc.pastTeams.includes(opponent.id))
+            )) {
+                return true;
+            }
+        } catch {
+            // Defensive: if older saves lack any of these fields, ignore.
+        }
+        return false;
+    };
+
+    if (hasRevengeAngle(home, away)) {
+        homeMorale = Math.min(100, homeMorale + 3);
+    }
+    if (hasRevengeAngle(away, home)) {
+        awayMorale = Math.min(100, awayMorale + 3);
+    }
 
     // Morale Mod: 50 is neutral. 100 is +2%, 0 is -2% strength impact
     // Formula: 1.0 + ((morale - 50) / 50) * 0.02
