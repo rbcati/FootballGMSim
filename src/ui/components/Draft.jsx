@@ -50,6 +50,77 @@ function ovrColor(ovr) {
   return "var(--danger)";
 }
 
+// ── Position colour map ───────────────────────────────────────────────────────
+const POS_COLORS = {
+  QB:  "#FF6B35",
+  RB:  "#34C759",
+  WR:  "#0A84FF",
+  TE:  "#5E5CE6",
+  OL:  "#64D2FF",
+  DL:  "#FF453A",
+  LB:  "#FF9F0A",
+  CB:  "#30D158",
+  S:   "#FFD60A",
+  K:   "#AEC6CF",
+  P:   "#B4A0E5",
+};
+
+// ── Scouting Fog of War ───────────────────────────────────────────────────────
+// Uses the player id as a stable seed so grades don't change on re-render.
+function _seededRand(seed) {
+  const x = Math.sin(seed * 9301 + 49297) * 233280;
+  return x - Math.floor(x);
+}
+
+/**
+ * Returns a stable { grade, gradeColor, range } object for a prospect.
+ * scoutAccuracy: 0–1 (1 = perfect info, 0 = pure guesswork).
+ */
+function getScoutReport(trueOvr, playerId, scoutAccuracy = 0.65) {
+  const noise = Math.round((_seededRand(playerId) - 0.5) * 2 * (1 - scoutAccuracy) * 18);
+  const scoutedOvr = Math.min(99, Math.max(50, trueOvr + noise));
+  const spread = Math.round((1 - scoutAccuracy) * 10);
+  const low  = Math.max(50, scoutedOvr - spread);
+  const high = Math.min(99, scoutedOvr + spread);
+
+  let grade, gradeColor;
+  if (scoutedOvr >= 88)      { grade = "A+"; gradeColor = "#34C759"; }
+  else if (scoutedOvr >= 83) { grade = "A";  gradeColor = "#34C759"; }
+  else if (scoutedOvr >= 78) { grade = "B+"; gradeColor = "#30D158"; }
+  else if (scoutedOvr >= 73) { grade = "B";  gradeColor = "#0A84FF"; }
+  else if (scoutedOvr >= 68) { grade = "C+"; gradeColor = "#FF9F0A"; }
+  else if (scoutedOvr >= 63) { grade = "C";  gradeColor = "#FF9F0A"; }
+  else if (scoutedOvr >= 58) { grade = "D";  gradeColor = "#FF453A"; }
+  else                        { grade = "F";  gradeColor = "#FF453A"; }
+
+  return { grade, gradeColor, range: `${low}–${high}` };
+}
+
+function ScoutBadge({ playerId, trueOvr }) {
+  const { grade, gradeColor, range } = getScoutReport(trueOvr, playerId);
+  return (
+    <span
+      title={`Scout range: ${range} OVR`}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        padding: "2px 7px",
+        borderRadius: "var(--radius-pill)",
+        background: `${gradeColor}22`,
+        color: gradeColor,
+        fontWeight: 700,
+        fontSize: "var(--text-xs)",
+        border: `1px solid ${gradeColor}55`,
+        cursor: "default",
+        letterSpacing: "0.5px",
+      }}
+    >
+      {grade}
+    </span>
+  );
+}
+
 // ── Draft Pick Grade Logic ────────────────────────────────────────────────────
 
 /**
@@ -643,7 +714,40 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState(null);
 
-  const progressionDone = league?.offseasonProgressionDone ?? false;
+  const phase = league?.phase ?? '';
+  // Progression can only run during the 'offseason_resign' / 'offseason' phase.
+  // In every other phase it has either already happened (free_agency / draft) or
+  // isn't applicable (regular / preseason / playoffs).  Treating it as "done"
+  // disables the button and prevents the "Not in offseason phase" error.
+  const progressionDone =
+    !['offseason_resign', 'offseason'].includes(phase) ||
+    (league?.offseasonProgressionDone ?? false);
+  // "Start Draft" is only valid once the worker has entered the 'draft' phase.
+  const isDraftPhase = phase === 'draft';
+
+  // Guard: show an informational placeholder when we're nowhere near the draft
+  if (!['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(phase)) {
+    return (
+      <div
+        style={{
+          maxWidth: 560,
+          margin: '0 auto',
+          textAlign: 'center',
+          padding: 'var(--space-10) var(--space-4)',
+          color: 'var(--text-muted)',
+        }}
+      >
+        <div style={{ fontSize: '2rem', marginBottom: 'var(--space-4)' }}>🏈</div>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text)', marginBottom: 'var(--space-2)' }}>
+          Draft Not Available
+        </div>
+        <p style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+          The NFL Draft opens during the offseason after Free Agency concludes.
+          Come back once the season ends and player progression has run.
+        </p>
+      </div>
+    );
+  }
 
   const handleProgression = async () => {
     setProgressing(true);
@@ -809,8 +913,15 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
         </CardContent>
       </Card>
 
+      {/* FA waiting notice */}
+      {phase === 'free_agency' && (
+        <div style={{ padding: 'var(--space-3) var(--space-4)', background: 'var(--accent)11', border: '1px solid var(--accent)44', borderRadius: 'var(--radius-md)', marginBottom: 'var(--space-4)', fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+          Free Agency is in progress. Advance through all FA days to unlock the draft.
+        </div>
+      )}
+
       {/* Step 2: Start Draft */}
-      <Card className="card-premium" style={{ opacity: progressionDone ? 1 : 0.55 }}>
+      <Card className="card-premium" style={{ opacity: isDraftPhase ? 1 : 0.55 }}>
         <CardContent style={{ padding: "var(--space-5)" }}>
         <div
           style={{
@@ -870,9 +981,10 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
           </div>
           <Button
             className="btn btn-primary"
-            disabled={!progressionDone || starting}
+            disabled={!isDraftPhase || starting}
             onClick={handleStartDraft}
             style={{ flexShrink: 0, minWidth: 120 }}
+            title={!isDraftPhase ? 'Available once Free Agency is complete' : undefined}
           >
             {starting ? "Starting…" : "Start Draft"}
           </Button>
@@ -942,6 +1054,87 @@ function DraftBoard({
 
   return (
     <div>
+      {/* ── War Room Banner ── */}
+      {!isDraftComplete && (
+        <div
+          style={{
+            marginBottom: "var(--space-4)",
+            borderRadius: "var(--radius-md)",
+            overflow: "hidden",
+            background: isUserPick
+              ? "linear-gradient(135deg, #0f0c29 0%, #302b63 60%, #24243e 100%)"
+              : "var(--surface-strong)",
+            border: `1px solid ${isUserPick ? "var(--accent)" : "var(--hairline)"}`,
+            padding: "var(--space-3) var(--space-5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "var(--space-4)",
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                color: isUserPick ? "var(--accent)" : "var(--text-muted)",
+                marginBottom: 2,
+              }}
+            >
+              {isUserPick ? "★ You Are On The Clock" : "War Room — AI Picking"}
+            </div>
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: "var(--text-lg)",
+                color: "var(--text)",
+              }}
+            >
+              {currentPick?.teamName ?? "—"}
+              <span
+                style={{
+                  marginLeft: 10,
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-muted)",
+                  fontWeight: 400,
+                }}
+              >
+                Round {currentPick?.round} · Pick #{currentPick?.overall}
+              </span>
+            </div>
+          </div>
+          {/* Position colour legend */}
+          <div
+            style={{
+              display: "flex",
+              gap: "var(--space-2)",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            {Object.entries(POS_COLORS).map(([pos, color]) => (
+              <span
+                key={pos}
+                style={{
+                  padding: "1px 6px",
+                  borderRadius: "var(--radius-pill)",
+                  background: `${color}22`,
+                  color,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  border: `1px solid ${color}44`,
+                  fontFamily: "monospace",
+                }}
+              >
+                {pos}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Draft Ticker — last 5 picks ── */}
       <DraftTicker completedPicks={completedPicks} />
 
@@ -960,11 +1153,18 @@ function DraftBoard({
         className="draft-layout"
         style={{
           display: "grid",
-          gridTemplateColumns: "260px 1fr",
+          gridTemplateColumns: "minmax(0, 260px) minmax(0, 1fr)",
           gap: "var(--space-5)",
           alignItems: "start",
         }}
       >
+        <style>{`
+          @media (max-width: 900px) {
+            .draft-layout {
+              grid-template-columns: minmax(0, 1fr);
+            }
+          }
+        `}</style>
         {/* ── Left Panel: Draft Board ── */}
         <div
           style={{
@@ -1425,8 +1625,8 @@ function DraftBoard({
                       { key: "name", label: "NAME" },
                       { key: "traits", label: "TRAITS" },
                       { key: "age", label: "AGE" },
-                      { key: "ovr", label: "OVR" },
-                      { key: "potential", label: "POT" },
+                      { key: "ovr", label: isDraftComplete ? "OVR" : "GRADE" },
+                      { key: "potential", label: isDraftComplete ? "POT" : "???" },
                       { key: "college", label: "COLLEGE" },
                     ].map((col) => (
                       <TableHead
@@ -1491,10 +1691,11 @@ function DraftBoard({
                             display: "inline-block",
                             padding: "1px 6px",
                             borderRadius: "var(--radius-pill)",
-                            background: "var(--surface-strong)",
+                            background: `${POS_COLORS[p.pos] ?? "#666"}22`,
                             fontSize: "var(--text-xs)",
                             fontWeight: 700,
-                            color: "var(--text-muted)",
+                            color: POS_COLORS[p.pos] ?? "var(--text-muted)",
+                            border: `1px solid ${POS_COLORS[p.pos] ?? "#666"}55`,
                             fontFamily: "monospace",
                           }}
                         >
@@ -1504,7 +1705,7 @@ function DraftBoard({
                       <TableCell
                         style={{
                           fontWeight: 600,
-                          color: "var(--text)",
+                          color: onPlayerClick ? "var(--accent)" : "var(--text)",
                           cursor: onPlayerClick ? "pointer" : "default",
                         }}
                         onClick={() => onPlayerClick && onPlayerClick(p.id)}
@@ -1515,9 +1716,9 @@ function DraftBoard({
                         <PlayerPreview player={p}>
                           <span
                             style={{
-                              borderBottom: onPlayerClick
-                                ? "1px dotted var(--text-muted)"
-                                : "none",
+                              textDecoration: onPlayerClick ? "underline" : "none",
+                              textDecorationStyle: "dotted",
+                              textUnderlineOffset: 3,
                             }}
                           >
                             {p.name}
@@ -1531,7 +1732,11 @@ function DraftBoard({
                       </TableCell>
                       <TableCell style={{ color: "var(--text-muted)" }}>{p.age}</TableCell>
                       <TableCell>
-                        <OvrBadge ovr={p.ovr} />
+                        {/* Fog of War: show scout grade before drafted, true OVR after */}
+                        {isDraftComplete
+                          ? <OvrBadge ovr={p.ovr} />
+                          : <ScoutBadge playerId={p.id} trueOvr={p.ovr} />
+                        }
                       </TableCell>
                       <TableCell
                         style={{
@@ -1539,7 +1744,8 @@ function DraftBoard({
                           fontSize: "var(--text-xs)",
                         }}
                       >
-                        {p.potential ?? "—"}
+                        {/* Hide potential until draft is complete */}
+                        {isDraftComplete ? (p.potential ?? "—") : "??"}
                       </TableCell>
                       <TableCell
                         style={{
