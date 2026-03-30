@@ -1144,7 +1144,17 @@ function QuickJumpFab({ onNavigate }) {
   );
 }
 
-export default function LeagueDashboard({ league, busy, simulating, actions, onAdvanceWeek, notifications = [], onDismissNotification }) {
+export default function LeagueDashboard({
+  league,
+  busy,
+  simulating,
+  actions,
+  onAdvanceWeek,
+  notifications = [],
+  onDismissNotification,
+  externalBoxScoreId,
+  onConsumeExternalBoxScore,
+}) {
   const [activeTab, setActiveTab] = useState("Weekly Hub");
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
@@ -1184,6 +1194,15 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
       setActiveTab("Postseason");
     }
   }, [league?.phase]);
+
+  // If an external box score request comes from the LiveGame scoreboard,
+  // open the BoxScore modal for that game and then notify the parent
+  // that we've consumed the request.
+  useEffect(() => {
+    if (!externalBoxScoreId) return;
+    setSelectedGameId(externalBoxScoreId);
+    onConsumeExternalBoxScore?.();
+  }, [externalBoxScoreId, onConsumeExternalBoxScore]);
 
   if (!league) return null;
 
@@ -1810,7 +1829,11 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
           <BoxScore
             gameId={selectedGameId}
             actions={actions}
-            onClose={() => setSelectedGameId(null)}
+          onClose={() => setSelectedGameId(null)}
+          onPlayerSelect={(id) => {
+            setSelectedGameId(null);
+            setSelectedPlayerId(id);
+          }}
           />
         </TabErrorBoundary>
       )}
