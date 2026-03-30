@@ -65,6 +65,7 @@ export default function App() {
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
+  const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
@@ -471,10 +472,8 @@ export default function App() {
           lastResults={lastResults}
           gameEvents={gameEvents}
           onOpenBoxScore={(gameId) => {
-            if (!league?.seasonId || league.week == null) return;
-            // gameId from GAME_EVENT already matches the DB key used by BoxScore.
-            // Store on window so the dashboard's BoxScore modal can pick it up via a notification if needed.
-            window.__lastClickedBoxScoreId = gameId;
+            if (!gameId) return;
+            setExternalBoxScoreId(gameId);
           }}
         />
       )}
@@ -513,6 +512,8 @@ export default function App() {
         onAdvanceWeek={handleAdvanceWeek}
         notifications={notifications}
         onDismissNotification={actions.dismissNotification}
+        externalBoxScoreId={externalBoxScoreId}
+        onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
       />
 
       {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
