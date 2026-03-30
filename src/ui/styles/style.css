@@ -6260,6 +6260,17 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ========================================
+   MOBILE DASHBOARD NAV TWEAKS
+   Hide the wide tab row on small screens – rely on MobileNav instead
+   ======================================== */
+
+@media (max-width: 768px) {
+  .dashboard-main-tabs {
+    display: none;
+  }
+}
+
+/* ========================================
    INJURIES PAGE
    ======================================== */
 
