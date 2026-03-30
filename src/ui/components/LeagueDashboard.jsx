@@ -1282,8 +1282,8 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
         </div>
       )}
 
-      {/* ── Status Grid — shown only when NOT on the Home tab (Home tab has its own rich cards) ── */}
-      {activeTab !== "Home" && <div
+      {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
+      {activeTab !== "Home" && league.phase !== "draft" && <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
