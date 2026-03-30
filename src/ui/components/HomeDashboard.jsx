@@ -805,12 +805,15 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
 
       {/* Main grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--space-4)" }}>
+        {/* Hero identity row */}
         <TeamSnapshotCard userTeam={userTeam} league={league} />
-        <NextGameCard nextGame={nextGame} league={league} />
-        <RecentFormCard form={recentForm} />
-        <QuickStatsCard userTeam={userTeam} league={league} />
         <OwnerMoodCard league={league} />
+
+        {/* Game + quick stats */}
+        <NextGameCard nextGame={nextGame} league={league} />
+        <QuickStatsCard userTeam={userTeam} league={league} />
         <CoachApprovalCard league={league} />
+        <RecentFormCard form={recentForm} />
         <InjuryReportCard injuries={injuries} onPlayerSelect={onPlayerSelect} />
 
         <SectionCard title="Top Performers" icon="🔥">
