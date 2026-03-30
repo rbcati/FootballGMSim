@@ -221,6 +221,82 @@ function approvalColor(val) {
   return "#FF453A";
 }
 
+function ownerMoodMeta(league) {
+  if (!league) {
+    return {
+      mood: "neutral",
+      face: "😐",
+      toneColor: "var(--text-muted)",
+      headline: "Owner mood unknown",
+      detail: "Play a few weeks to get a read on expectations.",
+    };
+  }
+
+  const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+  const approval = Math.round(league.ownerApproval ?? 75);
+  const wins = userTeam?.wins ?? 0;
+  const losses = userTeam?.losses ?? 0;
+  const ties = userTeam?.ties ?? 0;
+  const games = wins + losses + ties;
+  const winPct = games > 0 ? ((wins + ties * 0.5) / games) : 0.5;
+
+  const year = league.year ?? 1;
+  const cycle = ((year - 1) % 3) + 1; // 1,2,3 → simple regime cycle
+
+  let expectation;
+  if (cycle === 1) {
+    expectation = "Year 1: show clear progress toward 7+ wins or a top-10 unit.";
+  } else if (cycle === 2) {
+    expectation = "Year 2: push for a winning record and serious playoff contention.";
+  } else {
+    expectation = "Year 3: make the playoffs and be dangerous once you get there.";
+  }
+
+  let mood = "neutral";
+  let face = "😐";
+  let toneColor = "var(--text-muted)";
+  let detail;
+
+  if (approval >= 78) {
+    mood = "thrilled";
+    face = "😄";
+    toneColor = "var(--success)";
+    if (winPct >= 0.7) {
+      detail = "Thrilled with how often you’re winning right now.";
+    } else {
+      detail = "Happy with the direction and the way the roster is shaping up.";
+    }
+  } else if (approval >= 58) {
+    mood = "uneasy";
+    face = "😕";
+    toneColor = "var(--warning)";
+    if (winPct >= 0.5) {
+      detail = "Encouraged, but waiting to see if this team can truly separate.";
+    } else {
+      detail = "Concerned about inconsistency — wants cleaner performances soon.";
+    }
+  } else {
+    mood = "angry";
+    face = "😡";
+    toneColor = "var(--danger)";
+    if (winPct >= 0.4) {
+      detail = "Frustrated that a talented roster isn’t converting close games.";
+    } else {
+      detail = "Very unhappy with the slide — patience is running low.";
+    }
+  }
+
+  return {
+    mood,
+    face,
+    toneColor,
+    headline: `Owner mood: ${mood === "thrilled" ? "Thrilled" : mood === "uneasy" ? "Concerned" : "Angry"}`,
+    detail,
+    expectation,
+    approval,
+  };
+}
+
 /**
  * CoachApprovalSnippet — shows GM/Staff/Players/Fans/Media approval ratings.
  * Values are synthesised deterministically from league state so they update
@@ -345,6 +421,54 @@ function CoachApprovalSnippet({ league }) {
             </div>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+function OwnerMoodSnippet({ league }) {
+  const meta = ownerMoodMeta(league);
+
+  return (
+    <div style={{
+      background: "var(--surface)",
+      border: "1.5px solid var(--hairline)",
+      borderRadius: "var(--radius-lg)",
+      padding: "10px 14px",
+      marginBottom: 12,
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+    }}>
+      <div style={{
+        width: 34,
+        height: 34,
+        borderRadius: "50%",
+        background: "rgba(0,0,0,0.25)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: "1.3rem",
+        flexShrink: 0,
+      }}>
+        {meta.face}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: "0.78rem",
+          fontWeight: 800,
+          color: meta.toneColor,
+          marginBottom: 2,
+        }}>
+          {meta.headline} ({meta.approval}%)
+        </div>
+        <div style={{
+          fontSize: "0.7rem",
+          color: "var(--text-muted)",
+          lineHeight: 1.4,
+        }}>
+          {meta.detail}
+        </div>
       </div>
     </div>
   );
@@ -785,8 +909,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Season Progress ── */}
       <SeasonProgressBar league={league} />
 
-      {/* ── Coach Approval Ratings ── */}
+      {/* ── Coach Approval + Owner Mood ── */}
       <CoachApprovalSnippet league={league} />
+      <OwnerMoodSnippet league={league} />
 
       {/* ── Advance Week CTA ── */}
       {onAdvanceWeek && (
