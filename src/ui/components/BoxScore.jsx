@@ -166,7 +166,7 @@ function TeamSummaryTable({ homeStats, awayStats, homeAbbr, awayAbbr }) {
 
 // ── Player stat table ─────────────────────────────────────────────────────────
 
-function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr }) {
+function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr, onPlayerSelect }) {
   const renderTable = (rows, teamAbbr) => {
     if (!rows || rows.length === 0) return null;
     return (
@@ -208,9 +208,12 @@ function PlayerTable({ columns, homeRows, awayRows, homeAbbr, awayAbbr }) {
                     <div
                       style={{
                         fontWeight: 600,
-                        color: "var(--text)",
+                        color: onPlayerSelect ? "var(--accent)" : "var(--text)",
                         fontSize: "var(--text-sm)",
+                        cursor: onPlayerSelect ? "pointer" : "default",
                       }}
+                      onClick={() => onPlayerSelect && row.id != null && onPlayerSelect(row.id)}
+                      title={onPlayerSelect ? `View ${row.name} profile` : undefined}
                     >
                       {row.name}
                     </div>
@@ -349,7 +352,7 @@ function filterAndSortPlayers(side, tabKey) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function BoxScore({ gameId, actions, onClose }) {
+export default function BoxScore({ gameId, actions, onClose, onPlayerSelect }) {
   const [game, setGame] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -697,6 +700,7 @@ export default function BoxScore({ gameId, actions, onClose }) {
                   awayRows={awayRows}
                   homeAbbr={homeAbbr}
                   awayAbbr={awayAbbr}
+                  onPlayerSelect={onPlayerSelect}
                 />
               )}
 
