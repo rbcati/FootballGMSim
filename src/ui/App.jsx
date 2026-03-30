@@ -470,6 +470,12 @@ export default function App() {
           league={league}
           lastResults={lastResults}
           gameEvents={gameEvents}
+          onOpenBoxScore={(gameId) => {
+            if (!league?.seasonId || league.week == null) return;
+            // gameId from GAME_EVENT already matches the DB key used by BoxScore.
+            // Store on window so the dashboard's BoxScore modal can pick it up via a notification if needed.
+            window.__lastClickedBoxScoreId = gameId;
+          }}
         />
       )}
 
