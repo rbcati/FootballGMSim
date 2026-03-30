@@ -49,6 +49,10 @@ import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
 
+// Increment this when shipping notable UX/bugfix updates so users
+// see the in-app changelog popup once per version.
+const APP_VERSION = '1.1.0-draft-war-room';
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -66,6 +70,8 @@ export default function App() {
 
   const [activeView, setActiveView] = useState('saves');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
@@ -77,6 +83,19 @@ export default function App() {
   useEffect(() => {
     if (!busy) advancingRef.current = false;
   }, [busy]);
+
+  // ── Versioned changelog popup ────────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('gmsim_last_seen_version');
+      if (seen !== APP_VERSION) {
+        setShowChangelog(true);
+        localStorage.setItem('gmsim_last_seen_version', APP_VERSION);
+      }
+    } catch {
+      // non-fatal: if storage fails, just skip the popup
+    }
+  }, []);
 
   // ── Service-Worker update detection ───────────────────────────────────────
   const [swUpdateReady, setSwUpdateReady] = useState(false);
@@ -685,6 +704,86 @@ export default function App() {
             }
           }}
         />
+      )}
+
+      {/* ── Version changelog popup ─────────────────────────────────────── */}
+      {showChangelog && (
+        <div
+          onClick={() => setShowChangelog(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9998,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'env(safe-area-inset-top, 16px) env(safe-area-inset-right, 16px) env(safe-area-inset-bottom, 16px) env(safe-area-inset-left, 16px)',
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--surface-strong, #111827)',
+              borderRadius: 'var(--radius-xl, 20px)',
+              border: '1px solid var(--hairline)',
+              maxWidth: 440,
+              width: '100%',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              padding: '24px 20px 20px',
+              boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.4, color: 'var(--accent)' }}>
+                  Update Notes
+                </div>
+                <h2
+                  style={{
+                    margin: '4px 0 8px',
+                    fontSize: '1.1rem',
+                    fontWeight: 800,
+                    letterSpacing: '-0.02em',
+                  }}
+                >
+                  Draft War Room & Live Hub
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowChangelog(false)}
+                style={{
+                  border: 'none',
+                  background: 'transparent',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: 20,
+                  lineHeight: 1,
+                }}
+                aria-label="Close changelog"
+              >
+                ×
+              </button>
+            </div>
+
+            <ul
+              style={{
+                margin: '8px 0 0',
+                paddingLeft: 18,
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-muted)',
+                lineHeight: 1.5,
+              }}
+            >
+              <li>Fixed offseason/draft phase sync so "Sim to Season" no longer stalls or throws phase errors.</li>
+              <li>Introduced a focused Draft War Room with scouting fog, live ticker, and less dashboard clutter.</li>
+              <li>Upgraded the Live Game hub: scoreboard cards now open box scores, and box-score player names open their cards.</li>
+              <li>Condensed repetitive Free Agency news and notifications into a single recap to keep feeds readable.</li>
+            </ul>
+          </div>
+        </div>
       )}
     </div>
   );
