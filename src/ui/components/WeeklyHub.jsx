@@ -906,10 +906,11 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 0 80px" }}>
 
-      {/* ── Season Progress ── */}
+      {/* ── Season Progress + Next Game (mobile hero stack) ── */}
       <SeasonProgressBar league={league} />
+      <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />
 
-      {/* ── Coach Approval + Owner Mood ── */}
+      {/* ── Approval strip ── */}
       <CoachApprovalSnippet league={league} />
       <OwnerMoodSnippet league={league} />
 
@@ -922,9 +923,6 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
           onAdvanceWeek={onAdvanceWeek}
         />
       )}
-
-      {/* ── Next Game Preview ── */}
-      <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />
 
       {/* ── Action Grid ── */}
       <div style={{ marginBottom: 16 }}>
