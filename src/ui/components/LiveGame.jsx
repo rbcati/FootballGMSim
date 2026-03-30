@@ -204,10 +204,14 @@ function TeamBadge({ abbr, size = 36, isUser = false }) {
 
 // ── Scoreboard card (one per matchup) ────────────────────────────────────────
 
-function MatchupCard({ event, userTeamId, pending }) {
+function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
   const { homeId, awayId, homeAbbr, awayAbbr, homeScore, awayScore } = event;
   const isUser = homeId === userTeamId || awayId === userTeamId;
   const finished = !pending;
+  const handleClick = () => {
+    if (!finished || !onOpenBoxScore || !event?.gameId) return;
+    onOpenBoxScore(event.gameId);
+  };
 
   return (
     <div
@@ -224,7 +228,9 @@ function MatchupCard({ event, userTeamId, pending }) {
               boxShadow: "0 0 0 1px var(--accent)",
             }
           : {}),
+        cursor: finished && onOpenBoxScore && event?.gameId ? "pointer" : "default",
       }}
+      onClick={handleClick}
     >
       {/* Away team */}
       <TeamBadge abbr={awayAbbr} size={32} isUser={awayId === userTeamId} />
@@ -392,6 +398,7 @@ export default function LiveGame({
   league,
   lastResults,
   gameEvents,
+  onOpenBoxScore,
 }) {
   const [visible, setVisible] = useState(false);
   const [plays, setPlays] = useState([]);
@@ -783,6 +790,7 @@ export default function LiveGame({
                 event={ev}
                 userTeamId={userTeamId}
                 pending={false}
+                onOpenBoxScore={onOpenBoxScore}
               />
             ))}
 
