@@ -524,6 +524,103 @@ function approvalColor(val) {
   return "#FF453A";
 }
 
+function ownerMoodMeta(league) {
+  if (!league) {
+    return {
+      mood: "neutral",
+      face: "😐",
+      toneColor: "var(--text-muted)",
+      headline: "Owner mood unknown",
+      detail: "Play a few weeks to get a read on expectations.",
+    };
+  }
+
+  const userTeam = league.teams?.find(t => t.id === league.userTeamId);
+  const approval = Math.round(league.ownerApproval ?? 75);
+  const wins = userTeam?.wins ?? 0;
+  const losses = userTeam?.losses ?? 0;
+  const ties = userTeam?.ties ?? 0;
+  const games = wins + losses + ties;
+  const winPct = games > 0 ? ((wins + ties * 0.5) / games) : 0.5;
+
+  const year = league.year ?? 1;
+  const cycle = ((year - 1) % 3) + 1;
+
+  let expectation;
+  if (cycle === 1) {
+    expectation = "Year 1: hit 7+ wins or build a clear top-10 unit.";
+  } else if (cycle === 2) {
+    expectation = "Year 2: finish with a winning record and sniff the playoffs.";
+  } else {
+    expectation = "Year 3: make the playoffs and win at least one game.";
+  }
+
+  let mood = "neutral";
+  let face = "😐";
+  let toneColor = "var(--text-muted)";
+  let detail;
+
+  if (approval >= 78) {
+    mood = "thrilled";
+    face = "😄";
+    toneColor = "var(--success)";
+    if (winPct >= 0.7) {
+      detail = "Thrilled with the win column and the rookie core.";
+    } else {
+      detail = "Happy with the direction and patient as the roster develops.";
+    }
+  } else if (approval >= 58) {
+    mood = "uneasy";
+    face = "😕";
+    toneColor = "var(--warning)";
+    if (winPct >= 0.5) {
+      detail = "Sees signs of progress, but wants more consistency week to week.";
+    } else {
+      detail = "Concerned that the results aren’t matching the roster talent.";
+    }
+  } else {
+    mood = "angry";
+    face = "😡";
+    toneColor = "var(--danger)";
+    if (winPct >= 0.4) {
+      detail = "Frustrated by tough losses in big spots — pressure is rising.";
+    } else {
+      detail = "Very unhappy with the slide and questioning the long-term plan.";
+    }
+  }
+
+  return {
+    mood,
+    face,
+    toneColor,
+    headline: `Owner mood: ${mood === "thrilled" ? "Thrilled" : mood === "uneasy" ? "Concerned" : "Angry"}`,
+    detail,
+    expectation,
+    approval,
+  };
+}
+
+function OwnerMoodCard({ league }) {
+  const meta = ownerMoodMeta(league);
+
+  return (
+    <SectionCard title="Owner Mood" icon={meta.face}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: meta.toneColor }}>
+          {meta.headline} ({meta.approval}%)
+        </div>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", lineHeight: 1.5 }}>
+          {meta.detail}
+        </div>
+        <div style={{ fontSize: "0.7rem", color: "var(--text-subtle)", marginTop: 4 }}>
+          <span style={{ fontWeight: 700 }}>This year’s goal:&nbsp;</span>
+          {meta.expectation}
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 function CoachApprovalCard({ league }) {
   if (!league) return null;
 
@@ -712,6 +809,7 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
         <NextGameCard nextGame={nextGame} league={league} />
         <RecentFormCard form={recentForm} />
         <QuickStatsCard userTeam={userTeam} league={league} />
+        <OwnerMoodCard league={league} />
         <CoachApprovalCard league={league} />
         <InjuryReportCard injuries={injuries} onPlayerSelect={onPlayerSelect} />
 
