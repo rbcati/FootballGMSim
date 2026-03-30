@@ -507,6 +507,16 @@ export default function AnimatedField({
           />
         )}
 
+        {/* Kick/Punt trajectory */}
+        {(play?.type === "kick" || play?.type === "punt" || play?.type === "field-goal") && animPhase >= 1 && (
+          <line
+            x1={losX} y1={FIELD_H / 2}
+            x2={ballPos.x} y2={ballPos.y}
+            stroke="#0A84FF" strokeWidth="2" strokeDasharray="6 4" opacity="0.7"
+            style={{ transition: `x2 ${0.8 / speed}s ease, y2 ${0.8 / speed}s ease` }}
+          />
+        )}
+
         {/* Ball */}
         <Football
           x={animPhase >= 1 ? ballPos.x : losX}
