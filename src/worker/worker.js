@@ -1530,22 +1530,23 @@ async function handleSimToPhase({ targetPhase }, id) {
     } else if (currentMeta.phase === 'free_agency') {
       await handleAdvanceFreeAgencyDay({}, null);
     } else if (currentMeta.phase === 'draft') {
-      // Auto-sim all draft picks
+      // Auto-sim all draft picks. The draft pipeline itself is responsible
+      // for transitioning into the next season (handleSimDraftPick and
+      // handleMakeDraftPick both call handleStartNewSeason once all picks
+      // are made), so we deliberately do NOT call handleAdvanceOffseason here.
       await handleStartDraft({}, null);
-      // Sim through all draft picks
       let draftDone = false;
       let draftGuard = 0;
       while (!draftDone && draftGuard < 500) {
         const draftMeta = cache.getMeta();
-        if (!draftMeta.draftState || draftMeta.draftState.currentPick >= draftMeta.draftState.order?.length) {
+        const ds = draftMeta.draftState;
+        if (!ds || ds.currentPickIndex >= (ds.picks?.length ?? 0)) {
           draftDone = true;
         } else {
           await handleSimDraftPick({}, null);
         }
         draftGuard++;
       }
-      // After draft completes, advance offseason
-      await handleAdvanceOffseason({}, null);
     } else {
       // Unknown phase — break to prevent infinite loop
       break;
