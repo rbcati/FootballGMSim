@@ -408,6 +408,7 @@ export default function LiveGame({
   const [momentum, setMomentum] = useState(0); // -100 to +100 (positive = home momentum)
   const [quarterScores, setQuarterScores] = useState({ home: [], away: [] });
   const [driveCount, setDriveCount] = useState(0);
+  const [logCollapsed, setLogCollapsed] = useState(false);
   const playLogRef = useRef(null);
   const intervalRef = useRef(null);
   const playCountRef = useRef(0);
@@ -866,21 +867,37 @@ export default function LiveGame({
             {userHomeAbbr !== "???"
               ? `${userAwayAbbr} @ ${userHomeAbbr}`
               : "Play-by-play"}
+            <button
+              className="btn"
+              onClick={() => setLogCollapsed((v) => !v)}
+              style={{
+                marginLeft: "auto",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: "var(--text-xs)",
+                color: "var(--accent)",
+                padding: 0,
+              }}
+            >
+              {logCollapsed ? "Expand" : "Collapse"}
+            </button>
           </div>
-          <div
-            ref={playLogRef}
-            style={{
-              flex: 1,
-              overflowY: "auto",
-              maxHeight: 280,
-              minHeight: 150,
-              padding: "var(--space-2) var(--space-3)",
-              display: "flex",
-              flexDirection: "column",
-              gap: "var(--space-1)",
-              position: "relative",
-            }}
-          >
+          {!logCollapsed && (
+            <div
+              ref={playLogRef}
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                maxHeight: 280,
+                minHeight: 150,
+                padding: "var(--space-2) var(--space-3)",
+                display: "flex",
+                flexDirection: "column",
+                gap: "var(--space-1)",
+                position: "relative",
+              }}
+            >
             {overlayEvent && (
               <div
                 className={`game-event-overlay ${overlayEvent.type}`}
@@ -959,7 +976,8 @@ export default function LiveGame({
               )
             ))}
             <style>{`@keyframes lgFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}`}</style>
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
