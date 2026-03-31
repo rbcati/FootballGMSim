@@ -2616,7 +2616,7 @@ async function handleUpdateSettings({ settings }, id) {
 
 // ── Handler: UPDATE_STRATEGY ──────────────────────────────────────────────────
 
-async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId, offSchemeId, defSchemeId }, id) {
+async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId, offSchemeId, defSchemeId, gamePlan, gmDecisions }, id) {
   const meta = cache.getMeta();
   const userTeamId = meta.userTeamId;
   const team = cache.getTeam(userTeamId);
@@ -2633,6 +2633,22 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
   if (riskId)    strategies.riskId    = riskId;
   // Allow null to clear star target
   if (starTargetId !== undefined) strategies.starTargetId = starTargetId;
+  // Extended game-plan sliders (from GamePlanScreen)
+  if (gamePlan) {
+    strategies.gamePlan = {
+      ...(strategies.gamePlan || {}),
+      ...gamePlan,
+    };
+  }
+
+  // Weekly GM Decisions (light-touch pre-game choices)
+  if (gmDecisions) {
+    strategies.gmDecisions = {
+      ...(strategies.gmDecisions || {}),
+      ...gmDecisions,
+    };
+  }
+
   // Scheme selections (Scheme Engine v1)
   if (offSchemeId) strategies.offSchemeId = offSchemeId;
   if (defSchemeId) strategies.defSchemeId = defSchemeId;
