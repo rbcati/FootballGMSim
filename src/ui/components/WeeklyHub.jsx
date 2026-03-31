@@ -426,6 +426,90 @@ function CoachApprovalSnippet({ league }) {
   );
 }
 
+function GMDecisionsCard({ league, actions }) {
+  const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
+  const existing = userTeam?.strategies?.gmDecisions || {};
+  const [practiceFocus, setPracticeFocus] = useState(existing.practiceFocus || "balanced");
+  const [lockerRoom, setLockerRoom] = useState(existing.lockerRoom || "calm");
+
+  const update = (next) => {
+    if (!actions?.send) return;
+    actions.send("UPDATE_STRATEGY", {
+      gmDecisions: {
+        practiceFocus: next.practiceFocus ?? practiceFocus,
+        lockerRoom:    next.lockerRoom    ?? lockerRoom,
+      },
+    });
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="GM Decisions This Week" emoji="🧠" />
+      <div style={{
+        background: "var(--surface)",
+        border: "1.5px solid var(--hairline)",
+        borderRadius: "var(--radius-lg)",
+        padding: "12px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}>
+        <div style={{ fontSize: "0.72rem", color: "var(--text-subtle)", marginBottom: 2 }}>
+          Small focus tweaks with tiny game-day boosts and risks.
+        </div>
+        <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontWeight: 700 }}>Practice focus</span>
+          <select
+            value={practiceFocus}
+            onChange={(e) => {
+              const val = e.target.value;
+              setPracticeFocus(val);
+              update({ practiceFocus: val });
+            }}
+            style={{
+              padding: "6px 8px",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--hairline)",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontSize: "0.8rem",
+            }}
+          >
+            <option value="balanced">Balanced week</option>
+            <option value="red_zone_offense">Red zone offense</option>
+            <option value="run_defense">Run defense</option>
+            <option value="pass_protection">Pass protection</option>
+          </select>
+        </label>
+        <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontWeight: 700 }}>Locker room tone</span>
+          <select
+            value={lockerRoom}
+            onChange={(e) => {
+              const val = e.target.value;
+              setLockerRoom(val);
+              update({ lockerRoom: val });
+            }}
+            style={{
+              padding: "6px 8px",
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--hairline)",
+              background: "var(--bg)",
+              color: "var(--text)",
+              fontSize: "0.8rem",
+            }}
+          >
+            <option value="calm">Stay calm</option>
+            <option value="call_out_offense">Call out the offense</option>
+            <option value="motivate_veterans">Motivate veterans</option>
+            <option value="back_rookie">Back the rookie</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  );
+}
+
 function OwnerMoodSnippet({ league }) {
   const meta = ownerMoodMeta(league);
 
@@ -913,6 +997,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Approval strip ── */}
       <CoachApprovalSnippet league={league} />
       <OwnerMoodSnippet league={league} />
+      <GMDecisionsCard league={league} actions={actions} />
 
       {/* ── Advance Week CTA ── */}
       {onAdvanceWeek && (
