@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 test.describe('Daily Regression Pass', () => {
 
@@ -9,7 +9,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('1. Playability Smoke Test', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
@@ -69,7 +69,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('2. Strategy Persistence & High Stakes', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
@@ -136,7 +136,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('2b. Mobile UI Scrolling Check', async ({ page }) => {
         await page.setViewportSize({ width: 375, height: 667 });
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
@@ -191,7 +191,7 @@ test.describe('Daily Regression Pass', () => {
 
     test('3. Contracts & Cap Trust', async ({ page }) => {
         test.setTimeout(60000); // Increase timeout for slow league generation
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
@@ -308,7 +308,7 @@ test.describe('Daily Regression Pass', () => {
     });
 
     test('4. Replay Exploit Prevention', async ({ page }) => {
-        await page.goto('http://localhost:3000');
+        await page.goto('http://localhost:5173');
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);

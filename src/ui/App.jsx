@@ -71,7 +71,6 @@ export default function App() {
   const [activeView, setActiveView] = useState('saves');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
-  const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
