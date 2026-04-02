@@ -223,6 +223,13 @@ function PostGameScreenInner({
   const resultLabel = userWon ? "VICTORY!" : userLost ? "DEFEAT" : tied ? "TIE" : "FINAL";
 
   const [activeTab, setActiveTab] = useState("leaders"); // "leaders" | "grades"
+  // Show "Game Saved ✓" for 3 seconds on mount to confirm the auto-save happened
+  const [showSaved, setShowSaved] = useState(true);
+  React.useEffect(() => {
+    const t = setTimeout(() => setShowSaved(false), 3000);
+    return () => clearTimeout(t);
+  }, []);
+
   const { qb, receiver, rusher, defender } = useGameLeaders(logs);
 
   // Build leader stat lines
@@ -285,6 +292,26 @@ function PostGameScreenInner({
                 Week {week} · {phase === "playoffs" ? "Playoffs" : "Regular Season"}
               </div>
             )}
+            {/* Auto-save confirmation toast */}
+            <div style={{
+              marginTop: 10,
+              height: 22,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {showSaved && (
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  padding: "3px 10px",
+                  background: "#34C75918",
+                  border: "1px solid #34C75940",
+                  borderRadius: 20,
+                  fontSize: "0.65rem", fontWeight: 700, color: "#34C759",
+                  animation: "fadeSlideIn 0.3s ease-out",
+                }}>
+                  ✓ Game saved
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Score card */}

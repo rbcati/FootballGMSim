@@ -72,7 +72,45 @@ function ProgressBar({ value, max = 99, color, height = 4, animated = true }) {
   );
 }
 
-function PlayerRow({ player, isUser, onSelect, teamColor }) {
+// Compute scheme fit 0–100 from player ratings vs. scheme demands
+function computeSchemeFit(player, schemeName = "") {
+  if (!schemeName) return null;
+  const r = player.ratings || player.attrs || {};
+  const pos = player.pos || player.position || "";
+  const s = schemeName.toLowerCase();
+
+  let score = 70; // baseline
+  if (pos === "QB") {
+    if (s.includes("air_raid") || s.includes("spread")) {
+      score += (r.arm || r.throwPower || 70) * 0.15 + (r.acc || r.throwAccuracy || 70) * 0.15 - 70 * 0.3;
+    } else if (s.includes("smash") || s.includes("pro")) {
+      score += (r.mob || r.speed || 60) * (-0.05) + (r.arm || 70) * 0.1;
+    }
+  } else if (pos === "RB") {
+    if (s.includes("smash") || s.includes("power")) {
+      score += (r.pow || r.strength || 70) * 0.2 - 70 * 0.2;
+    } else if (s.includes("spread") || s.includes("west")) {
+      score += (r.spd || r.speed || 70) * 0.15 + (r.ctch || 70) * 0.1 - 70 * 0.25;
+    }
+  } else if (pos === "WR" || pos === "TE") {
+    if (s.includes("air_raid")) {
+      score += (r.spd || 70) * 0.15 + (r.ctch || r.catching || 70) * 0.15 - 70 * 0.3;
+    }
+  }
+
+  // Scheme fit bonus from schemeFit field if worker already computed it
+  if (player.schemeFit != null) return Math.round(player.schemeFit);
+  return Math.min(99, Math.max(40, Math.round(score)));
+}
+
+function schemeFitColor(fit) {
+  if (fit == null) return "var(--text-subtle)";
+  if (fit >= 80) return "#34C759";
+  if (fit >= 65) return "#FF9F0A";
+  return "#FF453A";
+}
+
+function PlayerRow({ player, isUser, onSelect, schemeName }) {
   const devBadge = getDevTraitBadge(player.devTrait);
   const pos = player.pos || player.position;
   const posColor = POS_COLORS[pos] || "#9ca3af";
@@ -80,6 +118,8 @@ function PlayerRow({ player, isUser, onSelect, teamColor }) {
   const yearsLeft = player.years ?? player.contract?.years ?? 0;
   const isInjured = (player.injuryWeeksRemaining || 0) > 0;
   const isExpiring = yearsLeft <= 1;
+  const fit = computeSchemeFit(player, schemeName);
+  const fitColor = schemeFitColor(fit);
 
   return (
     <div
@@ -156,8 +196,18 @@ function PlayerRow({ player, isUser, onSelect, teamColor }) {
         )}
       </div>
 
-      {/* Contract */}
-      <div style={{ textAlign: "right", minWidth: 60 }}>
+      {/* Scheme fit + Contract */}
+      <div style={{ textAlign: "right", minWidth: 70 }}>
+        {fit != null && (
+          <div style={{
+            fontSize: "0.65rem", fontWeight: 800, color: fitColor,
+            background: `${fitColor}18`, border: `1px solid ${fitColor}40`,
+            borderRadius: 4, padding: "1px 5px", marginBottom: 3,
+            display: "inline-block",
+          }}>
+            FIT {fit}
+          </div>
+        )}
         <div style={{
           fontSize: "var(--text-sm)", fontWeight: 700,
           color: salary > 15 ? "var(--warning)" : "var(--text)",
@@ -295,9 +345,35 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   const avgOvr = rosterSize > 0 ? Math.round(roster.reduce((s, p) => s + (p.ovr || 0), 0) / rosterSize) : 0;
   const totalSalary = roster.reduce((s, p) => s + (p.baseAnnual || p.contract?.baseAnnual || 0), 0);
   const injuredCount = roster.filter(p => (p.injuryWeeksRemaining || 0) > 0).length;
+  const schemeName = team?.strategies?.offScheme || team?.strategies?.offPlanId || "";
+  const avgFit = rosterSize > 0
+    ? Math.round(roster.reduce((s, p) => s + computeSchemeFit(p, schemeName), 0) / rosterSize)
+    : null;
 
   return (
     <div className="fade-in">
+      {/* ── Scheme banner ── */}
+      {schemeName && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          background: "var(--surface)",
+          border: "1.5px solid var(--hairline)",
+          borderRadius: 10, padding: "8px 14px", marginBottom: 12,
+        }}>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)" }}>
+            🗂️ Scheme: <span style={{ color: "var(--text)", fontWeight: 800 }}>{schemeName.replace(/_/g, " ").toUpperCase()}</span>
+          </div>
+          {avgFit != null && (
+            <div style={{
+              fontSize: "0.72rem", fontWeight: 800,
+              color: schemeFitColor(avgFit),
+            }}>
+              Avg Fit: {avgFit}%
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Header Stats + View Toggle ── */}
       <div style={{
         display: "flex", alignItems: "flex-start",
@@ -424,6 +500,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
                   player={player}
                   isUser={isUserTeam}
                   onSelect={onPlayerSelect}
+                  schemeName={schemeName}
                 />
               </div>
             ))}

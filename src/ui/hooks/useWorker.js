@@ -514,6 +514,10 @@ export function useWorker() {
     updateDepthChart: (positions) =>
       request(toWorker.UPDATE_DEPTH_CHART, { positions }),
 
+    /** Update team strategy / GM decisions (fire-and-forget, non-blocking). */
+    updateStrategy: (payload) =>
+      send(toWorker.UPDATE_STRATEGY, payload),
+
     /**
      * Run a training drill for the user's team.
      * @param {string} teamId

@@ -97,7 +97,8 @@ const ATTR_LABELS = {
 function getAttrs(player, attrKeys) {
   const src = player.ratings || player.attrs || {};
   const ovr = player.ovr ?? 70;
-  const seed = (player.id ?? "").split("").reduce((h, c) => h * 31 + c.charCodeAt(0), 0) & 0xffff;
+  // String() guard: player.id may be numeric in some save versions; split() needs a string
+  const seed = String(player.id ?? "").split("").reduce((h, c) => h * 31 + c.charCodeAt(0), 0) & 0xffff;
   let rng = seed;
   const rand = () => { rng = (rng * 1664525 + 1013904223) & 0xffff; return rng / 0xffff; };
 
