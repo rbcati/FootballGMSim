@@ -11,18 +11,40 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
-// ── Helpers (100% original) ────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
+// NFL-authentic team colors (primary + accent)
+const NFL_PRIMARY = {
+  BUF:"#00338D",MIA:"#008E97",NE:"#C60C30",NYJ:"#18A050",
+  BAL:"#9747FF",CIN:"#FB4F14",CLE:"#FF3C00",PIT:"#FFB612",
+  HOU:"#C41230",IND:"#0055A4",JAX:"#D7A22A",TEN:"#4B92DB",
+  DEN:"#FB4F14",KC:"#E31837",LV:"#A5ACAF",LAC:"#0080C6",
+  DAL:"#6B9EFF",NYG:"#0B62A0",PHI:"#2D9E44",WSH:"#D55050",
+  CHI:"#C83803",DET:"#0076B6",GB:"#FFB612",MIN:"#7B3FB5",
+  ATL:"#A71930",CAR:"#0085CA",NO:"#B5A86C",TB:"#D50A0A",
+  ARI:"#97233F",LAR:"#0047AB",SF:"#AA0000",SEA:"#69BE28",
+};
+const NFL_ACCENT = {
+  BUF:"#C60C30",MIA:"#FC4C02",NE:"#002244",NYJ:"#FFFFFF",
+  BAL:"#9E7C0C",CIN:"#000000",CLE:"#311D00",PIT:"#101820",
+  HOU:"#03202F",IND:"#A2AAAD",JAX:"#101820",TEN:"#0C2340",
+  DEN:"#002244",KC:"#FFB81C",LV:"#000000",LAC:"#FFC20E",
+  DAL:"#869397",NYG:"#A71930",PHI:"#A5ACAF",WSH:"#FFB612",
+  CHI:"#0B162A",DET:"#B0B7BC",GB:"#203731",MIN:"#FFC62F",
+  ATL:"#000000",CAR:"#101820",NO:"#101820",TB:"#FF7900",
+  ARI:"#FFB612",LAR:"#FFA300",SF:"#B3995D",SEA:"#002244",
+};
 function teamColor(abbr = "") {
-  const palette = [
-    "#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
-    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF",
-    "#FF6B35","#B4A0E5",
-  ];
+  if (NFL_PRIMARY[abbr]) return NFL_PRIMARY[abbr];
+  const palette = ["#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
+    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF","#FF6B35","#B4A0E5"];
   let hash = 0;
   for (let i = 0; i < abbr.length; i++)
     hash = abbr.charCodeAt(i) + ((hash << 5) - hash);
   return palette[Math.abs(hash) % palette.length];
+}
+function teamAccent(abbr = "") {
+  return NFL_ACCENT[abbr] || teamColor(abbr);
 }
 
 function TeamCircle({ abbr, size = 44, isUser = false }) {
@@ -1015,6 +1037,350 @@ function WildCardRaceCard({ league, userTeam, onTeamSelect }) {
   );
 }
 
+// ── Power Rankings Helper ──────────────────────────────────────────────────────
+function getPowerRank(league) {
+  if (!league?.teams || !league?.userTeamId) return null;
+  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  if (!userTeam) return null;
+  const sorted = [...league.teams].sort((a, b) => {
+    // Sort by win% first, then team OVR as tiebreaker
+    const ga = a.wins + a.losses + (a.ties ?? 0);
+    const gb = b.wins + b.losses + (b.ties ?? 0);
+    const pa = ga > 0 ? (a.wins + (a.ties ?? 0) * 0.5) / ga : 0.5;
+    const pb = gb > 0 ? (b.wins + (b.ties ?? 0) * 0.5) / gb : 0.5;
+    if (Math.abs(pb - pa) > 0.01) return pb - pa;
+    return (b.ovr ?? 70) - (a.ovr ?? 70);
+  });
+  return sorted.findIndex(t => t.id === league.userTeamId) + 1;
+}
+
+// ── New Save Hero (shown on Week 1 before any games) ──────────────────────────
+function NewSaveHero({ userTeam, league, onAdvanceWeek, isBusy }) {
+  if (!userTeam) return null;
+  const color = teamColor(userTeam.abbr);
+  const accent = teamAccent(userTeam.abbr);
+  const roster = userTeam.roster ?? [];
+  const powerRank = getPowerRank(league);
+
+  // Find franchise cornerstones: top players by OVR across key positions
+  const keyPositions = ["QB","WR","RB","TE","OL","DL","LB","CB","S","EDGE","DE","DT"];
+  const cornerstones = [...roster]
+    .filter(p => keyPositions.includes(p.pos ?? ""))
+    .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0))
+    .slice(0, 3);
+
+  // Position group ratings
+  const groupOvr = (positions) => {
+    const g = roster.filter(p => positions.includes(p.pos ?? ""));
+    if (!g.length) return 0;
+    const sorted = [...g].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+    const top2avg = sorted.slice(0, 2).reduce((s, p) => s + (p.ovr ?? 0), 0) / Math.min(2, sorted.length);
+    return Math.round(top2avg);
+  };
+  const offOvr = groupOvr(["QB","WR","RB","TE","OL","OT","OG","C","FB"]);
+  const defOvr = groupOvr(["DL","LB","CB","S","DE","DT","EDGE","MLB","OLB","ILB","SS","FS"]);
+
+  const ovrLabel = (v) => v >= 85 ? "ELITE" : v >= 78 ? "STRONG" : v >= 70 ? "SOLID" : v >= 63 ? "AVERAGE" : "NEEDS WORK";
+  const ovrLabelColor = (v) => v >= 85 ? "#34C759" : v >= 78 ? "#30D158" : v >= 70 ? "#FF9F0A" : v >= 63 ? "#FF9F0A" : "#FF453A";
+
+  const capRoom = userTeam.capRoom ?? (userTeam.capTotal ?? 301.2) - (userTeam.capUsed ?? 0);
+  const year = league?.year ?? 2025;
+
+  return (
+    <div style={{
+      background: `linear-gradient(135deg, ${color}1a 0%, transparent 50%), var(--surface)`,
+      border: `1.5px solid ${color}55`,
+      borderRadius: "var(--radius-xl)",
+      padding: "var(--space-5)",
+      marginBottom: "var(--space-4)",
+      boxShadow: `0 8px 40px ${color}1a`,
+      position: "relative",
+      overflow: "hidden",
+    }}>
+      {/* Background watermark */}
+      <div style={{
+        position: "absolute", top: -20, right: -20,
+        fontSize: "9rem", fontWeight: 900, opacity: 0.04,
+        color, lineHeight: 1, pointerEvents: "none", userSelect: "none",
+      }}>
+        {userTeam.abbr}
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
+        <div>
+          <div style={{ fontSize: "0.65rem", fontWeight: 800, color, textTransform: "uppercase", letterSpacing: "2px", marginBottom: 6 }}>
+            {year} Season Preview · GM Mode
+          </div>
+          <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>
+            {userTeam.name}
+          </div>
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: 4 }}>
+            {typeof userTeam.conf === "number" ? ["AFC","NFC"][userTeam.conf] : userTeam.conf}
+            {" "}
+            {typeof userTeam.div === "number" ? ["East","North","South","West"][userTeam.div] : userTeam.div}
+          </div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          {powerRank && (
+            <div style={{
+              background: powerRank <= 8 ? "#FFD60A18" : powerRank <= 16 ? `${color}15` : "var(--surface-strong)",
+              border: `1px solid ${powerRank <= 8 ? "#FFD60A44" : `${color}33`}`,
+              borderRadius: "var(--radius-lg)",
+              padding: "var(--space-2) var(--space-3)",
+              display: "inline-block",
+            }}>
+              <div style={{ fontSize: "0.58rem", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Power Rank</div>
+              <div style={{ fontSize: "1.6rem", fontWeight: 900, color: powerRank <= 8 ? "#FFD60A" : color, lineHeight: 1.1, marginTop: 2 }}>
+                #{powerRank}
+              </div>
+              <div style={{ fontSize: "0.58rem", color: "var(--text-subtle)" }}>of 32 teams</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Team Strength Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
+        {[
+          { label: "Overall", value: userTeam.ovr ?? 75, color: "#0A84FF" },
+          { label: "Offense", value: offOvr, color: "#FF9F0A" },
+          { label: "Defense", value: defOvr, color: "#FF453A" },
+        ].map(({ label, value, color: c }) => (
+          <div key={label} style={{
+            background: `${c}10`,
+            border: `1px solid ${c}28`,
+            borderRadius: "var(--radius-md)",
+            padding: "var(--space-3)",
+            textAlign: "center",
+          }}>
+            <div style={{ fontSize: "0.58rem", color: "var(--text-subtle)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.5px" }}>{label}</div>
+            <div style={{ fontSize: "1.5rem", fontWeight: 900, color: c, lineHeight: 1.15, marginTop: 2 }}>{value}</div>
+            <div style={{ fontSize: "0.55rem", fontWeight: 800, color: ovrLabelColor(value), marginTop: 2 }}>{ovrLabel(value)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Franchise Cornerstones */}
+      {cornerstones.length > 0 && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <div style={{ fontSize: "0.62rem", fontWeight: 800, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "var(--space-2)" }}>
+            Franchise Cornerstones
+          </div>
+          <div style={{ display: "flex", gap: "var(--space-2)" }}>
+            {cornerstones.map((p, i) => {
+              const ovrColor = p.ovr >= 85 ? "#34C759" : p.ovr >= 75 ? "#FF9F0A" : "#FF453A";
+              const posColor = teamColor(userTeam.abbr);
+              return (
+                <div key={p.id ?? i} style={{
+                  flex: 1,
+                  background: i === 0 ? `${color}15` : "var(--surface-strong)",
+                  border: `1px solid ${i === 0 ? `${color}44` : "var(--hairline)"}`,
+                  borderRadius: "var(--radius-md)",
+                  padding: "var(--space-3)",
+                  position: "relative",
+                  overflow: "hidden",
+                }}>
+                  {i === 0 && (
+                    <div style={{
+                      position: "absolute", top: 4, right: 6,
+                      fontSize: "0.5rem", fontWeight: 900, color,
+                      textTransform: "uppercase", letterSpacing: "0.5px",
+                    }}>STAR</div>
+                  )}
+                  <div style={{
+                    display: "inline-block", padding: "1px 6px",
+                    background: `${posColor}22`,
+                    color: posColor, fontSize: "0.58rem", fontWeight: 800,
+                    borderRadius: "var(--radius-pill)", marginBottom: 4,
+                  }}>
+                    {p.pos}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--text)", lineHeight: 1.2 }}>
+                    {p.firstName ? `${p.firstName[0]}. ${p.lastName}` : p.name ?? "Unknown"}
+                  </div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 900, color: ovrColor, marginTop: 2 }}>{p.ovr}</div>
+                  <div style={{ fontSize: "0.55rem", color: "var(--text-subtle)", marginTop: 1 }}>
+                    Age {p.age} · Yr {p.yearsRemaining ?? "?"}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Key Facts Row */}
+      <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap", paddingTop: "var(--space-3)", borderTop: "1px solid var(--hairline)" }}>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          💰 <span style={{ fontWeight: 700, color: capRoom > 20 ? "var(--success)" : capRoom > 5 ? "var(--warning)" : "var(--danger)" }}>${capRoom.toFixed(0)}M</span> cap space
+        </div>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          👥 <span style={{ fontWeight: 700, color: "var(--text)" }}>{roster.length}</span> players on roster
+        </div>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          📅 <span style={{ fontWeight: 700, color: "var(--text)" }}>17 game</span> regular season
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Franchise Cornerstones Card (mid-season version) ──────────────────────────
+function FranchiseCornerstonesCard({ userTeam, onPlayerSelect }) {
+  if (!userTeam?.roster?.length) return null;
+  const roster = userTeam.roster;
+  const gamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0);
+  // Only show this card mid-season (after some games played)
+  if (gamesPlayed === 0) return null;
+
+  const keyPos = ["QB","WR","RB","TE","OL","DL","LB","CB","S","EDGE","DE","DT","OT","OG"];
+  const top5 = [...roster]
+    .filter(p => keyPos.includes(p.pos ?? ""))
+    .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0))
+    .slice(0, 5);
+
+  const color = teamColor(userTeam.abbr);
+
+  return (
+    <SectionCard title="Franchise Cornerstones" icon="🌟" accent={color}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+        {top5.map((p, i) => {
+          const ovrColor = p.ovr >= 85 ? "#34C759" : p.ovr >= 78 ? "#FF9F0A" : "#64D2FF";
+          const isInjured = p.injury && (p.injury.weeksLeft ?? 0) > 0;
+          return (
+            <div
+              key={p.id ?? i}
+              onClick={() => onPlayerSelect?.(p.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: "var(--space-3)",
+                padding: "var(--space-2) var(--space-3)",
+                background: i === 0 ? `${color}12` : "var(--surface)",
+                border: `1px solid ${i === 0 ? `${color}40` : "var(--hairline)"}`,
+                borderRadius: "var(--radius-sm)",
+                cursor: onPlayerSelect ? "pointer" : "default",
+              }}
+            >
+              <span style={{ width: 18, fontWeight: 800, fontSize: "0.65rem", color: i === 0 ? "#FFD60A" : "var(--text-subtle)", textAlign: "center" }}>
+                {i === 0 ? "★" : `${i + 1}`}
+              </span>
+              <div style={{
+                padding: "2px 7px",
+                background: `${color}20`, color,
+                fontSize: "0.6rem", fontWeight: 800,
+                borderRadius: "var(--radius-pill)", flexShrink: 0,
+              }}>
+                {p.pos}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)" }}>
+                  {p.firstName ? `${p.firstName[0]}. ${p.lastName}` : p.name ?? "Unknown"}
+                  {isInjured && <span style={{ marginLeft: 6, fontSize: "0.6rem", color: "var(--danger)" }}>🏥 OUT</span>}
+                </div>
+                <div style={{ fontSize: "0.62rem", color: "var(--text-subtle)" }}>
+                  Age {p.age} · {p.yearsRemaining ?? "?"} yr left
+                </div>
+              </div>
+              <div style={{ fontSize: "1rem", fontWeight: 900, color: ovrColor }}>{p.ovr}</div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+// ── Power Rankings Card ───────────────────────────────────────────────────────
+function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
+  if (!league?.teams || !userTeam) return null;
+
+  const sorted = useMemo(() => [...league.teams].sort((a, b) => {
+    const ga = a.wins + a.losses + (a.ties ?? 0);
+    const gb = b.wins + b.losses + (b.ties ?? 0);
+    const pa = ga > 0 ? (a.wins + (a.ties ?? 0) * 0.5) / ga : 0.5;
+    const pb = gb > 0 ? (b.wins + (b.ties ?? 0) * 0.5) / gb : 0.5;
+    if (Math.abs(pb - pa) > 0.005) return pb - pa;
+    return (b.ovr ?? 70) - (a.ovr ?? 70);
+  }), [league.teams]);
+
+  const userRank = sorted.findIndex(t => t.id === userTeam.id) + 1;
+  const gamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0);
+
+  // Show user's rank + top 5 + surrounding teams if user is outside top 5
+  const showTeams = useMemo(() => {
+    const top5 = sorted.slice(0, 5);
+    if (userRank <= 5) return top5;
+    const userRow = sorted[userRank - 1];
+    const above = sorted[userRank - 2];
+    const below = sorted[userRank];
+    const extra = [above, userRow, below].filter(Boolean);
+    return [...top5, { _divider: true }, ...extra];
+  }, [sorted, userRank]);
+
+  const rankColor = (rank) => rank === 1 ? "#FFD60A" : rank <= 4 ? "#34C759" : rank <= 10 ? "#0A84FF" : rank <= 20 ? "#FF9F0A" : "#FF453A";
+
+  return (
+    <SectionCard title="Power Rankings" icon="📊" accent={rankColor(userRank)}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          You are ranked <strong style={{ color: rankColor(userRank) }}>#{userRank}</strong> of 32 teams
+          {gamesPlayed === 0 && " (pre-season)"}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+        {showTeams.map((team, i) => {
+          if (team._divider) return (
+            <div key="div" style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 0" }}>
+              <div style={{ flex: 1, height: 1, background: "var(--hairline)", borderStyle: "dashed" }} />
+              <span style={{ fontSize: "0.6rem", color: "var(--text-subtle)" }}>···</span>
+              <div style={{ flex: 1, height: 1, background: "var(--hairline)" }} />
+            </div>
+          );
+          const rank = sorted.findIndex(t => t.id === team.id) + 1;
+          const isUser = team.id === userTeam.id;
+          const tc = teamColor(team.abbr);
+          const gp = team.wins + team.losses + (team.ties ?? 0);
+          return (
+            <div
+              key={team.id}
+              onClick={() => onTeamSelect?.(team.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: "var(--space-2)",
+                padding: "5px var(--space-3)",
+                background: isUser ? "var(--accent-muted)" : "transparent",
+                border: isUser ? "1px solid var(--accent)" : "1px solid transparent",
+                borderRadius: "var(--radius-sm)",
+                cursor: "pointer",
+              }}
+            >
+              <span style={{ width: 20, fontWeight: 900, fontSize: "0.65rem", color: rankColor(rank), textAlign: "center", flexShrink: 0 }}>
+                {rank}
+              </span>
+              <div style={{
+                width: 22, height: 22, borderRadius: "50%",
+                background: `${tc}22`, border: `2px solid ${tc}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "0.45rem", fontWeight: 900, color: tc, flexShrink: 0,
+              }}>
+                {team.abbr?.slice(0,3)}
+              </div>
+              <span style={{ flex: 1, fontSize: "var(--text-xs)", fontWeight: isUser ? 700 : 500, color: isUser ? "var(--accent)" : "var(--text)" }}>
+                {team.name ?? team.abbr}
+              </span>
+              <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
+                {team.wins}-{team.losses}{(team.ties ?? 0) > 0 ? `-${team.ties}` : ""}
+              </span>
+              <span style={{ fontSize: "0.62rem", fontWeight: 700, color: tc, width: 24, textAlign: "right" }}>
+                {team.ovr ?? "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
 // ── Main Export ────────────────────────────────────────────────────────────────
 
 export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, onTabChange, onAdvanceWeek, isBusy }) {
@@ -1077,69 +1443,90 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
     offseason: "Offseason",
   }[phase] ?? phase ?? "Season";
 
+  const gamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0) + (userTeam.ties ?? 0);
+  const isNewSave = gamesPlayed === 0 && (phase === "preseason" || phase === "regular");
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
 
-      {/* Phase banner */}
-      <div style={{
-        padding: "var(--space-2) var(--space-4)",
-        background: phase === "playoffs"
-          ? "linear-gradient(90deg, rgba(255,215,0,0.12), transparent)"
-          : phase === "draft"
-          ? "rgba(10,132,255,0.08)"
-          : "var(--surface)",
-        border: `1px solid ${phase === "playoffs" ? "rgba(255,215,0,0.25)" : "var(--hairline)"}`,
-        borderRadius: "var(--radius-md)",
-        display: "flex", alignItems: "center", gap: "var(--space-3)",
-      }}>
-        <span style={{ fontSize: "0.9rem" }}>
-          {phase === "playoffs" ? "🏆" : phase === "draft" ? "🎓" : phase === "free_agency" ? "✍️" : "🏈"}
-        </span>
-        <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)" }}>
-          {phaseLabel}
-        </span>
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-          {phase === "regular" && league?.week ? `Week ${league.week}` : ""}
-          {phase === "playoffs" && league?.week ? ` · Round ${league.week - 18}` : ""}
-        </span>
-        {phase === "playoffs" && (
-          <Button
-            variant="outline"
-            onClick={() => onTabChange?.("Postseason")}
-            style={{
-              marginLeft: "auto", padding: "4px 12px",
-              background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.3)",
-              borderRadius: "var(--radius-pill)", color: "#FFD700",
-              fontSize: "var(--text-xs)", fontWeight: 700,
-            }}
-          >
-            View Bracket →
-          </Button>
-        )}
-        {phase === "draft" && (
-          <Button
-            variant="outline"
-            onClick={() => onTabChange?.("Draft")}
-            style={{
-              marginLeft: "auto", padding: "4px 12px",
-              background: "var(--accent-muted)", border: "1px solid var(--accent)",
-              borderRadius: "var(--radius-pill)", color: "var(--accent)",
-              fontSize: "var(--text-xs)", fontWeight: 700,
-            }}
-          >
-            Open Draft Board →
-          </Button>
-        )}
-      </div>
+      {/* ── NEW SAVE: Full welcome hero replaces phase banner for first load ── */}
+      {isNewSave ? (
+        <NewSaveHero userTeam={userTeam} league={league} onAdvanceWeek={onAdvanceWeek} isBusy={isBusy} />
+      ) : (
+        /* Phase banner for mid-season */
+        <div style={{
+          padding: "var(--space-2) var(--space-4)",
+          background: phase === "playoffs"
+            ? "linear-gradient(90deg, rgba(255,215,0,0.12), transparent)"
+            : phase === "draft"
+            ? "rgba(10,132,255,0.08)"
+            : "var(--surface)",
+          border: `1px solid ${phase === "playoffs" ? "rgba(255,215,0,0.25)" : "var(--hairline)"}`,
+          borderRadius: "var(--radius-md)",
+          display: "flex", alignItems: "center", gap: "var(--space-3)",
+        }}>
+          <span style={{ fontSize: "0.9rem" }}>
+            {phase === "playoffs" ? "🏆" : phase === "draft" ? "🎓" : phase === "free_agency" ? "✍️" : "🏈"}
+          </span>
+          <span style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)" }}>
+            {phaseLabel}
+          </span>
+          <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+            {phase === "regular" && league?.week ? `Week ${league.week}` : ""}
+            {phase === "playoffs" && league?.week ? ` · Round ${league.week - 18}` : ""}
+          </span>
+          {phase === "playoffs" && (
+            <Button
+              variant="outline"
+              onClick={() => onTabChange?.("Postseason")}
+              style={{
+                marginLeft: "auto", padding: "4px 12px",
+                background: "rgba(255,215,0,0.15)", border: "1px solid rgba(255,215,0,0.3)",
+                borderRadius: "var(--radius-pill)", color: "#FFD700",
+                fontSize: "var(--text-xs)", fontWeight: 700,
+              }}
+            >
+              View Bracket →
+            </Button>
+          )}
+          {phase === "draft" && (
+            <Button
+              variant="outline"
+              onClick={() => onTabChange?.("Draft")}
+              style={{
+                marginLeft: "auto", padding: "4px 12px",
+                background: "var(--accent-muted)", border: "1px solid var(--accent)",
+                borderRadius: "var(--radius-pill)", color: "var(--accent)",
+                fontSize: "var(--text-xs)", fontWeight: 700,
+              }}
+            >
+              Open Draft Board →
+            </Button>
+          )}
+        </div>
+      )}
 
-      {/* Large Advance Week CTA */}
-      <AdvanceWeekCTA phase={phase} week={league?.week} onAdvanceWeek={onAdvanceWeek} isBusy={isBusy} />
+      {/* Advance Week CTA — only show if NOT new-save (new-save shows its own CTA inline) */}
+      {!isNewSave && (
+        <AdvanceWeekCTA phase={phase} week={league?.week} onAdvanceWeek={onAdvanceWeek} isBusy={isBusy} />
+      )}
+
+      {/* ── NEW SAVE: Start Season CTA shown prominently below hero ── */}
+      {isNewSave && (
+        <AdvanceWeekCTA phase={phase} week={league?.week} onAdvanceWeek={onAdvanceWeek} isBusy={isBusy} />
+      )}
 
       {/* Main grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--space-4)" }}>
 
-        {/* Hero: Team Identity with streak */}
-        <TeamSnapshotCard userTeam={userTeam} league={league} streak={streak} />
+        {/* Hero: Team Identity with streak (shown after games played) */}
+        {!isNewSave && <TeamSnapshotCard userTeam={userTeam} league={league} streak={streak} />}
+
+        {/* Power Rankings — show for new saves and mid-season */}
+        <PowerRankingsCard league={league} userTeam={userTeam} onTeamSelect={onTeamSelect} />
+
+        {/* Franchise cornerstones — mid-season star list */}
+        <FranchiseCornerstonesCard userTeam={userTeam} onPlayerSelect={onPlayerSelect} />
 
         {/* Owner mood + season goals side by side */}
         <OwnerMoodCard league={league} />
@@ -1147,14 +1534,14 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
 
         {/* Game + quick stats */}
         <NextGameCard nextGame={nextGame} league={league} />
-        <QuickStatsCard userTeam={userTeam} league={league} />
+        {!isNewSave && <QuickStatsCard userTeam={userTeam} league={league} />}
 
         {/* Roster breakdown — full width on mobile, half on desktop */}
         <TeamStrengthBreakdown userTeam={userTeam} />
 
         {/* Approval + Form */}
-        <CoachApprovalCard league={league} />
-        <RecentFormCard form={recentForm} />
+        {!isNewSave && <CoachApprovalCard league={league} />}
+        {!isNewSave && <RecentFormCard form={recentForm} />}
 
         {/* Injury report */}
         <InjuryReportCard injuries={injuries} onPlayerSelect={onPlayerSelect} />
