@@ -213,6 +213,94 @@ function getInjuries(league) {
   return userTeam.roster.filter(p => p.injury || p.injuredWeeks > 0).slice(0, 4);
 }
 
+// Get last N game results for any team from schedule
+function getTeamRecentForm(schedule, teamId, n = 3) {
+  if (!schedule?.weeks) return [];
+  const results = [];
+  for (const week of [...schedule.weeks].reverse()) {
+    if (results.length >= n) break;
+    for (const game of week.games ?? []) {
+      if (!game.played) continue;
+      const homeId = typeof game.home === "object" ? game.home.id : Number(game.home);
+      const awayId = typeof game.away === "object" ? game.away.id : Number(game.away);
+      if (homeId !== teamId && awayId !== teamId) continue;
+      const isHome = homeId === teamId;
+      const ts = isHome ? game.homeScore : game.awayScore;
+      const os = isHome ? game.awayScore : game.homeScore;
+      results.push(ts > os ? "W" : ts < os ? "L" : "T");
+    }
+  }
+  return results.reverse();
+}
+
+// Get next N unplayed games for the user team
+function getUpcomingGames(league, n = 3) {
+  if (!league?.schedule?.weeks) return [];
+  const userId = league.userTeamId;
+  const teamById = Object.fromEntries((league.teams || []).map(t => [t.id, t]));
+  const games = [];
+  for (const week of league.schedule.weeks) {
+    if (games.length >= n) break;
+    for (const game of week.games ?? []) {
+      if (game.played) continue;
+      const homeId = typeof game.home === "object" ? game.home.id : Number(game.home);
+      const awayId = typeof game.away === "object" ? game.away.id : Number(game.away);
+      if (homeId !== userId && awayId !== userId) continue;
+      const isHome = homeId === userId;
+      const oppId = isHome ? awayId : homeId;
+      games.push({ week: week.week, isHome, opp: teamById[oppId] });
+    }
+  }
+  return games;
+}
+
+// Get current win/loss streak for a team
+function getTeamStreak(schedule, teamId) {
+  if (!schedule?.weeks) return null;
+  let streakType = null;
+  let count = 0;
+  for (const week of [...schedule.weeks].reverse()) {
+    for (const game of [...(week.games ?? [])].reverse()) {
+      if (!game.played) continue;
+      const homeId = typeof game.home === "object" ? game.home.id : Number(game.home);
+      const awayId = typeof game.away === "object" ? game.away.id : Number(game.away);
+      if (homeId !== teamId && awayId !== teamId) continue;
+      const isHome = homeId === teamId;
+      const ts = isHome ? game.homeScore : game.awayScore;
+      const os = isHome ? game.awayScore : game.homeScore;
+      const result = ts > os ? "W" : ts < os ? "L" : "T";
+      if (streakType === null) { streakType = result; count = 1; }
+      else if (result === streakType) count++;
+      else return { type: streakType, count };
+    }
+  }
+  return streakType ? { type: streakType, count } : null;
+}
+
+// Compute user team's conference playoff seeding
+function getPlayoffSeed(league) {
+  if (!league?.teams || !league?.userTeamId) return null;
+  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  if (!userTeam) return null;
+  const confIdx = typeof userTeam.conf === "number" ? userTeam.conf : userTeam.conf === "AFC" ? 0 : 1;
+  const confTeams = league.teams
+    .filter(t => {
+      const tc = typeof t.conf === "number" ? t.conf : t.conf === "AFC" ? 0 : 1;
+      return tc === confIdx;
+    })
+    .sort((a, b) => {
+      const ga = a.wins + a.losses + (a.ties ?? 0);
+      const gb = b.wins + b.losses + (b.ties ?? 0);
+      if (ga === 0 && gb === 0) return (b.ovr ?? 0) - (a.ovr ?? 0);
+      const pa = (a.wins + (a.ties ?? 0) * 0.5) / Math.max(1, ga);
+      const pb = (b.wins + (b.ties ?? 0) * 0.5) / Math.max(1, gb);
+      return pb - pa;
+    });
+  const seed = confTeams.findIndex(t => t.id === userTeam.id) + 1;
+  const confName = ["AFC", "NFC"][confIdx] ?? "?";
+  return { seed, confName, inPlayoffs: seed <= 7, total: confTeams.length };
+}
+
 // ── Coach Approval Snippet ─────────────────────────────────────────────────────
 
 function approvalColor(val) {
@@ -426,25 +514,61 @@ function CoachApprovalSnippet({ league }) {
   );
 }
 
+// Descriptive effects shown to the player for each decision
+const PRACTICE_FOCUS_META = {
+  balanced:          { label: "Balanced Week",         effect: "No bonuses — rest and general prep.",               icon: "⚖️" },
+  red_zone_offense:  { label: "Red Zone Offense",      effect: "+TDs near goal line; –long-drive efficiency.",      icon: "🎯" },
+  run_defense:       { label: "Stuff the Run",         effect: "+run stop rate; –pass rush pressure.",              icon: "🛡️" },
+  pass_protection:   { label: "Pass Protection",       effect: "+OL blocking; –run game burst.",                    icon: "🧱" },
+  third_down:        { label: "3rd Down Efficiency",   effect: "+conversion rate; –explosive play chance.",         icon: "📐" },
+  two_minute_drill:  { label: "Two-Minute Drill",      effect: "+late-game scoring; –first-half ball control.",     icon: "⏱️" },
+  secondary_coverage:{ label: "Secondary Coverage",   effect: "+coverage depth; –blitz frequency.",                icon: "🔒" },
+  special_teams:     { label: "Special Teams",         effect: "+field position; –offensive reps.",                 icon: "🦵" },
+};
+
+const LOCKER_ROOM_META = {
+  calm:              { label: "Stay Calm",             effect: "Consistent morale. No downside.",                   icon: "😌" },
+  call_out_offense:  { label: "Hold Offense Accountable", effect: "+pressure on starters; –risk of friction.",     icon: "📢" },
+  motivate_veterans: { label: "Rally the Veterans",   effect: "+morale for players 28+; –rookie confidence.",      icon: "💪" },
+  back_rookie:       { label: "Back the Rookie",      effect: "+youth confidence; –veteran buy-in.",               icon: "🌱" },
+  team_film_session: { label: "Extra Film Work",      effect: "+opponent awareness; –practice intensity.",         icon: "🎬" },
+  closed_practices:  { label: "Closed Practices",     effect: "+game-plan secrecy; –media coverage.",              icon: "🚫" },
+};
+
 function GMDecisionsCard({ league, actions }) {
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   const existing = userTeam?.strategies?.gmDecisions || {};
   const [practiceFocus, setPracticeFocus] = useState(existing.practiceFocus || "balanced");
-  const [lockerRoom, setLockerRoom] = useState(existing.lockerRoom || "calm");
+  const [lockerRoom, setLockerRoom]       = useState(existing.lockerRoom    || "calm");
+  const [gameIntensity, setGameIntensity] = useState(existing.gameIntensity || "standard");
 
   const update = (next) => {
     if (!actions?.send) return;
     actions.send("UPDATE_STRATEGY", {
       gmDecisions: {
-        practiceFocus: next.practiceFocus ?? practiceFocus,
-        lockerRoom:    next.lockerRoom    ?? lockerRoom,
+        practiceFocus:  next.practiceFocus  ?? practiceFocus,
+        lockerRoom:     next.lockerRoom     ?? lockerRoom,
+        gameIntensity:  next.gameIntensity  ?? gameIntensity,
       },
     });
   };
 
+  const practiceMeta = PRACTICE_FOCUS_META[practiceFocus] ?? PRACTICE_FOCUS_META.balanced;
+  const lockerMeta   = LOCKER_ROOM_META[lockerRoom]       ?? LOCKER_ROOM_META.calm;
+
+  const selectStyle = {
+    padding: "6px 8px",
+    borderRadius: "var(--radius-md)",
+    border: "1px solid var(--hairline)",
+    background: "var(--bg)",
+    color: "var(--text)",
+    fontSize: "0.8rem",
+    width: "100%",
+  };
+
   return (
     <div style={{ marginBottom: 16 }}>
-      <SectionHeader title="GM Decisions This Week" emoji="🧠" />
+      <SectionHeader title="Weekly Decisions" emoji="🧠" />
       <div style={{
         background: "var(--surface)",
         border: "1.5px solid var(--hairline)",
@@ -452,59 +576,60 @@ function GMDecisionsCard({ league, actions }) {
         padding: "12px 14px",
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 12,
       }}>
-        <div style={{ fontSize: "0.72rem", color: "var(--text-subtle)", marginBottom: 2 }}>
-          Small focus tweaks with tiny game-day boosts and risks.
+        <div style={{ fontSize: "0.7rem", color: "var(--text-subtle)", lineHeight: 1.4 }}>
+          These decisions carry real trade-offs. Choose based on your opponent and roster needs.
         </div>
-        <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontWeight: 700 }}>Practice focus</span>
-          <select
-            value={practiceFocus}
-            onChange={(e) => {
-              const val = e.target.value;
-              setPracticeFocus(val);
-              update({ practiceFocus: val });
-            }}
-            style={{
-              padding: "6px 8px",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--hairline)",
-              background: "var(--bg)",
-              color: "var(--text)",
-              fontSize: "0.8rem",
-            }}
-          >
-            <option value="balanced">Balanced week</option>
-            <option value="red_zone_offense">Red zone offense</option>
-            <option value="run_defense">Run defense</option>
-            <option value="pass_protection">Pass protection</option>
-          </select>
-        </label>
-        <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-          <span style={{ fontWeight: 700 }}>Locker room tone</span>
-          <select
-            value={lockerRoom}
-            onChange={(e) => {
-              const val = e.target.value;
-              setLockerRoom(val);
-              update({ lockerRoom: val });
-            }}
-            style={{
-              padding: "6px 8px",
-              borderRadius: "var(--radius-md)",
-              border: "1px solid var(--hairline)",
-              background: "var(--bg)",
-              color: "var(--text)",
-              fontSize: "0.8rem",
-            }}
-          >
-            <option value="calm">Stay calm</option>
-            <option value="call_out_offense">Call out the offense</option>
-            <option value="motivate_veterans">Motivate veterans</option>
-            <option value="back_rookie">Back the rookie</option>
-          </select>
-        </label>
+
+        {/* Practice Focus */}
+        <div>
+          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Practice Focus</span>
+            <select value={practiceFocus} onChange={(e) => { setPracticeFocus(e.target.value); update({ practiceFocus: e.target.value }); }} style={selectStyle}>
+              {Object.entries(PRACTICE_FOCUS_META).map(([k, v]) => (
+                <option key={k} value={k}>{v.icon} {v.label}</option>
+              ))}
+            </select>
+          </label>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
+            {practiceMeta.effect}
+          </div>
+        </div>
+
+        {/* Locker Room Tone */}
+        <div>
+          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Locker Room Tone</span>
+            <select value={lockerRoom} onChange={(e) => { setLockerRoom(e.target.value); update({ lockerRoom: e.target.value }); }} style={selectStyle}>
+              {Object.entries(LOCKER_ROOM_META).map(([k, v]) => (
+                <option key={k} value={k}>{v.icon} {v.label}</option>
+              ))}
+            </select>
+          </label>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
+            {lockerMeta.effect}
+          </div>
+        </div>
+
+        {/* Game Intensity */}
+        <div>
+          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontWeight: 700 }}>Game Intensity</span>
+            <select value={gameIntensity} onChange={(e) => { setGameIntensity(e.target.value); update({ gameIntensity: e.target.value }); }} style={selectStyle}>
+              <option value="conservative">🛡️ Conservative — protect starters, limit injuries</option>
+              <option value="standard">⚖️ Standard — normal game plan</option>
+              <option value="aggressive">⚔️ Aggressive — go for it on 4th, blitz often</option>
+              <option value="all_out">🔥 All-Out — season on the line, no holding back</option>
+            </select>
+          </label>
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
+            {gameIntensity === "conservative" && "Lower injury risk; –small scoring upside."}
+            {gameIntensity === "standard"     && "Balanced risk vs. reward."}
+            {gameIntensity === "aggressive"   && "+scoring upside; higher injury exposure."}
+            {gameIntensity === "all_out"      && "Maximum scoring potential; significant injury risk."}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -653,49 +778,124 @@ function ActionCard({ icon, label, sublabel, color, onClick, badge, disabled }) 
 
 // ── Next Game Preview ─────────────────────────────────────────────────────────
 
+function MiniFormDots({ form }) {
+  if (!form?.length) return null;
+  return (
+    <div style={{ display: "flex", gap: 3, justifyContent: "center" }}>
+      {form.map((r, i) => (
+        <div key={i} style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: r === "W" ? "#34C759" : r === "L" ? "#FF453A" : "#FF9F0A",
+          flexShrink: 0,
+        }} title={r === "W" ? "Win" : r === "L" ? "Loss" : "Tie"} />
+      ))}
+    </div>
+  );
+}
+
 function NextGameCard({ nextGame, league, onNavigate }) {
   if (!nextGame) return null;
   const { week, isHome, opp, user } = nextGame;
   const userTeam = user || league.teams?.find(t => t.id === league.userTeamId);
 
+  const userForm = useMemo(() => getTeamRecentForm(league?.schedule, league?.userTeamId, 3), [league?.schedule, league?.userTeamId]);
+  const oppForm  = useMemo(() => getTeamRecentForm(league?.schedule, opp?.id, 3), [league?.schedule, opp?.id]);
+  const oppStreak = useMemo(() => getTeamStreak(league?.schedule, opp?.id), [league?.schedule, opp?.id]);
+
+  // Check if this is a division rival (same conf + div)
+  const isDivRival = useMemo(() => {
+    if (!userTeam || !opp) return false;
+    const uc = typeof userTeam.conf === "number" ? userTeam.conf : userTeam.conf === "AFC" ? 0 : 1;
+    const oc = typeof opp.conf === "number" ? opp.conf : opp.conf === "AFC" ? 0 : 1;
+    const ud = typeof userTeam.div === "number" ? userTeam.div : { East:0,North:1,South:2,West:3 }[userTeam.div] ?? -1;
+    const od = typeof opp.div === "number" ? opp.div : { East:0,North:1,South:2,West:3 }[opp.div] ?? -2;
+    return uc === oc && ud === od;
+  }, [userTeam, opp]);
+
+  // OVR matchup edge
+  const userOvr = userTeam?.ovr ?? 75;
+  const oppOvr  = opp?.ovr ?? 75;
+  const ovrDiff = userOvr - oppOvr;
+  const matchupLabel = ovrDiff >= 5 ? "Favorable" : ovrDiff <= -5 ? "Tough" : "Even";
+  const matchupColor = ovrDiff >= 5 ? "#34C759" : ovrDiff <= -5 ? "#FF453A" : "#FF9F0A";
+
+  const isPlayoffWeek = week >= 19;
+  const weekLabel = isPlayoffWeek
+    ? (["Wild Card","Divisional","Conf. Championship","Super Bowl"][week - 19] ?? `Playoffs`)
+    : `Week ${week ?? "?"}`;
+
   return (
     <div style={{
-      background: "var(--surface)",
-      border: "1.5px solid var(--hairline)",
+      background: isPlayoffWeek ? "linear-gradient(135deg, rgba(255,214,10,0.06) 0%, var(--surface) 60%)" : "var(--surface)",
+      border: isPlayoffWeek ? "1.5px solid #FFD60A55" : "1.5px solid var(--hairline)",
       borderRadius: "var(--radius-lg)",
       padding: "16px",
       marginBottom: 16,
     }}>
-      <SectionHeader title={`Week ${week ?? "?"} — Next Game`} emoji="🏈" />
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <SectionHeader title={`${weekLabel} — Next Game`} emoji={isPlayoffWeek ? "🏆" : "🏈"} />
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {isDivRival && (
+            <span style={{
+              fontSize: "0.6rem", fontWeight: 800, color: "#FF453A",
+              background: "#FF453A18", padding: "2px 6px",
+              borderRadius: 4, letterSpacing: "0.5px",
+            }}>DIV RIVAL</span>
+          )}
+          <span style={{
+            fontSize: "0.6rem", fontWeight: 800, color: matchupColor,
+            background: `${matchupColor}18`, padding: "2px 6px",
+            borderRadius: 4,
+          }}>{matchupLabel}</span>
+        </div>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         {/* User team */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
           <TeamCircle abbr={userTeam?.abbr ?? "YOU"} size={52} />
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text)" }}>{userTeam?.abbr ?? "Your Team"}</div>
-            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{winPct(userTeam?.wins??0,userTeam?.losses??0,userTeam?.ties??0)} • {userTeam?.wins??0}-{userTeam?.losses??0}</div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{userTeam?.wins??0}-{userTeam?.losses??0} · OVR {userOvr}</div>
           </div>
-          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#34C759", background: "#34C75920", padding: "2px 6px", borderRadius: 4 }}>
+          <MiniFormDots form={userForm} />
+          <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#34C759", background: "#34C75920", padding: "2px 6px", borderRadius: 4 }}>
             {isHome ? "HOME" : "AWAY"}
           </span>
         </div>
 
         {/* VS */}
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
           <div style={{ fontSize: "0.65rem", fontWeight: 800, color: "var(--text-subtle)", letterSpacing: "1px" }}>VS</div>
+          {ovrDiff !== 0 && (
+            <div style={{ fontSize: "0.58rem", color: matchupColor, fontWeight: 700 }}>
+              {ovrDiff > 0 ? `+${ovrDiff}` : ovrDiff}
+            </div>
+          )}
         </div>
 
         {/* Opponent */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 5 }}>
           <TeamCircle abbr={opp?.abbr ?? "OPP"} size={52} />
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: "0.78rem", fontWeight: 800, color: "var(--text)" }}>{opp?.abbr ?? "Opponent"}</div>
-            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{winPct(opp?.wins??0,opp?.losses??0,opp?.ties??0)} • {opp?.wins??0}-{opp?.losses??0}</div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{opp?.wins??0}-{opp?.losses??0} · OVR {oppOvr}</div>
           </div>
-          <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#FF9F0A", background: "#FF9F0A20", padding: "2px 6px", borderRadius: 4 }}>
-            {isHome ? "AWAY" : "HOME"}
-          </span>
+          <MiniFormDots form={oppForm} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+            <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#FF9F0A", background: "#FF9F0A20", padding: "2px 6px", borderRadius: 4 }}>
+              {isHome ? "AWAY" : "HOME"}
+            </span>
+            {oppStreak && (
+              <span style={{
+                fontSize: "0.58rem", color: oppStreak.type === "W" ? "#34C759" : "#FF453A",
+                fontWeight: 700,
+              }}>
+                {oppStreak.count}{oppStreak.type} streak
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -709,7 +909,7 @@ function NextGameCard({ nextGame, league, onNavigate }) {
           cursor: "pointer", letterSpacing: "0.3px",
         }}
       >
-        Game Plan →
+        View Game Plan →
       </Button>
     </div>
   );
@@ -869,6 +1069,193 @@ function SeasonProgressBar({ league }) {
   );
 }
 
+// ── Playoff Picture Snippet ───────────────────────────────────────────────────
+
+function PlayoffPictureSnippet({ league }) {
+  if (league?.phase !== "regular") return null;
+  const seedData = getPlayoffSeed(league);
+  if (!seedData) return null;
+  const { seed, confName, inPlayoffs } = seedData;
+  const weeksLeft = Math.max(0, 18 - (league.week ?? 0));
+
+  let statusText, seedColor, icon;
+  if (seed === 1) {
+    statusText = `#1 seed — ${confName} leader`;
+    seedColor = "#FFD60A"; icon = "🥇";
+  } else if (seed <= 4) {
+    statusText = `#${seed} seed — Div leader`;
+    seedColor = "#34C759"; icon = "🟢";
+  } else if (seed <= 7) {
+    statusText = `#${seed} seed — Wild card`;
+    seedColor = "#0A84FF"; icon = "🔵";
+  } else {
+    const back = seed - 7;
+    statusText = `#${seed} — ${back} game${back !== 1 ? "s" : ""} out of playoffs`;
+    seedColor = "#FF453A"; icon = "🔴";
+  }
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      padding: "8px 14px",
+      background: inPlayoffs ? "#34C75908" : "#FF453A08",
+      border: `1px solid ${inPlayoffs ? "#34C75930" : "#FF453A25"}`,
+      borderRadius: "var(--radius-md)",
+      marginBottom: 12,
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <span style={{ fontSize: "0.9rem" }}>{icon}</span>
+        <div>
+          <div style={{ fontSize: "0.75rem", fontWeight: 800, color: seedColor }}>{statusText}</div>
+          <div style={{ fontSize: "0.62rem", color: "var(--text-subtle)", marginTop: 1 }}>
+            {confName} Playoff Picture
+          </div>
+        </div>
+      </div>
+      <div style={{
+        fontSize: "0.68rem", fontWeight: 700,
+        color: "var(--text-subtle)", textAlign: "right",
+      }}>
+        {weeksLeft > 0 ? `${weeksLeft}w remaining` : "Season complete"}
+      </div>
+    </div>
+  );
+}
+
+// ── Upcoming Schedule ─────────────────────────────────────────────────────────
+
+function UpcomingScheduleCard({ league, onNavigate }) {
+  const upcoming = useMemo(() => getUpcomingGames(league, 4), [league]);
+  // Skip the first (already shown in NextGameCard), show up to 3 more
+  const rest = upcoming.slice(1, 4);
+  if (!rest.length) return null;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="Upcoming Schedule" emoji="📅" />
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {rest.map(({ week, isHome, opp }) => {
+          const isPlayoffRound = week >= 19;
+          const weekLabel = isPlayoffRound
+            ? (["WC","DIV","CCG","SB"][week - 19] ?? `Wk${week}`)
+            : `Wk ${week}`;
+          const oppOvr = opp?.ovr ?? 75;
+          const ovrColor = oppOvr >= 82 ? "#FF453A" : oppOvr >= 75 ? "#FF9F0A" : "#34C759";
+          return (
+            <div key={week} style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "7px 12px",
+              background: "var(--surface)",
+              border: "1px solid var(--hairline)",
+              borderRadius: "var(--radius-md)",
+            }}>
+              <span style={{
+                fontSize: "0.62rem", fontWeight: 800,
+                color: isPlayoffRound ? "#FFD60A" : "var(--text-subtle)",
+                width: 32, flexShrink: 0,
+              }}>{weekLabel}</span>
+              <TeamCircle abbr={opp?.abbr ?? "?"} size={26} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text)" }}>
+                  {isHome ? "vs " : "@ "}{opp?.abbr ?? "?"}
+                </span>
+                <span style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginLeft: 6 }}>
+                  {opp?.wins ?? 0}-{opp?.losses ?? 0}
+                </span>
+              </div>
+              <span style={{
+                fontSize: "0.6rem", fontWeight: 700, color: ovrColor,
+                background: `${ovrColor}15`, padding: "1px 5px", borderRadius: 3,
+              }}>OVR {oppOvr}</span>
+              <span style={{
+                fontSize: "0.6rem", fontWeight: 700, flexShrink: 0,
+                color: isHome ? "#34C759" : "#FF9F0A",
+              }}>{isHome ? "H" : "A"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── League Leaders Snapshot ───────────────────────────────────────────────────
+
+function WeeklyLeagueLeaders({ league, onNavigate }) {
+  const leaders = useMemo(() => {
+    if (!league?.teams?.length) return [];
+    const allPlayers = [];
+    for (const team of league.teams) {
+      for (const p of team.roster ?? []) {
+        allPlayers.push({ ...p, teamAbbr: team.abbr, teamId: team.id });
+      }
+    }
+
+    const getStat = (p, key) =>
+      p.stats?.season?.[key] ?? p.seasonStats?.[key] ?? p.stats?.career?.[key] ?? 0;
+
+    const topBy = (key, posFilter, label, unit = "") => {
+      const eligible = allPlayers.filter(p => {
+        const pos = p.pos ?? p.position ?? "";
+        return posFilter.some(f => pos.toUpperCase().startsWith(f));
+      });
+      const sorted = eligible.filter(p => getStat(p, key) > 0).sort((a, b) => getStat(b, key) - getStat(a, key));
+      if (!sorted.length) return null;
+      const top = sorted[0];
+      const val = getStat(top, key);
+      const name = top.lastName ? `${top.firstName?.[0] ?? ""}. ${top.lastName}` : (top.name ?? "?");
+      return { label, name: name.trim(), val: Math.round(val) + unit, teamAbbr: top.teamAbbr, pos: top.pos ?? top.position ?? "" };
+    };
+
+    return [
+      topBy("passYds",  ["QB"],           "Pass Yds"),
+      topBy("rushYds",  ["RB","QB","FB"], "Rush Yds"),
+      topBy("recYds",   ["WR","TE","RB"], "Rec Yds"),
+      topBy("sacks",    ["DE","DT","LB","OLB","EDGE","DL"], "Sacks"),
+      topBy("passTD",   ["QB"],           "Pass TDs"),
+      topBy("rushTD",   ["RB","QB"],      "Rush TDs"),
+    ].filter(Boolean).slice(0, 6);
+  }, [league?.teams]);
+
+  if (!leaders.length) return null;
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <SectionHeader title="League Leaders" emoji="📊" />
+        {onNavigate && (
+          <button
+            onClick={() => onNavigate?.("Stats")}
+            style={{ background: "none", border: "none", color: "var(--accent)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", padding: 0 }}
+          >
+            Full Stats →
+          </button>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+        {leaders.map(({ label, name, val, teamAbbr, pos }) => (
+          <div key={label} style={{
+            padding: "8px 10px",
+            background: "var(--surface)",
+            border: "1px solid var(--hairline)",
+            borderRadius: "var(--radius-md)",
+          }}>
+            <div style={{ fontSize: "0.58rem", color: "var(--text-subtle)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 2 }}>
+              {label}
+            </div>
+            <div style={{ fontSize: "0.95rem", fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>
+              {val}
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 2 }}>
+              {name} · {teamAbbr}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Recent News ───────────────────────────────────────────────────────────────
 
 function RecentNews({ news = [], onNavigate }) {
@@ -910,6 +1297,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
   const nextGame  = useMemo(() => getNextGame(league),     [league]);
   const injuries  = useMemo(() => getInjuries(league),     [league]);
   const news      = useMemo(() => league?.news ?? [],      [league?.news]);
+  const userStreak = useMemo(() => getTeamStreak(league?.schedule, league?.userTeamId), [league?.schedule, league?.userTeamId]);
 
   const injuryCount   = injuries.length;
   const userTeam      = league?.teams?.find(t => t.id === league.userTeamId);
@@ -990,9 +1378,36 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 0 80px" }}>
 
-      {/* ── Season Progress + Next Game (mobile hero stack) ── */}
+      {/* ── Season Progress ── */}
       <SeasonProgressBar league={league} />
+
+      {/* ── Playoff picture (regular season only) ── */}
+      <PlayoffPictureSnippet league={league} />
+
+      {/* ── Streak Banner ── */}
+      {userStreak && userStreak.count >= 2 && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          padding: "7px 14px",
+          background: userStreak.type === "W" ? "#34C75910" : "#FF453A08",
+          border: `1px solid ${userStreak.type === "W" ? "#34C75930" : "#FF453A25"}`,
+          borderRadius: "var(--radius-md)", marginBottom: 12,
+        }}>
+          <span style={{ fontSize: "1rem" }}>{userStreak.type === "W" ? "🔥" : "❄️"}</span>
+          <span style={{ fontSize: "0.78rem", fontWeight: 800, color: userStreak.type === "W" ? "#34C759" : "#FF453A" }}>
+            {userStreak.count}-game {userStreak.type === "W" ? "win" : "losing"} streak
+          </span>
+          {userStreak.type === "W" && userStreak.count >= 4 && (
+            <span style={{ fontSize: "0.62rem", color: "#FF9F0A", fontWeight: 700, marginLeft: "auto" }}>HOT STREAK 🌶️</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Next Game ── */}
       <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />
+
+      {/* ── Upcoming Schedule ── */}
+      <UpcomingScheduleCard league={league} onNavigate={onNavigate} />
 
       {/* ── Approval strip ── */}
       <CoachApprovalSnippet league={league} />
@@ -1036,6 +1451,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
 
       {/* ── Top Performers ── */}
       <TopPerformers league={league} onPlayerSelect={onPlayerSelect} />
+
+      {/* ── League Leaders ── */}
+      <WeeklyLeagueLeaders league={league} onNavigate={onNavigate} />
 
       {/* ── Recent News ── */}
       <RecentNews news={news} onNavigate={onNavigate} />
