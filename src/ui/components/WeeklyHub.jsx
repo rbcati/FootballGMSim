@@ -155,12 +155,21 @@ function AdvanceWeekButton({ league, busy, simulating, onAdvanceWeek }) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// NFL-authentic team colors
+const NFL_PRIMARY_WH = {
+  BUF:"#00338D",MIA:"#008E97",NE:"#C60C30",NYJ:"#18A050",
+  BAL:"#9747FF",CIN:"#FB4F14",CLE:"#FF3C00",PIT:"#FFB612",
+  HOU:"#C41230",IND:"#0055A4",JAX:"#D7A22A",TEN:"#4B92DB",
+  DEN:"#FB4F14",KC:"#E31837",LV:"#A5ACAF",LAC:"#0080C6",
+  DAL:"#6B9EFF",NYG:"#0B62A0",PHI:"#2D9E44",WSH:"#D55050",
+  CHI:"#C83803",DET:"#0076B6",GB:"#FFB612",MIN:"#7B3FB5",
+  ATL:"#A71930",CAR:"#0085CA",NO:"#B5A86C",TB:"#D50A0A",
+  ARI:"#97233F",LAR:"#0047AB",SF:"#AA0000",SEA:"#69BE28",
+};
 function teamColor(abbr = "") {
-  const palette = [
-    "#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
-    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF",
-    "#FF6B35","#B4A0E5",
-  ];
+  if (NFL_PRIMARY_WH[abbr]) return NFL_PRIMARY_WH[abbr];
+  const palette = ["#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
+    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF","#FF6B35","#B4A0E5"];
   let h = 0;
   for (let i = 0; i < abbr.length; i++) h = abbr.charCodeAt(i) + ((h << 5) - h);
   return palette[Math.abs(h) % palette.length];
@@ -535,6 +544,38 @@ const LOCKER_ROOM_META = {
   closed_practices:  { label: "Closed Practices",     effect: "+game-plan secrecy; –media coverage.",              icon: "🚫" },
 };
 
+// Styled toggle button for GM decisions
+function DecisionToggle({ options, value, onChange }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+      {options.map(({ key, icon, label, shortLabel }) => {
+        const active = value === key;
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key)}
+            style={{
+              padding: "5px 10px",
+              borderRadius: "var(--radius-pill)",
+              border: `1.5px solid ${active ? "var(--accent)" : "var(--hairline)"}`,
+              background: active ? "var(--accent-muted)" : "var(--surface)",
+              color: active ? "var(--accent)" : "var(--text-muted)",
+              fontSize: "0.68rem",
+              fontWeight: active ? 800 : 500,
+              cursor: "pointer",
+              transition: "all 0.12s",
+              outline: "none",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {icon} {shortLabel ?? label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function GMDecisionsCard({ league, actions }) {
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   const existing = userTeam?.strategies?.gmDecisions || {};
@@ -556,15 +597,20 @@ function GMDecisionsCard({ league, actions }) {
   const practiceMeta = PRACTICE_FOCUS_META[practiceFocus] ?? PRACTICE_FOCUS_META.balanced;
   const lockerMeta   = LOCKER_ROOM_META[lockerRoom]       ?? LOCKER_ROOM_META.calm;
 
-  const selectStyle = {
-    padding: "6px 8px",
-    borderRadius: "var(--radius-md)",
-    border: "1px solid var(--hairline)",
-    background: "var(--bg)",
-    color: "var(--text)",
-    fontSize: "0.8rem",
-    width: "100%",
-  };
+  const practiceOptions = Object.entries(PRACTICE_FOCUS_META).map(([k, v]) => ({
+    key: k, icon: v.icon, label: v.label,
+    shortLabel: v.label.split(" ").slice(0, 2).join(" "),
+  }));
+  const lockerOptions = Object.entries(LOCKER_ROOM_META).map(([k, v]) => ({
+    key: k, icon: v.icon, label: v.label,
+    shortLabel: v.label.split(" ").slice(0, 2).join(" "),
+  }));
+  const intensityOptions = [
+    { key: "conservative", icon: "🛡️", label: "Conservative", shortLabel: "Conservative" },
+    { key: "standard",     icon: "⚖️", label: "Standard",     shortLabel: "Standard" },
+    { key: "aggressive",   icon: "⚔️", label: "Aggressive",   shortLabel: "Aggressive" },
+    { key: "all_out",      icon: "🔥", label: "All-Out",      shortLabel: "All-Out" },
+  ];
 
   return (
     <div style={{ marginBottom: 16 }}>
@@ -573,61 +619,59 @@ function GMDecisionsCard({ league, actions }) {
         background: "var(--surface)",
         border: "1.5px solid var(--hairline)",
         borderRadius: "var(--radius-lg)",
-        padding: "12px 14px",
+        padding: "14px 14px",
         display: "flex",
         flexDirection: "column",
-        gap: 12,
+        gap: 14,
       }}>
-        <div style={{ fontSize: "0.7rem", color: "var(--text-subtle)", lineHeight: 1.4 }}>
-          These decisions carry real trade-offs. Choose based on your opponent and roster needs.
-        </div>
 
         {/* Practice Focus */}
         <div>
-          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontWeight: 700 }}>Practice Focus</span>
-            <select value={practiceFocus} onChange={(e) => { setPracticeFocus(e.target.value); update({ practiceFocus: e.target.value }); }} style={selectStyle}>
-              {Object.entries(PRACTICE_FOCUS_META).map(([k, v]) => (
-                <option key={k} value={k}>{v.icon} {v.label}</option>
-              ))}
-            </select>
-          </label>
-          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 7, display: "flex", alignItems: "center", gap: 5 }}>
+            <span>🏋️</span> Practice Focus
+          </div>
+          <DecisionToggle
+            options={practiceOptions}
+            value={practiceFocus}
+            onChange={(v) => { setPracticeFocus(v); update({ practiceFocus: v }); }}
+          />
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 6, lineHeight: 1.4 }}>
+            <span style={{ color: "var(--accent)", fontWeight: 700 }}>{practiceMeta.icon} {practiceMeta.label}:</span>{" "}
             {practiceMeta.effect}
           </div>
         </div>
 
         {/* Locker Room Tone */}
         <div>
-          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontWeight: 700 }}>Locker Room Tone</span>
-            <select value={lockerRoom} onChange={(e) => { setLockerRoom(e.target.value); update({ lockerRoom: e.target.value }); }} style={selectStyle}>
-              {Object.entries(LOCKER_ROOM_META).map(([k, v]) => (
-                <option key={k} value={k}>{v.icon} {v.label}</option>
-              ))}
-            </select>
-          </label>
-          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 7, display: "flex", alignItems: "center", gap: 5 }}>
+            <span>🎙️</span> Locker Room Tone
+          </div>
+          <DecisionToggle
+            options={lockerOptions}
+            value={lockerRoom}
+            onChange={(v) => { setLockerRoom(v); update({ lockerRoom: v }); }}
+          />
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 6, lineHeight: 1.4 }}>
+            <span style={{ color: "var(--accent)", fontWeight: 700 }}>{lockerMeta.icon} {lockerMeta.label}:</span>{" "}
             {lockerMeta.effect}
           </div>
         </div>
 
         {/* Game Intensity */}
         <div>
-          <label style={{ fontSize: "0.72rem", color: "var(--text-muted)", display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontWeight: 700 }}>Game Intensity</span>
-            <select value={gameIntensity} onChange={(e) => { setGameIntensity(e.target.value); update({ gameIntensity: e.target.value }); }} style={selectStyle}>
-              <option value="conservative">🛡️ Conservative — protect starters, limit injuries</option>
-              <option value="standard">⚖️ Standard — normal game plan</option>
-              <option value="aggressive">⚔️ Aggressive — go for it on 4th, blitz often</option>
-              <option value="all_out">🔥 All-Out — season on the line, no holding back</option>
-            </select>
-          </label>
-          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 4, paddingLeft: 2, lineHeight: 1.4 }}>
-            {gameIntensity === "conservative" && "Lower injury risk; –small scoring upside."}
-            {gameIntensity === "standard"     && "Balanced risk vs. reward."}
-            {gameIntensity === "aggressive"   && "+scoring upside; higher injury exposure."}
-            {gameIntensity === "all_out"      && "Maximum scoring potential; significant injury risk."}
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 7, display: "flex", alignItems: "center", gap: 5 }}>
+            <span>⚡</span> Game Intensity
+          </div>
+          <DecisionToggle
+            options={intensityOptions}
+            value={gameIntensity}
+            onChange={(v) => { setGameIntensity(v); update({ gameIntensity: v }); }}
+          />
+          <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 6, lineHeight: 1.4 }}>
+            {gameIntensity === "conservative" && "🛡️ Lower injury risk; small scoring downside."}
+            {gameIntensity === "standard"     && "⚖️ Balanced risk vs. reward. No modifiers."}
+            {gameIntensity === "aggressive"   && "⚔️ +scoring upside; higher injury exposure."}
+            {gameIntensity === "all_out"      && "🔥 Maximum upside; significant injury risk."}
           </div>
         </div>
       </div>
@@ -1014,11 +1058,27 @@ function TopPerformers({ league, onPlayerSelect }) {
 
 // ── Season Progress Bar ───────────────────────────────────────────────────────
 
+function getPowerRankWH(league) {
+  if (!league?.teams || !league?.userTeamId) return null;
+  const sorted = [...league.teams].sort((a, b) => {
+    const ga = a.wins + a.losses + (a.ties ?? 0);
+    const gb = b.wins + b.losses + (b.ties ?? 0);
+    const pa = ga > 0 ? (a.wins + (a.ties ?? 0) * 0.5) / ga : 0.5;
+    const pb = gb > 0 ? (b.wins + (b.ties ?? 0) * 0.5) / gb : 0.5;
+    if (Math.abs(pb - pa) > 0.005) return pb - pa;
+    return (b.ovr ?? 70) - (a.ovr ?? 70);
+  });
+  return sorted.findIndex(t => t.id === league.userTeamId) + 1;
+}
+
 function SeasonProgressBar({ league }) {
   const week  = league?.week ?? league?.currentWeek ?? 0;
   const total = league?.phase === "playoffs" ? 18 : 17;
   const pct   = Math.min(100, Math.round((week / total) * 100));
   const phase = phaseInfo(league?.phase);
+  const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
+  const powerRank = getPowerRankWH(league);
+  const rankColor = powerRank <= 8 ? "#FFD60A" : powerRank <= 16 ? "#34C759" : powerRank <= 24 ? "#FF9F0A" : "#FF453A";
 
   return (
     <div style={{
@@ -1036,15 +1096,22 @@ function SeasonProgressBar({ league }) {
               {phase.label}
             </div>
             <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-              {league?.year ?? "Season"} · Week {week} of {total}
+              {league?.year ?? "Season"}
+              {league?.phase === "regular" ? ` · Week ${week} of ${total}` : ""}
+              {userTeam ? ` · ${userTeam.wins ?? 0}-${userTeam.losses ?? 0}${(userTeam.ties ?? 0) > 0 ? `-${userTeam.ties}` : ""}` : ""}
             </div>
           </div>
         </div>
-        <div style={{
-          fontSize: "1.6rem", fontWeight: 900, color: phase.color,
-          lineHeight: 1,
-        }}>
-          {week}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {powerRank && (
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: "0.55rem", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Power Rank</div>
+              <div style={{ fontSize: "1.1rem", fontWeight: 900, color: rankColor, lineHeight: 1.1 }}>#{powerRank}</div>
+            </div>
+          )}
+          <div style={{ fontSize: "1.6rem", fontWeight: 900, color: phase.color, lineHeight: 1 }}>
+            {week}
+          </div>
         </div>
       </div>
 
@@ -1057,14 +1124,6 @@ function SeasonProgressBar({ league }) {
           transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
         }} />
       </div>
-
-      {/* Team record */}
-      {league?.userTeam && (
-        <div style={{ marginTop: 8, fontSize: "0.72rem", color: "var(--text-muted)" }}>
-          {league.userTeam.name} · {league.userTeam.wins ?? 0}-{league.userTeam.losses ?? 0}
-          {league.userTeam.ties > 0 ? `-${league.userTeam.ties}` : ""}
-        </div>
-      )}
     </div>
   );
 }
@@ -1381,9 +1440,6 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Season Progress ── */}
       <SeasonProgressBar league={league} />
 
-      {/* ── Playoff picture (regular season only) ── */}
-      <PlayoffPictureSnippet league={league} />
-
       {/* ── Streak Banner ── */}
       {userStreak && userStreak.count >= 2 && (
         <div style={{
@@ -1403,18 +1459,13 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
         </div>
       )}
 
+      {/* ── Playoff picture (regular season only) ── */}
+      <PlayoffPictureSnippet league={league} />
+
       {/* ── Next Game ── */}
       <NextGameCard nextGame={nextGame} league={league} onNavigate={onNavigate} />
 
-      {/* ── Upcoming Schedule ── */}
-      <UpcomingScheduleCard league={league} onNavigate={onNavigate} />
-
-      {/* ── Approval strip ── */}
-      <CoachApprovalSnippet league={league} />
-      <OwnerMoodSnippet league={league} />
-      <GMDecisionsCard league={league} actions={actions} />
-
-      {/* ── Advance Week CTA ── */}
+      {/* ── ADVANCE WEEK CTA — primary action, shown right after matchup context ── */}
       {onAdvanceWeek && (
         <AdvanceWeekButton
           league={league}
@@ -1429,8 +1480,8 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
         <SectionHeader title="This Week" emoji="📅" />
         <div style={{
           display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: 10,
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 8,
         }}>
           {actions_grid.map(a => (
             <ActionCard
@@ -1446,11 +1497,19 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
         </div>
       </div>
 
+      {/* ── Upcoming Schedule ── */}
+      <UpcomingScheduleCard league={league} onNavigate={onNavigate} />
+
       {/* ── Injury Alerts ── */}
       <InjuryAlerts injuries={injuries} onNavigate={onNavigate} onPlayerSelect={onPlayerSelect} />
 
       {/* ── Top Performers ── */}
       <TopPerformers league={league} onPlayerSelect={onPlayerSelect} />
+
+      {/* ── GM Weekly Decisions ── */}
+      <CoachApprovalSnippet league={league} />
+      <OwnerMoodSnippet league={league} />
+      <GMDecisionsCard league={league} actions={actions} />
 
       {/* ── League Leaders ── */}
       <WeeklyLeagueLeaders league={league} onNavigate={onNavigate} />
