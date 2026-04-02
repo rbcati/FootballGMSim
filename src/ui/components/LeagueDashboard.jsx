@@ -770,7 +770,7 @@ function ScheduleTab({
           const showStakes =
             isUserGame &&
             !game.played &&
-            nextGameStakes > 50 &&
+            nextGameStakes > 75 &&
             selectedWeek === currentWeek;
           const isClickable = game.played && onGameSelect && seasonId;
           const handleCardClick = isClickable
@@ -811,9 +811,9 @@ function ScheduleTab({
                         padding: "2px 8px",
                         borderRadius: "var(--radius-pill)",
                         background:
-                          nextGameStakes > 80
+                          nextGameStakes > 90
                             ? "var(--danger)"
-                            : "var(--warning)",
+                            : "#FF4500", // tension color based on memory (> 75 implicit from showStakes logic usually, but here applied if > 50 and <= 90)
                         color: "#fff",
                         fontWeight: 700,
                         fontSize: "var(--text-xs)",
@@ -823,7 +823,7 @@ function ScheduleTab({
                         gap: 4,
                       }}
                     >
-                      {nextGameStakes > 80 ? "🔥 RIVALRY" : "⚠️ STAKES"}
+                      {nextGameStakes > 90 ? "🔥 RIVALRY" : "⚠️ STAKES"}
                     </span>
                   )}
                 </div>

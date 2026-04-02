@@ -489,13 +489,13 @@
 .backup-size {
   color: var(--text-subtle);
   font-size: var(--text-xs);
-  font-family: monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .backup-version {
   color: var(--text-subtle);
   font-size: var(--text-xs);
-  font-family: monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 .backup-actions {
@@ -543,7 +543,7 @@
   gap: var(--space-2);
   font-size: var(--text-sm);
   color: var(--text-muted);
-  font-family: monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================================
