@@ -1306,6 +1306,28 @@ function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
   const userRank = sorted.findIndex(t => t.id === userTeam.id) + 1;
   const gamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0);
 
+  // ── Week-over-week trend tracking ─────────────────────────────────────────
+  // Store last week's rankings in localStorage keyed by seasonId+week so we
+  // can show ▲/▼ arrows without any worker changes.
+  const rankHistKey = `gmsim_power_ranks_${league.seasonId ?? 0}`;
+  const prevRanks = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem(rankHistKey) || '{}');
+    } catch { return {}; }
+  }, [rankHistKey]);
+
+  // Persist current rankings after each week advance (week changes ⇒ save snapshot)
+  const prevWeekRef = React.useRef(null);
+  React.useEffect(() => {
+    if (prevWeekRef.current !== null && prevWeekRef.current !== league.week) {
+      // Week has changed — snapshot the rankings from BEFORE this week
+      const snapshot = {};
+      sorted.forEach((t, i) => { snapshot[String(t.id)] = i + 1; });
+      try { localStorage.setItem(rankHistKey, JSON.stringify(snapshot)); } catch { /* non-fatal */ }
+    }
+    prevWeekRef.current = league.week;
+  }, [league.week]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Show user's rank + top 5 + surrounding teams if user is outside top 5
   const showTeams = useMemo(() => {
     const top5 = sorted.slice(0, 5);
@@ -1326,6 +1348,7 @@ function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
           You are ranked <strong style={{ color: rankColor(userRank) }}>#{userRank}</strong> of 32 teams
           {gamesPlayed === 0 && " (pre-season)"}
         </div>
+        <div style={{ fontSize: "0.6rem", color: "var(--text-subtle)" }}>week-over-week ▲▼</div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {showTeams.map((team, i) => {
@@ -1339,7 +1362,19 @@ function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
           const rank = sorted.findIndex(t => t.id === team.id) + 1;
           const isUser = team.id === userTeam.id;
           const tc = teamColor(team.abbr);
-          const gp = team.wins + team.losses + (team.ties ?? 0);
+          const prevRank = prevRanks[String(team.id)];
+          const delta = prevRank != null ? prevRank - rank : 0; // positive = moved up
+          const trendEl = prevRank == null ? null : delta > 0 ? (
+            <span style={{ fontSize: "0.6rem", color: "#34C759", fontWeight: 800, width: 22, textAlign: "center", flexShrink: 0 }}>
+              ▲{delta}
+            </span>
+          ) : delta < 0 ? (
+            <span style={{ fontSize: "0.6rem", color: "#FF453A", fontWeight: 800, width: 22, textAlign: "center", flexShrink: 0 }}>
+              ▼{Math.abs(delta)}
+            </span>
+          ) : (
+            <span style={{ fontSize: "0.6rem", color: "var(--text-subtle)", width: 22, textAlign: "center", flexShrink: 0 }}>–</span>
+          );
           return (
             <div
               key={team.id}
@@ -1356,6 +1391,7 @@ function PowerRankingsCard({ league, userTeam, onTeamSelect }) {
               <span style={{ width: 20, fontWeight: 900, fontSize: "0.65rem", color: rankColor(rank), textAlign: "center", flexShrink: 0 }}>
                 {rank}
               </span>
+              {trendEl}
               <div style={{
                 width: 22, height: 22, borderRadius: "50%",
                 background: `${tc}22`, border: `2px solid ${tc}`,

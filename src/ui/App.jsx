@@ -195,6 +195,35 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [league, actions.save]);
 
+  // ── Keyboard shortcuts (desktop) ──────────────────────────────────────────
+  // Space / Enter  → Advance week (when not busy and no modal open)
+  // S              → Manual save
+  // ?              → Toggle changelog / help
+  useEffect(() => {
+    const onKey = (e) => {
+      // Skip if focus is inside an input, textarea, or select
+      const tag = document.activeElement?.tagName?.toUpperCase();
+      if (['INPUT','TEXTAREA','SELECT','BUTTON'].includes(tag)) return;
+      // Skip if any modal/overlay is open (postGame, userGamePrompt, etc.)
+      if (postGameResult || promptUserGame || userGameLogs) return;
+      // Skip if not in an active league
+      if (!league) return;
+
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        handleAdvanceWeek();
+      } else if (e.key === 's' || e.key === 'S') {
+        if (!busy && league) {
+          actions.save();
+        }
+      } else if (e.key === '?') {
+        setShowChangelog(v => !v);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [league, busy, postGameResult, promptUserGame, userGameLogs, handleAdvanceWeek, actions]);
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleAdvanceWeek = useCallback(() => {

@@ -51,6 +51,9 @@ import GodMode from "./GodMode.jsx";
 import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
 import WeeklyHub from "./WeeklyHub.jsx";
+import AnalyticsHub from "./AnalyticsHub.jsx";
+import GlossaryPopover from "./GlossaryPopover.jsx";
+import OnboardingTour from "./OnboardingTour.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -188,6 +191,7 @@ const BASE_TABS = [
   "Trade Finder",
   "History",
   "Hall of Fame",
+  "Analytics",
   "Season Recap",
   "Saves",
   "God Mode",
@@ -1804,6 +1808,11 @@ export default function LeagueDashboard({
             <GodMode league={league} actions={actions} />
           </TabErrorBoundary>
         )}
+        {activeTab === "Analytics" && (
+          <TabErrorBoundary label="Analytics">
+            <AnalyticsHub league={league} />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Season Recap" && (
           <TabErrorBoundary label="Season Recap">
             <SeasonRecap
@@ -1868,6 +1877,11 @@ export default function LeagueDashboard({
           />
         </TabErrorBoundary>
       )}
+
+      {/* ── Global utilities (always mounted, visually minimal) ── */}
+      <GlossaryPopover />
+      <OnboardingTour league={league} />
+
     </div>
   );
 }
