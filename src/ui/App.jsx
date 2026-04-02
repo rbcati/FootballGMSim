@@ -51,7 +51,50 @@ import ThemeToggle         from './components/ThemeToggle.jsx';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
-const APP_VERSION = '1.1.0-draft-war-room';
+const APP_VERSION = '1.2.0-save-fix-ux';
+
+// ── GameSimulation Error Boundary ────────────────────────────────────────────
+// Prevents a crash inside GameSimulation from killing the whole app.
+// On crash, calls onFallback so the week can still advance.
+class GameSimErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { crashed: false }; }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(err, info) {
+    console.error('[GameSim] Render crash caught — recovering:', err, info?.componentStack?.slice(0, 200));
+  }
+  render() {
+    if (!this.state.crashed) return this.props.children;
+    // Trigger recovery callback once
+    setTimeout(() => this.props.onFallback?.(), 50);
+    return (
+      <div style={{
+        position: 'fixed', inset: 0, zIndex: 9500,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        gap: 16, padding: 24,
+      }}>
+        <div style={{ fontSize: '2rem' }}>🏈</div>
+        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#FF453A' }}>Sim viewer crashed</div>
+        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
+          The game result was saved. Returning to hub…
+        </div>
+      </div>
+    );
+  }
+}
+
+// ── LiveGame Error Boundary ───────────────────────────────────────────────────
+// LiveGame renders outside TabErrorBoundary — wrap it so crashes don't kill the app.
+class LiveGameErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { crashed: false }; }
+  static getDerivedStateFromError() { return { crashed: true }; }
+  componentDidCatch(err) { console.error('[LiveGame] Render crash caught:', err); }
+  render() {
+    if (!this.state.crashed) return this.props.children;
+    return null; // silently hide — the ticker still works
+  }
+}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -483,17 +526,19 @@ export default function App() {
       {/* ── Live game viewer (visible during simulation + results) ────── */}
       {/* Hide when user game prompt is active to avoid stale empty state behind modal */}
       {!state.promptUserGame && (
-        <LiveGame
-          simulating={simulating}
-          simProgress={simProgress}
-          league={league}
-          lastResults={lastResults}
-          gameEvents={gameEvents}
-          onOpenBoxScore={(gameId) => {
-            if (!gameId) return;
-            setExternalBoxScoreId(gameId);
-          }}
-        />
+        <LiveGameErrorBoundary>
+          <LiveGame
+            simulating={simulating}
+            simProgress={simProgress}
+            league={league}
+            lastResults={lastResults}
+            gameEvents={gameEvents}
+            onOpenBoxScore={(gameId) => {
+              if (!gameId) return;
+              setExternalBoxScoreId(gameId);
+            }}
+          />
+        </LiveGameErrorBoundary>
       )}
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
@@ -645,34 +690,47 @@ export default function App() {
       {/* ── Live Game Viewer (premium GameSimulation) ── */}
       {userGameLogs && (() => {
         // Determine actual home/away from the latest game event for the user's team
-        const userEvent = gameEvents?.find(e => e.homeId === league.userTeamId || e.awayId === league.userTeamId);
-        const weekGames = league?.schedule?.weeks?.find(w => w.week === league.week)?.games ?? [];
-        const userMatchup = weekGames.find(g => Number(g.home) === league.userTeamId || Number(g.away) === league.userTeamId);
-        const homeId = userEvent?.homeId ?? (userMatchup ? Number(userMatchup.home) : league.userTeamId);
-        const awayId = userEvent?.awayId ?? (userMatchup ? Number(userMatchup.away) : league.teams?.find(t => t.id !== league.userTeamId)?.id);
+        const userEvent = gameEvents?.find(e => e.homeId === league?.userTeamId || e.awayId === league?.userTeamId);
+        const weekGames = league?.schedule?.weeks?.find(w => w.week === league?.week)?.games ?? [];
+        const userMatchup = weekGames.find(g => Number(g.home) === league?.userTeamId || Number(g.away) === league?.userTeamId);
+        const homeId = userEvent?.homeId ?? (userMatchup ? Number(userMatchup.home) : league?.userTeamId);
+        const awayId = userEvent?.awayId ?? (userMatchup ? Number(userMatchup.away) : league?.teams?.find(t => t.id !== league?.userTeamId)?.id);
         const homeTeam = league?.teams?.find(t => t.id === homeId) || { abbr: userEvent?.homeAbbr || 'HOME', id: homeId };
         const awayTeam = league?.teams?.find(t => t.id === awayId) || { abbr: userEvent?.awayAbbr || 'AWAY', id: awayId };
         return (
-          <GameSimulation
-            logs={userGameLogs}
-            homeTeam={homeTeam}
-            awayTeam={awayTeam}
-            userTeamId={league?.userTeamId}
-            onComplete={(scores) => {
-              // Capture final scores + logs for PostGameScreen, then clear the viewer
-              setPostGameResult({
-                homeTeam,
-                awayTeam,
-                homeScore: scores?.homeScore ?? 0,
-                awayScore: scores?.awayScore ?? 0,
-                userTeamId: league?.userTeamId,
-                week: league?.week,
-                phase: league?.phase,
-                logs: userGameLogs || [],
-              });
-              actions.clearUserGame();
-            }}
-          />
+          <GameSimErrorBoundary onFallback={() => {
+            // If GameSimulation crashes, recover directly to advancing the week
+            actions.clearUserGame();
+            setTimeout(() => actions.advanceWeek({ skipUserGame: true }), 200);
+          }}>
+            <GameSimulation
+              logs={userGameLogs}
+              homeTeam={homeTeam}
+              awayTeam={awayTeam}
+              userTeamId={league?.userTeamId}
+              onComplete={(scores) => {
+                try {
+                  // Belt-and-suspenders save immediately on game completion
+                  actions.save();
+                  // Capture final scores + logs for PostGameScreen, then clear the viewer
+                  setPostGameResult({
+                    homeTeam,
+                    awayTeam,
+                    homeScore: scores?.homeScore ?? 0,
+                    awayScore: scores?.awayScore ?? 0,
+                    userTeamId: league?.userTeamId,
+                    week: league?.week,
+                    phase: league?.phase,
+                    logs: userGameLogs || [],
+                  });
+                  actions.clearUserGame();
+                } catch (err) {
+                  console.error('[App] onComplete failed:', err);
+                  actions.clearUserGame();
+                }
+              }}
+            />
+          </GameSimErrorBoundary>
         );
       })()}
 

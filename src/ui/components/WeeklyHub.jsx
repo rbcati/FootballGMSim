@@ -14,7 +14,7 @@
  * (LeagueDashboard) can switch tabs without any routing library.
  */
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -584,8 +584,7 @@ function GMDecisionsCard({ league, actions }) {
   const [gameIntensity, setGameIntensity] = useState(existing.gameIntensity || "standard");
 
   const update = (next) => {
-    if (!actions?.send) return;
-    actions.send("UPDATE_STRATEGY", {
+    actions?.updateStrategy?.({
       gmDecisions: {
         practiceFocus:  next.practiceFocus  ?? practiceFocus,
         lockerRoom:     next.lockerRoom     ?? lockerRoom,
@@ -1352,6 +1351,67 @@ function RecentNews({ news = [], onNavigate }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
+// ── Owner Strategy Notes ──────────────────────────────────────────────────────
+// Persistent GM notepad — text is stored in localStorage so it survives reloads.
+function OwnerNotesCard({ league }) {
+  const storageKey = `gmsim_gm_notes_${league?.id ?? 'default'}`;
+  const [notes, setNotes] = useState(() => {
+    try { return localStorage.getItem(storageKey) || ""; } catch { return ""; }
+  });
+  const [saved, setSaved] = useState(false);
+  const timerRef = useRef(null);
+
+  const handleChange = (e) => {
+    const val = e.target.value;
+    setNotes(val);
+    setSaved(false);
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      try { localStorage.setItem(storageKey, val); } catch { /* quota full */ }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1800);
+    }, 600);
+  };
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <SectionHeader title="GM Notes" emoji="📝" />
+        {saved && (
+          <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#34C759", opacity: 0.8 }}>
+            ✓ Saved
+          </span>
+        )}
+      </div>
+      <textarea
+        value={notes}
+        onChange={handleChange}
+        placeholder="Jot down your strategy, trade targets, injury concerns…"
+        rows={4}
+        style={{
+          width: "100%",
+          background: "var(--surface)",
+          border: "1.5px solid var(--hairline)",
+          borderRadius: "var(--radius-lg)",
+          padding: "10px 12px",
+          color: "var(--text)",
+          fontSize: "0.78rem",
+          lineHeight: 1.5,
+          resize: "vertical",
+          outline: "none",
+          fontFamily: "inherit",
+          boxSizing: "border-box",
+          transition: "border-color 0.15s",
+        }}
+        onFocus={e => { e.target.style.borderColor = "var(--accent)"; }}
+        onBlur={e => { e.target.style.borderColor = "var(--hairline)"; }}
+      />
+    </div>
+  );
+}
+
 export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect, onAdvanceWeek, busy, simulating }) {
   const nextGame  = useMemo(() => getNextGame(league),     [league]);
   const injuries  = useMemo(() => getInjuries(league),     [league]);
@@ -1510,6 +1570,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       <CoachApprovalSnippet league={league} />
       <OwnerMoodSnippet league={league} />
       <GMDecisionsCard league={league} actions={actions} />
+
+      {/* ── GM Notes (persistent notepad) ── */}
+      <OwnerNotesCard league={league} />
 
       {/* ── League Leaders ── */}
       <WeeklyLeagueLeaders league={league} onNavigate={onNavigate} />
