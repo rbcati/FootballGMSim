@@ -678,6 +678,172 @@ function GMDecisionsCard({ league, actions }) {
   );
 }
 
+// ── Owner Goals Card ──────────────────────────────────────────────────────────
+// Explicit season goals driven by the cycle year + current performance.
+// Shows fan approval bar + explicit win-target with consequence text.
+function OwnerGoalsCard({ league }) {
+  if (!league?.teams) return null;
+
+  const userTeam = league.teams.find(t => t.id === league.userTeamId);
+  if (!userTeam) return null;
+
+  const wins      = userTeam.wins   ?? 0;
+  const losses    = userTeam.losses ?? 0;
+  const ties      = userTeam.ties   ?? 0;
+  const games     = wins + losses + ties;
+  const approval  = Math.round(league.ownerApproval ?? 75);
+  const fanApproval = Math.round(league.fanApproval ?? 65);
+  const year      = league.year ?? 1;
+  const phase     = league.phase ?? "regular";
+  const week      = league.week  ?? 1;
+
+  // Season goal tiers (cycle repeats every 3 years)
+  const cycle = ((year - 1) % 3) + 1;
+  const goals = cycle === 1
+    ? { wins: 7,  label: "7-win season",   reward: "Contract extension offer",  penalty: "Mandatory roster review" }
+    : cycle === 2
+    ? { wins: 9,  label: "Winning record", reward: "Increased draft budget",     penalty: "HC on hot seat" }
+    : { wins: 11, label: "Playoff berth",  reward: "Franchise player bonus",     penalty: "HC fired at season end" };
+
+  const remainingGames = Math.max(0, 17 - games);
+  const winsNeeded     = Math.max(0, goals.wins - wins);
+  const onPace         = games > 0 && (wins / games * 17) >= goals.wins;
+  const alreadyMet     = wins >= goals.wins;
+  const impossible     = !alreadyMet && winsNeeded > remainingGames;
+
+  const statusColor = alreadyMet ? "#34C759" : impossible ? "#FF453A" : onPace ? "#0A84FF" : "#FF9F0A";
+  const statusLabel = alreadyMet ? "✓ Goal met!" : impossible ? "Unreachable" : onPace ? "On pace" : "Behind pace";
+
+  const approvalColor = (v) => v >= 70 ? "#34C759" : v >= 45 ? "#FF9F0A" : "#FF453A";
+
+  // Fan approval meter
+  const fanColor = approvalColor(fanApproval);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <SectionHeader title="Owner Goals" emoji="🎯" />
+      <div style={{
+        background: "var(--surface)",
+        border: `1.5px solid ${statusColor}44`,
+        borderRadius: "var(--radius-lg)",
+        padding: "14px 14px",
+        display: "flex", flexDirection: "column", gap: 12,
+      }}>
+        {/* Win target row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10,
+            background: `${statusColor}18`,
+            border: `1.5px solid ${statusColor}44`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "1.1rem", flexShrink: 0,
+          }}>
+            {alreadyMet ? "🏆" : impossible ? "😰" : "🎯"}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: "0.82rem" }}>
+              Year {cycle} Goal: <span style={{ color: statusColor }}>{goals.label}</span>
+            </div>
+            <div style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 2 }}>
+              {alreadyMet
+                ? `Achieved with ${wins} wins — great work!`
+                : `${wins}W so far · need ${winsNeeded} more in ${remainingGames} games`}
+            </div>
+          </div>
+          <span style={{
+            fontSize: "0.65rem", fontWeight: 800,
+            color: statusColor,
+            background: `${statusColor}18`,
+            border: `1px solid ${statusColor}44`,
+            padding: "3px 8px", borderRadius: 8,
+            flexShrink: 0,
+          }}>
+            {statusLabel}
+          </span>
+        </div>
+
+        {/* Win progress bar */}
+        {phase === "regular" && (
+          <div>
+            <div style={{ height: 5, background: "var(--hairline)", borderRadius: 3, overflow: "hidden" }}>
+              <div style={{
+                height: "100%",
+                width: `${Math.min(100, (wins / goals.wins) * 100)}%`,
+                background: `linear-gradient(90deg, ${statusColor}bb, ${statusColor})`,
+                borderRadius: 3, transition: "width 0.5s",
+              }} />
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3 }}>
+              <span style={{ fontSize: "0.6rem", color: "var(--text-subtle)" }}>{wins} wins</span>
+              <span style={{ fontSize: "0.6rem", color: "var(--text-subtle)" }}>Target: {goals.wins}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Reward / Penalty */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{
+            flex: 1, padding: "8px 10px",
+            background: "#34C75910", border: "1px solid #34C75930",
+            borderRadius: 8,
+          }}>
+            <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "#34C759", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Reward
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{goals.reward}</div>
+          </div>
+          <div style={{
+            flex: 1, padding: "8px 10px",
+            background: "#FF453A10", border: "1px solid #FF453A30",
+            borderRadius: 8,
+          }}>
+            <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "#FF453A", marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Consequence
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{goals.penalty}</div>
+          </div>
+        </div>
+
+        {/* Approval meters */}
+        <div style={{ display: "flex", gap: 12 }}>
+          {[
+            { label: "Owner Approval", value: approval,    color: approvalColor(approval) },
+            { label: "Fan Approval",   value: fanApproval, color: fanColor },
+          ].map(({ label, value, color }) => (
+            <div key={label} style={{ flex: 1 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: "0.62rem", color: "var(--text-muted)", fontWeight: 700 }}>{label}</span>
+                <span style={{ fontSize: "0.62rem", fontWeight: 900, color }}>{value}%</span>
+              </div>
+              <div style={{ height: 5, background: "var(--hairline)", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", width: `${value}%`,
+                  background: color, borderRadius: 3, transition: "width 0.5s",
+                }} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Low approval warning */}
+        {(approval < 40 || fanApproval < 35) && (
+          <div style={{
+            padding: "8px 10px",
+            background: "#FF453A0d",
+            border: "1px solid #FF453A44",
+            borderRadius: 8,
+            fontSize: "0.72rem",
+            color: "#FF453A",
+            fontWeight: 700,
+          }}>
+            ⚠️ {approval < 40 ? "Owner patience is running thin — win more games or restructure." : "Fan support is dropping — consecutive losses erode attendance revenue."}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OwnerMoodSnippet({ league }) {
   const meta = ownerMoodMeta(league);
 
@@ -1412,6 +1578,168 @@ function OwnerNotesCard({ league }) {
   );
 }
 
+// ── New-Career Checklist ──────────────────────────────────────────────────────
+// Shows only in year 1 / first career. Each item auto-completes when the
+// corresponding milestone is detected in league state.
+
+const CHECKLIST_ITEMS = [
+  {
+    id: "sim_week",
+    label: "Simulate your first week",
+    check: (l) => (l?.week ?? 1) > 1 || l?.phase === "playoffs" || l?.phase === "offseason",
+  },
+  {
+    id: "check_roster",
+    label: "Review your roster (Roster Hub tab)",
+    check: (_l, done) => done.has("check_roster"),  // manual dismiss
+    manual: true,
+  },
+  {
+    id: "set_strategy",
+    label: "Set your scheme & game plan",
+    check: (l) => !!(l?.teams?.find(t => t.id === l?.userTeamId)?.strategies?.offSchemeId),
+  },
+  {
+    id: "first_win",
+    label: "Win your first game",
+    check: (l) => (l?.teams?.find(t => t.id === l?.userTeamId)?.wins ?? 0) >= 1,
+  },
+  {
+    id: "make_playoffs",
+    label: "Make the playoffs",
+    check: (l) => l?.phase === "playoffs" || l?.phase === "offseason" || l?.phase === "offseason_resign",
+  },
+];
+
+function NewCareerChecklist({ league, onNavigate }) {
+  const storageKey = `gmsim_checklist_${league?.seasonId ?? "0"}`;
+  const [manualDone, setManualDone] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(storageKey) || "[]")); }
+    catch { return new Set(); }
+  });
+  const [dismissed, setDismissed] = useState(() => {
+    try { return !!localStorage.getItem("gmsim_checklist_dismissed"); }
+    catch { return false; }
+  });
+
+  // Only show in year 1 of a career
+  const isNewCareer = (league?.year === 2025 || league?.year === 1);
+  if (!isNewCareer || dismissed) return null;
+
+  const items = CHECKLIST_ITEMS.map(item => ({
+    ...item,
+    done: item.check(league, manualDone),
+  }));
+
+  const completedCount = items.filter(i => i.done).length;
+  const allDone = completedCount === items.length;
+
+  const markManual = (id) => {
+    const next = new Set([...manualDone, id]);
+    setManualDone(next);
+    try { localStorage.setItem(storageKey, JSON.stringify([...next])); } catch { /* non-fatal */ }
+  };
+
+  const dismiss = () => {
+    setDismissed(true);
+    try { localStorage.setItem("gmsim_checklist_dismissed", "1"); } catch { /* non-fatal */ }
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <SectionHeader title="First Season Goals" emoji="✅" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: "0.65rem", color: "var(--text-subtle)" }}>
+            {completedCount}/{items.length}
+          </span>
+          <button
+            onClick={dismiss}
+            style={{ background: "none", border: "none", color: "var(--text-subtle)", cursor: "pointer", fontSize: "0.75rem", padding: "0 2px" }}
+            title="Dismiss checklist"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height: 4, background: "var(--hairline)", borderRadius: 2, marginBottom: 10, overflow: "hidden" }}>
+        <div style={{
+          height: "100%",
+          width: `${(completedCount / items.length) * 100}%`,
+          background: allDone ? "#34C759" : "var(--accent)",
+          borderRadius: 2,
+          transition: "width 0.4s",
+        }} />
+      </div>
+
+      <div style={{
+        background: "var(--surface)",
+        border: "1.5px solid var(--hairline)",
+        borderRadius: "var(--radius-lg)",
+        overflow: "hidden",
+      }}>
+        {items.map((item, i) => (
+          <div
+            key={item.id}
+            style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "10px 14px",
+              borderBottom: i < items.length - 1 ? "1px solid var(--hairline)" : "none",
+              opacity: item.done ? 0.55 : 1,
+            }}
+          >
+            {/* Checkbox */}
+            <div style={{
+              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+              border: `2px solid ${item.done ? "#34C759" : "var(--hairline)"}`,
+              background: item.done ? "#34C75922" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "0.7rem",
+            }}>
+              {item.done ? "✓" : ""}
+            </div>
+
+            {/* Label */}
+            <span style={{
+              flex: 1, fontSize: "0.78rem",
+              fontWeight: item.done ? 500 : 700,
+              color: item.done ? "var(--text-muted)" : "var(--text)",
+              textDecoration: item.done ? "line-through" : "none",
+            }}>
+              {item.label}
+            </span>
+
+            {/* Manual dismiss for items with no auto-check */}
+            {!item.done && item.manual && (
+              <button
+                onClick={() => markManual(item.id)}
+                style={{
+                  fontSize: "0.65rem", color: "var(--accent)",
+                  background: "none", border: "1px solid var(--accent)",
+                  borderRadius: 6, padding: "2px 8px", cursor: "pointer",
+                }}
+              >
+                Done
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {allDone && (
+        <div style={{
+          marginTop: 10, textAlign: "center",
+          fontSize: "0.8rem", fontWeight: 800, color: "#34C759",
+        }}>
+          🎉 First-season goals complete! You&apos;re a real GM now.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect, onAdvanceWeek, busy, simulating }) {
   const nextGame  = useMemo(() => getNextGame(league),     [league]);
   const injuries  = useMemo(() => getInjuries(league),     [league]);
@@ -1566,6 +1894,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       {/* ── Top Performers ── */}
       <TopPerformers league={league} onPlayerSelect={onPlayerSelect} />
 
+      {/* ── Owner Goals & Approval ── */}
+      <OwnerGoalsCard league={league} />
+
       {/* ── GM Weekly Decisions ── */}
       <CoachApprovalSnippet league={league} />
       <OwnerMoodSnippet league={league} />
@@ -1573,6 +1904,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
 
       {/* ── GM Notes (persistent notepad) ── */}
       <OwnerNotesCard league={league} />
+
+      {/* ── New-career checklist (year 1 only) ── */}
+      <NewCareerChecklist league={league} onNavigate={onNavigate} />
 
       {/* ── League Leaders ── */}
       <WeeklyLeagueLeaders league={league} onNavigate={onNavigate} />

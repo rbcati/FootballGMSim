@@ -1252,6 +1252,13 @@ if (res.injuries && res.injuries.length > 0) {
 
   // Also send a full state update so UI can re-render all panels
   post(toUI.STATE_UPDATE, buildViewState());
+
+  // Belt-and-suspenders: second background flush after the UI receives results.
+  // The first flushDirty() above runs synchronously in the advance pipeline;
+  // this second one catches any cache mutations that happen between the two posts
+  // (e.g. standings recalculation, injury updates).  Non-blocking — failures are
+  // logged but never surface to the user.
+  flushDirty().catch(e => console.warn('[Worker] post-week belt-flush failed (non-fatal):', e.message));
 }
 
 /**
