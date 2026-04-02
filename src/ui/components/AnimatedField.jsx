@@ -122,20 +122,26 @@ function ParticleBurst({ x, y, color, count = 12, active }) {
     Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * 2 * Math.PI;
       const dist = 20 + Math.random() * 30;
-      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist };
+      const r = 2 + Math.random() * 3; // dynamic sizes
+      return {
+        dx: Math.cos(angle) * dist,
+        dy: Math.sin(angle) * dist + 15, // gravity effect
+        r
+      };
     }), [count] // eslint-disable-line
   );
   return (
     <g>
       {particles.map((p, i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill={color} opacity="0.9">
+        <circle key={i} cx={x} cy={y} r={p.r} fill={color} opacity="0.9">
           <animateTransform
             attributeName="transform" type="translate"
             from="0 0" to={`${p.dx} ${p.dy}`}
             dur="0.6s" fill="freeze"
+            calcMode="spline" keyTimes="0;1" keySplines="0.25 0.1 0.25 1"
           />
           <animate attributeName="opacity" from="0.9" to="0" dur="0.6s" fill="freeze" />
-          <animate attributeName="r" from="3" to="1" dur="0.6s" fill="freeze" />
+          <animate attributeName="r" from={p.r} to="1" dur="0.6s" fill="freeze" />
         </circle>
       ))}
     </g>
@@ -266,9 +272,16 @@ export default function AnimatedField({
   // Burst coordinates (ball landing spot)
   const burstX = animPhase >= 1 ? ballPos.x : losX;
   const burstY = animPhase >= 1 ? ballPos.y : FIELD_H / 2;
+
+  const playDesc = (play?.description || "").toLowerCase();
+  const isGoal = play?.isTouchdown || playDesc.includes("touchdown");
+  const isTurnoverOrSack = play?.isTurnover || playDesc.includes("interception") || playDesc.includes("sack") || playDesc.includes("fumble");
+  const isKick = playDesc.includes("field goal") || play?.type === "fieldGoal" || play?.type === "kickoff" || playDesc.includes("kick");
+
   const burstColor = isBigPlay
-    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD60A"
-      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception")) ? "#FF453A"
+    ? isGoal ? "#FFD700"
+      : isTurnoverOrSack ? "#FF453A"
+      : isKick ? "#0A84FF"
       : "#FF9F0A"
     : "#34C759";
 
@@ -503,6 +516,16 @@ export default function AnimatedField({
             x1={losX} y1={FIELD_H / 2}
             x2={ballPos.x} y2={ballPos.y}
             stroke="white" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.5"
+            style={{ transition: `x2 ${0.6 / speed}s ease, y2 ${0.6 / speed}s ease` }}
+          />
+        )}
+
+        {/* Kick/Punt trajectory */}
+        {(play?.type === "kick" || play?.type === "punt" || play?.type === "fieldGoal" || (play?.description || "").toLowerCase().includes("punt") || (play?.description || "").toLowerCase().includes("kick") || (play?.description || "").toLowerCase().includes("field goal")) && animPhase >= 1 && (
+          <line
+            x1={losX} y1={FIELD_H / 2}
+            x2={ballPos.x} y2={ballPos.y}
+            stroke="#0A84FF" strokeWidth="2" strokeDasharray="6 4" opacity="0.6"
             style={{ transition: `x2 ${0.6 / speed}s ease, y2 ${0.6 / speed}s ease` }}
           />
         )}

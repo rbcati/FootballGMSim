@@ -182,7 +182,7 @@
   border-radius: var(--radius-pill, 999px);
   font-size: 0.875rem;
   margin: 0.25rem 0.5rem 0.25rem 0;
-  font-family: 'SF Mono', Monaco, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Records Grid */
