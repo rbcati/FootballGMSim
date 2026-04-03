@@ -3,7 +3,7 @@ import re
 with open('src/ui/App.jsx', 'r') as f:
     content = f.read()
 
-content = content.replace("promptUserGame,\n    userGameLogs\n  } = state;", "  } = state;\n  const { promptUserGame, userGameLogs } = state;")
+print("handleAdvanceWeek index:", content.find('const handleAdvanceWeek = useCallback'))
+print("Keyboard hook index:", content.find('// ── Keyboard shortcuts (desktop)'))
 
-with open('src/ui/App.jsx', 'w') as f:
-    f.write(content)
+# Check if there are any syntax errors / undefined variable issues by building via vite

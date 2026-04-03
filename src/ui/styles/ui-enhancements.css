@@ -912,8 +912,7 @@ select:disabled {
   animation: slideUp 0.3s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
+
   to { opacity: 1; }
 }
 
@@ -956,13 +955,6 @@ select:disabled {
   80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
 }
-
-.game-event-overlay.touchdown .event-text { color: #FFD700; text-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-.game-event-overlay.field-goal .event-text { color: #34C759; text-shadow: 0 0 20px rgba(52, 199, 89, 0.5); }
-.game-event-overlay.turnover .event-text { color: #FF453A; text-shadow: 0 0 20px rgba(255, 69, 58, 0.5); }
-.game-event-overlay.safety .event-text { color: #FF9F0A; text-shadow: 0 0 20px rgba(255, 159, 10, 0.5); }
-.game-event-overlay.sack .event-text { color: #FF9F0A; }
-.game-event-overlay.big-play .event-text { color: #0A84FF; text-shadow: 0 0 20px rgba(10, 132, 255, 0.5); }
 
 /* Play log item flash animations */
 .play-item.play-touchdown {
@@ -1244,9 +1236,7 @@ select:disabled {
 }
 
 /* Ensure fade-in is available globally */
-.fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
+
 
 /* Hard Shake */
 @keyframes shake-hard {
@@ -1441,7 +1431,7 @@ select:disabled {
 .score-overlay.field-goal {
   color: #FFD700; /* Gold */
   text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
+  font-weight: 900;
   letter-spacing: 2px;
 }
 
@@ -1449,7 +1439,7 @@ select:disabled {
   color: #FFFFFF;
   background: #FF453A;
   text-shadow: 2px 2px 0px #8B0000;
-  font-family: 'Courier New', monospace;
+  font-weight: 900; font-variant-numeric: tabular-nums;
   font-weight: 900;
   border: 4px solid #fff;
   padding: 15px 30px;
@@ -1811,15 +1801,9 @@ select:disabled {
 }
 
 /* Smooth Fade Transitions */
-.fade-out {
-  opacity: 0 !important;
-  transition: opacity 0.3s ease-out;
-}
 
-.fade-in {
-  opacity: 1 !important;
-  transition: opacity 0.3s ease-in;
-}
+
+
 
 /* Enhanced Field Marker Transitions */
 .field-marker {
@@ -1848,44 +1832,14 @@ select:disabled {
    ============================================ */
 
 /* Enhanced Overlay Icons & Styles */
-.game-event-overlay.field-goal-made .event-text {
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500;
-}
-.game-event-overlay.field-goal-made::before {
-  content: '👟';
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
 
-.game-event-overlay.defense-stop .event-text {
-  color: #FF453A;
-  border: 4px solid #FF453A;
-  background: rgba(0, 0, 0, 0.8);
-  padding: 15px 30px;
-  transform: rotate(-5deg);
-  border-radius: 12px;
-  box-shadow: 0 0 20px rgba(255, 69, 58, 0.4);
-}
-.game-event-overlay.defense-stop::before {
-  content: '🛡️';
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
-}
 
-.game-event-overlay.punt .event-text {
-  color: #fff;
-}
-.game-event-overlay.punt::before {
-  content: '🦶';
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-}
+
+
+
+
+
+
 
 /* Drive Summary Overlay */
 .game-event-overlay.drive-summary {
@@ -2060,9 +2014,7 @@ select:disabled {
 }
 
 /* Update Defense Stop to use Shield Pop */
-.game-event-overlay.defense-stop::before {
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
 
 /* New Celebration Animations */
 @keyframes celebrate-spike {
@@ -2281,51 +2233,19 @@ body {
 }
 
 /* Additional Event Classes */
-.game-event-overlay.defense-stop::before {
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
 
-.game-event-overlay.field-goal-made .event-text {
-  animation: goal-celebration 1s ease-out;
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500;
-}
+
+
 
 /* Special Game Event Overlays */
-.game-event-overlay.two-point .event-text {
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500;
-  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-.game-event-overlay.two-point::before {
-  content: '✌️';
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: bounce 1s infinite;
-}
 
-.game-event-overlay.two-point-miss .event-text {
-  color: #FF453A;
-}
-.game-event-overlay.two-point-miss::before {
-  content: '❌';
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: shake 0.5s;
-}
 
-.game-event-overlay.missed-xp .event-text {
-  color: #FF453A;
-}
-.game-event-overlay.missed-xp::before {
-  content: '🚫';
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: shake 0.5s;
-}
+
+
+
+
+
+
 
 /* Additional Game Animations - Added by Day 2 Task */
 @keyframes run-bob {
@@ -2396,59 +2316,19 @@ body {
    ============================================ */
 
 /* Generic Goal Style (Touchdown, Field Goal) */
-.game-event-overlay.goal .event-text {
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
-  letter-spacing: 2px;
-  animation: goal-celebration 1s ease-out;
-}
 
-.game-event-overlay.goal::before {
-  content: '🙌'; /* Hands up */
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
+
 
 /* Specific Kick Style (Punt, Kickoff) */
-.game-event-overlay.kick .event-text {
-  color: #0A84FF;
-  text-shadow: 0 0 15px #0056b3;
-  font-family: 'Arial Black', sans-serif;
-  letter-spacing: 1px;
-}
 
-.game-event-overlay.kick::before {
-  content: '🦶'; /* Foot */
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: kick-flash 0.3s ease-out;
-}
+
+
 
 /* Generic Save Style (Turnover, Defense Stop, Safety) */
-.game-event-overlay.save .event-text {
-  color: #FF453A;
-  border: 4px solid #FF453A;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 15px 30px;
-  transform: rotate(-5deg);
-  border-radius: 12px;
-  box-shadow: 0 0 20px rgba(255, 69, 58, 0.6);
-  font-family: 'Courier New', monospace;
-  font-weight: 900;
-}
 
-.game-event-overlay.save::before {
-  content: '🛡️'; /* Shield */
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
+
 
 /* Enhancing Button States for tactile feel */
 .control-btn:active, .btn:active {
@@ -2463,21 +2343,17 @@ body {
 }
 
 /* Fade Out Animation for View Transitions */
-@keyframes fadeOut {
-  from { opacity: 1; transform: translateY(0); }
+
   to { opacity: 0; transform: translateY(-10px); }
 }
 
-.fade-out {
-  animation: fadeOut 0.2s ease-out forwards !important;
-  pointer-events: none; /* Prevent clicks during exit */
-}
+
 
 /* Quarter End Style */
 .game-event-overlay.quarter-end .event-text {
   color: #fff;
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-  font-family: 'Arial Black', sans-serif;
+  font-weight: 900;
   letter-spacing: 2px;
 }
 .game-event-overlay.quarter-end::before {
@@ -2619,15 +2495,9 @@ body {
 }
 
 /* Additional Event Classes */
-.game-event-overlay.defense-stop::before {
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
 
-.game-event-overlay.field-goal-made .event-text {
-  animation: goal-celebration 1s ease-out;
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500;
-}
+
+
 
 /* Additional Game Animations - Added by Day 2 Task */
 @keyframes run-bob {
@@ -2698,59 +2568,19 @@ body {
    ============================================ */
 
 /* Generic Goal Style (Touchdown, Field Goal) */
-.game-event-overlay.goal .event-text {
-  color: #FFD700;
-  text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500;
-  font-family: 'Arial Black', sans-serif;
-  letter-spacing: 2px;
-  animation: goal-celebration 1s ease-out;
-}
 
-.game-event-overlay.goal::before {
-  content: '🙌'; /* Hands up */
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
+
 
 /* Specific Kick Style (Punt, Kickoff) */
-.game-event-overlay.kick .event-text {
-  color: #0A84FF;
-  text-shadow: 0 0 15px #0056b3;
-  font-family: 'Arial Black', sans-serif;
-  letter-spacing: 1px;
-}
 
-.game-event-overlay.kick::before {
-  content: '🦶'; /* Foot */
-  display: block;
-  font-size: 4rem;
-  margin-bottom: 10px;
-  animation: kick-flash 0.3s ease-out;
-}
+
+
 
 /* Generic Save Style (Turnover, Defense Stop, Safety) */
-.game-event-overlay.save .event-text {
-  color: #FF453A;
-  border: 4px solid #FF453A;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 15px 30px;
-  transform: rotate(-5deg);
-  border-radius: 12px;
-  box-shadow: 0 0 20px rgba(255, 69, 58, 0.6);
-  font-family: 'Courier New', monospace;
-  font-weight: 900;
-}
 
-.game-event-overlay.save::before {
-  content: '🛡️'; /* Shield */
-  display: block;
-  font-size: 5rem;
-  margin-bottom: 10px;
-  filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5));
-  animation: shield-pop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
+
+
 
 /* Enhancing Button States for tactile feel */
 .control-btn:active, .btn:active {
@@ -2765,21 +2595,17 @@ body {
 }
 
 /* Fade Out Animation for View Transitions */
-@keyframes fadeOut {
-  from { opacity: 1; transform: translateY(0); }
+
   to { opacity: 0; transform: translateY(-10px); }
 }
 
-.fade-out {
-  animation: fadeOut 0.2s ease-out forwards !important;
-  pointer-events: none; /* Prevent clicks during exit */
-}
+
 
 /* Quarter End Style */
 .game-event-overlay.quarter-end .event-text {
   color: #fff;
   text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
-  font-family: 'Arial Black', sans-serif;
+  font-weight: 900;
   letter-spacing: 2px;
 }
 .game-event-overlay.quarter-end::before {
@@ -2830,3 +2656,46 @@ body {
 .impact-pulse {
   animation: impact-pulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.fade-out {
+  animation: fadeOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  pointer-events: none;
+}
+
+
+.game-event-overlay.touchdown .event-text { color: #FFD700; text-shadow: 0 0 20px #FFA500, 0 0 40px #FF4500; font-weight: 900; letter-spacing: 2px; }
+.game-event-overlay.touchdown::before { content: '🙌'; display: block; font-size: 5rem; margin-bottom: 10px; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+.game-event-overlay.field-goal .event-text { color: #0A84FF; text-shadow: 0 0 15px #0056b3; font-weight: 900; letter-spacing: 1px; }
+.game-event-overlay.field-goal::before { content: '👟'; display: block; font-size: 4rem; margin-bottom: 10px; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+.game-event-overlay.punt .event-text { color: #0A84FF; text-shadow: 0 0 15px #0056b3; font-weight: 900; letter-spacing: 1px; }
+.game-event-overlay.punt::before { content: '🦶'; display: block; font-size: 4rem; margin-bottom: 10px; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+
+
+
+
+.game-event-overlay.turnover .event-text { color: #FF453A; border: 4px solid #FF453A; background: rgba(0, 0, 0, 0.85); padding: 15px 30px; transform: rotate(-5deg); border-radius: 12px; box-shadow: 0 0 20px rgba(255, 69, 58, 0.6); font-weight: 900; font-variant-numeric: tabular-nums; }
+.game-event-overlay.turnover::before { content: '🔄'; display: block; font-size: 5rem; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5)); animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+.game-event-overlay.sack .event-text { color: #FF453A; border: 4px solid #FF453A; background: rgba(0, 0, 0, 0.85); padding: 15px 30px; transform: rotate(-5deg); border-radius: 12px; box-shadow: 0 0 20px rgba(255, 69, 58, 0.6); font-weight: 900; }
+.game-event-overlay.sack::before { content: '💥'; display: block; font-size: 5rem; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5)); animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+
+.game-event-overlay.safety .event-text { color: #FF453A; border: 4px solid #FF453A; background: rgba(0, 0, 0, 0.85); padding: 15px 30px; transform: rotate(-5deg); border-radius: 12px; box-shadow: 0 0 20px rgba(255, 69, 58, 0.6); font-weight: 900; }
+.game-event-overlay.safety::before { content: '🛡️'; display: block; font-size: 5rem; margin-bottom: 10px; filter: drop-shadow(0 0 10px rgba(255, 69, 58, 0.5)); animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }

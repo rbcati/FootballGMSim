@@ -116,26 +116,33 @@ function NameTag({ x, y, label, color }) {
 }
 
 // Particle burst for big plays
-function ParticleBurst({ x, y, color, count = 12, active }) {
+function ParticleBurst({ x, y, color, count = 14, active }) {
   if (!active) return null;
   const particles = useMemo(() =>
     Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * 2 * Math.PI;
-      const dist = 20 + Math.random() * 30;
-      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist };
+      const dist = 20 + Math.random() * 40;
+      const size = 2 + Math.random() * 4;
+      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist, size };
     }), [count] // eslint-disable-line
   );
   return (
     <g>
       {particles.map((p, i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill={color} opacity="0.9">
-          <animateTransform
-            attributeName="transform" type="translate"
-            from="0 0" to={`${p.dx} ${p.dy}`}
-            dur="0.6s" fill="freeze"
+        <circle key={i} cx={x} cy={y} r={p.size} fill={color} opacity="0.9">
+          <animate
+            attributeName="cx"
+            from={x} to={x + p.dx}
+            dur="0.8s" fill="freeze"
           />
-          <animate attributeName="opacity" from="0.9" to="0" dur="0.6s" fill="freeze" />
-          <animate attributeName="r" from="3" to="1" dur="0.6s" fill="freeze" />
+          <animate
+            attributeName="cy"
+            values={`${y}; ${y + p.dy * 0.5 - 15}; ${y + p.dy + 30}`}
+            keyTimes="0; 0.4; 1"
+            dur="0.8s" fill="freeze"
+          />
+          <animate attributeName="opacity" from="0.9" to="0" dur="0.8s" fill="freeze" />
+          <animate attributeName="r" from={p.size} to="0" dur="0.8s" fill="freeze" />
         </circle>
       ))}
     </g>
@@ -267,8 +274,9 @@ export default function AnimatedField({
   const burstX = animPhase >= 1 ? ballPos.x : losX;
   const burstY = animPhase >= 1 ? ballPos.y : FIELD_H / 2;
   const burstColor = isBigPlay
-    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD60A"
-      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception")) ? "#FF453A"
+    ? (play?.isTouchdown || (play?.description || "").toLowerCase().includes("touchdown")) ? "#FFD700"
+      : (play?.type === "kick" || (play?.description || "").toLowerCase().includes("field goal") || (play?.description || "").toLowerCase().includes("punt")) ? "#0A84FF"
+      : (play?.isTurnover || (play?.description || "").toLowerCase().includes("interception") || (play?.description || "").toLowerCase().includes("sack") || (play?.description || "").toLowerCase().includes("safety") || (play?.description || "").toLowerCase().includes("fumble")) ? "#FF453A"
       : "#FF9F0A"
     : "#34C759";
 
@@ -497,8 +505,8 @@ export default function AnimatedField({
           );
         })}
 
-        {/* Pass trajectory */}
-        {play?.type === "pass" && animPhase >= 1 && (
+        {/* Pass/Kick trajectory */}
+        {(play?.type === "pass" || play?.type === "kick" || (play?.description || "").toLowerCase().includes("punt") || (play?.description || "").toLowerCase().includes("field goal")) && animPhase >= 1 && (
           <line
             x1={losX} y1={FIELD_H / 2}
             x2={ballPos.x} y2={ballPos.y}
