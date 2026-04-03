@@ -4052,11 +4052,23 @@ async function handleGetDashboardLeaders(payload, id) {
   const teamMap = {};
   allTeamsByIdRef.forEach(t => { teamMap[t.id] = t.abbr; });
 
+  const stats = [...liveMap.values()];
+  const missingIds = [];
+  for (const s of stats) {
+    if (!cache.getPlayer(s.playerId)) missingIds.push(s.playerId);
+  }
+
+  const loadedPlayers = new Map();
+  if (missingIds.length > 0) {
+    const players = await Players.loadBulk(missingIds);
+    for (const p of players) if (p) loadedPlayers.set(String(p.id), p);
+  }
+
   const entries = [];
-  await Promise.all([...liveMap.values()].map(async s => {
-    const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
+  for (const s of stats) {
+    const p = cache.getPlayer(s.playerId) ?? loadedPlayers.get(s.playerId);
     if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId, teamAbbr: teamMap[p.teamId ?? s.teamId] || 'FA' });
-  }));
+  }
 
   const topN = (list, key, n = 5) => {
     return list
@@ -4145,10 +4157,22 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
         if (!liveMap.has(s.playerId)) liveMap.set(s.playerId, s);
       }
     }
-    await Promise.all([...liveMap.values()].map(async s => {
-      const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
+    const stats = [...liveMap.values()];
+    const missingIds = [];
+    for (const s of stats) {
+      if (!cache.getPlayer(s.playerId)) missingIds.push(s.playerId);
+    }
+
+    const loadedPlayers = new Map();
+    if (missingIds.length > 0) {
+      const players = await Players.loadBulk(missingIds);
+      for (const p of players) if (p) loadedPlayers.set(String(p.id), p);
+    }
+
+    for (const s of stats) {
+      const p = cache.getPlayer(s.playerId) ?? loadedPlayers.get(s.playerId);
       if (p) entries.push({ ...s, name: p.name, pos: p.pos, teamId: p.teamId ?? s.teamId });
-    }));
+    }
   } else {
     // All-time: load all archived player stats, aggregate by player
     const allStats = await PlayerStats.loadAll();
@@ -4180,12 +4204,24 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
       }
     }
     // Resolve names/pos for all-time entries
-    await Promise.all([...byPlayer.values()].map(async agg => {
+    const aggs = [...byPlayer.values()];
+    const missingIds = [];
+    for (const agg of aggs) {
+      if (!agg.name && !cache.getPlayer(agg.playerId)) missingIds.push(agg.playerId);
+    }
+
+    const loadedPlayers = new Map();
+    if (missingIds.length > 0) {
+      const players = await Players.loadBulk(missingIds);
+      for (const p of players) if (p) loadedPlayers.set(String(p.id), p);
+    }
+
+    for (const agg of aggs) {
       if (!agg.name) {
-        const p = cache.getPlayer(agg.playerId) ?? await Players.load(agg.playerId);
+        const p = cache.getPlayer(agg.playerId) ?? loadedPlayers.get(agg.playerId);
         if (p) { agg.name = p.name; agg.pos = p.pos; agg.teamId = p.teamId ?? agg.teamId; }
       }
-    }));
+    }
     entries = [...byPlayer.values()].filter(e => e.name);
   }
 
@@ -4327,10 +4363,22 @@ async function handleGetAwardRaces(_payload, id) {
   const allTeams  = cache.getAllTeams();
   const teamById  = new Map(allTeams.map(t => [t.id, t]));
 
+  const stats = [...liveMap.values()];
+  const missingIds = [];
+  for (const s of stats) {
+    if (!cache.getPlayer(s.playerId)) missingIds.push(s.playerId);
+  }
+
+  const loadedPlayers = new Map();
+  if (missingIds.length > 0) {
+    const players = await Players.loadBulk(missingIds);
+    for (const p of players) if (p) loadedPlayers.set(String(p.id), p);
+  }
+
   const allEntries = [];
-  await Promise.all([...liveMap.values()].map(async s => {
-    const p = cache.getPlayer(s.playerId) ?? await Players.load(s.playerId);
-    if (!p) return;
+  for (const s of stats) {
+    const p = cache.getPlayer(s.playerId) ?? loadedPlayers.get(s.playerId);
+    if (!p) continue;
     const team = teamById.get(p.teamId ?? s.teamId);
     allEntries.push({
       ...s,
@@ -4340,7 +4388,7 @@ async function handleGetAwardRaces(_payload, id) {
       teamAbbr: team?.abbr ?? '???',
       ovr:      p.ovr,
     });
-  }));
+  }
 
   // Build a playerId→playerObject map for rookie detection
   const playerMap = new Map(cache.getAllPlayers().map(p => [p.id, p]));
