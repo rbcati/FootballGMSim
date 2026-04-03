@@ -8,7 +8,6 @@
  * Mobile-first responsive Tailwind v4 with dark: mode.
  */
 import React, { useEffect, useState } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -16,8 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-export default function HallOfFame({ onPlayerSelect }) {
-  const { actions } = useWorker();
+export default function HallOfFame({ onPlayerSelect, actions }) {
   const [players, setPlayers] = useState(null);
   const [loading, setLoading] = useState(true);
 

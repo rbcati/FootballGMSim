@@ -4,7 +4,45 @@
  * Runs client-side mock drafts using league team needs and prospect data.
  */
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+
+// ── Draft Value Chart (NFL-style pick point values) ──────────────────────────
+// Based on the classic Jimmy Johnson / Dallas Cowboys trade value chart
+const PICK_VALUES = [
+  3000,2600,2200,1800,1700,1600,1500,1400,1350,1300,
+  1250,1200,1150,1100,1050,1000, 950, 900, 875, 850,
+   800, 780, 760, 740, 720, 700, 680, 660, 640, 620,
+   600, 590, // End of Round 1
+   580, 560, 550, 540, 530, 520, 510, 500, 490, 480,
+   470, 460, 450, 440, 430, 420, 410, 400, 390, 380,
+   370, 360, 350, 340, 330, 320, 310, 300, 290, 285,
+   280, 275, // End of Round 2
+   270, 265, 260, 255, 250, 245, 240, 235, 230, 225,
+   220, 215, 210, 205, 200, 195, 190, 185, 180, 175,
+   170, 165, 160, 155, 150, 145, 140, 136, 132, 128,
+   124, 120, // End of Round 3
+   116, 112, 108, 104, 100,  97,  94,  91,  88,  86,
+    84,  82,  80,  78,  76,  74,  72,  70,  68,  66,
+    64,  62,  60,  59,  58,  57,  56,  55,  54,  53,
+    52,  51, // End of Round 4
+    50,  49,  48,  47,  46,  45,  44,  43,  42,  41,
+    40,  39,  38,  37,  36,  35,  34,  33,  32,  31,
+    30,  29,  28,  27,  26,  25,  24,  23,  22,  21,
+    20,  19, // End of Round 5
+    18,  17,  16,  15,  14,  13,  12,  11,  10,   9,
+     8,   7,   6,   6,   6,   6,   6,   6,   6,   6,
+     6,   6,   6,   6,   6,   6,   6,   5,   5,   5,
+     5,   5, // End of Round 6
+     5,   5,   4,   4,   4,   4,   4,   4,   4,   4,
+     4,   4,   4,   4,   4,   4,   4,   3,   3,   3,
+     3,   3,   3,   3,   3,   3,   3,   2,   2,   2,
+     2,   2,  // End of Round 7
+];
+
+function pickValue(overall) {
+  const idx = Math.max(0, Math.min(overall - 1, PICK_VALUES.length - 1));
+  return PICK_VALUES[idx];
+}
 
 // Seeded RNG for reproducible mock results
 function seededRng(seed) {
@@ -240,11 +278,23 @@ export default function MockDraft({ league, actions, onPlayerSelect }) {
     });
   };
 
+  // Trade-up calculator state
+  const [tradeA, setTradeA] = useState(""); // picks you give (comma-separated overall numbers)
+  const [tradeB, setTradeB] = useState(""); // picks you receive
+
+  const parsePickList = (str) =>
+    str.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n >= 1 && n <= 224);
+
+  const tradeATotal = useMemo(() => parsePickList(tradeA).reduce((s, n) => s + pickValue(n), 0), [tradeA]);
+  const tradeBTotal = useMemo(() => parsePickList(tradeB).reduce((s, n) => s + pickValue(n), 0), [tradeB]);
+  const tradeDelta = tradeBTotal - tradeATotal;
+
   const tabs = [
     { id: "mock", label: "Mock Draft" },
     { id: "board", label: "Big Board" },
     { id: "combine", label: "Combine" },
     { id: "needs", label: "Team Needs" },
+    { id: "trade", label: "Trade Calc" },
   ];
 
   return (
@@ -433,6 +483,127 @@ export default function MockDraft({ league, actions, onPlayerSelect }) {
                 })}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Trade Value Calculator Tab ── */}
+      {subTab === "trade" && (
+        <div>
+          <p style={{ fontSize: "var(--text-xs, 12px)", color: "var(--text-muted)", marginBottom: 16 }}>
+            Enter pick numbers (e.g. <strong>1, 33</strong>) to compare trade value using the classic draft chart.
+            A positive balance means you receive more value.
+          </p>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            {[
+              { label: "You Give", value: tradeA, set: setTradeA, total: tradeATotal, color: "#FF453A" },
+              { label: "You Receive", value: tradeB, set: setTradeB, total: tradeBTotal, color: "#34C759" },
+            ].map(({ label, value, set, total, color }) => (
+              <div key={label} style={{
+                background: "var(--surface)", border: "1.5px solid var(--hairline)",
+                borderRadius: 10, padding: 14,
+              }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-muted)",
+                  textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
+                  {label}
+                </div>
+                <input
+                  value={value}
+                  onChange={e => set(e.target.value)}
+                  placeholder="1, 33, 65…"
+                  style={{
+                    width: "100%", background: "var(--bg)", color: "var(--text)",
+                    border: "1px solid var(--hairline)", borderRadius: 6,
+                    padding: "6px 10px", fontSize: 13, outline: "none",
+                  }}
+                />
+                <div style={{ marginTop: 8 }}>
+                  {parsePickList(value).map(n => (
+                    <div key={n} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "3px 0", borderBottom: "1px solid var(--hairline)",
+                      fontSize: "0.72rem",
+                    }}>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        Pick #{n} (Rd {Math.ceil(n / 32)})
+                      </span>
+                      <span style={{ fontWeight: 700, color }}>{pickValue(n).toLocaleString()} pts</span>
+                    </div>
+                  ))}
+                  {parsePickList(value).length > 0 && (
+                    <div style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      paddingTop: 6, fontWeight: 800, fontSize: "0.8rem",
+                    }}>
+                      <span style={{ color: "var(--text)" }}>Total</span>
+                      <span style={{ color }}>{total.toLocaleString()} pts</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Trade verdict */}
+          {(tradeATotal > 0 || tradeBTotal > 0) && (
+            <div style={{
+              background: tradeDelta > 50 ? "#34C75918" : tradeDelta < -50 ? "#FF453A18" : "#FF9F0A18",
+              border: `1.5px solid ${tradeDelta > 50 ? "#34C759" : tradeDelta < -50 ? "#FF453A" : "#FF9F0A"}44`,
+              borderRadius: 10, padding: "14px 18px",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <div style={{
+                  fontWeight: 800, fontSize: "0.9rem",
+                  color: tradeDelta > 50 ? "#34C759" : tradeDelta < -50 ? "#FF453A" : "#FF9F0A",
+                }}>
+                  {tradeDelta > 50 ? "✓ You Win This Trade" : tradeDelta < -50 ? "✗ You Lose Value" : "≈ Fair Trade"}
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: 2 }}>
+                  {Math.abs(tradeDelta).toLocaleString()} pts {tradeDelta >= 0 ? "in your favour" : "in their favour"}
+                </div>
+              </div>
+              <div style={{
+                fontSize: "1.6rem", fontWeight: 900,
+                color: tradeDelta > 50 ? "#34C759" : tradeDelta < -50 ? "#FF453A" : "#FF9F0A",
+              }}>
+                {tradeDelta >= 0 ? "+" : ""}{tradeDelta.toLocaleString()}
+              </div>
+            </div>
+          )}
+
+          {/* Quick reference chart */}
+          <div style={{ marginTop: 20 }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 800, color: "var(--text-muted)",
+              textTransform: "uppercase", letterSpacing: "1px", marginBottom: 8 }}>
+              Quick Reference — Pick Values by Round
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
+              {[1,2,3,4,5,6,7].map(round => {
+                const firstPick = (round - 1) * 32 + 1;
+                const lastPick = round * 32;
+                const midPick = Math.round((firstPick + lastPick) / 2);
+                return (
+                  <div key={round} style={{
+                    background: "var(--surface)", border: "1px solid var(--hairline)",
+                    borderRadius: 8, padding: "8px 6px", textAlign: "center",
+                  }}>
+                    <div style={{ fontSize: "0.6rem", fontWeight: 800, color: "var(--text-muted)",
+                      textTransform: "uppercase", marginBottom: 4 }}>Rd {round}</div>
+                    <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--accent)" }}>
+                      #{firstPick}: {pickValue(firstPick)}
+                    </div>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)", marginTop: 2 }}>
+                      mid: {pickValue(midPick)}
+                    </div>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-subtle)" }}>
+                      #{lastPick}: {pickValue(lastPick)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

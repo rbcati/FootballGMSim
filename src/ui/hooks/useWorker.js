@@ -332,6 +332,9 @@ export function useWorker() {
     /** Delete a save (returns Promise with updated list). */
     deleteSave: (leagueId)     => request(toWorker.DELETE_SAVE, { leagueId }, { silent: true }),
 
+    /** Rename a save (returns Promise with updated list). */
+    renameSave: (leagueId, name) => request(toWorker.RENAME_SAVE, { leagueId, name }, { silent: true }),
+
     /** Generate a new league. teams = array of team definitions. */
     newLeague: (teams, options) => {
       dispatch({ type: 'BUSY' });

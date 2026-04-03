@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 import { teamColor } from "../../data/team-utils.js";
 
 function LeaderList({ title, players, onPlayerSelect }) {
@@ -108,8 +107,7 @@ function LeaderList({ title, players, onPlayerSelect }) {
   );
 }
 
-export default function StatLeadersWidget({ onPlayerSelect }) {
-  const { actions } = useWorker();
+export default function StatLeadersWidget({ onPlayerSelect, actions }) {
   const [mode, setMode] = useState("league"); // 'league' | 'team'
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);

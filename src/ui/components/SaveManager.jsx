@@ -8,6 +8,8 @@ export default function SaveManager({ actions, onCreate }) {
   const [loadingSaveId, setLoadingSaveId] = useState(null);
   const [saveErrors, setSaveErrors] = useState({});
   const [deletingId, setDeletingId] = useState(null);
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const fetchSaves = useCallback(async () => {
     try {
@@ -98,6 +100,26 @@ export default function SaveManager({ actions, onCreate }) {
       setDeletingId(null);
     }
   }, [actions]);
+
+  const handleRenameStart = useCallback((save) => {
+    setRenamingId(save.id);
+    setRenameValue(save.name || `League ${save.id?.slice(0, 6)}`);
+  }, []);
+
+  const handleRenameConfirm = useCallback(async (id) => {
+    const trimmed = renameValue.trim();
+    if (!trimmed) { setRenamingId(null); return; }
+    try {
+      const res = await actions.renameSave(id, trimmed);
+      const updated = res?.saves || res?.payload?.saves || [];
+      if (updated.length > 0) setSaves(updated);
+      else setSaves(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
+    } catch (err) {
+      setSaveErrors(prev => ({ ...prev, [id]: "Rename failed: " + err.message }));
+    } finally {
+      setRenamingId(null);
+    }
+  }, [actions, renameValue]);
 
   if (loading) {
     return (
@@ -216,39 +238,83 @@ export default function SaveManager({ actions, onCreate }) {
 
                     {/* Actions */}
                     <div className="sm-save-actions" onClick={(e) => e.stopPropagation()}>
-                      {isLoading ? (
-                        <div className="sm-save-spinner" />
-                      ) : saveError ? (
-                        <button
-                          className="sm-btn sm-btn-retry"
-                          onClick={() => setSaveErrors((prev) => ({ ...prev, [save.id]: null }))}
-                        >
-                          Retry
-                        </button>
+                      {renamingId === save.id ? (
+                        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") handleRenameConfirm(save.id);
+                              if (e.key === "Escape") setRenamingId(null);
+                            }}
+                            style={{
+                              fontSize: 12, padding: "3px 7px",
+                              background: "var(--surface)", color: "var(--text)",
+                              border: "1px solid var(--accent)", borderRadius: 5,
+                              width: 120, outline: "none",
+                            }}
+                          />
+                          <button
+                            className="sm-btn sm-btn-load"
+                            onClick={() => handleRenameConfirm(save.id)}
+                            style={{ padding: "3px 8px", fontSize: 11 }}
+                          >✓</button>
+                          <button
+                            className="sm-btn sm-btn-delete"
+                            onClick={() => setRenamingId(null)}
+                            style={{ padding: "3px 8px", fontSize: 11 }}
+                          >✕</button>
+                        </div>
                       ) : (
-                        <button
-                          className="sm-btn sm-btn-load"
-                          disabled={isBusy}
-                          onClick={() => handleLoad(save.id)}
-                        >
-                          Play
-                        </button>
+                        <>
+                          {isLoading ? (
+                            <div className="sm-save-spinner" />
+                          ) : saveError ? (
+                            <button
+                              className="sm-btn sm-btn-retry"
+                              onClick={() => setSaveErrors((prev) => ({ ...prev, [save.id]: null }))}
+                            >
+                              Retry
+                            </button>
+                          ) : (
+                            <button
+                              className="sm-btn sm-btn-load"
+                              disabled={isBusy}
+                              onClick={() => handleLoad(save.id)}
+                            >
+                              Play
+                            </button>
+                          )}
+                          <button
+                            className="sm-btn sm-btn-delete"
+                            disabled={isBusy}
+                            onClick={() => handleRenameStart(save)}
+                            title="Rename save"
+                            style={{ opacity: isBusy ? 0.4 : 1 }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+                              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                            </svg>
+                          </button>
+                          <button
+                            className="sm-btn sm-btn-delete"
+                            disabled={isBusy}
+                            onClick={() => handleDelete(save.id)}
+                            title="Delete save"
+                          >
+                            {isDeleting ? (
+                              <div className="sm-save-spinner" style={{ width: 16, height: 16 }} />
+                            ) : (
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                                <polyline points="3 6 5 6 21 6" />
+                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+                              </svg>
+                            )}
+                          </button>
+                        </>
                       )}
-                      <button
-                        className="sm-btn sm-btn-delete"
-                        disabled={isBusy}
-                        onClick={() => handleDelete(save.id)}
-                        title="Delete save"
-                      >
-                        {isDeleting ? (
-                          <div className="sm-save-spinner" style={{ width: 16, height: 16 }} />
-                        ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                          </svg>
-                        )}
-                      </button>
                     </div>
                   </div>
                 );
