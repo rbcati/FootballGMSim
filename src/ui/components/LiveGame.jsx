@@ -535,17 +535,16 @@ export default function LiveGame({
 
     if (lowerText.includes("touchdown")) {
       setOverlayEvent({ type: "touchdown", text: "TOUCHDOWN" });
-    } else if (lowerText.includes("field goal attempt... good")) {
-      setOverlayEvent({ type: "field-goal-made", text: "FIELD GOAL" });
-    } else if (
-      lowerText.includes("interception") ||
-      lowerText.includes("fumble")
-    ) {
+    } else if (lowerText.includes("field goal attempt... good") || lowerText.includes("field goal")) {
+      setOverlayEvent({ type: "field-goal", text: "FIELD GOAL" });
+    } else if (lowerText.includes("interception") || lowerText.includes("fumble")) {
       setOverlayEvent({ type: "turnover", text: "TURNOVER" });
     } else if (lowerText.includes("sack")) {
       setOverlayEvent({ type: "sack", text: "SACK" });
     } else if (lowerText.includes("safety")) {
       setOverlayEvent({ type: "safety", text: "SAFETY" });
+    } else if (lowerText.includes("punt")) {
+      setOverlayEvent({ type: "punt", text: "PUNT" });
     } else if (lowerText.includes("deep pass complete")) {
       setOverlayEvent({ type: "big-play", text: "BIG PLAY" });
     } else {

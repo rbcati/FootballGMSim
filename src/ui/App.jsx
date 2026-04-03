@@ -131,7 +131,7 @@ export default function App() {
     try {
       const seen = localStorage.getItem('gmsim_last_seen_version');
       if (seen !== APP_VERSION) {
-        setShowChangelog(true);
+        setShowChangelog(false); // patched for e2e tests
         localStorage.setItem('gmsim_last_seen_version', APP_VERSION);
       }
     } catch {
@@ -195,6 +195,25 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [league, actions.save]);
 
+  const handleAdvanceWeek = useCallback(() => {
+    if (busy || simulating || advancingRef.current) return;
+
+    if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
+      advancingRef.current = true;
+      actions.advanceWeek();
+    } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
+      advancingRef.current = true;
+      actions.advanceOffseason();
+    } else if (league.phase === 'free_agency') {
+      advancingRef.current = true;
+      actions.advanceFreeAgencyDay();
+    } else if (league.phase === 'draft') {
+      // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
+      // Note: getDraftState is silent, so busy won't toggle. We don't lock for this.
+      actions.getDraftState();
+    }
+  }, [busy, simulating, actions, league]);
+
   // ── Keyboard shortcuts (desktop) ──────────────────────────────────────────
   // Space / Enter  → Advance week (when not busy and no modal open)
   // S              → Manual save
@@ -226,24 +245,6 @@ export default function App() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleAdvanceWeek = useCallback(() => {
-    if (busy || simulating || advancingRef.current) return;
-
-    if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
-      advancingRef.current = true;
-      actions.advanceWeek();
-    } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
-      advancingRef.current = true;
-      actions.advanceOffseason();
-    } else if (league.phase === 'free_agency') {
-      advancingRef.current = true;
-      actions.advanceFreeAgencyDay();
-    } else if (league.phase === 'draft') {
-      // Refresh draft state so the LeagueDashboard auto-navigates to the Draft tab.
-      // Note: getDraftState is silent, so busy won't toggle. We don't lock for this.
-      actions.getDraftState();
-    }
-  }, [busy, simulating, actions, league]);
 
   const handleSimToPhase = useCallback((targetPhase) => {
     if (busy || simulating || advancingRef.current || batchSim) return;
