@@ -325,6 +325,24 @@ function dbGet(storeName, key) {
   });
 }
 
+function dbGetBulk(storeName, keys) {
+  if (!keys || keys.length === 0) return Promise.resolve([]);
+  return txOp(storeName, 'readonly', (store, resolve, reject) => {
+    const n = keys.length;
+    const results = new Array(n);
+    let completed = 0;
+    keys.forEach((key, i) => {
+      const req = store.get(key);
+      req.onsuccess = () => {
+        results[i] = req.result ?? null;
+        completed++;
+        if (completed === n) resolve(results);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  });
+}
+
 function dbPut(storeName, value) {
   return txOp(storeName, 'readwrite', (store, resolve, reject) => {
     const req = store.put(value);
@@ -429,6 +447,7 @@ export const Teams = {
 
 export const Players = {
   load:     (id)     => dbGet(STORES.PLAYERS, id),
+  loadBulk: (ids)    => dbGetBulk(STORES.PLAYERS, ids),
   loadAll:  ()       => dbGetAll(STORES.PLAYERS),
   byTeam:   (teamId) => dbGetAllByIndex(STORES.PLAYERS, 'teamId', teamId),
   save:     (player) => dbPut(STORES.PLAYERS, player),
