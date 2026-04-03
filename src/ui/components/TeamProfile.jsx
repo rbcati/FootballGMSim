@@ -5,7 +5,6 @@
  * Opens when a team name is clicked in Standings or other views.
  */
 import React, { useEffect, useState } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 import RelocateModal from "./RelocateModal.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -97,8 +96,7 @@ function StatBox({ label, value, sub }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function TeamProfile({ teamId, onClose, onPlayerSelect }) {
-  const { actions } = useWorker();
+export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRelocate, setShowRelocate] = useState(false);

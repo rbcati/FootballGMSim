@@ -8,7 +8,6 @@
  * Mobile-first Tailwind v4 with dark: mode support.
  */
 import React, { useEffect, useState } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -24,8 +23,7 @@ const RECORD_LABELS = {
   sacks: "Sacks",
 };
 
-export default function LeagueHistory({ onPlayerSelect }) {
-  const { actions } = useWorker();
+export default function LeagueHistory({ onPlayerSelect, actions }) {
   const [seasons, setSeasons] = useState(null);
   const [records, setRecords] = useState(null);
   const [activeTab, setActiveTab] = useState("champions");

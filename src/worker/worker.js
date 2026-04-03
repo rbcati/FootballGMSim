@@ -535,6 +535,30 @@ async function handleDeleteSave({ leagueId }, id) {
   }
 }
 
+// ── Handler: RENAME_SAVE ──────────────────────────────────────────────────────
+
+async function handleRenameSave({ leagueId, name }, id) {
+  try {
+    if (!leagueId || !name?.trim()) {
+      post(toUI.ERROR, { message: 'leagueId and name are required for RENAME_SAVE' }, id);
+      return;
+    }
+    // Update the save metadata in the Saves store
+    const existing = await Saves.get(leagueId);
+    if (!existing) {
+      post(toUI.ERROR, { message: `Save ${leagueId} not found` }, id);
+      return;
+    }
+    await Saves.put({ ...existing, name: name.trim() });
+    // Broadcast updated manifest entry so localStorage mirror stays in sync
+    self.postMessage({ type: 'SAVE_MANIFEST_UPDATE', payload: { ...existing, name: name.trim() } });
+    // Return updated saves list
+    await handleGetAllSaves({}, id);
+  } catch (e) {
+    post(toUI.ERROR, { message: e.message }, id);
+  }
+}
+
 // ── Handler: NEW_LEAGUE ───────────────────────────────────────────────────────
 
 async function handleNewLeague(payload, id) {
@@ -4446,6 +4470,7 @@ async function handleMessage(event) {
       case toWorker.GET_ALL_SAVES:      return await handleGetAllSaves(payload, id);
       case toWorker.LOAD_SAVE:          return await handleLoadSave(payload, id);
       case toWorker.DELETE_SAVE:        return await handleDeleteSave(payload, id);
+      case toWorker.RENAME_SAVE:        return await handleRenameSave(payload, id);
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);

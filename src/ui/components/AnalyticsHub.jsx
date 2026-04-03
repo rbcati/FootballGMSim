@@ -11,7 +11,6 @@
  */
 
 import React, { useEffect, useState, useMemo, useCallback } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -223,8 +222,7 @@ function SortTh({ col, sortKey, sortDir, onSort }) {
 
 // ── AnalyticsHub ───────────────────────────────────────────────────────────────
 
-export default function AnalyticsHub({ league }) {
-  const { actions } = useWorker();
+export default function AnalyticsHub({ league, actions }) {
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [category, setCategory] = useState("passing");

@@ -80,6 +80,7 @@ export const toWorker = Object.freeze({
   GET_ALL_SAVES:      'GET_ALL_SAVES',        // list all available leagues
   LOAD_SAVE:          'LOAD_SAVE',            // { leagueId }
   DELETE_SAVE:        'DELETE_SAVE',          // { leagueId }
+  RENAME_SAVE:        'RENAME_SAVE',          // { leagueId, name }
   SAVE_NOW:           'SAVE_NOW',             // force immediate DB flush
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
 

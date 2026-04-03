@@ -27,6 +27,14 @@ const POSITION_GROUPS = [
 
 const STARTERS = { QB: 1, RB: 2, WR: 3, TE: 2, OL: 5, DL: 4, LB: 3, DB: 4, ST: 3 };
 
+// Scheme fit colour thresholds
+function schemeFitColor(fit) {
+  if (fit == null) return "#636366";
+  if (fit >= 70) return "#34C759";  // green
+  if (fit >= 50) return "#FF9F0A";  // yellow
+  return "#FF453A";                  // red
+}
+
 function posColor(pos = "") {
   const map = {
     QB: "#FF9F0A", RB: "#34C759", WR: "#0A84FF", TE: "#5E5CE6",
@@ -145,6 +153,21 @@ function PlayerRow({
           </span>
         </div>
       </div>
+
+      {/* Scheme fit % pill */}
+      {player.schemeFit != null && (
+        <div style={{
+          flexShrink: 0,
+          fontSize: "0.58rem", fontWeight: 800,
+          color: schemeFitColor(player.schemeFit),
+          background: `${schemeFitColor(player.schemeFit)}18`,
+          border: `1px solid ${schemeFitColor(player.schemeFit)}44`,
+          borderRadius: 4, padding: "1px 5px",
+          minWidth: 30, textAlign: "center",
+        }} title={`Scheme fit: ${Math.round(player.schemeFit)}%`}>
+          {Math.round(player.schemeFit)}%
+        </div>
+      )}
 
       {/* Salary */}
       {player.contract?.salary != null && (
@@ -364,8 +387,65 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect 
     ? POSITION_GROUPS.filter(g => g.key === activeGroup)
     : POSITION_GROUPS;
 
+  // Auto-sort: order each group by schemeAdjustedOVR desc, then OVR desc
+  const handleAutoSort = useCallback(() => {
+    const playerById = Object.fromEntries(roster.map(p => [p.id, p]));
+    setChartOrder(prev => {
+      const newOrder = {};
+      for (const g of POSITION_GROUPS) {
+        const ids = prev[g.key] || [];
+        newOrder[g.key] = [...ids].sort((a, b) => {
+          const pa = playerById[a];
+          const pb = playerById[b];
+          const ovrA = pa?.schemeAdjustedOVR ?? pa?.ovr ?? 0;
+          const ovrB = pb?.schemeAdjustedOVR ?? pb?.ovr ?? 0;
+          return ovrB - ovrA;
+        });
+      }
+      if (actions?.updateDepthChart) {
+        actions.updateDepthChart(newOrder).catch(() => {});
+      }
+      return newOrder;
+    });
+  }, [roster, actions]);
+
+  // Compute team average scheme fit for display
+  const avgSchemeFit = useMemo(() => {
+    const fits = roster.map(p => p.schemeFit).filter(f => f != null);
+    if (!fits.length) return null;
+    return Math.round(fits.reduce((s, f) => s + f, 0) / fits.length);
+  }, [roster]);
+
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 40 }}>
+      {/* Header bar: auto-sort + avg fit */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        marginBottom: 10, gap: 8,
+      }}>
+        <button
+          onClick={handleAutoSort}
+          style={{
+            padding: "5px 14px", borderRadius: 8, border: "1px solid var(--accent)",
+            background: "var(--accent-muted, rgba(10,132,255,0.12))",
+            color: "var(--accent)", fontSize: "0.72rem", fontWeight: 700,
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+          }}
+          title="Sort each position group by scheme-adjusted OVR"
+        >
+          ⚡ Auto-Sort by Fit
+        </button>
+        {avgSchemeFit != null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: "0.65rem", color: "var(--text-subtle)" }}>Avg Fit</span>
+            <span style={{
+              fontSize: "0.75rem", fontWeight: 800,
+              color: schemeFitColor(avgSchemeFit),
+            }}>{avgSchemeFit}%</span>
+          </div>
+        )}
+      </div>
+
       {/* Position group filter tabs */}
       <div style={{
         display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14,

@@ -7,6 +7,70 @@
 import React, { useState, useMemo } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 
+const CAP_TOTAL = 301.2; // hard cap in $M
+
+function CapImpactBar({ capRoom, capHitThisYear }) {
+  const capUsed = Math.max(0, CAP_TOTAL - (capRoom ?? 0));
+  const newCapUsed = capUsed + capHitThisYear;
+  const pctUsed = Math.min(100, (capUsed / CAP_TOTAL) * 100);
+  const pctNew = Math.min(100, (newCapUsed / CAP_TOTAL) * 100);
+  const pctAdded = Math.max(0, pctNew - pctUsed);
+  const isOverCap = newCapUsed > CAP_TOTAL;
+  const barColor = isOverCap ? "#FF453A" : pctNew > 90 ? "#FF9F0A" : "#0A84FF";
+  const addColor = isOverCap ? "#FF453A" : "#FF9F0A";
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        fontSize: "0.65rem", color: "var(--text-muted)", marginBottom: 4,
+      }}>
+        <span>Cap Impact</span>
+        <span style={{ fontWeight: 700, color: isOverCap ? "#FF453A" : "var(--text-muted)" }}>
+          ${newCapUsed.toFixed(1)}M / ${CAP_TOTAL}M
+        </span>
+      </div>
+      {/* Bar */}
+      <div style={{
+        height: 8, borderRadius: 4, background: "var(--hairline)",
+        overflow: "hidden", position: "relative",
+      }}>
+        {/* Current usage */}
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0,
+          width: `${pctUsed}%`, background: barColor,
+          borderRadius: "4px 0 0 4px", transition: "width 0.2s",
+        }} />
+        {/* New contract addition */}
+        <div style={{
+          position: "absolute", left: `${pctUsed}%`, top: 0, bottom: 0,
+          width: `${pctAdded}%`, background: addColor,
+          opacity: 0.85,
+          borderRadius: pctAdded > 0 ? "0 4px 4px 0" : 0,
+          transition: "width 0.2s, left 0.2s",
+        }} />
+      </div>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        fontSize: "0.6rem", color: "var(--text-subtle)", marginTop: 3,
+      }}>
+        <span>Used: ${capUsed.toFixed(1)}M</span>
+        <span style={{ color: addColor }}>+${capHitThisYear.toFixed(1)}M</span>
+        <span>Room after: ${(CAP_TOTAL - newCapUsed).toFixed(1)}M</span>
+      </div>
+      {isOverCap && (
+        <div style={{
+          marginTop: 4, fontSize: "0.65rem", fontWeight: 700, color: "#FF453A",
+          background: "#FF453A18", border: "1px solid #FF453A44",
+          borderRadius: 4, padding: "2px 8px", textAlign: "center",
+        }}>
+          ⚠ Over Cap — reduce salary or release another player first
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ContractNegotiation({
   player,
   capRoom,
@@ -164,6 +228,7 @@ export default function ContractNegotiation({
           <div style={{ fontSize: "var(--text-xs)", marginTop: 8, color: schemeFit === "Excellent" ? "var(--success)" : "var(--warning)" }}>
             Scheme Fit: <strong>{schemeFit}</strong>
           </div>
+          <CapImpactBar capRoom={capRoom} capHitThisYear={capHitThisYear} />
         </div>
 
         {/* Action buttons */}

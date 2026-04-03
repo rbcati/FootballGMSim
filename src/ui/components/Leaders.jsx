@@ -6,7 +6,6 @@
  * Fetches data silently so it never blocks the Advance button.
  */
 import React, { useEffect, useState, useMemo } from "react";
-import { useWorker } from "../hooks/useWorker.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -239,8 +238,7 @@ function CategorySection({ catKey, stats, onPlayerSelect, userTeamId }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function Leaders({ onPlayerSelect, userTeamId }) {
-  const { actions } = useWorker();
+export default function Leaders({ onPlayerSelect, userTeamId, actions }) {
 
   const [mode, setMode] = useState("season");
   const [data, setData] = useState(null);

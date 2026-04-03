@@ -54,6 +54,7 @@ import WeeklyHub from "./WeeklyHub.jsx";
 import AnalyticsHub from "./AnalyticsHub.jsx";
 import GlossaryPopover from "./GlossaryPopover.jsx";
 import OnboardingTour from "./OnboardingTour.jsx";
+import OffseasonHub from "./OffseasonHub.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -93,6 +94,7 @@ const MOBILE_TAB_MAP = {
   god_mode: "God Mode",
   saves: "Saves",
   season_recap: "Season Recap",
+  offseason: "Offseason",
 };
 
 // Reverse map: dashboard tab → MobileNav tab ID
@@ -192,6 +194,7 @@ const BASE_TABS = [
   "History",
   "Hall of Fame",
   "Analytics",
+  "Offseason",
   "Season Recap",
   "Saves",
   "God Mode",
@@ -1596,7 +1599,7 @@ export default function LeagueDashboard({
             />
             {league.phase !== "preseason" && (
               <div style={{ marginTop: "var(--space-4)" }}>
-                <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} />
+                <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} actions={actions} />
               </div>
             )}
           </TabErrorBoundary>
@@ -1640,6 +1643,7 @@ export default function LeagueDashboard({
             <Leaders
               onPlayerSelect={setSelectedPlayerId}
               userTeamId={league.userTeamId}
+              actions={actions}
             />
           </TabErrorBoundary>
         )}
@@ -1754,12 +1758,12 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
-            <LeagueHistory onPlayerSelect={setSelectedPlayerId} />
+            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Hall of Fame" && (
           <TabErrorBoundary label="Hall of Fame">
-            <HallOfFame onPlayerSelect={setSelectedPlayerId} />
+            <HallOfFame onPlayerSelect={setSelectedPlayerId} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (
@@ -1810,7 +1814,12 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Analytics" && (
           <TabErrorBoundary label="Analytics">
-            <AnalyticsHub league={league} />
+            <AnalyticsHub league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Offseason" && (
+          <TabErrorBoundary label="Offseason">
+            <OffseasonHub league={league} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Season Recap" && (
@@ -1874,6 +1883,7 @@ export default function LeagueDashboard({
               setSelectedTeamId(null);
               setSelectedPlayerId(id);
             }}
+            actions={actions}
           />
         </TabErrorBoundary>
       )}
