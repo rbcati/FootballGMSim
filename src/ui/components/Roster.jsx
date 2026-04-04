@@ -715,7 +715,7 @@ function RosterTable({
   };
 
   const handleTradeBlockToggle = async (playerId) => {
-    if (!actions?.toggleTradeBlock) return;
+    if (!playerId || !actions?.toggleTradeBlock) return;
     await actions.toggleTradeBlock(playerId, teamId);
     actions.save();
     onRefetch();
@@ -1189,13 +1189,15 @@ function RosterTable({
                     </TableCell>
                     {/* Release / Extend */}
                     <TableCell style={{ textAlign: "center", padding: "0 var(--space-2)" }}>
-                      <button
-                        className={`trade-block-btn ${player.onTradeBlock ? "active" : ""}`}
-                        onClick={() => handleTradeBlockToggle(player.id)}
-                        title={player.onTradeBlock ? "Remove from trade block" : "Place on trade block"}
-                      >
-                        {player.onTradeBlock ? "🔴 On Block" : "➕ Trade Block"}
-                      </button>
+                      {player?.id && (
+                        <button
+                          className={`trade-block-btn ${player?.onTradeBlock ? "active" : ""}`}
+                          onClick={() => player?.id && handleTradeBlockToggle(player.id)}
+                          title={player?.onTradeBlock ? "Remove from trade block" : "Place on trade block"}
+                        >
+                          {player?.onTradeBlock ? "🔴 On Block" : "➕ Trade Block"}
+                        </button>
+                      )}
                     </TableCell>
                     {/* Release / Extend */}
                     <TableCell

@@ -3014,6 +3014,11 @@ async function handleUpdateDepthChart({ updates }, id) {
 }
 
 async function handleToggleTradeBlock({ playerId, teamId }, id) {
+  if (!playerId) {
+    self.postMessage({ type: 'ERROR', payload: { message: 'Missing playerId' } });
+    return;
+  }
+
   const numericPlayerId = Number(playerId);
   const player = cache.getPlayer(numericPlayerId);
   if (!player) {
