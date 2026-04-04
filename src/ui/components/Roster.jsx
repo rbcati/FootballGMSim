@@ -1013,9 +1013,7 @@ function RosterTable({
                       }}
                     >
                       <button
-                        onClick={() =>
-                          onPlayerSelect && onPlayerSelect(player.id)
-                        }
+                        onClick={() => player && onPlayerSelect && onPlayerSelect(player.id)}
                         style={{
                           background: "none",
                           border: "none",
@@ -1784,7 +1782,7 @@ function PlayerCard({ player, onSelect }) {
 
       {/* ── Player name ── */}
       <button
-        onClick={(e) => { e.stopPropagation(); onSelect?.(player.id); }}
+        onClick={(e) => { e.stopPropagation(); player && onSelect?.(player.id); }}
         style={{
           fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)",
           marginBottom: 2,

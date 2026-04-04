@@ -6,23 +6,26 @@ function fmtNumber(value) {
 }
 
 export default function PlayerDetailModal({ player, teams = [], onClose }) {
+  if (!player) return null;
+
+  const careerStats = player?.careerStats ?? [];
+  const playerName = player?.name ?? "Unknown Player";
+  const position = player?.pos ?? player?.position ?? "—";
+
   useEffect(() => {
-    if (!player) return undefined;
     const onKeyDown = (event) => {
       if (event.key === "Escape") onClose?.();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [player, onClose]);
+  }, [onClose]);
 
   const rows = useMemo(() => {
-    if (!Array.isArray(player?.careerStats)) return [];
-    return [...player.careerStats].sort(
+    if (!Array.isArray(careerStats)) return [];
+    return [...careerStats].sort(
       (a, b) => Number(b?.season ?? 0) - Number(a?.season ?? 0),
     );
-  }, [player]);
-
-  if (!player) return null;
+  }, [careerStats]);
 
   return (
     <>
@@ -54,9 +57,9 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
       >
         <div style={{ padding: "var(--space-4)", borderBottom: "1px solid var(--hairline)", display: "flex", justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{player.name}</div>
+            <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{playerName}</div>
             <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-              {player.pos} · Age {player.age ?? "—"} · OVR {player.ovr ?? "—"}
+              {position} · Age {player?.age ?? "—"} · OVR {player?.ovr ?? "—"}
             </div>
           </div>
           <button className="btn" onClick={onClose} aria-label="Close player detail modal">✕</button>
@@ -64,8 +67,8 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
 
         <div style={{ padding: "var(--space-4)" }}>
           <div style={{ fontWeight: 700, marginBottom: "var(--space-3)" }}>Career Stats by Season</div>
-          {rows.length === 0 ? (
-            <div style={{ color: "var(--text-muted)" }}>No career stats available yet.</div>
+          {careerStats.length === 0 ? (
+            <p className="no-stats" style={{ color: "var(--text-muted)" }}>No career stats recorded yet.</p>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table className="standings-table" style={{ width: "100%", fontSize: "var(--text-xs)" }}>
