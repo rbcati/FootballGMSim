@@ -466,3 +466,98 @@ label {
   font-weight: 600;
   letter-spacing: 0.05em;
 }
+
+/* ============================================================================
+   GM ADVISOR
+   ============================================================================ */
+
+.gm-advisor {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.advisor-header h2 {
+  color: #f59e0b;
+  margin: 0 0 4px;
+}
+
+.advisor-sub {
+  color: #94a3b8;
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.advisor-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.topic-btn {
+  background: #0f172a;
+  color: #cbd5e1;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.topic-btn:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.topic-btn.active {
+  background: #f59e0b;
+  color: #0f172a;
+  font-weight: 700;
+  border-color: #f59e0b;
+}
+
+.topic-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.advisor-response {
+  background: #0f172a;
+  border-radius: 8px;
+  padding: 20px;
+  min-height: 120px;
+}
+
+.advisor-loading .pulse {
+  color: #f59e0b;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.advisor-error {
+  color: #ef4444;
+}
+
+.advisor-prompt {
+  color: #475569;
+  font-style: italic;
+}
+
+.advice-topic {
+  color: #f59e0b;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.advice-body p {
+  color: #e2e8f0;
+  line-height: 1.6;
+  margin: 4px 0;
+  font-size: 14px;
+}
