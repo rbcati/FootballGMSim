@@ -388,6 +388,10 @@ export function useWorker() {
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
 
+    loadSlot: (slotKey)          => send(toWorker.LOAD_SLOT, { slotKey }),
+    saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),
+    deleteSlot: (slotKey)        => request(toWorker.DELETE_SLOT, { slotKey }, { silent: true }),
+
     /** Wipe the save and restart. */
     reset: ()                    => send(toWorker.RESET_LEAGUE),
 

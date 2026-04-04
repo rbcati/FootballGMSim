@@ -42,7 +42,7 @@ import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
 import GameSimulation      from './components/GameSimulation.jsx';
 import PostGameScreen      from './components/PostGameScreen.jsx';
-import SaveManager         from './components/SaveManager.jsx';
+import SaveSlotManager     from './components/SaveSlotManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
 import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
@@ -113,6 +113,8 @@ function AppContent() {
   } = state;
 
   const [activeView, setActiveView] = useState('saves');
+  const [activeSlot, setActiveSlot] = useState(null);
+  const [pendingNewSlot, setPendingNewSlot] = useState(null);
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const { soundEnabled, toggleSound } = useSettings();
@@ -192,10 +194,10 @@ function AppContent() {
 
   // Auto-save when user navigates away
   useEffect(() => {
-    const handler = () => { if (league) actions.save(); };
+    const handler = () => { if (league && activeSlot) actions.saveSlot(activeSlot); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [league, actions.save]);
+  }, [league, activeSlot, actions]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -249,7 +251,7 @@ function AppContent() {
         if (typeof handleAdvanceWeek === 'function') handleAdvanceWeek();
       } else if (e.key === 's' || e.key === 'S') {
         if (!busy && league) {
-          actions.save();
+          if (activeSlot) actions.saveSlot(activeSlot);
         }
       } else if (e.key === '?') {
         setShowChangelog(v => !v);
@@ -273,6 +275,32 @@ function AppContent() {
   }, [state, actions, handleAdvanceWeek]);
 
   // ── Advance button label ──────────────────────────────────────────────────
+
+
+  useEffect(() => {
+    if (!league || !activeSlot) return;
+    const slotNum = activeSlot?.split('_')?.[2];
+    if (!slotNum) return;
+    const userTeam = Array.isArray(league?.teams) ? league.teams.find(t => t?.id === league?.userTeamId) : null;
+    const existingRaw = localStorage.getItem(`footballgm_slot_${slotNum}_meta`);
+    const existing = existingRaw ? JSON.parse(existingRaw) : {};
+    const nextMeta = {
+      name: existing?.name ?? `Franchise ${slotNum}`,
+      teamName: userTeam?.name ?? userTeam?.abbr ?? 'Unknown Team',
+      record: { wins: userTeam?.wins ?? 0, losses: userTeam?.losses ?? 0 },
+      season: league?.season ?? league?.year ?? 1,
+      week: league?.week ?? 1,
+      lastSaved: new Date().toISOString(),
+    };
+    localStorage.setItem(`footballgm_slot_${slotNum}_meta`, JSON.stringify(nextMeta));
+  }, [league, activeSlot]);
+
+  useEffect(() => {
+    if (!league || !pendingNewSlot) return;
+    actions.saveSlot(pendingNewSlot);
+    setActiveSlot(pendingNewSlot);
+    setPendingNewSlot(null);
+  }, [league, pendingNewSlot, actions]);
   const getAdvanceLabel = () => {
     if (batchSim) return `Simulating…`;
     if (simulating) return `Simulating ${simProgress}%`;
@@ -307,7 +335,7 @@ function AppContent() {
     return <Loading message="Starting game engine…" />;
   }
 
-  if (!league) {
+  if (!league || activeSlot === null) {
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary>
@@ -319,8 +347,14 @@ function AppContent() {
     }
     return (
       <ErrorBoundary>
-        <div className="view fade-in" key="save_manager">
-          <SaveManager actions={actions} onCreate={() => setActiveView('new_league')} />
+        <div className="view fade-in" key="save_slot_manager">
+          <SaveSlotManager
+            activeSlot={activeSlot}
+            onLoad={(slotKey) => { setActiveSlot(slotKey); actions.loadSlot(slotKey); }}
+            onSave={(slotKey) => { setActiveSlot(slotKey); actions.saveSlot(slotKey); }}
+            onDelete={(slotKey) => { actions.deleteSlot(slotKey); if (activeSlot === slotKey) setActiveSlot(null); }}
+            onNew={(slotKey) => { setPendingNewSlot(slotKey); setActiveView('new_league'); }}
+          />
         </div>
       </ErrorBoundary>
     );
@@ -459,7 +493,8 @@ function AppContent() {
               <span className="app-sim-btn-short">→ Szn</span>
             </button>
           )}
-          <button className="btn app-save-btn" onClick={() => actions.save()} disabled={busy || !!batchSim}>
+          <button className="btn" onClick={() => setActiveSlot(null)} disabled={busy || !!batchSim}>Save Slots</button>
+          <button className="btn app-save-btn" onClick={() => activeSlot && actions.saveSlot(activeSlot)} disabled={busy || !!batchSim || !activeSlot}>
             Save
           </button>
           <button className="btn btn-danger app-reset-btn" onClick={handleReset} disabled={busy || !!batchSim}>
@@ -747,7 +782,7 @@ function AppContent() {
               onComplete={(scores) => {
                 try {
                   // Belt-and-suspenders save immediately on game completion
-                  actions.save();
+                  if (activeSlot) actions.saveSlot(activeSlot);
                   // Capture final scores + logs for PostGameScreen, then clear the viewer
                   setPostGameResult({
                     homeTeam,
