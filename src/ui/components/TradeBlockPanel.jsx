@@ -1,11 +1,15 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 
-export default function TradeBlockPanel({ players = [], onRemove }) {
+export default function TradeBlockPanel({ roster, onRemove }) {
+  if (!roster || !Array.isArray(roster)) {
+    return null;
+  }
+
   const [open, setOpen] = useState(true);
   const blockPlayers = useMemo(
-    () => players.filter((player) => (player?.onTradeBlock ?? false)),
-    [players],
+    () => roster.filter((player) => player?.onTradeBlock === true),
+    [roster],
   );
 
   return (
@@ -38,7 +42,7 @@ export default function TradeBlockPanel({ players = [], onRemove }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
               {blockPlayers.map((player) => (
                 <div
-                  key={player.id}
+                  key={player?.id ?? `${player?.name ?? "unknown"}-${player?.pos ?? "na"}`}
                   style={{
                     display: "grid",
                     gridTemplateColumns: "1fr auto auto auto",
@@ -49,10 +53,10 @@ export default function TradeBlockPanel({ players = [], onRemove }) {
                     padding: "var(--space-2) var(--space-3)",
                   }}
                 >
-                  <span style={{ fontWeight: 600 }}>{player.name}</span>
-                  <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{player.pos}</span>
-                  <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>OVR {player.ovr} · Age {player.age}</span>
-                  <Button className="btn" onClick={() => onRemove?.(player.id)} style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}>
+                  <span style={{ fontWeight: 600 }}>{player?.name ?? "Unknown"}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{player?.pos ?? "—"}</span>
+                  <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>OVR {player?.ovr ?? "—"} · Age {player?.age ?? "—"}</span>
+                  <Button className="btn" onClick={() => player?.id && onRemove?.(player.id)} style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }}>
                     Remove
                   </Button>
                 </div>

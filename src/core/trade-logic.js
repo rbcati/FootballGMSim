@@ -343,12 +343,17 @@ export function generateAITradeProposalsForUser() {
             if (aiOffer) {
                 // Find what the AI wants in return
                 for (const aiNeed of aiNeeds) {
-                    const candidates = userSurplus
-                      .filter((p) => p.pos === aiNeed.pos)
+                    const safeCandidates = Array.isArray(userSurplus)
+                      ? userSurplus
+                      : [];
+
+                    const candidates = safeCandidates
+                      .filter((p) => p?.pos === aiNeed.pos)
                       .sort((a, b) => {
+                        if (!a?.player || !b?.player) return 0;
                         const aWeight = (a.player?.onTradeBlock ?? false) ? 2 : 1;
                         const bWeight = (b.player?.onTradeBlock ?? false) ? 2 : 1;
-                        return (b.value * bWeight) - (a.value * aWeight);
+                        return ((b?.value ?? 0) * bWeight) - ((a?.value ?? 0) * aWeight);
                       });
                     const userAsset = candidates[0];
                     if (userAsset) {

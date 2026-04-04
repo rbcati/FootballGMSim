@@ -347,7 +347,9 @@ export default function TradeCenter({ league, actions }) {
         <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>Loading rosters…</div>
       ) : (
         <>
-          <TradeBlockPanel players={myRoster} onRemove={handleTradeBlockRemove} />
+          {Array.isArray(myRoster) && myRoster.length > 0 && (
+            <TradeBlockPanel roster={myRoster} onRemove={handleTradeBlockRemove} />
+          )}
           {/* Value + cap panel (original) */}
           {hasSelection && (
             <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
