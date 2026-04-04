@@ -83,6 +83,9 @@ export const toWorker = Object.freeze({
   DELETE_SAVE:        'DELETE_SAVE',          // { leagueId }
   RENAME_SAVE:        'RENAME_SAVE',          // { leagueId, name }
   SAVE_NOW:           'SAVE_NOW',             // force immediate DB flush
+  LOAD_SLOT:          'LOAD_SLOT',            // { slotKey }
+  SAVE_SLOT:          'SAVE_SLOT',            // { slotKey }
+  DELETE_SLOT:        'DELETE_SLOT',          // { slotKey }
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
 
   /** Settings */

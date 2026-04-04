@@ -429,6 +429,7 @@ async function loadSave() {
 async function handleInit(payload, id) {
   try {
     await openGlobalDB();
+    await migrateLegacySaveToSlot1IfNeeded();
     // We are ready, but we don't auto-load a save anymore.
     // The UI should verify worker readiness and then ask for save list.
     post(toUI.READY, {}, id);
@@ -1951,6 +1952,127 @@ async function handleGetBoxScore({ gameId }, id) {
   } catch (err) {
     post(toUI.BOX_SCORE, { gameId, game: null, error: err.message }, id);
   }
+}
+
+
+function isValidSlotKey(slotKey) {
+  return ['save_slot_1', 'save_slot_2', 'save_slot_3'].includes(slotKey);
+}
+
+async function snapshotActiveLeagueDB() {
+  const db = await openDB();
+  const storeNames = Array.from(db.objectStoreNames);
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeNames, 'readonly');
+    const out = {};
+    tx.onerror = () => reject(tx.error);
+    tx.oncomplete = () => resolve(out);
+    for (const storeName of storeNames) {
+      const req = tx.objectStore(storeName).getAll();
+      req.onsuccess = () => { out[storeName] = Array.isArray(req.result) ? req.result : []; };
+      req.onerror = () => reject(req.error);
+    }
+  });
+}
+
+async function writeLeagueSnapshot(leagueId, snapshot) {
+  configureActiveLeague(leagueId);
+  await openDB();
+  await clearAllData();
+  const db = await openDB();
+  const storeNames = Object.keys(snapshot ?? {});
+  if (!Array.isArray(storeNames) || storeNames.length === 0) return;
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(storeNames, 'readwrite');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    for (const storeName of storeNames) {
+      const rows = snapshot?.[storeName];
+      if (!Array.isArray(rows)) continue;
+      const store = tx.objectStore(storeName);
+      for (const row of rows) {
+        store.put(row);
+      }
+    }
+  });
+}
+
+async function copyLeagueData(sourceLeagueId, targetLeagueId) {
+  configureActiveLeague(sourceLeagueId);
+  await openDB();
+  const snapshot = await snapshotActiveLeagueDB();
+  await writeLeagueSnapshot(targetLeagueId, snapshot);
+}
+
+async function handleLoadSlot({ slotKey }, id) {
+  if (!isValidSlotKey(slotKey)) {
+    post(toUI.ERROR, { message: 'Invalid slot key' }, id);
+    return;
+  }
+  await handleLoadSave({ leagueId: slotKey }, id);
+}
+
+async function handleSaveSlot({ slotKey }, id) {
+  if (!isValidSlotKey(slotKey)) {
+    post(toUI.ERROR, { message: 'Invalid slot key' }, id);
+    return;
+  }
+
+  try {
+    const sourceLeagueId = getActiveLeagueId();
+    if (!sourceLeagueId) {
+      post(toUI.NOTIFICATION, { level: 'warn', message: 'Select or create a game before saving to a slot.' }, id);
+      return;
+    }
+
+    await flushDirty();
+    await copyLeagueData(sourceLeagueId, slotKey);
+    configureActiveLeague(slotKey);
+    await openDB();
+
+    const meta = cache.getMeta() ?? {};
+    const userTeam = cache.getTeam(meta?.userTeamId);
+    await Saves.save({
+      id: slotKey,
+      name: meta?.name ?? `Franchise ${slotKey?.split('_')?.[2] ?? '1'}`,
+      year: meta?.year,
+      teamId: meta?.userTeamId,
+      teamAbbr: userTeam?.abbr ?? '???',
+      lastPlayed: Date.now(),
+    });
+
+    _saveIsExplicitlyLoaded = true;
+    post(toUI.SAVED, {}, id);
+    post(toUI.STATE_UPDATE, buildViewState(), id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'Failed to save slot.' }, id);
+  }
+}
+
+async function handleDeleteSlot({ slotKey }, id) {
+  if (!isValidSlotKey(slotKey)) {
+    post(toUI.ERROR, { message: 'Invalid slot key' }, id);
+    return;
+  }
+  try {
+    await Saves.delete(slotKey);
+    await deleteLeagueDB(slotKey);
+    post(toUI.STATE_UPDATE, { activeSlot: null }, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'Failed to delete slot.' }, id);
+  }
+}
+
+async function migrateLegacySaveToSlot1IfNeeded() {
+  const saves = await Saves.loadAll();
+  const hasSlot1 = saves.some(s => s?.id === 'save_slot_1');
+  if (hasSlot1) return;
+
+  const legacy = saves.find(s => !isValidSlotKey(s?.id));
+  if (!legacy?.id) return;
+
+  await copyLeagueData(legacy.id, 'save_slot_1');
+  await Saves.save({ ...legacy, id: 'save_slot_1', lastPlayed: Date.now() });
 }
 
 // ── Handler: SAVE_NOW ─────────────────────────────────────────────────────────
@@ -4507,6 +4629,9 @@ async function handleMessage(event) {
       case toWorker.GET_ALL_SEASONS:    return await handleGetAllSeasons(payload, id);
       case toWorker.GET_PLAYER_CAREER:  return await handleGetPlayerCareer(payload, id);
       case toWorker.SAVE_NOW:           return await handleSaveNow(payload, id);
+      case toWorker.LOAD_SLOT:          return await handleLoadSlot(payload, id);
+      case toWorker.SAVE_SLOT:          return await handleSaveSlot(payload, id);
+      case toWorker.DELETE_SLOT:        return await handleDeleteSlot(payload, id);
       case toWorker.RESET_LEAGUE:       return await handleResetLeague(payload, id);
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
