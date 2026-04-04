@@ -410,6 +410,7 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
 traits: generateTraits(pos, playerOvr),
         abilities: [],
         offers: [], // FA offers
+        onTradeBlock: false,
         awards: [],
         personality: generatePersonality(),
         stats: {

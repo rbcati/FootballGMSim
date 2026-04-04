@@ -339,24 +339,31 @@ export function generateAITradeProposalsForUser() {
         const aiNeeds = getTeamNeeds(aiTeam.id);
 
         for (const userNeed of userNeeds) {
-            const aiOffer = aiSurplus.find(p => p.pos === userNeed.pos && calculatePlayerValue(p) >= 40);
+            const aiOffer = aiSurplus.find((p) => p.pos === userNeed.pos && p.value >= 40);
             if (aiOffer) {
                 // Find what the AI wants in return
                 for (const aiNeed of aiNeeds) {
-                    const userAsset = userSurplus.find(p => p.pos === aiNeed.pos);
+                    const candidates = userSurplus
+                      .filter((p) => p.pos === aiNeed.pos)
+                      .sort((a, b) => {
+                        const aWeight = (a.player?.onTradeBlock ?? false) ? 2 : 1;
+                        const bWeight = (b.player?.onTradeBlock ?? false) ? 2 : 1;
+                        return (b.value * bWeight) - (a.value * aWeight);
+                      });
+                    const userAsset = candidates[0];
                     if (userAsset) {
-                        const valA = calculatePlayerValue(aiOffer);
-                        const valB = calculatePlayerValue(userAsset);
+                        const valA = aiOffer.value;
+                        const valB = userAsset.value;
 
                         // Check if values are close enough (AI is willing to overpay slightly or underpay slightly)
                         if (valA > 0 && valB > 0 && Math.abs(valA - valB) / Math.max(valA, valB) <= 0.20) {
                             proposals.push({
                                 offeringTeamId: aiTeam.id,
                                 offeringTeamAbbr: aiTeam.abbr,
-                                offeringPlayerId: aiOffer.id,
-                                offeringPlayerName: aiOffer.name,
-                                receivingPlayerId: userAsset.id,
-                                receivingPlayerName: userAsset.name,
+                                offeringPlayerId: aiOffer.player.id,
+                                offeringPlayerName: aiOffer.player.name,
+                                receivingPlayerId: userAsset.player.id,
+                                receivingPlayerName: userAsset.player.name,
                                 timestamp: Date.now()
                             });
                             // Remove from surplus to prevent duplicate logic
