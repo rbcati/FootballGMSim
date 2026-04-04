@@ -38,9 +38,6 @@ export default function GMAdvisor({ league }) {
       .join(", ") || "None listed";
 
     return `
-You are an expert NFL General Manager advisor inside a football
-simulation game called Football GM Sim.
-
 CURRENT GAME STATE:
 - Team: ${userTeam.name ?? "Unknown"}
 - Season: ${league?.year ?? "—"} | Week: ${league?.week ?? "—"}
@@ -66,22 +63,33 @@ Keep response under 200 words. Use bullet points where helpful.
     setError("");
 
     try {
-      const headers = {
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-      };
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
 
-      if (import.meta.env.VITE_ANTHROPIC_API_KEY) {
-        headers["x-api-key"] = import.meta.env.VITE_ANTHROPIC_API_KEY;
+      if (!apiKey) {
+        setError("GM Advisor not configured. Add VITE_GROQ_API_KEY to environment.");
+        setLoading(false);
+        return;
       }
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
+          model: "llama-3.1-70b-versatile",
+          max_tokens: 400,
+          temperature: 0.7,
           messages: [
+            {
+              role: "system",
+              content: `You are an expert NFL General Manager advisor
+          inside a football simulation game. Give specific,
+          actionable advice. Reference real player names and stats
+          from the context. Be direct and concise.
+          Use bullet points. Max 150 words.`,
+            },
             {
               role: "user",
               content: buildContext(selectedTopic),
@@ -90,12 +98,14 @@ Keep response under 200 words. Use bullet points where helpful.
         }),
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error(`Anthropic request failed (${response.status})`);
+        setError(`Advisor error: ${data?.error?.message ?? "Unknown error. Try again."}`);
+        return;
       }
 
-      const data = await response.json();
-      const text = data?.content?.[0]?.text ?? "No advice returned.";
+      const text = data?.choices?.[0]?.message?.content ?? "No advice returned.";
       setAdvice(text);
       requestAnimationFrame(() => {
         responseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -126,6 +136,7 @@ Keep response under 200 words. Use bullet points where helpful.
           </button>
         ))}
       </div>
+      <p className="advisor-notice">⚡ Powered by Groq (free) · Responses may be rate limited</p>
 
       <div className="advisor-response" ref={responseRef}>
         {loading && (
