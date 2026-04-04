@@ -57,6 +57,7 @@ import OnboardingTour from "./OnboardingTour.jsx";
 import OffseasonHub from "./OffseasonHub.jsx";
 import V2Roadmap from "./V2Roadmap.jsx";
 import V2FeatureCenter from "./V2FeatureCenter.jsx";
+import GMAdvisor from "./GMAdvisor.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -207,6 +208,7 @@ const BASE_TABS = [
   "Scouting Center",
   "Contracts Hub",
   "League AI",
+  "🤖 GM Advisor",
 ];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
@@ -1871,6 +1873,11 @@ export default function LeagueDashboard({
         {activeTab === "League AI" && (
           <TabErrorBoundary label="League AI">
             <V2FeatureCenter title="League AI Center" />
+          </TabErrorBoundary>
+        )}
+        {isInitialized && activeTab === "🤖 GM Advisor" && (
+          <TabErrorBoundary label="GM Advisor">
+            <GMAdvisor league={league} />
           </TabErrorBoundary>
         )}
       </div>
