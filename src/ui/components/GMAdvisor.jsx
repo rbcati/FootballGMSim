@@ -28,14 +28,12 @@ export default function GMAdvisor({ league }) {
       .map((p) => `${p?.name ?? "Unknown"} (${p?.pos ?? p?.position ?? "?"}, OVR:${p?.ovr ?? 0}, Age:${p?.age ?? "?"})`)
       .join(", ");
 
-    const onBlock = roster
-      .filter((p) => p?.onTradeBlock)
-      .map((p) => p?.name)
-      .join(", ") || "None";
+    const onBlock =
+      roster.filter((p) => p?.onTradeBlock).map((p) => p?.name).join(", ") || "None";
 
-    const draftPicks = (userTeam.draftPicks ?? [])
-      .map((p) => `${p?.round ?? "?"} Rd ${p?.season ?? "?"}`)
-      .join(", ") || "None listed";
+    const draftPicks =
+      (userTeam.draftPicks ?? []).map((p) => `${p?.round ?? "?"} Rd ${p?.season ?? "?"}`).join(", ") ||
+      "None listed";
 
     return `
 CURRENT GAME STATE:
@@ -63,32 +61,21 @@ Keep response under 200 words. Use bullet points where helpful.
     setError("");
 
     try {
-      const apiKey = import.meta.env.VITE_GROQ_API_KEY ?? "";
-
-      if (!apiKey) {
-        setError("GM Advisor not configured. Add VITE_GROQ_API_KEY to environment.");
-        setLoading(false);
-        return;
-      }
-
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      const response = await fetch("/.netlify/functions/groq-proxy", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "llama-3.1-70b-versatile",
+          model: "llama-3.3-70b-versatile",
           max_tokens: 400,
           temperature: 0.7,
           messages: [
             {
               role: "system",
               content: `You are an expert NFL General Manager advisor
-          inside a football simulation game. Give specific,
-          actionable advice. Reference real player names and stats
-          from the context. Be direct and concise.
-          Use bullet points. Max 150 words.`,
+            inside a football simulation game. Give specific,
+            actionable advice. Reference real player names from
+            the context. Be direct and concise.
+            Use bullet points. Max 150 words.`,
             },
             {
               role: "user",
@@ -136,7 +123,7 @@ Keep response under 200 words. Use bullet points where helpful.
           </button>
         ))}
       </div>
-      <p className="advisor-notice">⚡ Powered by Groq (free) · Responses may be rate limited</p>
+      <p className="advisor-notice">⚡ Powered by Groq · AI advice based on your roster</p>
 
       <div className="advisor-response" ref={responseRef}>
         {loading && (
@@ -147,9 +134,7 @@ Keep response under 200 words. Use bullet points where helpful.
         {error && <p className="advisor-error">{error}</p>}
         {advice && !loading && (
           <div className="advisor-advice">
-            <p className="advice-topic">
-              Re: {ADVISOR_TOPICS.find((t) => t.key === topic)?.label}
-            </p>
+            <p className="advice-topic">Re: {ADVISOR_TOPICS.find((t) => t.key === topic)?.label}</p>
             <div className="advice-body">
               {advice.split("\n").map((line, i) => (
                 <p key={i}>{line}</p>
