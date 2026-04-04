@@ -1,105 +1,89 @@
-import React, { useState, useEffect } from "react";
-import { News, configureActiveLeague } from "../../db/index.js"; // Direct DB access for read-only view
+import React, { useMemo, useState, useEffect } from 'react';
 
-function NewsItem({ item }) {
-  const date = new Date(item.timestamp).toLocaleDateString();
-  let icon = "📰";
-  let color = "var(--text-muted)";
+const priorityColor = {
+  high: '#ef4444',
+  medium: '#f59e0b',
+  low: '#334155',
+};
 
-  if (item.type === "INJURY") {
-    icon = "🚑";
-    color = "var(--danger)";
-  } else if (item.type === "TRADE_PROPOSAL") {
-    icon = "🚨";
-    color = "var(--accent)";
-  } else if (item.type === "FEAT" || item.type === "MILESTONE") {
-    icon = "⭐";
-    color = "var(--warning)";
-  } else if (item.type === "NARRATIVE") {
-    icon = "🎭";
-    color = "var(--text)";
-  } else if (item.type === "INJURY") { // Re-trigger to avoid syntax issue
-    icon = "🚑";
-    color = "var(--danger)";
-  } else if (item.type === "TRANSACTION") {
-    icon = "✍️";
-    color = "var(--success)";
-  } else if (item.type === "GAME") {
-    icon = "🏈";
-    color = "var(--accent)";
-  } else if (item.type === "AWARD") {
-    icon = "🏆";
-    color = "var(--warning)";
-  }
+const tickerColor = {
+  high: '#f59e0b',
+  medium: '#ffffff',
+  low: '#94a3b8',
+};
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: "var(--space-3)",
-        padding: "var(--space-2) 0",
-        borderBottom: "1px solid var(--hairline)",
-        fontSize: "var(--text-sm)",
-      }}
-    >
-      <span style={{ fontSize: "1.2em" }}>{icon}</span>
-      <div style={{ flex: 1 }}>
-        <div style={{ color: "var(--text)" }}>{item.text}</div>
-        <div
-          style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}
-        >
-          Week {item.week}, {item.year}
-        </div>
-      </div>
-    </div>
-  );
-}
+export default function NewsFeed({ league, mode = 'full' }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [filter, setFilter] = useState('all');
 
-export default function NewsFeed({ league }) {
-  const [news, setNews] = useState([]);
+  const allNews = useMemo(() => (Array.isArray(league?.newsItems) ? league.newsItems : []), [league?.newsItems]);
+  const userTeamId = league?.userTeamId;
+
+  const latestFive = useMemo(() => allNews.slice(0, 5), [allNews]);
 
   useEffect(() => {
-    // Direct DB read for simplicity since news is high-volume/low-criticality
-    // In a stricter arch, we'd ask the worker via GET_RECENT_NEWS
-    if (league?.id) {
-      configureActiveLeague(league.id);
-      News.getRecent(10).then(setNews).catch(console.error);
-    }
-  }, []);
+    if (mode !== 'ticker' || latestFive.length <= 1) return undefined;
+    const timer = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % latestFive.length);
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [mode, latestFive.length]);
+
+  if (mode === 'ticker') {
+    if (!Array.isArray(latestFive) || latestFive.length === 0) return null;
+    return (
+      <div className="news-ticker" style={{ background: '#0f172a', borderBottom: '1px solid #334155', padding: '8px 16px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+        {latestFive.map((item, index) => (
+          <span
+            className="ticker-item"
+            key={item?.id ?? `${item?.headline ?? 'news'}_${index}`}
+            style={{
+              display: 'inline-block',
+              marginRight: 48,
+              fontSize: 13,
+              color: tickerColor[item?.priority] ?? '#ffffff',
+              opacity: activeIndex === index ? 1 : 0.55,
+              transition: 'opacity 0.35s ease',
+            }}
+          >
+            {item?.headline}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  const filtered = allNews.filter((item) => {
+    if (filter === 'team') return item?.teamId === userTeamId;
+    if (filter === 'league') return item?.teamId == null;
+    if (filter === 'high') return item?.priority === 'high';
+    return true;
+  }).slice(0, 50);
 
   return (
-    <div
-      className="card"
-      style={{ padding: "var(--space-4)", maxHeight: 300, overflowY: "auto" }}
-    >
-      <h3
-        style={{
-          fontSize: "var(--text-xs)",
-          fontWeight: 700,
-          textTransform: "uppercase",
-          letterSpacing: "0.5px",
-          color: "var(--text-muted)",
-          marginBottom: "var(--space-3)",
-          position: "sticky",
-          top: 0,
-          background: "var(--surface)",
-          paddingBottom: 8,
-        }}
-      >
-        League News
-      </h3>
-      {news.length === 0 ? (
-        <div
-          style={{
-            color: "var(--text-subtle)",
-            fontStyle: "italic",
-            textAlign: "center",
-          }}
-        >
-          No recent news.
-        </div>
+    <div className="card" style={{ padding: 'var(--space-4)' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {[
+          ['all', 'ALL'],
+          ['team', 'YOUR TEAM'],
+          ['league', 'LEAGUE'],
+          ['high', 'HIGH PRIORITY'],
+        ].map(([value, label]) => (
+          <button key={value} className="btn" onClick={() => setFilter(value)} style={{ opacity: filter === value ? 1 : 0.7 }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {!Array.isArray(filtered) || filtered.length === 0 ? (
+        <div style={{ color: 'var(--text-subtle)' }}>No news yet.</div>
       ) : (
-        news.map((item, i) => <NewsItem key={i} item={item} />)
+        filtered.map((item, index) => (
+          <div key={item?.id ?? `${item?.headline ?? 'item'}_${index}`} style={{ borderLeft: `4px solid ${priorityColor[item?.priority] ?? '#334155'}`, padding: '10px 12px', marginBottom: 10, background: 'var(--surface)' }}>
+            <div style={{ fontWeight: 700 }}>{item?.headline}</div>
+            <div style={{ color: 'var(--text-muted)' }}>{item?.body}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 4 }}>Week {item?.week ?? '-'} · Season {item?.season ?? '-'}</div>
+          </div>
+        ))
       )}
     </div>
   );

@@ -176,7 +176,17 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             schedule: null,
             resultsByWeek: [],
             transactions: [],
-            ownerChallenge: null
+            ownerChallenge: null,
+            newsItems: [],
+            ownerGoals: [],
+            retiredPlayers: [],
+            records: {
+                mostPassingYardsSeason: null,
+                mostRushingYardsSeason: null,
+                mostWinsSeason: null,
+                mostChampionships: null,
+                highestOvrPlayer: null,
+            },
         };
 
         // Shared set of elite player names across all teams to prevent duplicates
@@ -203,9 +213,12 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                 capUsed: 0,
                 capRoom: Constants.SALARY_CAP?.BASE || 220,
                 capSpace: Constants.SALARY_CAP?.BASE || 220,
-                scoutingPoints: 100
+                scoutingPoints: 100,
+                fanApproval: 50,
+                rivalTeamId: null
             };
             team.offScheme = team?.offScheme ?? 'Pro Style';
+            team.fanApproval = team?.fanApproval ?? 50;
             team.defScheme = team?.defScheme ?? '4-3';
             team.coachingStaff = team?.coachingStaff ?? {
               headCoach: {
@@ -296,6 +309,21 @@ function makeLeague(teams, options = {}, dependencies = {}) {
             }
         });
 
+        const teamsByDivision = new Map();
+        league.teams.forEach((team) => {
+            const key = `${team?.conf ?? ''}-${team?.div ?? ''}`;
+            const bucket = teamsByDivision.get(key) ?? [];
+            bucket.push(team);
+            teamsByDivision.set(key, bucket);
+        });
+        teamsByDivision.forEach((divisionTeams) => {
+            if (!Array.isArray(divisionTeams)) return;
+            divisionTeams.forEach((team, index) => {
+                if (!team) return;
+                const rival = divisionTeams[(index + 1) % divisionTeams.length];
+                team.rivalTeamId = rival?.id ?? null;
+            });
+        });
 
     return league;
 
