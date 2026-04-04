@@ -498,10 +498,10 @@ export default function App() {
       {swUpdateReady && (
         <div role="alert" className="app-banner app-banner-info">
           <span className="app-banner-text">
-            A new version of Football GM is available.
+            New version available. You can keep playing now and update when ready.
           </span>
           <button className="btn btn-primary app-banner-btn" onClick={handleSwUpdate}>
-            Update &amp; Reload
+            Update &amp; Restart
           </button>
           <button
             onClick={() => setSwUpdateReady(false)}

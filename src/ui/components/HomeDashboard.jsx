@@ -768,7 +768,7 @@ function getTeamStreakHome(schedule, teamId) {
 }
 
 function getPositionGroupOvr(roster, positions) {
-  if (!roster?.length) return 0;
+  if (!Array.isArray(roster) || !roster.length) return 0;
   const group = roster.filter(p => positions.includes(p.pos ?? p.position ?? ""));
   if (!group.length) return 0;
   // Weight top 2 starters more heavily
@@ -894,7 +894,7 @@ function SeasonObjectivesCard({ league, userTeam }) {
 // ── Team Strength Breakdown ───────────────────────────────────────────────────
 
 function TeamStrengthBreakdown({ userTeam }) {
-  if (!userTeam?.roster) return null;
+  if (!Array.isArray(userTeam?.roster)) return null;
 
   const roster = userTeam.roster;
 
@@ -1059,7 +1059,7 @@ function NewSaveHero({ userTeam, league, onAdvanceWeek, isBusy }) {
   if (!userTeam) return null;
   const color = teamColor(userTeam.abbr);
   const accent = teamAccent(userTeam.abbr);
-  const roster = userTeam.roster ?? [];
+  const roster = Array.isArray(userTeam.roster) ? userTeam.roster : [];
   const powerRank = getPowerRank(league);
 
   // Find franchise cornerstones: top players by OVR across key positions
@@ -1228,7 +1228,7 @@ function NewSaveHero({ userTeam, league, onAdvanceWeek, isBusy }) {
 
 // ── Franchise Cornerstones Card (mid-season version) ──────────────────────────
 function FranchiseCornerstonesCard({ userTeam, onPlayerSelect }) {
-  if (!userTeam?.roster?.length) return null;
+  if (!Array.isArray(userTeam?.roster) || !userTeam.roster.length) return null;
   const roster = userTeam.roster;
   const gamesPlayed = (userTeam.wins ?? 0) + (userTeam.losses ?? 0);
   // Only show this card mid-season (after some games played)
@@ -1444,8 +1444,8 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
   );
 
   const injuries = useMemo(() => {
-    if (!userTeam?.roster) return [];
-    return (userTeam.roster ?? [])
+    if (!Array.isArray(userTeam?.roster)) return [];
+    return userTeam.roster
       .filter(p => p.injury && p.injury.weeksLeft > 0)
       .map(p => ({
         playerId: p.id,
@@ -1458,7 +1458,8 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
   }, [userTeam]);
 
   const topPerformers = useMemo(() => {
-    return (userTeam?.roster || []).sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 3);
+    const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    return [...roster].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 3);
   }, [userTeam]);
 
   if (!userTeam) {
