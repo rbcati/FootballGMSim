@@ -56,6 +56,7 @@ import GlossaryPopover from "./GlossaryPopover.jsx";
 import OnboardingTour from "./OnboardingTour.jsx";
 import OffseasonHub from "./OffseasonHub.jsx";
 import V2Roadmap from "./V2Roadmap.jsx";
+import V2FeatureCenter from "./V2FeatureCenter.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -201,6 +202,10 @@ const BASE_TABS = [
   "Season Recap",
   "Saves",
   "God Mode",
+  "Training Lab",
+  "Scouting Center",
+  "Contracts Hub",
+  "League AI",
 ];
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
@@ -1599,6 +1604,8 @@ export default function LeagueDashboard({
               onTeamSelect={setSelectedTeamId}
               onPlayerSelect={setSelectedPlayerId}
               onTabChange={setActiveTab}
+              onAdvanceWeek={onAdvanceWeek}
+              isBusy={busy || simulating}
             />
             {league.phase !== "preseason" && (
               <div style={{ marginTop: "var(--space-4)" }}>
@@ -1837,6 +1844,26 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
             />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Training Lab" && (
+          <TabErrorBoundary label="Training Lab">
+            <V2FeatureCenter title="Training Lab" />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Scouting Center" && (
+          <TabErrorBoundary label="Scouting Center">
+            <V2FeatureCenter title="Scouting Center" />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Contracts Hub" && (
+          <TabErrorBoundary label="Contracts Hub">
+            <V2FeatureCenter title="Contracts Hub" />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "League AI" && (
+          <TabErrorBoundary label="League AI">
+            <V2FeatureCenter title="League AI Center" />
           </TabErrorBoundary>
         )}
       </div>
