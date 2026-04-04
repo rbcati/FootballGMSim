@@ -497,6 +497,12 @@ label {
   margin-bottom: 20px;
 }
 
+.advisor-notice {
+  color: #475569;
+  font-size: 11px;
+  margin-bottom: 12px;
+}
+
 .topic-btn {
   background: #0f172a;
   color: #cbd5e1;
