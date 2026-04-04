@@ -2178,6 +2178,7 @@ async function handleGetRoster({ teamId }, id) {
         progressionDelta: p.progressionDelta ?? null,
         potential:        p.potential ?? null,
         status:           p.status ?? 'active',
+        onTradeBlock:     p?.onTradeBlock ?? false,
         contract,
         traits:           p.traits ?? [],
         schemeFit:        fit,
@@ -3008,6 +3009,26 @@ async function handleUpdateDepthChart({ updates }, id) {
           cache.updatePlayer(p.id, { depthOrder: u.newOrder });
       }
   });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+async function handleToggleTradeBlock({ playerId, teamId }, id) {
+  const numericPlayerId = Number(playerId);
+  const player = cache.getPlayer(numericPlayerId);
+  if (!player) {
+    post(toUI.ERROR, { message: 'Player not found' }, id);
+    return;
+  }
+
+  const numericTeamId = Number(teamId);
+  if (!Number.isFinite(numericTeamId) || player.teamId !== numericTeamId) {
+    post(toUI.ERROR, { message: 'Player is not on the selected team' }, id);
+    return;
+  }
+
+  const isOnBlock = player?.onTradeBlock ?? false;
+  cache.updatePlayer(player.id, { onTradeBlock: !isOnBlock });
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
@@ -4495,6 +4516,7 @@ async function handleMessage(event) {
       case toWorker.CONDUCT_DRILL:      return await handleConductDrill(payload, id);
       case toWorker.UPDATE_MEDICAL_STAFF: return await handleUpdateMedicalStaff(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
+      case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);

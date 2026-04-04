@@ -714,6 +714,13 @@ function RosterTable({
     onRefetch();
   };
 
+  const handleTradeBlockToggle = async (playerId) => {
+    if (!actions?.toggleTradeBlock) return;
+    await actions.toggleTradeBlock(playerId, teamId);
+    actions.save();
+    onRefetch();
+  };
+
   const comparePlayerA = players.find(p => p.id === compareIds[0]);
   const comparePlayerB = players.find(p => p.id === compareIds[1]);
 
@@ -939,6 +946,17 @@ function RosterTable({
                 <TableHead
                   style={{
                     textAlign: "center",
+                    color: "var(--text-muted)",
+                    fontSize: "var(--text-xs)",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  Trade Block
+                </TableHead>
+                <TableHead
+                  style={{
+                    textAlign: "center",
                     paddingRight: "var(--space-3)",
                     color: "var(--text-muted)",
                     fontSize: "var(--text-xs)",
@@ -954,7 +972,7 @@ function RosterTable({
               {displayed.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={11}
+                    colSpan={12}
                     style={{
                       textAlign: "center",
                       padding: "var(--space-8)",
@@ -1168,6 +1186,16 @@ function RosterTable({
                       >
                         {compareIds.includes(player.id) ? "✓" : "⊕"}
                       </Button>
+                    </TableCell>
+                    {/* Release / Extend */}
+                    <TableCell style={{ textAlign: "center", padding: "0 var(--space-2)" }}>
+                      <button
+                        className={`trade-block-btn ${player.onTradeBlock ? "active" : ""}`}
+                        onClick={() => handleTradeBlockToggle(player.id)}
+                        title={player.onTradeBlock ? "Remove from trade block" : "Place on trade block"}
+                      >
+                        {player.onTradeBlock ? "🔴 On Block" : "➕ Trade Block"}
+                      </button>
                     </TableCell>
                     {/* Release / Extend */}
                     <TableCell

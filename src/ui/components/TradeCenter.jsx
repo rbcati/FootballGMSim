@@ -10,6 +10,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import TradeBlockPanel from "./TradeBlockPanel.jsx";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -297,6 +298,13 @@ export default function TradeCenter({ league, actions }) {
     } finally { setSubmitting(false); }
   };
 
+  const handleTradeBlockRemove = async (playerId) => {
+    if (!actions?.toggleTradeBlock) return;
+    await actions.toggleTradeBlock(playerId, myTeamId);
+    actions.save();
+    await fetchRosters(targetId);
+  };
+
   return (
     <Card className="card-premium"><CardContent className="p-4">
       {showSavedToast && (
@@ -339,6 +347,7 @@ export default function TradeCenter({ league, actions }) {
         <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>Loading rosters…</div>
       ) : (
         <>
+          <TradeBlockPanel players={myRoster} onRemove={handleTradeBlockRemove} />
           {/* Value + cap panel (original) */}
           {hasSelection && (
             <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>

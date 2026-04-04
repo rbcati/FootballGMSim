@@ -58,6 +58,9 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
         <div style={{ padding: "var(--space-4)", borderBottom: "1px solid var(--hairline)", display: "flex", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{playerName}</div>
+            {player?.onTradeBlock && (
+              <span className="trade-block-badge">🔴 On Trade Block</span>
+            )}
             <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
               {position} · Age {player?.age ?? "—"} · OVR {player?.ovr ?? "—"}
             </div>

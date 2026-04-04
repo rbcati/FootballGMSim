@@ -443,3 +443,26 @@ label {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); 
   gap: var(--space-4);
 }
+.trade-block-btn {
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trade-block-btn.active {
+  border-color: #ef4444;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.trade-block-badge {
+  color: #ef4444;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}

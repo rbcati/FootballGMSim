@@ -424,6 +424,8 @@ export function useWorker() {
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
       request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),
+    toggleTradeBlock: (playerId, teamId) =>
+      request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
 
     /** Get contract extension demand from AI (returns Promise). */
     getExtensionAsk: (playerId) =>
