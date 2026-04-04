@@ -9,14 +9,16 @@ const ADVISOR_TOPICS = [
   { key: "rebuild", label: "🏗️ Rebuild vs Win Now" },
 ];
 
-export default function GMAdvisor({ league }) {
+export default function GMAdvisor({ league, leagueState, currentSeason, currentWeek }) {
+  const resolvedLeague = leagueState ?? league;
   const [topic, setTopic] = useState(null);
   const [advice, setAdvice] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const responseRef = useRef(null);
 
-  const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
+  const userTeam =
+    resolvedLeague?.teams?.find((t) => t.id === resolvedLeague?.userTeamId) ?? null;
 
   const buildContext = (selectedTopic) => {
     if (!userTeam) return "";
@@ -38,7 +40,7 @@ export default function GMAdvisor({ league }) {
     return `
 CURRENT GAME STATE:
 - Team: ${userTeam.name ?? "Unknown"}
-- Season: ${league?.year ?? "—"} | Week: ${league?.week ?? "—"}
+- Season: ${currentSeason ?? resolvedLeague?.year ?? "—"} | Week: ${currentWeek ?? resolvedLeague?.week ?? "—"}
 - Record: ${userTeam.wins ?? 0}W - ${userTeam.losses ?? 0}L
 - Cap Space: $${(userTeam.capRoom ?? 0).toFixed(1)}M
 - Top 15 Roster: ${topPlayers || "Unavailable"}
