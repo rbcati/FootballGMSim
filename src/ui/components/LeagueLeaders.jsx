@@ -33,6 +33,10 @@ function LeaderTable({ title, statLabel, rows }) {
 
 export default function LeagueLeaders({ league, actions }) {
   const [rostersByTeam, setRostersByTeam] = useState({});
+  const currentSeason = league?.year ?? league?.seasonId;
+  const isReady = Boolean(league && currentSeason && Array.isArray(league?.teams));
+  const teams = league?.teams ?? [];
+  const getStat = (player, key) => player?.seasonLog?.[currentSeason]?.[key] ?? 0;
 
   useEffect(() => {
     let mounted = true;
@@ -56,41 +60,53 @@ export default function LeagueLeaders({ league, actions }) {
     };
   }, [league?.teams, actions]);
 
-  const currentSeason = league?.year ?? league?.seasonId;
-
   const allPlayers = useMemo(
-    () => Object.entries(rostersByTeam).flatMap(([teamId, players]) =>
-      (players || []).map((player) => ({ ...player, teamId: Number(teamId) }))),
-    [rostersByTeam],
+    () => {
+      const aggregated = [];
+      teams.forEach((team) => {
+        const loadedRoster = rostersByTeam?.[team?.id];
+        const roster = Array.isArray(loadedRoster) ? loadedRoster : (team?.roster ?? []);
+        roster.forEach((player) => {
+          if (player) aggregated.push({ ...player, teamId: Number(team?.id) });
+        });
+      });
+      return aggregated;
+    },
+    [rostersByTeam, teams],
   );
 
   const topPassing = useMemo(() => allPlayers
     .map((player) => {
-      const season = player?.seasonLog?.[currentSeason] ?? {};
-      const team = getTeamIdentity(player.teamId, league?.teams ?? []);
-      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: season.passYd ?? 0 };
+      const team = getTeamIdentity(player.teamId, teams);
+      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: getStat(player, "passYd") };
     })
     .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, league?.teams]);
+    .slice(0, 10), [allPlayers, currentSeason, teams]);
 
   const topRushing = useMemo(() => allPlayers
     .map((player) => {
-      const season = player?.seasonLog?.[currentSeason] ?? {};
-      const team = getTeamIdentity(player.teamId, league?.teams ?? []);
-      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: season.rushYd ?? 0 };
+      const team = getTeamIdentity(player.teamId, teams);
+      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: getStat(player, "rushYd") };
     })
     .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, league?.teams]);
+    .slice(0, 10), [allPlayers, currentSeason, teams]);
 
   const topDefense = useMemo(() => allPlayers
     .map((player) => {
-      const season = player?.seasonLog?.[currentSeason] ?? {};
-      const team = getTeamIdentity(player.teamId, league?.teams ?? []);
-      const combined = Number(season.tackles ?? 0) + Number(season.sacks ?? 0);
+      const team = getTeamIdentity(player.teamId, teams);
+      const combined = Number(getStat(player, "tackles")) + Number(getStat(player, "sacks"));
       return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: combined };
     })
     .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, league?.teams]);
+    .slice(0, 10), [allPlayers, currentSeason, teams]);
+
+  if (!isReady) {
+    return (
+      <div className="leaders-empty">
+        <p>Stats will appear after Week 1.</p>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "grid", gap: "var(--space-4)" }}>

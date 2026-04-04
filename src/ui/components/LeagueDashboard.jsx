@@ -1221,6 +1221,7 @@ export default function LeagueDashboard({
   }, [externalBoxScoreId, onConsumeExternalBoxScore]);
 
   if (!league) return null;
+  const isInitialized = Boolean(Array.isArray(league?.teams) && league.teams.length > 0);
 
   // NOTE: a missing schedule only affects the Schedule tab.
   // Do NOT block the whole dashboard — all other tabs remain usable.
@@ -1658,7 +1659,7 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
-        {activeTab === "League Leaders" && (
+        {isInitialized && activeTab === "League Leaders" && (
           <TabErrorBoundary label="League Leaders">
             <LeagueLeaders league={league} actions={actions} />
           </TabErrorBoundary>
