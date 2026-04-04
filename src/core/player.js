@@ -6,6 +6,15 @@ import { Constants as C } from './constants.js';
 import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 import { generateTraits } from './traits.js';
 
+const CONTRACT_DEFAULT = {
+  salary: 2,
+  years: 1,
+  guaranteed: 0,
+  isFranchiseTagged: false,
+};
+
+const DEV_TRAITS = ['Normal', 'Star', 'Superstar', 'XFactor'];
+
 // ============================================================================
 // PLAYER PROGRESSION & SKILL TREES
 // ============================================================================
@@ -255,40 +264,26 @@ function calculateOvr(pos, ratings) {
 }
 
 function generateContract(ovr, pos) {
-  const positionMultiplier = C.POSITION_VALUES?.[pos] || 1.0;
-  let baseAnnual;
-
-  if (ovr >= 90) {
-    if (pos === 'QB') baseAnnual = U.rand(15, 25) * positionMultiplier;
-    else baseAnnual = U.rand(12, 20) * positionMultiplier * 0.85;
-  } else if (ovr >= 80) {
-    baseAnnual = U.rand(4, 12) * positionMultiplier * 0.9;
-  } else if (ovr >= 70) {
-    baseAnnual = U.rand(1.5, 5) * positionMultiplier;
-  } else if (ovr >= 60) {
-    baseAnnual = U.rand(0.6, 2) * positionMultiplier;
-  } else {
-    baseAnnual = U.rand(0.4, 0.8) * positionMultiplier;
-  }
-
-  if (baseAnnual > 30) baseAnnual = 30;
-  if (baseAnnual < 0.4) baseAnnual = 0.4;
-
-  baseAnnual = Math.round(baseAnnual * 10) / 10;
-  const years = U.rand(1, 4);
-  const bonusPercent = (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15) +
-                      U.random() * ((C.SALARY_CAP.SIGNING_BONUS_MAX || 0.4) - (C.SALARY_CAP.SIGNING_BONUS_MIN || 0.15));
-
-  const maxBonus = baseAnnual * years * 0.4;
-  const signingBonus = Math.min(Math.round((baseAnnual * years * bonusPercent) * 10) / 10, maxBonus);
-
-  return {
-    years,
-    yearsTotal: years,
-    baseAnnual,
-    signingBonus: signingBonus,
-    guaranteedPct: C.SALARY_CAP?.GUARANTEED_PCT_DEFAULT || 0.5
+  const byOvr = (elite, star, depth) => {
+    if (ovr >= 90) return elite;
+    if (ovr >= 80) return star;
+    return depth;
   };
+  let range = [2, 6];
+  if (pos === 'QB') range = byOvr([35, 45], [20, 34], [3, 9]);
+  else if (pos === 'WR' || pos === 'CB') range = byOvr([20, 28], [12, 19], [3, 11]);
+  else if (pos === 'RB') range = byOvr([12, 16], [7, 11], [1, 6]);
+  else if (pos === 'OL' || pos === 'DL') range = byOvr([18, 24], [10, 17], [2, 9]);
+  else if (pos === 'LB' || pos === 'TE') range = byOvr([14, 20], [8, 13], [2, 7]);
+  else if (pos === 'K' || pos === 'P') range = [1, 4];
+  else if (pos === 'S') range = byOvr([12, 18], [7, 12], [2, 8]);
+
+  const salary = Math.round((U.rand(range[0] * 10, range[1] * 10) / 10) * 10) / 10;
+  const years = U.rand(1, 5);
+  const guaranteedRatio = 0.3 + (U.random() * 0.4);
+  const guaranteed = Math.round((salary * years * guaranteedRatio) * 10) / 10;
+
+  return { salary, years, guaranteed, isFranchiseTagged: false };
 }
 
 function tagAbilities(player) {
@@ -391,17 +386,25 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
         ovr: playerOvr,
         displayOvr: playerOvr, // Simplified calibration
         years: contractDetails.years,
-        yearsTotal: contractDetails.yearsTotal,
-        baseAnnual: contractDetails.baseAnnual,
-        signingBonus: contractDetails.signingBonus,
-        guaranteedPct: contractDetails.guaranteedPct,
+        yearsTotal: contractDetails.years,
+        baseAnnual: contractDetails.salary,
+        signingBonus: 0,
+        guaranteedPct: contractDetails.years > 0
+          ? (contractDetails.guaranteed / (contractDetails.salary * contractDetails.years))
+          : 0.5,
+        contract: {
+          ...CONTRACT_DEFAULT,
+          ...contractDetails
+        },
         injuryWeeksRemaining: 0,
         injuryWeeks: 0,
         fatigue: 0,
         morale: U.rand(70, 95),
         negotiationStatus: 'OPEN',
         lockoutWeeks: 0,
-        devTrait: U.choice(['Normal', 'Star', 'Superstar', 'X-Factor']),
+        devTrait: U.choice(DEV_TRAITS),
+        xp: 0,
+        ovrHistory: [],
         potential: playerPotential,
         isFollowed: false,
                 depthOrder: 0,
@@ -425,7 +428,9 @@ traits: generateTraits(pos, playerOvr),
         //          tackles, sacks, ffum, ovr }
         careerStats: [],
         history: [],
-        college: generateCollege()
+        college: generateCollege(),
+        trueOvr: playerOvr,
+        scoutedOvr: U.clamp(playerOvr + U.rand(-15, 15), 40, 99)
     };
 
     initProgressionStats(player);
@@ -478,7 +483,7 @@ function updateAdvancedStats(player, seasonStats) {
 // ============================================================================
 
 function generateDraftClass(year, options = {}) {
-    const classSize = options.classSize || 150;
+    const classSize = options.classSize || 250;
     const draftClass = [];
     const positions = C.DRAFT_CONFIG?.POSITIONS || C.POSITIONS; // Fallback
     const posKeys = Object.keys(positions).length > 0 && isNaN(Object.keys(positions)[0]) ? Object.keys(positions) : C.POSITIONS;
@@ -491,6 +496,16 @@ function generateDraftClass(year, options = {}) {
         const rookie = makePlayer(pos, 21, null, eliteNames); // Rookies are young
         rookie.year = year;
         rookie.draftId = i + 1;
+        rookie.age = U.choice([21, 22, 23]);
+        rookie.trueOvr = rookie.trueOvr ?? rookie.ovr;
+        rookie.scoutedOvr = U.clamp(rookie.trueOvr + U.rand(-15, 15), 40, 99);
+        rookie.devTrait = U.choice(DEV_TRAITS);
+        rookie.projectedRound = U.clamp(Math.ceil((100 - rookie.scoutedOvr) / 10), 1, 7);
+        rookie.combineResults = {
+          fortyTime: Number((U.rand(420, 495) / 100).toFixed(2)),
+          bench: U.rand(10, 40),
+          vertical: U.rand(24, 45),
+        };
         draftClass.push(rookie);
         // If this rookie is elite, add them to the set too
         if (rookie.ovr > 80) eliteNames.add(rookie.name);

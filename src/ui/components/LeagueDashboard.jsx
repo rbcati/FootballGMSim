@@ -58,6 +58,9 @@ import OffseasonHub from "./OffseasonHub.jsx";
 import V2Roadmap from "./V2Roadmap.jsx";
 import V2FeatureCenter from "./V2FeatureCenter.jsx";
 import GMAdvisor from "./GMAdvisor.jsx";
+import CapManager from "./CapManager.jsx";
+import DraftBigBoard from "./DraftBigBoard.jsx";
+import CoachingScreen from "./CoachingScreen.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -207,6 +210,9 @@ const BASE_TABS = [
   "Training Lab",
   "Scouting Center",
   "Contracts Hub",
+  "💰 Cap",
+  "🎓 Draft",
+  "🎙️ Coaches",
   "League AI",
   "🤖 GM Advisor",
 ];
@@ -1725,6 +1731,16 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
+        {isInitialized && activeTab === "💰 Cap" && (
+          <TabErrorBoundary label="Cap">
+            <CapManager league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {isInitialized && activeTab === "🎓 Draft" && (
+          <TabErrorBoundary label="Draft Big Board">
+            <DraftBigBoard league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
         {activeTab === "Draft Room" && (
           <TabErrorBoundary label="Draft Room">
             <RookieDraft
@@ -1732,6 +1748,11 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
             />
+          </TabErrorBoundary>
+        )}
+        {isInitialized && activeTab === "🎙️ Coaches" && (
+          <TabErrorBoundary label="Coaching">
+            <CoachingScreen league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Coaches" && (

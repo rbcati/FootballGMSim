@@ -11,6 +11,17 @@
   };
 
   // --- II. SALARY & CONTRACTS (REFACTORED) ---
+  export const SALARY_CAP_AMOUNT = 200;
+  export const ROOKIE_SCALE = {
+    1: { min: 8, max: 35 },
+    2: { min: 4, max: 8 },
+    3: { min: 1.5, max: 4 },
+    4: { min: 1, max: 2 },
+    5: { min: 0.8, max: 1.5 },
+    6: { min: 0.75, max: 1 },
+    7: { min: 0.7, max: 0.9 },
+  };
+
   const SALARY_CAP = {
     BASE: 301.2, // 2026 hard cap per team ($301.2M)
     HARD_CAP: 301.2, // Absolute hard cap — no team may exceed this
