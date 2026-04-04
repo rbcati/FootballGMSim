@@ -1820,6 +1820,20 @@ export default function WeeklyHub({ league, actions, onNavigate, onPlayerSelect,
       tab: "Depth Chart",
       badge: null,
     },
+    {
+      icon: "🚀", label: "V2 Roadmap",
+      sublabel: "Track pending upgrades",
+      color: "#FF9F0A",
+      tab: "V2 Roadmap",
+      badge: null,
+    },
+    {
+      icon: "🌅", label: "Offseason",
+      sublabel: "Calendar + phase tools",
+      color: "#64D2FF",
+      tab: "Offseason",
+      badge: null,
+    },
   ];
 
   return (

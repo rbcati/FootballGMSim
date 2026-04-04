@@ -55,6 +55,7 @@ import AnalyticsHub from "./AnalyticsHub.jsx";
 import GlossaryPopover from "./GlossaryPopover.jsx";
 import OnboardingTour from "./OnboardingTour.jsx";
 import OffseasonHub from "./OffseasonHub.jsx";
+import V2Roadmap from "./V2Roadmap.jsx";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -95,6 +96,7 @@ const MOBILE_TAB_MAP = {
   saves: "Saves",
   season_recap: "Season Recap",
   offseason: "Offseason",
+  roadmap: "V2 Roadmap",
 };
 
 // Reverse map: dashboard tab → MobileNav tab ID
@@ -195,6 +197,7 @@ const BASE_TABS = [
   "Hall of Fame",
   "Analytics",
   "Offseason",
+  "V2 Roadmap",
   "Season Recap",
   "Saves",
   "God Mode",
@@ -1820,6 +1823,11 @@ export default function LeagueDashboard({
         {activeTab === "Offseason" && (
           <TabErrorBoundary label="Offseason">
             <OffseasonHub league={league} onNavigate={setActiveTab} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "V2 Roadmap" && (
+          <TabErrorBoundary label="V2 Roadmap">
+            <V2Roadmap onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Season Recap" && (
