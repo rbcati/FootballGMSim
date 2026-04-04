@@ -48,6 +48,7 @@ import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
+import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -98,7 +99,7 @@ class LiveGameErrorBoundary extends Component {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-export default function App() {
+function AppContent() {
   const { state, actions } = useWorker();
   const {
     busy, simulating, simProgress,
@@ -114,6 +115,7 @@ export default function App() {
   const [activeView, setActiveView] = useState('saves');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
+  const { soundEnabled, toggleSound } = useSettings();
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
@@ -397,6 +399,9 @@ export default function App() {
         </div>
 
         <div className="app-header-actions">
+          <button className="btn" onClick={toggleSound} title={soundEnabled ? "Mute sound" : "Unmute sound"}>
+            {soundEnabled ? "🔊" : "🔇"}
+          </button>
           <ThemeToggle compact />
           <button
             className="btn btn-primary app-advance-btn"
@@ -872,6 +877,14 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <SettingsProvider>
+      <AppContent />
+    </SettingsProvider>
   );
 }
 
