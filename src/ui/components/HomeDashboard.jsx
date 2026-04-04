@@ -10,6 +10,8 @@ import PlayerCard from "./PlayerCard.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import NewsFeed from './NewsFeed.jsx';
+import OwnerGoalsPanel from './OwnerGoalsPanel.jsx';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1485,6 +1487,7 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
+      <NewsFeed league={league} mode="ticker" />
 
       {/* ── NEW SAVE: Full welcome hero replaces phase banner for first load ── */}
       {isNewSave ? (
@@ -1547,6 +1550,7 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
       {!isNewSave && (
         <AdvanceWeekCTA phase={phase} week={league?.week} onAdvanceWeek={onAdvanceWeek} isBusy={isBusy} />
       )}
+      <OwnerGoalsPanel league={league} />
 
       {/* ── NEW SAVE: Start Season CTA shown prominently below hero ── */}
       {isNewSave && (

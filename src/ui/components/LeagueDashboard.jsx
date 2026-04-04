@@ -39,6 +39,7 @@ import PlayerStats from "./PlayerStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
 import GamePlanScreen from "./GamePlanScreen.jsx";
 import NewsFeed from "./NewsFeed.jsx";
+import RecordBook from "./RecordBook.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
 import PostseasonHub from "./PostseasonHub.jsx";
@@ -90,7 +91,7 @@ const MOBILE_TAB_MAP = {
   financials: "Financials",
   strategy: "Strategy",
   game_plan: "Game Plan",
-  news: "Standings",
+  news: "📰 News",
   player_stats: "Stats",
   awards: "Award Races",
   history: "History",
@@ -1796,6 +1797,13 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
+        {isInitialized && activeTab === "📰 News" && (
+          <TabErrorBoundary label="News">
+            <NewsFeed league={league} mode="full" />
+            <RecordBook league={league} />
+          </TabErrorBoundary>
+        )}
+
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
             <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} />

@@ -208,4 +208,82 @@ class NewsEngine {
     }
 }
 
+
+
+export const createNewsItem = (type, data, week, season) => {
+    const templates = {
+        trade_completed: {
+            headline: (d) => `${d?.teamA ?? 'Team A'} trades ${d?.playerName ?? 'a player'} to ${d?.teamB ?? 'Team B'}`,
+            body: (d) => `The deal was completed for ${d?.assets ?? 'future assets'}.`,
+            priority: 'medium',
+        },
+        injury: {
+            headline: (d) => `${d?.playerName ?? 'Player'} (${d?.position ?? 'POS'}) out ${d?.weeks ?? 0} weeks`,
+            body: (d) => `${d?.teamName ?? 'The team'} will need to adjust their depth chart.`,
+            priority: 'high',
+        },
+        player_breakout: {
+            headline: (d) => `${d?.playerName ?? 'Player'} has broken out!`,
+            body: (d) => `${d?.teamName ?? 'This team'} has a rising star at ${d?.position ?? 'their position'}.`,
+            priority: 'high',
+        },
+        player_retired: {
+            headline: (d) => `${d?.playerName ?? 'Player'} announces retirement`,
+            body: (d) => `${d?.playerName ?? 'Player'} retires after ${d?.seasons ?? 0} seasons with career OVR ${d?.careerOvr ?? 0}.`,
+            priority: 'medium',
+        },
+        coach_fired: {
+            headline: (d) => `${d?.teamName ?? 'Team'} parts ways with HC ${d?.coachName ?? 'Coach'}`,
+            body: (d) => `The team finished ${d?.record ?? '0-0'} under their tenure.`,
+            priority: 'medium',
+        },
+        free_agent_signed: {
+            headline: (d) => `${d?.playerName ?? 'Player'} signs with ${d?.teamName ?? 'Team'}`,
+            body: (d) => `${d?.playerName ?? 'Player'} joins on a ${d?.years ?? 1}-year, $${d?.amount ?? 0}M deal.`,
+            priority: 'medium',
+        },
+        championship_won: {
+            headline: (d) => `${d?.teamName ?? 'Team'} are champions!`,
+            body: (d) => `The ${d?.teamName ?? 'team'} win the title in season ${d?.season ?? season}.`,
+            priority: 'high',
+        },
+        record_broken: {
+            headline: (d) => `${d?.playerName ?? 'Player'} breaks the ${d?.record ?? 'league'} record!`,
+            body: (d) => `${d?.playerName ?? 'Player'} now holds the all-time mark with ${d?.stat ?? 0}.`,
+            priority: 'high',
+        },
+        rivalry_game: {
+            headline: (d) => `Rivalry Week: ${d?.teamName ?? 'Team'} vs ${d?.rivalName ?? 'Rival'}`,
+            body: () => 'These divisional rivals meet again.',
+            priority: 'medium',
+        },
+        cpu_trade: {
+            headline: (d) => `${d?.teamA ?? 'Team A'} acquires ${d?.playerName ?? 'a player'} from ${d?.teamB ?? 'Team B'}`,
+            body: () => 'A deal was reached between the two franchises.',
+            priority: 'low',
+        },
+    };
+    const template = templates[type];
+    if (!template) return null;
+    return {
+        id: crypto.randomUUID(),
+        headline: template.headline(data),
+        body: template.body(data),
+        week,
+        season,
+        type,
+        teamId: data?.teamId ?? null,
+        priority: template.priority,
+    };
+};
+
+export const addNewsItem = (leagueState, item) => {
+    if (!item) return leagueState;
+    const news = Array.isArray(leagueState?.newsItems) ? leagueState.newsItems : [];
+    return {
+        ...leagueState,
+        newsItems: [item, ...news].slice(0, 200),
+    };
+};
+
 export default NewsEngine;

@@ -440,6 +440,9 @@ export const State = {
         migratedTeam.picks = [];
       }
 
+      migratedTeam.fanApproval = migratedTeam?.fanApproval ?? 50;
+      migratedTeam.rivalTeamId = migratedTeam?.rivalTeamId ?? null;
+
       // Ensure team stats are initialized
       if (!migratedTeam.stats) {
         migratedTeam.stats = { season: getZeroTeamStats(), game: getZeroTeamStats() };
@@ -478,6 +481,10 @@ export const State = {
       return migratedTeam;
     }).filter(t => t !== null);
     
+    migrated.newsItems = migrated?.newsItems ?? [];
+    migrated.ownerGoals = migrated?.ownerGoals ?? [];
+    migrated.retiredPlayers = migrated?.retiredPlayers ?? [];
+
     // Ensure records structure exists
     if (!migrated.records) {
       migrated.records = {};

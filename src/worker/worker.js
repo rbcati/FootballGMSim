@@ -74,13 +74,14 @@ import {
   OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES,
 } from '../core/scheme-core.js';
 import AiLogic from '../core/ai-logic.js';
-import NewsEngine from '../core/news-engine.js';
+import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js';
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
+import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -109,7 +110,7 @@ function yieldFrame() {
  * NEVER includes per-game stat arrays or historical data.
  */
 function buildViewState() {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const teams = cache.getAllTeams().map(t => ({
     id:        t.id,
     name:      t.name,
@@ -126,6 +127,8 @@ function buildViewState() {
     capTotal:  t.capTotal  ?? Constants.SALARY_CAP.HARD_CAP,
     ovr:       t.ovr       ?? 75,
     rosterCount: cache.getPlayersByTeam(t.id).length,
+    fanApproval: t?.fanApproval ?? 50,
+    rivalTeamId: t?.rivalTeamId ?? null,
   }));
 
   // Calculate tension/stakes for the user's next game
@@ -196,7 +199,11 @@ function buildViewState() {
     playoffSeeds: meta?.playoffSeeds ?? null,
     championTeamId: meta?.championTeamId ?? null,
     ownerApproval,
-    fanApproval,
+    fanApproval: cache.getTeam(meta?.userTeamId)?.fanApproval ?? fanApproval,
+    newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
+    ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],
+    retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
+    records: meta?.records ?? null,
     teams,
   };
 }
@@ -359,7 +366,7 @@ async function flushDirty() {
 
   // Update Global Save Metadata if league meta changed
   if (dirty.meta) {
-    const meta = cache.getMeta();
+    const meta = ensureDynastyMeta(cache.getMeta());
     const leagueId = getActiveLeagueId();
     if (leagueId) {
       const userTeam = cache.getTeam(meta.userTeamId);
@@ -465,7 +472,7 @@ async function handleLoadSave({ leagueId }, id) {
       _saveIsExplicitlyLoaded = true;
 
       // Update lastPlayed in Global DB
-      const meta = cache.getMeta();
+      const meta = ensureDynastyMeta(cache.getMeta());
       const userTeam = cache.getTeam(meta.userTeamId);
       const saveEntry = {
         id: leagueId,
@@ -605,6 +612,16 @@ async function handleNewLeague(payload, id) {
       phase:           'regular',
       difficulty:      options.difficulty ?? 'Normal',
       settings:        options.settings ?? {},
+      newsItems: [],
+      ownerGoals: generateOwnerGoals(),
+      retiredPlayers: [],
+      records: {
+        mostPassingYardsSeason: null,
+        mostRushingYardsSeason: null,
+        mostWinsSeason: null,
+        mostChampionships: null,
+        highestOvrPlayer: null,
+      },
     };
 
     // Separate flat data from the league blob
@@ -618,6 +635,8 @@ async function handleNewLeague(payload, id) {
         ties:       0,
         ptsFor:     0,
         ptsAgainst: 0,
+        fanApproval: t?.fanApproval ?? 50,
+        rivalTeamId: t?.rivalTeamId ?? null,
       };
     });
 
@@ -792,7 +811,7 @@ function generatePlayoffWeek19() {
  *   Super Bowl: AFC conf champ vs NFC conf champ
  */
 function advancePlayoffBracket(results, currentWeek) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const seeds = meta.playoffSeeds ?? {};
 
   // Build a flat teamId → { teamId, seed, conf } lookup (Object.keys returns strings)
@@ -884,7 +903,7 @@ function advancePlayoffBracket(results, currentWeek) {
 // ── Handler: ADVANCE_WEEK ─────────────────────────────────────────────────────
 
 async function handleAdvanceWeek(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   // Prevent runaway state machine: strict phase check
@@ -1081,6 +1100,8 @@ if (res.injuries && res.injuries.length > 0) {
                       // Since IDB ops are async, we should await or at least trigger.
                       // Since we are inside an async function, let's await to be safe.
                       await NewsEngine.logInjury(p, inj.type, inj.duration);
+                      const injuryNews = createNewsItem('injury', { playerName: p?.name, position: p?.pos, weeks: inj?.duration, teamName: cache.getTeam(p?.teamId)?.name, teamId: p?.teamId ?? null }, week, meta?.season);
+                      cache.setMeta(addNewsItem(cache.getMeta(), injuryNews));
                   }
               }
           }
@@ -1169,6 +1190,8 @@ if (res.injuries && res.injuries.length > 0) {
         sbChampId = wId;
         post(toUI.NOTIFICATION, { level: 'info', message: `🏆 ${champ.name} win the Super Bowl! Season complete.` });
         await NewsEngine.logAward('SUPER_BOWL', champ);
+        const titleNews = createNewsItem('championship_won', { teamName: champ?.name, season: meta?.season, teamId: champ?.id }, week, meta?.season);
+        cache.setMeta(addNewsItem(cache.getMeta(), titleNews));
       }
     }
     // ── Phase transition: playoffs → offseason_resign ─────────────────────────
@@ -1233,6 +1256,35 @@ if (res.injuries && res.injuries.length > 0) {
     } catch (tradeErr) {
       // Trade engine errors should never crash the week advance.
       console.warn('[Worker] AI trade engine error (non-fatal):', tradeErr.message);
+    }
+  }
+
+  const userWeeklyResult = results.find((r) => Number(r?.home ?? r?.homeTeamId) === meta?.userTeamId || Number(r?.away ?? r?.awayTeamId) === meta?.userTeamId);
+  if (userWeeklyResult) {
+    const homeId = Number(userWeeklyResult?.home ?? userWeeklyResult?.homeTeamId);
+    const awayId = Number(userWeeklyResult?.away ?? userWeeklyResult?.awayTeamId);
+    const userIsHome = homeId === meta?.userTeamId;
+    const userScore = userIsHome ? (userWeeklyResult?.scoreHome ?? userWeeklyResult?.homeScore ?? 0) : (userWeeklyResult?.scoreAway ?? userWeeklyResult?.awayScore ?? 0);
+    const oppScore = userIsHome ? (userWeeklyResult?.scoreAway ?? userWeeklyResult?.awayScore ?? 0) : (userWeeklyResult?.scoreHome ?? userWeeklyResult?.homeScore ?? 0);
+    const wonGame = userScore > oppScore;
+    const userTeam = cache.getTeam(meta?.userTeamId);
+    const oppId = userIsHome ? awayId : homeId;
+    if (userTeam?.rivalTeamId != null && Number(userTeam?.rivalTeamId) === Number(oppId)) {
+      const rivalTeam = cache.getTeam(oppId);
+      const rivalryNews = createNewsItem('rivalry_game', { teamName: userTeam?.name, rivalName: rivalTeam?.name, teamId: userTeam?.id }, week, meta?.season);
+      cache.setMeta(addNewsItem(cache.getMeta(), rivalryNews));
+    }
+    if (userTeam) {
+      const lossStreak = wonGame ? 0 : (userTeam?.lossStreak ?? 0) + 1;
+      const fanUpdate = applyGameFanApproval(userTeam, wonGame, lossStreak);
+      cache.updateTeam(userTeam.id, {
+        fanApproval: fanUpdate?.fanApproval ?? userTeam?.fanApproval ?? 50,
+        fanApprovalWinBoostUsed: fanUpdate?.fanApprovalWinBoostUsed ?? userTeam?.fanApprovalWinBoostUsed ?? 0,
+        lossStreak,
+      });
+      if (wonGame) {
+        cache.setMeta({ ownerGoals: updateGoalsForWin(meta?.ownerGoals) });
+      }
     }
   }
 
@@ -1499,7 +1551,7 @@ function winPct(t) {
 // ── Handler: SIM_TO_WEEK ─────────────────────────────────────────────────────
 
 async function handleSimToWeek({ targetWeek }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   const start = meta.currentWeek;
@@ -1513,7 +1565,7 @@ async function handleSimToWeek({ targetWeek }, id) {
 // ── Handler: SIM_TO_PHASE ────────────────────────────────────────────────────
 
 async function handleSimToPhase({ targetPhase }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   // Map target phases to stop conditions
@@ -1614,7 +1666,7 @@ async function handleGetAllSeasons(payload, id) {
 // ── Handler: GET_RECORDS ──────────────────────────────────────────────────────
 
 async function handleGetRecords(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const records = meta?.records ?? createEmptyRecords();
   post(toUI.RECORDS, { records }, id);
 }
@@ -1845,7 +1897,7 @@ async function handleGetPlayerCareer({ playerId }, id) {
 
 // ── Handler: APPLY_FRANCHISE_TAG ──────────────────────────────────────────────
 async function handleApplyFranchiseTag({ playerId, teamId }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const player = cache.getPlayer(playerId);
   if (!player || player.teamId !== teamId) {
       post(toUI.ERROR, { message: 'Invalid player for franchise tag.' }, id);
@@ -1890,7 +1942,7 @@ async function handleApplyFranchiseTag({ playerId, teamId }, id) {
 
 // ── Handler: RELOCATE_TEAM ────────────────────────────────────────────────────
 async function handleRelocateTeam({ teamId, newCity, newName, newAbbr }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
   if (!team) {
       post(toUI.ERROR, { message: 'Team not found.' }, id);
@@ -2111,7 +2163,7 @@ async function handleSetUserTeam({ teamId }, id) {
 // ── Handler: SIGN_PLAYER ──────────────────────────────────────────────────────
 
 async function handleSignPlayer({ playerId, teamId, contract }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const limit = (['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'].includes(meta.phase))
       ? Constants.ROSTER_LIMITS.OFFSEASON
       : Constants.ROSTER_LIMITS.REGULAR_SEASON;
@@ -2214,7 +2266,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   // Post-June-1 phases (free_agency, draft, preseason, regular, playoffs):
   //   This year's prorated bonus hits current dead cap; future years defer to
   //   deadMoneyNextYear (carries into next season's cap).
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const team = cache.getTeam(teamId);
   if (team && player.contract) {
     const yearsRemaining = Math.max(player.contract.years ?? 1, 1);
@@ -2328,7 +2380,7 @@ async function handleGetRoster({ teamId }, id) {
 // ── Handler: GET_FREE_AGENTS ──────────────────────────────────────────────────
 
 async function handleGetFreeAgents(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const userTeamId = meta.userTeamId;
 
   const freeAgents = cache.getAllPlayers()
@@ -2583,7 +2635,7 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   recalculateTeamCap(teamId);
 
   // Log Transaction
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   await Transactions.add({
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
@@ -2651,7 +2703,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const receiveVal  = calcSideValue(receiving);
 
   // AI acceptance threshold scales by difficulty
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const diff = meta.difficulty || 'Normal';
   let diffMult = 1.0;
   if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
@@ -2729,7 +2781,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     recalculateTeamCap(Number(toTeamId));
 
     // Log transaction
-    const meta = cache.getMeta();
+    const meta = ensureDynastyMeta(cache.getMeta());
     const tradeRecord = {
       type:     'TRADE',
       seasonId: meta.currentSeasonId,
@@ -2771,7 +2823,7 @@ async function handleUpdateSettings({ settings }, id) {
 // ── Handler: UPDATE_STRATEGY ──────────────────────────────────────────────────
 
 async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId, offSchemeId, defSchemeId, gamePlan, gmDecisions }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const userTeamId = meta.userTeamId;
   const team = cache.getTeam(userTeamId);
 
@@ -2908,7 +2960,7 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   cache.updatePlayer(player.id, { contract: newContract });
   recalculateTeamCap(teamId);
 
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   await Transactions.add({
     type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
     week: meta.currentWeek, teamId,
@@ -2938,7 +2990,7 @@ async function handleRestructureContract({ playerId, teamId }, id) {
  * Prospects are all players with status 'draft_eligible', sorted OVR desc.
  */
 function buildDraftStateView() {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const draftState = meta?.draftState;
   if (!draftState) return { notStarted: true };
 
@@ -3029,7 +3081,7 @@ function buildDraftStateView() {
  * Execute a single draft pick: sign the player to the team, update pick record.
  */
 function _executeDraftPick(pickIndex, playerId, teamId) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const draftState = meta?.draftState;
   if (!draftState) return;
 
@@ -3080,7 +3132,7 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
 
 
 async function handleConductPrivateWorkout({ playerId }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) return post(toUI.ERROR, { message: 'No league loaded' }, id);
 
   const team = cache.getTeam(meta.userTeamId);
@@ -3163,7 +3215,7 @@ async function handleToggleTradeBlock({ playerId, teamId }, id) {
 // ── Handler: START_DRAFT ──────────────────────────────────────────────────────
 
 async function handleStartDraft(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   // Idempotent: if draft is already running, return current state
@@ -3280,7 +3332,7 @@ async function handleMakeDraftPick({ playerId }, id) {
  * Each AI picks the highest-OVR available prospect.
  */
 async function handleSimDraftPick(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) { post(toUI.ERROR, { message: 'No active draft' }, id); return; }
 
   const userTeamId = meta.userTeamId;
@@ -3367,7 +3419,7 @@ async function handleSimDraftPick(payload, id) {
  * After acceptance, the AI team is now on the clock for that pick.
  */
 async function handleAcceptDraftTrade({ proposal }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) {
     post(toUI.ERROR, { message: 'No active draft' }, id);
     return;
@@ -3443,7 +3495,7 @@ async function handleRejectDraftTrade(payload, id) {
  * @returns {Object|null} trade proposal or null
  */
 function generateDraftTradeUpProposal() {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta?.draftState) return null;
   if (meta.pendingDraftTradeProposal) return null; // already proposed this pick
 
@@ -3621,7 +3673,7 @@ function calculateAwards(stats, teams) {
  * All mutations are flushed to IndexedDB before the UI is notified.
  */
 async function handleAdvanceOffseason(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   // Accept both new 'offseason_resign' phase and legacy 'offseason' for save compatibility.
   if (!meta || !['offseason_resign', 'offseason'].includes(meta.phase)) {
     post(toUI.ERROR, { message: 'Not in offseason phase' }, id);
@@ -3769,7 +3821,7 @@ async function handleAdvanceOffseason(payload, id) {
 // ── Handler: ADVANCE_FREE_AGENCY_DAY ──────────────────────────────────────────
 
 async function handleAdvanceFreeAgencyDay(payload, id) {
-    const meta = cache.getMeta();
+    const meta = ensureDynastyMeta(cache.getMeta());
     if (!meta || !meta.freeAgencyState) {
         post(toUI.ERROR, { message: 'Not in Free Agency' }, id);
         return;
@@ -3835,7 +3887,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
  */
 async function archiveSeason(seasonId) {
   try {
-    const meta = cache.getMeta();
+    const meta = ensureDynastyMeta(cache.getMeta());
     const teams = cache.getAllTeams();
 
     // 1. Ensure DB is up to date
@@ -4023,7 +4075,7 @@ async function archiveSeason(seasonId) {
 // ── Handler: START_NEW_SEASON ─────────────────────────────────────────────────
 
 async function handleStartNewSeason(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   // Gate: new season can only start from the draft phase (or legacy 'offseason').
@@ -4052,6 +4104,9 @@ async function handleStartNewSeason(payload, id) {
       deadCap:          rolledDeadCap,
       deadMoneyNextYear: 0,
       capTotal:          Constants.SALARY_CAP.HARD_CAP,
+      fanApproval:        team?.fanApproval ?? 50,
+      fanApprovalWinBoostUsed: 0,
+      lossStreak: 0,
     });
     recalculateTeamCap(team.id);
   }
@@ -4076,6 +4131,7 @@ async function handleStartNewSeason(payload, id) {
     freeAgencyState:         null, // Reset FA state
     championTeamId:          null,
     offseasonProgressionDone:false,
+    ownerGoals: generateOwnerGoals(),
   });
 
   await flushDirty(); // AUTO-SAVE: phase transition — new season initialized to preseason.
@@ -4208,7 +4264,7 @@ async function handleGetTeamProfile({ teamId }, id) {
 // ── Handler: GET_DASHBOARD_LEADERS ────────────────────────────────────────────
 
 async function handleGetDashboardLeaders(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const userTeamId = meta?.userTeamId;
 
   // Build a map seeded from in-memory stats
@@ -4283,7 +4339,7 @@ async function handleGetDashboardLeaders(payload, id) {
 // ── Handler: GET_LEAGUE_LEADERS ───────────────────────────────────────────────
 
 async function handleGetLeagueLeaders({ mode = 'season' }, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
 
   // Helper: build display-ready top-N list for a stat key
   const topN = (entries, key, n = 10) => {
@@ -4447,7 +4503,7 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
 async function handleGetAllPlayerStats(_payload, id) {
   // Return a flat list of ALL active players with their current season stats attached.
   // This powers the dedicated "Stats" tab.
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   const allPlayers = cache.getAllPlayers();
   const allTeams = cache.getAllTeams();
   const teamMap = new Map();
@@ -4519,7 +4575,7 @@ async function handleGetAllPlayerStats(_payload, id) {
 // ── Handler: GET_AWARD_RACES ──────────────────────────────────────────────────
 
 async function handleGetAwardRaces(_payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
 
   // Build enriched stat entries exactly like season-mode league leaders:
   // prefer in-memory stats, backfill from DB if needed (post save/load).
@@ -4703,7 +4759,7 @@ async function handleMessage(event) {
 // ── Handler: WATCH_GAME ──────────────────────────────────────────────────────
 
 async function handleWatchGame(payload, id) {
-  const meta = cache.getMeta();
+  const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   const week = meta.currentWeek;
