@@ -23,8 +23,9 @@ const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
             picks.push({
                 id: genId(),
                 round: r,
-                year: startYear + y,
+                season: startYear + y,
                 originalOwner: teamId,
+                currentOwner: teamId,
                 isCompensatory: false
             });
         }
@@ -201,7 +202,28 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                 capRollover: 0,
                 capUsed: 0,
                 capRoom: Constants.SALARY_CAP?.BASE || 220,
+                capSpace: Constants.SALARY_CAP?.BASE || 220,
                 scoutingPoints: 100
+            };
+            team.offScheme = team?.offScheme ?? 'Pro Style';
+            team.defScheme = team?.defScheme ?? '4-3';
+            team.coachingStaff = team?.coachingStaff ?? {
+              headCoach: {
+                name: `${team.city || team.name || 'Team'} HC`,
+                offenseMind: Utils.rand(50, 99),
+                defenseMind: Utils.rand(50, 99),
+                morale: 75,
+              },
+              offCoord: {
+                name: `${team.city || team.name || 'Team'} OC`,
+                scheme: team.offScheme,
+                rating: Utils.rand(50, 99),
+              },
+              defCoord: {
+                name: `${team.city || team.name || 'Team'} DC`,
+                scheme: team.defScheme,
+                rating: Utils.rand(50, 99),
+              },
             };
 
             // Delegate tasks to specialized functions
