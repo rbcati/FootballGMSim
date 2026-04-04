@@ -12,34 +12,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 
 const NAV_SECTIONS = [
-  { id: 'hub', label: 'Weekly Hub', icon: WeeklyHubIcon },
+  { id: 'weekly', label: 'Weekly Hub', icon: WeeklyHubIcon },
   { id: 'home', label: 'Home', icon: HomeIcon },
   { id: 'standings', label: 'Standings', icon: StandingsIcon },
   { id: 'schedule', label: 'Schedule', icon: ScheduleIcon },
   { id: 'roster', label: 'Roster', icon: RosterIcon },
   { id: 'leaders', label: 'Leaders', icon: LeadersIcon },
-  { id: 'free_agency', label: 'Free Agency', icon: FAIcon },
-  { id: 'trades', label: 'Trades', icon: TradesIcon },
+  { id: 'freeagency', label: 'Free Agency', icon: FAIcon },
+  { id: 'trade', label: 'Trades', icon: TradesIcon },
   { id: 'draft', label: 'Draft', icon: DraftIcon },
-  { id: 'mock_draft', label: 'Mock Draft', icon: DraftIcon },
+  { id: 'mockdraft', label: 'Mock Draft', icon: DraftIcon },
   { id: 'coaches', label: 'Coaches', icon: CoachesIcon },
   { id: 'staff', label: 'Staff', icon: StaffIcon },
   { id: 'training', label: 'Training', icon: TrainingIcon },
   { id: 'injuries', label: 'Injuries', icon: InjuryIcon },
-  { id: 'financials', label: 'Finances', icon: FinancesIcon },
-  { id: 'strategy', label: 'Strategy', icon: StrategyIcon },
-  { id: 'news', label: 'News', icon: NewsIcon },
-  { id: 'player_stats', label: 'Stats', icon: StatsIcon },
-  { id: 'awards', label: 'Awards', icon: AwardsIcon },
-  { id: 'history', label: 'History', icon: HistoryIcon },
-  { id: 'hall_of_fame', label: 'Hall of Fame', icon: HofIcon },
-  { id: 'season_recap', label: 'Recap', icon: RecapIcon },
-  { id: 'saves', label: 'Saves', icon: SaveIcon },
-  { id: 'god_mode', label: 'God Mode', icon: GodModeIcon },
+  { id: 'cap', label: 'Finances', icon: FinancesIcon },
+  { id: 'advisor', label: '🤖 GM Advisor', icon: AdvisorIcon },
 ];
 
 // Bottom tab bar shows the 5 most-used tabs
-const BOTTOM_TABS = ['hub', 'home', 'roster', 'standings', 'schedule'];
+const BOTTOM_TABS = ['weekly', 'home', 'roster', 'standings', 'schedule'];
 
 export default function MobileNav({ activeTab, onTabChange, league }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -66,6 +58,11 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
   }, [menuOpen]);
 
   const bottomTabs = NAV_SECTIONS.filter(s => BOTTOM_TABS.includes(s.id));
+  const handleNavClick = (tabKey) => {
+    onTabChange?.(tabKey);
+    setMenuOpen(false);
+    window.scrollTo(0, 0);
+  };
 
   return (
     <>
@@ -110,10 +107,7 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
               <button
                 key={section.id}
                 className={`mobile-nav-item ${isActive ? 'active' : ''}`}
-                onClick={() => {
-                  onTabChange(section.id);
-                  setMenuOpen(false);
-                }}
+                onClick={() => handleNavClick(section.id)}
               >
                 <Icon size={20} />
                 <span>{section.label}</span>
@@ -132,7 +126,7 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
             <button
               key={section.id}
               className={`mobile-bottom-tab ${isActive ? 'active' : ''}`}
-              onClick={() => onTabChange(section.id)}
+              onClick={() => handleNavClick(section.id)}
               aria-label={section.label}
             >
               <Icon size={22} />
@@ -242,6 +236,20 @@ function FinancesIcon({ size = 24 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  );
+}
+
+function AdvisorIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="14" rx="2" />
+      <circle cx="9" cy="11" r="1" />
+      <circle cx="15" cy="11" r="1" />
+      <path d="M9 15h6" />
+      <path d="M12 4V2" />
+      <path d="M8 22h8" />
+      <path d="M12 18v4" />
     </svg>
   );
 }

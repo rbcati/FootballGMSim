@@ -72,43 +72,50 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Map MobileNav tab IDs → LeagueDashboard tab names
 const MOBILE_TAB_MAP = {
-  hub: "Weekly Hub",
+  weekly: "Weekly Hub",
   home: "Home",
   standings: "Standings",
   schedule: "Schedule",
   roster: "Roster",
-  roster_hub: "Roster Hub",
   leaders: "Leaders",
-  free_agency: "Free Agency",
-  fa_hub: "FA Hub",
-  trades: "Trades",
-  trade_finder: "Trade Finder",
+  freeagency: "Free Agency",
+  trade: "Trades",
   draft: "Draft",
-  draft_room: "Draft Room",
-  mock_draft: "Mock Draft",
+  mockdraft: "Mock Draft",
   coaches: "Coaches",
   staff: "Staff",
-  financials: "Financials",
-  strategy: "Strategy",
-  game_plan: "Game Plan",
-  news: "📰 News",
-  player_stats: "Stats",
-  awards: "Award Races",
-  history: "History",
-  hall_of_fame: "Hall of Fame",
   training: "Training",
   injuries: "Injuries",
-  god_mode: "God Mode",
-  saves: "Saves",
-  season_recap: "Season Recap",
-  offseason: "Offseason",
-  roadmap: "V2 Roadmap",
+  cap: "💰 Cap",
+  advisor: "🤖 GM Advisor",
+
+  // Legacy aliases kept for compatibility with any older callers.
+  hub: "Weekly Hub",
+  free_agency: "Free Agency",
+  trades: "Trades",
+  mock_draft: "Mock Draft",
+  financials: "Financials",
 };
 
-// Reverse map: dashboard tab → MobileNav tab ID
-const REVERSE_TAB_MAP = Object.fromEntries(
-  Object.entries(MOBILE_TAB_MAP).map(([k, v]) => [v, k])
-);
+// Reverse map: dashboard tab → MobileNav tab ID (canonical IDs only).
+const REVERSE_TAB_MAP = {
+  "Weekly Hub": "weekly",
+  Home: "home",
+  Standings: "standings",
+  Schedule: "schedule",
+  Roster: "roster",
+  Leaders: "leaders",
+  "Free Agency": "freeagency",
+  Trades: "trade",
+  Draft: "draft",
+  "Mock Draft": "mockdraft",
+  Coaches: "coaches",
+  Staff: "staff",
+  Training: "training",
+  Injuries: "injuries",
+  "💰 Cap": "cap",
+  "🤖 GM Advisor": "advisor",
+};
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -1906,7 +1913,12 @@ export default function LeagueDashboard({
         )}
         {isInitialized && activeTab === "🤖 GM Advisor" && (
           <TabErrorBoundary label="GM Advisor">
-            <GMAdvisor league={league} />
+            <GMAdvisor
+              league={league}
+              leagueState={league}
+              currentSeason={league?.year}
+              currentWeek={league?.week}
+            />
           </TabErrorBoundary>
         )}
       </div>
@@ -1916,7 +1928,7 @@ export default function LeagueDashboard({
 
       {/* ── Mobile Navigation (bottom bar + slide-in) ── */}
       <MobileNav
-        activeTab={REVERSE_TAB_MAP[activeTab] || "hub"}
+        activeTab={REVERSE_TAB_MAP[activeTab] || "weekly"}
         onTabChange={(mobileTabId) => {
           const dashTab = MOBILE_TAB_MAP[mobileTabId];
           if (dashTab) setActiveTab(dashTab);
