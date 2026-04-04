@@ -213,6 +213,7 @@ export default function TradeCenter({ league, actions }) {
   const [submitting, setSubmitting] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
+  const [showSavedToast, setShowSavedToast] = useState(false);
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
@@ -271,6 +272,12 @@ export default function TradeCenter({ league, actions }) {
 
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
 
+  useEffect(() => {
+    if (!showSavedToast) return undefined;
+    const timer = setTimeout(() => setShowSavedToast(false), 1800);
+    return () => clearTimeout(timer);
+  }, [showSavedToast]);
+
   const handlePropose = async () => {
     if (!hasSelection || targetId == null) return;
     setSubmitting(true);
@@ -281,6 +288,8 @@ export default function TradeCenter({ league, actions }) {
       if (resp?.payload?.accepted) {
         setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]);
         await fetchRosters(targetId);
+        actions.save();
+        setShowSavedToast(true);
       }
     } catch (e) {
       console.error(e);
@@ -290,6 +299,23 @@ export default function TradeCenter({ league, actions }) {
 
   return (
     <Card className="card-premium"><CardContent className="p-4">
+      {showSavedToast && (
+        <div style={{
+          position: "fixed",
+          right: 16,
+          bottom: 86,
+          zIndex: 3000,
+          background: "rgba(52,199,89,0.15)",
+          color: "var(--success)",
+          border: "1px solid rgba(52,199,89,0.5)",
+          borderRadius: "var(--radius-md)",
+          padding: "8px 12px",
+          fontSize: "var(--text-xs)",
+          fontWeight: 700,
+        }}>
+          Game Saved
+        </div>
+      )}
       {/* Header + propose button (original) */}
       <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", flexWrap: "wrap" }}>

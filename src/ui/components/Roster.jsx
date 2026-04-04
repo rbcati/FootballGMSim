@@ -27,6 +27,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
+import PlayerDetailModal from "./PlayerDetailModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -1004,18 +1005,28 @@ function RosterTable({
                     </TableCell>
                     {/* Name */}
                     <TableCell
-                      onClick={() =>
-                        onPlayerSelect && onPlayerSelect(player.id)
-                      }
                       style={{
                         fontWeight: 600,
                         color: "var(--text)",
                         fontSize: "var(--text-sm)",
                         whiteSpace: "nowrap",
-                        cursor: "pointer",
                       }}
                     >
-                      {player.name}
+                      <button
+                        onClick={() =>
+                          onPlayerSelect && onPlayerSelect(player.id)
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--accent)",
+                          cursor: "pointer",
+                          padding: 0,
+                          fontWeight: 700,
+                        }}
+                      >
+                        {player.name}
+                      </button>
                       {isResignPhase && isZeroYears && (
                         <span
                           style={{
@@ -1772,13 +1783,21 @@ function PlayerCard({ player, onSelect }) {
       </div>
 
       {/* ── Player name ── */}
-      <div style={{
-        fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)",
-        marginBottom: 2,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>
+      <button
+        onClick={(e) => { e.stopPropagation(); onSelect?.(player.id); }}
+        style={{
+          fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)",
+          marginBottom: 2,
+          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          background: "none",
+          border: "none",
+          padding: 0,
+          textAlign: "left",
+          cursor: "pointer",
+        }}
+      >
         {player.name}
-      </div>
+      </button>
 
       {/* ── Age + Contract ── */}
       <div style={{
@@ -1999,6 +2018,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
   const [viewMode, setViewMode] = useState("cards"); // 'cards' | 'table' | 'depth'
+  const [modalPlayer, setModalPlayer] = useState(null);
 
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
@@ -2231,7 +2251,10 @@ export default function Roster({ league, actions, onPlayerSelect }) {
       {!loading && viewMode === "cards" && (
         <PlayerCardGrid
           players={players}
-          onPlayerSelect={onPlayerSelect}
+          onPlayerSelect={(playerId) => {
+            const selected = players.find((p) => p.id === playerId);
+            if (selected) setModalPlayer(selected);
+          }}
           phase={league?.phase}
         />
       )}
@@ -2243,7 +2266,10 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           actions={actions}
           teamId={teamId}
           onRefetch={fetchRoster}
-          onPlayerSelect={onPlayerSelect}
+          onPlayerSelect={(playerId) => {
+            const selected = players.find((p) => p.id === playerId);
+            if (selected) setModalPlayer(selected);
+          }}
           phase={league?.phase}
           schemeName={(() => {
             const ut = league?.teams?.find(t => t.id === league.userTeamId);
@@ -2271,6 +2297,13 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             <DepthChartView players={players} />
           )}
         </CardContent></Card>
+      )}
+      {modalPlayer && (
+        <PlayerDetailModal
+          player={modalPlayer}
+          teams={league?.teams ?? []}
+          onClose={() => setModalPlayer(null)}
+        />
       )}
     </div>
   );

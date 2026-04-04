@@ -31,9 +31,9 @@ import BoxScore from "./BoxScore.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
 import HallOfFame from "./HallOfFame.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
-import PlayerDetailModal from "./PlayerDetailModal.jsx";
 import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
+import LeagueLeaders from "./LeagueLeaders.jsx";
 import AwardRaces from "./AwardRaces.jsx";
 import PlayerStats from "./PlayerStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
@@ -176,6 +176,7 @@ const BASE_TABS = [
   "Schedule",
   "Stats",
   "Leaders",
+  "League Leaders",
   "Award Races",
   "Strategy",
   "Game Plan",
@@ -1655,6 +1656,11 @@ export default function LeagueDashboard({
               userTeamId={league.userTeamId}
               actions={actions}
             />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "League Leaders" && (
+          <TabErrorBoundary label="League Leaders">
+            <LeagueLeaders league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Award Races" && (
