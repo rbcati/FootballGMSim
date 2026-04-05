@@ -276,9 +276,12 @@ function buildRosterView(teamId) {
     return {
         id:       p.id,
         name:     p.name,
+        teamId:   p.teamId ?? teamId ?? null,
+        status:   p.status ?? 'active',
         pos:      p.pos,
         age:      p.age,
         ovr:      p.ovr,
+        potential: p.potential ?? p.pot ?? null,
         schemeAdjustedOVR,
         schemeBonus: schemeBonusVal,
         topAttr,

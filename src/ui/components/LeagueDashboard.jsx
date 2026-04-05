@@ -1558,35 +1558,6 @@ export default function LeagueDashboard({
               );
             }
 
-            const weekData = league.schedule?.weeks?.find((w) => w.week === prevWeek);
-            const allGames = weekData?.games?.filter((g) => g.played) ?? [];
-            const userGame = allGames.find(
-              (g) =>
-                toId(g.home) === Number(league.userTeamId) ||
-                toId(g.away) === Number(league.userTeamId),
-            );
-            if (userGame) {
-              const homeId = toId(userGame.home);
-              const awayId = toId(userGame.away);
-              const isHome = homeId === Number(league.userTeamId);
-              const userScore = isHome ? userGame.homeScore : userGame.awayScore;
-              const oppScore = isHome ? userGame.awayScore : userGame.homeScore;
-              const oppAbbr = teamById[isHome ? awayId : homeId]?.abbr ?? "???";
-              const win = userScore > oppScore;
-              const resultChar = win ? "W" : userScore === oppScore ? "T" : "L";
-              const resultColor = win ? "var(--success)" : userScore === oppScore ? "var(--text-muted)" : "var(--danger)";
-              return (
-                <>
-                  <div className="stat-label">Last Game</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontVariantNumeric: "tabular-nums" }}>
-                    <span style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: resultColor }}>{resultChar}</span>
-                    <span style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>{userScore}-{oppScore}</span>
-                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>vs {oppAbbr}</span>
-                  </div>
-                </>
-              );
-            }
-
             return (
               <>
                 <div className="stat-label">Last Game</div>
@@ -1596,7 +1567,7 @@ export default function LeagueDashboard({
                     color: "var(--text-muted)",
                   }}
                 >
-                  No results yet
+                  No latest simulated results
                 </div>
               </>
             );
