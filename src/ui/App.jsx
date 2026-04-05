@@ -203,6 +203,7 @@ function AppContent() {
 
   const handleAdvanceWeek = useCallback(() => {
     if (busy || simulating || advancingRef.current) return;
+    if (!league?.phase) return;
 
     if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
       advancingRef.current = true;
@@ -319,6 +320,67 @@ function AppContent() {
     return `▶ Sim Week ${league.week}`;
   };
 
+  const safePhase = league?.phase ?? null;
+  const canUseTopActions = !!safePhase && !(busy || simulating || !!batchSim);
+
+  const topSecondaryAction = useMemo(() => {
+    if (!safePhase) return null;
+    if (safePhase === 'regular') {
+      return {
+        label: 'Sim to Playoffs',
+        title: 'Simulate all remaining regular season weeks',
+        onClick: () => handleSimToPhase('playoffs'),
+        disabled: !canUseTopActions,
+      };
+    }
+    if (safePhase === 'playoffs') {
+      return {
+        label: 'Sim to Offseason',
+        title: 'Simulate remaining playoff games to offseason',
+        onClick: () => handleSimToPhase('offseason'),
+        disabled: !canUseTopActions,
+      };
+    }
+    if (['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(safePhase)) {
+      return {
+        label: 'Sim to Season',
+        title: 'Simulate through offseason to next preseason',
+        onClick: () => handleSimToPhase('preseason'),
+        disabled: !canUseTopActions,
+      };
+    }
+    return null;
+  }, [safePhase, canUseTopActions, handleSimToPhase]);
+
+  const utilityActions = useMemo(() => {
+    const items = [];
+
+    if (safePhase === 'regular') {
+      items.push({
+        label: 'Sim to Offseason',
+        title: 'Simulate through playoffs to offseason',
+        onClick: () => handleSimToPhase('offseason'),
+        disabled: !canUseTopActions,
+      });
+    }
+    if (safePhase && safePhase !== 'regular' && safePhase !== 'playoffs' && ['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(safePhase)) {
+      items.push({
+        label: 'Sim to Season',
+        title: 'Simulate through offseason to next preseason',
+        onClick: () => handleSimToPhase('preseason'),
+        disabled: !canUseTopActions,
+      });
+    }
+
+    items.push(
+      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || !!batchSim },
+      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || !!batchSim },
+      { label: 'Reset Franchise', onClick: handleReset, disabled: busy || !!batchSim, danger: true },
+    );
+
+    return items;
+  }, [safePhase, canUseTopActions, activeSlot, actions, busy, batchSim, handleReset, handleSimToPhase]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!workerReady) {
@@ -376,63 +438,8 @@ function AppContent() {
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   const isPostseason = league?.phase === 'playoffs';
-  const canUseTopActions = !(busy || simulating || !!batchSim);
 
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
-
-  const topSecondaryAction = useMemo(() => {
-    if (league.phase === 'regular') {
-      return {
-        label: 'Sim to Playoffs',
-        title: 'Simulate all remaining regular season weeks',
-        onClick: () => handleSimToPhase('playoffs'),
-        disabled: canUseTopActions ? false : true,
-      };
-    }
-    if (league.phase === 'playoffs') {
-      return {
-        label: 'Sim to Offseason',
-        title: 'Simulate remaining playoff games to offseason',
-        onClick: () => handleSimToPhase('offseason'),
-        disabled: canUseTopActions ? false : true,
-      };
-    }
-    if (['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase)) {
-      return {
-        label: 'Sim to Season',
-        title: 'Simulate through offseason to next preseason',
-        onClick: () => handleSimToPhase('preseason'),
-        disabled: canUseTopActions ? false : true,
-      };
-    }
-    return null;
-  }, [league.phase, canUseTopActions, handleSimToPhase]);
-
-  const utilityActions = useMemo(() => {
-    const items = [];
-    if (league.phase === 'regular') {
-      items.push({
-        label: 'Sim to Offseason',
-        title: 'Simulate through playoffs to offseason',
-        onClick: () => handleSimToPhase('offseason'),
-        disabled: !canUseTopActions,
-      });
-    }
-    if (league.phase !== 'regular' && league.phase !== 'playoffs' && ['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase)) {
-      items.push({
-        label: 'Sim to Season',
-        title: 'Simulate through offseason to next preseason',
-        onClick: () => handleSimToPhase('preseason'),
-        disabled: !canUseTopActions,
-      });
-    }
-    items.push(
-      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || !!batchSim },
-      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || !!batchSim },
-      { label: 'Reset Franchise', onClick: handleReset, disabled: busy || !!batchSim, danger: true },
-    );
-    return items;
-  }, [league.phase, canUseTopActions, activeSlot, actions, busy, batchSim, handleReset, handleSimToPhase]);
 
   return (
     <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
@@ -593,7 +600,7 @@ function AppContent() {
       )}
 
       {/* ── Notifications ──────────────────────────────────────────────── */}
-      {notifications.length > 0 && (
+      {Array.isArray(notifications) && notifications.length > 0 && (
         <div className="app-notifications">
           {notifications.map(n => (
             <div
