@@ -2617,7 +2617,12 @@ async function handleFireCoach({ teamId, role }, id) {
 // simulation engine.  They are cleared when the week advances.
 
 async function handleConductDrill({ teamId, intensity, drillType, positionGroups }, id) {
+    const meta = ensureDynastyMeta(cache.getMeta());
     const numId = Number(teamId ?? meta?.userTeamId);
+    if (!Number.isFinite(numId)) {
+        post(toUI.ERROR, { message: 'No team selected for drill' }, id);
+        return;
+    }
     const team = cache.getTeam(numId);
     if (!team) {
         post(toUI.ERROR, { message: 'Team not found for drill' }, id);
@@ -2696,7 +2701,12 @@ async function handleConductDrill({ teamId, intensity, drillType, positionGroups
 // read their traits when computing in-game injury chances.
 
 async function handleUpdateMedicalStaff({ teamId, medStaff }, id) {
+    const meta = ensureDynastyMeta(cache.getMeta());
     const numId = Number(teamId ?? meta?.userTeamId);
+    if (!Number.isFinite(numId)) {
+        post(toUI.ERROR, { message: 'No team selected for medical staff update' }, id);
+        return;
+    }
     const team = cache.getTeam(numId);
     if (!team) {
         post(toUI.ERROR, { message: 'Team not found for medical staff update' }, id);
@@ -2713,11 +2723,12 @@ async function handleUpdateMedicalStaff({ teamId, medStaff }, id) {
 // ── Handler: EXTENSION ──────────────────────────────────────────────────────
 
 async function handleGetExtensionAsk({ playerId }, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // Generate ask based on market value
-  const ask = calculateExtensionDemand(player, meta?.difficulty);
+  const ask = calculateExtensionDemand(player, meta?.difficulty ?? 'Normal');
   post(toUI.EXTENSION_ASK, { ask }, id);
 }
 
