@@ -86,14 +86,13 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
       <Card variant="primary" className="weekly-primary weekly-hero">
         <CardHeader className="weekly-primary__header">
           <div className="weekly-hero__identity">
-            <p className="weekly-hud__eyebrow">{user.city} {user.name}</p>
-            <CardTitle className="weekly-hero__title">{nextGame ? `Next: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : "Advance Franchise"}</CardTitle>
+            <p className="weekly-hud__eyebrow">{phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
+            <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · Ready to Sim` : "Advance Franchise"}</CardTitle>
             <p className="weekly-primary__subtitle">
-              {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} · Week ${nextGame.week}` : "Set priorities and move the league forward."}
+              {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} is up next. Lock your plan, then advance.` : "Set priorities and move the league forward."}
             </p>
           </div>
           <div className="weekly-hud__meta">
-            <Badge variant="outline">{phaseLabel(league.phase)} · W{league.week ?? 1}</Badge>
             <Badge variant="outline">{user.wins ?? 0}-{user.losses ?? 0}{(user.ties ?? 0) ? `-${user.ties}` : ""}</Badge>
             {ownerMood != null && <Badge>{`Owner ${Math.round(ownerMood)}%`}</Badge>}
             <Badge variant="secondary">Cap ${Number(capSpace).toFixed(1)}M</Badge>
@@ -113,7 +112,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           <Button variant="secondary" onClick={() => onNavigate?.("Roster")} className="weekly-hero__action-secondary">Roster</Button>
           <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="More actions">
             <span aria-hidden>⋯</span>
-            <span>More</span>
+            <span>More Tools</span>
           </Button>
         </CardContent>
       </Card>
@@ -146,9 +145,9 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         <h3 className="weekly-section__title">Franchise snapshots</h3>
         <div className="weekly-secondary-grid">
           <Card variant="secondary">
-            <CardHeader><CardTitle className="text-sm">Upcoming</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Matchup Pulse</CardTitle></CardHeader>
             <CardContent className="text-sm text-[color:var(--text-muted)]">
-              {nextGame ? `${nextGame.isHome ? "Home" : "Away"} vs ${nextGame.opp?.abbr ?? "TBD"}` : "No scheduled game"}
+              {nextGame ? `${nextGame.isHome ? "Home" : "Road"} · ${nextGame.opp?.abbr ?? "TBD"} (${nextGame.opp?.wins ?? 0}-${nextGame.opp?.losses ?? 0})` : "No scheduled game"}
             </CardContent>
           </Card>
           <Card variant="secondary">

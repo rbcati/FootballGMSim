@@ -67,6 +67,11 @@ function ValueBar({ myValue, theirValue }) {
   const diff = myValue - theirValue;
   const fairnessColor = Math.abs(diff) < total * 0.15 ? "var(--success)" : diff > 0 ? "var(--accent)" : "var(--danger)";
   const label = Math.abs(diff) < total * 0.15 ? "Fair deal" : diff > 0 ? "Favorable for you" : "Unfavorable for you";
+  const pulse = Math.abs(diff) < total * 0.15
+    ? "Both sides are in range. This should get a real look."
+    : diff > 0
+      ? "You are asking for more value than you're sending."
+      : "You are paying a premium. Push to close if this is your target.";
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
@@ -78,6 +83,7 @@ function ValueBar({ myValue, theirValue }) {
         <div style={{ width: `${myPct}%`, background: fairnessColor, transition: "width .3s" }} />
         <div style={{ flex: 1, background: "var(--surface-strong)" }} />
       </div>
+      <div style={{ marginTop: 8, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{pulse}</div>
     </div>
   );
 }
@@ -340,6 +346,13 @@ export default function TradeCenter({ league, actions }) {
               {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
             </select>
           </div>
+          {targetId && liveTheirTeam && (
+            <div className="trade-target-pill">
+              <span className="trade-target-pill__label">Working with</span>
+              <strong>{liveTheirTeam.name}</strong>
+              <span>{liveTheirTeam.wins ?? 0}-{liveTheirTeam.losses ?? 0}{(liveTheirTeam.ties ?? 0) ? `-${liveTheirTeam.ties}` : ""} · OVR {liveTheirTeam.ovr ?? "—"}</span>
+            </div>
+          )}
           {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : "Propose Trade"}</Button>}
         </div>
       </div>
@@ -368,7 +381,10 @@ export default function TradeCenter({ league, actions }) {
           <div className="trade-panels-grid">
             {/* You Give */}
             <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
-              <div className="trade-panel-card__head">You Give</div>
+              <div className="trade-panel-card__head">
+                <span>You Give</span>
+                <span className={`trade-panel-card__count ${offering.size > 0 || myPicks.length > 0 ? "is-active" : ""}`}>{offering.size + myPicks.length} selected</span>
+              </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {myRoster.map(p => (
                   <PlayerCheckRow key={p.id} player={p} checked={offering.has(p.id)} onChange={toggleOffering} onNameClick={() => setPreviewPlayer(p)} />
@@ -379,7 +395,10 @@ export default function TradeCenter({ league, actions }) {
 
             {/* You Receive */}
             <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
-              <div className="trade-panel-card__head">You Receive</div>
+              <div className="trade-panel-card__head">
+                <span>You Receive</span>
+                <span className={`trade-panel-card__count ${receiving.size > 0 || theirPicks.length > 0 ? "is-active" : ""}`}>{receiving.size + theirPicks.length} selected</span>
+              </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {theirRoster.map(p => (
                   <PlayerCheckRow key={p.id} player={p} checked={receiving.has(p.id)} onChange={toggleReceiving} onNameClick={() => setPreviewPlayer(p)} />
