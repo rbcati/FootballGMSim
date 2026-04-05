@@ -306,9 +306,10 @@ function ScoreHUD({ homeTeam, awayTeam, homeScore, awayScore, quarter, timeLeft,
   return (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "10px 14px",
-      background: "rgba(0,0,0,0.6)",
-      borderBottom: "1px solid rgba(255,255,255,0.08)",
+      padding: "12px 14px",
+      background: "linear-gradient(180deg, rgba(15,18,28,0.97), rgba(8,10,18,0.94))",
+      borderBottom: "1px solid rgba(255,255,255,0.12)",
+      boxShadow: "0 8px 28px rgba(0,0,0,0.45)",
       flexShrink: 0,
       gap: 8,
     }}>
@@ -331,7 +332,7 @@ function ScoreHUD({ homeTeam, awayTeam, homeScore, awayScore, quarter, timeLeft,
       </div>
 
       {/* Game info */}
-      <div style={{ textAlign: "center", flexShrink: 0 }}>
+      <div style={{ textAlign: "center", flexShrink: 0, padding: "6px 10px", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)" }}>
         <div style={{
           fontSize: "0.85rem", fontWeight: 900, color: "var(--text)",
           letterSpacing: "0.5px",
@@ -378,13 +379,13 @@ function MomentumMeter({ momentum = 0, homeColor, awayColor, homeAbbr, awayAbbr 
       : `${awayAbbr} Momentum`;
 
   return (
-    <div style={{ padding: "6px 14px", flexShrink: 0 }}>
+    <div style={{ padding: "9px 14px 7px", flexShrink: 0, background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
       <div style={{ fontSize: "0.6rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px",
         color: "var(--text-subtle)", textAlign: "center", marginBottom: 4 }}>
         Momentum — {label}
       </div>
       <div style={{
-        height: 8, borderRadius: 4, overflow: "hidden",
+        height: 10, borderRadius: 999, overflow: "hidden",
         display: "flex", background: "rgba(255,255,255,0.05)",
         border: "1px solid rgba(255,255,255,0.06)",
       }}>
@@ -392,7 +393,7 @@ function MomentumMeter({ momentum = 0, homeColor, awayColor, homeAbbr, awayAbbr 
           width: `${awayWidth}%`, background: awayColor,
           opacity: 0.75, transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
         }} />
-        <div style={{ width: 2, background: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <div style={{ width: 2, background: "rgba(255,255,255,0.45)", flexShrink: 0 }} />
         <div style={{
           flex: 1, background: homeColor,
           opacity: 0.75, transition: "width 1s cubic-bezier(0.2,0.8,0.2,1)",
@@ -482,17 +483,18 @@ function LiveStatsStrip({ logs, visibleCount }) {
 
   return (
     <div style={{
-      display: "flex", gap: 6, padding: "5px 14px", flexShrink: 0,
-      background: "rgba(0,0,0,0.35)",
-      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      display: "flex", gap: 8, padding: "7px 14px", flexShrink: 0,
+      background: "rgba(255,255,255,0.015)",
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
       overflowX: "auto", WebkitOverflowScrolling: "touch",
     }}>
       {pills.map(pill => (
         <div key={pill.key} style={{
-          fontSize: "0.65rem", fontWeight: 700, color: pill.color,
-          background: `${pill.color}14`,
-          border: `1px solid ${pill.color}30`,
-          borderRadius: 6, padding: "3px 8px", whiteSpace: "nowrap", flexShrink: 0,
+          fontSize: "0.64rem", fontWeight: 800, color: pill.color,
+          background: `${pill.color}1C`,
+          border: `1px solid ${pill.color}3A`,
+          borderRadius: 999, padding: "4px 10px", whiteSpace: "nowrap", flexShrink: 0,
+          letterSpacing: "0.2px",
         }}>
           {pill.label}
         </div>
@@ -519,15 +521,15 @@ function PlayFeedEntry({ log, isLatest }) {
   return (
     <div style={{
       display: "flex", alignItems: "flex-start", gap: 8,
-      padding: "7px 10px",
+      padding: "9px 12px",
       borderLeft: `3px solid ${borderColor}`,
       background: score
-        ? "rgba(52,199,89,0.07)"
+        ? "rgba(52,199,89,0.09)"
         : turnover
-          ? "rgba(255,69,58,0.07)"
-          : "transparent",
-      borderRadius: "0 6px 6px 0",
-      marginBottom: 3,
+          ? "rgba(255,69,58,0.09)"
+          : "rgba(255,255,255,0.015)",
+      borderRadius: "0 8px 8px 0",
+      marginBottom: 6,
       animation: isLatest ? "feedSlideIn 0.25s ease-out" : "none",
     }}>
       <span style={{
@@ -618,9 +620,9 @@ function BigPlayPopup({ log, onDismiss }) {
 
 function ProgressBar({ current, total }) {
   return (
-    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", flexShrink: 0 }}>
+    <div style={{ height: 4, background: "rgba(255,255,255,0.08)", flexShrink: 0 }}>
       <div style={{
-        height: "100%", background: "var(--accent)",
+        height: "100%", background: "linear-gradient(90deg, var(--accent), #64D2FF)",
         width: `${total > 0 ? (current / total) * 100 : 0}%`,
         transition: "width 0.3s ease",
       }} />
@@ -814,7 +816,7 @@ export default function GameSimulation({
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 9500,
-      background: "#0a0a0f",
+      background: "radial-gradient(circle at top, #131c2f 0%, #07090f 48%, #05060a 100%)",
       display: "flex", flexDirection: "column",
       overflow: "hidden",
       fontFamily: "inherit",
@@ -851,13 +853,14 @@ export default function GameSimulation({
 
       {/* ── Controls row ── */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 6, justifyContent: "space-between",
-        padding: "8px 14px",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        background: "rgba(0,0,0,0.4)",
+        display: "flex", alignItems: "center", gap: 10, justifyContent: "space-between",
+        padding: "10px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(0,0,0,0.42)",
         flexShrink: 0,
+        flexWrap: "wrap",
       }}>
-        <div style={{ display: "flex", gap: 5 }}>
+        <div style={{ display: "flex", gap: 6 }}>
           {[1, 2, 4, "⚡"].map((s) => {
             const val = s === "⚡" ? "instant" : s;
             const active = speed === val;
@@ -866,10 +869,10 @@ export default function GameSimulation({
                 key={s}
                 onClick={() => setSpeed(val)}
                 style={{
-                  padding: "4px 9px", borderRadius: 6, border: "none",
+                  padding: "5px 10px", borderRadius: 999, border: "1px solid transparent",
                   background: active ? "var(--accent)" : "rgba(255,255,255,0.08)",
                   color: active ? "#fff" : "var(--text-muted)",
-                  fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
+                  fontSize: "0.72rem", fontWeight: 800, cursor: "pointer",
                   minWidth: 32,
                 }}
               >
@@ -878,14 +881,14 @@ export default function GameSimulation({
             );
           })}
         </div>
-        <div style={{ display: "flex", gap: 5 }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <button
             onClick={() => setKeyPlaysOnly(k => !k)}
             style={{
-              padding: "4px 9px", borderRadius: 6, border: "none",
+              padding: "5px 10px", borderRadius: 999, border: "1px solid transparent",
               background: keyPlaysOnly ? "#FFD60A22" : "rgba(255,255,255,0.06)",
               color: keyPlaysOnly ? "#FFD60A" : "var(--text-muted)",
-              fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
+              fontSize: "0.71rem", fontWeight: 800, cursor: "pointer",
             }}
           >
             🔑 Key Plays
@@ -897,10 +900,10 @@ export default function GameSimulation({
               if (!next) setPendingPlayCall(null);
             }}
             style={{
-              padding: "4px 9px", borderRadius: 6, border: "none",
+              padding: "5px 10px", borderRadius: 999, border: "1px solid transparent",
               background: callPlaysMode ? "rgba(10,132,255,0.25)" : "rgba(255,255,255,0.06)",
               color: callPlaysMode ? "#0A84FF" : "var(--text-muted)",
-              fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
+              fontSize: "0.71rem", fontWeight: 800, cursor: "pointer",
             }}
           >
             📋 Call Plays
@@ -908,8 +911,8 @@ export default function GameSimulation({
           <button
             onClick={() => setPlaying(p => !p)}
             style={{
-              padding: "4px 12px", borderRadius: 6, border: "none",
-              background: "rgba(255,255,255,0.08)",
+              padding: "5px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(255,255,255,0.09)",
               color: "var(--text)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer",
               minWidth: 60,
             }}
@@ -919,7 +922,7 @@ export default function GameSimulation({
           <button
             onClick={handleFinish}
             style={{
-              padding: "4px 9px", borderRadius: 6,
+              padding: "5px 11px", borderRadius: 999,
               border: "1px solid rgba(255,255,255,0.1)",
               background: "none",
               color: "var(--text-muted)", fontSize: "0.72rem", cursor: "pointer",
@@ -975,9 +978,9 @@ export default function GameSimulation({
         {lastCalledPlay && callPlaysMode && pendingPlayCall !== "waiting" && (
           <div style={{
             position: "absolute", bottom: 0, left: 0, right: 0,
-            background: "rgba(10,132,255,0.15)",
+            background: "rgba(10,132,255,0.2)",
             borderTop: "1px solid rgba(10,132,255,0.3)",
-            padding: "4px 10px",
+            padding: "6px 12px",
             fontSize: "0.65rem", fontWeight: 700,
             color: "#0A84FF",
             display: "flex", alignItems: "center", gap: 6,
@@ -991,11 +994,11 @@ export default function GameSimulation({
       {/* ── Commentary banner ── */}
       {commentary && (
         <div style={{
-          padding: "7px 14px",
-          background: "rgba(255,215,0,0.06)",
-          borderTop: "1px solid rgba(255,215,0,0.12)",
-          borderBottom: "1px solid rgba(255,215,0,0.12)",
-          fontSize: "0.78rem", fontWeight: 700, color: "#FFD60A",
+          padding: "8px 14px",
+          background: "linear-gradient(180deg, rgba(255,215,0,0.1), rgba(255,215,0,0.05))",
+          borderTop: "1px solid rgba(255,215,0,0.2)",
+          borderBottom: "1px solid rgba(255,215,0,0.2)",
+          fontSize: "0.77rem", fontWeight: 800, color: "#FFD60A",
           letterSpacing: "0.2px",
           flexShrink: 0,
           animation: "feedSlideIn 0.3s ease-out",
@@ -1009,8 +1012,9 @@ export default function GameSimulation({
         ref={feedRef}
         style={{
           flex: 1, overflowY: "auto",
-          padding: "8px 12px",
+          padding: "10px 12px",
           WebkitOverflowScrolling: "touch",
+          background: "linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.03))",
         }}
       >
         {visibleLogs.length === 0 && (
@@ -1100,20 +1104,24 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
       {/* Confetti dots */}
       {userWon && <ConfettiLayer colors={[homeColor, "#FFD700", "#34C759"]} />}
 
-      <div style={{ textAlign: "center", maxWidth: 340 }}>
-        <div style={{ fontSize: "3rem", lineHeight: 1, marginBottom: 12 }}>{resultEmoji}</div>
+      <div style={{ textAlign: "center", maxWidth: 380, width: "100%" }}>
+        <div style={{ fontSize: "2.7rem", lineHeight: 1, marginBottom: 8 }}>{resultEmoji}</div>
 
         {/* Score */}
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 16,
+          display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 14, marginBottom: 16,
+          padding: "14px 16px",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.04)",
         }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 4 }}>
               {awayTeam?.abbr ?? "AWY"}
             </div>
             <div style={{
-              fontSize: "3.5rem", fontWeight: 900, lineHeight: 1,
-              color: awayScore > homeScore ? aColor : "var(--text-muted)",
+              fontSize: "3.2rem", fontWeight: 900, lineHeight: 1,
+              color: awayScore > homeScore ? awayColor : "var(--text-muted)",
               fontVariantNumeric: "tabular-nums",
             }}>
               {awayScore}
@@ -1125,7 +1133,7 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
               {homeTeam?.abbr ?? "HME"}
             </div>
             <div style={{
-              fontSize: "3.5rem", fontWeight: 900, lineHeight: 1,
+              fontSize: "3.2rem", fontWeight: 900, lineHeight: 1,
               color: homeScore > awayScore ? homeColor : "var(--text-muted)",
               fontVariantNumeric: "tabular-nums",
             }}>
@@ -1139,8 +1147,8 @@ function FinalOverlay({ homeTeam, awayTeam, homeScore, awayScore, homeColor, awa
           display: "inline-block",
           background: `${resultColor}20`,
           border: `1.5px solid ${resultColor}`,
-          borderRadius: 8, padding: "6px 16px",
-          fontSize: "0.9rem", fontWeight: 900, color: resultColor,
+          borderRadius: 999, padding: "7px 16px",
+          fontSize: "0.85rem", fontWeight: 900, color: resultColor,
           letterSpacing: "1px", marginBottom: 20,
         }}>
           {resultText}

@@ -434,14 +434,14 @@ export default function PlayerProfile({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: "var(--surface)",
+          background: "linear-gradient(180deg, var(--surface-elevated), var(--surface))",
           width: "92%",
           maxWidth: 960,
           maxHeight: "90vh",
           overflowY: "auto",
           borderRadius: "var(--radius-lg)",
           boxShadow: "var(--shadow-xl)",
-          border: "1px solid var(--hairline)",
+          border: "1px solid var(--hairline-strong)",
           display: "flex",
           flexDirection: "column",
         }}
@@ -494,7 +494,7 @@ export default function PlayerProfile({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "flex-start",
-            background: "var(--surface-strong)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))",
           }}
         >
           {loading ? (
@@ -530,8 +530,8 @@ export default function PlayerProfile({
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: "var(--text-2xl)",
-                    fontWeight: 800,
+                    fontSize: "clamp(1.35rem, 2.8vw, 1.8rem)",
+                    fontWeight: 900,
                   }}
                 >
                   {player.name}
@@ -581,8 +581,9 @@ export default function PlayerProfile({
                   {player.potential && (
                     <span
                       style={{
-                        color: "var(--text-subtle)",
+                        color: "var(--text-muted)",
                         fontSize: "var(--text-xs)",
+                        fontWeight: 700,
                       }}
                     >
                       Pot: {player.potential}
@@ -702,7 +703,7 @@ export default function PlayerProfile({
             <div className="table-wrapper" style={{ overflowX: "auto" }}>
               <Table
                 className="standings-table"
-                style={{ width: "100%", minWidth: 480 }}
+                style={{ width: "100%", minWidth: 480, fontSize: "0.79rem", lineHeight: 1.35 }}
               >
                 <TableHeader>
                   <TableRow>

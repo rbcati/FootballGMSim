@@ -34,7 +34,8 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
         style={{
           position: "fixed",
           inset: 0,
-          background: "rgba(0,0,0,0.6)",
+          background: "rgba(0,0,0,0.72)",
+          backdropFilter: "blur(4px)",
           zIndex: 9000,
         }}
       />
@@ -43,38 +44,48 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
         aria-modal="true"
         style={{
           position: "fixed",
-          inset: "10% auto auto 50%",
+          inset: "6% auto auto 50%",
           transform: "translateX(-50%)",
           width: "min(960px, 94vw)",
-          maxHeight: "80vh",
+          maxHeight: "88vh",
           overflow: "auto",
-          border: "1px solid var(--hairline)",
-          background: "var(--surface)",
+          border: "1px solid var(--hairline-strong)",
+          background: "linear-gradient(180deg, var(--surface-elevated), var(--surface))",
           borderRadius: "var(--radius-lg)",
           zIndex: 9001,
-          boxShadow: "0 20px 60px rgba(0,0,0,0.45)",
+          boxShadow: "0 28px 80px rgba(0,0,0,0.55)",
         }}
       >
-        <div style={{ padding: "var(--space-4)", borderBottom: "1px solid var(--hairline)", display: "flex", justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{playerName}</div>
+        <div style={{ padding: "var(--space-4) var(--space-5)", borderBottom: "1px solid var(--hairline)", display: "flex", justifyContent: "space-between", gap: "var(--space-3)", alignItems: "flex-start", background: "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.9px", color: "var(--text-subtle)", fontWeight: 700, marginBottom: "var(--space-1)" }}>Player Profile</div>
+            <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, lineHeight: 1.12 }}>{playerName}</div>
             {player?.onTradeBlock && (
               <span className="trade-block-badge">🔴 On Trade Block</span>
             )}
-            <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-              {position} · Age {player?.age ?? "—"} · OVR {player?.ovr ?? "—"}
+            <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginTop: "var(--space-1)" }}>
+              {position} · Age {player?.age ?? "—"} · {player?.teamAbbr || player?.team || "Team N/A"}
+            </div>
+            <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
+              <span className={`rating-pill rating-color-${(player?.ovr ?? 0) >= 85 ? "elite" : (player?.ovr ?? 0) >= 75 ? "good" : "avg"}`}>{player?.ovr ?? "—"} OVR</span>
+              <span style={{ padding: "3px 10px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.18)", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--text-muted)" }}>
+                Pot {player?.potential ?? player?.pot ?? "—"}
+              </span>
             </div>
           </div>
-          <button className="btn" onClick={onClose} aria-label="Close player detail modal">✕</button>
+          <button className="btn" onClick={onClose} aria-label="Close player detail modal" style={{ borderRadius: "999px", minWidth: 40, minHeight: 40, padding: 0, fontSize: "1.1rem", fontWeight: 800 }}>✕</button>
         </div>
 
-        <div style={{ padding: "var(--space-4)" }}>
-          <div style={{ fontWeight: 700, marginBottom: "var(--space-3)" }}>Career Stats by Season</div>
+        <div style={{ padding: "var(--space-4) var(--space-5) var(--space-5)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
+            <div style={{ fontWeight: 800, fontSize: "var(--text-base)" }}>Career Stats by Season</div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.6px" }}>{rows.length} seasons</div>
+          </div>
           {careerStats.length === 0 ? (
             <p className="no-stats" style={{ color: "var(--text-muted)" }}>No career stats recorded yet.</p>
           ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table className="standings-table" style={{ width: "100%", fontSize: "var(--text-xs)" }}>
+            <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", background: "rgba(255,255,255,0.02)" }}>
+              <table className="standings-table" style={{ width: "100%", fontSize: "0.76rem", lineHeight: 1.35 }}>
                 <thead>
                   <tr>
                     <th style={{ textAlign: "left" }}>Season</th>

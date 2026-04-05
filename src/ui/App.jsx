@@ -36,7 +36,7 @@
  *  - Renders only from the view-model slices the worker sends.
  */
 
-import React, { useEffect, useCallback, useRef, useState, Component } from 'react';
+import React, { useEffect, useCallback, useRef, useState, Component, useMemo } from 'react';
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
@@ -376,8 +376,63 @@ function AppContent() {
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   const isPostseason = league?.phase === 'playoffs';
+  const canUseTopActions = !(busy || simulating || !!batchSim);
 
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
+
+  const topSecondaryAction = useMemo(() => {
+    if (league.phase === 'regular') {
+      return {
+        label: 'Sim to Playoffs',
+        title: 'Simulate all remaining regular season weeks',
+        onClick: () => handleSimToPhase('playoffs'),
+        disabled: canUseTopActions ? false : true,
+      };
+    }
+    if (league.phase === 'playoffs') {
+      return {
+        label: 'Sim to Offseason',
+        title: 'Simulate remaining playoff games to offseason',
+        onClick: () => handleSimToPhase('offseason'),
+        disabled: canUseTopActions ? false : true,
+      };
+    }
+    if (['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase)) {
+      return {
+        label: 'Sim to Season',
+        title: 'Simulate through offseason to next preseason',
+        onClick: () => handleSimToPhase('preseason'),
+        disabled: canUseTopActions ? false : true,
+      };
+    }
+    return null;
+  }, [league.phase, canUseTopActions, handleSimToPhase]);
+
+  const utilityActions = useMemo(() => {
+    const items = [];
+    if (league.phase === 'regular') {
+      items.push({
+        label: 'Sim to Offseason',
+        title: 'Simulate through playoffs to offseason',
+        onClick: () => handleSimToPhase('offseason'),
+        disabled: !canUseTopActions,
+      });
+    }
+    if (league.phase !== 'regular' && league.phase !== 'playoffs' && ['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase)) {
+      items.push({
+        label: 'Sim to Season',
+        title: 'Simulate through offseason to next preseason',
+        onClick: () => handleSimToPhase('preseason'),
+        disabled: !canUseTopActions,
+      });
+    }
+    items.push(
+      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || !!batchSim },
+      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || !!batchSim },
+      { label: 'Reset Franchise', onClick: handleReset, disabled: busy || !!batchSim, danger: true },
+    );
+    return items;
+  }, [league.phase, canUseTopActions, activeSlot, actions, busy, batchSim, handleReset, handleSimToPhase]);
 
   return (
     <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
@@ -435,71 +490,46 @@ function AppContent() {
         </div>
 
         <div className="app-header-actions">
-          <button className="btn" onClick={toggleSound} title={soundEnabled ? "Mute sound" : "Unmute sound"}>
+          <button className="btn app-icon-btn" onClick={toggleSound} title={soundEnabled ? "Mute sound" : "Unmute sound"}>
             {soundEnabled ? "🔊" : "🔇"}
           </button>
           <ThemeToggle compact />
           <button
-            className="btn btn-primary app-advance-btn"
+            className="btn btn-primary app-advance-btn app-action-primary"
             onClick={handleAdvanceWeek}
             disabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
           >
             {getAdvanceLabel()}
           </button>
-          {/* Sim to... buttons — show during regular season and playoffs */}
-          {league.phase === 'regular' && !batchSim && (
-            <>
-              <button
-                className="btn app-sim-btn"
-                onClick={() => handleSimToPhase('playoffs')}
-                disabled={busy || simulating}
-                title="Simulate all remaining regular season weeks"
-              >
-                <span className="app-sim-btn-full">Sim to Playoffs</span>
-                <span className="app-sim-btn-short">→ PO</span>
-              </button>
-              <button
-                className="btn app-sim-btn"
-                onClick={() => handleSimToPhase('offseason')}
-                disabled={busy || simulating}
-                title="Simulate through playoffs to offseason"
-              >
-                <span className="app-sim-btn-full">Sim to Offseason</span>
-                <span className="app-sim-btn-short">→ Off</span>
-              </button>
-            </>
-          )}
-          {league.phase === 'playoffs' && !batchSim && (
+          {topSecondaryAction && !batchSim && (
             <button
-              className="btn app-sim-btn"
-              onClick={() => handleSimToPhase('offseason')}
-              disabled={busy || simulating}
-              title="Simulate remaining playoff games to offseason"
+              className="btn app-sim-btn app-action-secondary"
+              onClick={topSecondaryAction.onClick}
+              disabled={topSecondaryAction.disabled}
+              title={topSecondaryAction.title}
             >
-              <span className="app-sim-btn-full">Sim to Offseason</span>
-              <span className="app-sim-btn-short">→ Off</span>
+              {topSecondaryAction.label}
             </button>
           )}
-          {/* During offseason phases, offer Sim to Season */}
-          {['offseason_resign', 'offseason', 'free_agency', 'draft'].includes(league.phase) && !batchSim && (
-            <button
-              className="btn app-sim-btn"
-              onClick={() => handleSimToPhase('preseason')}
-              disabled={busy || simulating}
-              title="Simulate through offseason to next preseason"
-            >
-              <span className="app-sim-btn-full">Sim to Season</span>
-              <span className="app-sim-btn-short">→ Szn</span>
-            </button>
-          )}
-          <button className="btn" onClick={() => setActiveSlot(null)} disabled={busy || !!batchSim}>Save Slots</button>
-          <button className="btn app-save-btn" onClick={() => activeSlot && actions.saveSlot(activeSlot)} disabled={busy || !!batchSim || !activeSlot}>
-            Save
-          </button>
-          <button className="btn btn-danger app-reset-btn" onClick={handleReset} disabled={busy || !!batchSim}>
-            Reset
-          </button>
+          <details className="app-overflow-menu">
+            <summary className="btn app-overflow-trigger" aria-label="More actions">
+              More
+            </summary>
+            <div className="app-overflow-list">
+              {utilityActions.map((item) => (
+                <button
+                  key={item.label}
+                  className={`app-overflow-item ${item.danger ? 'danger' : ''}`}
+                  onClick={item.onClick}
+                  disabled={item.disabled}
+                  title={item.title || item.label}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </details>
         </div>
       </header>
 

@@ -3,13 +3,13 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const cardVariants = cva(
-  "rounded-xl border text-[color:var(--text)] shadow-sm transition-colors",
+  "rounded-xl border text-[color:var(--text)] shadow-sm transition-colors duration-200",
   {
     variants: {
       variant: {
-        primary: "border-[color:rgba(10,132,255,.45)] bg-[linear-gradient(180deg,rgba(10,132,255,.16),rgba(10,132,255,.05))] shadow-[0_8px_24px_rgba(10,132,255,.18)]",
-        secondary: "border-[color:var(--hairline)] bg-[color:var(--surface)]",
-        utility: "border-[color:var(--hairline)] bg-[color:rgba(255,255,255,0.03)]",
+        primary: "border-[color:rgba(10,132,255,.52)] bg-[linear-gradient(175deg,rgba(10,132,255,.2),rgba(10,132,255,.06)_55%,rgba(255,255,255,.02))] shadow-[0_14px_36px_rgba(10,132,255,.24)]",
+        secondary: "border-[color:var(--hairline)] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_6px_20px_rgba(0,0,0,.28)]",
+        utility: "border-[color:rgba(255,255,255,.08)] bg-[color:rgba(255,255,255,0.02)] shadow-none",
       },
     },
     defaultVariants: {
