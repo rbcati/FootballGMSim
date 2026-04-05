@@ -1,4 +1,5 @@
 import React, { useRef, useState } from "react";
+import OwnerMessagesCard from "./OwnerMessagesCard.jsx";
 
 const ADVISOR_TOPICS = [
   { key: "roster", label: "👥 Roster Advice" },
@@ -23,8 +24,9 @@ export default function GMAdvisor({ league, leagueState, currentSeason, currentW
   const buildContext = (selectedTopic) => {
     if (!leagueState) {
       return `You are a GM advisor for a football simulation game.
-    The user's game data is still loading. 
-    Give general GM strategy advice for topic: ${selectedTopic}`;
+    Team reports are still coming in from scouts and cap staff.
+    Give practical, in-universe strategy guidance for topic: ${selectedTopic}.
+    Keep it grounded and forward-looking.`;
     }
 
     const teams = Array.isArray(leagueState?.teams) ? leagueState.teams : [];
@@ -32,15 +34,15 @@ export default function GMAdvisor({ league, leagueState, currentSeason, currentW
 
     if (!selectedUserTeam) {
       return `You are a GM advisor for a football simulation game.
-    No team data available yet.
-    Give general GM strategy advice for topic: ${selectedTopic}`;
+    Team-specific reports are unavailable right now.
+    Give balanced strategy advice for topic: ${selectedTopic} using league-level principles.`;
     }
 
     const roster = Array.isArray(selectedUserTeam?.roster) ? selectedUserTeam.roster : [];
     const safeRoster =
       roster.length > 0
         ? roster
-        : [{ name: "No roster data loaded yet", position: "N/A", ovr: 0, age: 0 }];
+        : [{ name: "Depth chart update pending", position: "N/A", ovr: 0, age: 0 }];
 
     const topPlayers = [...safeRoster]
       .sort((a, b) => (b?.ovr ?? 0) - (a?.ovr ?? 0))
@@ -179,13 +181,13 @@ Do not reference any real NFL events or real players.
         return;
       }
 
-      const text = data?.choices?.[0]?.message?.content ?? "No advice returned.";
+      const text = data?.choices?.[0]?.message?.content ?? "No advisory memo came through. Try another topic in a moment.";
       setAdvice(text);
       requestAnimationFrame(() => {
         responseRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     } catch (_err) {
-      setError("Advisor unavailable. Check connection and try again.");
+      setError("The advisor line is quiet right now. Give it a moment and request another briefing.");
     } finally {
       setLoading(false);
     }
@@ -197,6 +199,13 @@ Do not reference any real NFL events or real players.
         <h2>🤖 GM Advisor</h2>
         <p className="advisor-sub">AI-powered strategy for your franchise</p>
       </div>
+
+      <OwnerMessagesCard
+        league={resolvedLeague}
+        userTeam={userTeam}
+        currentWeek={currentWeek ?? resolvedLeague?.week}
+        currentSeason={currentSeason ?? resolvedLeague?.year}
+      />
 
       <div className="advisor-topics">
         {ADVISOR_TOPICS.map((t) => (
@@ -232,8 +241,8 @@ Do not reference any real NFL events or real players.
         {!advice && !loading && !error && (
           <p className="advisor-prompt">
             {userTeam
-              ? "Select a topic above to get personalized franchise advice."
-              : "Load into a league to use GM Advisor."}
+              ? "Select a topic to request a strategy briefing for your football operations staff."
+              : "Open an active franchise file to brief with your GM advisor."}
           </p>
         )}
       </div>
