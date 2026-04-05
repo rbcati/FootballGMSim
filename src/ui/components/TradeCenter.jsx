@@ -51,12 +51,12 @@ function OvrBadge({ ovr }) {
 
 function PlayerCheckRow({ player, checked, onChange, onNameClick }) {
   return (
-    <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "var(--space-2) var(--space-3)", borderBottom: "1px solid var(--hairline)", cursor: "pointer", background: checked ? "var(--accent)11" : "transparent" }}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(player.id, e.target.checked)} style={{ accentColor: "var(--accent)", width: 14, height: 14 }} />
+    <label className={`trade-asset-row ${checked ? "is-selected" : ""}`}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(player.id, e.target.checked)} style={{ accentColor: "var(--accent)", width: 15, height: 15 }} />
       <OvrBadge ovr={player.ovr} />
-      <span style={{ minWidth: 26, padding: "1px 4px", borderRadius: "var(--radius-pill)", background: "var(--surface-strong)", fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textAlign: "center" }}>{player.pos}</span>
-      <span onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }} style={{ flex: 1, fontSize: "var(--text-sm)", color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>{player.name}</span>
-      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{fmtSalary(player.contract?.baseAnnual)}</span>
+      <span className="trade-asset-row__pos">{player.pos}</span>
+      <span onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }} className="trade-asset-row__name">{player.name}</span>
+      <span className="trade-asset-row__salary">{fmtSalary(player.contract?.baseAnnual)}</span>
     </label>
   );
 }
@@ -106,21 +106,27 @@ function PickSelector({ side, picks, onChange }) {
   const [year, setYear] = useState(new Date().getFullYear() + 1);
   const addPick = () => onChange(side, { kind: "pick", round, year, id: `${side}_${round}_${year}_${Date.now()}` });
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap", padding: "var(--space-2) var(--space-3)", borderTop: "1px solid var(--hairline)" }}>
-      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Add pick:</span>
-      <select value={round} onChange={(e) => setRound(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "2px 4px", fontSize: "var(--text-xs)" }}>
+    <div className="trade-pick-controls">
+      <div className="trade-pick-controls__inputs">
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Add pick:</span>
+        <select value={round} onChange={(e) => setRound(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "4px 6px", fontSize: "var(--text-xs)" }}>
         {[1,2,3,4,5,6,7].map(r => <option key={r} value={r}>R{r}</option>)}
-      </select>
-      <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "2px 4px", fontSize: "var(--text-xs)" }}>
+        </select>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "4px 6px", fontSize: "var(--text-xs)" }}>
         {[0,1,2].map(d => { const y = new Date().getFullYear() + 1 + d; return <option key={y} value={y}>{y}</option>; })}
-      </select>
-      <Button className="btn" style={{ fontSize: "var(--text-xs)", padding: "2px 8px" }} onClick={addPick}>+ Add</Button>
-      {picks.map(pk => (
-        <span key={pk.id} style={{ fontSize: "var(--text-xs)", background: "var(--accent)22", color: "var(--accent)", padding: "1px 6px", borderRadius: "var(--radius-pill)", display: "inline-flex", alignItems: "center", gap: 4 }}>
-          {pk.year} R{pk.round}
-          <Button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12 }} onClick={() => onChange(side, pk, true)}>×</Button>
-        </span>
-      ))}
+        </select>
+        <Button className="btn" style={{ fontSize: "var(--text-xs)", padding: "4px 10px" }} onClick={addPick}>+ Add</Button>
+      </div>
+      {picks.length > 0 && (
+        <div className="trade-pick-controls__chips">
+          {picks.map(pk => (
+            <span key={pk.id} className="trade-pick-chip">
+              {pk.year} R{pk.round}
+              <Button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12, minHeight: 0 }} onClick={() => onChange(side, pk, true)}>×</Button>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -306,7 +312,7 @@ export default function TradeCenter({ league, actions }) {
   };
 
   return (
-    <Card className="card-premium"><CardContent className="p-4">
+    <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
       {showSavedToast && (
         <div style={{
           position: "fixed",
@@ -325,11 +331,11 @@ export default function TradeCenter({ league, actions }) {
         </div>
       )}
       {/* Header + propose button (original) */}
-      <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-4)", flexWrap: "wrap" }}>
+      <div className="card trade-header-card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-4)", flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Trade Partner</div>
-            <select value={targetId ?? ""} onChange={e => setTargetId(e.target.value ? Number(e.target.value) : null)} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220 }}>
+            <select value={targetId ?? ""} onChange={e => setTargetId(e.target.value ? Number(e.target.value) : null)} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220, width: "100%" }}>
               <option value="">Select a team…</option>
               {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
             </select>
@@ -359,10 +365,10 @@ export default function TradeCenter({ league, actions }) {
           )}
 
           {/* Drag-and-drop panels */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-4)" }}>
+          <div className="trade-panels-grid">
             {/* You Give */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "var(--space-3) var(--space-4)", background: "var(--surface-strong)" }}>You Give</div>
+            <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
+              <div className="trade-panel-card__head">You Give</div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {myRoster.map(p => (
                   <PlayerCheckRow key={p.id} player={p} checked={offering.has(p.id)} onChange={toggleOffering} onNameClick={() => setPreviewPlayer(p)} />
@@ -372,8 +378,8 @@ export default function TradeCenter({ league, actions }) {
             </div>
 
             {/* You Receive */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ padding: "var(--space-3) var(--space-4)", background: "var(--surface-strong)" }}>You Receive</div>
+            <div className="card trade-panel-card" style={{ padding: 0, overflow: "hidden" }}>
+              <div className="trade-panel-card__head">You Receive</div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {theirRoster.map(p => (
                   <PlayerCheckRow key={p.id} player={p} checked={receiving.has(p.id)} onChange={toggleReceiving} onNameClick={() => setPreviewPlayer(p)} />

@@ -130,20 +130,21 @@ export default function GlossaryPopover() {
         aria-label="Open rules glossary"
         style={{
           position: "fixed",
-          bottom: "calc(env(safe-area-inset-bottom, 0px) + 72px)",
-          left: 16,
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 84px)",
+          right: 12,
           zIndex: 3000,
-          width: 36, height: 36,
+          width: 34, height: 34,
           borderRadius: "50%",
-          background: open ? "var(--accent)" : "var(--surface-strong)",
+          background: open ? "var(--accent)" : "color-mix(in srgb, var(--surface-strong) 88%, transparent)",
           border: "1.5px solid var(--hairline)",
           color: open ? "#fff" : "var(--text-muted)",
-          fontSize: "0.9rem",
+          fontSize: "0.82rem",
           fontWeight: 900,
           cursor: "pointer",
           display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: "0 2px 12px rgba(0,0,0,0.35)",
-          transition: "background 0.15s, color 0.15s",
+          boxShadow: "0 4px 14px rgba(0,0,0,0.32)",
+          transition: "background 0.15s, color 0.15s, transform 0.15s",
+          opacity: open ? 1 : 0.92,
         }}
       >
         ?
@@ -155,10 +156,10 @@ export default function GlossaryPopover() {
           ref={panelRef}
           style={{
             position: "fixed",
-            bottom: "calc(env(safe-area-inset-bottom, 0px) + 116px)",
-            left: 16,
+            bottom: "calc(env(safe-area-inset-bottom, 0px) + 130px)",
+            right: 12,
             zIndex: 3001,
-            width: "min(360px, calc(100vw - 32px))",
+            width: "min(360px, calc(100vw - 24px))",
             maxHeight: "60vh",
             background: "var(--surface-strong, #1a1a2e)",
             border: "1px solid var(--hairline)",
