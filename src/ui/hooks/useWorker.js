@@ -56,6 +56,10 @@ const INITIAL_STATE = {
   userGameLiveStats: null,
 };
 
+function isWeeklyResultsPhase(phase) {
+  return phase === 'preseason' || phase === 'regular' || phase === 'playoffs';
+}
+
 function reducer(state, action) {
   switch (action.type) {
     case 'BUSY':
@@ -73,13 +77,22 @@ function reducer(state, action) {
     case 'STATE_UPDATE':
       // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
-      return { ...state, busy: false, league: { ...(state.league ?? {}), ...action.payload } };
+      return {
+        ...state,
+        busy: false,
+        league: { ...(state.league ?? {}), ...action.payload },
+        ...(action.payload?.phase && !isWeeklyResultsPhase(action.payload.phase)
+          ? { lastResults: [], lastSimWeek: null, gameEvents: [] }
+          : {}),
+      };
     case 'PROMPT_USER_GAME':
       return { ...state, busy: false, simulating: false, simProgress: 0, promptUserGame: true, userGameLogs: null };
     case 'PLAY_LOGS':
       return { ...state, busy: false, simulating: false, promptUserGame: false, userGameLogs: action.logs, userGameLiveStats: action.liveStats || null };
     case 'CLEAR_USER_GAME':
       return { ...state, promptUserGame: false, userGameLogs: null, userGameLiveStats: null };
+    case 'CLEAR_RESULTS':
+      return { ...state, lastResults: [], lastSimWeek: null, gameEvents: [] };
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null };
     case 'BATCH_SIM_START':
@@ -207,6 +220,7 @@ export function useWorker() {
           if (payload.phase) {
             dispatch({ type: 'STATE_UPDATE', payload: { phase: payload.phase } });
           }
+          dispatch({ type: 'CLEAR_RESULTS' });
           if (payload.message) {
             dispatch({ type: 'NOTIFY', level: 'info', message: payload.message });
           }
@@ -224,6 +238,7 @@ export function useWorker() {
               year:  payload.year,
             },
           });
+          dispatch({ type: 'CLEAR_RESULTS' });
           break;
         case toUI.DRAFT_TRADE_OFFER:
           // AI trade-up proposal during draft — store in state for Draft UI to show

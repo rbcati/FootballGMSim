@@ -119,6 +119,11 @@ function AppContent() {
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const { soundEnabled, toggleSound } = useSettings();
+  const isWeeklyResultPhase = league?.phase === 'preseason' || league?.phase === 'regular' || league?.phase === 'playoffs';
+  const authoritativeResults = useMemo(
+    () => (isWeeklyResultPhase && Array.isArray(lastResults) ? lastResults : []),
+    [isWeeklyResultPhase, lastResults],
+  );
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
@@ -640,7 +645,7 @@ function AppContent() {
             simulating={simulating}
             simProgress={simProgress}
             league={league}
-            lastResults={lastResults}
+            lastResults={authoritativeResults}
             simulatedWeek={lastSimWeek}
             gameEvents={gameEvents}
             onOpenBoxScore={(gameId) => {
@@ -652,9 +657,9 @@ function AppContent() {
       )}
 
       {/* ── Last results ticker ────────────────────────────────────────── */}
-      {lastResults && lastResults.length > 0 && (
+      {authoritativeResults.length > 0 && (
         <div className="app-results-ticker">
-          {lastResults.map((r, i) => {
+          {authoritativeResults.map((r, i) => {
             const homeWin = r.homeScore > r.awayScore;
             const isUserGame = r.homeId === league.userTeamId || r.awayId === league.userTeamId;
             return (
@@ -677,9 +682,9 @@ function AppContent() {
       )}
 
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
-      <LeagueDashboard
+        <LeagueDashboard
         league={leagueReady ? league : null}
-        lastResults={lastResults}
+        lastResults={authoritativeResults}
         lastSimWeek={lastSimWeek}
         busy={busy}
         simulating={simulating}
