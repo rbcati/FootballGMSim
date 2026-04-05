@@ -622,11 +622,23 @@ export default function LiveGame({
   } : null);
   const recapText = (() => {
     if (!recapGame) return null;
+    const homeScore = recapGame.homeScore ?? 0;
+    const awayScore = recapGame.awayScore ?? 0;
+    if (homeScore === awayScore) {
+      return "Dead even at the final whistle. Tough one to split.";
+    }
     const homeWin = (recapGame.homeScore ?? 0) > (recapGame.awayScore ?? 0);
     const userIsHome = recapGame.homeId === userTeamId;
     const userWon = userIsHome ? homeWin : !homeWin;
-    const margin = Math.abs((recapGame.homeScore ?? 0) - (recapGame.awayScore ?? 0));
-    return `${userWon ? "Win secured" : "Loss absorbed"}${margin > 0 ? ` by ${margin}` : ""}.`;
+    const margin = Math.abs(homeScore - awayScore);
+    if (userWon) {
+      if (margin <= 3) return "Narrow win. You closed it out in the final stretch.";
+      if (margin <= 10) return "Solid win. A clean result on both sides of the ball.";
+      return "Statement win. Total control from kickoff to finish.";
+    }
+    if (margin <= 3) return "Heartbreaker. One possession away from flipping it.";
+    if (margin <= 10) return "Competitive loss. You were in it, but couldn't finish.";
+    return "Rough day. Regroup and reset before next week.";
   })();
 
   if (!visible) return null;
