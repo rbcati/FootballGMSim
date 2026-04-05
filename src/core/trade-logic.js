@@ -331,6 +331,19 @@ export function classifyTeamDirection(team, week = 1) {
   return 'balanced';
 }
 
+export function getPickMarketValue(pick) {
+  const round = Number(pick?.round ?? 4);
+  const PICK_VALUES = [0, 950, 360, 150, 70, 30, 12, 4];
+  return PICK_VALUES[round] ?? 8;
+}
+
+function pickLabel(pick) {
+  if (!pick) return 'Future pick';
+  const season = Number(pick?.season ?? pick?.year ?? 0);
+  const suffix = season > 0 ? `${season} ` : '';
+  return `${suffix}R${pick?.round ?? '?'}`;
+}
+
 function getExpiringPlayers(teamId) {
   const roster = cache.getPlayersByTeam(teamId);
   return roster.filter((p) => {
@@ -372,12 +385,120 @@ function offerReasonCopy(type, aiAbbr, needPos, week) {
   return `${aiAbbr} is addressing a ${needPos} need with a depth-for-depth framework.`;
 }
 
+function stanceCopy(aiDirection, offerType, nearDeadline) {
+  if (aiDirection === 'contender' && nearDeadline) return 'Deadline push';
+  if (aiDirection === 'contender') return 'Playoff push';
+  if (aiDirection === 'rebuilding') return offerType === 'pick_package' ? 'Future-first posture' : 'Asset cycling';
+  if (aiDirection === 'desperate') return 'Pressure is on';
+  return 'Roster balance';
+}
+
+function getDeadlinePressure(week, aiDirection) {
+  if (week >= 13) return aiDirection === 'contender' ? 1.18 : 1.08;
+  if (week >= 10) return aiDirection === 'contender' ? 1.1 : 1.02;
+  return 1.0;
+}
+
+function resolveTradablePick(team, season, preferredRound = 3) {
+  const picks = Array.isArray(team?.picks) ? team.picks : [];
+  const pool = picks
+    .filter((pk) => Number(pk?.season ?? 0) >= season)
+    .sort((a, b) => {
+      const aSeason = Number(a?.season ?? 0);
+      const bSeason = Number(b?.season ?? 0);
+      if (aSeason !== bSeason) return aSeason - bSeason;
+      return Number(a?.round ?? 7) - Number(b?.round ?? 7);
+    });
+  const preferred = pool.find((pk) => Number(pk?.round ?? 7) >= preferredRound);
+  return preferred ?? pool[0] ?? null;
+}
+
+export function buildOfferSignature(offer) {
+  const givePlayers = [...(offer?.offering?.playerIds ?? [])].sort().join(',');
+  const getPlayers = [...(offer?.receiving?.playerIds ?? [])].sort().join(',');
+  const giveRounds = (offer?.offeringPickSnapshots ?? [])
+    .map((pk) => `${pk?.season ?? '?'}-R${pk?.round ?? '?'}`)
+    .sort()
+    .join(',');
+  const getRounds = (offer?.receivingPickSnapshots ?? [])
+    .map((pk) => `${pk?.season ?? '?'}-R${pk?.round ?? '?'}`)
+    .sort()
+    .join(',');
+  return `${offer?.offeringTeamId}|${offer?.offerType}|${givePlayers}|${getPlayers}|${giveRounds}|${getRounds}`;
+}
+
+export function shouldSkipOfferFromMemory({ offer, week, memory }) {
+  const signature = buildOfferSignature(offer);
+  const memoryRow = memory?.[signature];
+  if (!memoryRow) return false;
+  const weeksAgo = week - Number(memoryRow.lastWeek ?? 0);
+  if (weeksAgo >= 3) return false;
+  const deadlineShift = Number(memoryRow.lastWeek ?? 0) < 10 && week >= 10;
+  const directionShift = memoryRow.lastDirection && memoryRow.lastDirection !== offer.offeringDirection;
+  return !(deadlineShift || directionShift);
+}
+
+export function evaluateCounterOffer({
+  aiTeam,
+  userTeam,
+  week = 1,
+  aiDirection = 'balanced',
+  offerType = 'depth_swap',
+  aiReceivesValue = 0,
+  aiGivesValue = 0,
+  hasUserPickSweetener = false,
+  hasAiPickSweetener = false,
+  isCounterRound = true,
+}) {
+  const pressure = getDeadlinePressure(week, aiDirection);
+  const expiringAiCount = getExpiringPlayers(aiTeam?.id).length;
+  const capRoom = Number(aiTeam?.capRoom ?? 0);
+  const capStress = capRoom < 6 ? 1.08 : 1.0;
+  const rebuilderDiscount = aiDirection === 'rebuilding' && hasUserPickSweetener ? 0.94 : 1.0;
+  const contenderPremium = aiDirection === 'contender' ? 1.04 : 1.0;
+  const urgencyFactor = aiDirection === 'desperate' ? 0.98 : 1.0;
+  const expiringFactor = expiringAiCount > 0 && offerType === 'deadline_rental' ? 0.97 : 1.0;
+  const askMultiplier = pressure * capStress * rebuilderDiscount * contenderPremium * urgencyFactor * expiringFactor;
+  const requiredValue = aiGivesValue * askMultiplier;
+  const closeGap = requiredValue - aiReceivesValue;
+
+  if (aiReceivesValue >= requiredValue) {
+    return {
+      status: 'accepts',
+      stance: aiDirection === 'contender' ? 'Good enough for us to move now.' : 'That closes the value gap.',
+      reason: `${aiTeam?.abbr ?? 'They'} sign off on this counter.`,
+    };
+  }
+
+  const sweetenerNeeded = closeGap <= 180 && !hasUserPickSweetener;
+  if (isCounterRound && (closeGap <= 280 || sweetenerNeeded || hasAiPickSweetener)) {
+    return {
+      status: 'asks_more',
+      stance: 'We need a little more to get this done.',
+      reason: sweetenerNeeded
+        ? `${aiTeam?.abbr ?? 'They'} like the framework but want pick compensation to close it.`
+        : `${aiTeam?.abbr ?? 'They'} are close, but need one more sweetener.`,
+      askHint: sweetenerNeeded ? 'add_pick' : 'add_depth_piece',
+    };
+  }
+
+  return {
+    status: 'rejects',
+    stance: 'They are not moving off this price.',
+    reason: `${aiTeam?.abbr ?? 'They'} pass on that counter.`,
+    askHint: closeGap > 700 ? 'major_upgrade' : 'value_gap',
+  };
+}
+
 /**
  * Phase 4 Opus: AI-Initiated Trade Proposals
  * The AI evaluates the user's roster for surplus and needs, and generates
  * 1-2 trade proposals from AI teams that match those needs.
  */
-export function generateAITradeProposalsForUser() {
+export function generateAITradeProposalsForUser({
+  existingOffers = [],
+  offerMemory = {},
+} = {}) {
   const meta = cache.getMeta();
   if (!meta || meta.phase !== 'regular') return [];
 
@@ -441,22 +562,20 @@ export function generateAITradeProposalsForUser() {
     const askValue = userAsset.value;
     if (offerValue <= 0 || askValue <= 0) continue;
 
-    const tolerance = nearDeadline && (aiDirection === 'contender' || aiDirection === 'desperate') ? 0.34 : 0.24;
+    const directionTolerance = aiDirection === 'rebuilding' ? 0.2 : aiDirection === 'contender' ? 0.28 : 0.24;
+    const tolerance = nearDeadline ? directionTolerance + 0.06 : directionTolerance;
     const withinRange = Math.abs(offerValue - askValue) / Math.max(offerValue, askValue) <= tolerance;
     if (!withinRange) continue;
 
     const offerType = computeOfferType({ userDirection, aiDirection, userCapRoom, week });
     const urgency = nearDeadline && aiDirection === 'contender' ? 'high' : aiDirection === 'desperate' ? 'high' : 'medium';
     const reason = offerReasonCopy(offerType, aiTeam.abbr, topUserNeed.pos, week);
-    const stance = aiDirection === 'contender'
-      ? 'Win now'
-      : aiDirection === 'rebuilding'
-        ? 'Future assets'
-        : aiDirection === 'desperate'
-          ? 'Shake-up mode'
-          : 'Balanced approach';
+    const stance = stanceCopy(aiDirection, offerType, nearDeadline);
+    const offeringPickSnapshots = [];
+    const receivingPickSnapshots = [];
+    const offeringPickIds = [];
 
-    proposals.push({
+    const proposal = {
       id: `offer_${meta?.season ?? meta?.year ?? 1}_${week}_${aiTeam.id}_${aiOfferCandidate.player.id}_${Date.now()}`,
       week,
       season: meta?.season ?? meta?.year ?? 1,
@@ -473,15 +592,17 @@ export function generateAITradeProposalsForUser() {
         userDirection,
         userCapRoom: Math.round(userCapRoom),
       },
-      offering: { playerIds: [aiOfferCandidate.player.id], pickIds: [] },
+      offering: { playerIds: [aiOfferCandidate.player.id], pickIds: offeringPickIds },
       receiving: { playerIds: [userAsset.player.id], pickIds: [] },
+      offeringPickSnapshots,
+      receivingPickSnapshots,
       offeringPlayerId: aiOfferCandidate.player.id,
       offeringPlayerName: aiOfferCandidate.player.name,
       receivingPlayerId: userAsset.player.id,
       receivingPlayerName: userAsset.player.name,
       expiresAfterWeek: week + 2,
       timestamp: Date.now(),
-    });
+    };
 
     usedPlayerIds.add(aiOfferCandidate.player.id);
     usedPlayerIds.add(userAsset.player.id);
@@ -490,11 +611,25 @@ export function generateAITradeProposalsForUser() {
     if (
       offerType === 'pick_package'
       && nearDeadline
-      && proposals.length > 0
       && Math.random() < 0.35
     ) {
-      proposals[proposals.length - 1].offering.pickIds = [`future_r${Math.random() < 0.65 ? 3 : 4}`];
+      const preferredRound = Math.random() < 0.65 ? 3 : 4;
+      const aiPick = resolveTradablePick(aiTeam, Number(meta?.season ?? meta?.year ?? 1), preferredRound);
+      if (aiPick?.id != null) {
+        proposal.offering.pickIds.push(aiPick.id);
+        proposal.offeringPickSnapshots.push({
+          id: aiPick.id,
+          round: aiPick.round,
+          season: aiPick.season,
+          label: pickLabel(aiPick),
+        });
+      }
     }
+
+    if (shouldSkipOfferFromMemory({ offer: proposal, week, memory: offerMemory })) continue;
+    if (existingOffers.some((existing) => buildOfferSignature(existing) === buildOfferSignature(proposal))) continue;
+
+    proposals.push(proposal);
   }
 
   return proposals;

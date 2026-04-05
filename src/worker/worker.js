@@ -79,7 +79,7 @@ import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
-import { runAIToAITrades, generateAITradeProposalsForUser }          from '../core/trade-logic.js';
+import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 
@@ -129,6 +129,9 @@ function buildViewState() {
     rosterCount: cache.getPlayersByTeam(t.id).length,
     fanApproval: t?.fanApproval ?? 50,
     rivalTeamId: t?.rivalTeamId ?? null,
+    picks: Array.isArray(t?.picks)
+      ? t.picks.map((pk) => ({ id: pk.id, round: pk.round, season: pk.season, currentOwner: pk.currentOwner }))
+      : [],
   }));
 
   // Calculate tension/stakes for the user's next game
@@ -220,6 +223,77 @@ function pruneIncomingTradeOffers(metaObj) {
     const expiresAfterWeek = Number(offer.expiresAfterWeek ?? (offer.week ?? week) + 2);
     return expiresAfterWeek >= week;
   });
+}
+
+function buildOfferSignature(offer) {
+  const givePlayers = [...(offer?.offering?.playerIds ?? [])].sort().join(',');
+  const getPlayers = [...(offer?.receiving?.playerIds ?? [])].sort().join(',');
+  const givePicks = [...(offer?.offering?.pickIds ?? [])].sort().join(',');
+  const getPicks = [...(offer?.receiving?.pickIds ?? [])].sort().join(',');
+  return `${offer?.offeringTeamId}|${offer?.offerType ?? 'market'}|${givePlayers}|${getPlayers}|${givePicks}|${getPicks}`;
+}
+
+function updateTradeOfferMemory(metaObj, offers = []) {
+  const week = Number(metaObj?.currentWeek ?? 1);
+  const baseline = metaObj?.tradeOfferMemory ?? {};
+  const next = { ...baseline };
+  for (const offer of offers) {
+    const sig = buildOfferSignature(offer);
+    next[sig] = {
+      lastWeek: week,
+      lastDirection: offer?.offeringDirection ?? 'balanced',
+    };
+  }
+  const retentionWeeks = 5;
+  for (const [sig, row] of Object.entries(next)) {
+    if (week - Number(row?.lastWeek ?? 0) > retentionWeeks) delete next[sig];
+  }
+  return next;
+}
+
+function getPickRoundValue(round) {
+  const PICK_VALUES = [0, 950, 360, 150, 70, 30, 12, 4];
+  return PICK_VALUES[Number(round ?? 4)] ?? 8;
+}
+
+function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}) {
+  const playerVal = playerIds.reduce((sum, pid) => sum + _tradeValue(cache.getPlayer(Number(pid))), 0);
+  const pickVal = pickIds.reduce((sum, pid) => {
+    const pick = resolvePickById(pid);
+    return sum + getPickRoundValue(pick?.round);
+  }, 0);
+  return playerVal + pickVal;
+}
+
+function resolvePickById(pickId) {
+  if (pickId == null) return null;
+  const allTeams = cache.getAllTeams();
+  for (const team of allTeams) {
+    const picks = Array.isArray(team?.picks) ? team.picks : [];
+    const found = picks.find((pk) => String(pk?.id) === String(pickId));
+    if (found) return found;
+  }
+  return null;
+}
+
+function transferPickOwnership(pickIds = [], fromTeamId, toTeamId) {
+  if (!Array.isArray(pickIds) || pickIds.length === 0) return;
+  const fromTeam = cache.getTeam(Number(fromTeamId));
+  const toTeam = cache.getTeam(Number(toTeamId));
+  if (!fromTeam || !toTeam) return;
+
+  const fromPicks = Array.isArray(fromTeam?.picks) ? [...fromTeam.picks] : [];
+  const toPicks = Array.isArray(toTeam?.picks) ? [...toTeam.picks] : [];
+
+  for (const pickId of pickIds) {
+    const idx = fromPicks.findIndex((pk) => String(pk?.id) === String(pickId));
+    if (idx < 0) continue;
+    const [pick] = fromPicks.splice(idx, 1);
+    toPicks.push({ ...pick, currentOwner: Number(toTeamId) });
+  }
+
+  cache.updateTeam(Number(fromTeamId), { picks: fromPicks });
+  cache.updateTeam(Number(toTeamId), { picks: toPicks });
 }
 
 /**
@@ -1263,7 +1337,10 @@ if (res.injuries && res.injuries.length > 0) {
       await runAIToAITrades();
 
       // Also generate trade proposals for the user
-      const tradeProposals = generateAITradeProposalsForUser();
+      const tradeProposals = generateAITradeProposalsForUser({
+        existingOffers: Array.isArray(meta?.incomingTradeOffers) ? meta.incomingTradeOffers : [],
+        offerMemory: meta?.tradeOfferMemory ?? {},
+      });
       if (tradeProposals.length > 0) {
         const latestMeta = ensureDynastyMeta(cache.getMeta());
         const existingOffers = pruneIncomingTradeOffers(latestMeta);
@@ -1273,6 +1350,7 @@ if (res.injuries && res.injuries.length > 0) {
           cache.setMeta({
             incomingTradeOffers: merged,
             lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1),
+            tradeOfferMemory: updateTradeOfferMemory(latestMeta, freshOffers),
           });
           for (const prop of freshOffers) {
             NewsEngine.logNews(
@@ -2720,24 +2798,8 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     return;
   }
 
-  // Calculate value on each side
-  const calcSideValue = ({ playerIds = [], pickIds = [] }) => {
-    const playerVal = playerIds.reduce((sum, pid) => {
-      const p = cache.getPlayer(Number(pid));
-      return sum + _tradeValue(p);
-    }, 0);
-    // Draft picks: rough round-based flat value (R1=800, R2=300, R3=150 …)
-    const PICK_VALUES = [0, 800, 300, 100, 40, 15, 5, 2];
-    const pickVal = pickIds.reduce((sum, pid) => {
-      const pk = cache.getDraftPick ? cache.getDraftPick(pid) : null;
-      const round = pk?.round ?? 3;
-      return sum + (PICK_VALUES[round] ?? 10);
-    }, 0);
-    return playerVal + pickVal;
-  };
-
-  const offerVal    = calcSideValue(offering);
-  const receiveVal  = calcSideValue(receiving);
+  const offerVal    = calcAssetBundleValue(offering);
+  const receiveVal  = calcAssetBundleValue(receiving);
 
   // AI acceptance threshold scales by difficulty
   const meta = ensureDynastyMeta(cache.getMeta());
@@ -2827,6 +2889,8 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
   (receiving?.playerIds ?? []).forEach(pid => {
     cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
   });
+  transferPickOwnership(offering?.pickIds ?? [], Number(fromTeamId), Number(toTeamId));
+  transferPickOwnership(receiving?.pickIds ?? [], Number(toTeamId), Number(fromTeamId));
 
   recalculateTeamCap(Number(fromTeamId));
   recalculateTeamCap(Number(toTeamId));
@@ -2873,6 +2937,103 @@ async function handleRejectIncomingTrade({ offerId }, id) {
   cache.setMeta({ incomingTradeOffers: remaining });
   await flushDirty();
   post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer declined.' }, id);
+  post(toUI.STATE_UPDATE, buildViewState());
+}
+
+async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const offers = pruneIncomingTradeOffers(latestMeta);
+  const offer = offers.find((o) => o?.id === offerId);
+  if (!offer) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, counterStatus: 'expired', reason: 'That offer is no longer on the table.' }, id);
+    return;
+  }
+  if (offer?.lastCounter) {
+    post(toUI.TRADE_RESPONSE, {
+      accepted: false,
+      counterStatus: 'locked',
+      reason: `${offer.offeringTeamAbbr ?? 'They'} already answered your counter and are holding firm.`,
+    }, id);
+    return;
+  }
+
+  const aiTeam = cache.getTeam(Number(offer.offeringTeamId));
+  const userTeam = cache.getTeam(Number(latestMeta?.userTeamId));
+  if (!aiTeam || !userTeam) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, counterStatus: 'invalid', reason: 'Counter could not be evaluated right now.' }, id);
+    return;
+  }
+
+  const userBundle = {
+    playerIds: Array.isArray(offering?.playerIds) ? offering.playerIds : [],
+    pickIds: Array.isArray(offering?.pickIds) ? offering.pickIds : [],
+  };
+  const aiBundle = {
+    playerIds: Array.isArray(receiving?.playerIds) ? receiving.playerIds : [],
+    pickIds: Array.isArray(receiving?.pickIds) ? receiving.pickIds : [],
+  };
+
+  const aiReceivesValue = calcAssetBundleValue(userBundle);
+  const aiGivesValue = calcAssetBundleValue(aiBundle);
+  const response = evaluateCounterOffer({
+    aiTeam,
+    userTeam,
+    week: Number(latestMeta?.currentWeek ?? 1),
+    aiDirection: offer?.offeringDirection ?? 'balanced',
+    offerType: offer?.offerType ?? 'depth_swap',
+    aiReceivesValue,
+    aiGivesValue,
+    hasUserPickSweetener: userBundle.pickIds.length > 0,
+    hasAiPickSweetener: aiBundle.pickIds.length > 0,
+    isCounterRound: true,
+  });
+
+  const remaining = offers.filter((o) => o?.id !== offerId);
+  if (response.status === 'accepts') {
+    await executeAcceptedTrade({
+      fromTeamId: Number(latestMeta?.userTeamId),
+      toTeamId: Number(offer.offeringTeamId),
+      offering: userBundle,
+      receiving: aiBundle,
+    });
+    cache.setMeta({
+      incomingTradeOffers: remaining,
+      lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1),
+    });
+    post(toUI.TRADE_RESPONSE, {
+      accepted: true,
+      counterStatus: 'accepts',
+      reason: response.reason,
+      stance: response.stance,
+      offerValue: Math.round(aiReceivesValue),
+      receiveValue: Math.round(aiGivesValue),
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState());
+    return;
+  }
+
+  const updatedOffer = {
+    ...offer,
+    lastCounter: {
+      week: Number(latestMeta?.currentWeek ?? 1),
+      status: response.status,
+      stance: response.stance,
+      reason: response.reason,
+      askHint: response.askHint ?? null,
+    },
+    stance: response.stance,
+  };
+  cache.setMeta({ incomingTradeOffers: [updatedOffer, ...remaining].slice(0, 6) });
+  await flushDirty();
+  post(toUI.TRADE_RESPONSE, {
+    accepted: false,
+    counterStatus: response.status,
+    reason: response.reason,
+    stance: response.stance,
+    askHint: response.askHint ?? null,
+    offerValue: Math.round(aiReceivesValue),
+    receiveValue: Math.round(aiGivesValue),
+  }, id);
   post(toUI.STATE_UPDATE, buildViewState());
 }
 
@@ -4774,6 +4935,7 @@ async function handleMessage(event) {
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.ACCEPT_INCOMING_TRADE: return await handleAcceptIncomingTrade(payload, id);
       case toWorker.REJECT_INCOMING_TRADE: return await handleRejectIncomingTrade(payload, id);
+      case toWorker.COUNTER_INCOMING_TRADE: return await handleCounterIncomingTrade(payload, id);
       case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
