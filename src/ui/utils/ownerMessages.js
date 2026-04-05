@@ -241,10 +241,23 @@ export function evaluateOwnerMessageContext({ league, userTeam, currentWeek, cur
   })[0];
 
   const seed = season * 31 + week * 17 + top.severity;
+  const pressureState = top.tone === "urgent_demand"
+    ? "urgent_demand"
+    : top.tone === "disappointment" || top.tone === "warning"
+      ? "warning"
+      : "cooling";
+  let expectedAction = null;
+  if (top.triggerKey === "cap_unused_while_losing") expectedAction = "Use cap flexibility to add impact help.";
+  else if (top.triggerKey === "inaction_during_decline") expectedAction = "Make a roster move this week.";
+  else if (top.triggerKey === "missed_owner_goals") expectedAction = "Commit to a clear franchise direction now.";
+  else if (top.triggerKey === "steady_progress") expectedAction = "Stay disciplined and continue current plan.";
+
   return {
     ...top,
     key: `${top.triggerKey}:${top.tone}:${top.stateLabel}:${top.checkpoint}`,
     message: pickMessage(top.triggerKey, top.tone, seed),
+    pressureState,
+    expectedAction,
     diagnostics: {
       wins,
       losses,

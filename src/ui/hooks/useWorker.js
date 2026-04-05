@@ -432,6 +432,10 @@ export function useWorker() {
     /** Submit a trade offer to an AI team (returns a Promise). */
     submitTrade: (fromTeamId, toTeamId, offering, receiving) =>
       request(toWorker.TRADE_OFFER, { fromTeamId, toTeamId, offering, receiving }),
+    acceptIncomingTrade: (offerId) =>
+      request(toWorker.ACCEPT_INCOMING_TRADE, { offerId }),
+    rejectIncomingTrade: (offerId) =>
+      request(toWorker.REJECT_INCOMING_TRADE, { offerId }),
     toggleTradeBlock: (playerId, teamId) =>
       request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
 

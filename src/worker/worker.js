@@ -202,10 +202,24 @@ function buildViewState() {
     fanApproval: cache.getTeam(meta?.userTeamId)?.fanApproval ?? fanApproval,
     newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
     ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],
+    incomingTradeOffers: Array.isArray(meta?.incomingTradeOffers) ? meta.incomingTradeOffers : [],
+    lastTradeActivityWeek: Number(meta?.lastTradeActivityWeek ?? 0),
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
     teams,
   };
+}
+
+function pruneIncomingTradeOffers(metaObj) {
+  const week = Number(metaObj?.currentWeek ?? 1);
+  const season = Number(metaObj?.season ?? metaObj?.year ?? 1);
+  const offers = Array.isArray(metaObj?.incomingTradeOffers) ? metaObj.incomingTradeOffers : [];
+  return offers.filter((offer) => {
+    if (!offer) return false;
+    if (offer.season != null && Number(offer.season) !== season) return false;
+    const expiresAfterWeek = Number(offer.expiresAfterWeek ?? (offer.week ?? week) + 2);
+    return expiresAfterWeek >= week;
+  });
 }
 
 /**
@@ -1248,15 +1262,35 @@ if (res.injuries && res.injuries.length > 0) {
       // Also generate trade proposals for the user
       const tradeProposals = generateAITradeProposalsForUser();
       if (tradeProposals.length > 0) {
-         // Create a news item or notification for the UI
-         for (const prop of tradeProposals) {
-            NewsEngine.logNews('TRADE_PROPOSAL', `🚨 ${prop.offeringTeamAbbr} has offered ${prop.offeringPlayerName} in exchange for ${prop.receivingPlayerName}.`, null, { isProposal: true, ...prop });
-         }
+        const latestMeta = ensureDynastyMeta(cache.getMeta());
+        const existingOffers = pruneIncomingTradeOffers(latestMeta);
+        const freshOffers = tradeProposals.filter((offer) => !existingOffers.some((e) => e?.id === offer?.id));
+        if (freshOffers.length > 0) {
+          const merged = [...freshOffers, ...existingOffers].slice(0, 6);
+          cache.setMeta({
+            incomingTradeOffers: merged,
+            lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1),
+          });
+          for (const prop of freshOffers) {
+            NewsEngine.logNews(
+              'TRADE_PROPOSAL',
+              `📨 ${prop.offeringTeamAbbr} offer: ${prop.offeringPlayerName} for ${prop.receivingPlayerName}. ${prop.reason}`,
+              null,
+              { isProposal: true, ...prop },
+            );
+          }
+        }
       }
     } catch (tradeErr) {
       // Trade engine errors should never crash the week advance.
       console.warn('[Worker] AI trade engine error (non-fatal):', tradeErr.message);
     }
+  }
+
+  const postTradeMeta = ensureDynastyMeta(cache.getMeta());
+  const prunedOffers = pruneIncomingTradeOffers(postTradeMeta);
+  if (prunedOffers.length !== (Array.isArray(postTradeMeta?.incomingTradeOffers) ? postTradeMeta.incomingTradeOffers.length : 0)) {
+    cache.setMeta({ incomingTradeOffers: prunedOffers });
   }
 
   const userWeeklyResult = results.find((r) => Number(r?.home ?? r?.homeTeamId) === meta?.userTeamId || Number(r?.away ?? r?.awayTeamId) === meta?.userTeamId);
@@ -2768,30 +2802,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
 
   if (accepted) {
-    // Execute the trade: swap players
-    (offering.playerIds ?? []).forEach(pid => {
-      cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
-    });
-    (receiving.playerIds ?? []).forEach(pid => {
-      cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
-    });
-
-    // Recalculate caps for both teams
-    recalculateTeamCap(Number(fromTeamId));
-    recalculateTeamCap(Number(toTeamId));
-
-    // Log transaction
-    const meta = ensureDynastyMeta(cache.getMeta());
-    const tradeRecord = {
-      type:     'TRADE',
-      seasonId: meta.currentSeasonId,
-      week:     meta.currentWeek,
-      teamId:   Number(fromTeamId),
-      details:  { fromTeamId, toTeamId, offering, receiving },
-    };
-    await Transactions.add(tradeRecord);
-    await NewsEngine.logTransaction('TRADE', { fromTeamId, toTeamId });
-    await flushDirty(); // AUTO-SAVE: phase transition — roster swap persisted immediately.
+    await executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving });
   }
 
   post(toUI.TRADE_RESPONSE, {
@@ -2804,6 +2815,62 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   if (accepted) {
     post(toUI.STATE_UPDATE, buildViewState());
   }
+}
+
+async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving }) {
+  (offering?.playerIds ?? []).forEach(pid => {
+    cache.updatePlayer(Number(pid), { teamId: Number(toTeamId) });
+  });
+  (receiving?.playerIds ?? []).forEach(pid => {
+    cache.updatePlayer(Number(pid), { teamId: Number(fromTeamId) });
+  });
+
+  recalculateTeamCap(Number(fromTeamId));
+  recalculateTeamCap(Number(toTeamId));
+
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const tradeRecord = {
+    type:     'TRADE',
+    seasonId: latestMeta.currentSeasonId,
+    week:     latestMeta.currentWeek,
+    teamId:   Number(fromTeamId),
+    details:  { fromTeamId, toTeamId, offering, receiving },
+  };
+  await Transactions.add(tradeRecord);
+  await NewsEngine.logTransaction('TRADE', { fromTeamId, toTeamId });
+  await flushDirty();
+}
+
+async function handleAcceptIncomingTrade({ offerId }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const offers = pruneIncomingTradeOffers(latestMeta);
+  const offer = offers.find((o) => o?.id === offerId);
+  if (!offer) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer expired or no longer available.' }, id);
+    return;
+  }
+
+  await executeAcceptedTrade({
+    fromTeamId: Number(latestMeta?.userTeamId),
+    toTeamId: Number(offer.offeringTeamId),
+    offering: offer.receiving ?? { playerIds: [offer.receivingPlayerId], pickIds: [] },
+    receiving: offer.offering ?? { playerIds: [offer.offeringPlayerId], pickIds: [] },
+  });
+
+  const remaining = offers.filter((o) => o?.id !== offerId);
+  cache.setMeta({ incomingTradeOffers: remaining, lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1) });
+  post(toUI.TRADE_RESPONSE, { accepted: true, reason: `${offer.offeringTeamAbbr} deal accepted.` }, id);
+  post(toUI.STATE_UPDATE, buildViewState());
+}
+
+async function handleRejectIncomingTrade({ offerId }, id) {
+  const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const offers = pruneIncomingTradeOffers(latestMeta);
+  const remaining = offers.filter((o) => o?.id !== offerId);
+  cache.setMeta({ incomingTradeOffers: remaining });
+  await flushDirty();
+  post(toUI.TRADE_RESPONSE, { accepted: false, reason: 'Offer declined.' }, id);
+  post(toUI.STATE_UPDATE, buildViewState());
 }
 
 // ── Handler: UPDATE_SETTINGS ─────────────────────────────────────────────────
@@ -4702,6 +4769,8 @@ async function handleMessage(event) {
       case toWorker.CONDUCT_DRILL:      return await handleConductDrill(payload, id);
       case toWorker.UPDATE_MEDICAL_STAFF: return await handleUpdateMedicalStaff(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
+      case toWorker.ACCEPT_INCOMING_TRADE: return await handleAcceptIncomingTrade(payload, id);
+      case toWorker.REJECT_INCOMING_TRADE: return await handleRejectIncomingTrade(payload, id);
       case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
