@@ -1268,3 +1268,30 @@
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.mobile-nav-items.grouped {
+  display: grid;
+  gap: var(--space-4);
+  padding-bottom: calc(var(--space-8) + env(safe-area-inset-bottom));
+}
+.mobile-nav-group {
+  border-top: 1px solid var(--hairline);
+  padding-top: var(--space-3);
+}
+.mobile-nav-group-title {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-3);
+  font-size: 11px;
+  color: var(--text-subtle);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.mobile-bottom-tab {
+  min-width: 58px;
+}
+
+@media (max-width: 767px) {
+  .dashboard-main-tabs {
+    display: none !important;
+  }
+}
