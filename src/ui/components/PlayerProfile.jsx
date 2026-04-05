@@ -254,7 +254,9 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
       <Card
         className="card-premium"
         style={{
-          width: 400,
+          width: "min(420px, calc(100vw - 24px))",
+          maxHeight: "min(88vh, 640px)",
+          overflowY: "auto",
           padding: "var(--space-6)",
           boxShadow: "var(--shadow-lg)",
           background: "var(--surface)",
@@ -331,8 +333,20 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
             </div>
           </div>
         ) : (
-          <div>
-            <p>Player refuses to negotiate at this time.</p>
+          <div style={{ display: "grid", gap: "var(--space-4)" }}>
+            <div
+              style={{
+                border: "1px solid rgba(255,159,10,0.45)",
+                background: "rgba(255,159,10,0.10)",
+                borderRadius: "var(--radius-md)",
+                padding: "var(--space-3) var(--space-4)",
+              }}
+            >
+              <p style={{ margin: 0, fontWeight: 700 }}>Negotiation unavailable</p>
+              <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
+                Player refuses to negotiate at this time.
+              </p>
+            </div>
             <Button className="btn" onClick={onClose}>
               Close
             </Button>
