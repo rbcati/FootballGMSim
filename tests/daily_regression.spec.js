@@ -1,5 +1,38 @@
 import { test, expect } from '@playwright/test';
 
+async function startNewFranchise(page) {
+    // Wait for the UI to settle and determine which screen we're on
+    try {
+        await page.waitForSelector('button:has-text("Start New Franchise"), button:has-text("Start Dynasty"), .team-card', { state: 'visible', timeout: 5000 });
+    } catch(e) {
+        console.log('No known setup buttons visible, assuming game loaded...');
+    }
+
+    // There are multiple slots, so we grab the first 'Start New Franchise' button.
+    const isNewFranchiseVisible = await page.isVisible('button:has-text("Start New Franchise")');
+    if (isNewFranchiseVisible) {
+        await page.locator('button:has-text("Start New Franchise")').first().click();
+        await page.waitForSelector('.team-card', { state: 'visible' });
+        await page.locator('.team-card').first().click();
+        await page.click('button:has-text("Continue")');
+        await page.waitForTimeout(500);
+        await page.click('button:has-text("Continue")');
+        await page.waitForTimeout(500);
+        await page.click('button:has-text("Start Dynasty")');
+    } else if (await page.isVisible('button:has-text("Start Dynasty")')) {
+        await page.click('button:has-text("Start Dynasty")');
+    } else if (await page.isVisible('.team-card')) {
+        await page.locator('.team-card').first().click();
+        await page.click('button:has-text("Continue")');
+        await page.waitForTimeout(500);
+        await page.click('button:has-text("Continue")');
+        await page.waitForTimeout(500);
+        await page.click('button:has-text("Start Dynasty")');
+    } else {
+        console.log('Assuming game already loaded...');
+    }
+}
+
 test.describe('Daily Regression Pass', () => {
 
     test.beforeEach(async ({ page }) => {
@@ -12,32 +45,7 @@ test.describe('Daily Regression Pass', () => {
         await page.goto('http://localhost:5173');
         await page.waitForTimeout(1000);
 
-        // Handle Onboarding / Dashboard
-        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn');
-        if (createBtn) {
-            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn');
-            await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
-            await page.locator('.team-select-btn, .team-card').first().click();
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Start Dynasty")');
-        } else if (await page.isVisible('button:has-text("Start Dynasty")')) {
-             // Already in setup
-            await page.click('button:has-text("Start Dynasty")');
-        } else if (await page.isVisible('.team-select-btn, .team-card')) {
-             // Already in setup
-            await page.locator('.team-select-btn, .team-card').first().click();
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Start Dynasty")');
-        } else {
-            // Assuming already in game or hub
-            console.log('Assuming game already loaded...');
-        }
+        await startNewFranchise(page);
 
         await page.waitForFunction(() => document.querySelector('.app-header') !== null, null, { timeout: 60000 });
         const hubVisible = await page.isVisible('.app-header');
@@ -47,14 +55,18 @@ test.describe('Daily Regression Pass', () => {
         const startWeek = await page.evaluate(() => window.state.league.week);
         console.log(`Current Week: ${startWeek}`);
 
+        // If there's an onboarding tour blocking, close it.
+        const skipTourBtn = page.locator('button:has-text("Skip tour")');
+        if (await skipTourBtn.isVisible()) {
+            await skipTourBtn.click();
+            await page.waitForTimeout(500);
+        }
+
         // Try different advance buttons
         const advanceBtnTop = page.locator('.app-advance-btn');
 
         if (await advanceBtnTop.isVisible()) {
-            await page.evaluate(() => {
-                const btn = document.querySelector('.app-advance-btn');
-                if(btn) btn.click();
-            });
+            await advanceBtnTop.click();
         } else {
             console.log('No advance button found, forcing via JS');
             await page.evaluate(() => window.handleGlobalAdvance());
@@ -88,12 +100,8 @@ test.describe('Daily Regression Pass', () => {
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await startNewFranchise(page);
+
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
 
         // 1. Test Strategy Persistence
@@ -156,12 +164,8 @@ test.describe('Daily Regression Pass', () => {
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await startNewFranchise(page);
+
         await page.waitForFunction(() => window.state && window.state.league);
         try {
             await page.waitForSelector('.app-header', { state: 'visible', timeout: 60000 });
@@ -224,12 +228,8 @@ test.describe('Daily Regression Pass', () => {
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await startNewFranchise(page);
+
         await page.waitForFunction(() => window.state && window.state.league);
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 20000 });
 
@@ -361,12 +361,8 @@ test.describe('Daily Regression Pass', () => {
 
         // Force state with a finalized game
         await page.waitForTimeout(1000);
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await startNewFranchise(page);
+
         await page.waitForFunction(() => window.state && window.state.league);
 
         await page.evaluate(async () => {

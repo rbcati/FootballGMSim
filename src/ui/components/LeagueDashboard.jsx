@@ -1286,6 +1286,7 @@ export default function LeagueDashboard({
             {" · "}
             <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? "var(--success)" : (league.ownerApproval ?? 75) >= 50 ? "var(--warning)" : "var(--danger)" }}>
               Owner {league.ownerApproval ?? 75}%
+              {(league.ownerApproval ?? 75) < 50 && " (Seat Hot)"}
             </span>
           </div>
         </div>
