@@ -1,4 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 const SLOT_KEYS = ['save_slot_1', 'save_slot_2', 'save_slot_3'];
 
@@ -27,42 +30,56 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
   };
 
   return (
-    <div style={{ display: 'grid', gap: 12, padding: 16 }}>
+    <div className="save-slots-v2">
       {slots.map((slot) => {
         const isActive = activeSlot === slot.key;
         const isEmpty = !slot.meta?.lastSaved;
+        const slotName = slot.meta?.name ?? `Franchise ${slot.slotNum}`;
+
         return (
-          <div key={slot.key} style={{ background: '#1e293b', border: `2px solid ${isActive ? '#f59e0b' : '#334155'}`, borderRadius: 10, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <strong>Slot {slot.slotNum}</strong>
-              {editing === slot.slotNum ? (
-                <span>
-                  <input value={value} onChange={(e) => setValue(e.target.value)} />
-                  <button onClick={() => persistName(slot.slotNum)}>✓</button>
-                </span>
-              ) : (
-                <button onClick={() => { setEditing(slot.slotNum); setValue(slot.meta?.name ?? `Franchise ${slot.slotNum}`); }}>✏️</button>
-              )}
-            </div>
-            {isEmpty ? (
+          <Card key={slot.key} variant={isActive ? 'primary' : 'secondary'} className="save-slot-v2">
+            <CardHeader className="save-slot-v2__header">
               <div>
-                <div>Empty Slot</div>
-                <button className="btn btn-primary" onClick={() => onNew?.(slot.key)}>New Game</button>
+                <p className="save-slot-v2__kicker">Career Slot {slot.slotNum}</p>
+                <CardTitle className="text-base">{slotName}</CardTitle>
               </div>
-            ) : (
-              <div>
-                <div>{slot.meta?.name ?? `Franchise ${slot.slotNum}`}</div>
-                <div>{slot.meta?.teamName ?? '—'} ({slot.meta?.record?.wins ?? 0}-{slot.meta?.record?.losses ?? 0})</div>
-                <div>Season {slot.meta?.season ?? 1} • Week {slot.meta?.week ?? 1}</div>
-                <div>Last saved: {slot.meta?.lastSaved ?? '—'}</div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-primary" onClick={() => onLoad?.(slot.key)}>Load Game</button>
-                  <button className="btn" onClick={() => onSave?.(slot.key)}>Save Here</button>
-                  <button className="btn btn-danger" onClick={() => window.confirm('Delete this slot?') && onDelete?.(slot.key)}>Delete</button>
+              <div className="save-slot-v2__header-actions">
+                {isActive && <Badge>Active</Badge>}
+                {editing === slot.slotNum ? (
+                  <>
+                    <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Rename slot ${slot.slotNum}`} />
+                    <Button size="sm" onClick={() => persistName(slot.slotNum)}>Save</Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" size="sm" onClick={() => { setEditing(slot.slotNum); setValue(slotName); }}>Rename</Button>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              {isEmpty ? (
+                <div className="save-slot-v2__empty">
+                  <p>This franchise slot is ready for a new dynasty.</p>
+                  <Button onClick={() => onNew?.(slot.key)}>Start New Franchise</Button>
                 </div>
-              </div>
-            )}
-          </div>
+              ) : (
+                <>
+                  <div className="save-slot-v2__meta-grid">
+                    <div><span>Team</span><strong>{slot.meta?.teamName ?? '—'}</strong></div>
+                    <div><span>Season</span><strong>{slot.meta?.season ?? 1} · Week {slot.meta?.week ?? 1}</strong></div>
+                    <div><span>Record</span><strong>{slot.meta?.record?.wins ?? 0}-{slot.meta?.record?.losses ?? 0}</strong></div>
+                    <div><span>Last Saved</span><strong>{slot.meta?.lastSaved ?? '—'}</strong></div>
+                  </div>
+
+                  <div className="save-slot-v2__actions">
+                    <Button onClick={() => onLoad?.(slot.key)}>Enter Franchise</Button>
+                    <Button variant="secondary" onClick={() => onSave?.(slot.key)}>Save Here</Button>
+                    <Button variant="destructive" onClick={() => window.confirm('Delete this slot?') && onDelete?.(slot.key)}>Delete</Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         );
       })}
     </div>
