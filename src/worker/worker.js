@@ -106,11 +106,25 @@ function yieldFrame() {
 }
 
 /**
+ * Single safe metadata accessor used by worker handlers.
+ * Always returns an object so call sites never crash on missing cache meta.
+ */
+function getSafeMeta() {
+  return ensureDynastyMeta(cache.getMeta() ?? {});
+}
+
+/**
+ * Defensive fallback for legacy paths that still reference `meta` implicitly.
+ * We refresh this at the top of every inbound worker message.
+ */
+let meta = getSafeMeta();
+
+/**
  * Build the minimal "view state" slice the UI needs to render the current screen.
  * NEVER includes per-game stat arrays or historical data.
  */
 function buildViewState() {
-  const meta = ensureDynastyMeta(cache.getMeta());
+  const meta = getSafeMeta();
   const teams = cache.getAllTeams().map(t => ({
     id:        t.id,
     name:      t.name,
@@ -4911,6 +4925,9 @@ async function handleMessage(event) {
   const { type, payload = {}, id } = event.data;
 
   try {
+    // Keep module-scope fallback metadata in sync per message tick.
+    meta = getSafeMeta();
+
     switch (type) {
       case toWorker.INIT:               return await handleInit(payload, id);
       case toWorker.GET_ALL_SAVES:      return await handleGetAllSaves(payload, id);
