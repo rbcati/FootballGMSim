@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { NAV_LABELS } from '../constants/navigationCopy.js';
 
 const NAV_GROUPS = [
   {
@@ -33,10 +34,10 @@ const NAV_GROUPS = [
 ];
 
 const BOTTOM_TABS = [
-  { id: 'weekly', label: 'Hub', icon: WeeklyHubIcon },
-  { id: 'roster', label: 'Team', icon: RosterIcon },
-  { id: 'standings', label: 'League', icon: StandingsIcon },
-  { id: 'trade', label: 'Actions', icon: TradesIcon },
+  { id: 'weekly', label: NAV_LABELS.weekly, icon: WeeklyHubIcon },
+  { id: 'roster', label: NAV_LABELS.roster, icon: RosterIcon },
+  { id: 'standings', label: NAV_LABELS.standings, icon: StandingsIcon },
+  { id: 'trade', label: NAV_LABELS.trades, icon: TradesIcon },
 ];
 
 export default function MobileNav({ activeTab, onTabChange, league }) {
@@ -108,9 +109,9 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
             </button>
           );
         })}
-        <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open actions">
+        <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open more menu">
           <MoreIcon size={20} />
-          <span className="mobile-bottom-label">Actions</span>
+          <span className="mobile-bottom-label">{NAV_LABELS.more}</span>
         </button>
       </div>
     </>

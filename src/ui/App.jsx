@@ -49,6 +49,7 @@ import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
 import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
+import { ACTION_LABELS } from './constants/navigationCopy.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -521,7 +522,7 @@ function AppContent() {
           )}
           <details className="app-overflow-menu">
             <summary className="btn app-overflow-trigger" aria-label="Action menu">
-              Actions
+              {ACTION_LABELS.more}
             </summary>
             <div className="app-overflow-list">
               {utilityActions.map((item) => (
