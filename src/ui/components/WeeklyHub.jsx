@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ACTION_LABELS } from "../constants/navigationCopy.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -87,7 +88,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         <CardHeader className="weekly-primary__header">
           <div className="weekly-hero__identity">
             <p className="weekly-hud__eyebrow">{phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
-            <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · Ready to Advance` : "Advance Franchise"}</CardTitle>
+            <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · ${ACTION_LABELS.readyToAdvance}` : ACTION_LABELS.advanceFranchise}</CardTitle>
             <p className="weekly-primary__subtitle">
               {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} next. Finalize prep, then advance.` : "Set priorities and keep the season moving."}
             </p>
@@ -106,13 +107,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             disabled={busy || simulating}
             onClick={onAdvanceWeek}
           >
-            {simulating ? "Simulating..." : busy ? "Working..." : "Advance Week"}
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate?.("Game Plan")} className="weekly-hero__action-secondary">Game Plan</Button>
-          <Button variant="secondary" onClick={() => onNavigate?.("Roster")} className="weekly-hero__action-secondary">Roster</Button>
-          <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="Trade Center">
-            <span aria-hidden>⋯</span>
-            <span>Trade Center</span>
+            {simulating ? ACTION_LABELS.simulating : busy ? ACTION_LABELS.working : ACTION_LABELS.advanceWeek}
           </Button>
         </CardContent>
       </Card>

@@ -60,6 +60,7 @@ import GMAdvisor from "./GMAdvisor.jsx";
 import CapManager from "./CapManager.jsx";
 import DraftBigBoard from "./DraftBigBoard.jsx";
 import CoachingScreen from "./CoachingScreen.jsx";
+import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -1525,6 +1526,34 @@ export default function LeagueDashboard({
                       })}
                     </div>
                   )}
+                </>
+              );
+            }
+
+            if (authoritativeResults.length > 0) {
+              const featured = buildLatestResultsSummary({ results: authoritativeResults, teamById });
+              return (
+                <>
+                  <div className="stat-label">Last Game</div>
+                  <div
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    Week {prevWeek} complete. No user matchup in latest results.
+                  </div>
+                  <div
+                    style={{
+                      marginTop: 4,
+                      fontSize: 10,
+                      color: "var(--text-subtle)",
+                      lineHeight: 1.5,
+                      fontVariantNumeric: "tabular-nums",
+                    }}
+                  >
+                    {featured.join(" · ")}
+                  </div>
                 </>
               );
             }
