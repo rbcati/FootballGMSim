@@ -990,7 +990,7 @@ export default function LiveGame({
                   padding: "var(--space-2) 0",
                 }}
               >
-                Week recap is ready.
+                Simulation complete. Open the week recap above for final notes.
               </p>
             )}
             {plays.map((p) => (
