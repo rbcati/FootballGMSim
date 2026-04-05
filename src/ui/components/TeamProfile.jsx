@@ -48,6 +48,15 @@ function ovrColor(ovr) {
   return "var(--danger)";
 }
 
+const sectionHeadingStyle = {
+  margin: "0 0 var(--space-2)",
+  fontSize: "var(--text-sm)",
+  fontWeight: 800,
+  color: "var(--text-subtle)",
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function StatBox({ label, value, sub }) {
@@ -160,7 +169,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
         {/* ── Header ── */}
         <div
           style={{
-            padding: "var(--space-5)",
+            padding: "var(--space-4) var(--space-5)",
             borderBottom: "1px solid var(--hairline)",
             background: "var(--surface-strong)",
             display: "flex",
@@ -203,8 +212,9 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: "var(--text-2xl)",
+                    fontSize: "calc(var(--text-2xl) - 1px)",
                     fontWeight: 800,
+                    lineHeight: 1.15,
                   }}
                 >
                   {team.name}
@@ -213,7 +223,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                   style={{
                     color: "var(--text-muted)",
                     fontSize: "var(--text-sm)",
-                    marginTop: "var(--space-1)",
+                    marginTop: 2,
                   }}
                 >
                   {team.conf} · {team.div} Division · OVR{" "}
@@ -225,7 +235,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                   style={{
                     color: "var(--text-subtle)",
                     fontSize: "var(--text-xs)",
-                    marginTop: 4,
+                    marginTop: 3,
                   }}
                 >
                   This Season: {team.wins}-{team.losses}
@@ -249,6 +259,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               color: "var(--text-muted)",
               padding: "var(--space-1)",
               marginLeft: "var(--space-2)",
+              minWidth: 34,
+              minHeight: 34,
             }}
           >
             ×
@@ -259,23 +271,16 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
         {!loading && team && franchise && (
           <div
             style={{
-              padding: "var(--space-5)",
+              padding: "var(--space-4) var(--space-5) var(--space-5)",
               display: "flex",
               flexDirection: "column",
-              gap: "var(--space-6)",
+              gap: "var(--space-5)",
             }}
           >
             {/* ── Franchise Stats ── */}
             <section>
               <h3
-                style={{
-                  margin: "0 0 var(--space-3)",
-                  fontSize: "var(--text-base)",
-                  fontWeight: 700,
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                }}
+                style={sectionHeadingStyle}
               >
                 Franchise Records
               </h3>
@@ -312,14 +317,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
             {/* ── Cap snapshot ── */}
             <section>
               <h3
-                style={{
-                  margin: "0 0 var(--space-3)",
-                  fontSize: "var(--text-base)",
-                  fontWeight: 700,
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                  letterSpacing: "1px",
-                }}
+                style={sectionHeadingStyle}
               >
                 Current Salary Cap
               </h3>
@@ -349,14 +347,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
             {franchise.seasonHistory?.length > 0 && (
               <section>
                 <h3
-                  style={{
-                    margin: "0 0 var(--space-3)",
-                    fontSize: "var(--text-base)",
-                    fontWeight: 700,
-                    color: "var(--text-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                  }}
+                  style={sectionHeadingStyle}
                 >
                   Season History (last {franchise.seasonHistory.length})
                 </h3>
@@ -430,14 +421,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
             {players.length > 0 && (
               <section>
                 <h3
-                  style={{
-                    margin: "0 0 var(--space-3)",
-                    fontSize: "var(--text-base)",
-                    fontWeight: 700,
-                    color: "var(--text-muted)",
-                    textTransform: "uppercase",
-                    letterSpacing: "1px",
-                  }}
+                  style={sectionHeadingStyle}
                 >
                   Current Roster (Top 12)
                 </h3>

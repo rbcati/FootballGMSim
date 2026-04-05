@@ -89,7 +89,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             <p className="weekly-hud__eyebrow">{phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
             <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · Ready to Sim` : "Advance Franchise"}</CardTitle>
             <p className="weekly-primary__subtitle">
-              {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} is up next. Lock your plan, then advance.` : "Set priorities and move the league forward."}
+              {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} next. Finalize prep, then advance.` : "Set priorities and keep the season moving."}
             </p>
           </div>
           <div className="weekly-hud__meta">
@@ -106,13 +106,13 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             disabled={busy || simulating}
             onClick={onAdvanceWeek}
           >
-            {simulating ? "Simulating..." : busy ? "Working..." : "Sim Week"}
+            {simulating ? "Simulating..." : busy ? "Working..." : "Advance Week"}
           </Button>
           <Button variant="secondary" onClick={() => onNavigate?.("Game Plan")} className="weekly-hero__action-secondary">Game Plan</Button>
           <Button variant="secondary" onClick={() => onNavigate?.("Roster")} className="weekly-hero__action-secondary">Roster</Button>
           <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="More actions">
             <span aria-hidden>⋯</span>
-            <span>More Tools</span>
+            <span>Trade Desk</span>
           </Button>
         </CardContent>
       </Card>
@@ -133,7 +133,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
       </section>
 
       <section className="weekly-section">
-        <h3 className="weekly-section__title">Quick tools</h3>
+        <h3 className="weekly-section__title">Front office shortcuts</h3>
         <div className="weekly-tools-row">
           {tools.map((tool) => (
             <Button key={tool.tab} variant="secondary" onClick={() => onNavigate?.(tool.tab)}>{tool.label}</Button>
