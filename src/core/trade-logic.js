@@ -309,79 +309,193 @@ export async function runAIToAITrades() {
   }
 }
 
+function safeWinPct(team) {
+  const wins = Number(team?.wins ?? 0);
+  const losses = Number(team?.losses ?? 0);
+  const ties = Number(team?.ties ?? 0);
+  const games = wins + losses + ties;
+  if (games <= 0) return 0.5;
+  return (wins + ties * 0.5) / games;
+}
+
+export function classifyTeamDirection(team, week = 1) {
+  const winPct = safeWinPct(team);
+  if (week <= 4) {
+    if (winPct >= 0.7) return 'contender';
+    if (winPct <= 0.3) return 'retool';
+    return 'balanced';
+  }
+  if (winPct >= 0.62) return 'contender';
+  if (winPct <= 0.35) return 'rebuilding';
+  if (winPct <= 0.45) return 'desperate';
+  return 'balanced';
+}
+
+function getExpiringPlayers(teamId) {
+  const roster = cache.getPlayersByTeam(teamId);
+  return roster.filter((p) => {
+    const yearsLeft = Number(
+      p?.contract?.yearsRemaining
+        ?? p?.contract?.years
+        ?? p?.years
+        ?? p?.contractYearsLeft
+        ?? 2,
+    );
+    return yearsLeft <= 1 && (p?.ovr ?? 0) >= 72;
+  });
+}
+
+function computeOfferType({ userDirection, aiDirection, userCapRoom, week }) {
+  const nearDeadline = week >= 10;
+  if (aiDirection === 'contender' && (userDirection === 'rebuilding' || userDirection === 'retool')) {
+    return nearDeadline ? 'deadline_rental' : 'contender_veteran_push';
+  }
+  if (aiDirection === 'rebuilding' && userDirection === 'contender') {
+    return 'pick_package';
+  }
+  if (userCapRoom >= 28 && aiDirection !== 'contender') {
+    return 'cap_dump_opportunity';
+  }
+  if (aiDirection === 'desperate') {
+    return 'shake_up_offer';
+  }
+  return 'depth_swap';
+}
+
+function offerReasonCopy(type, aiAbbr, needPos, week) {
+  if (type === 'deadline_rental') return `${aiAbbr} is in a win-now window entering the deadline and wants immediate ${needPos} help.`;
+  if (type === 'contender_veteran_push') return `${aiAbbr} sees your veteran as a playoff rotation fit and is willing to pay now.`;
+  if (type === 'pick_package') return `${aiAbbr} is collecting future assets and targeting your long-term timeline.`;
+  if (type === 'cap_dump_opportunity') return `${aiAbbr} is tight against the cap and floated a salary-balancing deal.`;
+  if (type === 'shake_up_offer') return `${aiAbbr} is underperforming and trying a change-of-scenery move.`;
+  if (week >= 12) return `${aiAbbr} is reacting to late-season roster pressure.`;
+  return `${aiAbbr} is addressing a ${needPos} need with a depth-for-depth framework.`;
+}
+
 /**
  * Phase 4 Opus: AI-Initiated Trade Proposals
  * The AI evaluates the user's roster for surplus and needs, and generates
  * 1-2 trade proposals from AI teams that match those needs.
  */
 export function generateAITradeProposalsForUser() {
-    const meta = cache.getMeta();
-    if (!meta || meta.phase !== 'regular') return [];
+  const meta = cache.getMeta();
+  if (!meta || meta.phase !== 'regular') return [];
 
-    const userTeamId = meta.userTeamId;
-    if (!userTeamId) return [];
+  const userTeamId = Number(meta.userTeamId);
+  if (!userTeamId) return [];
 
-    const allTeams = cache.getAllTeams();
-    const userTeam = allTeams.find(t => t.id === userTeamId);
-    if (!userTeam) return [];
+  const allTeams = cache.getAllTeams();
+  const userTeam = allTeams.find((t) => Number(t.id) === userTeamId);
+  if (!userTeam) return [];
 
-    const aiTeams = allTeams.filter(t => t.id !== userTeamId);
-    const userNeeds = getTeamNeeds(userTeamId);
-    const userSurplus = getSurplusPlayers(userTeamId);
+  const userNeeds = getTeamNeeds(userTeamId);
+  const userSurplus = getSurplusPlayers(userTeamId);
+  const userExpiring = getExpiringPlayers(userTeamId);
+  const userDirection = classifyTeamDirection(userTeam, meta.currentWeek ?? 1);
+  const userCapRoom = Number(userTeam?.capRoom ?? 0);
+  const week = Number(meta?.currentWeek ?? 1);
+  const nearDeadline = week >= 10;
 
-    const proposals = [];
+  // Keep offers occasional and contextual.
+  const baseChance = nearDeadline ? 0.55 : 0.35;
+  if (Math.random() > baseChance) return [];
 
-    // The AI looks for what the user needs and offers it, asking for user surplus in return
-    for (const aiTeam of aiTeams) {
-        if (proposals.length >= 2) break; // Max 2 proposals per week
+  const aiTeams = U.shuffle(allTeams.filter((t) => Number(t.id) !== userTeamId));
+  const proposals = [];
+  const usedPlayerIds = new Set();
 
-        const aiSurplus = getSurplusPlayers(aiTeam.id);
-        const aiNeeds = getTeamNeeds(aiTeam.id);
+  for (const aiTeam of aiTeams) {
+    if (proposals.length >= 2) break;
+    if (Math.random() < 0.45 && proposals.length >= 1) continue;
 
-        for (const userNeed of userNeeds) {
-            const aiOffer = aiSurplus.find((p) => p.pos === userNeed.pos && p.value >= 40);
-            if (aiOffer) {
-                // Find what the AI wants in return
-                for (const aiNeed of aiNeeds) {
-                    const safeCandidates = Array.isArray(userSurplus)
-                      ? userSurplus
-                      : [];
+    const aiDirection = classifyTeamDirection(aiTeam, week);
+    const aiSurplus = getSurplusPlayers(aiTeam.id);
+    const aiNeeds = getTeamNeeds(aiTeam.id);
+    const aiExpiring = getExpiringPlayers(aiTeam.id);
+    if (aiSurplus.length === 0 || aiNeeds.length === 0) continue;
 
-                    const candidates = safeCandidates
-                      .filter((p) => p?.pos === aiNeed.pos)
-                      .sort((a, b) => {
-                        if (!a?.player || !b?.player) return 0;
-                        const aWeight = (a.player?.onTradeBlock ?? false) ? 2 : 1;
-                        const bWeight = (b.player?.onTradeBlock ?? false) ? 2 : 1;
-                        return ((b?.value ?? 0) * bWeight) - ((a?.value ?? 0) * aWeight);
-                      });
-                    const userAsset = candidates[0];
-                    if (userAsset) {
-                        const valA = aiOffer.value;
-                        const valB = userAsset.value;
+    const topUserNeed = userNeeds[0];
+    const topAiNeed = aiNeeds[0];
+    if (!topUserNeed || !topAiNeed) continue;
 
-                        // Check if values are close enough (AI is willing to overpay slightly or underpay slightly)
-                        if (valA > 0 && valB > 0 && Math.abs(valA - valB) / Math.max(valA, valB) <= 0.20) {
-                            proposals.push({
-                                offeringTeamId: aiTeam.id,
-                                offeringTeamAbbr: aiTeam.abbr,
-                                offeringPlayerId: aiOffer.player.id,
-                                offeringPlayerName: aiOffer.player.name,
-                                receivingPlayerId: userAsset.player.id,
-                                receivingPlayerName: userAsset.player.name,
-                                timestamp: Date.now()
-                            });
-                            // Remove from surplus to prevent duplicate logic
-                            aiSurplus.splice(aiSurplus.indexOf(aiOffer), 1);
-                            userSurplus.splice(userSurplus.indexOf(userAsset), 1);
-                            break; // Move to next team
-                        }
-                    }
-                }
-            }
-            if (proposals.some(p => p.offeringTeamId === aiTeam.id)) break;
-        }
+    const aiOfferCandidate = aiSurplus.find((asset) =>
+      asset?.pos === topUserNeed.pos && !usedPlayerIds.has(asset?.player?.id),
+    ) ?? aiSurplus[0];
+
+    const userCandidatePool = userSurplus.filter((asset) =>
+      asset?.pos === topAiNeed.pos && !usedPlayerIds.has(asset?.player?.id),
+    );
+
+    let userAsset = userCandidatePool[0] ?? null;
+    if (!userAsset && userDirection !== 'contender' && userExpiring.length > 0) {
+      const expiring = userExpiring
+        .filter((p) => !usedPlayerIds.has(p.id))
+        .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0))[0];
+      if (expiring) {
+        userAsset = { pos: expiring.pos, value: calculatePlayerValue(expiring), player: expiring };
+      }
     }
+    if (!aiOfferCandidate || !userAsset) continue;
 
-    return proposals;
+    const offerValue = aiOfferCandidate.value;
+    const askValue = userAsset.value;
+    if (offerValue <= 0 || askValue <= 0) continue;
+
+    const tolerance = nearDeadline && (aiDirection === 'contender' || aiDirection === 'desperate') ? 0.34 : 0.24;
+    const withinRange = Math.abs(offerValue - askValue) / Math.max(offerValue, askValue) <= tolerance;
+    if (!withinRange) continue;
+
+    const offerType = computeOfferType({ userDirection, aiDirection, userCapRoom, week });
+    const urgency = nearDeadline && aiDirection === 'contender' ? 'high' : aiDirection === 'desperate' ? 'high' : 'medium';
+    const reason = offerReasonCopy(offerType, aiTeam.abbr, topUserNeed.pos, week);
+    const stance = aiDirection === 'contender'
+      ? 'Win now'
+      : aiDirection === 'rebuilding'
+        ? 'Future assets'
+        : aiDirection === 'desperate'
+          ? 'Shake-up mode'
+          : 'Balanced approach';
+
+    proposals.push({
+      id: `offer_${meta?.season ?? meta?.year ?? 1}_${week}_${aiTeam.id}_${aiOfferCandidate.player.id}_${Date.now()}`,
+      week,
+      season: meta?.season ?? meta?.year ?? 1,
+      offeringTeamId: aiTeam.id,
+      offeringTeamAbbr: aiTeam.abbr,
+      offeringTeamName: aiTeam.name,
+      offeringDirection: aiDirection,
+      offerType,
+      urgency,
+      stance,
+      reason,
+      context: {
+        deadlineProximity: nearDeadline ? 'near' : 'early',
+        userDirection,
+        userCapRoom: Math.round(userCapRoom),
+      },
+      offering: { playerIds: [aiOfferCandidate.player.id], pickIds: [] },
+      receiving: { playerIds: [userAsset.player.id], pickIds: [] },
+      offeringPlayerId: aiOfferCandidate.player.id,
+      offeringPlayerName: aiOfferCandidate.player.name,
+      receivingPlayerId: userAsset.player.id,
+      receivingPlayerName: userAsset.player.name,
+      expiresAfterWeek: week + 2,
+      timestamp: Date.now(),
+    });
+
+    usedPlayerIds.add(aiOfferCandidate.player.id);
+    usedPlayerIds.add(userAsset.player.id);
+
+    // Rebuilders sometimes add a late pick sweetener near deadline.
+    if (
+      offerType === 'pick_package'
+      && nearDeadline
+      && proposals.length > 0
+      && Math.random() < 0.35
+    ) {
+      proposals[proposals.length - 1].offering.pickIds = [`future_r${Math.random() < 0.65 ? 3 : 4}`];
+    }
+  }
+
+  return proposals;
 }

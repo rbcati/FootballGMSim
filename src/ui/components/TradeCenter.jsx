@@ -227,6 +227,7 @@ export default function TradeCenter({ league, actions }) {
   const [tradeResult, setTradeResult] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const incomingOffers = useMemo(() => Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [], [league?.incomingTradeOffers]);
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
@@ -337,6 +338,39 @@ export default function TradeCenter({ league, actions }) {
         </div>
       )}
       {/* Header + propose button (original) */}
+      {incomingOffers.length > 0 && (
+        <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <strong style={{ fontSize: "var(--text-sm)" }}>Incoming trade offers</strong>
+            <Badge variant="outline">{incomingOffers.length} pending</Badge>
+          </div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {incomingOffers.slice(0, 3).map((offer) => (
+              <div key={offer.id} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>
+                  {offer.offeringTeamAbbr} → {offer.offeringPlayerName} for {offer.receivingPlayerName}
+                </div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{offer.reason}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <Badge variant="secondary">{offer.offerType?.replaceAll("_", " ") ?? "market offer"}</Badge>
+                  <Badge variant={offer.urgency === "high" ? "destructive" : "outline"}>{offer.urgency ?? "standard"}</Badge>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(offer.id)}>Accept</Button>
+                  <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setTargetId(Number(offer.offeringTeamId))}
+                  >
+                    Open Team
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="card trade-header-card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-4)", flexWrap: "wrap" }}>
           <div>

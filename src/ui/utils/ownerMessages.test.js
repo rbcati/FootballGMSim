@@ -36,6 +36,7 @@ describe("evaluateOwnerMessageContext", () => {
     expect(context).toBeTruthy();
     expect(context.triggerKey).toBe("low_owner_approval");
     expect(context.tone).toBe("urgent_demand");
+    expect(context.pressureState).toBe("urgent_demand");
     expect(context.message.length).toBeGreaterThan(20);
   });
 
@@ -50,6 +51,7 @@ describe("evaluateOwnerMessageContext", () => {
     expect(context).toBeTruthy();
     expect(context.triggerKey).toBe("steady_progress");
     expect(context.tone).toBe("cautious_encouragement");
+    expect(context.pressureState).toBe("cooling");
   });
 
   it("detects goal failure pressure late in the season", () => {
@@ -63,6 +65,7 @@ describe("evaluateOwnerMessageContext", () => {
     expect(context).toBeTruthy();
     expect(context.triggerKey).toBe("missed_owner_goals");
     expect(["disappointment", "urgent_demand"]).toContain(context.tone);
+    expect(context.expectedAction).toBeTruthy();
   });
 });
 

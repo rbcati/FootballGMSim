@@ -73,7 +73,14 @@ export default function OwnerMessagesCard({ league, userTeam, currentWeek, curre
       </div>
 
       {activeMessage ? (
-        <p className="owner-message-copy">“{activeMessage.message}”</p>
+        <>
+          <p className="owner-message-copy">“{activeMessage.message}”</p>
+          {activeMessage.expectedAction && (
+            <p className="owner-message-idle" style={{ marginTop: 8 }}>
+              Expected action: {activeMessage.expectedAction}
+            </p>
+          )}
+        </>
       ) : (
         <p className="owner-message-idle">No new owner directive this week. Stay on plan and keep results trending up.</p>
       )}

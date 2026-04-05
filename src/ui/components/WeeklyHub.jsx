@@ -3,6 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ACTION_LABELS } from "../constants/navigationCopy.js";
+import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -65,11 +66,12 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
-export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
+export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating }) {
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const injuries = useMemo(() => getInjuries(league), [league]);
-  const urgentItems = useMemo(() => getUrgentItems(league), [league]);
+  const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
+  const urgentItems = weeklyContext?.urgentItems?.length ? weeklyContext.urgentItems : getUrgentItems(league);
 
   if (!league || !user) return null;
 
@@ -81,6 +83,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
     { label: "Trades", tab: "Trades" },
     { label: "Staff", tab: "Staff" },
   ];
+  const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
 
   return (
     <div className="weekly-hub-v2">
@@ -127,6 +130,32 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         </div>
       </section>
 
+      {topOffer && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Incoming trade offer</h3>
+          <Card variant="secondary">
+            <CardHeader>
+              <CardTitle className="text-sm">
+                {topOffer.offeringTeamAbbr} offers {topOffer.offeringPlayerName}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8 }}>
+              <div>They want: {topOffer.receivingPlayerName}</div>
+              <div>{topOffer.reason}</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Badge variant="outline">{topOffer.stance ?? "Market call"}</Badge>
+                <Badge variant={topOffer.urgency === "high" ? "destructive" : "secondary"}>{topOffer.urgency === "high" ? "High urgency" : "Standard urgency"}</Badge>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>
+                <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(topOffer.id)}>Reject</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Review in Trades</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
       <section className="weekly-section">
         <h3 className="weekly-section__title">Front office shortcuts</h3>
         <div className="weekly-tools-row">
@@ -146,12 +175,23 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             </CardContent>
           </Card>
           <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Weekly Focus</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">
+              <strong style={{ color: "var(--text)" }}>{weeklyContext?.focus?.title ?? "Keep advancing with discipline."}</strong>
+              <div>{weeklyContext?.focus?.subtitle ?? "Stay active in every phase."}</div>
+            </CardContent>
+          </Card>
+          <Card variant="secondary">
             <CardHeader><CardTitle className="text-sm">Approval</CardTitle></CardHeader>
             <CardContent className="text-sm text-[color:var(--text-muted)]">Owner: {ownerMood != null ? `${Math.round(ownerMood)}%` : "N/A"}</CardContent>
           </Card>
           <Card variant="secondary">
             <CardHeader><CardTitle className="text-sm">Injury Watch</CardTitle></CardHeader>
             <CardContent className="text-sm text-[color:var(--text-muted)]">{injuries[0] ? `${injuries[0].name} · ${injuries[0].injury || `${injuries[0].injuredWeeks} wks`}` : "Roster healthy"}</CardContent>
+          </Card>
+          <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Market Pulse</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext?.marketPulse ?? "No unusual movement this week."}</CardContent>
           </Card>
         </div>
       </section>
