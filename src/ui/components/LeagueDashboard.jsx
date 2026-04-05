@@ -1171,6 +1171,8 @@ function QuickJumpFab({ onNavigate }) {
 
 export default function LeagueDashboard({
   league,
+  lastResults = [],
+  lastSimWeek = null,
   busy,
   simulating,
   actions,
@@ -1412,40 +1414,30 @@ export default function LeagueDashboard({
         {/* Last Game + compact league scores */}
         <div className="stat-box">
           {(() => {
-            const prevWeek = (league.week || 1) - 1;
-            const weekData = league.schedule?.weeks?.find(
-              (w) => w.week === prevWeek,
-            );
-            const allGames = weekData?.games?.filter((g) => g.played) ?? [];
-            const userGame = allGames.find(
-              (g) =>
-                g.home === league.userTeamId ||
-                (typeof g.home === "object" &&
-                  g.home.id === league.userTeamId) ||
-                g.away === league.userTeamId ||
-                (typeof g.away === "object" && g.away.id === league.userTeamId),
-            );
-            const otherGames = allGames.filter((g) => g !== userGame);
+            const toId = (value) =>
+              Number(typeof value === "object" ? value?.id : value);
+            const prevWeek = Number(lastSimWeek ?? ((league.week || 1) - 1));
 
             const teamById = {};
             league.teams?.forEach((t) => {
               teamById[t.id] = t;
             });
 
-            if (userGame) {
-              const homeId =
-                typeof userGame.home === "object"
-                  ? userGame.home.id
-                  : userGame.home;
-              const awayId =
-                typeof userGame.away === "object"
-                  ? userGame.away.id
-                  : userGame.away;
+            const authoritativeResults = Array.isArray(lastResults) ? lastResults : [];
+            const userResult = authoritativeResults.find(
+              (r) =>
+                Number(r.homeId) === Number(league.userTeamId) ||
+                Number(r.awayId) === Number(league.userTeamId),
+            );
+
+            if (userResult) {
+              const homeId = Number(userResult.homeId);
+              const awayId = Number(userResult.awayId);
               const isHome = homeId === league.userTeamId;
               const userScore = isHome
-                ? userGame.homeScore
-                : userGame.awayScore;
-              const oppScore = isHome ? userGame.awayScore : userGame.homeScore;
+                ? userResult.homeScore
+                : userResult.awayScore;
+              const oppScore = isHome ? userResult.awayScore : userResult.homeScore;
               const oppId = isHome ? awayId : homeId;
               const oppAbbr = teamById[oppId]?.abbr ?? "???";
               const win = userScore > oppScore;
@@ -1491,7 +1483,7 @@ export default function LeagueDashboard({
                     </span>
                   </div>
                   {/* Compact other league scores — click to open BoxScore */}
-                  {otherGames.length > 0 && (
+                  {authoritativeResults.length > 1 && (
                     <div
                       style={{
                         marginTop: 4,
@@ -1503,11 +1495,12 @@ export default function LeagueDashboard({
                         overflow: "hidden",
                       }}
                     >
-                      {otherGames.slice(0, 6).map((g, i) => {
-                        const hId =
-                          typeof g.home === "object" ? g.home.id : g.home;
-                        const aId =
-                          typeof g.away === "object" ? g.away.id : g.away;
+                      {authoritativeResults
+                        .filter((g) => g !== userResult)
+                        .slice(0, 6)
+                        .map((g, i, arr) => {
+                        const hId = toId(g.homeId);
+                        const aId = toId(g.awayId);
                         const hA = teamById[hId]?.abbr ?? "?";
                         const aA = teamById[aId]?.abbr ?? "?";
                         const gId = league.seasonId
@@ -1526,9 +1519,7 @@ export default function LeagueDashboard({
                             title={gId ? "View box score" : undefined}
                           >
                             {aA} {g.awayScore}-{g.homeScore} {hA}
-                            {i < Math.min(otherGames.length, 6) - 1
-                              ? " · "
-                              : ""}
+                            {i < arr.length - 1 ? " · " : ""}
                           </span>
                         );
                       })}
@@ -1537,6 +1528,36 @@ export default function LeagueDashboard({
                 </>
               );
             }
+
+            const weekData = league.schedule?.weeks?.find((w) => w.week === prevWeek);
+            const allGames = weekData?.games?.filter((g) => g.played) ?? [];
+            const userGame = allGames.find(
+              (g) =>
+                toId(g.home) === Number(league.userTeamId) ||
+                toId(g.away) === Number(league.userTeamId),
+            );
+            if (userGame) {
+              const homeId = toId(userGame.home);
+              const awayId = toId(userGame.away);
+              const isHome = homeId === Number(league.userTeamId);
+              const userScore = isHome ? userGame.homeScore : userGame.awayScore;
+              const oppScore = isHome ? userGame.awayScore : userGame.homeScore;
+              const oppAbbr = teamById[isHome ? awayId : homeId]?.abbr ?? "???";
+              const win = userScore > oppScore;
+              const resultChar = win ? "W" : userScore === oppScore ? "T" : "L";
+              const resultColor = win ? "var(--success)" : userScore === oppScore ? "var(--text-muted)" : "var(--danger)";
+              return (
+                <>
+                  <div className="stat-label">Last Game</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: "var(--text-lg)", fontWeight: 800, color: resultColor }}>{resultChar}</span>
+                    <span style={{ fontSize: "var(--text-base)", fontWeight: 700 }}>{userScore}-{oppScore}</span>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>vs {oppAbbr}</span>
+                  </div>
+                </>
+              );
+            }
+
             return (
               <>
                 <div className="stat-label">Last Game</div>

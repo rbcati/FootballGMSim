@@ -397,6 +397,7 @@ export default function LiveGame({
   simProgress,
   league,
   lastResults,
+  simulatedWeek,
   gameEvents,
   onOpenBoxScore,
 }) {
@@ -423,42 +424,56 @@ export default function LiveGame({
     return map;
   }, [league?.teams]);
 
+  const toId = (value) => {
+    if (value && typeof value === "object") return Number(value.id);
+    return Number(value);
+  };
+
+  const simContextWeek = useMemo(() => {
+    if (simulating) return league?.week ?? null;
+    if (simulatedWeek != null) return simulatedWeek;
+    if ((lastResults?.length ?? 0) > 0 && league?.week != null) {
+      return Math.max(1, Number(league.week) - 1);
+    }
+    return league?.week ?? null;
+  }, [simulating, simulatedWeek, lastResults, league?.week]);
+
   // Games currently scheduled for this week that haven't resolved yet
   const weekGames = useMemo(() => {
-    if (!league?.schedule?.weeks || !league?.week) return [];
-    const wd = league.schedule.weeks.find((w) => w.week === league.week);
+    if (!league?.schedule?.weeks || !simContextWeek) return [];
+    const wd = league.schedule.weeks.find((w) => w.week === simContextWeek);
     return wd?.games ?? [];
-  }, [league?.schedule, league?.week]);
+  }, [league?.schedule, simContextWeek]);
 
   // The user's team's game from the current week schedule
   const userGame = useMemo(() => {
-    if (!league?.userTeamId) return null;
+    if (league?.userTeamId == null) return null;
     return (
       weekGames.find(
         (g) =>
-          Number(g.home) === league.userTeamId ||
-          Number(g.away) === league.userTeamId,
+          toId(g.home) === Number(league.userTeamId) ||
+          toId(g.away) === Number(league.userTeamId),
       ) ?? null
     );
   }, [weekGames, league?.userTeamId]);
 
   // Resolved GAME_EVENT for the user's game (if simulation already finished it)
   const userEvent = useMemo(() => {
-    if (!league?.userTeamId) return null;
+    if (league?.userTeamId == null) return null;
     return (
       (gameEvents ?? []).find(
-        (e) => e.homeId === league.userTeamId || e.awayId === league.userTeamId,
+        (e) => Number(e.homeId) === Number(league.userTeamId) || Number(e.awayId) === Number(league.userTeamId),
       ) ?? null
     );
   }, [gameEvents, league?.userTeamId]);
 
   const userHomeAbbr =
     userEvent?.homeAbbr ??
-    (userGame ? teamById[userGame.home]?.abbr : null) ??
+    (userGame ? teamById[toId(userGame.home)]?.abbr : null) ??
     "???";
   const userAwayAbbr =
     userEvent?.awayAbbr ??
-    (userGame ? teamById[userGame.away]?.abbr : null) ??
+    (userGame ? teamById[toId(userGame.away)]?.abbr : null) ??
     "???";
 
   // ── Show / hide logic ────────────────────────────────────────────────────
@@ -600,17 +615,17 @@ export default function LiveGame({
   // Games still pending (not yet in gameEvents) — show only user's game.
   const resolvedGameIds = new Set(resolvedEvents.map((e) => e.gameId));
   const pendingGames = weekGames.filter((g) => {
-    const id = `${league?.seasonId}_w${league?.week}_${g.home}_${g.away}`;
+    const id = `${league?.seasonId}_w${simContextWeek}_${toId(g.home)}_${toId(g.away)}`;
     return !resolvedGameIds.has(id);
   });
   const userPendingGames = pendingGames.filter(
-    (g) => Number(g.home) === userTeamId || Number(g.away) === userTeamId,
+    (g) => toId(g.home) === Number(userTeamId) || toId(g.away) === Number(userTeamId),
   );
 
   // Final results to show when sim is done — user's game only.
   const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
   const userLastResults = (lastResults ?? []).filter(
-    (r) => r.homeId === userTeamId || r.awayId === userTeamId,
+    (r) => Number(r.homeId) === Number(userTeamId) || Number(r.awayId) === Number(userTeamId),
   );
   const recapGame = userResolvedEvents[0] ?? (userLastResults[0] ? {
     homeId: userLastResults[0].homeId,
@@ -673,8 +688,8 @@ export default function LiveGame({
           }}
         >
           {simulating
-            ? `Week ${league?.week} · Simulating…`
-            : `Week ${league?.week ?? ""} · Final Results`}
+            ? `Week ${simContextWeek ?? ""} · Simulating…`
+            : `Week ${simContextWeek ?? ""} · Final Results`}
         </span>
 
         {simulating && !skipping && (
@@ -802,7 +817,7 @@ export default function LiveGame({
               marginBottom: "var(--space-3)",
             }}
           >
-            Scoreboard — Week {league?.week}
+            Scoreboard — Week {simContextWeek ?? ""}
           </div>
 
           <div

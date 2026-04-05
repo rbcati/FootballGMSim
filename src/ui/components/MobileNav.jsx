@@ -108,9 +108,9 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
             </button>
           );
         })}
-        <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open menu">
+        <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open actions">
           <MoreIcon size={20} />
-          <span className="mobile-bottom-label">Menu</span>
+          <span className="mobile-bottom-label">Actions</span>
         </button>
       </div>
     </>

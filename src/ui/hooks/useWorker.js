@@ -38,6 +38,8 @@ const INITIAL_STATE = {
   league:       null,   // { seasonId, year, week, phase, userTeamId, teams[] }
   /** results from the last simulated week */
   lastResults:  null,
+  /** week number that produced lastResults */
+  lastSimWeek:  null,
   /**
    * Live game events received during the current simulation.
    * Each entry: { gameId, week, homeId, awayId, homeName, awayName,
@@ -100,6 +102,7 @@ function reducer(state, action) {
         busy:        false,
         simProgress: 100,
         lastResults: action.results,
+        lastSimWeek: action.week ?? null,
         league:      {
           ...(state.league ?? {}),
           week:  action.nextWeek,
@@ -191,6 +194,7 @@ export function useWorker() {
         case toUI.WEEK_COMPLETE:
           dispatch({
             type:       'WEEK_COMPLETE',
+            week:       payload.week,
             results:    payload.results,
             nextWeek:   payload.nextWeek,
             phase:      payload.phase,

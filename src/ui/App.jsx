@@ -104,7 +104,7 @@ function AppContent() {
   const {
     busy, simulating, simProgress,
     workerReady, hasSave,
-    league, lastResults, gameEvents,
+    league, lastResults, lastSimWeek, gameEvents,
     error, notifications,
     batchSim,
     promptUserGame,
@@ -317,7 +317,7 @@ function AppContent() {
       const roundNames = { 19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Champ', 22: 'Super Bowl' };
       return `▶ ${roundNames[league.week] || `Playoffs Wk ${league.week}`}`;
     }
-    return `▶ Sim Week ${league.week}`;
+    return `▶ Advance Week ${league.week}`;
   };
 
   const safePhase = league?.phase ?? null;
@@ -520,8 +520,8 @@ function AppContent() {
             </button>
           )}
           <details className="app-overflow-menu">
-            <summary className="btn app-overflow-trigger" aria-label="More actions">
-              More
+            <summary className="btn app-overflow-trigger" aria-label="Action menu">
+              Actions
             </summary>
             <div className="app-overflow-list">
               {utilityActions.map((item) => (
@@ -640,6 +640,7 @@ function AppContent() {
             simProgress={simProgress}
             league={league}
             lastResults={lastResults}
+            simulatedWeek={lastSimWeek}
             gameEvents={gameEvents}
             onOpenBoxScore={(gameId) => {
               if (!gameId) return;
@@ -677,6 +678,8 @@ function AppContent() {
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
       <LeagueDashboard
         league={leagueReady ? league : null}
+        lastResults={lastResults}
+        lastSimWeek={lastSimWeek}
         busy={busy}
         simulating={simulating}
         actions={actions}
