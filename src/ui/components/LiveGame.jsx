@@ -612,6 +612,22 @@ export default function LiveGame({
   const userLastResults = (lastResults ?? []).filter(
     (r) => r.homeId === userTeamId || r.awayId === userTeamId,
   );
+  const recapGame = userResolvedEvents[0] ?? (userLastResults[0] ? {
+    homeId: userLastResults[0].homeId,
+    awayId: userLastResults[0].awayId,
+    homeAbbr: userLastResults[0].homeName?.slice(0, 3) ?? "???",
+    awayAbbr: userLastResults[0].awayName?.slice(0, 3) ?? "???",
+    homeScore: userLastResults[0].homeScore,
+    awayScore: userLastResults[0].awayScore,
+  } : null);
+  const recapText = (() => {
+    if (!recapGame) return null;
+    const homeWin = (recapGame.homeScore ?? 0) > (recapGame.awayScore ?? 0);
+    const userIsHome = recapGame.homeId === userTeamId;
+    const userWon = userIsHome ? homeWin : !homeWin;
+    const margin = Math.abs((recapGame.homeScore ?? 0) - (recapGame.awayScore ?? 0));
+    return `${userWon ? "Win secured" : "Loss absorbed"}${margin > 0 ? ` by ${margin}` : ""}.`;
+  })();
 
   if (!visible) return null;
 
@@ -872,15 +888,18 @@ export default function LiveGame({
               onClick={() => setLogCollapsed((v) => !v)}
               style={{
                 marginLeft: "auto",
-                background: "none",
-                border: "none",
+                background: "var(--surface)",
+                border: "1px solid var(--hairline)",
+                borderRadius: "var(--radius-pill)",
                 cursor: "pointer",
                 fontSize: "var(--text-xs)",
-                color: "var(--accent)",
-                padding: 0,
+                color: "var(--text-muted)",
+                padding: "4px 10px",
+                fontWeight: 700,
               }}
+              aria-expanded={!logCollapsed}
             >
-              {logCollapsed ? "Expand" : "Collapse"}
+              {logCollapsed ? "▾ Expand recap" : "▴ Collapse recap"}
             </button>
           </div>
           {!logCollapsed && (
@@ -898,6 +917,23 @@ export default function LiveGame({
                 position: "relative",
               }}
             >
+            {!simulating && recapGame && (
+              <div style={{
+                border: "1px solid var(--hairline)",
+                background: "linear-gradient(160deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))",
+                borderRadius: "var(--radius-md)",
+                padding: "var(--space-2) var(--space-3)",
+                marginBottom: "var(--space-2)",
+              }}>
+                <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-subtle)", marginBottom: 2 }}>
+                  Week Recap
+                </div>
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)" }}>{recapText}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  {recapGame.awayAbbr} {recapGame.awayScore} - {recapGame.homeScore} {recapGame.homeAbbr}
+                </div>
+              </div>
+            )}
             {overlayEvent && (
               <div
                 className={`game-event-overlay ${overlayEvent.type}`}
@@ -942,7 +978,7 @@ export default function LiveGame({
                   padding: "var(--space-2) 0",
                 }}
               >
-                Simulation complete.
+                Week recap is ready.
               </p>
             )}
             {plays.map((p) => (

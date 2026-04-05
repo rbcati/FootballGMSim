@@ -83,38 +83,37 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
 
   return (
     <div className="weekly-hub-v2">
-      <Card variant="utility" className="weekly-hud">
-        <CardContent className="weekly-hud__content">
-          <div>
-            <p className="weekly-hud__eyebrow">{user.city} {user.name}</p>
-            <h2 className="weekly-hud__title">{phaseLabel(league.phase)} · Week {league.week ?? 1}</h2>
-          </div>
-          <div className="weekly-hud__meta">
-            <Badge variant="outline">{user.wins ?? 0}-{user.losses ?? 0}{(user.ties ?? 0) ? `-${user.ties}` : ""}</Badge>
-            {ownerMood != null && <Badge>{`Owner ${Math.round(ownerMood)}%`}</Badge>}
-            <Badge variant="secondary">Cap ${Number(capSpace).toFixed(1)}M</Badge>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card variant="primary" className="weekly-primary">
+      <Card variant="primary" className="weekly-primary weekly-hero">
         <CardHeader className="weekly-primary__header">
-          <div>
-            <CardTitle className="text-[1.1rem]">{nextGame ? `Next: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : "Advance Franchise"}</CardTitle>
+          <div className="weekly-hero__identity">
+            <p className="weekly-hud__eyebrow">{user.city} {user.name}</p>
+            <CardTitle className="weekly-hero__title">{nextGame ? `Next: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : "Advance Franchise"}</CardTitle>
             <p className="weekly-primary__subtitle">
               {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} · Week ${nextGame.week}` : "Set priorities and move the league forward."}
             </p>
           </div>
-          {injuries.length > 0 && <Badge variant="destructive">{injuries.length} injuries</Badge>}
+          <div className="weekly-hud__meta">
+            <Badge variant="outline">{phaseLabel(league.phase)} · W{league.week ?? 1}</Badge>
+            <Badge variant="outline">{user.wins ?? 0}-{user.losses ?? 0}{(user.ties ?? 0) ? `-${user.ties}` : ""}</Badge>
+            {ownerMood != null && <Badge>{`Owner ${Math.round(ownerMood)}%`}</Badge>}
+            <Badge variant="secondary">Cap ${Number(capSpace).toFixed(1)}M</Badge>
+            {injuries.length > 0 && <Badge variant="destructive">{injuries.length} injuries</Badge>}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="weekly-hero__actions">
           <Button
             size="lg"
-            className="w-full"
+            className="weekly-hero__action-main"
             disabled={busy || simulating}
             onClick={onAdvanceWeek}
           >
             {simulating ? "Simulating..." : busy ? "Working..." : "Sim Week"}
+          </Button>
+          <Button variant="secondary" onClick={() => onNavigate?.("Game Plan")} className="weekly-hero__action-secondary">Game Plan</Button>
+          <Button variant="secondary" onClick={() => onNavigate?.("Roster")} className="weekly-hero__action-secondary">Roster</Button>
+          <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="More actions">
+            <span aria-hidden>⋯</span>
+            <span>More</span>
           </Button>
         </CardContent>
       </Card>

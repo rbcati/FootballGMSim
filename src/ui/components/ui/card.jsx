@@ -3,13 +3,13 @@ import { cva } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
 const cardVariants = cva(
-  "rounded-xl border text-[color:var(--text)] shadow-sm transition-colors duration-200",
+  "rounded-xl border text-[color:var(--text)] shadow-sm transition-[border-color,box-shadow,background] duration-200",
   {
     variants: {
       variant: {
-        primary: "border-[color:rgba(10,132,255,.52)] bg-[linear-gradient(175deg,rgba(10,132,255,.2),rgba(10,132,255,.06)_55%,rgba(255,255,255,.02))] shadow-[0_14px_36px_rgba(10,132,255,.24)]",
-        secondary: "border-[color:var(--hairline)] bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.015))] shadow-[0_6px_20px_rgba(0,0,0,.28)]",
-        utility: "border-[color:rgba(255,255,255,.08)] bg-[color:rgba(255,255,255,0.02)] shadow-none",
+        primary: "border-[color:rgba(10,132,255,.52)] bg-[linear-gradient(175deg,rgba(10,132,255,.22),rgba(10,132,255,.08)_55%,rgba(255,255,255,.02))] shadow-[0_16px_40px_rgba(10,132,255,.26)]",
+        secondary: "border-[color:rgba(255,255,255,.11)] bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.018))] shadow-[0_7px_24px_rgba(0,0,0,.3)]",
+        utility: "border-[color:rgba(255,255,255,.07)] bg-[color:rgba(255,255,255,0.015)] shadow-none",
       },
     },
     defaultVariants: {
@@ -29,7 +29,7 @@ const CardHeader = React.forwardRef(({ className, ...props }, ref) => (
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef(({ className, ...props }, ref) => (
-  <h3 ref={ref} className={cn("text-base font-semibold leading-tight tracking-tight text-[color:var(--text)]", className)} {...props} />
+  <h3 ref={ref} className={cn("text-[1.02rem] font-semibold leading-tight tracking-tight text-[color:var(--text)]", className)} {...props} />
 ));
 CardTitle.displayName = "CardTitle";
 
