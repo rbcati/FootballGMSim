@@ -22,8 +22,8 @@ const STEPS = [
   },
   {
     emoji: "📅",
-    title: "Advance Week to Simulate",
-    body: 'Click the blue "▶ Sim Week" button at the top right to simulate each game week. You\'ll see live scores, injuries, and stat leaders update automatically.',
+    title: "Advance Week",
+    body: 'Click the blue "▶ Advance Week" button at the top right to simulate each game week. You\'ll see live scores, injuries, and stat leaders update automatically.',
     cta: "Got it →",
   },
   {

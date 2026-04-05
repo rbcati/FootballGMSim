@@ -87,7 +87,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
         <CardHeader className="weekly-primary__header">
           <div className="weekly-hero__identity">
             <p className="weekly-hud__eyebrow">{phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
-            <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · Ready to Sim` : "Advance Franchise"}</CardTitle>
+            <CardTitle className="weekly-hero__title">{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · Ready to Advance` : "Advance Franchise"}</CardTitle>
             <p className="weekly-primary__subtitle">
               {nextGame ? `${nextGame.opp?.city ?? ""} ${nextGame.opp?.name ?? ""} next. Finalize prep, then advance.` : "Set priorities and keep the season moving."}
             </p>
@@ -110,9 +110,9 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
           </Button>
           <Button variant="secondary" onClick={() => onNavigate?.("Game Plan")} className="weekly-hero__action-secondary">Game Plan</Button>
           <Button variant="secondary" onClick={() => onNavigate?.("Roster")} className="weekly-hero__action-secondary">Roster</Button>
-          <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="More actions">
+          <Button variant="outline" onClick={() => onNavigate?.("Trades")} className="weekly-hero__action-overflow" aria-label="Trade Center">
             <span aria-hidden>⋯</span>
-            <span>Trade Desk</span>
+            <span>Trade Center</span>
           </Button>
         </CardContent>
       </Card>

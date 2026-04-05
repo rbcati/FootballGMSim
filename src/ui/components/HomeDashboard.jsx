@@ -149,7 +149,7 @@ function SectionCard({ title, icon, children, accent }) {
 
 // ── NEW: Large Advance Week CTA ────────────────────────────────────────────────
 function AdvanceWeekCTA({ phase, week, onAdvanceWeek, isBusy }) {
-  const label = phase === "regular" ? `Sim Week ${week}` :
+  const label = phase === "regular" ? `Advance Week ${week}` :
                 phase === "preseason" ? "Start Season" :
                 phase === "free_agency" ? "Enter Draft" : "Advance Phase";
   return (
