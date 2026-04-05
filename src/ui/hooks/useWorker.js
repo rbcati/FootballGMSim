@@ -451,6 +451,8 @@ export function useWorker() {
       request(toWorker.ACCEPT_INCOMING_TRADE, { offerId }),
     rejectIncomingTrade: (offerId) =>
       request(toWorker.REJECT_INCOMING_TRADE, { offerId }),
+    counterIncomingTrade: (offerId, offering, receiving) =>
+      request(toWorker.COUNTER_INCOMING_TRADE, { offerId, offering, receiving }),
     toggleTradeBlock: (playerId, teamId) =>
       request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
 

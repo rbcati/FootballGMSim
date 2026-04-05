@@ -107,27 +107,38 @@ function CapImpact({ myTeam, theirTeam, myCapAfter, theirCapAfter }) {
   );
 }
 
-function PickSelector({ side, picks, onChange }) {
-  const [round, setRound] = useState(1);
-  const [year, setYear] = useState(new Date().getFullYear() + 1);
-  const addPick = () => onChange(side, { kind: "pick", round, year, id: `${side}_${round}_${year}_${Date.now()}` });
+function pickLabel(pk) {
+  return `${pk?.season ?? pk?.year ?? "Future"} R${pk?.round ?? "?"}`;
+}
+
+function PickSelector({ side, picks, onChange, availablePicks = [] }) {
+  const [selectedPickId, setSelectedPickId] = useState("");
+  const available = useMemo(
+    () => availablePicks.filter((pk) => !picks.some((chosen) => String(chosen.id) === String(pk.id))),
+    [availablePicks, picks],
+  );
+  const addPick = () => {
+    if (!selectedPickId) return;
+    const chosen = available.find((pk) => String(pk.id) === String(selectedPickId));
+    if (!chosen) return;
+    onChange(side, chosen);
+    setSelectedPickId("");
+  };
   return (
     <div className="trade-pick-controls">
       <div className="trade-pick-controls__inputs">
-        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Add pick:</span>
-        <select value={round} onChange={(e) => setRound(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "4px 6px", fontSize: "var(--text-xs)" }}>
-        {[1,2,3,4,5,6,7].map(r => <option key={r} value={r}>R{r}</option>)}
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Add owned pick:</span>
+        <select value={selectedPickId} onChange={(e) => setSelectedPickId(e.target.value)} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "4px 6px", fontSize: "var(--text-xs)", minWidth: 148 }}>
+          <option value="">{available.length > 0 ? "Select pick…" : "No picks available"}</option>
+          {available.map((pk) => <option key={pk.id} value={pk.id}>{pickLabel(pk)}</option>)}
         </select>
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-sm)", padding: "4px 6px", fontSize: "var(--text-xs)" }}>
-        {[0,1,2].map(d => { const y = new Date().getFullYear() + 1 + d; return <option key={y} value={y}>{y}</option>; })}
-        </select>
-        <Button className="btn" style={{ fontSize: "var(--text-xs)", padding: "4px 10px" }} onClick={addPick}>+ Add</Button>
+        <Button className="btn" style={{ fontSize: "var(--text-xs)", padding: "4px 10px" }} onClick={addPick} disabled={!selectedPickId}>+ Add</Button>
       </div>
       {picks.length > 0 && (
         <div className="trade-pick-controls__chips">
           {picks.map(pk => (
             <span key={pk.id} className="trade-pick-chip">
-              {pk.year} R{pk.round}
+              {pickLabel(pk)}
               <Button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12, minHeight: 0 }} onClick={() => onChange(side, pk, true)}>×</Button>
             </span>
           ))}
@@ -177,7 +188,7 @@ function TradeBlockSummary({ myRosterMap, theirRosterMap, offering, receiving, m
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>You Give</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1)" }}>
             {offeredPlayers.map(p => <span key={p.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--surface-strong)", fontSize: "var(--text-xs)" }}>{p.pos} {p.name}</span>)}
-            {myPicks.map(pk => <span key={pk.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--accent)11", color: "var(--accent)" }}>{pk.year} R{pk.round}</span>)}
+            {myPicks.map(pk => <span key={pk.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--accent)11", color: "var(--accent)" }}>{pickLabel(pk)}</span>)}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>⇄</div>
@@ -185,7 +196,7 @@ function TradeBlockSummary({ myRosterMap, theirRosterMap, offering, receiving, m
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: "var(--space-2)" }}>You Receive</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-1)" }}>
             {receivedPlayers.map(p => <span key={p.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--surface-strong)", fontSize: "var(--text-xs)" }}>{p.pos} {p.name}</span>)}
-            {theirPicks.map(pk => <span key={pk.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--accent)11", color: "var(--accent)" }}>{pk.year} R{pk.round}</span>)}
+            {theirPicks.map(pk => <span key={pk.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--accent)11", color: "var(--accent)" }}>{pickLabel(pk)}</span>)}
           </div>
         </div>
       </div>
@@ -225,6 +236,7 @@ export default function TradeCenter({ league, actions }) {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [tradeResult, setTradeResult] = useState(null);
+  const [counterOfferId, setCounterOfferId] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const incomingOffers = useMemo(() => Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [], [league?.incomingTradeOffers]);
@@ -249,6 +261,16 @@ export default function TradeCenter({ league, actions }) {
 
   const liveMyTeam = useMemo(() => league?.teams?.find(t => t.id === myTeamId) ?? myTeam, [league?.teams, myTeamId, myTeam]);
   const liveTheirTeam = useMemo(() => targetId != null ? (league?.teams?.find(t => t.id === targetId) ?? theirTeam) : theirTeam, [league?.teams, targetId, theirTeam]);
+  const myAvailablePicks = useMemo(() => Array.isArray(liveMyTeam?.picks) ? liveMyTeam.picks : [], [liveMyTeam?.picks]);
+  const theirAvailablePicks = useMemo(() => Array.isArray(liveTheirTeam?.picks) ? liveTheirTeam.picks : [], [liveTheirTeam?.picks]);
+
+  useEffect(() => {
+    if (!counterOfferId) return;
+    const source = incomingOffers.find((offer) => offer.id === counterOfferId);
+    if (!source) return;
+    setMyPicks((source?.receiving?.pickIds ?? []).map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+    setTheirPicks((source?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+  }, [counterOfferId, incomingOffers, myAvailablePicks, theirAvailablePicks]);
 
   const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(id)), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
   const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(id)), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
@@ -276,6 +298,18 @@ export default function TradeCenter({ league, actions }) {
     else setter(prev => [...prev, pick]);
   };
 
+  const startCounterOffer = (offer) => {
+    const aiTeamId = Number(offer?.offeringTeamId);
+    if (!aiTeamId) return;
+    setCounterOfferId(offer.id);
+    setTargetId(aiTeamId);
+    setOffering(new Set(offer?.receiving?.playerIds ?? []));
+    setReceiving(new Set(offer?.offering?.playerIds ?? []));
+    setMyPicks((offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+    setTheirPicks((offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+    setTradeResult(null);
+  };
+
   const onDragStart = (e, player) => { e.dataTransfer.setData("playerId", player.id); };
   const onDrop = (e, side) => {
     e.preventDefault();
@@ -297,10 +331,15 @@ export default function TradeCenter({ league, actions }) {
     setSubmitting(true);
     setTradeResult(null);
     try {
-      const resp = await actions.submitTrade(myTeamId, targetId, { playerIds: [...offering], pickIds: myPicks.map(p => p.id) }, { playerIds: [...receiving], pickIds: theirPicks.map(p => p.id) });
+      const outgoing = { playerIds: [...offering], pickIds: myPicks.map(p => p.id) };
+      const incoming = { playerIds: [...receiving], pickIds: theirPicks.map(p => p.id) };
+      const resp = counterOfferId
+        ? await actions.counterIncomingTrade(counterOfferId, outgoing, incoming)
+        : await actions.submitTrade(myTeamId, targetId, outgoing, incoming);
       if (resp?.payload) setTradeResult(resp.payload);
       if (resp?.payload?.accepted) {
         setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]);
+        setCounterOfferId(null);
         await fetchRosters(targetId);
         actions.save();
         setShowSavedToast(true);
@@ -348,16 +387,26 @@ export default function TradeCenter({ league, actions }) {
             {incomingOffers.slice(0, 3).map((offer) => (
               <div key={offer.id} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 6 }}>
                 <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>
-                  {offer.offeringTeamAbbr} → {offer.offeringPlayerName} for {offer.receivingPlayerName}
+                  {offer.offeringTeamAbbr} offered a deal
                 </div>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{offer.reason}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+                  {offer.offeringPlayerName} {offer?.offeringPickSnapshots?.length ? `+ ${offer.offeringPickSnapshots.map((pk) => pk.label ?? pickLabel(pk)).join(", ")}` : ""} for {offer.receivingPlayerName}
+                </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Badge variant="secondary">{offer.offerType?.replaceAll("_", " ") ?? "market offer"}</Badge>
                   <Badge variant={offer.urgency === "high" ? "destructive" : "outline"}>{offer.urgency ?? "standard"}</Badge>
+                  {offer.stance ? <Badge variant="outline">{offer.stance}</Badge> : null}
                 </div>
+                {offer?.lastCounter?.reason ? (
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                    {offer.lastCounter.reason}
+                  </div>
+                ) : null}
                 <div style={{ display: "flex", gap: 8 }}>
                   <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(offer.id)}>Accept</Button>
                   <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
+                  <Button size="sm" variant="outline" onClick={() => startCounterOffer(offer)}>Counter</Button>
                   <Button
                     size="sm"
                     variant="outline"
@@ -375,7 +424,10 @@ export default function TradeCenter({ league, actions }) {
         <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-4)", flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Trade Partner</div>
-            <select value={targetId ?? ""} onChange={e => setTargetId(e.target.value ? Number(e.target.value) : null)} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220, width: "100%" }}>
+            <select value={targetId ?? ""} onChange={e => {
+              setTargetId(e.target.value ? Number(e.target.value) : null);
+              setCounterOfferId(null);
+            }} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220, width: "100%" }}>
               <option value="">Select a team…</option>
               {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
             </select>
@@ -387,9 +439,15 @@ export default function TradeCenter({ league, actions }) {
               <span>{liveTheirTeam.wins ?? 0}-{liveTheirTeam.losses ?? 0}{(liveTheirTeam.ties ?? 0) ? `-${liveTheirTeam.ties}` : ""} · OVR {liveTheirTeam.ovr ?? "—"}</span>
             </div>
           )}
-          {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : "Propose Trade"}</Button>}
+          {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
         </div>
       </div>
+      {counterOfferId && (
+        <div className="card" style={{ marginBottom: "var(--space-3)", padding: "10px 12px", border: "1px solid var(--accent)" }}>
+          <strong style={{ fontSize: "var(--text-xs)" }}>Counter mode: one response round</strong>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Adjust assets, then send your counter. The AI will accept, ask for more, or pass.</div>
+        </div>
+      )}
 
       {/* Trade result (original) */}
       {tradeResult && <TradeResult result={tradeResult} onDismiss={() => setTradeResult(null)} />}
@@ -424,7 +482,7 @@ export default function TradeCenter({ league, actions }) {
                   <PlayerCheckRow key={p.id} player={p} checked={offering.has(p.id)} onChange={toggleOffering} onNameClick={() => setPreviewPlayer(p)} />
                 ))}
               </div>
-              <PickSelector side="my" picks={myPicks} onChange={handlePickChange} />
+              <PickSelector side="my" picks={myPicks} onChange={handlePickChange} availablePicks={myAvailablePicks} />
             </div>
 
             {/* You Receive */}
@@ -438,7 +496,7 @@ export default function TradeCenter({ league, actions }) {
                   <PlayerCheckRow key={p.id} player={p} checked={receiving.has(p.id)} onChange={toggleReceiving} onNameClick={() => setPreviewPlayer(p)} />
                 ))}
               </div>
-              <PickSelector side="their" picks={theirPicks} onChange={handlePickChange} />
+              <PickSelector side="their" picks={theirPicks} onChange={handlePickChange} availablePicks={theirAvailablePicks} />
             </div>
           </div>
 

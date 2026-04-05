@@ -58,6 +58,7 @@ export const toWorker = Object.freeze({
   TRADE_OFFER:        'TRADE_OFFER',       // { fromTeamId, toTeamId, offering, receiving }
   ACCEPT_INCOMING_TRADE: 'ACCEPT_INCOMING_TRADE', // { offerId }
   REJECT_INCOMING_TRADE: 'REJECT_INCOMING_TRADE', // { offerId }
+  COUNTER_INCOMING_TRADE: 'COUNTER_INCOMING_TRADE', // { offerId, offering, receiving }
   RESPOND_TRADE:      'RESPOND_TRADE',     // { tradeId, accepted }
   TOGGLE_TRADE_BLOCK: 'TOGGLE_TRADE_BLOCK', // { playerId, teamId }
 
