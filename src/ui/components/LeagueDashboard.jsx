@@ -56,8 +56,6 @@ import AnalyticsHub from "./AnalyticsHub.jsx";
 import GlossaryPopover from "./GlossaryPopover.jsx";
 import OnboardingTour from "./OnboardingTour.jsx";
 import OffseasonHub from "./OffseasonHub.jsx";
-import V2Roadmap from "./V2Roadmap.jsx";
-import V2FeatureCenter from "./V2FeatureCenter.jsx";
 import GMAdvisor from "./GMAdvisor.jsx";
 import CapManager from "./CapManager.jsx";
 import DraftBigBoard from "./DraftBigBoard.jsx";
@@ -211,17 +209,12 @@ const BASE_TABS = [
   "Hall of Fame",
   "Analytics",
   "Offseason",
-  "V2 Roadmap",
   "Season Recap",
   "Saves",
   "God Mode",
-  "Training Lab",
-  "Scouting Center",
-  "Contracts Hub",
   "💰 Cap",
   "🎓 Draft",
   "🎙️ Coaches",
-  "League AI",
   "🤖 GM Advisor",
 ];
 
@@ -1877,11 +1870,6 @@ export default function LeagueDashboard({
             <OffseasonHub league={league} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
-        {activeTab === "V2 Roadmap" && (
-          <TabErrorBoundary label="V2 Roadmap">
-            <V2Roadmap onNavigate={setActiveTab} />
-          </TabErrorBoundary>
-        )}
         {activeTab === "Season Recap" && (
           <TabErrorBoundary label="Season Recap">
             <SeasonRecap
@@ -1889,26 +1877,6 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
             />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Training Lab" && (
-          <TabErrorBoundary label="Training Lab">
-            <V2FeatureCenter title="Training Lab" />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Scouting Center" && (
-          <TabErrorBoundary label="Scouting Center">
-            <V2FeatureCenter title="Scouting Center" />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Contracts Hub" && (
-          <TabErrorBoundary label="Contracts Hub">
-            <V2FeatureCenter title="Contracts Hub" />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "League AI" && (
-          <TabErrorBoundary label="League AI">
-            <V2FeatureCenter title="League AI Center" />
           </TabErrorBoundary>
         )}
         {isInitialized && activeTab === "🤖 GM Advisor" && (

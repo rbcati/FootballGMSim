@@ -40,10 +40,10 @@ function getUrgentItems(league) {
     items.push({ tone: "danger", label: "Injuries", detail: `${injuries.length} players unavailable`, tab: "Injuries" });
   }
   if (upcomingFreeAgents > 4) {
-    items.push({ tone: "warning", label: "Expiring Deals", detail: `${upcomingFreeAgents} contracts need action`, tab: "Contracts Hub" });
+    items.push({ tone: "warning", label: "Expiring Deals", detail: `${upcomingFreeAgents} contracts need action`, tab: "Financials" });
   }
   if ((league?.phase === "draft" || league?.phase === "offseason") && !league?.bigBoardLocked) {
-    items.push({ tone: "info", label: "Scouting", detail: "Finalize your board", tab: "Scouting Center" });
+    items.push({ tone: "info", label: "Scouting", detail: "Finalize your board", tab: "🎓 Draft" });
   }
   if (ownerMood != null && ownerMood < 55) {
     items.push({ tone: "danger", label: "Owner Pressure", detail: "Approval is trending down", tab: "🤖 GM Advisor" });
