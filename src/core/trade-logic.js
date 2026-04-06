@@ -618,6 +618,7 @@ export function generateAITradeProposalsForUser({
     const proposal = {
       id: `offer_${meta?.season ?? meta?.year ?? 1}_${week}_${aiTeam.id}_${aiOfferCandidate.player.id}_${Date.now()}`,
       week,
+      createdWeek: week,
       season: meta?.season ?? meta?.year ?? 1,
       offeringTeamId: aiTeam.id,
       offeringTeamAbbr: aiTeam.abbr,
@@ -649,6 +650,7 @@ export function generateAITradeProposalsForUser({
       expiresAfterWeek: week + 2,
       timestamp: Date.now(),
     };
+    proposal.signature = buildOfferSignature(proposal);
 
     usedPlayerIds.add(aiOfferCandidate.player.id);
     usedPlayerIds.add(userAsset.player.id);

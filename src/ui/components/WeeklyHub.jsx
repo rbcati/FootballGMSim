@@ -6,7 +6,7 @@ import { ACTION_LABELS } from "../constants/navigationCopy.js";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
 import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalizeTeamId } from "../utils/gamePresentation.js";
-import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
+import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -79,6 +79,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const ownerDisplay = formatPercent(ownerMood, "—", { digits: 0 });
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
+  const topOfferIdentity = topOffer ? getOfferIdentity(topOffer) : null;
   const topPriorities = weeklyContext.topPriorities?.length
     ? weeklyContext.topPriorities
     : [{ tone: "ok", level: "recommendation", label: "All Clear", detail: "No urgent blockers right now.", why: "You can safely advance once prep is set.", tab: "Weekly Hub" }];
@@ -299,8 +300,11 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               </div>
               {topOfferSummary ? (
                 <div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Offer ref: {topOfferIdentity?.label}</div>
                   <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.userImpact.abbr}</strong> OVR {topOfferSummary.userImpact.ovr.before} → {topOfferSummary.userImpact.ovr.after} · {topOfferSummary.userImpact.capLine}</div>
+                  {topOfferSummary.userImpact.rankImpact.lines.length ? <div>Depth: {topOfferSummary.userImpact.rankImpact.lines.join(" · ")}</div> : null}
                   <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.offeringImpact.abbr}</strong> OVR {topOfferSummary.offeringImpact.ovr.before} → {topOfferSummary.offeringImpact.ovr.after} · {topOfferSummary.offeringImpact.capLine}</div>
+                  {topOfferSummary.offeringImpact.rankImpact.lines.length ? <div>Depth: {topOfferSummary.offeringImpact.rankImpact.lines.join(" · ")}</div> : null}
                 </div>
               ) : null}
               {topOfferSummary ? <div><strong style={{ color: "var(--text)" }}>GM read:</strong> {topOfferSummary.recommendation}</div> : null}
