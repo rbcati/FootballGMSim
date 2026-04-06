@@ -1317,7 +1317,7 @@ export default function LeagueDashboard({
             {league.week && <span> · Week {league.week}</span>}
             {" · "}
             <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
-              Owner {ownerApprovalText}
+              Owner {ownerApprovalText}{ownerApproval != null && ownerApproval < 50 ? " (Seat Hot)" : ""}
             </span>
           </div>
         </div>
