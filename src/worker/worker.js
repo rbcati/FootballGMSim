@@ -92,6 +92,7 @@ import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
+import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -524,6 +525,85 @@ function buildRosterView(teamId) {
 // Every other path that might call flushDirty() is therefore safely blocked.
 let _saveIsExplicitlyLoaded = false;
 
+const LEAGUE_DB_PREFIX = 'FootballGM_League_';
+
+function postManifestUpdate(entry) {
+  self.postMessage({ type: 'SAVE_MANIFEST_UPDATE', payload: entry });
+}
+
+function postManifestRemove(saveId) {
+  self.postMessage({ type: 'SAVE_MANIFEST_REMOVE', payload: { id: saveId } });
+}
+
+function postManifestReplace(saves) {
+  self.postMessage({ type: 'SAVE_MANIFEST_REPLACE', payload: { saves } });
+}
+
+async function leagueMetaExists(leagueId) {
+  const dbName = `${LEAGUE_DB_PREFIX}${leagueId}`;
+  return new Promise((resolve) => {
+    let req;
+    try {
+      req = indexedDB.open(dbName);
+    } catch (_) {
+      resolve(null);
+      return;
+    }
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('meta')) {
+        db.close();
+        resolve(false);
+        return;
+      }
+      const tx = db.transaction(['meta'], 'readonly');
+      const store = tx.objectStore('meta');
+      const getReq = store.get('league');
+      getReq.onerror = () => {
+        db.close();
+        resolve(null);
+      };
+      getReq.onsuccess = () => {
+        db.close();
+        resolve(!!getReq.result);
+      };
+    };
+  });
+}
+
+async function getTrustedSaveList() {
+  const rawSaves = await Saves.loadAll();
+  const { saves: sanitized } = sanitizeSaveList(rawSaves);
+
+  const validSaves = [];
+  for (const save of sanitized) {
+    const exists = await leagueMetaExists(save.id);
+    if (exists === true || exists === null) validSaves.push(save);
+  }
+
+  const validIds = new Set(validSaves.map((s) => s.id));
+  const stale = sanitized.filter((s) => !validIds.has(s.id));
+  for (const orphan of stale) {
+    await Saves.delete(orphan.id).catch(() => {});
+    postManifestRemove(orphan.id);
+  }
+
+  validSaves.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+  postManifestReplace(validSaves);
+  return validSaves;
+}
+
+async function createUniqueLeagueId() {
+  const saves = await Saves.loadAll();
+  const existing = new Set(saves.map((s) => s?.id).filter(Boolean));
+  let attempt = Utils.id();
+  while (!isValidSaveId(attempt) || existing.has(attempt)) {
+    attempt = Utils.id();
+  }
+  return attempt;
+}
+
 // ── DB flush ─────────────────────────────────────────────────────────────────
 
 /**
@@ -636,13 +716,13 @@ async function flushDirty() {
     const _hbLeagueId = getActiveLeagueId();
     if (_hbMeta && _hbLeagueId) {
       const _hbUserTeam = cache.getTeam(_hbMeta.userTeamId);
-      self.postMessage({ type: 'SAVE_MANIFEST_UPDATE', payload: {
+      postManifestUpdate({
         id:        _hbLeagueId,
         name:      _hbMeta.name || `League ${_hbLeagueId}`,
         year:      _hbMeta.year,
         teamAbbr:  _hbUserTeam?.abbr,
         lastPlayed: Date.now(),
-      }});
+      });
     }
   } catch (_) { /* non-fatal — manifest is best-effort */ }
 }
@@ -685,8 +765,7 @@ async function handleInit(payload, id) {
 
 async function handleGetAllSaves(payload, id) {
   try {
-    const saves = await Saves.loadAll();
-    saves.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+    const saves = await getTrustedSaveList();
     post(toUI.ALL_SAVES, { saves }, id);
   } catch (err) {
     post(toUI.ERROR, { message: err.message }, id);
@@ -696,7 +775,7 @@ async function handleGetAllSaves(payload, id) {
 // ── Handler: LOAD_SAVE ────────────────────────────────────────────────────────
 
 async function handleLoadSave({ leagueId }, id) {
-  if (!leagueId) { post(toUI.ERROR, { message: "No leagueId provided" }, id); return; }
+  if (!leagueId || !isValidSaveId(leagueId)) { post(toUI.ERROR, { message: "Invalid leagueId provided" }, id); return; }
 
   try {
     configureActiveLeague(leagueId);
@@ -769,13 +848,25 @@ async function handleLoadSave({ leagueId }, id) {
 // ── Handler: DELETE_SAVE ──────────────────────────────────────────────────────
 
 async function handleDeleteSave({ leagueId }, id) {
+  if (!leagueId || !isValidSaveId(leagueId)) {
+    post(toUI.ERROR, { message: 'Invalid leagueId for DELETE_SAVE' }, id);
+    return;
+  }
   try {
     await Saves.delete(leagueId);
     await deleteLeagueDB(leagueId);
+    postManifestRemove(leagueId);
+
+    if (getActiveLeagueId() === leagueId) {
+      cache.reset();
+      _saveIsExplicitlyLoaded = false;
+      configureActiveLeague(null);
+      post(toUI.NOTIFICATION, { level: 'info', message: 'Active save was deleted and has been unloaded.' });
+    }
     // Return updated list
     await handleGetAllSaves({}, id);
   } catch (e) {
-    post(toUI.ERROR, { message: e.message }, id);
+    post(toUI.ERROR, { message: `Delete failed for ${leagueId}: ${e.message}` }, id);
   }
 }
 
@@ -795,7 +886,7 @@ async function handleRenameSave({ leagueId, name }, id) {
     }
     await Saves.put({ ...existing, name: name.trim() });
     // Broadcast updated manifest entry so localStorage mirror stays in sync
-    self.postMessage({ type: 'SAVE_MANIFEST_UPDATE', payload: { ...existing, name: name.trim() } });
+    postManifestUpdate({ ...existing, name: name.trim() });
     // Return updated saves list
     await handleGetAllSaves({}, id);
   } catch (e) {
@@ -811,10 +902,10 @@ async function handleNewLeague(payload, id) {
     const userTeamId = options.userTeamId ?? 0;
 
     // Generate new League ID
-    const leagueId = Utils.id();
+    const leagueId = await createUniqueLeagueId();
     configureActiveLeague(leagueId);
 
-    // Wipe any existing data in this new DB (should be empty but good practice)
+    // Wipe any existing data in this DB (defensive guard for unexpected ID collisions)
     await clearAllData();
     cache.reset();
 
@@ -934,6 +1025,7 @@ async function handleNewLeague(payload, id) {
         lastPlayed: Date.now()
     };
     await Saves.save(saveEntry);
+    postManifestUpdate(saveEntry);
 
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (err) {
@@ -2459,6 +2551,14 @@ async function handleSaveSlot({ slotKey }, id) {
       teamAbbr: userTeam?.abbr ?? '???',
       lastPlayed: Date.now(),
     });
+    postManifestUpdate({
+      id: slotKey,
+      name: meta?.name ?? `Franchise ${slotKey?.split('_')?.[2] ?? '1'}`,
+      year: meta?.year,
+      teamId: meta?.userTeamId,
+      teamAbbr: userTeam?.abbr ?? '???',
+      lastPlayed: Date.now(),
+    });
 
     _saveIsExplicitlyLoaded = true;
     post(toUI.SAVED, {}, id);
@@ -2476,6 +2576,7 @@ async function handleDeleteSlot({ slotKey }, id) {
   try {
     await Saves.delete(slotKey);
     await deleteLeagueDB(slotKey);
+    postManifestRemove(slotKey);
     post(toUI.STATE_UPDATE, { activeSlot: null }, id);
   } catch (err) {
     post(toUI.ERROR, { message: err?.message ?? 'Failed to delete slot.' }, id);

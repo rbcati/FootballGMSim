@@ -1,6 +1,31 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { teamColor } from "../../data/team-utils.js";
 
+function validateSaveEntry(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || "").trim();
+  if (!id || /\s/.test(id)) return null;
+  return {
+    id,
+    name: String(raw.name || `League ${id}`).trim(),
+    year: Number.isFinite(Number(raw.year)) ? Number(raw.year) : null,
+    teamId: raw.teamId ?? null,
+    teamAbbr: String(raw.teamAbbr || "???").trim() || "???",
+    lastPlayed: Number.isFinite(Number(raw.lastPlayed)) ? Number(raw.lastPlayed) : 0,
+    recovered: !!raw.recovered,
+  };
+}
+
+function normalizeSaveList(rawSaves = []) {
+  const list = [];
+  for (const raw of rawSaves) {
+    const normalized = validateSaveEntry(raw);
+    if (normalized) list.push(normalized);
+  }
+  list.sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+  return list;
+}
+
 export default function SaveManager({ actions, onCreate }) {
   const [saves, setSaves] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -16,30 +41,27 @@ export default function SaveManager({ actions, onCreate }) {
       setLoading(true);
       setError(null);
       const res = await actions.getAllSaves();
-      const idbSaves = res?.saves || res?.payload?.saves || [];
-      if (idbSaves.length === 0) {
-        try {
-          const manifest = JSON.parse(
-            localStorage.getItem("gmsim_save_manifest") || "[]",
-          );
-          if (manifest.length > 0) {
-            setError("Save index recovered from backup. Some saves may not load.");
-            setSaves(manifest.map((s) => ({ ...s, recovered: true })));
-            return;
-          }
-        } catch (_me) { /* ignore */ }
-      }
+      const idbSaves = normalizeSaveList(res?.saves || res?.payload?.saves || []);
       setSaves(idbSaves);
     } catch (err) {
       console.error(err);
+      const message = String(err?.message || "");
+      const isDbUnavailable = /database|indexeddb|idb|blocked|version|timed out/i.test(message);
+      if (!isDbUnavailable) {
+        setError(err.message || "Failed to fetch saves.");
+        setSaves([]);
+        return;
+      }
       try {
         const manifest = JSON.parse(
           localStorage.getItem("gmsim_save_manifest") || "[]",
         );
-        setSaves(manifest.map((s) => ({ ...s, recovered: true })));
-        setError(`Database error — showing recovered saves`);
+        const recovered = normalizeSaveList(manifest).map((s) => ({ ...s, recovered: true }));
+        setSaves(recovered);
+        setError("IndexedDB unavailable. Showing recovery list only; entries may be incomplete.");
       } catch (_me) {
-        setError(err.message);
+        setError(err.message || "Failed to fetch saves.");
+        setSaves([]);
       }
     } finally {
       setLoading(false);
@@ -81,16 +103,8 @@ export default function SaveManager({ actions, onCreate }) {
     setDeletingId(id);
     setSaveErrors((prev) => ({ ...prev, [id]: null }));
     try {
-      const res = await actions.deleteSave(id);
-      const updated = res?.saves || res?.payload?.saves || [];
-      setSaves(updated);
-      try {
-        const manifest = JSON.parse(
-          localStorage.getItem("gmsim_save_manifest") || "[]",
-        );
-        const filtered = manifest.filter((s) => s.id !== id);
-        localStorage.setItem("gmsim_save_manifest", JSON.stringify(filtered));
-      } catch (_) {}
+      await actions.deleteSave(id);
+      await fetchSaves();
     } catch (err) {
       setSaveErrors((prev) => ({
         ...prev,
@@ -110,16 +124,14 @@ export default function SaveManager({ actions, onCreate }) {
     const trimmed = renameValue.trim();
     if (!trimmed) { setRenamingId(null); return; }
     try {
-      const res = await actions.renameSave(id, trimmed);
-      const updated = res?.saves || res?.payload?.saves || [];
-      if (updated.length > 0) setSaves(updated);
-      else setSaves(prev => prev.map(s => s.id === id ? { ...s, name: trimmed } : s));
+      await actions.renameSave(id, trimmed);
+      await fetchSaves();
     } catch (err) {
       setSaveErrors(prev => ({ ...prev, [id]: "Rename failed: " + err.message }));
     } finally {
       setRenamingId(null);
     }
-  }, [actions, renameValue]);
+  }, [actions, renameValue, fetchSaves]);
 
   if (loading) {
     return (
@@ -204,10 +216,10 @@ export default function SaveManager({ actions, onCreate }) {
                   <div
                     key={save.id}
                     className={`sm-save-card ${isLoading ? "sm-save-loading" : ""} ${saveError ? "sm-save-errored" : ""} ${save.recovered ? "sm-save-recovered" : ""}`}
-                    onClick={() => !isBusy && !saveError && handleLoad(save.id)}
+                    onClick={() => !isBusy && !saveError && !save.recovered && handleLoad(save.id)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && !isBusy && !saveError && handleLoad(save.id)}
+                    onKeyDown={(e) => e.key === "Enter" && !isBusy && !saveError && !save.recovered && handleLoad(save.id)}
                     style={{ animationDelay: `${idx * 50}ms` }}
                   >
                     {/* Team badge with team color */}
@@ -280,18 +292,19 @@ export default function SaveManager({ actions, onCreate }) {
                           ) : (
                             <button
                               className="sm-btn sm-btn-load"
-                              disabled={isBusy}
+                              disabled={isBusy || save.recovered}
                               onClick={() => handleLoad(save.id)}
+                              title={save.recovered ? "Recovery entry: database unavailable" : "Load save"}
                             >
                               Play
                             </button>
                           )}
                           <button
                             className="sm-btn sm-btn-delete"
-                            disabled={isBusy}
+                            disabled={isBusy || save.recovered}
                             onClick={() => handleRenameStart(save)}
                             title="Rename save"
-                            style={{ opacity: isBusy ? 0.4 : 1 }}
+                            style={{ opacity: (isBusy || save.recovered) ? 0.4 : 1 }}
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -300,9 +313,9 @@ export default function SaveManager({ actions, onCreate }) {
                           </button>
                           <button
                             className="sm-btn sm-btn-delete"
-                            disabled={isBusy}
+                            disabled={isBusy || save.recovered}
                             onClick={() => handleDelete(save.id)}
-                            title="Delete save"
+                            title={save.recovered ? "Recovery entry: delete unavailable while database is offline" : "Delete save"}
                           >
                             {isDeleting ? (
                               <div className="sm-save-spinner" style={{ width: 16, height: 16 }} />
