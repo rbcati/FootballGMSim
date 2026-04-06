@@ -1947,6 +1947,84 @@ async function handleGetRecords(payload, id) {
   post(toUI.RECORDS, { records }, id);
 }
 
+async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const resolvedSeasonId = seasonId ?? meta?.currentSeasonId ?? null;
+
+  let rows = [];
+  if (teamId != null) {
+    rows = await Transactions.byTeam(Number(teamId)).catch(() => []);
+    if (resolvedSeasonId) {
+      rows = rows.filter((row) => row?.seasonId === resolvedSeasonId);
+    }
+  } else if (resolvedSeasonId) {
+    rows = await Transactions.bySeason(resolvedSeasonId).catch(() => []);
+  }
+
+  const allTeams = cache.getAllTeams();
+  const teamById = new Map(allTeams.map((t) => [Number(t.id), t]));
+  const teamLookup = (idValue) => teamById.get(Number(idValue));
+
+  const txTypeLabel = (type = "") => {
+    const map = {
+      SIGN: "Signing",
+      RELEASE: "Release",
+      EXTEND: "Extension",
+      RESTRUCTURE: "Restructure",
+      FRANCHISE_TAG: "Franchise Tag",
+      TRADE: "Trade",
+    };
+    return map[type] ?? type;
+  };
+
+  const payloadRows = rows
+    .map((tx) => {
+      const details = tx?.details ?? {};
+      const team = teamLookup(tx?.teamId);
+      const player = details?.playerId != null ? cache.getPlayer(details.playerId) : null;
+      const fromTeam = details?.fromTeamId != null ? teamLookup(details.fromTeamId) : null;
+      const toTeam = details?.toTeamId != null ? teamLookup(details.toTeamId) : null;
+      const contract = details?.contract ?? null;
+      const annual = Number(contract?.baseAnnual ?? 0);
+      const years = Number(contract?.yearsTotal ?? contract?.years ?? 0);
+      const bonus = Number(contract?.signingBonus ?? 0);
+
+      return {
+        id: tx?.id,
+        type: tx?.type,
+        typeLabel: txTypeLabel(tx?.type),
+        seasonId: tx?.seasonId ?? null,
+        week: tx?.week ?? null,
+        teamId: tx?.teamId ?? null,
+        teamAbbr: team?.abbr ?? null,
+        teamName: team?.name ?? null,
+        playerId: details?.playerId ?? null,
+        playerName: player?.name ?? null,
+        playerPos: player?.pos ?? null,
+        fromTeamId: details?.fromTeamId ?? null,
+        toTeamId: details?.toTeamId ?? null,
+        fromTeamAbbr: fromTeam?.abbr ?? null,
+        toTeamAbbr: toTeam?.abbr ?? null,
+        years: years || null,
+        annual: Number.isFinite(annual) ? annual : null,
+        totalValue: (years > 0 && Number.isFinite(annual)) ? (annual * years + bonus) : null,
+        details,
+      };
+    })
+    .sort((a, b) => {
+      const sa = String(a?.seasonId ?? "");
+      const sb = String(b?.seasonId ?? "");
+      if (sa !== sb) return sb.localeCompare(sa);
+      const wa = Number(a?.week ?? -1);
+      const wb = Number(b?.week ?? -1);
+      if (wa !== wb) return wb - wa;
+      return Number(b?.id ?? 0) - Number(a?.id ?? 0);
+    })
+    .slice(0, 300);
+
+  post(toUI.TRANSACTIONS, { transactions: payloadRows }, id);
+}
+
 // ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
 
 async function handleGetHallOfFame(payload, id) {
@@ -5160,7 +5238,16 @@ async function handleGetTeamProfile({ teamId }, id) {
 
   // Top current players (for quick roster preview)
   const currentPlayers = cache.getPlayersByTeam(numId)
-    .map(p => ({ id: p.id, name: p.name, pos: p.pos, age: p.age, ovr: p.ovr }))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      pos: p.pos,
+      age: p.age,
+      ovr: p.ovr,
+      injuryWeeksRemaining: p.injuryWeeksRemaining ?? p.injury?.weeksRemaining ?? 0,
+      contract: p.contract ?? null,
+      years: p.years ?? null,
+    }))
     .sort((a, b) => b.ovr - a.ovr)
     .slice(0, 12);
 
@@ -5682,6 +5769,7 @@ async function handleMessage(event) {
       case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
       case toWorker.GET_RECORDS:        return await handleGetRecords(payload, id);
       case toWorker.GET_HALL_OF_FAME:   return await handleGetHallOfFame(payload, id);
+      case toWorker.GET_TRANSACTIONS:   return await handleGetTransactions(payload, id);
 
       default:
         console.warn(`[Worker] Unknown message type: ${type}`);

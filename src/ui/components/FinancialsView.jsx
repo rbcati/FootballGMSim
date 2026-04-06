@@ -223,6 +223,49 @@ export default function FinancialsView({ league, actions }) {
     });
   }, [enriched, sortCol, sortDir]);
 
+  const capByYear = useMemo(() => {
+    const years = [1, 2, 3, 4];
+    return years.map((yr) => {
+      const committed = enriched.reduce((sum, p) => {
+        const rem = Number(p.yearsRemaining ?? 0);
+        if (rem < yr) return sum;
+        const bonusYears = Math.max(Number(p.yearsTotal ?? 1), 1);
+        return sum + Number(p.baseAnnual ?? 0) + (Number(p.signingBonus ?? 0) / bonusYears);
+      }, 0);
+      return { yearOffset: yr, committed };
+    });
+  }, [enriched]);
+
+  const expiringDeals = useMemo(
+    () => [...enriched].filter((p) => Number(p.yearsRemaining) === 1).sort((a, b) => (b.capHit ?? 0) - (a.capHit ?? 0)).slice(0, 8),
+    [enriched],
+  );
+
+  const largestDeals = useMemo(
+    () => [...enriched].sort((a, b) => (b.capHit ?? 0) - (a.capHit ?? 0)).slice(0, 8),
+    [enriched],
+  );
+
+  const capByGroup = useMemo(() => {
+    const groupOf = (pos = "") => {
+      const p = String(pos).toUpperCase();
+      if (["QB"].includes(p)) return "QB";
+      if (["RB", "FB"].includes(p)) return "RB";
+      if (["WR", "TE"].includes(p)) return "Receivers";
+      if (["OL", "OT", "OG", "C"].includes(p)) return "OL";
+      if (["DL", "DE", "DT", "EDGE"].includes(p)) return "DL";
+      if (["LB"].includes(p)) return "LB";
+      if (["CB", "S", "SS", "FS"].includes(p)) return "DB";
+      return "ST";
+    };
+    const buckets = {};
+    for (const p of enriched) {
+      const g = groupOf(p.pos);
+      buckets[g] = (buckets[g] ?? 0) + Number(p.capHit ?? 0);
+    }
+    return Object.entries(buckets).map(([group, cap]) => ({ group, cap, pct: hardCap > 0 ? (cap / hardCap) * 100 : 0 })).sort((a, b) => b.cap - a.cap);
+  }, [enriched, hardCap]);
+
   const handleSort = (col) => {
     if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else {
@@ -414,6 +457,58 @@ export default function FinancialsView({ league, actions }) {
           sub={`vs. $${hardCap}M hard cap`}
           danger={isOverCap}
         />
+      </div>
+
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardHeader><CardTitle>Cap Commitments & Allocation</CardTitle></CardHeader>
+        <CardContent style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+            {capByYear.map((slot) => (
+              <div key={slot.yearOffset} style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px", background: "var(--surface-strong)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-secondary)" }}>Year +{slot.yearOffset - 1}</div>
+                <div style={{ fontSize: 17, fontWeight: 800 }}>{fmt(slot.committed)}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{fmt(Math.max(hardCap - slot.committed, 0))} projected room*</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8 }}>
+            {capByGroup.map((g) => (
+              <div key={g.group} style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px" }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{g.group}</div>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)", fontSize: 12 }}>
+                  <span>{fmt(g.cap)}</span>
+                  <span>{g.pct.toFixed(1)}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-subtle)" }}>*Commitment view uses current contracts only; no speculative future signings.</div>
+        </CardContent>
+      </Card>
+
+      <div style={{ display: "grid", gap: 12, marginBottom: "var(--space-5)", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))" }}>
+        <Card className="card-premium">
+          <CardHeader><CardTitle style={{ fontSize: 15 }}>Top Cap Hits</CardTitle></CardHeader>
+          <CardContent style={{ display: "grid", gap: 6 }}>
+            {largestDeals.map((p) => (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span>{p.name} ({p.pos})</span>
+                <strong>{fmt(p.capHit)}</strong>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        <Card className="card-premium">
+          <CardHeader><CardTitle style={{ fontSize: 15 }}>Expiring Deals (1y left)</CardTitle></CardHeader>
+          <CardContent style={{ display: "grid", gap: 6 }}>
+            {expiringDeals.length === 0 ? <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No expiring contracts.</div> : expiringDeals.map((p) => (
+              <div key={p.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span>{p.name} ({p.pos}, age {p.age})</span>
+                <strong>{fmt(p.capHit)}</strong>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── June 1st Explanation ── */}

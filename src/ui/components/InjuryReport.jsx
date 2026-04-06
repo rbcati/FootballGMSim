@@ -400,6 +400,24 @@ export default function InjuryReport({ league, onPlayerSelect }) {
     [allInjured, userTeamId],
   );
 
+  const teamBurden = useMemo(() => {
+    return teams.map((t) => {
+      const roster = t.roster || t.players || [];
+      const injured = roster.filter((p) => p.injured || (p.injury && p.injury.weeksRemaining > 0));
+      const totalWeeks = injured.reduce((sum, p) => sum + Number(p?.injury?.weeksRemaining ?? 0), 0);
+      return { id: t.id ?? t.tid, abbr: t.abbr || t.name, count: injured.length, totalWeeks };
+    }).sort((a, b) => (b.count - a.count) || (b.totalWeeks - a.totalWeeks)).slice(0, 8);
+  }, [teams]);
+
+  const positionPressure = useMemo(() => {
+    const buckets = {};
+    allInjured.forEach((p) => {
+      const pos = String(p.pos || p.position || "?").toUpperCase();
+      buckets[pos] = (buckets[pos] ?? 0) + 1;
+    });
+    return Object.entries(buckets).map(([pos, count]) => ({ pos, count })).sort((a, b) => b.count - a.count).slice(0, 6);
+  }, [allInjured]);
+
   const filteredLeague = useMemo(() => {
     let list = [...allInjured];
 
@@ -458,6 +476,32 @@ export default function InjuryReport({ league, onPlayerSelect }) {
 
       {/* Quick Stats */}
       <QuickStats players={allInjured} />
+
+      <Card className="card-premium" style={{ marginBottom: 20 }}>
+        <CardContent className="p-4" style={{ display: "grid", gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>Availability pressure snapshots</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+            <div style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Most impacted teams</div>
+              {teamBurden.map((t) => (
+                <div key={t.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                  <span>{t.abbr}</span>
+                  <span>{t.count} injuries · {t.totalWeeks} wks</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 6 }}>Position-group pressure</div>
+              {positionPressure.map((p) => (
+                <div key={p.pos} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
+                  <span>{p.pos}</span>
+                  <span>{p.count} out</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── My Team Section ─────────────────────────────────────────────── */}
       <Card className="card-premium" style={{ marginBottom: 24 }}>
