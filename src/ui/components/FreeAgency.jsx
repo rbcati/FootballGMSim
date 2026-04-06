@@ -95,6 +95,19 @@ function suggestedYears(age) {
   return 1;
 }
 
+function resolveDemandAnnual(player) {
+  const explicit = [
+    player?.contractDemand?.baseAnnual,
+    player?.contractDemand?.annual,
+    player?.desiredContract?.baseAnnual,
+    player?.desiredContract?.annual,
+    player?.askingPrice,
+    player?.ask,
+  ].find((v) => Number.isFinite(v) && v > 0);
+  if (explicit != null) return Number(explicit);
+  return suggestedSalary(player?.ovr ?? 50, player?.pos, player?.age ?? 28);
+}
+
 function ovrColor(ovr) {
   if (ovr >= 85) return "var(--success)";
   if (ovr >= 75) return "var(--accent)";
@@ -615,13 +628,13 @@ export default function FreeAgency({
   const capTotal = userTeam?.capTotal ?? 255;
   const capUsed = userTeam?.capUsed ?? 0;
   const deadCap = userTeam?.deadCap ?? 0;
-  const capRoom = capTotal - capUsed - deadCap;
+  const capRoom = userTeam?.capRoom ?? (capTotal - capUsed - deadCap);
 
   const faPool = useMemo(() => {
     if (!faState?.freeAgents) return [];
     return faState.freeAgents.map((p) => ({
       ...p,
-      _ask: suggestedSalary(p.ovr, p.pos, p.age),
+      _ask: resolveDemandAnnual(p),
     }));
   }, [faState]);
 
@@ -656,13 +669,20 @@ export default function FreeAgency({
     return arr;
   }, [displayed, sortKey, sortDir]);
 
-  const priorityTargets = useMemo(
-    () => sortedAgents.filter((p) => (p.tags || []).includes("expiring") || p.isExpiring).slice(0, 5),
-    [sortedAgents]
-  );
+  const isResignPhase = faState?.phase === "offseason_resign";
+  const priorityTargets = useMemo(() => {
+    if (isResignPhase) {
+      return sortedAgents.filter((p) => (p.tags || []).includes("expiring") || p.isExpiring).slice(0, 5);
+    }
+    return sortedAgents.slice(0, 5);
+  }, [sortedAgents, isResignPhase]);
   const projectedPriorityCost = useMemo(
     () => priorityTargets.reduce((sum, p) => sum + (p._ask ?? 0), 0),
     [priorityTargets]
+  );
+  const affordableTargets = useMemo(
+    () => priorityTargets.filter((p) => (p._ask ?? 0) <= capRoom + 0.01).length,
+    [priorityTargets, capRoom],
   );
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -708,14 +728,14 @@ export default function FreeAgency({
     setTimeout(() => setFlash(null), 3000);
   };
 
-  const handleQuickResignPriorities = () => {
+  const handleQuickFilterPriorities = () => {
     setPosFilter("ALL");
     setMinOvr(75);
     setSortKey("ovr");
     setSortDir("desc");
     setNameFilter("");
     setShowCapPreview(true);
-    showFlash("Priorities loaded: OVR 75+ sorted by impact.");
+    showFlash(isResignPhase ? "Re-sign priorities loaded: OVR 75+." : "Top-target quick filter loaded: OVR 75+.");
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -832,16 +852,16 @@ export default function FreeAgency({
         style={{
           marginBottom: "var(--space-4)",
           position: "sticky",
-          top: "max(8px, env(safe-area-inset-top))",
+          top: "calc(env(safe-area-inset-top) + 4px)",
           zIndex: 9,
         }}
       >
         <CardContent
           style={{
-            padding: "var(--space-4)",
+            padding: "var(--space-3)",
             display: "flex",
             flexDirection: "column",
-            gap: "var(--space-4)",
+            gap: "var(--space-2)",
           }}
         >
           {/* Top row: search & OVR */}
@@ -849,6 +869,7 @@ export default function FreeAgency({
             style={{
               display: "flex",
               gap: "var(--space-4)",
+              rowGap: "var(--space-2)",
               flexWrap: "wrap",
               alignItems: "center",
             }}
@@ -889,13 +910,15 @@ export default function FreeAgency({
                 }}
               />
             </div>
-            <Button
-              className="btn btn-primary"
-              onClick={handleQuickResignPriorities}
-              style={{ whiteSpace: "nowrap" }}
-            >
-              Quick Re-sign Priorities
-            </Button>
+            {isResignPhase ? (
+              <Button className="btn btn-primary" onClick={handleQuickFilterPriorities} style={{ whiteSpace: "nowrap" }}>
+                Quick Filter: Re-sign Priorities
+              </Button>
+            ) : (
+              <Button className="btn btn-primary" onClick={handleQuickFilterPriorities} style={{ whiteSpace: "nowrap" }}>
+                Quick Filter: Top Targets
+              </Button>
+            )}
           </div>
 
           {/* Bottom row: Position Pills */}
@@ -935,10 +958,13 @@ export default function FreeAgency({
                 Cap Impact Preview
               </div>
               <div style={{ fontWeight: 800, color: "var(--text)" }}>
-                Top 5 priorities: ${projectedPriorityCost.toFixed(1)}M / yr projected
+                {priorityTargets.length} filtered target{priorityTargets.length === 1 ? "" : "s"}: ${projectedPriorityCost.toFixed(1)}M / yr total demand
               </div>
               <div style={{ fontSize: "var(--text-xs)", color: projectedPriorityCost > capRoom ? "var(--danger)" : "var(--success)" }}>
-                Remaining cap after priorities: ${(capRoom - projectedPriorityCost).toFixed(1)}M
+                You can currently afford {affordableTargets}/{priorityTargets.length || 0} · remaining room: ${(capRoom - projectedPriorityCost).toFixed(1)}M
+              </div>
+              <div style={{ fontSize: "10px", color: "var(--text-subtle)", marginTop: 2 }}>
+                Uses each player's current ask/demand when available.
               </div>
             </div>
             <Button className="btn" onClick={() => setShowCapPreview(false)}>Close</Button>

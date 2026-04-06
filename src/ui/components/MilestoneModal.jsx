@@ -259,6 +259,13 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
   if (!champ) return null;
 
   const color = teamColor(champ.abbr ?? "");
+  const winPct = (champ.wins + champ.losses) > 0 ? champ.wins / (champ.wins + champ.losses) : null;
+  let recap = null;
+  if (winPct != null) {
+    recap = `${champ.wins}-${champ.losses} (${(winPct * 100).toFixed(1)}% win rate) and finished on top.`;
+  } else if (Number.isFinite(champ.ovr)) {
+    recap = `Closed the year with a ${champ.ovr} OVR title run.`;
+  }
 
   return (
     <div
@@ -274,13 +281,13 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "var(--space-5)",
-        padding: "var(--space-6)",
+        gap: "var(--space-3)",
+        padding: "var(--space-5)",
       }}
     >
       <div
         style={{
-          fontSize: 70,
+          fontSize: 58,
           lineHeight: 1,
           filter: "drop-shadow(0 0 16px rgba(214,178,94,0.4))",
         }}
@@ -293,7 +300,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
           fontWeight: 900,
           color: "#fff",
           textTransform: "uppercase",
-          letterSpacing: "3px",
+          letterSpacing: "2px",
           textAlign: "center",
         }}
       >
@@ -301,8 +308,8 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
       </div>
       <div
         style={{
-          width: 100,
-          height: 100,
+          width: 88,
+          height: 88,
           borderRadius: "50%",
           background: `${color}28`,
           border: `4px solid ${color}`,
@@ -311,7 +318,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
           alignItems: "center",
           justifyContent: "center",
           fontWeight: 900,
-          fontSize: 28,
+          fontSize: 24,
           color: color,
         }}
       >
@@ -319,7 +326,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
       </div>
       <div
         style={{
-          fontSize: "var(--text-xl)",
+          fontSize: "var(--text-lg)",
           fontWeight: 800,
           color: color,
           textAlign: "center",
@@ -329,7 +336,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
       </div>
       <div
         style={{
-          fontSize: "var(--text-base)",
+          fontSize: "var(--text-sm)",
           color: "#fff",
           fontWeight: 700,
           textAlign: "center",
@@ -346,28 +353,27 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
       >
         {champ.wins}-{champ.losses} Record
       </div>
-      <div style={{
-        minWidth: 280,
-        maxWidth: 440,
-        background: "rgba(17,24,39,0.72)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: 14,
-        padding: "12px 14px",
-      }}>
-        <div style={{ fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--text-subtle)", marginBottom: 6 }}>
-          Season Recap
+      {recap && (
+        <div style={{
+          minWidth: 280,
+          maxWidth: 440,
+          background: "rgba(17,24,39,0.72)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: "10px 12px",
+        }}>
+          <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>
+            {recap}
+          </div>
         </div>
-        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>
-          Dominated through the postseason and finished as the final team standing.
-        </div>
-      </div>
+      )}
       <button
         className="btn btn-primary"
         onClick={onProceed}
         style={{
-          marginTop: "var(--space-4)",
-          minWidth: 240,
-          fontSize: "var(--text-lg)",
+          marginTop: "var(--space-2)",
+          minWidth: 220,
+          fontSize: "var(--text-base)",
           fontWeight: 800,
         }}
       >
