@@ -45,6 +45,8 @@ describe('evaluateWeeklyContext', () => {
     expect(ctx.urgentItems.length).toBeGreaterThan(0);
     expect(ctx.incomingOffers.length).toBe(1);
     expect(ctx.focus.title.length).toBeGreaterThan(5);
+    expect(Array.isArray(ctx.storylineCards)).toBe(true);
+    expect(ctx.storylineCards.length).toBeGreaterThan(0);
   });
 
   it('returns a stable fallback when no offers are available', () => {

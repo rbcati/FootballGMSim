@@ -1,5 +1,6 @@
 import { evaluateOwnerMessageContext } from './ownerMessages.js';
 import { buildDirectionGuidance, buildTeamIntelligence } from './teamIntelligence.js';
+import { buildStorylineCards } from './leagueNarratives.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -113,6 +114,7 @@ export function evaluateWeeklyContext(league) {
   const direction = classifyDirection(userTeam, week);
   const intel = buildTeamIntelligence(userTeam, { week });
   const contractMarket = league?.contractMarket ?? null;
+  const storylineCards = buildStorylineCards(league);
 
   const ownerContext = evaluateOwnerMessageContext({
     league,
@@ -245,6 +247,7 @@ export function evaluateWeeklyContext(league) {
       heatingCount: Number(contractMarket?.heatingCount ?? 0),
       hotPositions: Array.isArray(contractMarket?.hotPositions) ? contractMarket.hotPositions : [],
     },
+    storylineCards,
     pressurePoints: {
       ownerApproval: safeNum(league?.ownerApproval ?? league?.ownerMood, null),
       capRoom,

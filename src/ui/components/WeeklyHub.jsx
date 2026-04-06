@@ -126,6 +126,25 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
         </div>
       </section>
 
+
+      <section className="weekly-section">
+        <h3 className="weekly-section__title">League storylines</h3>
+        <div className="weekly-urgent-list">
+          {(weeklyContext.storylineCards?.length ? weeklyContext.storylineCards : [{ title: 'No major storyline spikes this week', detail: 'The league picture is stable. Use this week to prep depth and game plan edges.', tone: 'ok', tab: 'Standings' }]).map((story, idx) => (
+            <button key={`${story.id ?? story.title}-${idx}`} className={`weekly-urgent-item tone-${story.tone ?? 'ok'}`} onClick={() => onNavigate?.(story.tab ?? 'Standings')}>
+              <div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <strong>{story.title}</strong>
+                  <Badge variant="outline">{(story.category ?? 'story').replaceAll('_', ' ')}</Badge>
+                </div>
+                <span>{story.detail}</span>
+              </div>
+              <span>›</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="weekly-section">
         <h3 className="weekly-section__title">Team-building guidance</h3>
         <Card variant="secondary">
