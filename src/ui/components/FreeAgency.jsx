@@ -112,6 +112,14 @@ function ovrColor(ovr) {
   return "var(--danger)";
 }
 
+const RESIGN_TIER_LABEL = {
+  priority_resign: "Priority re-sign",
+  resign_if_price: "Re-sign if price holds",
+  replaceable_depth: "Replaceable depth",
+  let_walk: "Let walk",
+  trade_or_tag: "Trade/Tag candidate",
+};
+
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
 
 function OvrBadge({ ovr }) {
@@ -1111,14 +1119,24 @@ export default function FreeAgency({
                               {market.competitionLabel}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              {market.attention ?? `Market: ${market.heatLabel ?? "No market heat signal"}`}
+                              {market.attention ?? `Market: ${market.heatLabel ?? "No market heat signal"}`} · {market.knownBidderLabel}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
                               {market.decision}
                             </div>
+                            {market.decisionReason && (
+                              <div style={{ color: "var(--text-subtle)", marginTop: 1 }}>
+                                {market.decisionReason}
+                              </div>
+                            )}
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              {market.urgencyLabel}
+                              {market.urgencyLabel}{market.patienceLabel ? ` · ${market.patienceLabel}` : ""}
                             </div>
+                            {!!market.reSign?.recommendationTier && (
+                              <div style={{ color: "var(--text-subtle)", marginTop: 1 }}>
+                                {RESIGN_TIER_LABEL[market.reSign.recommendationTier] ?? "Re-sign view unavailable"}: {market.reSign.shortReason}
+                              </div>
+                            )}
                             {userIsTop && (
                               <span style={{
                                 display: "inline-block",
@@ -1207,7 +1225,7 @@ export default function FreeAgency({
                             <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
                           </div>
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
-                            {player?.demandProfile?.headline ?? "Balanced priorities"}
+                            {player?.demandProfile?.headline ?? "Balanced priorities"}{market.riskLabel ? ` · ${market.riskLabel}` : ""}
                           </div>
                           {!canAfford ? (
                             <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
@@ -1259,11 +1277,21 @@ export default function FreeAgency({
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
-                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "No market heat signal"} market`}
+                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "No market heat signal"} market`} · {mMarket.knownBidderLabel}
                                 </div>
                                 <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
-                                   {mMarket.decision} · {mMarket.urgencyLabel}
+                                   {mMarket.decision} · {mMarket.urgencyLabel}{mMarket.patienceLabel ? ` · ${mMarket.patienceLabel}` : ""}
                                 </div>
+                                {mMarket.decisionReason && (
+                                  <div style={{ fontSize: "10px", color: "var(--text-subtle)", marginTop: 2 }}>
+                                    {mMarket.decisionReason}
+                                  </div>
+                                )}
+                                {!!mMarket.reSign?.recommendationTier && (
+                                  <div style={{ fontSize: "10px", color: "var(--text-subtle)", marginTop: 2 }}>
+                                    {RESIGN_TIER_LABEL[mMarket.reSign.recommendationTier] ?? "Re-sign"} · {mMarket.reSign.shortReason}
+                                  </div>
+                                )}
                                {/* Top Bid info on mobile */}
                                {mHasBids && (
                                  <div style={{ fontSize: "var(--text-xs)", marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>

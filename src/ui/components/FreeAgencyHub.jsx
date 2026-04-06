@@ -1,6 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import PlayerCard from "./PlayerCard.jsx";
-import ContractNegotiation from "./ContractNegotiation.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,7 +45,6 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("pressure");
   const [search, setSearch] = useState("");
-  const [biddingPlayer, setBiddingPlayer] = useState(null);
   const [faState, setFaState] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -92,17 +90,8 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
   }, [freeAgents, posFilter, sortKey, search]);
 
   const trackedTargets = useMemo(() => filtered.filter((p) => p?.offers?.userOffered).slice(0, 5), [filtered]);
-
-  const handleOffer = useCallback((offer) => {
-    if (!biddingPlayer) return;
-    actions.submitOffer(biddingPlayer.id, league.userTeamId, {
-      years: offer.years,
-      baseAnnual: offer.annual,
-      guaranteePct: offer.guaranteePct,
-      signingBonus: offer.bonus,
-    });
-    setBiddingPlayer(null);
-  }, [actions, biddingPlayer, league.userTeamId]);
+  const userLeadCount = useMemo(() => filtered.filter((p) => summarizeFreeAgentMarket(p).userLeads).length, [filtered]);
+  const noSnapshotCount = useMemo(() => filtered.filter((p) => !summarizeFreeAgentMarket(p).hasVisibleSnapshot).length, [filtered]);
 
   return (
     <div className="fade-in">
@@ -120,6 +109,8 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
         <MiniStat label="Available" value={freeAgents.length} />
         <MiniStat label="Tracked" value={trackedTargets.length} color={trackedTargets.length ? "var(--accent)" : "var(--text)"} />
+        <MiniStat label="You Lead" value={userLeadCount} color={userLeadCount ? "var(--success)" : "var(--text)"} />
+        <MiniStat label="Unknown" value={noSnapshotCount} color={noSnapshotCount ? "var(--warning)" : "var(--text)"} />
         <MiniStat label="Cap Room" value={`$${capRoom.toFixed(1)}M`} color={capRoom > 10 ? "var(--success)" : capRoom > 0 ? "var(--warning)" : "var(--danger)"} />
       </div>
 
@@ -158,8 +149,7 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
                   <div
                     key={fa.id}
                     className={`card-premium hover-lift fade-in stagger-${Math.min(i + 1, 8)}`}
-                    style={{ padding: "var(--space-3) var(--space-4)", borderLeft: `3px solid ${posColor}`, cursor: "pointer" }}
-                    onClick={() => setBiddingPlayer(fa)}
+                    style={{ padding: "var(--space-3) var(--space-4)", borderLeft: `3px solid ${posColor}` }}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
                       <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${posColor}22`, border: `2px solid ${posColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 12, color: posColor, flexShrink: 0 }}>
@@ -174,17 +164,23 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
                           <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Age {fa.age}</span>
                         </div>
                         <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 3 }}>
-                          {market.competitionLabel} · {market.decision}
+                          {market.hasVisibleSnapshot ? `${market.competitionLabel} · ${market.decision}` : "No visible market snapshot"}
                         </div>
                         <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
-                          {market.preference ?? "No preference profile visible"}
+                          {market.preference ?? "No preference profile visible"}{market.patienceLabel ? ` · ${market.patienceLabel}` : ""}
                         </div>
+                        {market.decisionReason && (
+                          <div style={{ fontSize: "10px", color: "var(--text-subtle)" }}>{market.decisionReason}</div>
+                        )}
                       </div>
 
                       <div className="text-right" style={{ minWidth: 116 }}>
                         <div className="text-sm font-bold tabular-nums" style={{ color: market.userLeads ? "var(--success)" : "var(--text)" }}>{market.topOfferLabel}</div>
                         <div className="text-xs" style={{ color: "var(--text-subtle)" }}>{market.topBidTeam ?? "No current market snapshot"}</div>
                         <div className="text-xs" style={{ color: market.userLeads ? "var(--success)" : "var(--warning)" }}>{market.leadLabel}</div>
+                        <Button size="sm" variant="secondary" style={{ marginTop: 6 }} onClick={() => onNavigate?.("Free Agency")}>
+                          Open workspace
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -194,15 +190,6 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
           </ScrollArea>
         </CardContent>
       </Card>
-
-      {biddingPlayer && (
-        <ContractNegotiation
-          player={biddingPlayer}
-          capRoom={capRoom}
-          onOffer={handleOffer}
-          onClose={() => setBiddingPlayer(null)}
-        />
-      )}
     </div>
   );
 }

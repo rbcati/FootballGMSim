@@ -75,8 +75,17 @@ export function summarizeFreeAgentMarket(player) {
 
   const heatLabel = market?.heatLabel ?? null;
   const decision = market?.decision ?? "Evaluating offers";
+  const decisionReason = market?.decisionReason ?? null;
+  const decisionState = market?.timingState ?? "evaluating_market";
   const attention = market?.attention ?? null;
   const preference = player?.demandProfile?.headline ?? null;
+  const priorities = Array.isArray(player?.demandProfile?.priorities) ? player.demandProfile.priorities : [];
+  const urgencyTag = market?.urgencyLabel ?? null;
+  const patienceLabel = market?.patienceLabel ?? null;
+  const riskLabel = market?.riskLabel ?? null;
+  const knownBidderLabel = bidderCount > 0 ? `${bidderCount} known bidder${bidderCount > 1 ? "s" : ""}` : "No known bidders";
+  const hasVisibleSnapshot = hasTopOffer || bidderCount > 0 || userOffered || !!market?.timingState;
+  const reSign = player?.reSign ?? null;
   const urgency = market?.urgency ?? "low";
   const urgencyLabel = urgency === "high" ? "Decision expected soon" : urgency === "medium" ? "Decision window open" : "No immediate deadline signal";
   let competitionLabel = "No visible competing offer yet";
@@ -93,17 +102,26 @@ export function summarizeFreeAgentMarket(player) {
 
   return {
     bidderCount,
+    knownBidderLabel,
     userOffered,
     userLeads,
     hasTopOffer,
+    hasVisibleSnapshot,
     heatLabel,
     decision,
+    decisionState,
+    decisionReason,
     attention,
     preference,
+    priorities,
     urgencyLabel,
+    urgencyTag,
+    patienceLabel,
+    riskLabel,
     competitionLabel,
     leadLabel,
     topOfferLabel,
     topBidTeam: offers?.topBidTeam ?? null,
+    reSign,
   };
 }

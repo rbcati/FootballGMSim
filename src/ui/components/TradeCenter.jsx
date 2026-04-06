@@ -154,6 +154,7 @@ function TradeResult({ result, onDismiss }) {
   const valueDiff = (result.receiveValue ?? 0) - (result.offerValue ?? 0);
   const reasonType = result?.rejectionType ?? (String(result?.reason ?? "").toLowerCase().includes("cap") ? "cap" : "value");
   const askHint = result?.askHint;
+  const reasonDetail = result?.reasonDetail ?? null;
   const counterHint = !result.accepted
     ? askHint === "add_pick"
       ? "Add draft pick compensation to close the gap."
@@ -183,7 +184,13 @@ function TradeResult({ result, onDismiss }) {
               <Badge variant={reasonType === "cap" ? "destructive" : "outline"}>
                 {reasonType === "cap" ? "Cap issue" : reasonType === "fit" ? "Roster fit issue" : reasonType === "direction" ? "Team direction issue" : "Value issue"}
               </Badge>
-              <Badge variant="outline">Model estimate: asset value heuristic</Badge>
+              <Badge variant="outline">Model estimate: {reasonDetail?.model ?? "asset value heuristic"}</Badge>
+              {Array.isArray(reasonDetail?.aiNeeds) && reasonDetail.aiNeeds.length > 0 && (
+                <Badge variant="outline">Need: {reasonDetail.aiNeeds.join(", ")}</Badge>
+              )}
+              {Array.isArray(reasonDetail?.aiSurplus) && reasonDetail.aiSurplus.length > 0 && (
+                <Badge variant="outline">Surplus: {reasonDetail.aiSurplus.join(", ")}</Badge>
+              )}
             </div>
           )}
         </div>
