@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { deriveTeamCapSnapshot, formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -132,6 +133,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
   const franchise = data?.franchise;
   const players = data?.currentPlayers ?? [];
   const color = teamColor(team?.abbr ?? "");
+  const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
 
   return (
     <>
@@ -155,9 +157,9 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "var(--surface)",
-          width: "92%",
+          width: "min(860px, 100%)",
           maxWidth: 820,
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           overflowY: "auto",
           borderRadius: "var(--radius-lg)",
           boxShadow: "var(--shadow-xl)",
@@ -169,7 +171,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
         {/* ── Header ── */}
         <div
           style={{
-            padding: "var(--space-4) var(--space-5)",
+            padding: "var(--space-3) var(--space-4)",
             borderBottom: "1px solid var(--hairline)",
             background: "var(--surface-strong)",
             display: "flex",
@@ -192,8 +194,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               {/* Team logo */}
               <div
                 style={{
-                  width: 72,
-                  height: 72,
+                  width: 58,
+                  height: 58,
                   borderRadius: "50%",
                   background: `${color}22`,
                   border: `3px solid ${color}`,
@@ -201,7 +203,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                   alignItems: "center",
                   justifyContent: "center",
                   fontWeight: 900,
-                  fontSize: 22,
+                  fontSize: 18,
                   color,
                   flexShrink: 0,
                 }}
@@ -212,7 +214,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: "calc(var(--text-2xl) - 1px)",
+                    fontSize: "clamp(1.1rem, 5vw, 1.6rem)",
                     fontWeight: 800,
                     lineHeight: 1.15,
                   }}
@@ -226,7 +228,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                     marginTop: 2,
                   }}
                 >
-                  {team.conf} · {team.div} Division · OVR{" "}
+                  {team.conf} · {team.div} · OVR{" "}
                   <strong style={{ color: ovrColor(team.ovr) }}>
                     {team.ovr}
                   </strong>
@@ -238,9 +240,9 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                     marginTop: 3,
                   }}
                 >
-                  This Season: {team.wins}-{team.losses}
-                  {team.ties > 0 ? `-${team.ties}` : ""} · {team.ptsFor} PF /{" "}
-                  {team.ptsAgainst} PA
+                  {team.wins}-{team.losses}
+                  {team.ties > 0 ? `-${team.ties}` : ""} · {safeRound(toFiniteNumber(team.ptsFor, 0), 0)} PF /{" "}
+                  {safeRound(toFiniteNumber(team.ptsAgainst, 0), 0)} PA
                 </div>
               </div>
             </div>
@@ -254,13 +256,13 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               background: "none",
               border: "none",
               cursor: "pointer",
-              fontSize: "1.5rem",
+              fontSize: "1.2rem",
               lineHeight: 1,
               color: "var(--text-muted)",
-              padding: "var(--space-1)",
+              padding: "4px 8px",
               marginLeft: "var(--space-2)",
-              minWidth: 34,
-              minHeight: 34,
+              minWidth: 36,
+              minHeight: 36,
             }}
           >
             ×
@@ -271,7 +273,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
         {!loading && team && franchise && (
           <div
             style={{
-              padding: "var(--space-4) var(--space-5) var(--space-5)",
+              padding: "var(--space-4)",
               display: "flex",
               flexDirection: "column",
               gap: "var(--space-5)",
@@ -293,11 +295,11 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               >
                 <StatBox
                   label="All-Time Record"
-                  value={`${franchise.allTimeWins}-${franchise.allTimeLosses}`}
+                  value={`${safeRound(toFiniteNumber(franchise.allTimeWins, 0), 0)}-${safeRound(toFiniteNumber(franchise.allTimeLosses, 0), 0)}`}
                   sub={winPct(
-                    franchise.allTimeWins,
-                    franchise.allTimeLosses,
-                    franchise.allTimeTies,
+                    toFiniteNumber(franchise.allTimeWins, 0),
+                    toFiniteNumber(franchise.allTimeLosses, 0),
+                    toFiniteNumber(franchise.allTimeTies, 0),
                   )}
                 />
                 <StatBox label="Seasons" value={franchise.seasonsPlayed || 0} />
@@ -330,15 +332,16 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               >
                 <StatBox
                   label="Cap Total"
-                  value={`$${(team.capTotal || 255).toFixed(0)}M`}
+                  value={formatMoneyM(capSnapshot.capTotal, "—", { digits: 0 })}
                 />
                 <StatBox
                   label="Cap Used"
-                  value={`$${(team.capUsed || 0).toFixed(1)}M`}
+                  value={formatMoneyM(capSnapshot.capUsed)}
                 />
                 <StatBox
                   label="Cap Space"
-                  value={`$${(team.capRoom || 0).toFixed(1)}M`}
+                  value={formatMoneyM(capSnapshot.capRoom)}
+                  sub={capSnapshot.capRoom < 0 ? "Over cap" : "Available"}
                 />
               </div>
             </section>
@@ -354,7 +357,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                 <div className="table-wrapper" style={{ overflowX: "auto" }}>
                   <Table
                     className="standings-table"
-                    style={{ width: "100%", minWidth: 420 }}
+                    style={{ width: "100%", minWidth: 420, fontSize: "0.76rem", lineHeight: 1.25 }}
                   >
                     <TableHeader>
                       <TableRow>
@@ -387,15 +390,15 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                             {row.year}
                           </TableCell>
                           <TableCell style={{ textAlign: "center", fontWeight: 700 }}>
-                            {row.wins}
+                            {safeRound(toFiniteNumber(row.wins, 0), 0)}
                           </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{row.losses}</TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{row.ties}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{safeRound(toFiniteNumber(row.losses, 0), 0)}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{safeRound(toFiniteNumber(row.ties, 0), 0)}</TableCell>
                           <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
-                            {winPct(row.wins, row.losses, row.ties)}
+                            {winPct(toFiniteNumber(row.wins, 0), toFiniteNumber(row.losses, 0), toFiniteNumber(row.ties, 0))}
                           </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{row.pf}</TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{row.pa}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{safeRound(toFiniteNumber(row.pf, 0), 0)}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{safeRound(toFiniteNumber(row.pa, 0), 0)}</TableCell>
                           <TableCell style={{ textAlign: "center" }}>
                             {row.champion && (
                               <span title="Super Bowl Champion">🏆</span>
@@ -429,7 +432,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      "repeat(auto-fill, minmax(200px, 1fr))",
+                      "repeat(auto-fill, minmax(170px, 1fr))",
                     gap: "var(--space-2)",
                   }}
                 >
@@ -443,8 +446,10 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                         gap: "var(--space-3)",
                         padding: "var(--space-2) var(--space-3)",
                         background: "var(--surface-strong)",
-                        borderRadius: "var(--radius-sm)",
+                        borderRadius: "var(--radius-md)",
                         cursor: onPlayerSelect ? "pointer" : "default",
+                        border: "1px solid var(--hairline)",
+                        minHeight: 46,
                       }}
                     >
                       <Badge

@@ -6,13 +6,11 @@
 import React, { useEffect, useState } from "react";
 import TraitBadge from "./TraitBadge";
 import RadarChart from "./RadarChart";
+import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import { getTeamIdentity } from "../../data/team-utils.js";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -213,150 +211,68 @@ function seasonYear(seasonId) {
   return seasonId;
 }
 
-// ── Extension Modal ───────────────────────────────────────────────────────────
+function getSeasonProductionSummary(player) {
+  if (!player?.careerStats?.length) return null;
+  const latest = player.careerStats[player.careerStats.length - 1];
+  if (!latest) return null;
 
-function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
-  const [ask, setAsk] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    actions
-      .getExtensionAsk(player.id)
-      .then((resp) => {
-        if (resp.payload?.ask) setAsk(resp.payload.ask);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, [player.id, actions]);
-
-  const handleAccept = async () => {
-    if (!ask) return;
-    setLoading(true);
-    await actions.extendContract(player.id, teamId, ask);
-    onComplete();
-  };
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0,0,0,0.55)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 10000,
-      }}
-    >
-      <Card
-        className="card-premium"
-        style={{
-          width: "min(420px, calc(100vw - 24px))",
-          maxHeight: "min(88vh, 640px)",
-          overflowY: "auto",
-          padding: "var(--space-6)",
-          boxShadow: "var(--shadow-lg)",
-          background: "var(--surface)",
-        }}
-      >
-        <CardContent>
-        <h3 style={{ marginTop: 0 }}>Extend {player.name}</h3>
-        {loading ? (
-          <div
-            style={{
-              padding: "var(--space-4)",
-              textAlign: "center",
-              color: "var(--text-muted)",
-            }}
-          >
-            Negotiating…
-          </div>
-        ) : ask ? (
-          <div>
-            <p
-              style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}
-            >
-              Agent Demand:
-            </p>
-            <div
-              style={{
-                fontSize: "1.5em",
-                fontWeight: 800,
-                margin: "var(--space-4) 0",
-                color: "var(--accent)",
-                textAlign: "center",
-                background: "var(--surface-strong)",
-                padding: "var(--space-4)",
-                borderRadius: "var(--radius-md)",
-              }}
-            >
-              {ask.years} Years
-              <br />
-              <span style={{ fontSize: "0.6em", color: "var(--text)" }}>
-                ${ask.baseAnnual}M / yr
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: "0.85em",
-                color: "var(--text-subtle)",
-                textAlign: "center",
-                marginBottom: "var(--space-6)",
-              }}
-            >
-              Includes ${ask.signingBonus}M Signing Bonus
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-3)",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Button className="btn" onClick={onClose}>
-                Reject
-              </Button>
-              <Button
-                className="btn btn-primary"
-                onClick={handleAccept}
-                style={{
-                  background: "var(--success)",
-                  borderColor: "var(--success)",
-                  color: "#fff",
-                }}
-              >
-                Accept Deal
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "var(--space-4)" }}>
-            <div
-              style={{
-                border: "1px solid rgba(255,159,10,0.45)",
-                background: "rgba(255,159,10,0.10)",
-                borderRadius: "var(--radius-md)",
-                padding: "var(--space-3) var(--space-4)",
-              }}
-            >
-              <p style={{ margin: 0, fontWeight: 700 }}>Negotiation unavailable</p>
-              <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-                Player refuses to negotiate at this time.
-              </p>
-            </div>
-            <Button className="btn" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+  if (player.pos === "QB" && latest.passYds != null) {
+    return `${latest.passYds.toLocaleString()} pass yds · ${latest.passTDs ?? 0} TD`;
+  }
+  if (["RB", "FB"].includes(player.pos) && latest.rushYds != null) {
+    return `${latest.rushYds.toLocaleString()} rush yds · ${latest.rushTDs ?? 0} TD`;
+  }
+  if (["WR", "TE"].includes(player.pos) && latest.recYds != null) {
+    return `${latest.receptions ?? 0} rec · ${latest.recYds.toLocaleString()} yds`;
+  }
+  if (["DE", "DT", "LB", "CB", "S", "DL"].includes(player.pos)) {
+    return `${latest.tackles ?? 0} tkl · ${latest.sacks ?? 0} sacks`;
+  }
+  return null;
 }
+
+function getPlayerSummaryChips(player, ringCount, nonRing) {
+  const chips = [];
+  const contractYears = toFiniteNumber(player?.contract?.years, null);
+  const contractAnnual = toFiniteNumber(player?.contract?.baseAnnual, null);
+  if (contractYears != null || contractAnnual != null) {
+    chips.push({
+      label: "Contract",
+      value: `${contractYears != null ? `${safeRound(contractYears, 0)}y` : "—"} · ${formatMoneyM(contractAnnual, "—")}/yr`,
+    });
+  }
+  if (player?.age != null) {
+    const devSignal = player.age <= 24 ? "Ascending" : player.age >= 30 ? "Veteran" : "Prime";
+    chips.push({ label: "Development", value: `${player.age} · ${devSignal}` });
+  }
+  if (player?.injuryWeeksRemaining > 0) {
+    chips.push({
+      label: "Durability",
+      value: `Out ${safeRound(player.injuryWeeksRemaining, 0)}w`,
+      tone: "warn",
+    });
+  } else {
+    chips.push({ label: "Durability", value: "Available" });
+  }
+  const recent = getSeasonProductionSummary(player);
+  if (recent) chips.push({ label: "Recent", value: recent });
+  if (ringCount > 0 || nonRing.length > 0) {
+    chips.push({
+      label: "Accolades",
+      value: ringCount > 0 ? `${ringCount}x Champ` : `${nonRing.length} awards`,
+    });
+  }
+  return chips;
+}
+
+const sectionLabelStyle = {
+  margin: "0 0 var(--space-2)",
+  fontSize: "var(--text-xs)",
+  fontWeight: 800,
+  color: "var(--text-subtle)",
+  textTransform: "uppercase",
+  letterSpacing: ".08em",
+};
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -427,6 +343,7 @@ export default function PlayerProfile({
   const nonRing = accolades
     .filter((a) => a.type !== "SB_RING")
     .sort((a, b) => b.year - a.year);
+  const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
 
   return (
     <div
@@ -449,11 +366,11 @@ export default function PlayerProfile({
         onClick={(e) => e.stopPropagation()}
         style={{
           background: "linear-gradient(180deg, var(--surface-elevated), var(--surface))",
-          width: "92%",
+          width: "min(980px, 100%)",
           maxWidth: 960,
-          maxHeight: "90vh",
+          maxHeight: "92vh",
           overflowY: "auto",
-          borderRadius: "var(--radius-lg)",
+          borderRadius: "min(var(--radius-lg), 14px)",
           boxShadow: "var(--shadow-xl)",
           border: "1px solid var(--hairline-strong)",
           display: "flex",
@@ -503,7 +420,7 @@ export default function PlayerProfile({
         {/* ── Header ── */}
         <div
           style={{
-            padding: "var(--space-5)",
+            padding: "var(--space-4) var(--space-4)",
             borderBottom: "1px solid var(--hairline)",
             display: "flex",
             justifyContent: "space-between",
@@ -525,9 +442,9 @@ export default function PlayerProfile({
               {/* Avatar */}
               <div
                 style={{
-                  width: 68,
-                  height: 68,
-                  borderRadius: "50%",
+                  width: 54,
+                  height: 54,
+                  borderRadius: "14px",
                   background: "var(--surface-sunken)",
                   display: "flex",
                   alignItems: "center",
@@ -544,8 +461,9 @@ export default function PlayerProfile({
                 <h2
                   style={{
                     margin: 0,
-                    fontSize: "clamp(1.35rem, 2.8vw, 1.8rem)",
+                    fontSize: "clamp(1.1rem, 4.8vw, 1.7rem)",
                     fontWeight: 900,
+                    lineHeight: 1.15,
                   }}
                 >
                   {player.name}
@@ -554,7 +472,7 @@ export default function PlayerProfile({
                   style={{
                     color: "var(--text-muted)",
                     fontSize: "var(--text-sm)",
-                    marginTop: "var(--space-1)",
+                    marginTop: 4,
                   }}
                 >
                   {player.pos} · Age {player.age} ·{" "}
@@ -596,7 +514,7 @@ export default function PlayerProfile({
                     <span
                       style={{
                         color: "var(--text-muted)",
-                        fontSize: "var(--text-xs)",
+                        fontSize: "var(--text-sm)",
                         fontWeight: 700,
                       }}
                     >
@@ -684,24 +602,47 @@ export default function PlayerProfile({
               background: "none",
               border: "none",
               cursor: "pointer",
-              fontSize: "1.5rem",
-              lineHeight: 1,
-              color: "var(--text-muted)",
-              padding: "var(--space-1)",
-              marginLeft: "var(--space-2)",
-            }}
-          >
-            ×
-          </Button>
+            fontSize: "1.2rem",
+            lineHeight: 1,
+            color: "var(--text-muted)",
+            padding: "4px 8px",
+            marginLeft: "var(--space-2)",
+            borderRadius: "999px",
+            minWidth: 34,
+            minHeight: 34,
+          }}
+        >
+          ×
+        </Button>
         </div>
 
-        {/* ── Career Stats ── */}
-        <div style={{ padding: "var(--space-5)", flex: 1 }}>
+        {/* ── Body ── */}
+        <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
+          {!loading && player && summaryChips.length > 0 && (
+            <section>
+              <h3 style={sectionLabelStyle}>Quick Read</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                {summaryChips.map((chip, idx) => (
+                  <div key={`${chip.label}-${idx}`} style={{
+                    border: `1px solid ${chip.tone === "warn" ? "rgba(255,159,10,0.4)" : "var(--hairline)"}`,
+                    background: chip.tone === "warn" ? "rgba(255,159,10,0.08)" : "var(--surface-strong)",
+                    borderRadius: "var(--radius-md)",
+                    padding: "10px",
+                  }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>{chip.label}</div>
+                    <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{chip.value}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section>
           <h3
             style={{
               marginTop: 0,
-              fontSize: "var(--text-lg)",
-              marginBottom: "var(--space-3)",
+              fontSize: "var(--text-base)",
+              marginBottom: "var(--space-2)",
             }}
           >
             Career Stats
@@ -714,17 +655,17 @@ export default function PlayerProfile({
               No career stats recorded yet.
             </p>
           ) : (
-            <div className="table-wrapper" style={{ overflowX: "auto" }}>
+            <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
               <Table
                 className="standings-table"
-                style={{ width: "100%", minWidth: 480, fontSize: "0.79rem", lineHeight: 1.35 }}
+                style={{ width: "100%", minWidth: 540, fontSize: "0.76rem", lineHeight: 1.3 }}
               >
                 <TableHeader>
                   <TableRow>
                     <TableHead
                       style={{
                         paddingLeft: "var(--space-4)",
-                        textAlign: "left",
+                        textAlign: "left", position: "sticky", left: 0, background: "var(--surface)",
                       }}
                     >
                       Year
@@ -747,12 +688,14 @@ export default function PlayerProfile({
                     )
                     .map((s, i) => {
                       const t = s.totals || {};
+                      const primeKey = columns.find((c) => c.hi)?.key;
                       return (
                         <TableRow key={i}>
                           <TableCell
                             style={{
-                              paddingLeft: "var(--space-4)",
+                              paddingLeft: "var(--space-3)",
                               fontWeight: 600,
+                              whiteSpace: "nowrap",
                             }}
                           >
                             {seasonYear(s.seasonId)}
@@ -760,7 +703,8 @@ export default function PlayerProfile({
                           <TableCell
                             style={{
                               color: "var(--text-muted)",
-                              fontSize: "var(--text-xs)",
+                              fontSize: "11px",
+                              whiteSpace: "nowrap",
                             }}
                           >
                             {s.teamId != null
@@ -772,10 +716,12 @@ export default function PlayerProfile({
                               key={col.key}
                               style={{
                                 textAlign: "center",
-                                color: isHigh(t, col)
+                                color: col.key === primeKey
+                                  ? "var(--text)"
+                                  : isHigh(t, col)
                                   ? "var(--accent)"
                                   : "var(--text)",
-                                fontWeight: isHigh(t, col) ? 700 : 400,
+                                fontWeight: col.key === primeKey ? 700 : isHigh(t, col) ? 700 : 500,
                               }}
                             >
                               {fmt(t, col)}
@@ -848,27 +794,32 @@ export default function PlayerProfile({
                 </div>
               );
             })()}
+          </section>
 
           {/* ── Per-season Career Stats (from player.careerStats archive) ── */}
           {!loading && player?.careerStats?.length > 0 && (
-            <div style={{ marginTop: "var(--space-6)" }}>
+            <section>
               <h3
                 style={{
-                  fontSize: "var(--text-base)",
+                  fontSize: "var(--text-sm)",
                   fontWeight: 700,
-                  marginBottom: "var(--space-3)",
+                  marginBottom: "var(--space-2)",
                   marginTop: 0,
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: ".07em",
                 }}
               >
                 Season Log
               </h3>
-              <div className="table-wrapper" style={{ overflowX: "auto" }}>
+              <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                 <Table
                   className="standings-table"
                   style={{
                     width: "100%",
                     fontVariantNumeric: "tabular-nums",
-                    minWidth: 360,
+                    minWidth: 480,
+                    fontSize: "0.76rem",
                   }}
                 >
                   <TableHeader>
@@ -1004,14 +955,14 @@ export default function PlayerProfile({
                   </TableBody>
                 </Table>
               </div>
-            </div>
+            </section>
           )}
         </div>
       </div>
 
       {/* Extension modal */}
       {extending && player && (
-        <ExtensionModal
+        <ExtensionNegotiationModal
           player={player}
           actions={actions}
           teamId={player.teamId}
