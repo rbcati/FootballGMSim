@@ -51,6 +51,7 @@ const INITIAL_STATE = {
   error:        null,
   /** notification queue */
   notifications:[],
+  notificationMemory: {},
   promptUserGame: false,
   userGameLogs: null,
   userGameLiveStats: null,
@@ -130,13 +131,27 @@ function reducer(state, action) {
     case 'ERROR':
       return { ...state, busy: false, simulating: false, error: action.message };
     case 'NOTIFY':
-      return {
-        ...state,
-        notifications: [
-          ...state.notifications.slice(-9),   // keep last 10
-          { id: Date.now(), level: action.level, message: action.message, retryable: action.retryable ?? false },
-        ],
-      };
+      {
+        const now = Date.now();
+        const message = String(action.message ?? '').trim();
+        const fingerprint = message.toLowerCase();
+        const prev = state.notificationMemory?.[fingerprint];
+        const dedupeWindowMs = 1000 * 60 * 2;
+        if (prev && (now - prev.ts) < dedupeWindowMs) {
+          return state;
+        }
+        return {
+          ...state,
+          notifications: [
+            ...state.notifications.slice(-9),   // keep last 10
+            { id: now, level: action.level, message, retryable: action.retryable ?? false },
+          ],
+          notificationMemory: {
+            ...(state.notificationMemory ?? {}),
+            [fingerprint]: { ts: now },
+          },
+        };
+      }
     case 'DISMISS_NOTIFY':
       return {
         ...state,

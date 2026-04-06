@@ -233,12 +233,23 @@ export function evaluateOwnerMessageContext({ league, userTeam, currentWeek, cur
       checkpoint: `wk${week}`,
     });
   }
-  if ((contractMarket?.priorityExpiring ?? 0) >= 2 && week >= 8) {
+  const marketBidRisk = Number(contractMarket?.bidRiskCount ?? 0);
+  const closeToDecisionCount = Number(contractMarket?.closeToDecisionCount ?? 0);
+  if ((contractMarket?.priorityExpiring ?? 0) >= 2 && week >= 8 && marketBidRisk === 0) {
     candidates.push({
       triggerKey: "expiring_core_ignored",
       tone: (contractMarket?.priorityExpiring ?? 0) >= 3 ? "urgent_demand" : "warning",
       severity: (contractMarket?.priorityExpiring ?? 0) >= 3 ? 88 : 74,
       stateLabel: `expiring-${contractMarket?.priorityExpiring ?? 0}`,
+      checkpoint: `wk${week}`,
+    });
+  }
+  if (marketBidRisk >= 2 || closeToDecisionCount >= 2) {
+    candidates.push({
+      triggerKey: "inaction_during_decline",
+      tone: marketBidRisk >= 3 ? "urgent_demand" : "warning",
+      severity: marketBidRisk >= 3 ? 89 : 76,
+      stateLabel: `contract-risk-${marketBidRisk}-close-${closeToDecisionCount}`,
       checkpoint: `wk${week}`,
     });
   }
