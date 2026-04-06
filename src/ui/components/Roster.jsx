@@ -42,6 +42,12 @@ import {
   evaluateResignRecommendation,
   summarizeExpiring,
 } from "../utils/contractInsights.js";
+import {
+  deriveTeamCapSnapshot,
+  formatMoneyM,
+  safeRound,
+  toFiniteNumber,
+} from "../utils/numberFormatting.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -134,8 +140,7 @@ function ovrColor(ovr) {
 }
 
 function fmtSalary(annual) {
-  if (annual == null) return "—";
-  return `$${annual.toFixed(1)}M`;
+  return formatMoneyM(annual);
 }
 
 function fmtYears(contract) {
@@ -340,11 +345,22 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
   }, [player.id, actions]);
 
   const handleAccept = async () => {
-    if (!ask) return;
+    if (!isAskValid) return;
     setLoading(true);
     await actions.extendContract(player.id, teamId, ask);
     onComplete();
   };
+
+  const askYears = toFiniteNumber(ask?.years, null);
+  const askBaseAnnual = toFiniteNumber(ask?.baseAnnual, null);
+  const askSigningBonus = toFiniteNumber(ask?.signingBonus, null);
+  const isAskValid =
+    askYears != null &&
+    askBaseAnnual != null &&
+    askSigningBonus != null &&
+    askYears > 0 &&
+    askBaseAnnual >= 0 &&
+    askSigningBonus >= 0;
 
   return (
     <div
@@ -385,7 +401,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
           >
             Negotiating...
           </div>
-        ) : ask ? (
+        ) : isAskValid ? (
           <div>
             <p
               style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}
@@ -404,10 +420,10 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 borderRadius: "var(--radius-md)",
               }}
             >
-              {ask.years} Years
+              {safeRound(askYears, 0)} Years
               <br />
               <span style={{ fontSize: "0.6em", color: "var(--text)" }}>
-                ${ask.baseAnnual}M / yr
+                {formatMoneyM(askBaseAnnual)} / yr
               </span>
             </div>
             <div
@@ -418,7 +434,7 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 marginBottom: "var(--space-6)",
               }}
             >
-              Includes ${ask.signingBonus}M Signing Bonus
+              Includes {formatMoneyM(askSigningBonus)} Signing Bonus
             </div>
             <div
               style={{
@@ -453,9 +469,9 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
                 padding: "var(--space-3) var(--space-4)",
               }}
             >
-              <p style={{ margin: 0, fontWeight: 700 }}>Negotiation unavailable</p>
+              <p style={{ margin: 0, fontWeight: 700 }}>Negotiation data unavailable</p>
               <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-                Player refuses to negotiate at this time.
+                Contract terms could not be loaded right now.
               </p>
             </div>
             <Button className="btn" onClick={onClose}>
@@ -469,9 +485,12 @@ function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
 }
 
 function CapBar({ capUsed, capTotal, deadCap = 0 }) {
+  const safeCapTotal = toFiniteNumber(capTotal, 0);
+  const safeCapUsed = Math.max(0, toFiniteNumber(capUsed, 0));
+  const safeDeadCap = Math.max(0, toFiniteNumber(deadCap, 0));
   const usedPct =
-    capTotal > 0 ? Math.min(100, ((capUsed - deadCap) / capTotal) * 100) : 0;
-  const deadPct = capTotal > 0 ? Math.min(100, (deadCap / capTotal) * 100) : 0;
+    safeCapTotal > 0 ? Math.min(100, ((safeCapUsed - safeDeadCap) / safeCapTotal) * 100) : 0;
+  const deadPct = safeCapTotal > 0 ? Math.min(100, (safeDeadCap / safeCapTotal) * 100) : 0;
 
   const totalPct = usedPct + deadPct;
   const color =
@@ -525,13 +544,13 @@ function CapBar({ capUsed, capTotal, deadCap = 0 }) {
             whiteSpace: "nowrap",
           }}
         >
-          ${capUsed?.toFixed(1)}M / ${capTotal?.toFixed(0)}M
+          {formatMoneyM(safeCapUsed)} / {formatMoneyM(safeCapTotal, "—", { digits: 0 })}
         </span>
-        {deadCap > 0 && (
+        {safeDeadCap > 0 && (
           <div
             style={{ fontSize: 9, color: "var(--text-subtle)", marginTop: 2 }}
           >
-            (${deadCap.toFixed(1)}M Dead)
+            ({formatMoneyM(safeDeadCap)} Dead)
           </div>
         )}
       </div>
@@ -727,7 +746,7 @@ function RosterTable({
     if (deadCap > 0.5) {
       if (
         !window.confirm(
-          `Release ${player.name}?\n\nThis will accelerate $${deadCap.toFixed(1)}M of dead cap against your budget.`,
+          `Release ${player.name}?\n\nThis will accelerate ${formatMoneyM(deadCap)} of dead cap against your budget.`,
         )
       ) {
         setReleasing(null);
@@ -1924,7 +1943,7 @@ function PlayerCard({ player, onSelect, showDecisionContext = false, decisionCon
           {yearsLeft}yr
         </span>
         <span style={{ color: "var(--hairline)" }}>·</span>
-        <span>${salary.toFixed(1)}M</span>
+        <span>{formatMoneyM(salary)}</span>
       </div>
 
       {/* ── Key attribute bars ── */}
@@ -2238,9 +2257,10 @@ export default function Roster({ league, actions, onPlayerSelect }) {
     );
   }
 
-  const capUsed = team?.capUsed ?? 0;
-  const capTotal = team?.capTotal ?? 255;
-  const capRoom = team?.capRoom ?? capTotal - capUsed;
+  const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const capUsed = capSnapshot.capUsed;
+  const capTotal = capSnapshot.capTotal;
+  const capRoom = capSnapshot.capRoom;
   const avgOvr = players.length
     ? Math.round(
         players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length,
@@ -2323,7 +2343,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
                         : "var(--success)",
                 }}
               >
-                ${capRoom.toFixed(1)}M
+                {formatMoneyM(capRoom)}
               </div>
             </div>
 
