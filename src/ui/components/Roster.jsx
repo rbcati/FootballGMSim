@@ -43,6 +43,7 @@ import {
   evaluateResignRecommendation,
   summarizeExpiring,
 } from "../utils/contractInsights.js";
+import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2107,6 +2108,11 @@ export default function Roster({ league, actions, onPlayerSelect }) {
     : 0;
 
   const isOverLimit = league?.phase === "preseason" && players.length > 53;
+  const teamIntel = useMemo(
+    () => buildTeamIntelligence({ ...team, roster: players }, { week: league?.week ?? 1 }),
+    [team, players, league?.week],
+  );
+  const directionGuidance = useMemo(() => buildDirectionGuidance(teamIntel), [teamIntel]);
 
   return (
     <div>
@@ -2218,6 +2224,36 @@ export default function Roster({ league, actions, onPlayerSelect }) {
 
         {/* Cap bar */}
         <CapBar capUsed={capUsed} capTotal={capTotal} deadCap={team?.deadCap} />
+
+        <div
+          style={{
+            marginTop: "var(--space-3)",
+            display: "grid",
+            gap: 8,
+            padding: "var(--space-3)",
+            border: "1px solid var(--hairline)",
+            borderRadius: "var(--radius-md)",
+            background: "var(--surface)",
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
+            {teamIntel.needsNow.slice(0, 2).map((n) => <Badge key={`need-${n.pos}`} variant="destructive">Need now: {n.pos}</Badge>)}
+            {teamIntel.surplus.slice(0, 2).map((s) => <Badge key={`sur-${s.pos}`} variant="secondary">Surplus: {s.pos}</Badge>)}
+          </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{directionGuidance}</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+            <span>{teamIntel.expiringStarters} expiring starter{teamIntel.expiringStarters === 1 ? "" : "s"}</span>
+            {teamIntel.agingCoreWarnings[0] ? <span>{teamIntel.agingCoreWarnings[0]}</span> : null}
+            {teamIntel.capStressContracts[0] ? <span>Cap stress: {teamIntel.capStressContracts[0].name}</span> : null}
+            {teamIntel.upsideGroups[0] ? <span>Upside: {teamIntel.upsideGroups[0]}</span> : null}
+          </div>
+          {teamIntel.warnings.length > 0 && (
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>
+              {teamIntel.warnings.slice(0, 2).join(" · ")}
+            </div>
+          )}
+        </div>
 
         {/* Legend for indicators */}
         <div

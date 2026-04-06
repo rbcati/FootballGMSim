@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 
 const POS_FILTERS = ['ALL', 'QB', 'WR', 'RB', 'TE', 'OL', 'DL', 'LB', 'CB', 'S', 'K'];
 
@@ -16,6 +17,8 @@ export default function DraftBigBoard({ league }) {
       return [];
     }
   });
+  const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
   const rows = useMemo(() => {
     const list = (Array.isArray(prospects) ? prospects : []).filter((p) => filter === 'ALL' || p?.pos === filter);
@@ -30,8 +33,13 @@ export default function DraftBigBoard({ league }) {
       const bv = b?.[sort.key] ?? b?.combineResults?.fortyTime ?? 0;
       return sort.dir === 'asc' ? (av > bv ? 1 : -1) : (av > bv ? -1 : 1);
     });
-    return list;
-  }, [prospects, filter, sort, order]);
+    return list.map((p, idx) => {
+      const isNeedFit = teamIntel.needsNow.some((n) => n.pos === p?.pos);
+      const upside = (Number(p?.potential ?? p?.pot ?? p?.ovr ?? 60) - Number(p?.ovr ?? 60)) >= 8 || Number(p?.age ?? 30) <= 21;
+      const tag = idx < 8 ? 'BPA' : isNeedFit ? 'Need fit' : upside ? 'Upside' : null;
+      return { ...p, _draftTag: tag };
+    });
+  }, [prospects, filter, sort, order, teamIntel]);
 
   const move = (id, delta) => {
     const arr = [...order.filter((x) => x !== id), id];
@@ -45,6 +53,9 @@ export default function DraftBigBoard({ league }) {
 
   return <div className="card-premium" style={{ padding: 16 }}>
     <h3>Draft Big Board</h3>
+    <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
+      Needs now: {teamIntel.needsNow.map((n) => n.pos).join(", ") || "None flagged"} · Later: {teamIntel.needsLater.map((n) => n.pos).join(", ") || "None"}
+    </div>
     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
       {POS_FILTERS.map((p) => <button key={p} onClick={() => setFilter(p)}>{p}</button>)}
     </div>
@@ -53,7 +64,7 @@ export default function DraftBigBoard({ league }) {
       <tbody>
         {rows.map((p, i) => (
           <tr key={p?.id} onClick={() => setSelected(p)}>
-            <td>{i + 1}</td><td>{p?.name}</td><td>{p?.pos}</td><td>{p?.age}</td><td>~{p?.scoutedOvr ?? 60}</td><td>{p?.combineResults?.fortyTime ?? '-'}</td><td>{p?.college ?? '-'}</td>
+            <td>{i + 1}</td><td>{p?.name}</td><td>{p?.pos}</td><td>{p?.age}</td><td>~{p?.scoutedOvr ?? 60}</td><td>{p?.combineResults?.fortyTime ?? '-'}</td><td>{p?.college ?? '-'} {p?._draftTag ? `· ${p._draftTag}` : ""}</td>
             <td><button onClick={(e) => { e.stopPropagation(); move(p?.id, -1); }}>↑</button><button onClick={(e) => { e.stopPropagation(); move(p?.id, 1); }}>↓</button></td>
           </tr>
         ))}

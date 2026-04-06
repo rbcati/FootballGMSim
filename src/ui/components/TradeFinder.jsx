@@ -11,6 +11,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
+import { buildDirectionGuidance, buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -147,6 +148,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
   }, [partnerTeam?.roster, posFilter]);
   const userNeedsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
   const partnerNeedsSummary = useMemo(() => computeTeamNeedsSummary(partnerTeam), [partnerTeam]);
+  const userIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
   // Simple trade value calculation
   const calcValue = useCallback((playerIds, roster) => {
@@ -164,6 +166,11 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
   const partnerValue = calcValue(partnerOffering, partnerTeam?.roster);
   const maxValue = Math.max(userValue, partnerValue, 1);
   const tradeDelta = userValue - partnerValue;
+  const tradeImpact = useMemo(() => {
+    const incomingPositions = partnerOffering.map((id) => partnerTeam?.roster?.find((r) => r.id === id)?.pos).filter(Boolean);
+    const outgoingPositions = userOffering.map((id) => userTeam?.roster?.find((r) => r.id === id)?.pos).filter(Boolean);
+    return summarizeTradeImpact({ intel: userIntel, incomingPositions, outgoingPositions, capBefore: userTeam?.capRoom ?? 0, capAfter: userTeam?.capRoom ?? 0 });
+  }, [partnerOffering, userOffering, partnerTeam?.roster, userTeam?.roster, userIntel, userTeam?.capRoom]);
 
   const toggleUserPlayer = (id) => {
     setUserOffering(prev =>
@@ -319,6 +326,12 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
             </div>
             <div style={{ marginTop: 2, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
               {partnerTeam?.abbr ?? "Partner"}: {formatNeedsLine(partnerNeedsSummary)}
+            </div>
+            <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
+              {buildDirectionGuidance(userIntel)}
+            </div>
+            <div style={{ marginTop: 2, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
+              {tradeImpact.needHits.length ? `Need fit: ${tradeImpact.needHits.join(", ")}` : "Need fit: no top need addressed"} · {tradeImpact.timeline}
             </div>
 
             {userOffering.length > 0 && partnerOffering.length > 0 && (

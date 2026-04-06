@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
+import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -51,6 +52,7 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
   const userTeam = league?.teams?.find((t) => t.id === league.userTeamId);
   const capRoom = userTeam?.capRoom ?? 0;
   const needsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
   useEffect(() => {
     let active = true;
@@ -92,6 +94,13 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
   const trackedTargets = useMemo(() => filtered.filter((p) => p?.offers?.userOffered).slice(0, 5), [filtered]);
   const userLeadCount = useMemo(() => filtered.filter((p) => summarizeFreeAgentMarket(p).userLeads).length, [filtered]);
   const noSnapshotCount = useMemo(() => filtered.filter((p) => !summarizeFreeAgentMarket(p).hasVisibleSnapshot).length, [filtered]);
+  const recommended = useMemo(
+    () => filtered
+      .map((p) => ({ p, fit: scoreFreeAgentForTeam(p, teamIntel, capRoom) }))
+      .sort((a, b) => b.fit.score - a.fit.score)
+      .slice(0, 3),
+    [filtered, teamIntel, capRoom],
+  );
 
   return (
     <div className="fade-in">
@@ -102,7 +111,14 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button size="sm" onClick={() => onNavigate?.("Free Agency")}>Open Free Agency Workspace</Button>
             <Badge variant="outline">{formatNeedsLine(needsSummary)}</Badge>
+            <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
           </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildDirectionGuidance(teamIntel)}</div>
+          {recommended.map(({ p, fit }) => (
+            <div key={p.id} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+              {p.name} ({fit.pos}) · {fit.reason}
+            </div>
+          ))}
         </CardContent>
       </Card>
 
