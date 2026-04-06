@@ -51,6 +51,7 @@ import GodMode from "./GodMode.jsx";
 import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
 import WeeklyHub from "./WeeklyHub.jsx";
+import { derivePregameAngles, derivePostgameStory } from "../utils/gamePresentation.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -773,6 +774,12 @@ function ScheduleTab({
             nextGameStakes > 50 &&
             selectedWeek === currentWeek;
           const isClickable = game.played && onGameSelect && seasonId;
+          const matchupAngles = !game.played
+            ? derivePregameAngles({ league: { teams, schedule }, game, week: selectedWeek })
+            : [];
+          const postgameStory = game.played
+            ? derivePostgameStory({ league: { teams, phase: selectedWeek >= 19 ? "playoffs" : "regular" }, game, week: selectedWeek })
+            : null;
           const handleCardClick = isClickable
             ? () =>
                 onGameSelect(
@@ -841,6 +848,15 @@ function ScheduleTab({
                   {game.played ? "Final" : "Scheduled"}
                 </span>
               </div>
+              {!game.played && matchupAngles.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: "var(--space-2)" }}>
+                  {matchupAngles.map((angle) => (
+                    <Badge key={`${angle.key}-${angle.label}`} variant={angle.tone === "danger" ? "destructive" : angle.tone === "warning" ? "secondary" : "outline"}>
+                      {angle.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
               {/* Final score display */}
               {game.played && game.homeScore !== undefined && (
@@ -902,6 +918,12 @@ function ScheduleTab({
                       }}
                     >
                       View Box Score →
+                    </div>
+                  )}
+                  {postgameStory && (
+                    <div style={{ marginBottom: "var(--space-2)", padding: "6px 8px", border: "1px solid var(--hairline)", borderRadius: 8, background: "var(--surface-strong)" }}>
+                      <div style={{ fontWeight: 700, fontSize: "var(--text-xs)", color: "var(--text)" }}>{postgameStory.headline}</div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{postgameStory.detail}</div>
                     </div>
                   )}
                 </>

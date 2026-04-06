@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { ACTION_LABELS } from "../constants/navigationCopy.js";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
+import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalizeTeamId } from "../utils/gamePresentation.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -59,6 +60,28 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const injuries = useMemo(() => getInjuries(league), [league]);
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
+  const pregameAngles = useMemo(() => {
+    if (!nextGame) return [];
+    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === Number(nextGame.week));
+    const game = (weekData?.games ?? []).find((g) => {
+      const homeId = normalizeTeamId(g?.home);
+      const awayId = normalizeTeamId(g?.away);
+      return homeId === league?.userTeamId || awayId === league?.userTeamId;
+    });
+    return game ? derivePregameAngles({ league, game, week: nextGame.week }) : [];
+  }, [league, nextGame]);
+  const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
+  const userLastGameStory = useMemo(() => {
+    const targetWeek = Number(league?.week ?? 1) - 1;
+    if (targetWeek < 1) return null;
+    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === targetWeek);
+    const userGame = (weekData?.games ?? []).find((g) => {
+      const homeId = normalizeTeamId(g?.home);
+      const awayId = normalizeTeamId(g?.away);
+      return g?.played && (homeId === league?.userTeamId || awayId === league?.userTeamId);
+    });
+    return userGame ? derivePostgameStory({ league, game: userGame, week: targetWeek }) : null;
+  }, [league]);
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -144,6 +167,72 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           ))}
         </div>
       </section>
+
+      {nextGame && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Pregame framing</h3>
+          <Card variant="secondary">
+            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
+              <strong style={{ color: "var(--text)" }}>Week {nextGame.week} {nextGame.isHome ? "vs" : "at"} {nextGame.opp?.name ?? nextGame.opp?.abbr ?? "TBD"}</strong>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(pregameAngles.length ? pregameAngles : [{ label: "Standard game week", tone: "ok" }]).map((angle) => (
+                  <Badge key={angle.key ?? angle.label} variant={angle.tone === "danger" ? "destructive" : angle.tone === "warning" ? "secondary" : "outline"}>
+                    {angle.label}
+                  </Badge>
+                ))}
+              </div>
+              <div>Framing is based on schedule context, records, streaks, and rivalry/division state.</div>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Open schedule matchup board</Button>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {(userLastGameStory || weeklyHonors) && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Postgame pulse</h3>
+          <div className="weekly-urgent-list">
+            {userLastGameStory && (
+              <button className="weekly-urgent-item tone-info" onClick={() => onNavigate?.("Schedule")}>
+                <div>
+                  <strong>{userLastGameStory.headline}</strong>
+                  <span>{userLastGameStory.detail}</span>
+                </div>
+                <span>›</span>
+              </button>
+            )}
+            {weeklyHonors?.statementWin && (
+              <button className="weekly-urgent-item tone-warning" onClick={() => onNavigate?.("Schedule")}>
+                <div>
+                  <strong>Statement win · Week {weeklyHonors.week}</strong>
+                  <span>{weeklyHonors.statementWin.detail}</span>
+                </div>
+                <span>›</span>
+              </button>
+            )}
+          </div>
+        </section>
+      )}
+
+      {weeklyHonors && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Weekly honors</h3>
+          <Card variant="secondary">
+            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
+              <strong style={{ color: "var(--text)" }}>Week {weeklyHonors.week} recognition</strong>
+              {weeklyHonors.teamOfWeekId != null && (
+                <div>Team of the week is highlighted on the schedule board and standings snapshot.</div>
+              )}
+              {weeklyHonors.story && <div>Headline: {weeklyHonors.story.headline}</div>}
+              {weeklyHonors.topScoringGame && (
+                <div>
+                  Top scoring game: {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.away))?.abbr ?? "AWY"} {weeklyHonors.topScoringGame.awayScore} - {weeklyHonors.topScoringGame.homeScore} {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.home))?.abbr ?? "HME"}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       <section className="weekly-section">
         <h3 className="weekly-section__title">Team-building guidance</h3>

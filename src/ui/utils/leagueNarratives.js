@@ -1,3 +1,5 @@
+import { deriveWeeklyHonors, derivePregameAngles } from './gamePresentation.js';
+
 function safeNum(v, d = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
@@ -261,12 +263,62 @@ export function buildStorylineCards(league) {
     });
   }
 
+  const honors = deriveWeeklyHonors(league);
+  if (honors?.statementWin) {
+    cards.push({
+      id: `statement-week-${honors.week}`,
+      category: 'major_result',
+      priority: 91,
+      tone: 'warning',
+      title: `Statement win from Week ${honors.week}`,
+      detail: honors.statementWin.detail,
+      tab: 'Schedule',
+    });
+  }
+
+  if (honors?.topScoringGame) {
+    const awayId = normalizeTeamId(honors.topScoringGame.away);
+    const homeId = normalizeTeamId(honors.topScoringGame.home);
+    const away = teamMap.get(awayId);
+    const home = teamMap.get(homeId);
+    cards.push({
+      id: `shootout-week-${honors.week}`,
+      category: 'major_result',
+      priority: 76,
+      tone: 'info',
+      title: `Top-scoring game of Week ${honors.week}`,
+      detail: `${away?.abbr ?? 'AWY'} ${honors.topScoringGame.awayScore}-${honors.topScoringGame.homeScore} ${home?.abbr ?? 'HME'} set the scoring pace.`,
+      tab: 'Schedule',
+    });
+  }
+
+  if (next) {
+    const weekData = (league?.schedule?.weeks ?? []).find((w) => safeNum(w?.week) === next.nextWeek);
+    const game = (weekData?.games ?? []).find((g) => {
+      const h = normalizeTeamId(g?.home);
+      const a = normalizeTeamId(g?.away);
+      return h === league?.userTeamId || a === league?.userTeamId;
+    });
+    const angles = game ? derivePregameAngles({ league, game, week: next.nextWeek }) : [];
+    if (angles.length) {
+      cards.push({
+        id: `pregame-angle-${next.nextWeek}`,
+        category: 'pregame',
+        priority: 79,
+        tone: 'info',
+        title: `Pregame focus: ${angles[0].label}`,
+        detail: 'Matchup framing is now tied to schedule, standings, and recent form.',
+        tab: 'Weekly Hub',
+      });
+    }
+  }
+
   return cards.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0)).slice(0, 6);
 }
 
 export function buildNarrativeNewsItems(league) {
   const stories = buildStorylineCards(league);
-  return stories.map((s, idx) => ({
+  const storyItems = stories.map((s, idx) => ({
     id: `story-${s.id}`,
     headline: s.title,
     body: s.detail,
@@ -280,4 +332,25 @@ export function buildNarrativeNewsItems(league) {
     sortWeight: 500 - idx,
     tab: s.tab,
   }));
+
+  const weekly = deriveWeeklyHonors(league);
+  const weeklyItems = [];
+  if (weekly?.story) {
+    weeklyItems.push({
+      id: `weekly-headline-${weekly.week}`,
+      headline: `Week ${weekly.week} headline: ${weekly.story.headline}`,
+      body: weekly.story.detail,
+      priority: weekly.story.tag === 'Upset' ? 'high' : 'medium',
+      week: weekly.week,
+      season: league?.year,
+      teamId: weekly.story.winnerId ?? null,
+      type: 'story_major_result',
+      source: 'storyline',
+      category: 'major_result',
+      sortWeight: 540,
+      tab: 'Schedule',
+    });
+  }
+
+  return [...weeklyItems, ...storyItems];
 }

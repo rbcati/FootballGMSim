@@ -30,6 +30,10 @@ const CATEGORY_MAP = {
   story_injury_fallout: 'Major injuries',
   story_trade_fallout: 'Trades',
   story_rivalry: 'Rivalries',
+  major_result: 'Major game result',
+  story_major_result: 'Major game result',
+  pregame: 'Game-day framing',
+  story_pregame: 'Game-day framing',
 };
 
 function categoryFor(item) {
