@@ -1187,6 +1187,15 @@ function QuickJumpFab({ onNavigate }) {
   );
 }
 
+function getPhasePriorityTabs(phase) {
+  if (phase === "offseason_resign") return ["Weekly Hub", "Roster", "FA Hub", "Financials"];
+  if (phase === "free_agency") return ["Weekly Hub", "Free Agency", "FA Hub", "Trades"];
+  if (phase === "draft") return ["Weekly Hub", "Draft", "Mock Draft", "🎓 Draft"];
+  if (phase === "preseason") return ["Weekly Hub", "Roster Hub", "Depth Chart", "Training"];
+  if (phase === "playoffs") return ["Weekly Hub", "Postseason", "Game Plan", "Injuries"];
+  return ["Weekly Hub", "Game Plan", "Roster", "Trades"];
+}
+
 export default function LeagueDashboard({
   league,
   lastResults = [],
@@ -1328,12 +1337,12 @@ export default function LeagueDashboard({
       </div>
 
       {/* ── Contextual Action Banners (compact) ── */}
-      {league.phase === "offseason_resign" && (
+      {activeTab !== "Weekly Hub" && league.phase === "offseason_resign" && (
         <div onClick={() => setActiveTab("Roster")} className="action-banner action-banner-success">
           ✍️ <strong>Expiring Contracts</strong> — review before Free Agency
         </div>
       )}
-      {league.phase === "preseason" && (
+      {activeTab !== "Weekly Hub" && league.phase === "preseason" && (
         <div className="action-banner action-banner-warning">
           ⚠️ <strong>Roster Cutdown:</strong>{" "}
           <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? "var(--danger)" : "var(--success)" }}>
@@ -1342,19 +1351,19 @@ export default function LeagueDashboard({
           {" "}/ 53 — must release {Math.max(0, (userTeam?.rosterCount ?? 0) - 53)} players
         </div>
       )}
-      {league.phase === "playoffs" && activeTab !== "Postseason" && (
+      {activeTab !== "Weekly Hub" && league.phase === "playoffs" && activeTab !== "Postseason" && (
         <div onClick={() => setActiveTab("Postseason")} className="action-banner action-banner-gold">
           🏆 <strong>PLAYOFFS</strong> — click to view bracket
         </div>
       )}
-      {league.phase === "draft" && activeTab !== "Draft" && (
+      {activeTab !== "Weekly Hub" && league.phase === "draft" && activeTab !== "Draft" && (
         <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
 
       {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
-      {activeTab !== "Home" && league.phase !== "draft" && <div
+      {activeTab !== "Home" && activeTab !== "Weekly Hub" && league.phase !== "draft" && <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
@@ -1598,6 +1607,24 @@ export default function LeagueDashboard({
         </div>
 
       </div>}
+
+      <div className="standings-tabs" style={{ marginBottom: "var(--space-2)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
+        {getPhasePriorityTabs(league.phase).filter((tab) => TABS.includes(tab)).map((tab) => (
+          <button
+            key={`priority-${tab}`}
+            className={`standings-tab${activeTab === tab ? " active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              flexShrink: 0,
+              fontSize: "10px",
+              padding: "7px 10px",
+              borderColor: "var(--accent)",
+            }}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
       {/* ── Tab Navigation ── sticky, horizontally scrollable, no wrap ── */}
       <div
