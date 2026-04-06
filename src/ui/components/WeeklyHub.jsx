@@ -55,7 +55,7 @@ function summarizeOfferAssets(offer, side) {
   return "Undisclosed package";
 }
 
-export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating }) {
+export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating, onPlayerSelect, onTeamSelect }) {
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const injuries = useMemo(() => getInjuries(league), [league]);
@@ -221,9 +221,21 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
             <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
               <strong style={{ color: "var(--text)" }}>Week {weeklyHonors.week} recognition</strong>
               {weeklyHonors.teamOfWeekId != null && (
-                <div>Team of the week is highlighted on the schedule board and standings snapshot.</div>
+                <div>Team of the week: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onTeamSelect?.(weeklyHonors.teamOfWeekId)}>{league?.teams?.find((t) => t.id === weeklyHonors.teamOfWeekId)?.name ?? "Open team profile"}</button></div>
               )}
               {weeklyHonors.story && <div>Headline: {weeklyHonors.story.headline}</div>}
+              {weeklyHonors.playerOfWeek && (
+                <div>
+                  Player of the week: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.playerOfWeek.playerId)}>{weeklyHonors.playerOfWeek.name}</button>
+                  {weeklyHonors.playerOfWeek.line ? ` · ${weeklyHonors.playerOfWeek.line}` : ""}
+                </div>
+              )}
+              {weeklyHonors.rookieOfWeek && (
+                <div>
+                  Rookie spotlight: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.rookieOfWeek.playerId)}>{weeklyHonors.rookieOfWeek.name}</button>
+                  {weeklyHonors.rookieOfWeek.line ? ` · ${weeklyHonors.rookieOfWeek.line}` : ""}
+                </div>
+              )}
               {weeklyHonors.topScoringGame && (
                 <div>
                   Top scoring game: {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.away))?.abbr ?? "AWY"} {weeklyHonors.topScoringGame.awayScore} - {weeklyHonors.topScoringGame.homeScore} {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.home))?.abbr ?? "HME"}

@@ -156,6 +156,22 @@ export function derivePostgameStory({ league, game, week }) {
     detail = `${winner.abbr} upset ${loser.abbr} despite the record gap.`;
   }
 
+  if (safeNum(game?.overtimePeriods ?? game?.ot, 0) > 0) {
+    tag = 'Overtime thriller';
+    detail = `${winner.abbr} won it in overtime after a late swing.`;
+  }
+
+  const possibleComeback = (() => {
+    const winnerIsHome = winner.id === home.id;
+    const winnerScoredSecondHalf = safeNum(winnerIsHome ? game?.secondHalfHomeScore : game?.secondHalfAwayScore);
+    const loserScoredSecondHalf = safeNum(winnerIsHome ? game?.secondHalfAwayScore : game?.secondHalfHomeScore);
+    return winnerScoredSecondHalf >= loserScoredSecondHalf + 10 && margin <= 10;
+  })();
+  if (possibleComeback) {
+    tag = 'Comeback';
+    detail = `${winner.abbr} closed stronger in the second half to complete the comeback.`;
+  }
+
   if (safeNum(week) >= 17 && league?.phase === 'regular') {
     const confTeams = league?.teams?.filter((t) => String(t.conf) === String(winner.conf)) ?? [];
     const confRank = confTeams.sort((a, b) => computeWinPct(b) - computeWinPct(a));
@@ -169,6 +185,87 @@ export function derivePostgameStory({ league, game, week }) {
 
   headline = `${tag}: ${headline}`;
   return { headline, detail, tag, winnerId: winner.id, loserId: loser.id };
+}
+
+function gatherResultGame(league, game, week) {
+  const bucket = league?.resultsByWeek?.[week];
+  if (!Array.isArray(bucket)) return null;
+  const homeId = normalizeTeamId(game?.home);
+  const awayId = normalizeTeamId(game?.away);
+  return bucket.find((r) => {
+    const rHome = normalizeTeamId(r?.home);
+    const rAway = normalizeTeamId(r?.away);
+    return (rHome === homeId && rAway === awayId) || (rHome === awayId && rAway === homeId);
+  }) ?? null;
+}
+
+function topPerformer(resultGame, side) {
+  const rosterStats = resultGame?.boxScore?.[side] ?? {};
+  const rows = Object.entries(rosterStats)
+    .map(([pid, row]) => ({ playerId: safeNum(pid, null), ...row }))
+    .filter((row) => row?.stats && row?.name);
+  if (!rows.length) return null;
+  const scored = rows.map((row) => {
+    const s = row.stats;
+    const passYds = safeNum(s.passYds);
+    const rushYds = safeNum(s.rushYds);
+    const recYds = safeNum(s.recYds);
+    const tds = safeNum(s.passTD) + safeNum(s.rushTD) + safeNum(s.recTD);
+    const sacks = safeNum(s.sacks);
+    const ints = safeNum(s.ints);
+    const tackles = safeNum(s.tackles);
+    const ff = safeNum(s.ff);
+    const fr = safeNum(s.fr);
+    const score = (passYds * 0.08) + (rushYds * 0.1) + (recYds * 0.1) + (tds * 12) + (sacks * 7) + (ints * 10) + (tackles * 0.4) + (ff * 4) + (fr * 4);
+    return { ...row, score, tds, passYds, rushYds, recYds, sacks, ints, tackles };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0] ?? null;
+}
+
+function formatLine(player) {
+  if (!player) return null;
+  const parts = [];
+  if (player.passYds > 0) parts.push(`${player.passYds} pass yds`);
+  if (player.rushYds > 0) parts.push(`${player.rushYds} rush yds`);
+  if (player.recYds > 0) parts.push(`${player.recYds} rec yds`);
+  if (player.tds > 0) parts.push(`${player.tds} TD`);
+  if (player.sacks > 0) parts.push(`${player.sacks} sacks`);
+  if (player.ints > 0) parts.push(`${player.ints} INT`);
+  if (!parts.length && player.tackles > 0) parts.push(`${player.tackles} tackles`);
+  return parts.slice(0, 3).join(', ');
+}
+
+export function deriveBoxScoreImmersion({ league, game, week }) {
+  if (!game?.played) return null;
+  const resultGame = gatherResultGame(league, game, week);
+  if (!resultGame) return null;
+  const awayId = normalizeTeamId(game?.away);
+  const homeId = normalizeTeamId(game?.home);
+  const winnerSide = safeNum(game?.homeScore) >= safeNum(game?.awayScore) ? 'home' : 'away';
+  const winnerId = winnerSide === 'home' ? homeId : awayId;
+  const winner = league?.teams?.find((t) => t.id === winnerId);
+  const awayBest = topPerformer(resultGame, 'away');
+  const homeBest = topPerformer(resultGame, 'home');
+  const playerOfGame = [awayBest, homeBest].filter(Boolean).sort((a, b) => b.score - a.score)[0] ?? null;
+  const notable = [awayBest, homeBest]
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 2)
+    .map((p) => ({ playerId: p.playerId, name: p.name, pos: p.pos, line: formatLine(p) }));
+
+  const winnerStreak = computeStreak(winner?.recentResults ?? []);
+  const streakImpact = winnerStreak?.count >= 3
+    ? `${winner?.abbr ?? winner?.name} pushed the streak to ${winnerStreak.type}${winnerStreak.count}.`
+    : null;
+
+  return {
+    playerOfGame: playerOfGame
+      ? { playerId: playerOfGame.playerId, name: playerOfGame.name, pos: playerOfGame.pos, line: formatLine(playerOfGame) }
+      : null,
+    notable,
+    streakImpact,
+    hasPlayLog: Array.isArray(resultGame?.playLogs) && resultGame.playLogs.length > 0,
+  };
 }
 
 export function getLastCompletedWeek(league) {
@@ -207,11 +304,49 @@ export function deriveWeeklyHonors(league) {
       : normalizeTeamId(gameWithLargestMargin.away);
   })();
 
+  const resultsBucket = league?.resultsByWeek?.[completed.week];
+  const topPlayers = [];
+  const playerSeasonMap = new Map();
+  for (const team of league?.teams ?? []) {
+    for (const p of team?.roster ?? []) playerSeasonMap.set(safeNum(p?.id, null), safeNum(p?.yearsPro, null));
+  }
+  if (Array.isArray(resultsBucket)) {
+    for (const result of resultsBucket) {
+      const homeTop = topPerformer(result, 'home');
+      const awayTop = topPerformer(result, 'away');
+      if (homeTop) {
+        const yearsPro = playerSeasonMap.get(homeTop.playerId);
+        topPlayers.push({ ...homeTop, teamId: normalizeTeamId(result.home), gameId: result.id, isRookie: yearsPro === 0 });
+      }
+      if (awayTop) {
+        const yearsPro = playerSeasonMap.get(awayTop.playerId);
+        topPlayers.push({ ...awayTop, teamId: normalizeTeamId(result.away), gameId: result.id, isRookie: yearsPro === 0 });
+      }
+    }
+  }
+  const rankedPlayers = topPlayers.sort((a, b) => b.score - a.score);
+  const playerOfWeek = rankedPlayers[0] ?? null;
+  const rookieOfWeek = rankedPlayers.find((p) => p.isRookie) ?? null;
+
   return {
     week: completed.week,
     story: stories[0],
     statementWin: stories.find((s) => s.tag === 'Upset') ?? stories[0],
     teamOfWeekId,
     topScoringGame: topScoring,
+    playerOfWeek: playerOfWeek ? {
+      playerId: playerOfWeek.playerId,
+      teamId: playerOfWeek.teamId,
+      name: playerOfWeek.name,
+      pos: playerOfWeek.pos,
+      line: formatLine(playerOfWeek),
+    } : null,
+    rookieOfWeek: rookieOfWeek ? {
+      playerId: rookieOfWeek.playerId,
+      teamId: rookieOfWeek.teamId,
+      name: rookieOfWeek.name,
+      pos: rookieOfWeek.pos,
+      line: formatLine(rookieOfWeek),
+    } : null,
   };
 }
