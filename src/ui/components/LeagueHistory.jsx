@@ -44,34 +44,42 @@ const STAT_LABELS = {
   pressures: "Pres",
   passesDefended: "PD",
 };
+const NOOP_ACTIONS = {};
 
 export default function LeagueHistory({ onPlayerSelect, actions }) {
+  const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState("seasons");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
     setLoading(true);
+    const txPromise = api.getTransactions
+      ? api.getTransactions({}).catch(() => ({ payload: { transactions: [] } }))
+      : Promise.resolve({ payload: { transactions: [] } });
 
     Promise.all([
-      actions.getAllSeasons().catch(() => ({ payload: { seasons: [] } })),
-      actions.getRecords().catch(() => ({ payload: { records: null } })),
-      actions.getAllPlayerStats({}).catch(() => ({ payload: { stats: [] } })),
-    ]).then(([seasonsRes, recordsRes, playersRes]) => {
+      api.getAllSeasons ? api.getAllSeasons().catch(() => ({ payload: { seasons: [] } })) : Promise.resolve({ payload: { seasons: [] } }),
+      api.getRecords ? api.getRecords().catch(() => ({ payload: { records: null } })) : Promise.resolve({ payload: { records: null } }),
+      api.getAllPlayerStats ? api.getAllPlayerStats({}).catch(() => ({ payload: { stats: [] } })) : Promise.resolve({ payload: { stats: [] } }),
+      txPromise,
+    ]).then(([seasonsRes, recordsRes, playersRes, txRes]) => {
       if (!mounted) return;
       setSeasons(seasonsRes?.payload?.seasons ?? seasonsRes?.seasons ?? []);
       setRecords(recordsRes?.payload?.records ?? null);
       setAllPlayers(playersRes?.payload?.stats ?? []);
+      setTransactions(txRes?.payload?.transactions ?? []);
       setLoading(false);
     });
 
     return () => {
       mounted = false;
     };
-  }, [actions]);
+  }, [actions, api]);
 
   if (loading) {
     return <div className="flex items-center justify-center py-16 text-[color:var(--text-muted)]">Loading history...</div>;
@@ -89,6 +97,7 @@ export default function LeagueHistory({ onPlayerSelect, actions }) {
           <TabsTrigger value="seasons">Season Archive</TabsTrigger>
           <TabsTrigger value="records">Record Book</TabsTrigger>
           <TabsTrigger value="awards">Awards History</TabsTrigger>
+          <TabsTrigger value="office">League Office</TabsTrigger>
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
         </TabsList>
 
@@ -104,8 +113,12 @@ export default function LeagueHistory({ onPlayerSelect, actions }) {
           <AwardsHistory seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
+        <TabsContent value="office">
+          <LeagueOfficeHistory transactions={transactions} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
+
         <TabsContent value="compare">
-          <PlayerCompare actions={actions} pool={allPlayers} onPlayerSelect={onPlayerSelect} />
+          <PlayerCompare actions={api} pool={allPlayers} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
       </Tabs>
     </div>
@@ -301,6 +314,45 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
               ))}
             </TableBody>
           </Table>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeagueOfficeHistory({ transactions, onPlayerSelect }) {
+  if (!transactions?.length) return <div className="py-8 text-center text-[color:var(--text-muted)]">No transaction history tracked yet.</div>;
+
+  const rows = transactions.slice(0, 120);
+  const describe = (tx) => {
+    if (tx.type === "TRADE") return `${tx.fromTeamAbbr ?? "??"} ↔ ${tx.toTeamAbbr ?? "??"} completed a trade package.`;
+    if (tx.type === "SIGN") return `${tx.teamAbbr ?? "??"} signed ${tx.playerName ?? "player"}.`;
+    if (tx.type === "RELEASE") return `${tx.teamAbbr ?? "??"} released ${tx.playerName ?? "player"}.`;
+    if (tx.type === "EXTEND") return `${tx.teamAbbr ?? "??"} extended ${tx.playerName ?? "player"}.`;
+    if (tx.type === "RESTRUCTURE") return `${tx.teamAbbr ?? "??"} restructured ${tx.playerName ?? "player"}.`;
+    if (tx.type === "FRANCHISE_TAG") return `${tx.teamAbbr ?? "??"} tagged ${tx.playerName ?? "player"}.`;
+    return tx.typeLabel ?? tx.type;
+  };
+
+  return (
+    <Card className="card-premium">
+      <CardHeader><CardTitle>League Moves Log</CardTitle></CardHeader>
+      <CardContent className="p-0">
+        <ScrollArea className="h-[560px]">
+          <div className="divide-y divide-[color:var(--hairline)]">
+            {rows.map((tx, idx) => (
+              <div key={`${tx.id ?? idx}`} className="px-4 py-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <strong>{tx.typeLabel ?? tx.type}</strong>
+                  <span className="text-xs text-[color:var(--text-muted)]">Week {tx.week ?? "?"}</span>
+                </div>
+                <div className="text-[color:var(--text-muted)] mt-1">{describe(tx)}</div>
+                {tx.playerId != null && (
+                  <button className="btn mt-2 text-xs" onClick={() => onPlayerSelect?.(tx.playerId)}>Open player</button>
+                )}
+              </div>
+            ))}
+          </div>
         </ScrollArea>
       </CardContent>
     </Card>

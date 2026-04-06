@@ -126,6 +126,7 @@ export const toWorker = Object.freeze({
   /** Record Book & Hall of Fame */
   GET_RECORDS:        'GET_RECORDS',          // {} — fetch all-time and single-season records
   GET_HALL_OF_FAME:   'GET_HALL_OF_FAME',     // {} — fetch all HOF inductees
+  GET_TRANSACTIONS:   'GET_TRANSACTIONS',     // { seasonId?, teamId? } — league-office move log
 });
 
 // ─────────────────────────────────────────────
@@ -200,6 +201,7 @@ export const toUI = Object.freeze({
   /** Record Book & Hall of Fame */
   RECORDS:            'RECORDS',              // { records }
   HALL_OF_FAME:       'HALL_OF_FAME',         // { players[] }
+  TRANSACTIONS:       'TRANSACTIONS',         // { transactions[] }
 
   /** Season lifecycle */
   SEASON_START:       'SEASON_START',         // { year, season, phase } — forces UI to Standings tab

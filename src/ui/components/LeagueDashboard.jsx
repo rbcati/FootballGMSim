@@ -1938,7 +1938,13 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Analytics" && (
           <TabErrorBoundary label="Analytics">
-            <AnalyticsHub league={league} actions={actions} />
+            <AnalyticsHub
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
+              onNavigate={setActiveTab}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Offseason" && (

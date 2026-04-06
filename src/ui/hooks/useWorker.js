@@ -419,6 +419,10 @@ export function useWorker() {
     /** Fetch Hall of Fame inductees. */
     getHallOfFame: ()            => request(toWorker.GET_HALL_OF_FAME, {}, { silent: true }),
 
+    /** Fetch league transaction log entries (returns a Promise). */
+    getTransactions: (payload = {}) =>
+      request(toWorker.GET_TRANSACTIONS, payload, { silent: true }),
+
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
 

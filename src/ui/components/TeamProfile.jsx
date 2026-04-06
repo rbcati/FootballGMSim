@@ -134,6 +134,14 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const players = data?.currentPlayers ?? [];
   const color = teamColor(team?.abbr ?? "");
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const gp = toFiniteNumber(team?.wins, 0) + toFiniteNumber(team?.losses, 0) + toFiniteNumber(team?.ties, 0);
+  const ppg = gp > 0 ? toFiniteNumber(team?.ptsFor, 0) / gp : 0;
+  const papg = gp > 0 ? toFiniteNumber(team?.ptsAgainst, 0) / gp : 0;
+  const diff = toFiniteNumber(team?.ptsFor, 0) - toFiniteNumber(team?.ptsAgainst, 0);
+  const diffPerGame = gp > 0 ? diff / gp : 0;
+  const avgAge = players.length ? (players.reduce((sum, p) => sum + toFiniteNumber(p.age, 0), 0) / players.length) : 0;
+  const injuryCount = players.filter((p) => toFiniteNumber(p.injuryWeeksRemaining, 0) > 0).length;
+  const expiringCount = players.filter((p) => toFiniteNumber(p.contract?.years ?? p.years, 0) <= 1).length;
 
   return (
     <>
@@ -279,6 +287,21 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
               gap: "var(--space-5)",
             }}
           >
+            <section>
+              <h3 style={sectionHeadingStyle}>Current Season Identity</h3>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "var(--space-2)" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Analytics")}>Team analytics</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Injury report</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Financials</Button>
+              </div>
+              <div style={{ display: "flex", gap: "var(--space-3)", flexWrap: "wrap" }}>
+                <StatBox label="Points/Game" value={safeRound(ppg, 1)} sub={`Allowed ${safeRound(papg, 1)}/G`} />
+                <StatBox label="Point Differential" value={`${diff >= 0 ? "+" : ""}${safeRound(diff, 0)}`} sub={`${diffPerGame >= 0 ? "+" : ""}${safeRound(diffPerGame, 1)} per game`} />
+                <StatBox label="Roster Age" value={safeRound(avgAge, 1)} sub={avgAge >= 29 ? "Veteran-heavy" : avgAge <= 25 ? "Young core" : "Balanced"} />
+                <StatBox label="Availability Pressure" value={injuryCount} sub={`${expiringCount} expiring deals`} />
+              </div>
+            </section>
+
             {/* ── Franchise Stats ── */}
             <section>
               <h3

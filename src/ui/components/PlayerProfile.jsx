@@ -3,7 +3,7 @@
  *
  * Modal: accolades/legacy badges + position-aware career stats table.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import TraitBadge from "./TraitBadge";
 import RadarChart from "./RadarChart";
 import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
@@ -358,6 +358,23 @@ export default function PlayerProfile({
       return { label: col.label, ...best };
     })
     .filter((entry) => entry.value > 0);
+  const latestStatLine = stats.length ? stats[stats.length - 1] : null;
+  const latestTotals = latestStatLine?.totals ?? {};
+  const latestGP = Number(latestTotals.gamesPlayed ?? 0);
+  const perGameSummary = useMemo(() => {
+    if (!latestGP) return [];
+    const out = [];
+    if ((latestTotals.passYd ?? 0) > 0) out.push({ label: "Pass Yds/G", value: ((latestTotals.passYd ?? 0) / latestGP).toFixed(1) });
+    if ((latestTotals.rushYd ?? 0) > 0) out.push({ label: "Rush Yds/G", value: ((latestTotals.rushYd ?? 0) / latestGP).toFixed(1) });
+    if ((latestTotals.recYd ?? 0) > 0) out.push({ label: "Rec Yds/G", value: ((latestTotals.recYd ?? 0) / latestGP).toFixed(1) });
+    if ((latestTotals.tackles ?? 0) > 0) out.push({ label: "Tackles/G", value: ((latestTotals.tackles ?? 0) / latestGP).toFixed(1) });
+    return out.slice(0, 3);
+  }, [latestGP, latestTotals]);
+  const peakSeason = useMemo(() => {
+    if (!stats.length) return null;
+    const metric = player?.pos === "QB" ? "passYd" : ["RB", "FB"].includes(player?.pos) ? "rushYd" : ["WR", "TE"].includes(player?.pos) ? "recYd" : ["LB", "DL", "DE", "DT", "EDGE"].includes(player?.pos) ? "sacks" : "tackles";
+    return [...stats].sort((a, b) => Number(b?.totals?.[metric] ?? 0) - Number(a?.totals?.[metric] ?? 0))[0] ?? null;
+  }, [stats, player?.pos]);
   const bestSeason = [...stats].sort((a, b) => {
     const aPrimary = a?.totals?.[keyColumns[0]?.key] ?? 0;
     const bPrimary = b?.totals?.[keyColumns[0]?.key] ?? 0;
@@ -657,6 +674,26 @@ export default function PlayerProfile({
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Season archive</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Leaders</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Analytics")}>Analytics</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Injuries</Button>
+              </div>
+            </section>
+          )}
+
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Current vs Peak Context</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Current Season</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{latestStatLine ? seasonYear(latestStatLine.seasonId) : "—"}</div>
+                  {perGameSummary.map((g) => <div key={g.label} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{g.label}: {g.value}</div>)}
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Peak Season</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{peakSeason ? seasonYear(peakSeason.seasonId) : "—"}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Use career highs below for category peaks.</div>
+                </div>
               </div>
             </section>
           )}
