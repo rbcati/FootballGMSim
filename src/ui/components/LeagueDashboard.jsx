@@ -68,6 +68,12 @@ import {
   formatPercent,
   safeRound,
 } from "../utils/numberFormatting.js";
+import {
+  derivePregameAngles,
+  derivePostgameStory,
+  deriveBoxScoreImmersion,
+  deriveWeeklyHonors,
+} from "../utils/gamePresentation.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -704,6 +710,8 @@ function ScheduleTab({
   onGameSelect,
   playoffSeeds,
   onTeamRoster,
+  league,
+  onPlayerSelect,
 }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
 
@@ -750,6 +758,7 @@ function ScheduleTab({
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData = schedule?.weeks?.find((w) => w.week === selectedWeek);
   const games = weekData?.games ?? [];
+  const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
 
   return (
     <div>
@@ -794,6 +803,31 @@ function ScheduleTab({
           gap: "var(--space-4)",
         }}
       >
+        {weeklyHonors?.week === selectedWeek && (
+          <div className="matchup-card" style={{ gridColumn: "1 / -1", borderColor: "rgba(245,158,11,0.45)" }}>
+            <div className="matchup-header">
+              <span>Week {selectedWeek} honors</span>
+              <span style={{ color: "var(--warning)", fontWeight: 700 }}>Broadcast desk</span>
+            </div>
+            <div style={{ display: "grid", gap: 6, fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
+              {weeklyHonors?.playerOfWeek && (
+                <div>
+                  <strong style={{ color: "var(--text)" }}>Player of the Week:</strong>{" "}
+                  <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.playerOfWeek.playerId)}>{weeklyHonors.playerOfWeek.name}</button>
+                  {` (${weeklyHonors.playerOfWeek.pos ?? "—"})`}{weeklyHonors.playerOfWeek.line ? ` · ${weeklyHonors.playerOfWeek.line}` : ""}
+                </div>
+              )}
+              {weeklyHonors?.rookieOfWeek && (
+                <div>
+                  <strong style={{ color: "var(--text)" }}>Top Rookie:</strong>{" "}
+                  <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.rookieOfWeek.playerId)}>{weeklyHonors.rookieOfWeek.name}</button>
+                  {` (${weeklyHonors.rookieOfWeek.pos ?? "—"})`}{weeklyHonors.rookieOfWeek.line ? ` · ${weeklyHonors.rookieOfWeek.line}` : ""}
+                </div>
+              )}
+              {weeklyHonors?.statementWin && <div><strong style={{ color: "var(--text)" }}>Statement win:</strong> {weeklyHonors.statementWin.headline}</div>}
+            </div>
+          </div>
+        )}
         {games.map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
@@ -816,6 +850,20 @@ function ScheduleTab({
             nextGameStakes > 50 &&
             selectedWeek === currentWeek;
           const isClickable = game.played && onGameSelect && seasonId;
+          const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
+          const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
+          const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
+          const isTopWeekTeam = weeklyHonors?.teamOfWeekId != null
+            && selectedWeek === weeklyHonors.week
+            && (weeklyHonors.teamOfWeekId === away.id || weeklyHonors.teamOfWeekId === home.id);
+          const majorResultTag = (() => {
+            if (!postgame) return null;
+            if (selectedWeek === 22 && league?.championTeamId != null) return "Super Bowl aftermath";
+            if (selectedWeek === 21) return "Conference title clinched";
+            if (selectedWeek >= 19 && postgame.tag === "Upset") return "Playoff upset";
+            if (selectedWeek >= 17 && postgame.tag === "Upset") return "Playoff race shakeup";
+            return null;
+          })();
           const handleCardClick = isClickable
             ? () =>
                 onGameSelect(
@@ -867,6 +915,11 @@ function ScheduleTab({
                       }}
                     >
                       {nextGameStakes > 80 ? "🔥 RIVALRY" : "⚠️ STAKES"}
+                    </span>
+                  )}
+                  {isTopWeekTeam && (
+                    <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "rgba(245,158,11,0.18)", color: "var(--warning)", fontWeight: 700, fontSize: "var(--text-xs)" }}>
+                      Team of the Week
                     </span>
                   )}
                 </div>
@@ -947,7 +1000,48 @@ function ScheduleTab({
                       View Box Score →
                     </div>
                   )}
+                  {postgame && (
+                    <div style={{ marginBottom: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
+                      <strong style={{ color: "var(--text)" }}>{postgame.headline}</strong>
+                      <div>{postgame.detail}</div>
+                      {majorResultTag && (
+                        <div style={{ marginTop: 4 }}>
+                          <span style={{ border: "1px solid rgba(245,158,11,0.5)", color: "var(--warning)", borderRadius: 999, padding: "1px 8px", fontWeight: 700 }}>
+                            {majorResultTag}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {immersion?.playerOfGame && (
+                    <div style={{ marginBottom: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
+                      Player of the game:{" "}
+                      <button className="btn-link" style={{ fontSize: "inherit" }} onClick={(e) => { e.stopPropagation(); onPlayerSelect?.(immersion.playerOfGame.playerId); }}>
+                        {immersion.playerOfGame.name}
+                      </button>
+                      {immersion.playerOfGame.line ? ` · ${immersion.playerOfGame.line}` : ""}
+                      {immersion.streakImpact ? <div>{immersion.streakImpact}</div> : null}
+                    </div>
+                  )}
                 </>
+              )}
+              {!game.played && pregameAngles.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: "var(--space-2)" }}>
+                  {pregameAngles.map((angle) => (
+                    <span
+                      key={`${idx}-${angle.key}`}
+                      style={{
+                        padding: "2px 8px",
+                        borderRadius: "var(--radius-pill)",
+                        border: "1px solid var(--hairline)",
+                        fontSize: "var(--text-xs)",
+                        color: angle.tone === "danger" ? "var(--danger)" : angle.tone === "warning" ? "var(--warning)" : "var(--text-muted)",
+                      }}
+                    >
+                      {angle.label}
+                    </span>
+                  ))}
+                </div>
               )}
 
               {/* Teams */}
@@ -1674,6 +1768,7 @@ export default function LeagueDashboard({
               actions={actions}
               onNavigate={setActiveTab}
               onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
               onAdvanceWeek={onAdvanceWeek}
               busy={busy}
               simulating={simulating}
@@ -1720,6 +1815,8 @@ export default function LeagueDashboard({
               onTeamRoster={(teamId) => {
                 setSelectedTeamId(teamId);
               }}
+              league={league}
+              onPlayerSelect={setSelectedPlayerId}
             />
           </TabErrorBoundary>
         )}

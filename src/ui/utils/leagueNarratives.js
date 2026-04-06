@@ -352,5 +352,24 @@ export function buildNarrativeNewsItems(league) {
     });
   }
 
+  if (weekly?.playerOfWeek) {
+    weeklyItems.push({
+      id: `weekly-player-${weekly.week}-${weekly.playerOfWeek.playerId ?? 'na'}`,
+      headline: `Week ${weekly.week}: Player of the Week — ${weekly.playerOfWeek.name}`,
+      body: weekly.playerOfWeek.line
+        ? `${weekly.playerOfWeek.pos ?? 'Player'} delivered: ${weekly.playerOfWeek.line}.`
+        : 'Top single-game impact of the week.',
+      priority: 'medium',
+      week: weekly.week,
+      season: league?.year,
+      teamId: weekly.playerOfWeek.teamId ?? null,
+      type: 'story_major_result',
+      source: 'storyline',
+      category: 'major_result',
+      sortWeight: 535,
+      tab: 'Schedule',
+    });
+  }
+
   return [...weeklyItems, ...storyItems];
 }
