@@ -44,6 +44,61 @@ function classifyDirection(team, week) {
   return 'balanced';
 }
 
+function mapPhaseShortcuts(phase) {
+  if (phase === 'offseason_resign') {
+    return [
+      { label: 'Re-sign Core', tab: 'Roster' },
+      { label: 'FA Hub', tab: 'FA Hub' },
+      { label: 'Financials', tab: 'Financials' },
+    ];
+  }
+  if (phase === 'free_agency') {
+    return [
+      { label: 'Free Agency', tab: 'Free Agency' },
+      { label: 'FA Hub', tab: 'FA Hub' },
+      { label: 'Financials', tab: 'Financials' },
+      { label: 'Trades', tab: 'Trades' },
+    ];
+  }
+  if (phase === 'draft') {
+    return [
+      { label: 'Draft Room', tab: 'Draft Room' },
+      { label: 'Big Board', tab: '🎓 Draft' },
+      { label: 'Mock Draft', tab: 'Mock Draft' },
+    ];
+  }
+  if (phase === 'preseason') {
+    return [
+      { label: 'Roster Cuts', tab: 'Roster Hub' },
+      { label: 'Depth Chart', tab: 'Depth Chart' },
+      { label: 'Training', tab: 'Training' },
+    ];
+  }
+  if (phase === 'playoffs') {
+    return [
+      { label: 'Postseason', tab: 'Postseason' },
+      { label: 'Game Plan', tab: 'Game Plan' },
+      { label: 'Injuries', tab: 'Injuries' },
+      { label: 'Depth Chart', tab: 'Depth Chart' },
+    ];
+  }
+  return [
+    { label: 'Game Plan', tab: 'Game Plan' },
+    { label: 'Roster', tab: 'Roster' },
+    { label: 'Injuries', tab: 'Injuries' },
+    { label: 'Trades', tab: 'Trades' },
+  ];
+}
+
+function phasePriorityLabel(phase) {
+  if (phase === 'offseason_resign') return 'Lock extension decisions before market opens.';
+  if (phase === 'free_agency') return 'Bid early on needs and protect cap flexibility.';
+  if (phase === 'draft') return 'Finalize board priorities before your pick window.';
+  if (phase === 'preseason') return 'Complete cuts and lock depth roles before kickoff.';
+  if (phase === 'playoffs') return 'Preserve health and optimize matchups for elimination games.';
+  return 'Prepare your next game and keep the weekly loop moving.';
+}
+
 export function evaluateWeeklyContext(league) {
   const userTeam = getUserTeam(league);
   if (!league || !userTeam) return null;
@@ -67,59 +122,72 @@ export function evaluateWeeklyContext(league) {
   const urgent = [];
 
   if (ownerContext?.pressureState === 'urgent_demand') {
-    urgent.push({ tone: 'danger', label: 'Owner Directive', detail: ownerContext.message, tab: '🤖 GM Advisor' });
+    urgent.push({ tone: 'danger', level: 'blocker', rank: 100, label: 'Owner Directive', detail: ownerContext.message, why: 'Ignoring this can rapidly damage job security.', tab: '🤖 GM Advisor' });
   } else if (ownerContext?.pressureState === 'warning') {
-    urgent.push({ tone: 'warning', label: 'Owner Pressure', detail: ownerContext.message, tab: '🤖 GM Advisor' });
+    urgent.push({ tone: 'warning', level: 'recommendation', rank: 80, label: 'Owner Pressure', detail: ownerContext.message, why: 'Owner sentiment influences franchise stability.', tab: '🤖 GM Advisor' });
   }
 
   if (streak?.type === 'L' && streak.count >= 3) {
-    urgent.push({ tone: 'danger', label: `Slide Alert (${streak.type}${streak.count})`, detail: 'Results are sliding. Adjust depth chart, scheme, or personnel.', tab: 'Game Plan' });
+    urgent.push({ tone: 'danger', level: 'recommendation', rank: 75, label: `Slide Alert (${streak.type}${streak.count})`, detail: 'Results are slipping. Adjust depth chart, scheme, or personnel.', why: 'Another loss can shift season direction.', tab: 'Game Plan' });
   }
 
   if (injuries.length >= 2) {
-    urgent.push({ tone: 'warning', label: 'Injury Depth Risk', detail: `${injuries.length} active injuries are stressing depth.`, tab: 'Injuries' });
+    urgent.push({ tone: injuries.length >= 4 ? 'danger' : 'warning', level: injuries.length >= 4 ? 'blocker' : 'recommendation', rank: injuries.length >= 4 ? 95 : 65, label: 'Injury Depth Risk', detail: `${injuries.length} active injuries are stressing depth.`, why: 'Depth decisions directly impact next game performance.', tab: 'Injuries' });
   }
 
   if (incomingOffers.length > 0) {
-    urgent.push({ tone: 'info', label: 'Trade Calls Waiting', detail: `${incomingOffers.length} incoming offer${incomingOffers.length > 1 ? 's' : ''} in your inbox.`, tab: 'Trades' });
+    urgent.push({ tone: 'info', level: 'recommendation', rank: 62, label: 'Trade Calls Waiting', detail: `${incomingOffers.length} incoming offer${incomingOffers.length > 1 ? 's' : ''} in your inbox.`, why: 'Active offers can improve cap flexibility or fill needs fast.', tab: 'Trades' });
   }
 
   if (capRoom >= 28 && direction !== 'rebuilding') {
-    urgent.push({ tone: 'warning', label: 'Cap Flex Unused', detail: `You still have $${capRoom.toFixed(1)}M in space.`, tab: '💰 Cap' });
+    urgent.push({ tone: 'warning', level: 'recommendation', rank: 60, label: 'Cap Flex Unused', detail: `You still have $${capRoom.toFixed(1)}M in space.`, why: 'Unused cap in contention windows can waste roster opportunity.', tab: '💰 Cap' });
   }
 
   if (expiring.length >= 5 && week >= 8) {
-    urgent.push({ tone: 'info', label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, tab: 'Financials' });
+    urgent.push({ tone: 'info', level: 'recommendation', rank: 58, label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, why: 'Delays increase free-agency replacement pressure.', tab: 'Financials' });
   }
+
   const ownerContractPressure = ownerContext?.key?.includes('expiring_core_ignored');
   if ((contractMarket?.priorityExpiring ?? 0) >= 2 && !ownerContractPressure) {
     urgent.push({
       tone: 'warning',
+      level: 'recommendation',
+      rank: 70,
       label: 'Priority Expiring Starters',
       detail: `${contractMarket.priorityExpiring} key contracts need action soon.`,
+      why: 'Losing core starters can force expensive replacements.',
       tab: 'Financials',
     });
   }
   if ((contractMarket?.bidRiskCount ?? 0) >= 1) {
     urgent.push({
       tone: 'danger',
+      level: 'blocker',
+      rank: 88,
       label: 'Bid Risk',
       detail: `${contractMarket.bidRiskCount} active bid${contractMarket.bidRiskCount > 1 ? 's are' : ' is'} at risk.`,
+      why: 'Targets may sign elsewhere within the current window.',
       tab: 'Free Agency',
     });
   }
   if ((contractMarket?.closeToDecisionCount ?? 0) >= 1) {
     urgent.push({
       tone: 'warning',
+      level: 'recommendation',
+      rank: 76,
       label: 'Decision Window',
       detail: `${contractMarket.closeToDecisionCount} target${contractMarket.closeToDecisionCount > 1 ? 's are' : ' is'} close to deciding.`,
+      why: 'This is the final chance to improve your offer.',
       tab: 'Free Agency',
     });
   } else if ((contractMarket?.likelyToTest ?? 0) >= 2) {
     urgent.push({
       tone: 'info',
+      level: 'recommendation',
+      rank: 50,
       label: 'Testing Market Risk',
       detail: `${contractMarket.likelyToTest} players are likely to test free agency.`,
+      why: 'Market competition usually increases replacement cost.',
       tab: 'Financials',
     });
   }
@@ -138,6 +206,10 @@ export function evaluateWeeklyContext(league) {
       ? 'Prioritize picks, young upside, and flexible contracts.'
       : 'Balance floor and ceiling—do not overpay before your direction is clear.';
 
+  const rankedUrgent = urgent
+    .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
+    .slice(0, 6);
+
   return {
     week,
     direction,
@@ -145,7 +217,26 @@ export function evaluateWeeklyContext(league) {
     incomingOffers,
     focus,
     advisorPulse,
-    urgentItems: urgent.slice(0, 4),
+    urgentItems: rankedUrgent,
+    topPriorities: rankedUrgent.slice(0, 3),
+    phasePriority: phasePriorityLabel(league?.phase),
+    phaseShortcuts: mapPhaseShortcuts(league?.phase),
+    pressurePoints: {
+      ownerApproval: safeNum(league?.ownerApproval ?? league?.ownerMood, null),
+      capRoom,
+      expiringCount: expiring.length,
+      injuriesCount: injuries.length,
+      incomingTradeCount: incomingOffers.length,
+      nextMilestone: league?.phase === 'playoffs'
+        ? 'Survive and advance'
+        : league?.phase === 'draft'
+          ? 'Next draft pick window'
+          : league?.phase === 'free_agency'
+            ? 'Current free-agency bid cycle'
+            : league?.phase === 'offseason_resign'
+              ? 'Re-signing window closes soon'
+              : `Week ${week + 1}`,
+    },
     marketPulse: (contractMarket?.bidRiskCount ?? 0) > 0
       ? `${contractMarket.bidRiskCount} contract market${contractMarket.bidRiskCount > 1 ? 's are' : ' is'} heating up against your bids.`
       : (contractMarket?.closeToDecisionCount ?? 0) > 0
