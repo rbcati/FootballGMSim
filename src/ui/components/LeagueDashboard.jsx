@@ -1785,6 +1785,7 @@ export default function LeagueDashboard({
         {activeTab === "Free Agency" && (
           <TabErrorBoundary label="Free Agency">
             <FreeAgency
+              userTeamId={league.userTeamId}
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
