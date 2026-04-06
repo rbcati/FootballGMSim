@@ -1408,6 +1408,14 @@ if (res.injuries && res.injuries.length > 0) {
     }
   }
 
+  if (meta.phase === 'regular' || meta.phase === 'preseason') {
+    try {
+      await resolvePendingFreeAgencyOffers({ resolutionDay: 7, emitNotifications: true });
+    } catch (faErr) {
+      console.warn('[Worker] in-season FA offer resolution error (non-fatal):', faErr.message);
+    }
+  }
+
   const postTradeMeta = ensureDynastyMeta(cache.getMeta());
   const prunedOffers = pruneIncomingTradeOffers(postTradeMeta);
   if (prunedOffers.length !== (Array.isArray(postTradeMeta?.incomingTradeOffers) ? postTradeMeta.incomingTradeOffers.length : 0)) {
@@ -2407,12 +2415,115 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   // IndexedDB 'put' will handle extra fields fine.
   cache.updatePlayer(playerId, { offers: player.offers });
 
+  const liveMeta = ensureDynastyMeta(cache.getMeta());
+  let immediateOutcome = null;
+  if (liveMeta.phase !== 'free_agency') {
+    immediateOutcome = await resolvePendingFreeAgencyOffers({
+      resolutionDay: 7,
+      onlyPlayerId: playerId,
+      emitNotifications: false,
+    });
+  }
+
   await flushDirty();
 
   // Return updated FA data view so UI reflects the offer immediately
   // Also state update
   await handleGetFreeAgents({}, null); // Broadcast FA update if needed, but easier to just reply success
   post(toUI.STATE_UPDATE, buildViewState(), id);
+
+  if (immediateOutcome?.signedCount > 0) {
+    const resolved = immediateOutcome.results?.[0];
+    if (resolved?.signedTeamId === resolvedTeamId) {
+      post(toUI.NOTIFICATION, { level: 'info', message: `${resolved.playerName} accepted your offer immediately.` });
+    } else if (resolved?.signedTeamName) {
+      post(toUI.NOTIFICATION, { level: 'warn', message: `${resolved.playerName} signed with ${resolved.signedTeamName}.` });
+    }
+  } else if (immediateOutcome?.results?.[0]?.status === 'pending') {
+    post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} is reviewing offers and will decide after weekly sim.` });
+  }
+}
+
+async function finalizeFreeAgencySigning(player, offer, liveMeta) {
+  if (!player || !offer) return null;
+  const signingTeamId = Number(offer.teamId);
+  const signingTeam = cache.getTeam(signingTeamId);
+  if (!signingTeam) return null;
+
+  const capHit = (offer?.contract?.baseAnnual ?? 0) + ((offer?.contract?.signingBonus ?? 0) / (offer?.contract?.yearsTotal || 1));
+  if ((signingTeam.capRoom ?? 0) < capHit) {
+    const nextOffers = (player.offers ?? []).filter((o) => Number(o?.teamId) !== signingTeamId);
+    cache.updatePlayer(player.id, { offers: nextOffers });
+    return null;
+  }
+
+  cache.updatePlayer(player.id, {
+    teamId: signingTeamId,
+    status: 'active',
+    contract: offer.contract,
+    offers: [],
+  });
+  recalculateTeamCap(signingTeamId);
+
+  await Transactions.add({
+    type: 'SIGN',
+    seasonId: liveMeta.currentSeasonId,
+    week: liveMeta.currentWeek,
+    teamId: signingTeamId,
+    details: { playerId: player.id, contract: offer.contract },
+  });
+
+  const totalDealValue = Math.round((((offer?.contract?.baseAnnual ?? 0) * (offer?.contract?.yearsTotal ?? 1)) + (offer?.contract?.signingBonus ?? 0)) * 10) / 10;
+  await NewsEngine.logNews(
+    'TRANSACTION',
+    `${player.name} signs a ${(offer?.contract?.yearsTotal ?? 1)}-year, $${totalDealValue}M deal with ${signingTeam.name}.`,
+    signingTeamId,
+    { playerId: player.id, priority: (player.ovr ?? 0) >= 80 ? 'high' : undefined },
+  );
+
+  return {
+    playerId: player.id,
+    playerName: player.name,
+    signedTeamId: signingTeamId,
+    signedTeamName: signingTeam.name,
+  };
+}
+
+async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId = null, emitNotifications = false } = {}) {
+  const liveMeta = ensureDynastyMeta(cache.getMeta());
+  const userTeamId = Number(liveMeta?.userTeamId);
+  const targetPlayerId = onlyPlayerId == null ? null : Number(onlyPlayerId);
+  const freeAgentsWithOffers = cache.getAllPlayers().filter((p) => {
+    if (targetPlayerId != null && Number(p?.id) !== targetPlayerId) return false;
+    return (!p.teamId || p.status === 'free_agent') && Array.isArray(p.offers) && p.offers.length > 0;
+  });
+
+  const results = [];
+  for (const player of freeAgentsWithOffers) {
+    const decision = AiLogic.evaluateOffers(player, resolutionDay);
+    if (decision?.signed && decision?.offer) {
+      const userWasInvolved = (player.offers ?? []).some((o) => Number(o?.teamId) === userTeamId);
+      const resolved = await finalizeFreeAgencySigning(player, decision.offer, liveMeta);
+      if (resolved) {
+        results.push({ ...resolved, status: 'signed' });
+        if (emitNotifications && userWasInvolved) {
+          post(toUI.NOTIFICATION, { level: 'info', message: `${resolved.playerName} signed with ${resolved.signedTeamName}.` });
+        }
+        continue;
+      }
+    }
+    const userHasOffer = (player.offers ?? []).some((o) => Number(o?.teamId) === userTeamId);
+    results.push({ playerId: player.id, playerName: player.name, status: 'pending' });
+    if (emitNotifications && userHasOffer) {
+      post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} has not chosen a contract yet.` });
+    }
+  }
+
+  return {
+    signedCount: results.filter((row) => row.status === 'signed').length,
+    pendingCount: results.filter((row) => row.status === 'pending').length,
+    results,
+  };
 }
 
 // ── Handler: RELEASE_PLAYER ───────────────────────────────────────────────────
