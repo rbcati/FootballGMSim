@@ -47,8 +47,8 @@ function classifyDirection(team, week) {
 function mapPhaseShortcuts(phase) {
   if (phase === 'offseason_resign') {
     return [
-      { label: 'Re-sign Core', tab: 'Roster' },
       { label: 'FA Hub', tab: 'FA Hub' },
+      { label: 'Free Agency', tab: 'Free Agency' },
       { label: 'Financials', tab: 'Financials' },
     ];
   }
@@ -221,6 +221,14 @@ export function evaluateWeeklyContext(league) {
     topPriorities: rankedUrgent.slice(0, 3),
     phasePriority: phasePriorityLabel(league?.phase),
     phaseShortcuts: mapPhaseShortcuts(league?.phase),
+    marketSummary: {
+      bidRiskCount: Number(contractMarket?.bidRiskCount ?? 0),
+      closeToDecisionCount: Number(contractMarket?.closeToDecisionCount ?? 0),
+      likelyToTest: Number(contractMarket?.likelyToTest ?? 0),
+      coolingCount: Number(contractMarket?.coolingCount ?? 0),
+      heatingCount: Number(contractMarket?.heatingCount ?? 0),
+      hotPositions: Array.isArray(contractMarket?.hotPositions) ? contractMarket.hotPositions : [],
+    },
     pressurePoints: {
       ownerApproval: safeNum(league?.ownerApproval ?? league?.ownerMood, null),
       capRoom,

@@ -134,6 +134,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Expiring Contracts</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.expiringCount ?? 0} expiring</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Injuries</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.injuriesCount ?? 0} active injuries</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Trade Activity</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.incomingTradeCount ?? 0} incoming offers</CardContent></Card>
+          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Market Pulse</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.marketPulse}</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Next Milestone</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{nextGame ? `Week ${nextGame.week}: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : weeklyContext.pressurePoints?.nextMilestone}</CardContent></Card>
         </div>
       </section>
@@ -153,6 +154,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
                 <Badge variant="outline">{topOffer.stance ?? "Market call"}</Badge>
                 <Badge variant={topOffer.urgency === "high" ? "destructive" : "secondary"}>{topOffer.urgency === "high" ? "High urgency" : "Standard urgency"}</Badge>
                 <Badge variant="outline">AI framing: {topOffer.offerType?.replaceAll("_", " ") ?? "trade call"}</Badge>
+                <Badge variant="outline">Estimate-based valuation</Badge>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>

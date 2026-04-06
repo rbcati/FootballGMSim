@@ -2941,6 +2941,14 @@ async function handleGetFreeAgents(payload, id) {
   const userTeamId = meta.userTeamId;
   const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
   const userTeam = cache.getTeam(userTeamId);
+  const userDirection = inferTeamDirection(userTeam, Number(meta?.currentWeek ?? 1));
+  const userWinPct = Math.max(0, Math.min(1, (() => {
+    const wins = Number(userTeam?.wins ?? 0);
+    const losses = Number(userTeam?.losses ?? 0);
+    const ties = Number(userTeam?.ties ?? 0);
+    const games = wins + losses + ties;
+    return games > 0 ? (wins + ties * 0.5) / games : 0.5;
+  })()));
 
   const freeAgents = allFreeAgents
     .map(p => {
@@ -2952,8 +2960,16 @@ async function handleGetFreeAgents(payload, id) {
         const ask = buildDemandFromProfile(p, profile, {
           marketHeat: heat,
           morale: p.morale ?? 68,
-          fit: 65,
-          teamSuccess: 0.5,
+          fit: Number(p?.schemeFit ?? 65),
+          teamSuccess: userWinPct,
+        });
+        const reSignInsight = evaluateReSignPriority(p, {
+          marketHeat: heat,
+          teamDirection: userDirection,
+          capRoom: userTeam?.capRoom ?? 0,
+          teamSuccess: userWinPct,
+          profile,
+          demand: ask,
         });
 
         // Find the top bid (highest total contract value)
@@ -3001,6 +3017,27 @@ async function handleGetFreeAgents(payload, id) {
             ? (offers.length >= 3 ? 'You’re leading, but another team is close' : 'Your bid leads')
             : (userTrailReason || 'Another team currently leads')
           : (offers.length >= 2 ? 'Warm market' : 'Open market');
+        const knownMarket = offers.length > 0 || !!userOffer || !!topBid;
+        const riskLabelByRisk = {
+          high: 'High risk of movement',
+          medium: 'Moderate risk',
+          low: 'Low immediate risk',
+        };
+        const patienceLabel = decisionTiming.patienceWeeks <= 1
+          ? 'Ready to decide now'
+          : decisionTiming.patienceWeeks <= 2
+            ? 'Likely to decide soon'
+            : `Can wait ${decisionTiming.patienceWeeks} more cycles`;
+        const topPreferences = [
+          ['money', profile.moneyPriority],
+          ['contender', profile.contenderPriority],
+          ['role', profile.rolePriority],
+          ['security', profile.securityPriority],
+          ['loyalty', profile.loyaltyPriority],
+        ]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 2)
+          .map(([tag]) => tag);
 
         return {
           id:        p.id,
@@ -3018,15 +3055,26 @@ async function handleGetFreeAgents(payload, id) {
             decision: decisionLabelByState[decisionTiming.state] ?? 'Evaluating market',
             decisionReason: decisionTiming.reason,
             urgency: decisionTiming.risk,
+            urgencyLabel: decisionTiming.risk === 'high'
+              ? 'Decision expected soon'
+              : decisionTiming.risk === 'medium'
+                ? 'Decision window open'
+                : 'No immediate deadline signal',
             timingState: decisionTiming.state,
             attention: detailTone,
+            patienceWeeks: decisionTiming.patienceWeeks,
+            patienceLabel,
+            riskLabel: riskLabelByRisk[decisionTiming.risk] ?? 'Risk unknown',
+            knownMarket,
           },
           demandProfile: {
             headline: profile.headline,
             willingness: ask.willingness,
             askAnnual: ask.baseAnnual,
             askYears: ask.yearsTotal,
+            priorities: topPreferences,
           },
+          reSign: reSignInsight,
           offers: {
               count: offers.length,
               userOffered: !!userOffer,
@@ -3313,6 +3361,36 @@ function _tradeValue(player) {
   return Math.pow(ovr, 1.8) * posMult * ageFactor;
 }
 
+function tradeNeedsSummary(teamId) {
+  const roster = cache.getPlayersByTeam(Number(teamId));
+  const targets = { QB: 1, RB: 2, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2 };
+  const byPos = {};
+  for (const p of roster) {
+    if (!p?.pos) continue;
+    byPos[p.pos] = byPos[p.pos] ?? [];
+    byPos[p.pos].push(p);
+  }
+  const needs = [];
+  const surplus = [];
+  for (const [pos, starterCount] of Object.entries(targets)) {
+    const group = (byPos[pos] ?? []).slice().sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0));
+    const starters = group.slice(0, starterCount);
+    const avg = starters.length ? starters.reduce((sum, p) => sum + Number(p?.ovr ?? 60), 0) / starters.length : 0;
+    if (starters.length < starterCount || avg < 72) needs.push(pos);
+    if (group.length >= starterCount + 2 && avg >= 72) surplus.push(pos);
+  }
+  return { needs, surplus };
+}
+
+function tradePackagePositions(playerIds = []) {
+  const positions = new Set();
+  for (const pid of playerIds) {
+    const player = cache.getPlayer(Number(pid));
+    if (player?.pos) positions.add(player.pos);
+  }
+  return [...positions];
+}
+
 async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, id) {
   // offering  = { playerIds: [], pickIds: [] }  (what fromTeam gives)
   // receiving = { playerIds: [], pickIds: [] }  (what fromTeam gets back)
@@ -3329,7 +3407,13 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 
   // AI acceptance threshold scales by difficulty
   const meta = ensureDynastyMeta(cache.getMeta());
+  const week = Number(meta?.currentWeek ?? 1);
   const diff = meta.difficulty || 'Normal';
+  const aiDirection = inferTeamDirection(to, week);
+  const userDirection = inferTeamDirection(from, week);
+  const aiNeeds = tradeNeedsSummary(toTeamId);
+  const aiGetsPositions = tradePackagePositions(offering?.playerIds ?? []);
+  const aiGivesPositions = tradePackagePositions(receiving?.playerIds ?? []);
   let diffMult = 1.0;
   if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
   if (diff === 'Hard') diffMult = 1.15; // AI demands 15% more
@@ -3340,7 +3424,9 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   // Let's refine the logic: AI is "toTeam". It is receiving "offering" and giving up "receiving".
   // AI accepts if offering >= receiving * diffMult
 
-  const threshold = receiveVal * diffMult;
+  const directionPremium = aiDirection === 'contender' && userDirection !== 'contender' ? 1.06 : 1.0;
+  const fitDiscount = aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 0.95 : 1.0;
+  const threshold = receiveVal * diffMult * directionPremium * fitDiscount;
   const accepted = offerVal >= threshold;
 
   // ── Hard Cap Trade Validation ────────────────────────────────────────────────
@@ -3398,14 +3484,38 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     await executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving });
   }
 
+  const rejectionType = accepted ? null : (
+    (to?.capRoom ?? 0) < 0 ? 'cap'
+      : aiDirection === 'contender' && userDirection === 'rebuilding' && !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 'direction'
+        : !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) && aiGivesPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 'fit'
+          : 'value'
+  );
+  const reason = accepted
+    ? 'Deal accepted'
+    : ((to?.capRoom ?? 0) < 0
+      ? `${to?.abbr ?? 'They'} cannot absorb more salary right now without clearing cap.`
+      : aiDirection === 'contender' && userDirection === 'rebuilding' && !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos))
+        ? `${to?.abbr ?? 'They'} are in a contender window and this package does not solve an immediate need.`
+        : !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) && aiGivesPositions.some((pos) => aiNeeds.needs.includes(pos))
+          ? `${to?.abbr ?? 'They'} view this as a roster-fit mismatch: they would give up a need position without filling one.`
+          : `Offer trails their internal value estimate by about ${Math.round(Math.max(0, threshold - offerVal))} points.`);
+
   post(toUI.TRADE_RESPONSE, {
     accepted,
     offerValue:   Math.round(offerVal),
     receiveValue: Math.round(receiveVal),
-    rejectionType: accepted ? null : 'value',
+    rejectionType,
     requiredValue: Math.round(threshold),
     valueGap: accepted ? 0 : Math.round(Math.max(0, threshold - offerVal)),
-    reason: accepted ? 'Deal accepted' : `Offer undervalues the return by about ${Math.round(Math.max(0, threshold - offerVal))} value points.`,
+    reason,
+    reasonDetail: accepted ? null : {
+      aiDirection,
+      aiNeeds: aiNeeds.needs.slice(0, 3),
+      aiSurplus: aiNeeds.surplus.slice(0, 2),
+      incomingPos: aiGetsPositions,
+      outgoingPos: aiGivesPositions,
+      model: 'asset value heuristic with timeline and needs adjustments',
+    },
   }, id);
 
   if (accepted) {
