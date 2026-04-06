@@ -110,16 +110,16 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-5); 
-  border-radius: var(--radius-md);
+  border-radius: 0.9rem;
   border: 1px solid var(--hairline); 
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
   color: var(--text);
-  font-weight: 500; 
+  font-weight: 700; 
   font-size: var(--text-sm);
   cursor: pointer; 
-  transition: all var(--dur) var(--ease);
+  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease), filter var(--dur) var(--ease);
   position: relative;
   overflow: hidden;
   text-decoration: none;
@@ -135,9 +135,10 @@
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px) scale(1.05);
   box-shadow: var(--shadow-md);
   border-color: var(--hairline-strong);
+  filter: brightness(1.05);
 }
 
 .btn:hover::before {
@@ -145,7 +146,7 @@
 }
 
 .btn:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.98);
 }
 
 .btn.primary { 
@@ -257,6 +258,14 @@ label {
 
 .table tbody tr {
   transition: all var(--dur-fast) var(--ease);
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.02);
+}
+
+.table tbody tr:hover {
+  background: rgba(0, 48, 135, 0.12);
 }
 
 .table tbody tr:hover {
