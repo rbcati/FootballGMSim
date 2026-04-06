@@ -114,6 +114,32 @@ function getSafeMeta() {
 }
 
 /**
+ * Resolve team context for user-driven contract/roster actions.
+ * Uses explicit payload teamId when provided, otherwise safely falls back
+ * to current meta.userTeamId.
+ */
+function resolveTeamContext(explicitTeamId) {
+  const safeMeta = getSafeMeta();
+  const resolvedTeamId = explicitTeamId ?? safeMeta.userTeamId ?? null;
+  if (resolvedTeamId == null) {
+    return {
+      ok: false,
+      message: 'Active team context is missing. Please select your franchise and try again.',
+    };
+  }
+
+  const team = cache.getTeam(resolvedTeamId);
+  if (!team) {
+    return {
+      ok: false,
+      message: 'Active franchise team could not be resolved. Please reload and try again.',
+    };
+  }
+
+  return { ok: true, meta: safeMeta, teamId: resolvedTeamId, team };
+}
+
+/**
  * Defensive fallback for legacy paths that still reference `meta` implicitly.
  * We refresh this at the top of every inbound worker message.
  */
@@ -2026,9 +2052,12 @@ async function handleGetPlayerCareer({ playerId }, id) {
 
 // ── Handler: APPLY_FRANCHISE_TAG ──────────────────────────────────────────────
 async function handleApplyFranchiseTag({ playerId, teamId }, id) {
-  const meta = ensureDynastyMeta(cache.getMeta());
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { meta, teamId: resolvedTeamId } = teamCtx;
+
   const player = cache.getPlayer(playerId);
-  if (!player || player.teamId !== teamId) {
+  if (!player || player.teamId !== resolvedTeamId) {
       post(toUI.ERROR, { message: 'Invalid player for franchise tag.' }, id);
       return;
   }
@@ -2052,20 +2081,20 @@ async function handleApplyFranchiseTag({ playerId, teamId }, id) {
   };
 
   cache.updatePlayer(playerId, { contract, isTagged: true });
-  recalculateTeamCap(teamId);
+  recalculateTeamCap(resolvedTeamId);
 
   await Transactions.add({
       type: 'FRANCHISE_TAG',
       seasonId: meta.currentSeasonId,
       week: meta.currentWeek,
-      teamId,
+      teamId: resolvedTeamId,
       details: { playerId, contract }
   });
 
-  await NewsEngine.logNews('TRANSACTION', `The ${cache.getTeam(teamId)?.abbr || 'team'} placed the franchise tag on ${player.pos} ${player.name}.`, teamId);
+  await NewsEngine.logNews('TRANSACTION', `The ${cache.getTeam(resolvedTeamId)?.abbr || 'team'} placed the franchise tag on ${player.pos} ${player.name}.`, resolvedTeamId);
 
   await flushDirty();
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() }, id);
 }
 
 
@@ -2292,12 +2321,15 @@ async function handleSetUserTeam({ teamId }, id) {
 // ── Handler: SIGN_PLAYER ──────────────────────────────────────────────────────
 
 async function handleSignPlayer({ playerId, teamId, contract }, id) {
-  const meta = ensureDynastyMeta(cache.getMeta());
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { meta, teamId: resolvedTeamId, team } = teamCtx;
+
   const limit = (['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'].includes(meta.phase))
       ? Constants.ROSTER_LIMITS.OFFSEASON
       : Constants.ROSTER_LIMITS.REGULAR_SEASON;
 
-  const roster = cache.getPlayersByTeam(teamId);
+  const roster = cache.getPlayersByTeam(resolvedTeamId);
   if (roster.length >= limit) {
       post(toUI.ERROR, { message: `Roster limit (${limit}) reached. Release a player first.` }, id);
       return;
@@ -2308,7 +2340,6 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
   // ── Hard Cap Check ($301.2M) ────────────────────────────────────────────────
-  const team = cache.getTeam(teamId);
   if (team && contract) {
     const newCapHit = (contract.baseAnnual ?? 0) + ((contract.signingBonus ?? 0) / (contract.yearsTotal || 1));
     const projectedCapUsed = (team.capUsed ?? 0) + newCapHit;
@@ -2322,31 +2353,32 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   }
 
   const oldTeamId = player.teamId;
-  cache.updatePlayer(player.id, { teamId, contract, status: 'active', offers: [] });
+  cache.updatePlayer(player.id, { teamId: resolvedTeamId, contract, status: 'active', offers: [] });
 
   // Update cap
-  recalculateTeamCap(teamId);
-  if (oldTeamId != null && oldTeamId !== teamId) recalculateTeamCap(oldTeamId);
+  recalculateTeamCap(resolvedTeamId);
+  if (oldTeamId != null && oldTeamId !== resolvedTeamId) recalculateTeamCap(oldTeamId);
 
   const txDetails = { playerId, contract };
   await Transactions.add({
     type: 'SIGN', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId, details: txDetails,
+    week: meta.currentWeek, teamId: resolvedTeamId, details: txDetails,
   });
-  await NewsEngine.logTransaction('SIGN', { teamId, ...txDetails });
+  await NewsEngine.logTransaction('SIGN', { teamId: resolvedTeamId, ...txDetails });
 
   await flushDirty();
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() }, id);
 }
 
 // ── Handler: SUBMIT_OFFER ─────────────────────────────────────────────────────
 
 async function handleSubmitOffer({ playerId, teamId, contract }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { teamId: resolvedTeamId, team } = teamCtx;
+
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
-
-  const team = cache.getTeam(teamId);
-  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
 
   // Cap check
   const capHit = contract.baseAnnual + (contract.signingBonus / contract.yearsTotal);
@@ -2359,11 +2391,11 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   if (!player.offers) player.offers = [];
 
   // Remove existing offer from this team if any
-  const existingIdx = player.offers.findIndex(o => o.teamId === teamId);
+  const existingIdx = player.offers.findIndex(o => o.teamId === resolvedTeamId);
   if (existingIdx > -1) player.offers.splice(existingIdx, 1);
 
   player.offers.push({
-      teamId,
+      teamId: resolvedTeamId,
       teamName: team.name,
       contract,
       timestamp: Date.now()
@@ -2747,11 +2779,12 @@ async function handleGetExtensionAsk({ playerId }, id) {
 }
 
 async function handleExtendContract({ playerId, teamId, contract }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { teamId: resolvedTeamId, team } = teamCtx;
+
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
-
-  const team = cache.getTeam(teamId);
-  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
 
   // Cap Check
   // Calculate impact: new hit vs old hit
@@ -2772,7 +2805,7 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   cache.updatePlayer(playerId, { contract });
 
   // Update Team Cap
-  recalculateTeamCap(teamId);
+  recalculateTeamCap(resolvedTeamId);
 
   // Log Transaction
   const meta = ensureDynastyMeta(cache.getMeta());
@@ -2780,15 +2813,15 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
       week: meta.currentWeek,
-      teamId,
+      teamId: resolvedTeamId,
       details: { playerId, contract }
   });
-  await NewsEngine.logTransaction('EXTEND', { teamId, playerId, contract });
+  await NewsEngine.logTransaction('EXTEND', { teamId: resolvedTeamId, playerId, contract });
 
   await flushDirty();
 
   // Return updated roster and state
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(teamId), ...buildViewState() }, id);
+  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() }, id);
 }
 
 // ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
@@ -3171,11 +3204,12 @@ const _updateTeamCap = recalculateTeamCap;
 //   BUT future years each have a higher cap hit (+$3.33M bonus per year remaining).
 
 async function handleRestructureContract({ playerId, teamId }, id) {
+  const teamCtx = resolveTeamContext(teamId);
+  if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
+  const { meta, teamId: resolvedTeamId } = teamCtx;
+
   let player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
-
-  const team = cache.getTeam(teamId);
-  if (!team) { post(toUI.ERROR, { message: 'Team not found' }, id); return; }
 
   // Only players with at least 2 years remaining can be restructured
   const contract = player.contract ?? {
@@ -3214,20 +3248,19 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   };
 
   cache.updatePlayer(player.id, { contract: newContract });
-  recalculateTeamCap(teamId);
+  recalculateTeamCap(resolvedTeamId);
 
-  const meta = ensureDynastyMeta(cache.getMeta());
   await Transactions.add({
     type: 'RESTRUCTURE', seasonId: meta.currentSeasonId,
-    week: meta.currentWeek, teamId,
+    week: meta.currentWeek, teamId: resolvedTeamId,
     details: { playerId: player.id, convertAmount, newBase, newSigningBonus },
   });
 
   await flushDirty();
 
-  const updatedTeam = cache.getTeam(teamId);
+  const updatedTeam = cache.getTeam(resolvedTeamId);
   post(toUI.STATE_UPDATE, {
-    roster: buildRosterView(teamId),
+    roster: buildRosterView(resolvedTeamId),
     ...buildViewState(),
     restructureResult: {
       playerName:    player.name,

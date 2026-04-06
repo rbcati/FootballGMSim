@@ -604,9 +604,11 @@ export default function FreeAgency({
 
   // ── Derived state ──────────────────────────────────────────────────────────
 
+  const activeTeamId = userTeamId ?? league?.userTeamId ?? null;
+
   const userTeam = useMemo(
-    () => league?.teams?.find((t) => t.id === userTeamId),
-    [league, userTeamId],
+    () => league?.teams?.find((t) => t.id === activeTeamId),
+    [league, activeTeamId],
   );
 
   const capTotal = userTeam?.capTotal ?? 255;
@@ -666,8 +668,12 @@ export default function FreeAgency({
 
   const handleSign = async (playerId, contract) => {
     setSigningPlayerId(null);
+    if (activeTeamId == null) {
+      showFlash("Could not resolve your active team. Please reload and try again.");
+      return;
+    }
     try {
-        await actions.submitOffer(playerId, userTeamId, contract);
+        await actions.submitOffer(playerId, activeTeamId, contract);
         showFlash(`Offer submitted.`);
         // Optimistic update for test
         setFaState(prev => {
