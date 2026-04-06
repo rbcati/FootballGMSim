@@ -61,6 +61,13 @@ import CapManager from "./CapManager.jsx";
 import DraftBigBoard from "./DraftBigBoard.jsx";
 import CoachingScreen from "./CoachingScreen.jsx";
 import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
+import {
+  clampPercent,
+  deriveTeamCapSnapshot,
+  formatMoneyM,
+  formatPercent,
+  safeRound,
+} from "../utils/numberFormatting.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -653,7 +660,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                               fontSize: "var(--text-sm)",
                             }}
                           >
-                            ${(team.capRoom ?? 0).toFixed(1)}M
+                            {formatMoneyM(team.capRoom ?? team.capSpace)}
                           </TableCell>
                         </TableRow>
                       );
@@ -1268,10 +1275,16 @@ export default function LeagueDashboard({
       )
     : 75;
 
-  const capTotal = userTeam?.capTotal ?? 255;
-  const capUsed = userTeam?.capUsed ?? 0;
-  const deadCap = userTeam?.deadCap ?? 0;
-  const capRoom = userTeam?.capRoom ?? capTotal - capUsed;
+  const cap = deriveTeamCapSnapshot(userTeam, { fallbackCapTotal: 255 });
+  const capTotal = cap.capTotal;
+  const capUsed = cap.capUsed;
+  const deadCap = cap.deadCap;
+  const capRoom = cap.capRoom;
+  const ownerApproval = clampPercent(
+    safeRound(league.ownerApproval ?? league.ownerMood, 0, null),
+    null,
+  );
+  const ownerApprovalText = formatPercent(ownerApproval, "—");
 
   return (
     <div>
@@ -1294,8 +1307,8 @@ export default function LeagueDashboard({
             {userTeam && <span> · {userTeam.conf} {userTeam.div}</span>}
             {league.week && <span> · Week {league.week}</span>}
             {" · "}
-            <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? "var(--success)" : (league.ownerApproval ?? 75) >= 50 ? "var(--warning)" : "var(--danger)" }}>
-              Owner {league.ownerApproval ?? 75}%
+            <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
+              Owner {ownerApprovalText}
             </span>
           </div>
         </div>
@@ -1364,20 +1377,20 @@ export default function LeagueDashboard({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            ${capRoom.toFixed(1)}M
+            {formatMoneyM(capRoom)}
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
               <DonutChart data={[
-                  { value: capUsed - deadCap, color: "var(--accent)" },
+                  { value: Math.max(0, capUsed - deadCap), color: "var(--accent)" },
                   { value: deadCap, color: "var(--danger)" },
                   { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
               ]} size={36} strokeWidth={6} />
               <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: "var(--text-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
                   <div style={{ display: "flex", gap: "8px" }}>
-                      <span style={{ color: "var(--accent)" }}>Act: ${(capUsed - deadCap).toFixed(1)}</span>
-                      {deadCap > 0 && <span style={{ color: "var(--danger)" }}>Ded: ${deadCap.toFixed(1)}</span>}
+                      <span style={{ color: "var(--accent)" }}>Act: {formatMoneyM(Math.max(0, capUsed - deadCap))}</span>
+                      {deadCap > 0 && <span style={{ color: "var(--danger)" }}>Ded: {formatMoneyM(deadCap)}</span>}
                   </div>
-                  <div>Tot: ${capTotal.toFixed(0)}</div>
+                  <div>Tot: {formatMoneyM(capTotal, "—", { digits: 0 })}</div>
               </div>
           </div>
         </div>

@@ -8,6 +8,14 @@
  */
 
 import React, { useMemo } from "react";
+import {
+  clampPercent,
+  deriveTeamCapSnapshot,
+  formatMoneyM,
+  formatPercent,
+  safeRound,
+  toFiniteNumber,
+} from "../utils/numberFormatting.js";
 
 const PHASES = [
   {
@@ -199,14 +207,27 @@ function OffseasonStatsCard({ league, onNavigate }) {
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   if (!userTeam) return null;
 
-  const capRoom = userTeam.capRoom ?? (301.2 - (userTeam.capUsed ?? 0));
-  const capUsed = Math.max(0, 301.2 - capRoom);
-  const capPct = Math.min(100, Math.round((capUsed / 301.2) * 100));
+  const cap = deriveTeamCapSnapshot(userTeam, { fallbackCapTotal: 301.2 });
+  const capRoom = cap.capRoom;
+  const capUsed = cap.capUsed;
+  const capPct = safeRound(cap.usedPct, 0, 0);
   const rosterCount = userTeam.rosterCount ?? userTeam.roster?.length ?? 0;
   const overCap = capRoom < 0;
-  const ownerApproval = Math.round(league?.ownerApproval ?? league?.ownerMood ?? 75);
-  const ownerTone = ownerApproval < 34 ? "#FF453A" : ownerApproval < 60 ? "#FF9F0A" : "#34C759";
-  const ownerStatus = ownerApproval < 34
+  const ownerApproval = clampPercent(
+    safeRound(league?.ownerApproval ?? league?.ownerMood, 0, null),
+    null,
+  );
+  const ownerApprovalDisplay = formatPercent(ownerApproval, "—");
+  const ownerTone = ownerApproval == null
+    ? "var(--text-muted)"
+    : ownerApproval < 34
+      ? "#FF453A"
+      : ownerApproval < 60
+        ? "#FF9F0A"
+        : "#34C759";
+  const ownerStatus = ownerApproval == null
+    ? "Unknown"
+    : ownerApproval < 34
     ? "Critical"
     : ownerApproval < 50
       ? "Hot Seat"
@@ -220,10 +241,10 @@ function OffseasonStatsCard({ league, onNavigate }) {
       : "Target upgrades in weak positions.";
 
   const stats = [
-    { label: "Cap Room", value: `$${capRoom.toFixed(1)}M`, color: overCap ? "#FF453A" : capRoom < 10 ? "#FF9F0A" : "#34C759" },
+    { label: "Cap Room", value: formatMoneyM(capRoom), color: overCap ? "#FF453A" : capRoom < 10 ? "#FF9F0A" : "#34C759" },
     { label: "Roster Size", value: `${rosterCount} / 53`, color: rosterCount > 53 ? "#FF453A" : "#34C759" },
-    { label: "Team OVR", value: userTeam.ovr ?? "—", color: "#0A84FF" },
-    { label: "Season", value: league.year ?? "—", color: "var(--text)" },
+    { label: "Team OVR", value: toFiniteNumber(userTeam.ovr, "—"), color: "#0A84FF" },
+    { label: "Season", value: toFiniteNumber(league.year, "—"), color: "var(--text)" },
   ];
 
   return (
@@ -231,10 +252,10 @@ function OffseasonStatsCard({ league, onNavigate }) {
       <div className="mb-2 rounded-lg border border-white/10 bg-black/20 p-2.5">
         <div className="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">
           <span>Owner Approval</span>
-          <span style={{ color: ownerTone }}>{ownerApproval}% · {ownerStatus}</span>
+          <span style={{ color: ownerTone }}>{ownerApprovalDisplay} · {ownerStatus}</span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${ownerApproval}%`, background: ownerTone }} />
+          <div className="h-full rounded-full transition-all duration-300" style={{ width: formatPercent(ownerApproval, "0%"), background: ownerTone }} />
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-slate-300">{nextAction}</span>
@@ -261,7 +282,7 @@ function OffseasonStatsCard({ league, onNavigate }) {
       <div className="rounded-lg border border-white/5 bg-black/20 p-2">
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.6rem", color: "var(--text-subtle)", marginBottom: 3 }}>
           <span>Cap Used</span>
-          <span>{capPct}%</span>
+          <span>{formatPercent(capPct, "—")}</span>
         </div>
         <div style={{ height: 5, borderRadius: 3, background: "var(--hairline)", overflow: "hidden" }}>
           <div style={{
