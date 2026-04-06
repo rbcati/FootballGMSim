@@ -423,7 +423,13 @@ function dbDelGlobal(storeName, key) {
 
 export const Saves = {
   loadAll: ()   => dbGetAllGlobal(GLOBAL_STORES.SAVES),
+  get:     (id) => txOpGlobal(GLOBAL_STORES.SAVES, 'readonly', (store, resolve, reject) => {
+    const req = store.get(id);
+    req.onsuccess = () => resolve(req.result ?? null);
+    req.onerror   = () => reject(req.error);
+  }),
   save:    (s)  => dbPutGlobal(GLOBAL_STORES.SAVES, s),
+  put:     (s)  => dbPutGlobal(GLOBAL_STORES.SAVES, s),
   delete:  (id) => dbDelGlobal(GLOBAL_STORES.SAVES, id),
 };
 

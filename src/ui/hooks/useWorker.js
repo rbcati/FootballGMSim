@@ -187,15 +187,15 @@ export function useWorker() {
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
 
-      // Resolve any waiting promise first.
+      // Resolve/reject any waiting promise first.
       // Silent requests (getRoster, getFreeAgents, history lookups) never set
       // busy=true, so they must NOT dispatch IDLE which would zero out
-      // simulating/simProgress mid-simulation.  Non-silent action requests
-      // (submitTrade) do set busy=true and clear it via IDLE.
+      // simulating/simProgress mid-simulation.
       if (id && pendingRef.current.has(id)) {
-        const { resolve, silent } = pendingRef.current.get(id);
+        const { resolve, reject, silent } = pendingRef.current.get(id);
         pendingRef.current.delete(id);
-        resolve({ type, payload });
+        if (type === toUI.ERROR) reject(new Error(payload.message || 'Worker request failed'));
+        else resolve({ type, payload });
         dispatch({ type: silent ? 'CLEAR_BUSY' : 'IDLE' });
       }
 
@@ -264,12 +264,6 @@ export function useWorker() {
           break;
         case toUI.ERROR:
           dispatch({ type: 'ERROR', message: payload.message });
-          // Reject any pending promise too
-          if (id && pendingRef.current.has(id)) {
-            const { reject } = pendingRef.current.get(id);
-            pendingRef.current.delete(id);
-            reject(new Error(payload.message));
-          }
           break;
         case toUI.SIM_BATCH_PROGRESS:
           dispatch({ type: 'BATCH_SIM_PROGRESS', currentWeek: payload.currentWeek, phase: payload.phase });
@@ -297,6 +291,21 @@ export function useWorker() {
             if (idx >= 0) existing[idx] = payload;
             else existing.push(payload);
             localStorage.setItem('gmsim_save_manifest', JSON.stringify(existing));
+          } catch (_e) { /* non-fatal */ }
+          break;
+        case 'SAVE_MANIFEST_REMOVE':
+          try {
+            const existing = JSON.parse(localStorage.getItem('gmsim_save_manifest') || '[]');
+            localStorage.setItem(
+              'gmsim_save_manifest',
+              JSON.stringify(existing.filter((s) => s?.id !== payload?.id)),
+            );
+          } catch (_e) { /* non-fatal */ }
+          break;
+        case 'SAVE_MANIFEST_REPLACE':
+          try {
+            const next = Array.isArray(payload?.saves) ? payload.saves : [];
+            localStorage.setItem('gmsim_save_manifest', JSON.stringify(next));
           } catch (_e) { /* non-fatal */ }
           break;
         default:
@@ -358,10 +367,7 @@ export function useWorker() {
     getAllSaves: ()            => request(toWorker.GET_ALL_SAVES, {}, { silent: true }),
 
     /** Load a specific save. */
-    loadSave: (leagueId)       => {
-      dispatch({ type: 'BUSY' });
-      send(toWorker.LOAD_SAVE, { leagueId });
-    },
+    loadSave: (leagueId)       => request(toWorker.LOAD_SAVE, { leagueId }, { silent: false }),
 
     /** Delete a save (returns Promise with updated list). */
     deleteSave: (leagueId)     => request(toWorker.DELETE_SAVE, { leagueId }, { silent: true }),
