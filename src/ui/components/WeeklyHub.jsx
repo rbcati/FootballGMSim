@@ -204,6 +204,18 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           </CardContent>
         </Card>
       </section>
+
+      <section className="weekly-section">
+        <h3 className="weekly-section__title">League universe</h3>
+        <Card variant="secondary">
+          <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingTop: 16 }}>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Open season archive</Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>View Hall of Fame</Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Browse stat leaders</Button>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Season Recap")}>Open season recap</Button>
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

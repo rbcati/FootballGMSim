@@ -1737,6 +1737,7 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               userTeamId={league.userTeamId}
               actions={actions}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
@@ -1951,6 +1952,7 @@ export default function LeagueDashboard({
               league={league}
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
@@ -2002,6 +2004,7 @@ export default function LeagueDashboard({
             onClose={() => setSelectedPlayerId(null)}
             actions={actions}
             teams={league.teams}
+            onNavigate={setActiveTab}
           />
         </TabErrorBoundary>
       )}
@@ -2017,6 +2020,7 @@ export default function LeagueDashboard({
               setSelectedPlayerId(id);
             }}
             actions={actions}
+            onNavigate={setActiveTab}
           />
         </TabErrorBoundary>
       )}

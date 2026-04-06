@@ -106,7 +106,7 @@ function StatBox({ label, value, sub }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }) {
+export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRelocate, setShowRelocate] = useState(false);
@@ -286,6 +286,11 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
               >
                 Franchise Records
               </h3>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "var(--space-2)" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Season archive</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Leaders</Button>
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -313,6 +318,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                   }
                 />
                 <StatBox label="Div. Titles" value={franchise.divTitles || 0} />
+                <StatBox label="Playoff Apps" value={franchise.playoffAppearances || 0} />
               </div>
             </section>
 
@@ -416,6 +422,79 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions }
                       ))}
                     </TableBody>
                   </Table>
+                </div>
+              </section>
+            )}
+
+            {(franchise.bestSeasons?.length > 0 || franchise.worstSeasons?.length > 0) && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Franchise Legacy Highlights</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-2)" }}>
+                  <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Best Seasons</div>
+                    {(franchise.bestSeasons ?? []).slice(0, 3).map((row) => (
+                      <div key={`best-${row.year}`} style={{ marginTop: 6, fontSize: "var(--text-sm)" }}>
+                        <strong>{row.year}</strong> · {row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ""} {row.champion ? "🏆" : ""}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700, textTransform: "uppercase" }}>Toughest Seasons</div>
+                    {(franchise.worstSeasons ?? []).slice(0, 3).map((row) => (
+                      <div key={`worst-${row.year}`} style={{ marginTop: 6, fontSize: "var(--text-sm)" }}>
+                        <strong>{row.year}</strong> · {row.wins}-{row.losses}{row.ties ? `-${row.ties}` : ""}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {franchise.hallOfFamers?.length > 0 && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Hall of Famers Tied to Franchise</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+                  {franchise.hallOfFamers.slice(0, 10).map((p) => (
+                    <button
+                      key={`hof-${p.id}`}
+                      onClick={() => onPlayerSelect && onPlayerSelect(p.id)}
+                      style={{
+                        border: "1px solid var(--hairline)",
+                        background: "var(--surface-strong)",
+                        borderRadius: "var(--radius-pill)",
+                        padding: "4px 10px",
+                        cursor: "pointer",
+                        fontSize: "var(--text-xs)",
+                        color: "var(--text)",
+                      }}
+                    >
+                      🏛️ {p.name} ({p.pos})
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {franchise.franchiseLeaders && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Franchise Leaders</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "var(--space-2)" }}>
+                  {Object.entries(franchise.franchiseLeaders).map(([key, rows]) => (
+                    <div key={key} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", fontWeight: 700 }}>
+                        {rows?.[0]?.label ?? key}
+                      </div>
+                      {(rows ?? []).slice(0, 3).map((row) => (
+                        <div
+                          key={`${key}-${row.playerId}`}
+                          onClick={() => onPlayerSelect && onPlayerSelect(row.playerId)}
+                          style={{ marginTop: 6, fontSize: "var(--text-sm)", cursor: "pointer" }}
+                        >
+                          <strong>{row.name}</strong> ({row.pos}) · {safeRound(toFiniteNumber(row.value, 0), 0).toLocaleString()}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </section>
             )}

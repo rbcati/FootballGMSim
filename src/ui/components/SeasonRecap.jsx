@@ -107,7 +107,7 @@ function ConfettiOverlay() {
   );
 }
 
-export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect }) {
+export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNavigate }) {
   const [showConfetti, setShowConfetti] = useState(true);
 
   useEffect(() => {
@@ -124,17 +124,14 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect }) {
     ? teams.find(t => t.id === league.championTeamId)
     : teams.sort((a, b) => b.wins - a.wins)[0];
 
-  // Generate mock awards from team data
+  // Team context summaries from real standings data
   const awards = useMemo(() => {
     if (!teams.length) return {};
 
-    // Simplified award generation from available data
     const sorted = [...teams].sort((a, b) => b.ptsFor - a.ptsFor);
     const bestOffense = sorted[0];
     const bestDefense = [...teams].sort((a, b) => a.ptsAgainst - b.ptsAgainst)[0];
-    const mostImproved = teams[Math.floor(Math.random() * teams.length)];
-
-    return { bestOffense, bestDefense, mostImproved };
+    return { bestOffense, bestDefense };
   }, [teams]);
 
   // Standing rankings
@@ -337,21 +334,38 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect }) {
 
       {/* Share Button */}
       <AnimatedSection delay={2500}>
-        <button
-          onClick={() => {
-            const text = `${year} Season Recap\n🏆 Champion: ${champion?.name || "TBD"} (${champion?.wins}-${champion?.losses})\n${userTeam ? `My team: ${userTeam.name} (${userTeam.wins}-${userTeam.losses})` : ""}\n#FootballGMSim`;
-            navigator.clipboard?.writeText(text);
-          }}
-          style={{
-            width: "100%", padding: 12, fontSize: 13, fontWeight: 700,
-            background: "var(--surface-strong, #1a1a2e)", color: "var(--text)",
-            border: "1px solid var(--hairline)", borderRadius: "var(--radius-md, 8px)",
-            cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          }}
-        >
-          📋 Copy Season Summary
-        </button>
+        <div style={{ display: "grid", gap: 8 }}>
+          <button
+            onClick={() => {
+              const text = `${year} Season Recap\n🏆 Champion: ${champion?.name || "TBD"} (${champion?.wins}-${champion?.losses})\n${userTeam ? `My team: ${userTeam.name} (${userTeam.wins}-${userTeam.losses})` : ""}\n#FootballGMSim`;
+              navigator.clipboard?.writeText(text);
+            }}
+            style={{
+              width: "100%", padding: 12, fontSize: 13, fontWeight: 700,
+              background: "var(--surface-strong, #1a1a2e)", color: "var(--text)",
+              border: "1px solid var(--hairline)", borderRadius: "var(--radius-md, 8px)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            📋 Copy Season Summary
+          </button>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button onClick={() => onNavigate?.("History")} style={secondaryBtnStyle}>Open season archive</button>
+            <button onClick={() => onNavigate?.("Hall of Fame")} style={secondaryBtnStyle}>View Hall of Fame</button>
+            <button onClick={() => onNavigate?.("Leaders")} style={secondaryBtnStyle}>See league leaders</button>
+          </div>
+        </div>
       </AnimatedSection>
     </div>
   );
 }
+
+const secondaryBtnStyle = {
+  padding: "8px 10px",
+  fontSize: 11,
+  borderRadius: "var(--radius-md, 8px)",
+  border: "1px solid var(--hairline)",
+  background: "var(--surface-strong, #1a1a2e)",
+  color: "var(--text)",
+  cursor: "pointer",
+};
