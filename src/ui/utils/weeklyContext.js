@@ -1,6 +1,7 @@
 import { evaluateOwnerMessageContext } from './ownerMessages.js';
 import { buildDirectionGuidance, buildTeamIntelligence } from './teamIntelligence.js';
 import { buildStorylineCards } from './leagueNarratives.js';
+import { deriveFranchisePressure } from './pressureModel.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -123,6 +124,8 @@ export function evaluateWeeklyContext(league) {
     currentSeason: league?.year,
   });
 
+  const pressure = deriveFranchisePressure(league, { intel, direction, ownerContext });
+
   const urgent = [];
 
   if (ownerContext?.pressureState === 'urgent_demand') {
@@ -207,6 +210,15 @@ export function evaluateWeeklyContext(league) {
     });
   }
 
+
+  if (pressure?.media?.reasons?.[0]) {
+    urgent.push({ tone: pressure.media.score >= 76 ? 'danger' : 'warning', level: 'recommendation', rank: pressure.media.score >= 76 ? 90 : 68, label: 'Media Temperature', detail: pressure.media.reasons[0], why: 'Narrative heat can increase scrutiny on every decision.', tab: 'News' });
+  }
+
+  if (pressure?.fans?.reasons?.[0]) {
+    urgent.push({ tone: pressure.fans.score < 45 ? 'warning' : 'info', level: 'recommendation', rank: 64, label: 'Fan Sentiment', detail: pressure.fans.reasons[0], why: 'Fan mood affects franchise momentum and owner confidence.', tab: 'News' });
+  }
+
   const focus = ownerContext?.expectedAction
     ? { title: ownerContext.expectedAction, subtitle: 'Owner expectation is active this week.' }
     : direction === 'contender'
@@ -248,8 +260,12 @@ export function evaluateWeeklyContext(league) {
       hotPositions: Array.isArray(contractMarket?.hotPositions) ? contractMarket.hotPositions : [],
     },
     storylineCards,
+    pressure,
     pressurePoints: {
       ownerApproval: safeNum(league?.ownerApproval ?? league?.ownerMood, null),
+      ownerState: pressure?.owner?.state ?? null,
+      fanState: pressure?.fans?.state ?? null,
+      mediaState: pressure?.media?.state ?? null,
       capRoom,
       expiringCount: expiring.length,
       injuriesCount: injuries.length,
