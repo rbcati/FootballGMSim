@@ -344,6 +344,38 @@ function pickLabel(pick) {
   return `${suffix}R${pick?.round ?? '?'}`;
 }
 
+function playerSnapshot(player) {
+  if (!player) return null;
+  return {
+    id: player.id,
+    name: player.name,
+    pos: player.pos,
+    ovr: player.ovr,
+    age: player.age,
+    contract: {
+      baseAnnual: Number(player?.contract?.baseAnnual ?? player?.baseAnnual ?? 0),
+      signingBonus: Number(player?.contract?.signingBonus ?? player?.signingBonus ?? 0),
+      yearsTotal: Number(player?.contract?.yearsTotal ?? player?.yearsTotal ?? 1),
+    },
+  };
+}
+
+function pickSnapshot(pick, teamsById = new Map()) {
+  if (!pick) return null;
+  const originalOwner = Number(pick?.originalOwner ?? pick?.sourceTeamId ?? pick?.teamId ?? NaN);
+  const currentOwner = Number(pick?.currentOwner ?? NaN);
+  return {
+    id: pick.id,
+    round: pick.round,
+    season: pick.season ?? pick.year,
+    originalOwner: Number.isFinite(originalOwner) ? originalOwner : null,
+    currentOwner: Number.isFinite(currentOwner) ? currentOwner : null,
+    originalOwnerAbbr: Number.isFinite(originalOwner) ? (teamsById.get(originalOwner)?.abbr ?? null) : null,
+    currentOwnerAbbr: Number.isFinite(currentOwner) ? (teamsById.get(currentOwner)?.abbr ?? null) : null,
+    label: pickLabel(pick),
+  };
+}
+
 function getExpiringPlayers(teamId) {
   const roster = cache.getPlayersByTeam(teamId);
   return roster.filter((p) => {
@@ -513,6 +545,7 @@ export function generateAITradeProposalsForUser({
   if (!Number.isFinite(userTeamId)) return [];
 
   const allTeams = cache.getAllTeams();
+  const teamsById = new Map(allTeams.map((team) => [Number(team.id), team]));
   const userTeam = allTeams.find((t) => Number(t.id) === userTeamId);
   if (!userTeam) return [];
 
@@ -603,10 +636,16 @@ export function generateAITradeProposalsForUser({
       receiving: { playerIds: [userAsset.player.id], pickIds: [] },
       offeringPickSnapshots,
       receivingPickSnapshots,
+      offeringPlayerSnapshots: [playerSnapshot(aiOfferCandidate.player)].filter(Boolean),
+      receivingPlayerSnapshots: [playerSnapshot(userAsset.player)].filter(Boolean),
       offeringPlayerId: aiOfferCandidate.player.id,
       offeringPlayerName: aiOfferCandidate.player.name,
       receivingPlayerId: userAsset.player.id,
       receivingPlayerName: userAsset.player.name,
+      userNeedPositions: userNeeds.map((need) => need.pos).slice(0, 4),
+      userSurplusPositions: userSurplus.map((asset) => asset.pos).slice(0, 4),
+      offeringNeedPositions: aiNeeds.map((need) => need.pos).slice(0, 4),
+      offeringSurplusPositions: aiSurplus.map((asset) => asset.pos).slice(0, 4),
       expiresAfterWeek: week + 2,
       timestamp: Date.now(),
     };
@@ -624,12 +663,8 @@ export function generateAITradeProposalsForUser({
       const aiPick = resolveTradablePick(aiTeam, Number(meta?.season ?? meta?.year ?? 1), preferredRound);
       if (aiPick?.id != null) {
         proposal.offering.pickIds.push(aiPick.id);
-        proposal.offeringPickSnapshots.push({
-          id: aiPick.id,
-          round: aiPick.round,
-          season: aiPick.season,
-          label: pickLabel(aiPick),
-        });
+        const snapshot = pickSnapshot(aiPick, teamsById);
+        if (snapshot) proposal.offeringPickSnapshots.push(snapshot);
       }
     }
 

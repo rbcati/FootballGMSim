@@ -6,6 +6,7 @@ import { ACTION_LABELS } from "../constants/navigationCopy.js";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
 import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalizeTeamId } from "../utils/gamePresentation.js";
+import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -43,18 +44,6 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
-function summarizeOfferAssets(offer, side) {
-  const players = side === "offering" ? offer?.offeringPlayerName : offer?.receivingPlayerName;
-  const picks = side === "offering" ? offer?.offeringPickSnapshots : offer?.receivingPickSnapshots;
-  const pickText = Array.isArray(picks) && picks.length
-    ? picks.slice(0, 2).map((pk) => pk?.label ?? `${pk?.season ?? pk?.year ?? "Future"} R${pk?.round ?? "?"}`).join(", ")
-    : null;
-  if (players && pickText) return `${players} + ${pickText}`;
-  if (players) return players;
-  if (pickText) return pickText;
-  return "Undisclosed package";
-}
-
 export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating, onPlayerSelect, onTeamSelect }) {
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
@@ -89,6 +78,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const ownerMood = league.ownerMood ?? league.ownerApproval;
   const ownerDisplay = formatPercent(ownerMood, "—", { digits: 0 });
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
+  const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
   const topPriorities = weeklyContext.topPriorities?.length
     ? weeklyContext.topPriorities
     : [{ tone: "ok", level: "recommendation", label: "All Clear", detail: "No urgent blockers right now.", why: "You can safely advance once prep is set.", tab: "Weekly Hub" }];
@@ -293,15 +283,36 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <CardTitle className="text-sm">{topOffer.offeringTeamAbbr ?? "Team"} is calling</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8 }}>
-              <div><strong style={{ color: "var(--text)" }}>They offer:</strong> {summarizeOfferAssets(topOffer, "offering")}</div>
-              <div><strong style={{ color: "var(--text)" }}>They want:</strong> {summarizeOfferAssets(topOffer, "receiving")}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div>
+                  <strong style={{ color: "var(--text)" }}>You Receive</strong>
+                  {([...(topOfferSummary?.receive?.players ?? []), ...(topOfferSummary?.receive?.picks ?? [])].slice(0, 3)).map((item) => (
+                    <div key={item.key}>• {item.label}</div>
+                  ))}
+                </div>
+                <div>
+                  <strong style={{ color: "var(--text)" }}>You Give</strong>
+                  {([...(topOfferSummary?.give?.players ?? []), ...(topOfferSummary?.give?.picks ?? [])].slice(0, 3)).map((item) => (
+                    <div key={item.key}>• {item.label}</div>
+                  ))}
+                </div>
+              </div>
+              {topOfferSummary ? (
+                <div>
+                  <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.userImpact.abbr}</strong> OVR {topOfferSummary.userImpact.ovr.before} → {topOfferSummary.userImpact.ovr.after} · {topOfferSummary.userImpact.capLine}</div>
+                  <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.offeringImpact.abbr}</strong> OVR {topOfferSummary.offeringImpact.ovr.before} → {topOfferSummary.offeringImpact.ovr.after} · {topOfferSummary.offeringImpact.capLine}</div>
+                </div>
+              ) : null}
+              {topOfferSummary ? <div><strong style={{ color: "var(--text)" }}>GM read:</strong> {topOfferSummary.recommendation}</div> : null}
               <div>{topOffer.reason}</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(topOfferSummary?.tags ?? []).slice(0, 3).map((tag) => <Badge key={`hub-tag-${tag}`} variant="outline">{tag}</Badge>)}
                 <Badge variant="outline">{topOffer.stance ?? "Market call"}</Badge>
                 <Badge variant={topOffer.urgency === "high" ? "destructive" : "secondary"}>{topOffer.urgency === "high" ? "High urgency" : "Standard urgency"}</Badge>
                 <Badge variant="outline">AI framing: {topOffer.offerType?.replaceAll("_", " ") ?? "trade call"}</Badge>
-                <Badge variant="outline">Estimate-based valuation</Badge>
+                <Badge variant="outline">Final acceptance uses AI logic</Badge>
               </div>
+              {topOfferSummary ? <div style={{ fontSize: "var(--text-xs)" }}>{topOfferSummary.estimateLabel}</div> : null}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>
                 <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(topOffer.id)}>Reject</Button>
