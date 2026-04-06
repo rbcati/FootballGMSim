@@ -532,8 +532,12 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                       <TableHead style={{ textAlign: "center" }}>L</TableHead>
                       <TableHead style={{ textAlign: "center" }}>T</TableHead>
                       <TableHead style={{ textAlign: "center" }}>PCT</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>PF</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>PA</TableHead>
+                      <TableHead style={{ textAlign: "center", color: "#34C759" }} title="Points For">
+                        PF
+                      </TableHead>
+                      <TableHead style={{ textAlign: "center", color: "#FF6B6B" }} title="Points Against">
+                        PA
+                      </TableHead>
                       <TableHead style={{ textAlign: "center" }}>STRK</TableHead>
                       <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
                       <TableHead style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>CAP</TableHead>
@@ -546,6 +550,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                         <TableRow
                           key={team.id}
                           className={isUser ? "user-team-row" : ""}
+                          style={{ background: idx % 2 ? "rgba(255,255,255,0.02)" : "transparent" }}
                         >
                           <TableCell style={{ paddingLeft: "var(--space-4)" }}>
                             <div
@@ -620,9 +625,11 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                           <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
                             {winPct(team.wins, team.losses, team.ties)}
                           </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{team.ptsFor}</TableCell>
+                          <TableCell style={{ textAlign: "center", color: "#34C759", fontWeight: 700 }}>
+                            {team.ptsFor}
+                          </TableCell>
                           <TableCell style={{ textAlign: "center" }}>
-                            {team.ptsAgainst}
+                            <span style={{ color: "#FF6B6B", fontWeight: 700 }}>{team.ptsAgainst}</span>
                           </TableCell>
                           <TableCell style={{ textAlign: "center" }}>
                             {(() => {
@@ -671,6 +678,9 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
         )}
       </div>
       )} {/* end playoff/division ternary */}
+      <div style={{ marginTop: "var(--space-2)", fontSize: "0.66rem", color: "var(--text-subtle)" }}>
+        PF/PA values are season aggregates and may appear compressed early in the season.
+      </div>
     </div>
   );
 }

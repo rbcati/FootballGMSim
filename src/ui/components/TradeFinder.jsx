@@ -135,6 +135,8 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
   const userValue = calcValue(userOffering, userTeam?.roster);
   const partnerValue = calcValue(partnerOffering, partnerTeam?.roster);
   const maxValue = Math.max(userValue, partnerValue, 1);
+  const tradeDelta = userValue - partnerValue;
+  const fairnessTone = Math.abs(tradeDelta) < 8 ? "#34C759" : Math.abs(tradeDelta) < 20 ? "#FF9F0A" : "#FF453A";
 
   const toggleUserPlayer = (id) => {
     setUserOffering(prev =>
@@ -281,6 +283,15 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               maxValue={maxValue}
               color="var(--warning)"
             />
+            <div style={{ marginTop: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-muted)", marginBottom: 4 }}>
+                <span>Balance Meter</span>
+                <span style={{ color: fairnessTone, fontWeight: 800 }}>
+                  {tradeDelta > 0 ? `You +${Math.round(tradeDelta)}` : `Them +${Math.round(Math.abs(tradeDelta))}`}
+                </span>
+              </div>
+              <div style={{ height: 8, borderRadius: 999, background: "linear-gradient(90deg,#34C759 0%, #FF9F0A 50%, #FF453A 100%)", opacity: 0.35 }} />
+            </div>
 
             {userOffering.length > 0 && partnerOffering.length > 0 && (
               <div style={{
@@ -288,7 +299,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               }}>
                 <span style={{
                   fontSize: "var(--text-xs)", fontWeight: 700,
-                  color: Math.abs(userValue - partnerValue) < 10 ? "var(--success)" : "var(--warning)",
+                  color: fairnessTone,
                 }}>
                   {Math.abs(userValue - partnerValue) < 10
                     ? "Fair Trade"

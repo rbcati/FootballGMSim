@@ -195,7 +195,7 @@ function PhaseTimelineItem({ phase, isActive, isPast, onNavigate }) {
 
 // ── Offseason Stats Card ──────────────────────────────────────────────────────
 
-function OffseasonStatsCard({ league }) {
+function OffseasonStatsCard({ league, onNavigate }) {
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   if (!userTeam) return null;
 
@@ -204,6 +204,8 @@ function OffseasonStatsCard({ league }) {
   const capPct = Math.min(100, Math.round((capUsed / 301.2) * 100));
   const rosterCount = userTeam.rosterCount ?? userTeam.roster?.length ?? 0;
   const overCap = capRoom < 0;
+  const ownerApproval = Math.round(league?.ownerApproval ?? league?.ownerMood ?? 75);
+  const ownerTone = ownerApproval < 34 ? "#FF453A" : ownerApproval < 60 ? "#FF9F0A" : "#34C759";
 
   const stats = [
     { label: "Cap Room", value: `$${capRoom.toFixed(1)}M`, color: overCap ? "#FF453A" : capRoom < 10 ? "#FF9F0A" : "#34C759" },
@@ -213,19 +215,31 @@ function OffseasonStatsCard({ league }) {
   ];
 
   return (
-    <div style={{
-      background: "var(--surface)", border: "1.5px solid var(--hairline)",
-      borderRadius: 12, padding: "14px 16px", marginBottom: 16,
-    }}>
-      <div style={{
-        fontSize: "0.65rem", fontWeight: 800, color: "var(--text-muted)",
-        textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10,
-      }}>
+    <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 shadow-2xl backdrop-blur-xl mb-4">
+      <div className="mb-3 rounded-xl border border-white/10 bg-black/30 p-3">
+        <div className="mb-1 flex items-center justify-between text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
+          <span>Owner Approval</span>
+          <span style={{ color: ownerTone }}>{ownerApproval}%</span>
+        </div>
+        <div className="h-2 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full transition-all duration-300" style={{ width: `${ownerApproval}%`, background: ownerTone }} />
+        </div>
+        {ownerApproval < 34 && (
+          <button
+            onClick={() => onNavigate?.("Owner")}
+            className="mt-2 text-xs font-semibold text-red-300 underline underline-offset-2"
+          >
+            Owner is furious — review directives now
+          </button>
+        )}
+      </div>
+
+      <div className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
         {userTeam.abbr} — Offseason Summary
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 10 }}>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {stats.map(({ label, value, color }) => (
-          <div key={label} style={{ textAlign: "center" }}>
+          <div key={label} className="rounded-xl border border-white/5 bg-white/[0.03] p-2 text-center">
             <div style={{ fontSize: "0.6rem", color: "var(--text-subtle)", fontWeight: 600, marginBottom: 2 }}>
               {label}
             </div>
@@ -236,7 +250,7 @@ function OffseasonStatsCard({ league }) {
         ))}
       </div>
       {/* Cap bar */}
-      <div>
+      <div className="rounded-xl border border-white/5 bg-black/20 p-2">
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.6rem", color: "var(--text-subtle)", marginBottom: 3 }}>
           <span>Cap Used</span>
           <span>{capPct}%</span>
@@ -280,11 +294,9 @@ export default function OffseasonHub({ league, onNavigate }) {
   }
 
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto", paddingBottom: 40 }}>
-      <div style={{ marginBottom: 20 }}>
-        <h2 style={{
-          fontSize: "1.1rem", fontWeight: 900, color: "var(--text)", marginBottom: 4,
-        }}>
+    <div className="mx-auto max-w-3xl pb-10">
+      <div className="mb-5 rounded-2xl border border-white/10 bg-gradient-to-r from-[#003087]/35 via-slate-900/70 to-[#d6b25e]/15 p-5 shadow-2xl">
+        <h2 className="mb-1 text-3xl font-extrabold tracking-tight text-white">
           Offseason Hub
         </h2>
         <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
@@ -292,13 +304,10 @@ export default function OffseasonHub({ league, onNavigate }) {
         </p>
       </div>
 
-      <OffseasonStatsCard league={league} />
+      <OffseasonStatsCard league={league} onNavigate={onNavigate} />
 
       {/* Phase timeline */}
-      <div style={{
-        background: "var(--surface)", border: "1.5px solid var(--hairline)",
-        borderRadius: 12, padding: "16px 14px",
-      }}>
+      <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 backdrop-blur-lg">
         <div style={{
           fontSize: "0.65rem", fontWeight: 800, color: "var(--text-muted)",
           textTransform: "uppercase", letterSpacing: "1px", marginBottom: 14,

@@ -268,20 +268,21 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
         left: 0,
         right: 0,
         bottom: 0,
-        background: "rgba(0,0,0,0.9)",
+        background: "radial-gradient(circle at top, rgba(214,178,94,0.18), rgba(0,0,0,0.92) 45%)",
         zIndex: 10000,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        gap: "var(--space-6)",
+        gap: "var(--space-5)",
         padding: "var(--space-6)",
       }}
     >
       <div
         style={{
-          fontSize: 64,
+          fontSize: 70,
           lineHeight: 1,
+          filter: "drop-shadow(0 0 16px rgba(214,178,94,0.4))",
         }}
       >
         🏆
@@ -303,8 +304,9 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
           width: 100,
           height: 100,
           borderRadius: "50%",
-          background: `${color}33`,
+          background: `${color}28`,
           border: `4px solid ${color}`,
+          boxShadow: `0 0 0 6px ${color}22, 0 18px 45px rgba(0,0,0,0.45)`,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
@@ -343,6 +345,21 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
         }}
       >
         {champ.wins}-{champ.losses} Record
+      </div>
+      <div style={{
+        minWidth: 280,
+        maxWidth: 440,
+        background: "rgba(17,24,39,0.72)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        borderRadius: 14,
+        padding: "12px 14px",
+      }}>
+        <div style={{ fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--text-subtle)", marginBottom: 6 }}>
+          Season Recap
+        </div>
+        <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>
+          Dominated through the postseason and finished as the final team standing.
+        </div>
       </div>
       <button
         className="btn btn-primary"

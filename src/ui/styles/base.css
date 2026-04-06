@@ -20,28 +20,30 @@
 }
 
 :root {
-  /* Core Palette - Enhanced Dark Mode */
-  --bg: #0a0c10;
-  --bg-secondary: #161b22;
-  --surface: rgba(22, 27, 34, 0.75);
-  --surface-strong: rgba(30, 36, 44, 0.85);
-  --surface-elevated: rgba(40, 46, 54, 0.9);
+  /* Core Palette - Football GM 2 Dark System */
+  --bg: #0a0a0a;
+  --bg-secondary: #111827;
+  --surface: rgba(17, 24, 39, 0.7);
+  --surface-strong: rgba(19, 28, 46, 0.84);
+  --surface-elevated: rgba(20, 31, 52, 0.92);
   --hairline: rgba(255, 255, 255, 0.08);
   --hairline-strong: rgba(255, 255, 255, 0.15);
   --text: #E6EDF3;
   --text-muted: #9FB0C2;
   --text-subtle: #7C8E9B;
-  --accent: #0A84FF;
-  --accent-hover: #409CFF;
-  --accent-muted: rgba(10, 132, 255, 0.1);
+  --accent: #003087;
+  --accent-hover: #1b4ead;
+  --accent-muted: rgba(0, 48, 135, 0.2);
+  --accent-gold: #d6b25e;
+  --accent-gold-muted: rgba(214, 178, 94, 0.18);
   --danger: #FF453A;
   --success: #34C759;
   --warning: #FF9F0A;
 
   /* Glass Effects */
-  --glass-bg: rgba(255, 255, 255, 0.05);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --glass-bg: rgba(16, 25, 42, 0.48);
+  --glass-border: rgba(255, 255, 255, 0.12);
+  --glass-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 34px rgba(0, 0, 0, 0.45);
   --glass-blur: blur(20px);
 
   /* Spacing Scale */
@@ -65,9 +67,9 @@
   --dur-fast: 150ms; --dur: 200ms; --dur-slow: 300ms;
 
   /* Typography Scale */
-  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-base: 1rem;
-  --text-lg: 1.125rem; --text-xl: 1.25rem; --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem; --text-4xl: 2.25rem;
+  --text-xs: 0.8125rem; --text-sm: 0.9375rem; --text-base: 1rem;
+  --text-lg: 1.125rem; --text-xl: 1.5rem; --text-2xl: 1.75rem;
+  --text-3xl: 2rem; --text-4xl: 2.25rem;
 
   /* Additional variables */
   --success-bg: rgba(34, 197, 94, 0.1);
@@ -187,7 +189,7 @@ html, body {
   color: var(--text);
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif;
   line-height: 1.5;
-  font-size: 14px;
+  font-size: 16px;
   min-height: 100vh;
   min-height: 100dvh; /* Dynamic viewport height for mobile browsers */
   overflow-x: hidden;
@@ -208,9 +210,9 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: var(--space-4);
 }
 
-h1 { font-size: var(--text-3xl); }
-h2 { font-size: var(--text-2xl); }
-h3 { font-size: var(--text-xl); }
+h1 { font-size: clamp(1.8rem, 3vw, 2rem); font-weight: 800; }
+h2 { font-size: clamp(1.5rem, 2.5vw, 1.75rem); font-weight: 800; }
+h3 { font-size: clamp(1.25rem, 2vw, 1.5rem); font-weight: 700; }
 h4 { font-size: var(--text-lg); }
 h5 { font-size: var(--text-base); }
 h6 { font-size: var(--text-sm); }

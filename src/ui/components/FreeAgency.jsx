@@ -575,6 +575,7 @@ export default function FreeAgency({
   const [signedIds, setSignedIds] = useState(new Set()); // Optimistic hides
   const [flash, setFlash] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
+  const [showCapPreview, setShowCapPreview] = useState(false);
 
   // Keep ref to avoid stale closure during mount load
   const loadCountRef = useRef(0);
@@ -655,6 +656,15 @@ export default function FreeAgency({
     return arr;
   }, [displayed, sortKey, sortDir]);
 
+  const priorityTargets = useMemo(
+    () => sortedAgents.filter((p) => (p.tags || []).includes("expiring") || p.isExpiring).slice(0, 5),
+    [sortedAgents]
+  );
+  const projectedPriorityCost = useMemo(
+    () => priorityTargets.reduce((sum, p) => sum + (p._ask ?? 0), 0),
+    [priorityTargets]
+  );
+
   // ── Handlers ───────────────────────────────────────────────────────────────
 
   const handleSort = (key) => {
@@ -696,6 +706,16 @@ export default function FreeAgency({
   const showFlash = (msg) => {
     setFlash(msg);
     setTimeout(() => setFlash(null), 3000);
+  };
+
+  const handleQuickResignPriorities = () => {
+    setPosFilter("ALL");
+    setMinOvr(75);
+    setSortKey("ovr");
+    setSortDir("desc");
+    setNameFilter("");
+    setShowCapPreview(true);
+    showFlash("Priorities loaded: OVR 75+ sorted by impact.");
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -811,6 +831,9 @@ export default function FreeAgency({
         className="card-premium"
         style={{
           marginBottom: "var(--space-4)",
+          position: "sticky",
+          top: "max(8px, env(safe-area-inset-top))",
+          zIndex: 9,
         }}
       >
         <CardContent
@@ -866,6 +889,13 @@ export default function FreeAgency({
                 }}
               />
             </div>
+            <Button
+              className="btn btn-primary"
+              onClick={handleQuickResignPriorities}
+              style={{ whiteSpace: "nowrap" }}
+            >
+              Quick Re-sign Priorities
+            </Button>
           </div>
 
           {/* Bottom row: Position Pills */}
@@ -896,6 +926,25 @@ export default function FreeAgency({
           </div>
         </CardContent>
       </Card>
+
+      {showCapPreview && (
+        <Card className="card-premium" style={{ marginBottom: "var(--space-4)", borderColor: "var(--accent-gold)" }}>
+          <CardContent style={{ padding: "var(--space-4)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                Cap Impact Preview
+              </div>
+              <div style={{ fontWeight: 800, color: "var(--text)" }}>
+                Top 5 priorities: ${projectedPriorityCost.toFixed(1)}M / yr projected
+              </div>
+              <div style={{ fontSize: "var(--text-xs)", color: projectedPriorityCost > capRoom ? "var(--danger)" : "var(--success)" }}>
+                Remaining cap after priorities: ${(capRoom - projectedPriorityCost).toFixed(1)}M
+              </div>
+            </div>
+            <Button className="btn" onClick={() => setShowCapPreview(false)}>Close</Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Table Card */}
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
