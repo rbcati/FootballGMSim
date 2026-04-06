@@ -35,11 +35,11 @@ function toTone(tier) {
 }
 
 function toLabel(tier) {
-  if (tier === 'priority_resign') return 'Priority Re-sign';
-  if (tier === 'resign_if_price') return 'Re-sign if Price Holds';
+  if (tier === 'priority_resign') return 'Must Keep';
+  if (tier === 'resign_if_price') return 'Keep if Price is Right';
   if (tier === 'trade_or_tag') return 'Trade/Tag Candidate';
-  if (tier === 'let_walk') return 'Let Walk';
-  return 'Replaceable Depth';
+  if (tier === 'let_walk') return 'Expendable';
+  return 'Expendable Depth';
 }
 
 export function evaluateResignRecommendation(player, context = {}) {
@@ -62,7 +62,7 @@ export function evaluateResignRecommendation(player, context = {}) {
   if (depthDiff === 'high') score += 10;
 
   let tier = 'replaceable_depth';
-  let reason = 'Replaceable depth: keep only if market is soft';
+  let reason = 'Expendable depth: keep only if market is soft';
   if (score >= 96) {
     tier = 'priority_resign';
     reason = depthDiff === 'high'

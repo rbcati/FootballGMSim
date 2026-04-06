@@ -1,14 +1,4 @@
-const STARTER_TARGETS = {
-  QB: 1,
-  RB: 2,
-  WR: 3,
-  TE: 1,
-  OL: 5,
-  DL: 4,
-  LB: 3,
-  CB: 2,
-  S: 2,
-};
+import { buildTeamIntelligence } from "./teamIntelligence.js";
 
 function safeNum(value, fallback = 0) {
   const num = Number(value);
@@ -18,40 +8,18 @@ function safeNum(value, fallback = 0) {
 export function computeTeamNeedsSummary(team) {
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   if (!roster.length) return { needs: [], surplus: [], counts: {} };
-
-  const byPos = {};
+  const intelligence = buildTeamIntelligence(team);
+  const counts = {};
   for (const player of roster) {
     const pos = player?.pos ?? player?.position;
     if (!pos) continue;
-    byPos[pos] = byPos[pos] ?? [];
-    byPos[pos].push(player);
+    counts[pos] = (counts[pos] ?? 0) + 1;
   }
-
-  const needs = [];
-  const surplus = [];
-  for (const [pos, target] of Object.entries(STARTER_TARGETS)) {
-    const group = (byPos[pos] ?? []).slice().sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr));
-    const starterSlice = group.slice(0, target);
-    const startersPresent = starterSlice.length;
-    const avgStarterOvr = startersPresent > 0
-      ? starterSlice.reduce((sum, p) => sum + safeNum(p?.ovr, 60), 0) / startersPresent
-      : 0;
-
-    if (startersPresent < target || avgStarterOvr < 70) {
-      needs.push({ pos, severity: (target - startersPresent) + Math.max(0, Math.round((70 - avgStarterOvr) / 5)) });
-    }
-    if (group.length >= target + 2 && avgStarterOvr >= 72) {
-      surplus.push({ pos, depth: group.length - target });
-    }
-  }
-
-  needs.sort((a, b) => b.severity - a.severity);
-  surplus.sort((a, b) => b.depth - a.depth);
 
   return {
-    needs: needs.map((n) => n.pos),
-    surplus: surplus.map((s) => s.pos),
-    counts: Object.fromEntries(Object.entries(byPos).map(([pos, players]) => [pos, players.length])),
+    needs: intelligence.needsNow.map((n) => n.pos),
+    surplus: intelligence.surplus.map((s) => s.pos),
+    counts,
   };
 }
 

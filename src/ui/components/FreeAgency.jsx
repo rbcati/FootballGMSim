@@ -40,6 +40,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
+import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -636,6 +637,7 @@ export default function FreeAgency({
   const deadCap = userTeam?.deadCap ?? 0;
   const capRoom = userTeam?.capRoom ?? (capTotal - capUsed - deadCap);
   const needsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
   const faPool = useMemo(() => {
     if (!faState?.freeAgents) return [];
@@ -690,6 +692,13 @@ export default function FreeAgency({
   const affordableTargets = useMemo(
     () => priorityTargets.filter((p) => (p._ask ?? 0) <= capRoom + 0.01).length,
     [priorityTargets, capRoom],
+  );
+  const recommendedTargets = useMemo(
+    () => sortedAgents
+      .map((p) => ({ player: p, fit: scoreFreeAgentForTeam(p, teamIntel, capRoom) }))
+      .sort((a, b) => b.fit.score - a.fit.score)
+      .slice(0, 4),
+    [sortedAgents, teamIntel, capRoom],
   );
 
   // ── Handlers ───────────────────────────────────────────────────────────────
@@ -756,8 +765,20 @@ export default function FreeAgency({
           <div style={{ fontWeight: 700 }}>Use this screen to place and edit offers. Use FA Hub for portfolio-level market pressure and shortlist triage.</div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Badge variant="outline">{formatNeedsLine(needsSummary)}</Badge>
+            <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
             <Button size="sm" variant="secondary" onClick={() => onNavigate?.("FA Hub")}>Open FA Hub Overview</Button>
           </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildDirectionGuidance(teamIntel)}</div>
+        </CardContent>
+      </Card>
+      <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+        <CardContent style={{ padding: "var(--space-3)", display: "grid", gap: 4 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase" }}>Recommended FA targets</div>
+          {recommendedTargets.map(({ player, fit }) => (
+            <div key={player.id} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+              <strong style={{ color: "var(--text)" }}>{player.name}</strong> ({fit.pos}) · {fit.reason}
+            </div>
+          ))}
         </CardContent>
       </Card>
 

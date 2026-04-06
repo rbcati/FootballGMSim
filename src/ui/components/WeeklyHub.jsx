@@ -127,6 +127,32 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
       </section>
 
       <section className="weekly-section">
+        <h3 className="weekly-section__title">Team-building guidance</h3>
+        <Card variant="secondary">
+          <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
+            <strong style={{ color: "var(--text)" }}>{weeklyContext?.directionGuidance}</strong>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {(weeklyContext?.teamIntel?.needsNow ?? []).slice(0, 3).map((n) => (
+                <Badge key={`wn-${n.pos}`} variant="destructive">Need now: {n.pos}</Badge>
+              ))}
+              {(weeklyContext?.teamIntel?.surplus ?? []).slice(0, 2).map((s) => (
+                <Badge key={`ws-${s.pos}`} variant="outline">Surplus: {s.pos}</Badge>
+              ))}
+            </div>
+            {(weeklyContext?.teamIntel?.warnings ?? []).slice(0, 2).map((w, idx) => (
+              <div key={`${w}-${idx}`}>• {w}</div>
+            ))}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Roster")}>Open Roster</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Open Trades</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Free Agency")}>Open Free Agency</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Room")}>Open Draft</Button>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="weekly-section">
         <h3 className="weekly-section__title">Pressure points</h3>
         <div className="weekly-secondary-grid">
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Owner Pressure</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{ownerDisplay}</CardContent></Card>

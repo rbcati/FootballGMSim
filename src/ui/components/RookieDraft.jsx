@@ -16,6 +16,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import PlayerRadarChart, { getPlayerRadarAttributes } from "./PlayerRadarChart.jsx";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import { launchConfetti } from "../../confetti.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -42,7 +43,7 @@ function teamColor(abbr = "") {
 }
 
 // ── Prospect Card (combine-style) ──
-function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick }) {
+function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick, tagLabel }) {
   const pos = player.pos || player.position;
   const posColor = POS_COLORS[pos] || "#9ca3af";
   const radarAttrs = getPlayerRadarAttributes({ ...player, ...(player.ratings || {}) });
@@ -145,6 +146,9 @@ function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick }) 
           {player.scoutStatus.grade}
         </div>
       )}
+      {tagLabel && (
+        <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "center" }}>{tagLabel}</div>
+      )}
 
       {/* Draft button */}
       {userPick && (
@@ -232,6 +236,8 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
   const isUserPick = draftState?.isUserPick ?? false;
   const isDraftComplete = draftState?.complete ?? false;
   const teams = league?.teams || [];
+  const userTeam = teams.find((t) => t.id === league?.userTeamId);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
   // Confetti on top-10 user picks
   useEffect(() => {
@@ -269,8 +275,14 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
     // Sort by OVR descending
     prospects.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
 
-    return prospects;
-  }, [draftClass, draftedIds, posFilter, searchQuery]);
+    return prospects.map((p, idx) => {
+      const pos = p.pos || p.position;
+      const needFit = teamIntel.needsNow.some((n) => n.pos === pos);
+      const upside = (Number(p?.potential ?? p?.pot ?? p?.ovr ?? 60) - Number(p?.ovr ?? 60)) >= 8 || Number(p?.age ?? 30) <= 21;
+      const tagLabel = idx < 12 ? "Best Player Available" : needFit ? "Best Need Fit" : upside ? "Long-term Upside" : "";
+      return { ...p, _tagLabel: tagLabel };
+    });
+  }, [draftClass, draftedIds, posFilter, searchQuery, teamIntel]);
 
   const handleDraft = useCallback((playerId) => {
     if (actions?.draftPlayer) {
@@ -314,6 +326,9 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
             marginBottom: "var(--space-2)",
           }}>
             {isDraftComplete ? "Draft Complete" : `${league?.year || 2025} NFL Draft`}
+          </div>
+          <div style={{ fontSize: "var(--text-xs)", color: "rgba(255,255,255,0.72)", marginBottom: "var(--space-2)" }}>
+            Needs now: {teamIntel.needsNow.map((n) => n.pos).join(", ") || "None"} · Later: {teamIntel.needsLater.map((n) => n.pos).join(", ") || "None"}
           </div>
 
           {!isDraftComplete && currentPick && (
@@ -448,6 +463,7 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
               onDraft={isUserPick ? handleDraft : null}
               onSelect={onPlayerSelect}
               userPick={isUserPick}
+              tagLabel={player._tagLabel}
             />
           ))}
           {availableProspects.length === 0 && (

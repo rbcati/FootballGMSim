@@ -1,4 +1,5 @@
 import { evaluateOwnerMessageContext } from './ownerMessages.js';
+import { buildDirectionGuidance, buildTeamIntelligence } from './teamIntelligence.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -110,6 +111,7 @@ export function evaluateWeeklyContext(league) {
   const expiring = (userTeam?.roster ?? []).filter((p) => safeNum(p?.contract?.yearsRemaining ?? p?.contractYearsLeft ?? p?.years ?? 2, 2) <= 1);
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
   const direction = classifyDirection(userTeam, week);
+  const intel = buildTeamIntelligence(userTeam, { week });
   const contractMarket = league?.contractMarket ?? null;
 
   const ownerContext = evaluateOwnerMessageContext({
@@ -145,6 +147,17 @@ export function evaluateWeeklyContext(league) {
 
   if (expiring.length >= 5 && week >= 8) {
     urgent.push({ tone: 'info', level: 'recommendation', rank: 58, label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, why: 'Delays increase free-agency replacement pressure.', tab: 'Financials' });
+  }
+  if ((intel?.warnings ?? []).length > 0) {
+    urgent.push({
+      tone: 'warning',
+      level: 'recommendation',
+      rank: 74,
+      label: 'Roster pressure point',
+      detail: intel.warnings[0],
+      why: 'Ignoring roster pressure points increases emergency spending later.',
+      tab: 'Roster',
+    });
   }
 
   const ownerContractPressure = ownerContext?.key?.includes('expiring_core_ignored');
@@ -205,6 +218,7 @@ export function evaluateWeeklyContext(league) {
     : direction === 'rebuilding'
       ? 'Prioritize picks, young upside, and flexible contracts.'
       : 'Balance floor and ceiling—do not overpay before your direction is clear.';
+  const directionGuidance = buildDirectionGuidance(intel);
 
   const rankedUrgent = urgent
     .sort((a, b) => (b.rank ?? 0) - (a.rank ?? 0))
@@ -217,6 +231,8 @@ export function evaluateWeeklyContext(league) {
     incomingOffers,
     focus,
     advisorPulse,
+    directionGuidance,
+    teamIntel: intel,
     urgentItems: rankedUrgent,
     topPriorities: rankedUrgent.slice(0, 3),
     phasePriority: phasePriorityLabel(league?.phase),

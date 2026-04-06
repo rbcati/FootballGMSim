@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import TradeBlockPanel from "./TradeBlockPanel.jsx";
 import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
+import { buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -299,6 +300,7 @@ export default function TradeCenter({ league, actions }) {
   const theirNeedsSummary = useMemo(() => computeTeamNeedsSummary({ ...liveTheirTeam, roster: theirRoster }), [liveTheirTeam, theirRoster]);
   const myAvailablePicks = useMemo(() => Array.isArray(liveMyTeam?.picks) ? liveMyTeam.picks : [], [liveMyTeam?.picks]);
   const theirAvailablePicks = useMemo(() => Array.isArray(liveTheirTeam?.picks) ? liveTheirTeam.picks : [], [liveTheirTeam?.picks]);
+  const myIntel = useMemo(() => buildTeamIntelligence({ ...liveMyTeam, roster: myRoster }, { week: league?.week ?? 1 }), [liveMyTeam, myRoster, league?.week]);
 
   useEffect(() => {
     if (!counterOfferId) return;
@@ -324,6 +326,17 @@ export default function TradeCenter({ league, actions }) {
     const absorbed = [...offering].reduce((s, id) => s + (myRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
   }, [offering, receiving, myRosterMap, theirRosterMap, liveTheirTeam]);
+  const tradeImpact = useMemo(() => {
+    const incomingPositions = [...receiving].map((id) => theirRosterMap.get(toAssetId(id))?.pos).filter(Boolean);
+    const outgoingPositions = [...offering].map((id) => myRosterMap.get(toAssetId(id))?.pos).filter(Boolean);
+    return summarizeTradeImpact({
+      intel: myIntel,
+      incomingPositions,
+      outgoingPositions,
+      capBefore: liveMyTeam?.capRoom ?? 0,
+      capAfter: myCapAfter,
+    });
+  }, [receiving, offering, theirRosterMap, myRosterMap, myIntel, liveMyTeam?.capRoom, myCapAfter]);
 
   const toggleOffering = (id, checked) => setOffering(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
   const toggleReceiving = (id, checked) => setReceiving(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
@@ -508,6 +521,12 @@ export default function TradeCenter({ league, actions }) {
             <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
               <ValueBar myValue={myOfferValue} theirValue={theirOfferValue} />
               <CapImpact myTeam={liveMyTeam} theirTeam={liveTheirTeam} myCapAfter={myCapAfter} theirCapAfter={theirCapAfter} />
+              <div style={{ marginTop: 10, display: "grid", gap: 4, fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                <div>{tradeImpact.needHits.length ? `Addresses needs: ${tradeImpact.needHits.join(", ")}` : "Does not directly hit a top need yet."}</div>
+                <div>{tradeImpact.surplusMoved.length ? `Moves surplus from: ${tradeImpact.surplusMoved.join(", ")}` : "Not moving a clear surplus group."}</div>
+                <div>{tradeImpact.capDelta >= 0 ? `Improves cap by $${tradeImpact.capDelta.toFixed(1)}M` : `Uses $${Math.abs(tradeImpact.capDelta).toFixed(1)}M of cap flexibility`}</div>
+                <div>{tradeImpact.timeline}</div>
+              </div>
             </div>
           )}
 
