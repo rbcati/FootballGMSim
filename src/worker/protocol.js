@@ -66,6 +66,7 @@ export const toWorker = Object.freeze({
   GET_EXTENSION_ASK:  'GET_EXTENSION_ASK', // { playerId }
   EXTEND_CONTRACT:    'EXTEND_CONTRACT',   // { playerId, teamId, contract }
   RESTRUCTURE_CONTRACT: 'RESTRUCTURE_CONTRACT',
+  APPLY_FRANCHISE_TAG: 'APPLY_FRANCHISE_TAG',
 
   /** Strategy */
   UPDATE_STRATEGY:    'UPDATE_STRATEGY',   // { offPlanId, defPlanId, riskId, starTargetId }

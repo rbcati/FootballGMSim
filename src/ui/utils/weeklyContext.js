@@ -55,6 +55,7 @@ export function evaluateWeeklyContext(league) {
   const expiring = (userTeam?.roster ?? []).filter((p) => safeNum(p?.contract?.yearsRemaining ?? p?.contractYearsLeft ?? p?.years ?? 2, 2) <= 1);
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
   const direction = classifyDirection(userTeam, week);
+  const contractMarket = league?.contractMarket ?? null;
 
   const ownerContext = evaluateOwnerMessageContext({
     league,
@@ -90,6 +91,22 @@ export function evaluateWeeklyContext(league) {
   if (expiring.length >= 5 && week >= 8) {
     urgent.push({ tone: 'info', label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, tab: 'Financials' });
   }
+  if ((contractMarket?.priorityExpiring ?? 0) >= 2) {
+    urgent.push({
+      tone: 'warning',
+      label: 'Priority Expiring Starters',
+      detail: `${contractMarket.priorityExpiring} key contracts need action soon.`,
+      tab: 'Financials',
+    });
+  }
+  if ((contractMarket?.likelyToTest ?? 0) >= 2) {
+    urgent.push({
+      tone: 'info',
+      label: 'Testing Market Risk',
+      detail: `${contractMarket.likelyToTest} players are likely to test free agency.`,
+      tab: 'Financials',
+    });
+  }
 
   const focus = ownerContext?.expectedAction
     ? { title: ownerContext.expectedAction, subtitle: 'Owner expectation is active this week.' }
@@ -113,6 +130,8 @@ export function evaluateWeeklyContext(league) {
     focus,
     advisorPulse,
     urgentItems: urgent.slice(0, 4),
-    marketPulse: incomingOffers[0]?.reason ?? (week >= 10 ? 'Deadline pressure is rising across the league.' : 'Market is active but selective.'),
+    marketPulse: contractMarket?.hotPositions?.length
+      ? `Market heating up at ${contractMarket.hotPositions.map((p) => p.pos).join(', ')}.`
+      : incomingOffers[0]?.reason ?? (week >= 10 ? 'Deadline pressure is rising across the league.' : 'Market is active but selective.'),
   };
 }

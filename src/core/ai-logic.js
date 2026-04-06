@@ -3,6 +3,14 @@ import { Constants } from './constants.js';
 import { Transactions } from '../db/index.js';
 import { calculateExtensionDemand } from './player.js';
 import { calculateOffensiveSchemeFit, calculateDefensiveSchemeFit } from './scheme-core.js';
+import {
+    buildContractProfile,
+    buildDemandFromProfile,
+    computeMarketHeat,
+    scoreOffer,
+    inferTeamDirection,
+    buildDecisionTiming,
+} from './contract-market.js';
 import NewsEngine from './news-engine.js';
 
 class AiLogic {
@@ -566,30 +574,16 @@ class AiLogic {
      */
     static evaluateOffers(player, day = 1) {
         if (!player.offers || player.offers.length === 0) return { signed: false, offer: null };
-
-        // Check if player has the "Divisive" trait — strictly chases guaranteed money
-        const isDivisive = (player.traits || []).some(t =>
-            typeof t === 'string' && t.toLowerCase() === 'divisive'
-        );
-
-        // Position-specific weight sets (moneyW, prestigeW, fitW)
-        // Divisive players: 100% money, 0% prestige, 0% fit
-        const POS_WEIGHTS = isDivisive
-            ? { moneyW: 1.00, prestigeW: 0.00, fitW: 0.00 }
-            : (() => {
-                const map = {
-                    QB:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
-                    WR:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
-                    RB:  { moneyW: 0.50, prestigeW: 0.30, fitW: 0.20 },
-                    LB:  { moneyW: 0.35, prestigeW: 0.40, fitW: 0.25 },
-                    S:   { moneyW: 0.35, prestigeW: 0.40, fitW: 0.25 },
-                };
-                return map[player.pos] ?? { moneyW: 0.45, prestigeW: 0.35, fitW: 0.20 };
-            })();
-        const weights = POS_WEIGHTS;
-
-        // Max expected contract value for normalization (~5yr × $50M)
-        const MAX_CONTRACT_VALUE = 250;
+        const allFreeAgents = cache.getAllPlayers().filter((p) => (!p.teamId || p.status === 'free_agent') && p.pos === player.pos);
+        const heat = computeMarketHeat(player.pos, allFreeAgents);
+        const profile = buildContractProfile(player);
+        const ask = buildDemandFromProfile(player, profile, {
+            marketHeat: heat,
+            morale: player.morale ?? 68,
+            fit: 65,
+            teamSuccess: 0.5,
+        });
+        const askTotal = (ask.baseAnnual * ask.yearsTotal) + (ask.signingBonus || 0);
 
         let bestScore = -1;
         let bestOffer = null;
@@ -599,28 +593,18 @@ class AiLogic {
             if (!team) continue;
 
             const c = offer.contract;
-            const totalValue = (c.baseAnnual * c.yearsTotal) + (c.signingBonus || 0);
-
-            // 1. Financial Value — normalized 0-100
-            const normalizedMoney = Math.min(100, (totalValue / MAX_CONTRACT_VALUE) * 100);
-
-            // 2. Prestige Modifier — based on last season's wins (0-17 range → 0-100)
-            //    Teams with more wins are more attractive destinations.
-            const teamWins = team.wins ?? 0;
-            const prestigeScore = Math.min(100, (teamWins / 17) * 100);
-
-            // 3. Scheme Fit — 0-100
-            let fitScore = 50;
-            if (team.staff && team.staff.headCoach) {
-                const hc = team.staff.headCoach;
-                const isOff = ['QB','RB','WR','TE','OL','K'].includes(player.pos);
-                if (isOff) fitScore = calculateOffensiveSchemeFit(player, hc.offScheme || 'Balanced');
-                else fitScore = calculateDefensiveSchemeFit(player, hc.defScheme || '4-3');
-            }
-
-            const score = (normalizedMoney * weights.moneyW * 100)
-                        + (prestigeScore  * weights.prestigeW * 100)
-                        + (fitScore       * weights.fitW  * 100);
+            const fitScore = ['QB','RB','WR','TE','OL','K'].includes(player.pos)
+                ? calculateOffensiveSchemeFit(player, team?.staff?.headCoach?.offScheme || 'Balanced')
+                : calculateDefensiveSchemeFit(player, team?.staff?.headCoach?.defScheme || '4-3');
+            const direction = inferTeamDirection(team, Number(cache.getMeta()?.currentWeek ?? 1));
+            const roleOpportunity = (this.calculateTeamNeeds(team.id)?.[player.pos] ?? 1) / 2.2;
+            const score = scoreOffer(player, offer, {
+                team,
+                direction,
+                roleOpportunity,
+                fit: fitScore,
+                loyaltyBoost: Number(team.id) === Number(player.teamId) ? 0.35 : 0,
+            }, { profile, askTotalValue: askTotal });
 
             if (score > bestScore) {
                 bestScore = score;
@@ -628,18 +612,12 @@ class AiLogic {
             }
         }
 
-        // Signing threshold based on player's ask — decreases 5% per day after day 2
-        const ask = calculateExtensionDemand(player);
-        const askTotalValue = (ask.baseAnnual * ask.yearsTotal) + ask.signingBonus;
-        const askNormalized  = Math.min(100, (askTotalValue / MAX_CONTRACT_VALUE) * 100);
-        const askScore = askNormalized * weights.moneyW * 100
-                       + 50 * weights.prestigeW * 100   // assume average prestige baseline
-                       + 50 * weights.fitW * 100;        // assume average fit baseline
-
-        const dayPenalty = Math.max(0, day - 2) * 0.05; // 5% per day after day 2
-        const threshold  = askScore * (0.95 - dayPenalty);
-
-        if (bestScore >= threshold) {
+        if (!bestOffer) return { signed: false, offer: null };
+        const bestValue = (bestOffer.contract.baseAnnual * bestOffer.contract.yearsTotal) + (bestOffer.contract.signingBonus || 0);
+        const timing = buildDecisionTiming(player, heat, player.offers.length, 'free_agency');
+        const dayDiscount = Math.max(0, day - 2) * 0.04;
+        const threshold = askTotal * (0.92 - dayDiscount);
+        if (bestValue >= threshold && (timing.resolveNow || day >= 3)) {
             return { signed: true, offer: bestOffer };
         }
 
