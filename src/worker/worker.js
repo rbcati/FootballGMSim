@@ -273,7 +273,7 @@ function buildViewState() {
     fanApproval: t?.fanApproval ?? 50,
     rivalTeamId: t?.rivalTeamId ?? null,
     picks: Array.isArray(t?.picks)
-      ? t.picks.map((pk) => ({ id: pk.id, round: pk.round, season: pk.season, currentOwner: pk.currentOwner }))
+      ? t.picks.map((pk) => ({ id: pk.id, round: pk.round, season: pk.season, currentOwner: pk.currentOwner, originalOwner: pk.originalOwner }))
       : [],
   }));
 
