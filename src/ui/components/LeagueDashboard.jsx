@@ -74,6 +74,7 @@ import {
   deriveBoxScoreImmersion,
   deriveWeeklyHonors,
 } from "../utils/gamePresentation.js";
+import { deriveFranchisePressure } from "../utils/pressureModel.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -1388,6 +1389,7 @@ export default function LeagueDashboard({
     null,
   );
   const ownerApprovalText = formatPercent(ownerApproval, "—");
+  const pressure = deriveFranchisePressure(league);
 
   return (
     <div>
@@ -1411,8 +1413,10 @@ export default function LeagueDashboard({
             {league.week && <span> · Week {league.week}</span>}
             {" · "}
             <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
-              Owner {ownerApprovalText}
+              Owner {pressure?.owner?.state ?? "Stable"} {ownerApprovalText}
             </span>
+            {pressure?.fans?.state ? <span>{` · Fans ${pressure.fans.state}`}</span> : null}
+            {pressure?.media?.state ? <span>{` · Media ${pressure.media.state}`}</span> : null}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>

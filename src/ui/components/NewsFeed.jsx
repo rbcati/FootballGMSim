@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { buildNarrativeNewsItems } from '../utils/leagueNarratives.js';
+import { deriveFranchisePressure } from '../utils/pressureModel.js';
 
 const priorityColor = {
   high: '#ef4444',
@@ -63,6 +64,7 @@ export default function NewsFeed({ league, mode = 'full' }) {
       .slice(0, 70);
     return merged;
   }, [allNews, league]);
+  const pressure = useMemo(() => deriveFranchisePressure(league), [league]);
 
   const latestFive = useMemo(() => mergedNews.slice(0, 5), [mergedNews]);
 
@@ -109,6 +111,17 @@ export default function NewsFeed({ league, mode = 'full' }) {
 
   return (
     <div className="card" style={{ padding: 'var(--space-4)' }}>
+      {pressure && (
+        <div style={{ marginBottom: 10, border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface-strong)' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', marginBottom: 3 }}>LOCAL PRESSURE BRIEFING</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Fans: <strong style={{ color: 'var(--text)' }}>{pressure.fans.state}</strong> · {pressure.narrativeNotes.fan}
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Media: <strong style={{ color: 'var(--text)' }}>{pressure.media.state}</strong> · {pressure.narrativeNotes.media}
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {[
           ['all', 'ALL'],

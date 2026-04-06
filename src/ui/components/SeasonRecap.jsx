@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from "react";
+import { deriveFranchisePressure } from "../utils/pressureModel.js";
 
 function AnimatedSection({ delay = 0, children, title, icon }) {
   const [visible, setVisible] = useState(false);
@@ -180,6 +181,7 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
 
   const seasonNarrative = buildSeasonNarrative({ champion, standings, userTeam, year });
   const awardWatches = getAwardWinnerCards(league);
+  const pressure = useMemo(() => deriveFranchisePressure(league), [league]);
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -274,6 +276,26 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
               #{standings.findIndex(t => t.id === userTeam.id) + 1}
             </strong>{" "}
             overall with a team OVR of {userTeam.ovr}.
+          </div>
+        </AnimatedSection>
+      )}
+
+      {pressure && (
+        <AnimatedSection delay={620} title="Organization reaction" icon="🏛️">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Owner {pressure.owner.state}</strong> ({pressure.owner.score}/100)
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.owner.reasons?.[0] ?? "Owner sees a stable trajectory."}</div>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Fans {pressure.fans.state}</strong> ({pressure.fans.score}/100)
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.narrativeNotes.fan}</div>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Media {pressure.media.state}</strong> ({pressure.media.score}/100)
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.narrativeNotes.media}</div>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{pressure.consequence}</div>
           </div>
         </AnimatedSection>
       )}

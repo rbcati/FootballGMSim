@@ -77,6 +77,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const cap = deriveTeamCapSnapshot(user, { fallbackCapTotal: 255 });
   const ownerMood = league.ownerMood ?? league.ownerApproval;
   const ownerDisplay = formatPercent(ownerMood, "—", { digits: 0 });
+  const pressure = weeklyContext?.pressure;
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
   const topOfferIdentity = topOffer ? getOfferIdentity(topOffer) : null;
@@ -99,7 +100,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           </div>
           <div className="weekly-hud__meta">
             <Badge variant="outline">{user.wins ?? 0}-{user.losses ?? 0}{(user.ties ?? 0) ? `-${user.ties}` : ""}</Badge>
-            <Badge>{`Owner ${ownerDisplay}`}</Badge>
+            <Badge>{`Owner ${pressure?.owner?.state ?? "Stable"} ${ownerDisplay}`}</Badge>
+            {pressure?.fans?.state ? <Badge variant="secondary">{`Fans ${pressure.fans.state}`}</Badge> : null}
+            {pressure?.media?.state ? <Badge variant="outline">{`Media ${pressure.media.state}`}</Badge> : null}
             <Badge variant="secondary">Cap {formatMoneyM(cap.capRoom)}</Badge>
             {injuries.length > 0 && <Badge variant="destructive">{injuries.length} injuries</Badge>}
           </div>
@@ -266,7 +269,38 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
       <section className="weekly-section">
         <h3 className="weekly-section__title">Pressure points</h3>
         <div className="weekly-secondary-grid">
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Owner Pressure</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{ownerDisplay}</CardContent></Card>
+          <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Owner Pressure</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">
+              <strong style={{ color: "var(--text)" }}>{pressure?.owner?.state ?? "Stable"} · {pressure?.owner?.score ?? ownerDisplay}</strong>
+              {(pressure?.owner?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`owner-r-${idx}`}>• {reason}</div>)}
+            </CardContent>
+          </Card>
+          <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Fan Sentiment</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">
+              <strong style={{ color: "var(--text)" }}>{pressure?.fans?.state ?? "Hopeful"} · {pressure?.fans?.score ?? "—"}</strong>
+              {(pressure?.fans?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`fan-r-${idx}`}>• {reason}</div>)}
+            </CardContent>
+          </Card>
+          <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Media Temperature</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">
+              <strong style={{ color: "var(--text)" }}>{pressure?.media?.state ?? "Watching"} · {pressure?.media?.score ?? "—"}</strong>
+              {(pressure?.media?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`media-r-${idx}`}>• {reason}</div>)}
+            </CardContent>
+          </Card>
+          <Card variant="secondary">
+            <CardHeader><CardTitle className="text-sm">Owner Directives</CardTitle></CardHeader>
+            <CardContent className="text-sm text-[color:var(--text-muted)]">
+              {(pressure?.directives ?? []).slice(0, 2).map((directive) => (
+                <div key={directive.theme} style={{ marginBottom: 4 }}>
+                  <strong style={{ color: "var(--text)" }}>{directive.theme}</strong> · {directive.progress}%
+                </div>
+              ))}
+              {!(pressure?.directives ?? []).length && <div>No active directive snapshot.</div>}
+            </CardContent>
+          </Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Cap Situation</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{formatMoneyM(cap.capRoom)} room</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Expiring Contracts</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.expiringCount ?? 0} expiring</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Injuries</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.injuriesCount ?? 0} active injuries</CardContent></Card>
@@ -274,6 +308,11 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Market Pulse</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.marketPulse}</CardContent></Card>
           <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Next Milestone</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{nextGame ? `Week ${nextGame.week}: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : weeklyContext.pressurePoints?.nextMilestone}</CardContent></Card>
         </div>
+        {pressure?.consequence ? (
+          <div style={{ marginTop: 8, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+            Consequence outlook: {pressure.consequence}
+          </div>
+        ) : null}
       </section>
 
       {topOffer && (

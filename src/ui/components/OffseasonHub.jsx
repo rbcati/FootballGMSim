@@ -16,6 +16,7 @@ import {
   safeRound,
   toFiniteNumber,
 } from "../utils/numberFormatting.js";
+import { deriveFranchisePressure } from "../utils/pressureModel.js";
 
 const PHASES = [
   {
@@ -234,6 +235,7 @@ function OffseasonStatsCard({ league, onNavigate }) {
       : ownerApproval < 68
         ? "Warming Seat"
         : "Stable";
+  const pressure = deriveFranchisePressure(league);
   const nextAction = overCap
     ? "Clear salary to get under the cap."
     : rosterCount < 53
@@ -258,9 +260,16 @@ function OffseasonStatsCard({ league, onNavigate }) {
           <div className="h-full rounded-full transition-all duration-300" style={{ width: formatPercent(ownerApproval, "0%"), background: ownerTone }} />
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-slate-300">{nextAction}</span>
+          <span className="text-[11px] text-slate-300">
+            {nextAction} {pressure?.fans?.state ? `· Fans ${pressure.fans.state}` : ""} {pressure?.media?.state ? `· Media ${pressure.media.state}` : ""}
+          </span>
           <button onClick={() => onNavigate?.("Owner")} className="text-[11px] font-semibold text-blue-300 underline underline-offset-2">Owner goals</button>
         </div>
+        {!!pressure?.directives?.length && (
+          <div className="mt-2 text-[11px] text-slate-300">
+            Directive: <strong style={{ color: "var(--text)" }}>{pressure.directives[0].theme}</strong> ({pressure.directives[0].progress}%)
+          </div>
+        )}
       </div>
 
       <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">

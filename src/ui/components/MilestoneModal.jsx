@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect } from "react";
 import { teamColor } from "../../data/team-utils.js";
+import { deriveFranchisePressure } from "../utils/pressureModel.js";
 
 // ── Playoff Bracket Modal ────────────────────────────────────────────────────
 
@@ -269,11 +270,12 @@ function PlayoffBracketModal({ playoffSeeds, teams, onDismiss }) {
 
 // ── Season Complete Splash ──────────────────────────────────────────────────
 
-function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
+function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
   if (championTeamId == null || !teams?.length) return null;
 
   const champ = teams.find((t) => t.id === championTeamId);
   if (!champ) return null;
+  const pressure = deriveFranchisePressure(league);
 
   const color = teamColor(champ.abbr ?? "");
   const winPct = (champ.wins + champ.losses) > 0 ? champ.wins / (champ.wins + champ.losses) : null;
@@ -384,6 +386,24 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
           </div>
         </div>
       )}
+      {pressure && (
+        <div style={{
+          minWidth: 280,
+          maxWidth: 440,
+          background: "rgba(17,24,39,0.72)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: "10px 12px",
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-subtle)", marginBottom: 4 }}>Franchise pressure context</div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+            Owner {pressure.owner.state} · Fans {pressure.fans.state} · Media {pressure.media.state}
+          </div>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-subtle)", marginTop: 4 }}>
+            {pressure.consequence}
+          </div>
+        </div>
+      )}
       <button
         className="btn btn-primary"
         onClick={onProceed}
@@ -454,6 +474,7 @@ export default function MilestoneModal({
         <SeasonCompleteSplash
           championTeamId={league?.championTeamId}
           teams={league?.teams}
+          league={league}
           onProceed={() => {
             setShowChampion(false);
             onDismissChampion?.();
