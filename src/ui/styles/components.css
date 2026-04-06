@@ -8,17 +8,17 @@
    ============================================================================ */
 
 .card {
-  padding: var(--space-6);
-  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  margin-bottom: var(--space-5);
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-xl);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   box-shadow: var(--glass-shadow);
   position: relative;
   overflow: hidden;
-  transition: all var(--dur) var(--ease);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), transform var(--dur) var(--ease);
 }
 
 .card::before {
@@ -109,17 +109,17 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-3) var(--space-5); 
+  padding: 10px 16px;
   border-radius: 0.9rem;
   border: 1px solid var(--hairline); 
   background: var(--glass-bg);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   color: var(--text);
   font-weight: 700; 
   font-size: var(--text-sm);
   cursor: pointer; 
-  transition: transform var(--dur) var(--ease), box-shadow var(--dur) var(--ease), border-color var(--dur) var(--ease), filter var(--dur) var(--ease);
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease);
   position: relative;
   overflow: hidden;
   text-decoration: none;
@@ -134,19 +134,9 @@
   transition: opacity var(--dur) var(--ease);
 }
 
-.btn:hover {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: var(--shadow-md);
-  border-color: var(--hairline-strong);
-  filter: brightness(1.05);
-}
-
-.btn:hover::before {
-  opacity: 1;
-}
-
 .btn:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.99);
+  filter: brightness(0.97);
 }
 
 .btn.primary { 
@@ -158,7 +148,7 @@
 
 .btn.primary:hover {
   box-shadow: var(--shadow-lg);
-  filter: brightness(1.1);
+  filter: brightness(1.05);
 }
 
 .btn.danger { 
@@ -174,8 +164,21 @@
 }
 
 .btn-sm {
-  padding: var(--space-2) var(--space-3);
+  padding: 6px 10px;
   font-size: var(--text-xs);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--hairline-strong);
+    filter: brightness(1.03);
+  }
+
+  .btn:hover::before {
+    opacity: 1;
+  }
 }
 
 /* ============================================================================
@@ -236,7 +239,7 @@ label {
 
 .table th,
 .table td {
-  padding: 4px 8px;
+  padding: 6px 8px;
   text-align: left;
   border-bottom: 1px solid var(--hairline);
   font-size: var(--text-sm);
@@ -265,11 +268,7 @@ label {
 }
 
 .table tbody tr:hover {
-  background: rgba(0, 48, 135, 0.12);
-}
-
-.table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(47, 124, 255, 0.12);
 }
 
 .table tbody tr.selected {

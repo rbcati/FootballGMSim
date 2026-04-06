@@ -351,10 +351,26 @@ export default function SaveManager({ actions, onCreate }) {
 }
 
 function formatRelativeDate(timestamp) {
-  const parsed = typeof timestamp === "number" ? timestamp : Date.parse(timestamp);
+  const normalizeEpoch = (value) => {
+    if (!Number.isFinite(value)) return NaN;
+    return value < 1e12 ? value * 1000 : value;
+  };
+
+  let parsed = NaN;
+  if (typeof timestamp === "number") {
+    parsed = normalizeEpoch(timestamp);
+  } else if (typeof timestamp === "string") {
+    const trimmed = timestamp.trim();
+    if (/^\d+$/.test(trimmed)) {
+      parsed = normalizeEpoch(Number(trimmed));
+    } else {
+      parsed = Date.parse(trimmed);
+    }
+  }
+
   if (!Number.isFinite(parsed)) return "Unknown";
   const now = Date.now();
-  const diff = now - parsed;
+  const diff = Math.max(0, now - parsed);
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);

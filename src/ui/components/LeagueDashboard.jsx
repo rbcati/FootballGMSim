@@ -494,14 +494,14 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
   return (
     <div>
       {/* Conference tab pills + view mode toggle */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
         <Tabs value={activeConf} onValueChange={setActiveConf}>
-          <TabsList>
+          <TabsList style={{ minHeight: 34 }}>
             {CONFS.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
           </TabsList>
         </Tabs>
         <Tabs value={viewMode} onValueChange={setViewMode}>
-          <TabsList>
+          <TabsList style={{ minHeight: 34 }}>
             <TabsTrigger value="division">Divisions</TabsTrigger>
             <TabsTrigger value="playoff">Playoff Picture</TabsTrigger>
           </TabsList>
@@ -532,10 +532,10 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                       <TableHead style={{ textAlign: "center" }}>L</TableHead>
                       <TableHead style={{ textAlign: "center" }}>T</TableHead>
                       <TableHead style={{ textAlign: "center" }}>PCT</TableHead>
-                      <TableHead style={{ textAlign: "center", color: "#34C759" }} title="Points For">
+                      <TableHead style={{ textAlign: "center", color: "var(--text-muted)" }} title="Points For (season total)">
                         PF
                       </TableHead>
-                      <TableHead style={{ textAlign: "center", color: "#FF6B6B" }} title="Points Against">
+                      <TableHead style={{ textAlign: "center", color: "var(--text-muted)" }} title="Points Against (season total)">
                         PA
                       </TableHead>
                       <TableHead style={{ textAlign: "center" }}>STRK</TableHead>
@@ -625,11 +625,11 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
                           <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
                             {winPct(team.wins, team.losses, team.ties)}
                           </TableCell>
-                          <TableCell style={{ textAlign: "center", color: "#34C759", fontWeight: 700 }}>
+                          <TableCell style={{ textAlign: "center", color: "var(--success)", fontWeight: 700 }}>
                             {team.ptsFor}
                           </TableCell>
                           <TableCell style={{ textAlign: "center" }}>
-                            <span style={{ color: "#FF6B6B", fontWeight: 700 }}>{team.ptsAgainst}</span>
+                            <span style={{ color: "var(--warning)", fontWeight: 700 }}>{team.ptsAgainst}</span>
                           </TableCell>
                           <TableCell style={{ textAlign: "center" }}>
                             {(() => {
@@ -1591,19 +1591,19 @@ export default function LeagueDashboard({
         className="standings-tabs dashboard-main-tabs"
         style={{
           marginBottom: "var(--space-4)",
-          flexWrap: "nowrap",
+          flexWrap: "wrap",
           overflowX: "auto",
           WebkitOverflowScrolling: "touch",
           scrollbarWidth: "none",
           msOverflowStyle: "none",
           position: "sticky",
-          top: 0,
+          top: "calc(env(safe-area-inset-top) + 2px)",
           zIndex: 10,
           background: "var(--bg)",
           paddingTop: "var(--space-2)",
           paddingBottom: "var(--space-2)",
           margin: "0 calc(var(--space-4) * -1) var(--space-4)",
-          padding: "var(--space-2) var(--space-4)",
+          padding: "6px var(--space-4)",
           borderBottom: "1px solid var(--hairline)",
         }}
       >
@@ -1616,7 +1616,8 @@ export default function LeagueDashboard({
               flexShrink: 0,
               textTransform: "uppercase",
               letterSpacing: "0.08em",
-              fontSize: "11px",
+              fontSize: "10px",
+              padding: "6px 9px",
             }}
           >
             {tab}

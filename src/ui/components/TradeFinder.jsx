@@ -88,6 +88,31 @@ function TradeValueBar({ label, value, maxValue, color }) {
   );
 }
 
+function TradeBalanceMeter({ delta }) {
+  const clamped = Math.max(-60, Math.min(60, delta));
+  const markerPct = ((clamped + 60) / 120) * 100;
+  const abs = Math.abs(delta);
+  const label = abs < 8 ? "Fair" : abs < 20 ? (delta > 0 ? "Favoring Them" : "Favoring You") : (delta > 0 ? "Overpay" : "Strong Value");
+  const tone = abs < 8 ? "var(--success)" : abs < 20 ? "var(--warning)" : "var(--danger)";
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-muted)", marginBottom: 6 }}>
+        <span>Favoring You</span>
+        <span style={{ color: tone, fontWeight: 800 }}>{label}</span>
+        <span>Favoring Them</span>
+      </div>
+      <div style={{ position: "relative", height: 12, borderRadius: 999, background: "linear-gradient(90deg, rgba(52,199,89,0.35), rgba(255,255,255,0.18) 50%, rgba(255,159,10,0.35))", border: "1px solid var(--hairline)" }}>
+        <div style={{ position: "absolute", left: "50%", top: -2, bottom: -2, width: 1, background: "rgba(255,255,255,0.65)" }} />
+        <div style={{ position: "absolute", left: `calc(${markerPct}% - 5px)`, top: -3, width: 10, height: 18, borderRadius: 4, background: tone, boxShadow: "0 0 0 2px rgba(255,255,255,0.25)" }} />
+      </div>
+      <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--text-subtle)", textAlign: "right" }}>
+        Delta: {delta > 0 ? `+${Math.round(delta)} sent by you` : `${Math.round(Math.abs(delta))} net to you`}
+      </div>
+    </div>
+  );
+}
+
 export default function TradeFinder({ league, actions, onPlayerSelect }) {
   const [selectedPartner, setSelectedPartner] = useState(null);
   const [userOffering, setUserOffering] = useState([]); // player IDs from user team
@@ -136,7 +161,6 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
   const partnerValue = calcValue(partnerOffering, partnerTeam?.roster);
   const maxValue = Math.max(userValue, partnerValue, 1);
   const tradeDelta = userValue - partnerValue;
-  const fairnessTone = Math.abs(tradeDelta) < 8 ? "#34C759" : Math.abs(tradeDelta) < 20 ? "#FF9F0A" : "#FF453A";
 
   const toggleUserPlayer = (id) => {
     setUserOffering(prev =>
@@ -283,14 +307,9 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               maxValue={maxValue}
               color="var(--warning)"
             />
-            <div style={{ marginTop: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-muted)", marginBottom: 4 }}>
-                <span>Balance Meter</span>
-                <span style={{ color: fairnessTone, fontWeight: 800 }}>
-                  {tradeDelta > 0 ? `You +${Math.round(tradeDelta)}` : `Them +${Math.round(Math.abs(tradeDelta))}`}
-                </span>
-              </div>
-              <div style={{ height: 8, borderRadius: 999, background: "linear-gradient(90deg,#34C759 0%, #FF9F0A 50%, #FF453A 100%)", opacity: 0.35 }} />
+            <TradeBalanceMeter delta={tradeDelta} />
+            <div style={{ marginTop: 6, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
+              Trade value is an estimate based on OVR + age curve (not full AI acceptance logic).
             </div>
 
             {userOffering.length > 0 && partnerOffering.length > 0 && (
@@ -299,7 +318,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               }}>
                 <span style={{
                   fontSize: "var(--text-xs)", fontWeight: 700,
-                  color: fairnessTone,
+                  color: Math.abs(tradeDelta) < 8 ? "#34C759" : Math.abs(tradeDelta) < 20 ? "#FF9F0A" : "#FF453A",
                 }}>
                   {Math.abs(userValue - partnerValue) < 10
                     ? "Fair Trade"
@@ -315,7 +334,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
           {/* Side by side rosters */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
             gap: "var(--space-3)",
           }}>
             {/* User side */}
@@ -327,7 +346,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               }}>
                 Your Players ({userOffering.length})
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", maxHeight: 460, overflowY: "auto" }}>
                 {userRoster.slice(0, 30).map(p => (
                   <PlayerChip
                     key={p.id}
@@ -348,7 +367,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               }}>
                 Their Players ({partnerOffering.length})
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", maxHeight: 460, overflowY: "auto" }}>
                 {partnerRoster.slice(0, 30).map(p => (
                   <PlayerChip
                     key={p.id}
