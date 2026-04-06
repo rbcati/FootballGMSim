@@ -42,17 +42,6 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
-function getOfferQuality(offer) {
-  const text = `${offer?.stance ?? ""} ${offer?.reason ?? ""}`.toLowerCase();
-  if (text.includes("favorable") || text.includes("value") || text.includes("flexibility")) {
-    return { label: "Likely favorable", variant: "secondary" };
-  }
-  if (text.includes("costly") || text.includes("premium") || text.includes("overpay")) {
-    return { label: "Likely costly", variant: "destructive" };
-  }
-  return { label: "Likely neutral", variant: "outline" };
-}
-
 function summarizeOfferAssets(offer, side) {
   const players = side === "offering" ? offer?.offeringPlayerName : offer?.receivingPlayerName;
   const picks = side === "offering" ? offer?.offeringPickSnapshots : offer?.receivingPickSnapshots;
@@ -163,7 +152,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Badge variant="outline">{topOffer.stance ?? "Market call"}</Badge>
                 <Badge variant={topOffer.urgency === "high" ? "destructive" : "secondary"}>{topOffer.urgency === "high" ? "High urgency" : "Standard urgency"}</Badge>
-                <Badge variant={getOfferQuality(topOffer).variant}>{getOfferQuality(topOffer).label}</Badge>
+                <Badge variant="outline">AI framing: {topOffer.offerType?.replaceAll("_", " ") ?? "trade call"}</Badge>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>
@@ -182,8 +171,8 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
             <strong style={{ color: "var(--text)" }}>{weeklyContext?.focus?.title ?? "Keep advancing with discipline."}</strong>
             <div>{weeklyContext?.focus?.subtitle ?? "Stay active in every phase."}</div>
             <div>GM pulse: {weeklyContext?.advisorPulse}</div>
-            {league.phase === "offseason_resign" && <div>Use <strong style={{ color: "var(--text)" }}>FA Hub</strong> to triage resign risk, then use <strong style={{ color: "var(--text)" }}>Free Agency</strong> only when you are ready to bid externally.</div>}
-            {league.phase === "free_agency" && <div>Use <strong style={{ color: "var(--text)" }}>Free Agency</strong> for live bids and <strong style={{ color: "var(--text)" }}>FA Hub</strong> for contract strategy and shortlist management.</div>}
+            {league.phase === "offseason_resign" && <div>Start in <strong style={{ color: "var(--text)" }}>FA Hub</strong> for market pressure and expiring risk. Move to <strong style={{ color: "var(--text)" }}>Free Agency</strong> when you are ready to submit or revise specific bids.</div>}
+            {league.phase === "free_agency" && <div>Start in <strong style={{ color: "var(--text)" }}>FA Hub</strong> to scan market pressure, then use <strong style={{ color: "var(--text)" }}>Free Agency</strong> as the transaction workspace for contract entry and cap checks.</div>}
           </CardContent>
         </Card>
       </section>

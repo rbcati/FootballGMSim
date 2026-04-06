@@ -1695,6 +1695,7 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
@@ -1704,6 +1705,7 @@ export default function LeagueDashboard({ league, busy, simulating, actions, onA
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}

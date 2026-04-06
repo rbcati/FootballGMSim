@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import TradeBlockPanel from "./TradeBlockPanel.jsx";
+import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -151,7 +152,25 @@ function PickSelector({ side, picks, onChange, availablePicks = [] }) {
 function TradeResult({ result, onDismiss }) {
   if (!result) return null;
   const valueDiff = (result.receiveValue ?? 0) - (result.offerValue ?? 0);
-  const counterHint = !result.accepted && valueDiff > 50 ? (valueDiff > 2000 ? "Add a top player or multiple assets" : valueDiff > 800 ? "Add a 1st-round pick" : valueDiff > 300 ? "Add a 2nd-round pick" : "Slightly increase your offer") : null;
+  const reasonType = result?.rejectionType ?? (String(result?.reason ?? "").toLowerCase().includes("cap") ? "cap" : "value");
+  const askHint = result?.askHint;
+  const counterHint = !result.accepted
+    ? askHint === "add_pick"
+      ? "Add draft pick compensation to close the gap."
+      : askHint === "add_depth_piece"
+        ? "Add one depth piece to move this into range."
+        : askHint === "major_upgrade"
+          ? "This is far off market. Add a premium asset."
+          : reasonType === "cap"
+            ? "Adjust salary coming in/out so both teams remain cap compliant."
+            : valueDiff > 2000
+              ? "Add a top player or multiple assets."
+              : valueDiff > 800
+                ? "Add a 1st-round pick or equivalent value."
+                : valueDiff > 300
+                  ? "Add a 2nd-round pick or similar depth value."
+                  : "Slightly increase your offer value."
+    : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ borderRadius: "var(--radius-md)", border: `1.5px solid ${result.accepted ? "var(--success)" : "var(--danger)"}`, background: result.accepted ? "rgba(52,199,89,0.08)" : "rgba(255,69,58,0.08)", padding: "var(--space-4) var(--space-5)", display: "flex", alignItems: "center", gap: "var(--space-4)" }}>
@@ -159,6 +178,14 @@ function TradeResult({ result, onDismiss }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: result.accepted ? "var(--success)" : "var(--danger)" }}>{result.accepted ? "Trade Accepted!" : "Trade Rejected"}</div>
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{result.reason}</div>
+          {!result.accepted && (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+              <Badge variant={reasonType === "cap" ? "destructive" : "outline"}>
+                {reasonType === "cap" ? "Cap issue" : reasonType === "fit" ? "Roster fit issue" : reasonType === "direction" ? "Team direction issue" : "Value issue"}
+              </Badge>
+              <Badge variant="outline">Model estimate: asset value heuristic</Badge>
+            </div>
+          )}
         </div>
         <Button onClick={onDismiss} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 20, color: "var(--text-muted)" }}>×</Button>
       </div>
@@ -261,6 +288,8 @@ export default function TradeCenter({ league, actions }) {
 
   const liveMyTeam = useMemo(() => league?.teams?.find(t => t.id === myTeamId) ?? myTeam, [league?.teams, myTeamId, myTeam]);
   const liveTheirTeam = useMemo(() => targetId != null ? (league?.teams?.find(t => t.id === targetId) ?? theirTeam) : theirTeam, [league?.teams, targetId, theirTeam]);
+  const myNeedsSummary = useMemo(() => computeTeamNeedsSummary({ ...liveMyTeam, roster: myRoster }), [liveMyTeam, myRoster]);
+  const theirNeedsSummary = useMemo(() => computeTeamNeedsSummary({ ...liveTheirTeam, roster: theirRoster }), [liveTheirTeam, theirRoster]);
   const myAvailablePicks = useMemo(() => Array.isArray(liveMyTeam?.picks) ? liveMyTeam.picks : [], [liveMyTeam?.picks]);
   const theirAvailablePicks = useMemo(() => Array.isArray(liveTheirTeam?.picks) ? liveTheirTeam.picks : [], [liveTheirTeam?.picks]);
 
@@ -393,10 +422,11 @@ export default function TradeCenter({ league, actions }) {
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
                   {offer.offeringPlayerName} {offer?.offeringPickSnapshots?.length ? `+ ${offer.offeringPickSnapshots.map((pk) => pk.label ?? pickLabel(pk)).join(", ")}` : ""} for {offer.receivingPlayerName}
                 </div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Badge variant="secondary">{offer.offerType?.replaceAll("_", " ") ?? "market offer"}</Badge>
                   <Badge variant={offer.urgency === "high" ? "destructive" : "outline"}>{offer.urgency ?? "standard"}</Badge>
                   {offer.stance ? <Badge variant="outline">{offer.stance}</Badge> : null}
+                  <Badge variant="outline">Estimate only: final acceptance uses AI logic</Badge>
                 </div>
                 {offer?.lastCounter?.reason ? (
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
@@ -441,6 +471,10 @@ export default function TradeCenter({ league, actions }) {
             </div>
           )}
           {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
+        </div>
+        <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveMyTeam?.abbr ?? "You"} · {formatNeedsLine(myNeedsSummary)}</div>
+          {liveTheirTeam && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveTheirTeam?.abbr ?? "Them"} · {formatNeedsLine(theirNeedsSummary)}</div>}
         </div>
       </div>
       {counterOfferId && (

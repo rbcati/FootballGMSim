@@ -10,6 +10,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { OvrPill } from "./LeagueDashboard.jsx";
+import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -144,6 +145,8 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
     }
     return roster.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
   }, [partnerTeam?.roster, posFilter]);
+  const userNeedsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
+  const partnerNeedsSummary = useMemo(() => computeTeamNeedsSummary(partnerTeam), [partnerTeam]);
 
   // Simple trade value calculation
   const calcValue = useCallback((playerIds, roster) => {
@@ -310,6 +313,12 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
             <TradeBalanceMeter delta={tradeDelta} />
             <div style={{ marginTop: 6, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
               Trade value is an estimate based on OVR + age curve (not full AI acceptance logic).
+            </div>
+            <div style={{ marginTop: 6, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
+              {userTeam?.abbr ?? "You"}: {formatNeedsLine(userNeedsSummary)}
+            </div>
+            <div style={{ marginTop: 2, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
+              {partnerTeam?.abbr ?? "Partner"}: {formatNeedsLine(partnerNeedsSummary)}
             </div>
 
             {userOffering.length > 0 && partnerOffering.length > 0 && (
