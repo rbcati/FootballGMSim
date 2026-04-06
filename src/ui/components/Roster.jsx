@@ -28,6 +28,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
+import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -42,12 +43,7 @@ import {
   evaluateResignRecommendation,
   summarizeExpiring,
 } from "../utils/contractInsights.js";
-import {
-  deriveTeamCapSnapshot,
-  formatMoneyM,
-  safeRound,
-  toFiniteNumber,
-} from "../utils/numberFormatting.js";
+import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -325,164 +321,6 @@ function sortPlayers(players, sortKey, sortDir) {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
-
-function ExtensionModal({ player, actions, teamId, onClose, onComplete }) {
-  const [ask, setAsk] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Fetch ask on mount
-    actions
-      .getExtensionAsk(player.id)
-      .then((resp) => {
-        if (resp.payload?.ask) setAsk(resp.payload.ask);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error(err);
-        setLoading(false);
-      });
-  }, [player.id, actions]);
-
-  const handleAccept = async () => {
-    if (!isAskValid) return;
-    setLoading(true);
-    await actions.extendContract(player.id, teamId, ask);
-    onComplete();
-  };
-
-  const askYears = toFiniteNumber(ask?.years, null);
-  const askBaseAnnual = toFiniteNumber(ask?.baseAnnual, null);
-  const askSigningBonus = toFiniteNumber(ask?.signingBonus, null);
-  const isAskValid =
-    askYears != null &&
-    askBaseAnnual != null &&
-    askSigningBonus != null &&
-    askYears > 0 &&
-    askBaseAnnual >= 0 &&
-    askSigningBonus >= 0;
-
-  return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0,0,0,0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-    >
-      <Card
-        className="card-premium"
-        style={{
-          width: "min(420px, calc(100vw - 24px))",
-          maxHeight: "min(88vh, 640px)",
-          overflowY: "auto",
-          padding: "var(--space-6)",
-          boxShadow: "var(--shadow-lg)",
-        }}
-      ><CardContent>
-        <h3 style={{ marginTop: 0 }}>
-          Extend {player.name}
-          <StatusBadge injuryWeeks={player.injuryWeeksRemaining} />
-        </h3>
-        {loading ? (
-          <div
-            style={{
-              padding: "var(--space-4)",
-              textAlign: "center",
-              color: "var(--text-muted)",
-            }}
-          >
-            Negotiating...
-          </div>
-        ) : isAskValid ? (
-          <div>
-            <p
-              style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}
-            >
-              Agent Demand:
-            </p>
-            <div
-              style={{
-                fontSize: "1.5em",
-                fontWeight: 800,
-                margin: "var(--space-4) 0",
-                color: "var(--accent)",
-                textAlign: "center",
-                background: "var(--surface-strong)",
-                padding: "var(--space-4)",
-                borderRadius: "var(--radius-md)",
-              }}
-            >
-              {safeRound(askYears, 0)} Years
-              <br />
-              <span style={{ fontSize: "0.6em", color: "var(--text)" }}>
-                {formatMoneyM(askBaseAnnual)} / yr
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: "0.85em",
-                color: "var(--text-subtle)",
-                textAlign: "center",
-                marginBottom: "var(--space-6)",
-              }}
-            >
-              Includes {formatMoneyM(askSigningBonus)} Signing Bonus
-            </div>
-            <div
-              style={{
-                display: "flex",
-                gap: "var(--space-3)",
-                justifyContent: "flex-end",
-              }}
-            >
-              <Button className="btn" onClick={onClose}>
-                Reject
-              </Button>
-              <Button
-                className="btn btn-primary"
-                onClick={handleAccept}
-                style={{
-                  background: "var(--success)",
-                  borderColor: "var(--success)",
-                  color: "#fff",
-                }}
-              >
-                Accept Deal
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gap: "var(--space-4)" }}>
-            <div
-              style={{
-                border: "1px solid rgba(255,159,10,0.45)",
-                background: "rgba(255,159,10,0.10)",
-                borderRadius: "var(--radius-md)",
-                padding: "var(--space-3) var(--space-4)",
-              }}
-            >
-              <p style={{ margin: 0, fontWeight: 700 }}>Negotiation data unavailable</p>
-              <p style={{ margin: "6px 0 0", color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-                Contract terms could not be loaded right now.
-              </p>
-            </div>
-            <Button className="btn" onClick={onClose}>
-              Close
-            </Button>
-          </div>
-        )}
-      </CardContent></Card>
-    </div>
-  );
-}
 
 function CapBar({ capUsed, capTotal, deadCap = 0 }) {
   const safeCapTotal = toFiniteNumber(capTotal, 0);
@@ -772,10 +610,11 @@ function RosterTable({
   return (
     <>
       {extending && (
-        <ExtensionModal
+        <ExtensionNegotiationModal
           player={extending}
           actions={actions}
           teamId={teamId}
+          statusNode={<StatusBadge injuryWeeks={extending.injuryWeeksRemaining} />}
           onClose={() => setExtending(null)}
           onComplete={() => {
             setExtending(null);
