@@ -1882,7 +1882,7 @@ export default function LeagueDashboard({
 
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
-            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} />
+            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} league={league} />
           </TabErrorBoundary>
         )}
         {activeTab === "Hall of Fame" && (

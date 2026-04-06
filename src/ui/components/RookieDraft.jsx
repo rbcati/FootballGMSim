@@ -16,7 +16,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import PlayerRadarChart, { getPlayerRadarAttributes } from "./PlayerRadarChart.jsx";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import { launchConfetti } from "../../confetti.js";
-import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { buildTeamIntelligence, classifyNeedFitForProspect, scoreProspectForTeam } from "../utils/teamIntelligence.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -253,6 +253,7 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
 
   // Available prospects (not yet drafted)
   const draftedIds = useMemo(() => new Set(draftPicks.map(p => p.playerId || p.id)), [draftPicks]);
+  const completedPicks = useMemo(() => [...draftPicks].sort((a, b) => (a.overall ?? 999) - (b.overall ?? 999)), [draftPicks]);
 
   const availableProspects = useMemo(() => {
     let prospects = draftClass.filter(p => !draftedIds.has(p.id));
@@ -277,12 +278,41 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
 
     return prospects.map((p, idx) => {
       const pos = p.pos || p.position;
-      const needFit = teamIntel.needsNow.some((n) => n.pos === pos);
+      const fit = classifyNeedFitForProspect(pos, teamIntel);
+      const scouting = scoreProspectForTeam(p, teamIntel);
       const upside = (Number(p?.potential ?? p?.pot ?? p?.ovr ?? 60) - Number(p?.ovr ?? 60)) >= 8 || Number(p?.age ?? 30) <= 21;
-      const tagLabel = idx < 12 ? "Best Player Available" : needFit ? "Best Need Fit" : upside ? "Long-term Upside" : "";
-      return { ...p, _tagLabel: tagLabel };
+      const tagLabel = idx < 10 ? "Best Player Available" : fit.bucket === "Immediate need" ? "Best Need Fit" : upside ? "Long-term Upside" : "Balanced Option";
+      return { ...p, _tagLabel: `${tagLabel} · ${fit.bucket}`, _fit: fit, _scouting: scouting };
     });
   }, [draftClass, draftedIds, posFilter, searchQuery, teamIntel]);
+
+  const recentPicks = useMemo(() => completedPicks.slice(-8).reverse(), [completedPicks]);
+  const upcomingPicks = useMemo(() => {
+    if (!currentPick) return [];
+    return (draftState?.picks || []).filter((p) => (p.overall ?? 999) >= currentPick).slice(0, 14);
+  }, [draftState?.picks, currentPick]);
+  const userUpcoming = useMemo(() => upcomingPicks.filter((p) => p.teamId === league?.userTeamId).slice(0, 4), [upcomingPicks, league?.userTeamId]);
+  const positionRun = useMemo(() => {
+    const posCounts = new Map();
+    recentPicks.forEach((p) => {
+      const pos = p.pos || p.playerPos;
+      if (!pos) return;
+      posCounts.set(pos, (posCounts.get(pos) ?? 0) + 1);
+    });
+    return [...posCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  }, [recentPicks]);
+
+  const onClockFraming = useMemo(() => {
+    const top = availableProspects[0];
+    if (!top) return [];
+    const fit = classifyNeedFitForProspect(top.pos || top.position, teamIntel);
+    return [
+      `Best available talent: ${top.name} (${top.pos || top.position})`,
+      `Best fit signal: ${fit.bucket} — ${fit.short}`,
+      positionRun.length > 0 ? `Current board movement: ${positionRun.map(([pos, c]) => `${pos} x${c}`).join(" · ")}` : "Current board movement: no clear run",
+      userUpcoming.length > 1 ? `Trade-down angle: ${userUpcoming.length} upcoming picks in sight; depth may allow a move.` : "Trade-down angle: avoid overconfidence, depth uncertain.",
+    ];
+  }, [availableProspects, teamIntel, positionRun, userUpcoming.length]);
 
   const handleDraft = useCallback((playerId) => {
     if (actions?.draftPlayer) {
@@ -448,6 +478,31 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
       )}
 
       {/* ── Content ── */}
+      {!isDraftComplete && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
+          <div className="stat-box" style={{ padding: "var(--space-3)" }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 4 }}>Recent picks</div>
+            {recentPicks.slice(0, 4).map((pick) => <div key={`recent-${pick.overall}`} style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>#{pick.overall} {pick.name || pick.playerName} ({pick.pos || pick.playerPos})</div>)}
+            {recentPicks.length === 0 && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Draft has not started yet.</div>}
+          </div>
+          <div className="stat-box" style={{ padding: "var(--space-3)" }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 4 }}>Your upcoming picks</div>
+            {userUpcoming.map((pick) => <div key={`user-up-${pick.overall}`} style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>R{pick.round} · #{pick.overall}</div>)}
+            {userUpcoming.length === 0 && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>No user picks in the next window.</div>}
+          </div>
+          <div className="stat-box" style={{ padding: "var(--space-3)" }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 4 }}>Position run watch</div>
+            {positionRun.map(([pos, count]) => <div key={`run-${pos}`} style={{ fontSize: "var(--text-xs)", color: "var(--text)" }}>{pos}: {count} of last 8 picks</div>)}
+            {positionRun.length === 0 && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>No run signal yet.</div>}
+          </div>
+        </div>
+      )}
+      {isUserPick && !isDraftComplete && (
+        <div className="stat-box" style={{ padding: "var(--space-3)", marginBottom: "var(--space-4)" }}>
+          <div style={{ fontWeight: 800, fontSize: "var(--text-sm)", marginBottom: 6 }}>On-the-clock framing</div>
+          {onClockFraming.map((line, idx) => <div key={`framing-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>• {line}</div>)}
+        </div>
+      )}
       {viewMode === "board" && (
         <div style={{
           display: "grid",

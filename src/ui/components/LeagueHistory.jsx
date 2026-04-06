@@ -46,7 +46,7 @@ const STAT_LABELS = {
 };
 const NOOP_ACTIONS = {};
 
-export default function LeagueHistory({ onPlayerSelect, actions }) {
+export default function LeagueHistory({ onPlayerSelect, actions, league }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
@@ -98,6 +98,7 @@ export default function LeagueHistory({ onPlayerSelect, actions }) {
           <TabsTrigger value="records">Record Book</TabsTrigger>
           <TabsTrigger value="awards">Awards History</TabsTrigger>
           <TabsTrigger value="office">League Office</TabsTrigger>
+          <TabsTrigger value="draft">Draft History</TabsTrigger>
           <TabsTrigger value="compare">Compare Players</TabsTrigger>
         </TabsList>
 
@@ -117,10 +118,78 @@ export default function LeagueHistory({ onPlayerSelect, actions }) {
           <LeagueOfficeHistory transactions={transactions} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
+        <TabsContent value="draft">
+          <DraftHistoryExplorer seasons={seasons} league={league} onPlayerSelect={onPlayerSelect} />
+        </TabsContent>
+
         <TabsContent value="compare">
           <PlayerCompare actions={api} pool={allPlayers} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+function DraftHistoryExplorer({ seasons, league, onPlayerSelect }) {
+  const currentClass = useMemo(() => {
+    const picks = league?.draftState?.picks ?? [];
+    return picks.filter((p) => p.playerId != null).slice(0, 96);
+  }, [league?.draftState?.picks]);
+
+  const archivedHints = useMemo(() => {
+    return (seasons ?? [])
+      .filter((s) => Array.isArray(s?.draftResults) || Array.isArray(s?.draftClass))
+      .slice(-12)
+      .reverse();
+  }, [seasons]);
+
+  return (
+    <div className="space-y-3">
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Draft Archive Browser</CardTitle></CardHeader>
+        <CardContent className="text-sm text-[color:var(--text-muted)]">
+          Historical full-class draft results are shown when present in archived season storage. This save currently exposes in-progress/current draft picks and linked player profiles.
+        </CardContent>
+      </Card>
+
+      {currentClass.length > 0 && (
+        <Card className="card-premium">
+          <CardHeader><CardTitle>Current Class Results</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="h-[460px]">
+              <Table>
+                <TableHeader><TableRow><TableHead className="pl-4">Pick</TableHead><TableHead>Team</TableHead><TableHead>Player</TableHead><TableHead>Pos</TableHead><TableHead>Round</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {currentClass.map((pk) => (
+                    <TableRow key={`draft-${pk.overall}`}>
+                      <TableCell className="pl-4 font-semibold">#{pk.overall}</TableCell>
+                      <TableCell>{pk.teamAbbr ?? "—"}</TableCell>
+                      <TableCell>
+                        {pk.playerId != null ? <button className="text-[color:var(--accent)]" onClick={() => onPlayerSelect?.(pk.playerId)}>{pk.playerName ?? "Open profile"}</button> : "—"}
+                      </TableCell>
+                      <TableCell>{pk.playerPos ?? "—"}</TableCell>
+                      <TableCell>R{pk.round ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Archived Draft Data Coverage</CardTitle></CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          {archivedHints.length > 0 ? archivedHints.map((s) => (
+            <div key={`dc-${s.id}`} className="rounded-md border border-[color:var(--hairline)] px-3 py-2">
+              <strong>{s.year}</strong> has stored draft artifacts ({Array.isArray(s?.draftResults) ? `${s.draftResults.length} picks` : "class data"}).
+            </div>
+          )) : (
+            <div className="text-[color:var(--text-muted)]">No historical draft-class tables were found in archived season records for this save.</div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

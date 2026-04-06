@@ -11,6 +11,7 @@ import { getTeamIdentity } from "../../data/team-utils.js";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
+import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile } from "../utils/teamIntelligence.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -332,9 +333,12 @@ export default function PlayerProfile({
     };
   }, [playerId, actions]);
 
-  if (!playerId) return null;
-
   const player = data?.player;
+  const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: data?.meta?.week ?? 1 }), [userTeam, data?.meta?.week]);
+  const isProspect = player?.status === "draft_eligible";
+  const prospectProfile = useMemo(() => (isProspect ? describeProspectProfile(player) : null), [isProspect, player]);
+  const needFit = useMemo(() => (isProspect ? classifyNeedFitForProspect(player?.pos, teamIntel) : null), [isProspect, player?.pos, teamIntel]);
   const stats = data?.stats ?? [];
   const columns = getColumns(player?.pos);
 
@@ -671,11 +675,41 @@ export default function PlayerProfile({
                 ))}
               </div>
               <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Room")}>Draft room</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Board")}>Big board</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Season archive</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Leaders</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Analytics")}>Analytics</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Injuries</Button>
+              </div>
+            </section>
+          )}
+
+          {!loading && player && isProspect && (
+            <section>
+              <h3 style={sectionLabelStyle}>Prospect Evaluation</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Projected Role</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{prospectProfile?.readiness ?? "Unknown"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Upside vs Readiness</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{prospectProfile?.upside ?? "Unknown"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Age / Development Profile</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{prospectProfile?.ageProfile ?? "Unknown"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Team Need Fit</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{needFit?.bucket ?? "Depth upgrade"}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{needFit?.short ?? "No strong fit signal."}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 6 }}>
+                Note: scouting certainty is limited to data currently stored in this save.
               </div>
             </section>
           )}
