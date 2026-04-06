@@ -69,6 +69,23 @@ function PlayoffBracketModal({ playoffSeeds, teams, onDismiss }) {
           PLAYOFF BRACKET
         </div>
 
+        <div style={{ marginBottom: "var(--space-4)", display: "grid", gap: 6 }}>
+          {confKeys.map((confKey) => {
+            const seeds = playoffSeeds[confKey] || [];
+            const top = seeds[0];
+            const bubble = seeds[6];
+            const topTeam = top ? teamMap[top.teamId] : null;
+            const bubbleTeam = bubble ? teamMap[bubble.teamId] : null;
+            return (
+              <div key={`story-${confKey}`} style={{ fontSize: 12, color: "var(--text-muted)", border: "1px solid var(--hairline)", borderRadius: 8, padding: "6px 8px" }}>
+                <strong style={{ color: "var(--text)" }}>{confLabels[confKey] || confKey}:</strong>{" "}
+                {topTeam ? `${topTeam.abbr} secured the #1 seed.` : "Top seed set."}{" "}
+                {bubbleTeam ? `${bubbleTeam.abbr} grabbed the final playoff slot.` : "Final berth locked."}
+              </div>
+            );
+          })}
+        </div>
+
         <div
           style={{
             display: "grid",
@@ -351,7 +368,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed }) {
           textAlign: "center",
         }}
       >
-        {champ.wins}-{champ.losses} Record
+        {champ.wins}-{champ.losses} Record · Championship clinched
       </div>
       {recap && (
         <div style={{

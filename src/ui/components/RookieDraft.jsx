@@ -302,6 +302,14 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
     return [...posCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
   }, [recentPicks]);
 
+  const draftNightPulse = useMemo(() => {
+    if (draftPicks.length === 0) return "Draft night opens with a clean board and no positional run yet.";
+    const surprise = recentPicks.find((p) => (p.overall ?? 999) > 20 && Number(p.ovr ?? 0) >= 80);
+    if (surprise) return `Surprise swing: #${surprise.overall} ${surprise.name || surprise.playerName} (${surprise.pos || surprise.playerPos}) came off the board early.`;
+    if (positionRun[0] && positionRun[0][1] >= 3) return `League run underway: ${positionRun[0][0]} has dominated recent picks (${positionRun[0][1]} of last 8).`;
+    return `Board is balanced so far with ${draftPicks.length} picks completed.`;
+  }, [draftPicks.length, recentPicks, positionRun]);
+
   const onClockFraming = useMemo(() => {
     const top = availableProspects[0];
     if (!top) return [];
@@ -476,6 +484,11 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
           ))}
         </div>
       )}
+
+      <div className="stat-box" style={{ padding: "var(--space-3)", marginBottom: "var(--space-3)", border: "1px solid var(--hairline)" }}>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginBottom: 4 }}>Draft night pulse</div>
+        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}>{draftNightPulse}</div>
+      </div>
 
       {/* ── Content ── */}
       {!isDraftComplete && (

@@ -107,6 +107,41 @@ function ConfettiOverlay() {
   );
 }
 
+
+function buildSeasonNarrative({ champion, standings, userTeam, year }) {
+  const top = standings?.[0];
+  const second = standings?.[1];
+  const champGap = top && second ? (top.wins - second.wins) : null;
+  if (!champion) return `${year} wrapped without a confirmed champion in state.`;
+  if (champGap != null && champGap >= 2) {
+    return `${champion.name} controlled the year from the top tier and finished ${champion.wins}-${champion.losses}.`;
+  }
+  if (champGap != null && champGap <= 0) {
+    return `${champion.name} survived a tight race and closed the season on the right side of one-score pressure.`;
+  }
+  if (userTeam && champion.id === userTeam.id) {
+    return `Your club finished the job. ${champion.name} turned this season into a title run.`;
+  }
+  return `${champion.name} completed a balanced championship path and separated late in the season.`;
+}
+
+function getAwardWinnerCards(league) {
+  const races = league?.awardRaces?.awards ?? null;
+  const slots = [
+    ['mvp', 'MVP'],
+    ['opoy', 'OPOY'],
+    ['dpoy', 'DPOY'],
+    ['oroy', 'OROY'],
+    ['droy', 'DROY'],
+  ];
+  return slots.map(([key, label]) => {
+    const board = races?.[key]?.league ?? races?.[key]?.afc ?? races?.[key]?.nfc ?? [];
+    const leader = Array.isArray(board) ? board[0] : null;
+    if (!leader) return null;
+    return { key, label, leader };
+  }).filter(Boolean);
+}
+
 export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNavigate }) {
   const [showConfetti, setShowConfetti] = useState(true);
 
@@ -142,6 +177,9 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
       return bWp - aWp;
     });
   }, [teams]);
+
+  const seasonNarrative = buildSeasonNarrative({ champion, standings, userTeam, year });
+  const awardWatches = getAwardWinnerCards(league);
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -187,6 +225,22 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
             {champion?.wins ?? 0}-{champion?.losses ?? 0} · Pts For: {champion?.ptsFor ?? 0}
           </div>
         </div>
+      </AnimatedSection>
+
+      <AnimatedSection delay={300} title="Season storyline" icon="📰">
+        <div style={{ padding: 12, borderRadius: 10, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)", fontSize: 13, color: "var(--text-muted)" }}>
+          <strong style={{ color: "var(--text)" }}>{seasonNarrative}</strong>
+          <div style={{ marginTop: 6 }}>Final table context: {standings?.[0]?.abbr ?? standings?.[0]?.name ?? "—"} finished ahead of {standings?.[1]?.abbr ?? standings?.[1]?.name ?? "—"}.</div>
+        </div>
+        {awardWatches.length > 0 && (
+          <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+            {awardWatches.slice(0, 3).map((award) => (
+              <button key={award.key} onClick={() => award.leader?.playerId != null ? onPlayerSelect?.(award.leader.playerId) : null} style={{ textAlign: "left", border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px", background: "var(--surface-strong, #1a1a2e)", color: "var(--text)", cursor: award.leader?.playerId != null ? "pointer" : "default" }}>
+                <strong>{award.label}</strong>: {award.leader.name} {award.leader.teamAbbr ? `(${award.leader.teamAbbr})` : ""}
+              </button>
+            ))}
+          </div>
+        )}
       </AnimatedSection>
 
       {/* Your Team Summary */}

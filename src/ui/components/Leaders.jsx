@@ -8,6 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPercent, toFiniteNumber } from "../utils/numberFormatting.js";
+import { buildStorylineCards } from "../utils/leagueNarratives.js";
 
 function posColor(pos) {
   const map = {
@@ -177,12 +178,14 @@ function CategorySection({ catKey, stats, onPlayerSelect, userTeamId }) {
   );
 }
 
-export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigate }) {
+export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigate, league }) {
   const [mode, setMode] = useState("season");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeCategory, setActiveCategory] = useState("passing");
+
+  const storyline = (buildStorylineCards(league)[0] ?? null);
 
   useEffect(() => {
     setLoading(true);
@@ -212,6 +215,20 @@ export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigat
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      {storyline && (
+        <Card className="card-premium" style={{ border: "1px solid var(--hairline)" }}>
+          <CardContent className="py-3" style={{ display: "grid", gap: 4 }}>
+            <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--text-subtle)", fontWeight: 800 }}>League talking point</div>
+            <div style={{ fontWeight: 800 }}>{storyline.title}</div>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{storyline.detail}</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.(storyline.tab ?? "Standings")}>Open {storyline.tab ?? 'Standings'}</button>
+              <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("Award Races")}>Award race board</button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <Tabs value={mode} onValueChange={setMode}>
           <TabsList>
