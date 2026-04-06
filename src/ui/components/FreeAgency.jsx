@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -78,10 +79,6 @@ function suggestedSalary(ovr, pos, age) {
 
   if (age > 32) raw *= 0.7;
   else if (age > 29) raw *= 0.85;
-
-  // Fluctuation
-  const varFactor = 0.9 + Math.random() * 0.2;
-  raw *= varFactor;
 
   // Vet minimum floor
   const floor = 0.75 + (age > 26 ? 0.25 : 0);
@@ -570,6 +567,7 @@ export default function FreeAgency({
   league,
   actions,
   onPlayerSelect,
+  onNavigate,
 }) {
   const [faState, setFaState] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -629,6 +627,7 @@ export default function FreeAgency({
   const capUsed = userTeam?.capUsed ?? 0;
   const deadCap = userTeam?.deadCap ?? 0;
   const capRoom = userTeam?.capRoom ?? (capTotal - capUsed - deadCap);
+  const needsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
 
   const faPool = useMemo(() => {
     if (!faState?.freeAgents) return [];
@@ -743,6 +742,17 @@ export default function FreeAgency({
   return (
     <div className="free-agency-container">
       <style>{mobileStyle}</style>
+      <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+        <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 8 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Free Agency · transaction workspace</div>
+          <div style={{ fontWeight: 700 }}>Use this screen to place and edit offers. Use FA Hub for portfolio-level market pressure and shortlist triage.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Badge variant="outline">{formatNeedsLine(needsSummary)}</Badge>
+            <Button size="sm" variant="secondary" onClick={() => onNavigate?.("FA Hub")}>Open FA Hub Overview</Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Free Agency Bidding War Status Banner */}
       {faState && (
         <Card
@@ -1079,9 +1089,9 @@ export default function FreeAgency({
                     const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                     const askYrs = suggestedYears(player.age);
                     const offers = player.offers || {};
-                    const market = player.market || {};
-                    const hasBids = offers.count > 0;
-                    const userIsTop = offers.userIsTopBidder;
+                    const market = summarizeFreeAgentMarket(player);
+                    const hasBids = market.bidderCount > 0;
+                    const userIsTop = market.userLeads;
 
                     // Top Bid cell (shared between signing & normal rows)
                     const topBidCell = (
@@ -1092,19 +1102,22 @@ export default function FreeAgency({
                               fontWeight: 700,
                               color: userIsTop ? "var(--success)" : "var(--warning)",
                             }}>
-                              ${offers.topBidAnnual}M/{offers.topBidYears}yr
+                              {market.topOfferLabel}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 2 }}>
-                              {offers.topBidTeam ?? "Unknown"}
+                              {market.topBidTeam ?? "No current market snapshot"}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              {offers.count} bid{offers.count !== 1 ? "s" : ""}
+                              {market.competitionLabel}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              {market.attention ?? `Market: ${market.heatLabel ?? "Warm"}`}
+                              {market.attention ?? `Market: ${market.heatLabel ?? "No market heat signal"}`}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              {market.decision ?? "Evaluating market"}
+                              {market.decision}
+                            </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
+                              {market.urgencyLabel}
                             </div>
                             {userIsTop && (
                               <span style={{
@@ -1120,14 +1133,14 @@ export default function FreeAgency({
                                 YOUR BID LEADS
                               </span>
                             )}
-                            {!userIsTop && offers.userOffered && offers.userTrailReason && (
+                            {!userIsTop && offers.userOffered && (
                               <div style={{ color: "var(--warning)", marginTop: 3, fontSize: "10px" }}>
-                                {offers.userTrailReason}
+                                {market.leadLabel}
                               </div>
                             )}
                           </div>
                         ) : (
-                          <span style={{ color: "var(--text-subtle)" }}>No bids</span>
+                          <span style={{ color: "var(--text-subtle)" }}>No visible competing offer yet</span>
                         )}
                       </TableCell>
                     );
@@ -1229,9 +1242,9 @@ export default function FreeAgency({
                   const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                   const askYrs = suggestedYears(player.age);
                   const mOffers = player.offers || {};
-                  const mMarket = player.market || {};
-                  const mHasBids = mOffers.count > 0;
-                  const mUserIsTop = mOffers.userIsTopBidder;
+                  const mMarket = summarizeFreeAgentMarket(player);
+                  const mHasBids = mMarket.bidderCount > 0;
+                  const mUserIsTop = mMarket.userLeads;
 
                   return (
                      <Card key={player.id} className="card-premium" style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)", background: isSigningThis ? "var(--surface-strong)" : "var(--surface)", border: mUserIsTop ? "1px solid var(--success)" : "1px solid var(--hairline)", boxShadow: "0 2px 4px rgba(0,0,0,0.1)" }}>
@@ -1246,26 +1259,26 @@ export default function FreeAgency({
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
-                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "Warm"} market`}
+                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "No market heat signal"} market`}
                                 </div>
-                               <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
-                                   {mMarket.decision ?? "Evaluating market"}
-                               </div>
+                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
+                                   {mMarket.decision} · {mMarket.urgencyLabel}
+                                </div>
                                {/* Top Bid info on mobile */}
                                {mHasBids && (
                                  <div style={{ fontSize: "var(--text-xs)", marginTop: 4, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                                    <span style={{ fontWeight: 700, color: mUserIsTop ? "var(--success)" : "var(--warning)" }}>
-                                     Top Bid: ${mOffers.topBidAnnual}M/{mOffers.topBidYears}yr
+                                     Top Bid: {mMarket.topOfferLabel}
                                    </span>
-                                   <span style={{ color: "var(--text-muted)" }}>by {mOffers.topBidTeam ?? "?"}</span>
-                                   <span style={{ color: "var(--text-muted)" }}>({mOffers.count} bid{mOffers.count !== 1 ? "s" : ""})</span>
+                                   <span style={{ color: "var(--text-muted)" }}>by {mMarket.topBidTeam ?? "No current market snapshot"}</span>
+                                   <span style={{ color: "var(--text-muted)" }}>({mMarket.competitionLabel})</span>
                                    {mUserIsTop && (
                                      <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", background: "var(--success)22", color: "var(--success)", fontWeight: 700, fontSize: "10px" }}>
                                        YOUR BID LEADS
                                      </span>
                                    )}
-                                   {!mUserIsTop && mOffers.userOffered && mOffers.userTrailReason && (
-                                     <span style={{ color: "var(--warning)", fontSize: "10px" }}>{mOffers.userTrailReason}</span>
+                                   {!mUserIsTop && mOffers.userOffered && (
+                                     <span style={{ color: "var(--warning)", fontSize: "10px" }}>{mMarket.leadLabel}</span>
                                    )}
                                  </div>
                                )}

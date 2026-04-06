@@ -3377,6 +3377,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
         accepted: false,
         offerValue: Math.round(offerVal),
         receiveValue: Math.round(receiveVal),
+        rejectionType: 'cap',
         reason: `Trade blocked: ${from.name} would exceed the $${hardCap}M hard cap ($${fromProjected.toFixed(1)}M projected).`,
       }, id);
       return;
@@ -3386,6 +3387,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
         accepted: false,
         offerValue: Math.round(offerVal),
         receiveValue: Math.round(receiveVal),
+        rejectionType: 'cap',
         reason: `Trade blocked: ${to.name} would exceed the $${hardCap}M hard cap ($${toProjected.toFixed(1)}M projected).`,
       }, id);
       return;
@@ -3400,7 +3402,10 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     accepted,
     offerValue:   Math.round(offerVal),
     receiveValue: Math.round(receiveVal),
-    reason: accepted ? 'Deal accepted' : 'Offer undervalues the return',
+    rejectionType: accepted ? null : 'value',
+    requiredValue: Math.round(threshold),
+    valueGap: accepted ? 0 : Math.round(Math.max(0, threshold - offerVal)),
+    reason: accepted ? 'Deal accepted' : `Offer undervalues the return by about ${Math.round(Math.max(0, threshold - offerVal))} value points.`,
   }, id);
 
   if (accepted) {
@@ -3531,6 +3536,7 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
       counterStatus: 'accepts',
       reason: response.reason,
       stance: response.stance,
+      rejectionType: response.rejectionType ?? null,
       offerValue: Math.round(aiReceivesValue),
       receiveValue: Math.round(aiGivesValue),
     }, id);
@@ -3557,6 +3563,7 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
     reason: response.reason,
     stance: response.stance,
     askHint: response.askHint ?? null,
+    rejectionType: response.rejectionType ?? (response.status === 'asks_more' ? 'value' : 'direction'),
     offerValue: Math.round(aiReceivesValue),
     receiveValue: Math.round(aiGivesValue),
   }, id);

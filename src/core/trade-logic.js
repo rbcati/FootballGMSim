@@ -467,6 +467,7 @@ export function evaluateCounterOffer({
       status: 'accepts',
       stance: aiDirection === 'contender' ? 'Good enough for us to move now.' : 'That closes the value gap.',
       reason: `${aiTeam?.abbr ?? 'They'} sign off on this counter.`,
+      rejectionType: null,
     };
   }
 
@@ -479,14 +480,20 @@ export function evaluateCounterOffer({
         ? `${aiTeam?.abbr ?? 'They'} like the framework but want pick compensation to close it.`
         : `${aiTeam?.abbr ?? 'They'} are close, but need one more sweetener.`,
       askHint: sweetenerNeeded ? 'add_pick' : 'add_depth_piece',
+      rejectionType: 'value',
     };
   }
 
   return {
     status: 'rejects',
     stance: 'They are not moving off this price.',
-    reason: `${aiTeam?.abbr ?? 'They'} pass on that counter.`,
+    reason: closeGap > 700
+      ? `${aiTeam?.abbr ?? 'They'} pass on that counter due to a major value gap.`
+      : aiDirection === 'contender'
+        ? `${aiTeam?.abbr ?? 'They'} pass — their current team direction prefers immediate contributors.`
+        : `${aiTeam?.abbr ?? 'They'} pass on that counter.`,
     askHint: closeGap > 700 ? 'major_upgrade' : 'value_gap',
+    rejectionType: closeGap > 700 ? 'value' : aiDirection === 'contender' ? 'direction' : 'fit',
   };
 }
 

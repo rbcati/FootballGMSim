@@ -1,9 +1,3 @@
-/**
- * FreeAgencyHub.jsx — Premium live bidding experience
- * Keeps ALL your original UI (ticker, MiniStat header, search, sort, filters, grid)
- * + new ContractNegotiation bottom sheet + live AI bids + correct useWorker actions
- */
-
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import ContractNegotiation from "./ContractNegotiation.jsx";
@@ -11,8 +5,8 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -24,82 +18,80 @@ const POS_FILTERS = ["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "LB", "CB", "S"]
 const SORT_KEYS = [
   { key: "ovr", label: "OVR" },
   { key: "age", label: "Age" },
-  { key: "salary", label: "Ask" },
+  { key: "ask", label: "Ask" },
+  { key: "pressure", label: "Pressure" },
 ];
 
 function MiniStat({ label, value, color = "var(--text)" }) {
   return (
     <Card className="card-premium" style={{ padding: "var(--space-2) var(--space-3)", textAlign: "center" }}>
       <CardContent className="p-0">
-        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>
-          {label}
-        </div>
-        <div style={{ fontSize: "var(--text-base)", fontWeight: 900, color, fontVariantNumeric: "tabular-nums" }}>
-          {value}
-        </div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase" }}>{label}</div>
+        <div style={{ fontSize: "var(--text-base)", fontWeight: 900, color, fontVariantNumeric: "tabular-nums" }}>{value}</div>
       </CardContent>
     </Card>
   );
 }
 
-export default function FreeAgencyHub({ league, actions }) {
+function pressureScore(player) {
+  const market = player?.market ?? {};
+  const offers = player?.offers ?? {};
+  const bidderCount = Number(offers?.count ?? market?.bidderCount ?? 0);
+  const urgency = market?.urgency === "high" ? 3 : market?.urgency === "medium" ? 2 : 1;
+  const leadPenalty = offers?.userOffered && !offers?.userIsTopBidder ? 2 : 0;
+  return bidderCount + urgency + leadPenalty;
+}
+
+export default function FreeAgencyHub({ league, actions, onNavigate }) {
   const [posFilter, setPosFilter] = useState("ALL");
-  const [sortKey, setSortKey] = useState("ovr");
+  const [sortKey, setSortKey] = useState("pressure");
   const [search, setSearch] = useState("");
   const [biddingPlayer, setBiddingPlayer] = useState(null);
-  const [aiBids, setAiBids] = useState({}); // {playerId: {bid, teamAbbr, timeLeft}}
+  const [faState, setFaState] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const freeAgents = league?.freeAgents || [];
-  const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
+  const userTeam = league?.teams?.find((t) => t.id === league.userTeamId);
   const capRoom = userTeam?.capRoom ?? 0;
+  const needsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
 
-  // Live AI bids simulation (updates every 2.5s)
   useEffect(() => {
-    const interval = setInterval(() => {
-      const updated = { ...aiBids };
-      freeAgents.slice(0, 8).forEach(fa => {
-        if (!updated[fa.id]) {
-          updated[fa.id] = {
-            bid: (fa.baseAnnual || 4),
-            teamAbbr: "AI",
-            timeLeft: 48,
-          };
-        }
-        updated[fa.id].bid = Math.max(
-          updated[fa.id].bid,
-          (fa.baseAnnual || 4) * (0.9 + Math.random() * 0.5)
-        );
-        updated[fa.id].timeLeft = Math.max(0, updated[fa.id].timeLeft - 1);
+    let active = true;
+    setLoading(true);
+    actions?.getFreeAgents?.()
+      .then((res) => {
+        if (!active) return;
+        setFaState(res?.payload ?? null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        console.error("FA Hub load error", err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
       });
-      setAiBids(updated);
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [freeAgents, aiBids]);
+    return () => { active = false; };
+  }, [actions, league?.week, league?.phase]);
+
+  const freeAgents = faState?.freeAgents ?? [];
 
   const filtered = useMemo(() => {
     let players = [...freeAgents];
-    if (posFilter !== "ALL") {
-      players = players.filter(p => (p.pos || p.position) === posFilter);
-    }
+    if (posFilter !== "ALL") players = players.filter((p) => (p.pos || p.position) === posFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
-      players = players.filter(p => p.name?.toLowerCase().includes(q));
+      players = players.filter((p) => p.name?.toLowerCase().includes(q));
     }
     players.sort((a, b) => {
-      switch (sortKey) {
-        case "ovr": return (b.ovr || 0) - (a.ovr || 0);
-        case "age": return (a.age || 0) - (b.age || 0);
-        case "salary": return (b.baseAnnual || 0) - (a.baseAnnual || 0);
-        default: return 0;
-      }
+      if (sortKey === "pressure") return pressureScore(b) - pressureScore(a);
+      if (sortKey === "ovr") return (b.ovr || 0) - (a.ovr || 0);
+      if (sortKey === "age") return (a.age || 0) - (b.age || 0);
+      if (sortKey === "ask") return ((b?.demandProfile?.askAnnual ?? 0) - (a?.demandProfile?.askAnnual ?? 0));
+      return 0;
     });
     return players;
   }, [freeAgents, posFilter, sortKey, search]);
 
-  const topFAs = useMemo(() =>
-    [...freeAgents].sort((a, b) => (b.ovr || 0) - (a.ovr || 0)).slice(0, 5),
-    [freeAgents]
-  );
+  const trackedTargets = useMemo(() => filtered.filter((p) => p?.offers?.userOffered).slice(0, 5), [filtered]);
 
   const handleOffer = useCallback((offer) => {
     if (!biddingPlayer) return;
@@ -112,92 +104,56 @@ export default function FreeAgencyHub({ league, actions }) {
     setBiddingPlayer(null);
   }, [actions, biddingPlayer, league.userTeamId]);
 
-  const handleSignImmediately = useCallback(() => {
-    if (!biddingPlayer) return;
-    actions.signPlayer(biddingPlayer.id, league.userTeamId, {
-      years: 3,
-      baseAnnual: biddingPlayer.baseAnnual || 8,
-    });
-    setBiddingPlayer(null);
-  }, [actions, biddingPlayer, league.userTeamId]);
-
   return (
     <div className="fade-in">
-      {/* Market Ticker (original) */}
-      {topFAs.length > 0 && (
-        <div className="news-ticker" style={{ marginBottom: "var(--space-4)", borderRadius: "var(--radius-md)" }}>
-          <div className="news-ticker-content">
-            {topFAs.concat(topFAs).map((fa, i) => (
-              <div key={`${fa.id}-${i}`} className="news-ticker-item">
-                <span className="news-ticker-dot" />
-                <span style={{ fontWeight: 700 }}>{fa.name}</span>
-                <span className={`pos-badge pos-${(fa.pos || "").toLowerCase()}`} style={{ fontSize: 9 }}>
-                  {fa.pos}
-                </span>
-                <span>{fa.ovr} OVR</span>
-                <span style={{ color: "var(--success)" }}>${(fa.baseAnnual || 0).toFixed(1)}M</span>
-              </div>
-            ))}
+      <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+        <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 8 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>FA Hub · Market overview</div>
+          <div style={{ fontWeight: 700 }}>Use FA Hub to triage pressure and shortlist targets. Use Free Agency to execute and adjust bids.</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button size="sm" onClick={() => onNavigate?.("Free Agency")}>Open Free Agency Workspace</Button>
+            <Badge variant="outline">{formatNeedsLine(needsSummary)}</Badge>
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* Header stats (original) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
         <MiniStat label="Available" value={freeAgents.length} />
+        <MiniStat label="Tracked" value={trackedTargets.length} color={trackedTargets.length ? "var(--accent)" : "var(--text)"} />
         <MiniStat label="Cap Room" value={`$${capRoom.toFixed(1)}M`} color={capRoom > 10 ? "var(--success)" : capRoom > 0 ? "var(--warning)" : "var(--danger)"} />
-        <MiniStat label="Top OVR" value={topFAs[0]?.ovr || "—"} />
       </div>
 
-      {/* Controls (original) */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-4)", alignItems: "center" }}>
-        <Input
-          type="text"
-          placeholder="Search free agents..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          style={{ flex: "1 1 180px", maxWidth: 280 }}
-        />
-        <div style={{ display: "flex", gap: "var(--space-1)" }}>
-          {SORT_KEYS.map(s => (
-            <button
-              key={s.key}
-              className={`division-tab${sortKey === s.key ? " active" : ""}`}
-              onClick={() => setSortKey(s.key)}
-              style={{ fontSize: 11 }}
-            >
+        <Input type="text" placeholder="Search free agents..." value={search} onChange={(e) => setSearch(e.target.value)} style={{ flex: "1 1 180px", maxWidth: 280 }} />
+        <div style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap" }}>
+          {SORT_KEYS.map((s) => (
+            <button key={s.key} className={`division-tab${sortKey === s.key ? " active" : ""}`} onClick={() => setSortKey(s.key)} style={{ fontSize: 11 }}>
               {s.label}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Position filter (original) */}
       <div className="division-tabs" style={{ marginBottom: "var(--space-4)" }}>
-        {POS_FILTERS.map(p => (
-          <button
-            key={p}
-            className={`division-tab${posFilter === p ? " active" : ""}`}
-            onClick={() => setPosFilter(p)}
-          >
-            {p}
-          </button>
+        {POS_FILTERS.map((p) => (
+          <button key={p} className={`division-tab${posFilter === p ? " active" : ""}`} onClick={() => setPosFilter(p)}>{p}</button>
         ))}
       </div>
 
-      {/* FA Grid */}
       <Card className="card-premium hover-lift">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Free Agents ({filtered.length})</CardTitle>
+          <CardTitle>Market Overview ({filtered.length})</CardTitle>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+            {loading ? "Refreshing market snapshot..." : "All activity shown below comes from current market state"}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <ScrollArea className="h-[600px]">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
               {filtered.slice(0, 60).map((fa, i) => {
                 const pos = fa.pos || fa.position;
                 const posColor = POS_COLORS[pos] || "#9ca3af";
-                const currentBid = aiBids[fa.id] || null;
-
+                const market = summarizeFreeAgentMarket(fa);
                 return (
                   <div
                     key={fa.id}
@@ -206,32 +162,29 @@ export default function FreeAgencyHub({ league, actions }) {
                     onClick={() => setBiddingPlayer(fa)}
                   >
                     <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-                      {/* Avatar */}
                       <div style={{ width: 40, height: 40, borderRadius: "50%", background: `${posColor}22`, border: `2px solid ${posColor}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900, fontSize: 12, color: posColor, flexShrink: 0 }}>
-                        {fa.name?.split(" ").map(n => n[0]).join("").slice(0, 2)}
+                        {fa.name?.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                       </div>
 
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {fa.name}
-                        </div>
+                        <div style={{ fontWeight: 700, fontSize: "var(--text-sm)", color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{fa.name}</div>
                         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", marginTop: 2 }}>
-                          <Badge className="text-[10px] font-bold" style={{ background: `${posColor}22`, color: posColor, borderColor: posColor }}>
-                            {pos}
-                          </Badge>
+                          <Badge className="text-[10px] font-bold" style={{ background: `${posColor}22`, color: posColor, borderColor: posColor }}>{pos}</Badge>
                           <PlayerCard player={fa} variant="compact" style={{ margin: 0, padding: 0 }} />
                           <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Age {fa.age}</span>
                         </div>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 3 }}>
+                          {market.competitionLabel} · {market.decision}
+                        </div>
+                        <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+                          {market.preference ?? "No preference profile visible"}
+                        </div>
                       </div>
 
-                      {/* Bid info */}
-                      <div className="text-right">
-                        <div className="text-sm font-bold tabular-nums" style={{ color: "var(--success)" }}>
-                          {currentBid ? `${currentBid.bid.toFixed(1)}M` : "No bids"}
-                        </div>
-                        <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                          {currentBid?.teamAbbr ?? "—"}
-                        </div>
+                      <div className="text-right" style={{ minWidth: 116 }}>
+                        <div className="text-sm font-bold tabular-nums" style={{ color: market.userLeads ? "var(--success)" : "var(--text)" }}>{market.topOfferLabel}</div>
+                        <div className="text-xs" style={{ color: "var(--text-subtle)" }}>{market.topBidTeam ?? "No current market snapshot"}</div>
+                        <div className="text-xs" style={{ color: market.userLeads ? "var(--success)" : "var(--warning)" }}>{market.leadLabel}</div>
                       </div>
                     </div>
                   </div>
@@ -242,13 +195,11 @@ export default function FreeAgencyHub({ league, actions }) {
         </CardContent>
       </Card>
 
-      {/* Contract Negotiation Sheet */}
       {biddingPlayer && (
         <ContractNegotiation
           player={biddingPlayer}
           capRoom={capRoom}
           onOffer={handleOffer}
-          onSignImmediately={handleSignImmediately}
           onClose={() => setBiddingPlayer(null)}
         />
       )}

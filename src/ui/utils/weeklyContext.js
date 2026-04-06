@@ -54,8 +54,8 @@ function mapPhaseShortcuts(phase) {
   }
   if (phase === 'free_agency') {
     return [
-      { label: 'Free Agency', tab: 'Free Agency' },
       { label: 'FA Hub', tab: 'FA Hub' },
+      { label: 'Free Agency', tab: 'Free Agency' },
       { label: 'Financials', tab: 'Financials' },
       { label: 'Trades', tab: 'Trades' },
     ];
@@ -167,7 +167,7 @@ export function evaluateWeeklyContext(league) {
       label: 'Bid Risk',
       detail: `${contractMarket.bidRiskCount} active bid${contractMarket.bidRiskCount > 1 ? 's are' : ' is'} at risk.`,
       why: 'Targets may sign elsewhere within the current window.',
-      tab: 'Free Agency',
+      tab: 'FA Hub',
     });
   }
   if ((contractMarket?.closeToDecisionCount ?? 0) >= 1) {
