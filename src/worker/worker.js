@@ -363,12 +363,51 @@ function pruneIncomingTradeOffers(metaObj) {
   const week = Number(metaObj?.currentWeek ?? 1);
   const season = Number(metaObj?.season ?? metaObj?.year ?? 1);
   const offers = Array.isArray(metaObj?.incomingTradeOffers) ? metaObj.incomingTradeOffers : [];
-  return offers.filter((offer) => {
-    if (!offer) return false;
-    if (offer.season != null && Number(offer.season) !== season) return false;
+  const normalized = [];
+  const seenIds = new Set();
+  const seenSignatures = new Set();
+  for (const offer of offers) {
+    if (!offer) continue;
+    if (offer.season != null && Number(offer.season) !== season) continue;
     const expiresAfterWeek = Number(offer.expiresAfterWeek ?? (offer.week ?? week) + 2);
-    return expiresAfterWeek >= week;
+    if (expiresAfterWeek < week) continue;
+    if (!isOfferStillValid(offer, metaObj?.userTeamId)) continue;
+    const signature = buildOfferSignature(offer);
+    const stableId = offer?.id ?? `offer_${signature}_${offer?.week ?? week}`;
+    if (seenIds.has(stableId)) continue;
+    if (seenSignatures.has(signature)) continue;
+    seenIds.add(stableId);
+    seenSignatures.add(signature);
+    normalized.push({ ...offer, id: stableId, signature });
+  }
+  return normalized;
+}
+
+function allPlayersOnTeam(teamId, playerIds = []) {
+  return (playerIds ?? []).every((pid) => {
+    const player = cache.getPlayer(Number(pid));
+    return player && Number(player.teamId) === Number(teamId);
   });
+}
+
+function allPicksOnTeam(teamId, pickIds = []) {
+  return (pickIds ?? []).every((pickId) => {
+    const pick = resolvePickById(pickId);
+    return pick && Number(pick.currentOwner) === Number(teamId);
+  });
+}
+
+function isOfferStillValid(offer, userTeamId) {
+  const aiTeamId = Number(offer?.offeringTeamId);
+  const userId = Number(userTeamId);
+  if (!Number.isFinite(aiTeamId) || !Number.isFinite(userId)) return false;
+  const offering = offer?.offering ?? { playerIds: [offer?.offeringPlayerId], pickIds: [] };
+  const receiving = offer?.receiving ?? { playerIds: [offer?.receivingPlayerId], pickIds: [] };
+  const aiPlayersValid = allPlayersOnTeam(aiTeamId, offering?.playerIds ?? []);
+  const userPlayersValid = allPlayersOnTeam(userId, receiving?.playerIds ?? []);
+  const aiPicksValid = allPicksOnTeam(aiTeamId, offering?.pickIds ?? []);
+  const userPicksValid = allPicksOnTeam(userId, receiving?.pickIds ?? []);
+  return aiPlayersValid && userPlayersValid && aiPicksValid && userPicksValid;
 }
 
 function buildOfferSignature(offer) {
@@ -1582,14 +1621,17 @@ if (res.injuries && res.injuries.length > 0) {
       await runAIToAITrades();
 
       // Also generate trade proposals for the user
+      const latestMeta = ensureDynastyMeta(cache.getMeta());
+      const existingOffers = pruneIncomingTradeOffers(latestMeta);
       const tradeProposals = generateAITradeProposalsForUser({
-        existingOffers: Array.isArray(meta?.incomingTradeOffers) ? meta.incomingTradeOffers : [],
-        offerMemory: meta?.tradeOfferMemory ?? {},
+        existingOffers,
+        offerMemory: latestMeta?.tradeOfferMemory ?? {},
       });
       if (tradeProposals.length > 0) {
-        const latestMeta = ensureDynastyMeta(cache.getMeta());
-        const existingOffers = pruneIncomingTradeOffers(latestMeta);
-        const freshOffers = tradeProposals.filter((offer) => !existingOffers.some((e) => e?.id === offer?.id));
+        const freshOffers = tradeProposals.filter((offer) => {
+          const sig = buildOfferSignature(offer);
+          return !existingOffers.some((e) => buildOfferSignature(e) === sig);
+        });
         if (freshOffers.length > 0) {
           const merged = [...freshOffers, ...existingOffers].slice(0, 6);
           cache.setMeta({

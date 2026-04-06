@@ -13,7 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import TradeBlockPanel from "./TradeBlockPanel.jsx";
 import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
 import { buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
-import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
+import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -439,11 +439,13 @@ export default function TradeCenter({ league, actions }) {
                 const summary = buildIncomingOfferPresentation({ offer, league, userTeamId: myTeamId });
                 const receiveItems = [...summary.receive.players, ...summary.receive.picks];
                 const giveItems = [...summary.give.players, ...summary.give.picks];
+                const identity = getOfferIdentity(offer);
                 return (
-                  <div key={offer.id} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 8 }}>
+                  <div key={identity.id} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px 12px", display: "grid", gap: 8 }}>
                     <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>
                       {offer.offeringTeamAbbr} offered a deal
                     </div>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Offer ref: {identity.label}</div>
                     <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{offer.reason}</div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -466,11 +468,13 @@ export default function TradeCenter({ league, actions }) {
                         <strong style={{ color: "var(--text)" }}>{summary.userImpact.abbr}</strong> OVR {summary.userImpact.ovr.before} → {summary.userImpact.ovr.after} · {summary.userImpact.capLine}
                         {summary.userImpact.helps.length ? <div>Helps: {summary.userImpact.helps.join(", ")}</div> : null}
                         {summary.userImpact.weakens.length ? <div>Weakens: {summary.userImpact.weakens.join(", ")}</div> : null}
+                        {summary.userImpact.rankImpact.lines.length ? <div>Depth: {summary.userImpact.rankImpact.lines.join(" · ")}</div> : null}
                       </div>
                       <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
                         <strong style={{ color: "var(--text)" }}>{summary.offeringImpact.abbr}</strong> OVR {summary.offeringImpact.ovr.before} → {summary.offeringImpact.ovr.after} · {summary.offeringImpact.capLine}
                         {summary.offeringImpact.helps.length ? <div>Helps: {summary.offeringImpact.helps.join(", ")}</div> : null}
                         {summary.offeringImpact.weakens.length ? <div>Weakens: {summary.offeringImpact.weakens.join(", ")}</div> : null}
+                        {summary.offeringImpact.rankImpact.lines.length ? <div>Depth: {summary.offeringImpact.rankImpact.lines.join(" · ")}</div> : null}
                       </div>
                     </div>
 
@@ -479,7 +483,7 @@ export default function TradeCenter({ league, actions }) {
                     </div>
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      {summary.tags.slice(0, 4).map((tag) => <Badge key={`${offer.id}-${tag}`} variant="outline">{tag}</Badge>)}
+                      {summary.tags.slice(0, 4).map((tag) => <Badge key={`${identity.id}-${tag}`} variant="outline">{tag}</Badge>)}
                       <Badge variant="secondary">{offer.offerType?.replaceAll("_", " ") ?? "market offer"}</Badge>
                       <Badge variant={offer.urgency === "high" ? "destructive" : "outline"}>{offer.urgency ?? "standard"}</Badge>
                       {offer.stance ? <Badge variant="outline">{offer.stance}</Badge> : null}

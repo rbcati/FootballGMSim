@@ -1,5 +1,17 @@
 import { buildTeamIntelligence } from "./teamIntelligence.js";
 
+const POSITION_ALIASES = {
+  HB: "RB", FB: "RB", FL: "WR", SE: "WR",
+  OT: "OL", LT: "OL", RT: "OL", OG: "OL", LG: "OL", RG: "OL", C: "OL",
+  DE: "DL", DT: "DL", NT: "DL", IDL: "DL", EDGE: "DL",
+  MLB: "LB", OLB: "LB", ILB: "LB",
+  DB: "CB", NCB: "CB", FS: "S", SS: "S",
+};
+
+const POSITION_STARTERS = {
+  QB: 1, RB: 1, WR: 3, TE: 1, OL: 5, DL: 4, LB: 3, CB: 2, S: 2,
+};
+
 function safeNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -17,6 +29,11 @@ function formatCapDelta(delta) {
   const rounded = Math.round(delta * 10) / 10;
   if (rounded === 0) return "Cap flat";
   return rounded > 0 ? `Cap room +$${rounded.toFixed(1)}M` : `Cap room -$${Math.abs(rounded).toFixed(1)}M`;
+}
+
+function canonicalPos(player) {
+  const raw = String(player?.pos ?? player?.position ?? "").toUpperCase();
+  return POSITION_ALIASES[raw] ?? raw;
 }
 
 function teamMap(league) {
@@ -65,10 +82,10 @@ export function formatPickLabel(pick, teamsById = new Map()) {
 
 function formatPlayerLabel(player) {
   if (!player) return "Player";
-  const pos = player?.pos ?? player?.position ?? "?";
+  const pos = canonicalPos(player) || "?";
+  const age = safeNum(player?.age, null);
   const ovr = player?.ovr ?? "?";
-  const age = player?.age != null ? ` age ${player.age}` : null;
-  return `${player?.name ?? "Player"} · ${pos} ${ovr}${age ? ` ·${age}` : ""}`;
+  return `${pos} ${player?.name ?? "Player"}, ${age ?? "?"}y, ${ovr} OVR`;
 }
 
 function getPlayerSnapshotById(team, playerId) {
@@ -103,15 +120,97 @@ function estimateOvrAfter(team, incomingPlayers, outgoingPlayers) {
   return { before, after, estimated: true, model: "team OVR estimate from roster-average swing" };
 }
 
+function buildRankMap(roster = []) {
+  const rankMap = new Map();
+  const byPos = new Map();
+  for (const player of roster) {
+    const pos = canonicalPos(player);
+    if (!pos) continue;
+    if (!byPos.has(pos)) byPos.set(pos, []);
+    byPos.get(pos).push(player);
+  }
+  for (const [pos, group] of byPos) {
+    group.sort((a, b) => safeNum(b?.ovr, 0) - safeNum(a?.ovr, 0));
+    group.forEach((player, idx) => {
+      rankMap.set(String(player?.id), { pos, rank: idx + 1, isStarter: idx < (POSITION_STARTERS[pos] ?? 1) });
+    });
+  }
+  return rankMap;
+}
+
+function applyProjectedRoster(team, incomingPlayers = [], outgoingPlayers = []) {
+  const outgoingIds = new Set(outgoingPlayers.map((p) => String(p?.id)));
+  const base = (team?.roster ?? []).filter((p) => !outgoingIds.has(String(p?.id)));
+  const existing = new Set(base.map((p) => String(p?.id)));
+  const additions = incomingPlayers
+    .filter((p) => p && !existing.has(String(p?.id)))
+    .map((p) => ({ ...p, pos: canonicalPos(p) }));
+  return [...base, ...additions];
+}
+
+function formatDepthRole(pos, rank) {
+  if (!Number.isFinite(rank)) return `${pos} depth`;
+  return `${pos}${rank}`;
+}
+
+function buildPositionRankImpact({ team, incomingPlayers, outgoingPlayers }) {
+  const beforeRoster = Array.isArray(team?.roster) ? team.roster : [];
+  const afterRoster = applyProjectedRoster(team, incomingPlayers, outgoingPlayers);
+  const beforeRanks = buildRankMap(beforeRoster);
+  const afterRanks = buildRankMap(afterRoster);
+  const moved = [...incomingPlayers, ...outgoingPlayers];
+  const lines = [];
+
+  for (const player of moved) {
+    if (!player) continue;
+    const id = String(player?.id);
+    const pos = canonicalPos(player);
+    const before = beforeRanks.get(id);
+    const after = afterRanks.get(id);
+    if (before && !after) {
+      lines.push(`Lose ${formatDepthRole(pos, before.rank)}`);
+    } else if (!before && after) {
+      lines.push(`Adds ${formatDepthRole(pos, after.rank)}`);
+    } else if (before && after && before.rank !== after.rank) {
+      lines.push(`${formatDepthRole(pos, before.rank)} → ${formatDepthRole(pos, after.rank)}`);
+    }
+  }
+
+  const unique = [...new Set(lines)].slice(0, 4);
+  return {
+    lines: unique,
+    estimated: true,
+    model: "position depth rank estimate from current roster OVR ordering",
+  };
+}
+
 function diffNeedSignals(intel, incomingPlayers, outgoingPlayers) {
-  const incomingPos = [...new Set(incomingPlayers.map((player) => player?.pos).filter(Boolean))];
-  const outgoingPos = [...new Set(outgoingPlayers.map((player) => player?.pos).filter(Boolean))];
+  const incomingPos = [...new Set(incomingPlayers.map((player) => canonicalPos(player)).filter(Boolean))];
+  const outgoingPos = [...new Set(outgoingPlayers.map((player) => canonicalPos(player)).filter(Boolean))];
   const needsNow = new Set((intel?.needsNow ?? []).map((need) => need.pos));
   const surplus = new Set((intel?.surplus ?? []).map((item) => item.pos));
   const helps = incomingPos.filter((pos) => needsNow.has(pos));
   const weakens = outgoingPos.filter((pos) => needsNow.has(pos));
   const surplusMoved = outgoingPos.filter((pos) => surplus.has(pos));
   return { helps, weakens, surplusMoved };
+}
+
+function buildOfferSignature(offer) {
+  const givePlayers = [...(offer?.offering?.playerIds ?? [])].sort().join(",");
+  const getPlayers = [...(offer?.receiving?.playerIds ?? [])].sort().join(",");
+  const givePicks = [...(offer?.offering?.pickIds ?? [])].sort().join(",");
+  const getPicks = [...(offer?.receiving?.pickIds ?? [])].sort().join(",");
+  return `${offer?.offeringTeamId}|${offer?.offerType ?? "market"}|${givePlayers}|${getPlayers}|${givePicks}|${getPicks}`;
+}
+
+export function getOfferIdentity(offer) {
+  const signature = offer?.signature ?? buildOfferSignature(offer);
+  const id = String(offer?.id ?? `${signature}|w${offer?.week ?? "?"}`);
+  return {
+    id,
+    signature,
+    label: `W${offer?.week ?? "?"} · ${String(signature).slice(0, 8)}`,
+  };
 }
 
 export function buildIncomingOfferPresentation({ offer, league, userTeamId }) {
@@ -135,29 +234,37 @@ export function buildIncomingOfferPresentation({ offer, league, userTeamId }) {
   const aiOvr = estimateOvrAfter(aiTeam, givePlayers, receivePlayers);
   const userSignals = diffNeedSignals(userIntel, receivePlayers, givePlayers);
   const aiSignals = diffNeedSignals(aiIntel, givePlayers, receivePlayers);
+  const userRankImpact = buildPositionRankImpact({ team: userTeam, incomingPlayers: receivePlayers, outgoingPlayers: givePlayers });
+  const aiRankImpact = buildPositionRankImpact({ team: aiTeam, incomingPlayers: givePlayers, outgoingPlayers: receivePlayers });
 
   const tags = [];
   if (userSignals.helps.length) tags.push("Need fit");
   if (userSignals.surplusMoved.length) tags.push("Surplus moved");
+  if ((receivePicks.length + givePicks.length) > 0) tags.push(receivePicks.length >= givePicks.length ? "Future pick value" : "Win-now move");
   if (userCapDelta >= 2) tags.push("Cap relief");
-  if ((offer?.offeringPickSnapshots?.length ?? 0) + (offer?.receivingPickSnapshots?.length ?? 0) > 0) tags.push("Future value");
-  if ((userTeam?.wins ?? 0) >= 8 && userSignals.weakens.length) tags.push("Risky for contender");
+  if (userSignals.helps.length && userSignals.weakens.length) tags.push("Depth swap");
+  if ((userIntel?.direction ?? "") === "rebuilding") tags.push("Rebuild move");
+  if ((userIntel?.direction ?? "") === "contender") tags.push("Win-now move");
   if (!tags.length) tags.push("Depth swap");
 
-  let recommendation = "Balanced swap; verify depth chart impact.";
-  if (userSignals.helps.length && userCapDelta >= 0) recommendation = `Addresses ${userSignals.helps[0]} need and keeps cap flexible.`;
-  else if (userSignals.helps.length && userSignals.weakens.length) recommendation = `Good value now, but weakens ${userSignals.weakens[0]}.`;
-  else if (userCapDelta >= 2) recommendation = "Cap relief move with minor talent loss.";
-  else if ((receivePicks.length > givePicks.length) && !userSignals.helps.length) recommendation = "Adds draft value, may hurt short-term push.";
+  let recommendation = "Balanced swap; verify starter ripple effects.";
+  if (userSignals.helps.length && userSignals.weakens.length) recommendation = `Upgrade at ${userSignals.helps[0]}, but lose ${userSignals.weakens[0]} starter depth.`;
+  else if (userSignals.helps.length && userCapDelta >= 0) recommendation = `Adds ${userSignals.helps[0]} help without tightening your cap.`;
+  else if (receivePicks.length > givePicks.length && !userSignals.weakens.length) recommendation = "Adds future value without hurting current starters.";
+  else if (userCapDelta >= 2) recommendation = "Cap relief move with minor roster downgrade risk.";
+  else if (userSignals.weakens.length) recommendation = `Risky downgrade at ${userSignals.weakens[0]} unless replacement is ready.`;
+
+  const identity = getOfferIdentity(offer);
 
   return {
+    identity,
     receive: {
-      players: receivePlayers.map((player) => ({ key: `r-p-${player.id}`, label: formatPlayerLabel(player) })),
-      picks: receivePicks.map((pick, idx) => ({ key: `r-k-${pick?.id ?? idx}`, label: formatPickLabel(pick, teamsById) })),
+      players: receivePlayers.map((player, idx) => ({ key: `r-p-${identity.id}-${player?.id ?? idx}`, label: formatPlayerLabel(player) })),
+      picks: receivePicks.map((pick, idx) => ({ key: `r-k-${identity.id}-${pick?.id ?? idx}`, label: formatPickLabel(pick, teamsById) })),
     },
     give: {
-      players: givePlayers.map((player) => ({ key: `g-p-${player.id}`, label: formatPlayerLabel(player) })),
-      picks: givePicks.map((pick, idx) => ({ key: `g-k-${pick?.id ?? idx}`, label: formatPickLabel(pick, teamsById) })),
+      players: givePlayers.map((player, idx) => ({ key: `g-p-${identity.id}-${player?.id ?? idx}`, label: formatPlayerLabel(player) })),
+      picks: givePicks.map((pick, idx) => ({ key: `g-k-${identity.id}-${pick?.id ?? idx}`, label: formatPickLabel(pick, teamsById) })),
     },
     userImpact: {
       abbr: userTeam?.abbr ?? "You",
@@ -167,6 +274,7 @@ export function buildIncomingOfferPresentation({ offer, league, userTeamId }) {
       helps: userSignals.helps,
       weakens: userSignals.weakens,
       surplusMoved: userSignals.surplusMoved,
+      rankImpact: userRankImpact,
     },
     offeringImpact: {
       abbr: aiTeam?.abbr ?? offer?.offeringTeamAbbr ?? "Them",
@@ -176,9 +284,10 @@ export function buildIncomingOfferPresentation({ offer, league, userTeamId }) {
       helps: aiSignals.helps,
       weakens: aiSignals.weakens,
       surplusMoved: aiSignals.surplusMoved,
+      rankImpact: aiRankImpact,
     },
     recommendation,
-    tags,
-    estimateLabel: "Estimates use current roster/cap snapshots. Final acceptance still uses AI trade logic.",
+    tags: [...new Set(tags)].slice(0, 5),
+    estimateLabel: "OVR and depth-rank lines are estimates from current roster snapshots; final acceptance still uses AI trade logic.",
   };
 }
