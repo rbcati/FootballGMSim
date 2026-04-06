@@ -65,6 +65,16 @@ const OWNER_MESSAGE_POOL = {
       "Good response lately. Keep pressure on and finish stronger.",
     ],
   },
+  expiring_core_ignored: {
+    warning: [
+      "Core expiring talent is stacking up. I expect a re-signing plan this week.",
+      "Do not let priority starters drift into open bidding without a response.",
+    ],
+    urgent_demand: [
+      "We cannot lose this core by inaction. Resolve these contracts immediately.",
+      "Priority starters are close to walking. Take decisive contract action now.",
+    ],
+  },
 };
 
 const TONE_PRIORITY = {
@@ -160,6 +170,7 @@ export function evaluateOwnerMessageContext({ league, userTeam, currentWeek, cur
   const onTradeBlockCount = Array.isArray(userTeam?.roster)
     ? userTeam.roster.filter((p) => p?.onTradeBlock).length
     : 0;
+  const contractMarket = league?.contractMarket ?? null;
 
   const candidates = [];
 
@@ -222,6 +233,15 @@ export function evaluateOwnerMessageContext({ league, userTeam, currentWeek, cur
       checkpoint: `wk${week}`,
     });
   }
+  if ((contractMarket?.priorityExpiring ?? 0) >= 2 && week >= 8) {
+    candidates.push({
+      triggerKey: "expiring_core_ignored",
+      tone: (contractMarket?.priorityExpiring ?? 0) >= 3 ? "urgent_demand" : "warning",
+      severity: (contractMarket?.priorityExpiring ?? 0) >= 3 ? 88 : 74,
+      stateLabel: `expiring-${contractMarket?.priorityExpiring ?? 0}`,
+      checkpoint: `wk${week}`,
+    });
+  }
 
   if (candidates.length === 0 && gamesPlayed >= 4 && winPct >= 0.5 && approval >= 65) {
     candidates.push({
@@ -251,6 +271,7 @@ export function evaluateOwnerMessageContext({ league, userTeam, currentWeek, cur
   else if (top.triggerKey === "inaction_during_decline") expectedAction = "Make a roster move this week.";
   else if (top.triggerKey === "missed_owner_goals") expectedAction = "Commit to a clear franchise direction now.";
   else if (top.triggerKey === "steady_progress") expectedAction = "Stay disciplined and continue current plan.";
+  else if (top.triggerKey === "expiring_core_ignored") expectedAction = "Re-sign or tag priority expiring starters.";
 
   return {
     ...top,

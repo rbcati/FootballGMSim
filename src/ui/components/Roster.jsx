@@ -37,6 +37,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  classifyTeamDirection,
+  evaluateResignRecommendation,
+  summarizeExpiring,
+} from "../utils/contractInsights.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -636,6 +641,8 @@ function RosterTable({
   players,
   actions,
   teamId,
+  team,
+  week,
   onRefetch,
   onPlayerSelect,
   phase,
@@ -675,7 +682,11 @@ function RosterTable({
     }
     return sortPlayers(filtered, sortKey, sortDir);
   }, [players, posFilter, sortKey, sortDir]);
-  const decisionSummary = useMemo(() => buildExpiringDecisionSummary(players), [players]);
+  const teamDirection = useMemo(() => classifyTeamDirection(team, week), [team, week]);
+  const decisionSummary = useMemo(
+    () => buildExpiringDecisionSummary(players, { team, roster: players, direction: teamDirection }),
+    [players, team, teamDirection],
+  );
 
   const activeFilters = isResignPhase ? ["EXPIRING", ...POSITIONS] : POSITIONS;
 
@@ -819,10 +830,11 @@ function RosterTable({
           fontSize: 11,
           color: "var(--text-muted)",
         }}>
-          <span><strong style={{ color: "var(--success)" }}>{decisionSummary.keep}</strong> keep core</span>
-          <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.upside}</strong> high-upside bets</span>
-          <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.depth}</strong> depth calls</span>
-          <span><strong style={{ color: "var(--danger)" }}>{decisionSummary.cut}</strong> likely cuts</span>
+          <span><strong style={{ color: "var(--success)" }}>{decisionSummary.priority_resign}</strong> priority re-signs</span>
+          <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.resign_if_price}</strong> price-sensitive</span>
+          <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.replaceable_depth}</strong> replaceable depth</span>
+          <span><strong style={{ color: "var(--danger)" }}>{decisionSummary.let_walk}</strong> let walk</span>
+          <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>
         </div>
       )}
       <div
@@ -1026,7 +1038,9 @@ function RosterTable({
                 const morale = player.morale ?? 75;
                 const fitCol = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
-                const expiringDecision = isResignPhase && isExpiring ? classifyExpiringDecision(player) : null;
+                const expiringDecision = isResignPhase && isExpiring
+                  ? classifyExpiringDecision(player, { team, roster: players, direction: teamDirection })
+                  : null;
 
                 // Highlight row if expiring in resign phase
                 const rowStyle = isReleasing
@@ -1107,6 +1121,11 @@ function RosterTable({
                         >
                           {expiringDecision.label}
                         </span>
+                      )}
+                      {expiringDecision && (
+                        <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+                          {expiringDecision.reason} · {expiringDecision.urgency} urgency · {expiringDecision.negotiationRisk} risk
+                        </div>
                       )}
                     </TableCell>
                     {/* OVR */}
@@ -1755,27 +1774,21 @@ function CardAttrBar({ label, value }) {
   );
 }
 
-function classifyExpiringDecision(player) {
-  const age = Number(player?.age ?? 0);
-  const ovr = Number(player?.ovr ?? 0);
-  const pot = Number(player?.potential ?? player?.pot ?? ovr);
-  const salary = Number(player?.contract?.baseAnnual ?? player?.baseAnnual ?? 0);
-
-  if (ovr >= 82 && age <= 30) return { key: "keep", label: "Keep Core", tone: "var(--success)" };
-  if (pot - ovr >= 8 && age <= 25) return { key: "upside", label: "High Upside", tone: "#64D2FF" };
-  if (ovr <= 68 || (age >= 33 && ovr < 78) || (salary >= 12 && ovr < 75)) return { key: "cut", label: "Cut Candidate", tone: "var(--danger)" };
-  return { key: "depth", label: "Depth Call", tone: "var(--warning)" };
+function classifyExpiringDecision(player, context = {}) {
+  const rec = evaluateResignRecommendation(player, context);
+  return {
+    key: rec.tier,
+    label: rec.label,
+    tone: rec.tone,
+    reason: rec.reason,
+    urgency: rec.urgency,
+    negotiationRisk: rec.negotiationRisk,
+    replacementDifficulty: rec.replacementDifficulty,
+  };
 }
 
-function buildExpiringDecisionSummary(players = []) {
-  const summary = { keep: 0, upside: 0, depth: 0, cut: 0 };
-  players.forEach((p) => {
-    const yearsLeft = p?.contract?.years ?? p?.contract?.yearsLeft ?? p?.contract?.yearsRemaining ?? 0;
-    if (yearsLeft > 1) return;
-    const bucket = classifyExpiringDecision(p).key;
-    summary[bucket] = (summary[bucket] ?? 0) + 1;
-  });
-  return summary;
+function buildExpiringDecisionSummary(players = [], context = {}) {
+  return summarizeExpiring(players, context);
 }
 
 /**
@@ -1784,7 +1797,7 @@ function buildExpiringDecisionSummary(players = []) {
  * Displays: position badge, OVR (colour-coded), name, age, contract, key
  * attributes, and optional INJURED / EXPIRING / ELITE POT badges.
  */
-function PlayerCard({ player, onSelect, showDecisionContext = false }) {
+function PlayerCard({ player, onSelect, showDecisionContext = false, decisionContext = {} }) {
   const pos = player.pos || "";
   const posColor = CARD_POS_COLORS[pos] || "#9ca3af";
   const ovr = player.ovr ?? 70;
@@ -1806,7 +1819,7 @@ function PlayerCard({ player, onSelect, showDecisionContext = false }) {
   const isExpiring = yearsLeft <= 1;
   const potential = player.potential ?? 0;
   const keyAttrs = getCardKeyAttrs(player);
-  const expiringDecision = isExpiring ? classifyExpiringDecision(player) : null;
+  const expiringDecision = isExpiring ? classifyExpiringDecision(player, decisionContext) : null;
 
   return (
     <div
@@ -1961,7 +1974,7 @@ function PlayerCard({ player, onSelect, showDecisionContext = false }) {
  * Full card grid with position-filter pills and sort controls.
  * Mirrors the RosterTable filter/sort UI but renders PlayerCard tiles instead of rows.
  */
-function PlayerCardGrid({ players, onPlayerSelect, phase }) {
+function PlayerCardGrid({ players, onPlayerSelect, phase, team, week }) {
   const isResignPhase = phase === "offseason_resign";
   const [posFilter, setPosFilter] = useState(isResignPhase ? "EXPIRING" : "ALL");
   const [sortKey, setSortKey] = useState("ovr");
@@ -1983,7 +1996,11 @@ function PlayerCardGrid({ players, onPlayerSelect, phase }) {
     }
     return sortPlayers(filtered, sortKey, sortDir);
   }, [players, posFilter, sortKey, sortDir]);
-  const decisionSummary = useMemo(() => buildExpiringDecisionSummary(players), [players]);
+  const direction = useMemo(() => classifyTeamDirection(team, week), [team, week]);
+  const decisionSummary = useMemo(
+    () => buildExpiringDecisionSummary(players, { team, roster: players, direction }),
+    [players, team, direction],
+  );
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -2018,10 +2035,11 @@ function PlayerCardGrid({ players, onPlayerSelect, phase }) {
             fontSize: 11,
             color: "var(--text-muted)",
           }}>
-            <span><strong style={{ color: "var(--success)" }}>{decisionSummary.keep}</strong> keep core</span>
-            <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.upside}</strong> high-upside bets</span>
-            <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.depth}</strong> depth calls</span>
-            <span><strong style={{ color: "var(--danger)" }}>{decisionSummary.cut}</strong> likely cuts</span>
+            <span><strong style={{ color: "var(--success)" }}>{decisionSummary.priority_resign}</strong> priority re-signs</span>
+            <span><strong style={{ color: "#64D2FF" }}>{decisionSummary.resign_if_price}</strong> price-sensitive</span>
+            <span><strong style={{ color: "var(--warning)" }}>{decisionSummary.replaceable_depth}</strong> replaceable depth</span>
+            <span><strong style={{ color: "var(--danger)" }}>{decisionSummary.let_walk}</strong> let walk</span>
+            <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>
           </div>
         )}
 
@@ -2126,6 +2144,7 @@ function PlayerCardGrid({ players, onPlayerSelect, phase }) {
               player={player}
               onSelect={onPlayerSelect}
               showDecisionContext={isResignPhase}
+              decisionContext={{ team, roster: players, direction }}
             />
           ))}
         </div>
@@ -2380,6 +2399,8 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             if (playerId != null) setSelectedPlayerId(playerId);
           }}
           phase={league?.phase}
+          team={team}
+          week={league?.week}
         />
       )}
 
@@ -2389,6 +2410,8 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           players={players}
           actions={actions}
           teamId={teamId}
+          team={team}
+          week={league?.week}
           onRefetch={fetchRoster}
           onPlayerSelect={(playerId) => {
             if (playerId != null) setSelectedPlayerId(playerId);

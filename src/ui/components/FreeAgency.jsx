@@ -1004,6 +1004,7 @@ export default function FreeAgency({
                     const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                     const askYrs = suggestedYears(player.age);
                     const offers = player.offers || {};
+                    const market = player.market || {};
                     const hasBids = offers.count > 0;
                     const userIsTop = offers.userIsTopBidder;
 
@@ -1024,6 +1025,9 @@ export default function FreeAgency({
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
                               {offers.count} bid{offers.count !== 1 ? "s" : ""}
                             </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
+                              Market: {market.heatLabel ?? "Warm"} · {market.decision ?? "Awaiting bids"}
+                            </div>
                             {userIsTop && (
                               <span style={{
                                 display: "inline-block",
@@ -1037,6 +1041,11 @@ export default function FreeAgency({
                               }}>
                                 YOUR BID LEADS
                               </span>
+                            )}
+                            {!userIsTop && offers.userOffered && offers.userTrailReason && (
+                              <div style={{ color: "var(--warning)", marginTop: 3, fontSize: "10px" }}>
+                                {offers.userTrailReason}
+                              </div>
                             )}
                           </div>
                         ) : (
@@ -1103,8 +1112,11 @@ export default function FreeAgency({
                         {topBidCell}
                         <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
                           <div style={{ fontSize: "var(--text-xs)", color: "var(--text)", fontWeight: 600, marginBottom: 4 }}>
-                            ${(player._ask ?? 0).toFixed(1)}M{" "}
+                            ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M{" "}
                             <span style={{ color: "var(--text-muted)" }}>/ {askYrs}y</span>
+                          </div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
+                            {player?.demandProfile?.headline ?? "Balanced priorities"}
                           </div>
                           {!canAfford ? (
                             <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
@@ -1139,6 +1151,7 @@ export default function FreeAgency({
                   const canAfford = (player._ask ?? 0) <= capRoom + 0.01;
                   const askYrs = suggestedYears(player.age);
                   const mOffers = player.offers || {};
+                  const mMarket = player.market || {};
                   const mHasBids = mOffers.count > 0;
                   const mUserIsTop = mOffers.userIsTopBidder;
 
@@ -1152,7 +1165,10 @@ export default function FreeAgency({
                                    <OvrBadge ovr={player.ovr} />
                                </div>
                                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
-                                   Age {player.age} · Ask: ${(player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
+                                   Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
+                                </div>
+                               <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
+                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.heatLabel ?? "Warm"} market
                                </div>
                                {/* Top Bid info on mobile */}
                                {mHasBids && (
@@ -1166,6 +1182,9 @@ export default function FreeAgency({
                                      <span style={{ padding: "1px 6px", borderRadius: "var(--radius-pill)", background: "var(--success)22", color: "var(--success)", fontWeight: 700, fontSize: "10px" }}>
                                        YOUR BID LEADS
                                      </span>
+                                   )}
+                                   {!mUserIsTop && mOffers.userOffered && mOffers.userTrailReason && (
+                                     <span style={{ color: "var(--warning)", fontSize: "10px" }}>{mOffers.userTrailReason}</span>
                                    )}
                                  </div>
                                )}
