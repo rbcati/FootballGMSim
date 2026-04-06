@@ -221,6 +221,7 @@ function TradePlayerSheet({ player, onClose }) {
 
 export default function TradeCenter({ league, actions }) {
   const myTeamId = league?.userTeamId;
+  const toAssetId = (id) => String(id);
 
   const [targetId, setTargetId] = useState(null);
   const [myRoster, setMyRoster] = useState([]);
@@ -243,13 +244,12 @@ export default function TradeCenter({ league, actions }) {
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
-  const myRosterMap = useMemo(() => new Map(myRoster.map(p => [p.id, p])), [myRoster]);
-  const theirRosterMap = useMemo(() => new Map(theirRoster.map(p => [p.id, p])), [theirRoster]);
+  const myRosterMap = useMemo(() => new Map(myRoster.map((p) => [toAssetId(p.id), p])), [myRoster]);
+  const theirRosterMap = useMemo(() => new Map(theirRoster.map((p) => [toAssetId(p.id), p])), [theirRoster]);
 
   const fetchRosters = useCallback(async (tId) => {
     if (!actions?.getRoster || myTeamId == null) return;
     setLoading(true);
-    setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); setTradeResult(null);
     try {
       const [myResp, theirResp] = await Promise.all([actions.getRoster(myTeamId), tId != null ? actions.getRoster(tId) : Promise.resolve(null)]);
       if (myResp?.payload) { setMyRoster(myResp.payload.players ?? []); setMyTeam(myResp.payload.team); }
@@ -272,39 +272,39 @@ export default function TradeCenter({ league, actions }) {
     setTheirPicks((source?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
   }, [counterOfferId, incomingOffers, myAvailablePicks, theirAvailablePicks]);
 
-  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(id)), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
-  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(id)), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
+  const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(toAssetId(id))), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
+  const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(toAssetId(id))), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
 
   const myCapAfter = useMemo(() => {
     const base = liveMyTeam?.capRoom ?? 0;
-    const freed = [...offering].reduce((s, id) => s + (myRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
-    const absorbed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
+    const freed = [...offering].reduce((s, id) => s + (myRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
+    const absorbed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
   }, [offering, receiving, myRosterMap, theirRosterMap, liveMyTeam]);
 
   const theirCapAfter = useMemo(() => {
     const base = liveTheirTeam?.capRoom ?? 0;
-    const freed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
-    const absorbed = [...offering].reduce((s, id) => s + (myRosterMap.get(id)?.contract?.baseAnnual ?? 0), 0);
+    const freed = [...receiving].reduce((s, id) => s + (theirRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
+    const absorbed = [...offering].reduce((s, id) => s + (myRosterMap.get(toAssetId(id))?.contract?.baseAnnual ?? 0), 0);
     return Math.round((base + freed - absorbed) * 10) / 10;
   }, [offering, receiving, myRosterMap, theirRosterMap, liveTheirTeam]);
 
-  const toggleOffering = (id, checked) => setOffering(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s; });
-  const toggleReceiving = (id, checked) => setReceiving(prev => { const s = new Set(prev); checked ? s.add(id) : s.delete(id); return s; });
+  const toggleOffering = (id, checked) => setOffering(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
+  const toggleReceiving = (id, checked) => setReceiving(prev => { const s = new Set(prev); const normalizedId = toAssetId(id); checked ? s.add(normalizedId) : s.delete(normalizedId); return s; });
 
   const handlePickChange = (side, pick, remove = false) => {
     const setter = side === "my" ? setMyPicks : setTheirPicks;
-    if (remove) setter(prev => prev.filter(p => p.id !== pick.id));
+    if (remove) setter(prev => prev.filter((p) => String(p.id) !== String(pick.id)));
     else setter(prev => [...prev, pick]);
   };
 
   const startCounterOffer = (offer) => {
     const aiTeamId = Number(offer?.offeringTeamId);
-    if (!aiTeamId) return;
+    if (!Number.isFinite(aiTeamId)) return;
     setCounterOfferId(offer.id);
     setTargetId(aiTeamId);
-    setOffering(new Set(offer?.receiving?.playerIds ?? []));
-    setReceiving(new Set(offer?.offering?.playerIds ?? []));
+    setOffering(new Set((offer?.receiving?.playerIds ?? []).map(toAssetId)));
+    setReceiving(new Set((offer?.offering?.playerIds ?? []).map(toAssetId)));
     setMyPicks((offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
     setTheirPicks((offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
     setTradeResult(null);
@@ -331,8 +331,8 @@ export default function TradeCenter({ league, actions }) {
     setSubmitting(true);
     setTradeResult(null);
     try {
-      const outgoing = { playerIds: [...offering], pickIds: myPicks.map(p => p.id) };
-      const incoming = { playerIds: [...receiving], pickIds: theirPicks.map(p => p.id) };
+      const outgoing = { playerIds: [...offering].map((id) => Number(id)), pickIds: myPicks.map(p => p.id) };
+      const incoming = { playerIds: [...receiving].map((id) => Number(id)), pickIds: theirPicks.map(p => p.id) };
       const resp = counterOfferId
         ? await actions.counterIncomingTrade(counterOfferId, outgoing, incoming)
         : await actions.submitTrade(myTeamId, targetId, outgoing, incoming);
@@ -427,6 +427,7 @@ export default function TradeCenter({ league, actions }) {
             <select value={targetId ?? ""} onChange={e => {
               setTargetId(e.target.value ? Number(e.target.value) : null);
               setCounterOfferId(null);
+              setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); setTradeResult(null);
             }} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220, width: "100%" }}>
               <option value="">Select a team…</option>
               {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
@@ -479,7 +480,7 @@ export default function TradeCenter({ league, actions }) {
               </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {myRoster.map(p => (
-                  <PlayerCheckRow key={p.id} player={p} checked={offering.has(p.id)} onChange={toggleOffering} onNameClick={() => setPreviewPlayer(p)} />
+                  <PlayerCheckRow key={p.id} player={p} checked={offering.has(toAssetId(p.id))} onChange={toggleOffering} onNameClick={() => setPreviewPlayer(p)} />
                 ))}
               </div>
               <PickSelector side="my" picks={myPicks} onChange={handlePickChange} availablePicks={myAvailablePicks} />
@@ -493,7 +494,7 @@ export default function TradeCenter({ league, actions }) {
               </div>
               <div style={{ maxHeight: 360, overflowY: "auto" }}>
                 {theirRoster.map(p => (
-                  <PlayerCheckRow key={p.id} player={p} checked={receiving.has(p.id)} onChange={toggleReceiving} onNameClick={() => setPreviewPlayer(p)} />
+                  <PlayerCheckRow key={p.id} player={p} checked={receiving.has(toAssetId(p.id))} onChange={toggleReceiving} onNameClick={() => setPreviewPlayer(p)} />
                 ))}
               </div>
               <PickSelector side="their" picks={theirPicks} onChange={handlePickChange} availablePicks={theirAvailablePicks} />

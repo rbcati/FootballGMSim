@@ -503,7 +503,7 @@ export function generateAITradeProposalsForUser({
   if (!meta || meta.phase !== 'regular') return [];
 
   const userTeamId = Number(meta.userTeamId);
-  if (!userTeamId) return [];
+  if (!Number.isFinite(userTeamId)) return [];
 
   const allTeams = cache.getAllTeams();
   const userTeam = allTeams.find((t) => Number(t.id) === userTeamId);
