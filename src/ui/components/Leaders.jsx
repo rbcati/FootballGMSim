@@ -177,7 +177,7 @@ function CategorySection({ catKey, stats, onPlayerSelect, userTeamId }) {
   );
 }
 
-export default function Leaders({ onPlayerSelect, userTeamId, actions }) {
+export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigate }) {
   const [mode, setMode] = useState("season");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -220,6 +220,10 @@ export default function Leaders({ onPlayerSelect, userTeamId, actions }) {
           </TabsList>
         </Tabs>
         {data?.year && <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{mode === "season" ? `${data.year} Season` : "All Seasons Combined"}</span>}
+        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("History")}>Open archive</button>
+          <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</button>
+        </div>
       </div>
 
       {!loading && hasData && (

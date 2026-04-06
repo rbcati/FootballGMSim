@@ -2,22 +2,18 @@
  * HallOfFame.jsx
  *
  * Premium gallery view of Hall of Fame inductees.
- * Displays players as gold-accented cards with SVG PlayerAvatars,
- * career stats, and accolade summaries.
- *
- * Mobile-first responsive Tailwind v4 with dark: mode.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function HallOfFame({ onPlayerSelect, actions }) {
   const [players, setPlayers] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [positionFilter, setPositionFilter] = useState("ALL");
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState("legacy");
 
   useEffect(() => {
     let mounted = true;
@@ -36,8 +32,27 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
         if (mounted) setLoading(false);
       });
 
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [actions]);
+
+  const positions = useMemo(() => {
+    const set = new Set((players ?? []).map((p) => p.pos).filter(Boolean));
+    return ["ALL", ...[...set].sort()];
+  }, [players]);
+
+  const filteredPlayers = useMemo(() => {
+    const list = (players ?? []).filter((p) => {
+      if (positionFilter !== "ALL" && p.pos !== positionFilter) return false;
+      const q = search.trim().toLowerCase();
+      if (!q) return true;
+      return [p.name, p.pos, p.primaryTeam]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(q));
+    });
+    return [...list].sort((a, b) => sortHallPlayers(a, b, sortKey));
+  }, [players, positionFilter, search, sortKey]);
 
   if (loading) {
     return (
@@ -61,19 +76,57 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3 px-1">
-        <h2 className="text-xl font-black text-[color:var(--text)] m-0">
-          Hall of Fame
-        </h2>
-        <Badge variant="secondary">
-          {players.length} {players.length === 1 ? "Legend" : "Legends"}
-        </Badge>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-black text-[color:var(--text)] m-0">Hall of Fame</h2>
+          <Badge variant="secondary">
+            {filteredPlayers.length}/{players.length} {players.length === 1 ? "Legend" : "Legends"}
+          </Badge>
+        </div>
+        <div className="text-xs text-[color:var(--text-muted)]">
+          Explore inductions, teams, awards, and peak greatness.
+        </div>
       </div>
 
-      {/* Gallery Grid */}
+      <Card className="card-premium">
+        <CardContent className="p-3 sm:p-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search legends"
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            />
+            <select
+              value={positionFilter}
+              onChange={(e) => setPositionFilter(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            >
+              {positions.map((pos) => (
+                <option key={pos} value={pos}>{pos === "ALL" ? "All positions" : pos}</option>
+              ))}
+            </select>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            >
+              <option value="legacy">Sort: Legacy Score</option>
+              <option value="inductionYear">Sort: Induction Year</option>
+              <option value="awards">Sort: Awards</option>
+              <option value="rings">Sort: Rings</option>
+              <option value="peak">Sort: Peak OVR</option>
+            </select>
+            <div className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-xs text-[color:var(--text-muted)] flex items-center">
+              Click any card to open full player archive.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {players.map((player) => (
+        {filteredPlayers.map((player) => (
           <HofCard
             key={player.id}
             player={player}
@@ -87,9 +140,8 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
 
 function HofCard({ player, onPlayerSelect }) {
   const { stats, accoladeSummary } = player;
-
-  // Determine primary stat to feature
   const primaryStat = getPrimaryStat(player);
+  const legacyScore = getLegacyScore(player);
 
   return (
     <Card
@@ -100,12 +152,10 @@ function HofCard({ player, onPlayerSelect }) {
       onClick={() => onPlayerSelect?.(player.id)}
     >
       <CardContent className="p-0">
-        {/* Gold gradient header */}
         <div className="relative bg-gradient-to-r from-yellow-600/20 via-yellow-500/10 to-yellow-600/20
                         dark:from-yellow-500/15 dark:via-yellow-400/5 dark:to-yellow-500/15
                         px-4 pt-4 pb-3">
           <div className="flex items-center gap-3">
-            {/* Avatar with gold ring */}
             <div className="relative shrink-0">
               <div className="rounded-full p-0.5 bg-gradient-to-br from-yellow-400 to-yellow-600
                               shadow-md shadow-yellow-500/20">
@@ -121,7 +171,6 @@ function HofCard({ player, onPlayerSelect }) {
               </div>
             </div>
 
-            {/* Name & info */}
             <div className="min-w-0 flex-1">
               <div className="font-black text-base text-[color:var(--text)] truncate
                               group-hover:text-yellow-500 transition-colors">
@@ -134,30 +183,22 @@ function HofCard({ player, onPlayerSelect }) {
               </div>
               <div className="text-xs text-[color:var(--text-muted)] mt-0.5">
                 {player.seasonsPlayed > 0 && `${player.seasonsPlayed} season${player.seasonsPlayed !== 1 ? "s" : ""}`}
-                {player.inductionYear && ` \u00B7 Inducted ${player.inductionYear}`}
+                {player.inductionYear && ` · Inducted ${player.inductionYear}`}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Stats Section */}
         <div className="px-4 py-3 space-y-3">
-          {/* Accolades row */}
-          {(accoladeSummary.mvps > 0 || accoladeSummary.superBowls > 0 || accoladeSummary.proBowls > 0) && (
+          {(accoladeSummary.mvps > 0 || accoladeSummary.superBowls > 0 || accoladeSummary.proBowls > 0 || legacyScore > 0) && (
             <div className="flex flex-wrap gap-1.5">
-              {accoladeSummary.mvps > 0 && (
-                <AccoladeBadge label={`${accoladeSummary.mvps}x MVP`} gold />
-              )}
-              {accoladeSummary.superBowls > 0 && (
-                <AccoladeBadge label={`${accoladeSummary.superBowls}x SB`} gold />
-              )}
-              {accoladeSummary.proBowls > 0 && (
-                <AccoladeBadge label={`${accoladeSummary.proBowls}x Pro Bowl`} />
-              )}
+              {accoladeSummary.mvps > 0 && <AccoladeBadge label={`${accoladeSummary.mvps}x MVP`} gold />}
+              {accoladeSummary.superBowls > 0 && <AccoladeBadge label={`${accoladeSummary.superBowls}x SB`} gold />}
+              {accoladeSummary.proBowls > 0 && <AccoladeBadge label={`${accoladeSummary.proBowls}x Pro Bowl`} />}
+              {legacyScore > 0 && <AccoladeBadge label={`Legacy ${legacyScore}`} />}
             </div>
           )}
 
-          {/* Career stat grid */}
           <div className="grid grid-cols-3 gap-2">
             {primaryStat.map(({ label, value }) => (
               <div key={label} className="text-center">
@@ -170,9 +211,15 @@ function HofCard({ player, onPlayerSelect }) {
               </div>
             ))}
           </div>
+
+          {Array.isArray(player.teamHistory) && player.teamHistory.length > 0 && (
+            <div className="text-[10px] text-[color:var(--text-muted)] border-t border-[color:var(--hairline)] pt-2">
+              Career path: {player.teamHistory.slice(0, 4).join(" → ")}
+              {player.teamHistory.length > 4 ? " …" : ""}
+            </div>
+          )}
         </div>
 
-        {/* HOF badge */}
         <div className="absolute top-2 right-2">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600
                           flex items-center justify-center shadow-sm">
@@ -201,9 +248,23 @@ function AccoladeBadge({ label, gold }) {
   );
 }
 
-/**
- * Determine the 3 most relevant career stats to display based on position.
- */
+function sortHallPlayers(a, b, sortKey) {
+  if (sortKey === "inductionYear") return (b.inductionYear ?? 0) - (a.inductionYear ?? 0);
+  if (sortKey === "rings") return (b.accoladeSummary?.superBowls ?? 0) - (a.accoladeSummary?.superBowls ?? 0);
+  if (sortKey === "awards") return ((b.accoladeSummary?.mvps ?? 0) + (b.accoladeSummary?.proBowls ?? 0)) - ((a.accoladeSummary?.mvps ?? 0) + (a.accoladeSummary?.proBowls ?? 0));
+  if (sortKey === "peak") return (b.peakOvr ?? b.ovr ?? 0) - (a.peakOvr ?? a.ovr ?? 0);
+  return getLegacyScore(b) - getLegacyScore(a);
+}
+
+function getLegacyScore(player) {
+  const summary = player?.accoladeSummary ?? {};
+  const rings = summary.superBowls ?? 0;
+  const mvps = summary.mvps ?? 0;
+  const pro = summary.proBowls ?? 0;
+  const peak = player?.peakOvr ?? player?.ovr ?? 0;
+  return (rings * 12) + (mvps * 10) + (pro * 2) + Math.round(peak / 5);
+}
+
 function getPrimaryStat(player) {
   const s = player.stats || {};
   const pos = player.pos;
@@ -227,17 +288,16 @@ function getPrimaryStat(player) {
       { label: "Rec Yds", value: s.recYds },
       { label: "Pass Yds", value: s.passYds > 0 ? s.passYds : undefined },
       { label: "Games", value: s.gamesPlayed },
-    ].filter(s => s.value !== undefined);
+    ].filter((line) => line.value !== undefined);
   }
   if (["DL", "LB", "CB", "S"].includes(pos)) {
     return [
       { label: "Sacks", value: s.sacks },
       { label: "Games", value: s.gamesPlayed },
       { label: "Rush Yds", value: s.rushYds > 100 ? s.rushYds : undefined },
-    ].filter(s => s.value !== undefined);
+    ].filter((line) => line.value !== undefined);
   }
 
-  // Fallback: show the biggest stat
   return [
     { label: "Games", value: s.gamesPlayed },
     { label: "Pass Yds", value: s.passYds },

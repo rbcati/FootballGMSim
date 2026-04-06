@@ -1979,19 +1979,26 @@ async function handleGetHallOfFame(payload, id) {
       gamesPlayed += line.gamesPlayed ?? 0;
     }
 
-    // Find induction year (last year in career + 1, or look at retirement)
+    // Find induction year (HOF accolade preferred)
     const lastCareerYear = careerStats.length > 0
       ? careerStats[careerStats.length - 1].season
       : null;
 
     // Find HOF accolade year if available
     const hofAccolade = (p.accolades || []).find(a => a.type === 'HOF');
-    const inductionYear = hofAccolade?.year ?? (lastCareerYear ? null : null);
+    const inductionYear = hofAccolade?.year ?? (lastCareerYear ? Number(lastCareerYear) + 1 : null);
+    const peakOvr = careerStats.reduce((best, line) => Math.max(best, line?.ovr ?? 0), p.ovr ?? 0);
+
+    const teamHistory = [...new Set(careerStats.map((line) => line?.team).filter(Boolean))];
 
     const accolades = Array.isArray(p.accolades) ? p.accolades : [];
     const mvpCount = accolades.filter(a => a.type === 'MVP').length;
     const sbCount = accolades.filter(a => a.type === 'SB_RING').length;
     const proCount = accolades.filter(a => a.type === 'PRO_BOWL').length;
+    const accoladeTimeline = accolades
+      .filter((a) => a?.type && a?.year)
+      .sort((a, b) => (a.year ?? 0) - (b.year ?? 0))
+      .slice(-10);
 
     return {
       id: p.id,
@@ -2004,8 +2011,11 @@ async function handleGetHallOfFame(payload, id) {
       teamColor: getTeamColor(primaryTeam, cache.getAllTeams()),
       inductionYear,
       seasonsPlayed: careerStats.length,
+      peakOvr,
+      teamHistory,
       stats: { passYds, rushYds, recYds, passTDs, sacks, gamesPlayed },
       accoladeSummary: { mvps: mvpCount, superBowls: sbCount, proBowls: proCount },
+      accoladeTimeline,
     };
   }).sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
 
@@ -5038,7 +5048,7 @@ async function handleGetTeamProfile({ teamId }, id) {
   const seasons = await Seasons.loadRecent(200);
 
   let allTimeWins = 0, allTimeLosses = 0, allTimeTies = 0;
-  let sbTitles = 0, divTitles = 0;
+  let sbTitles = 0, divTitles = 0, playoffAppearances = 0;
   const seasonHistory = [];
 
   const myDiv = teamDivInfo[numId];
@@ -5087,6 +5097,9 @@ async function handleGetTeamProfile({ teamId }, id) {
       if (isDivChamp) divTitles++;
     }
 
+    const madePlayoffs = (standing.wins ?? 0) >= 10;
+    if (madePlayoffs) playoffAppearances++;
+
     seasonHistory.push({
       year:      season.year,
       seasonId:  season.id,
@@ -5097,8 +5110,53 @@ async function handleGetTeamProfile({ teamId }, id) {
       pa:        standing.pa     || 0,
       champion:  isSBChamp,
       divTitle:  isDivChamp,
+      madePlayoffs,
     });
   }
+
+  const sortedByPct = [...seasonHistory].sort((a, b) => {
+    const aPct = (a.wins + 0.5 * (a.ties || 0)) / Math.max(1, a.wins + a.losses + (a.ties || 0));
+    const bPct = (b.wins + 0.5 * (b.ties || 0)) / Math.max(1, b.wins + b.losses + (b.ties || 0));
+    return bPct - aPct;
+  });
+  const bestSeasons = sortedByPct.slice(0, 5);
+  const worstSeasons = [...sortedByPct].reverse().slice(0, 5);
+
+  const teamAbbr = team.abbr;
+  const allPlayers = await Players.loadAll();
+  const hofLegends = allPlayers
+    .filter((p) => p?.hof === true)
+    .filter((p) => {
+      const career = Array.isArray(p.careerStats) ? p.careerStats : [];
+      return career.some((line) => line?.team === teamAbbr) || p.teamId === numId;
+    })
+    .map((p) => ({ id: p.id, name: p.name, pos: p.pos }))
+    .slice(0, 20);
+
+  const allStats = await PlayerStats.loadAll().catch(() => []);
+  const byPlayer = new Map();
+  for (const line of allStats) {
+    if (line?.teamId !== numId) continue;
+    const pid = String(line.playerId);
+    if (!byPlayer.has(pid)) byPlayer.set(pid, { playerId: pid, name: line.name, pos: line.pos, totals: {} });
+    const agg = byPlayer.get(pid);
+    if (line.name) agg.name = line.name;
+    if (line.pos) agg.pos = line.pos;
+    for (const [k, v] of Object.entries(line.totals || {})) {
+      if (typeof v === 'number') agg.totals[k] = (agg.totals[k] || 0) + v;
+    }
+  }
+  const leadersByKey = (key, label) => [...byPlayer.values()]
+    .filter((p) => (p.totals?.[key] || 0) > 0)
+    .sort((a, b) => (b.totals[key] || 0) - (a.totals[key] || 0))
+    .slice(0, 5)
+    .map((p) => ({
+      playerId: p.playerId,
+      name: p.name || `Player ${p.playerId}`,
+      pos: p.pos || '?',
+      value: p.totals[key] || 0,
+      label,
+    }));
 
   // Top current players (for quick roster preview)
   const currentPlayers = cache.getPlayersByTeam(numId)
@@ -5129,8 +5187,18 @@ async function handleGetTeamProfile({ teamId }, id) {
       allTimeTies,
       sbTitles,
       divTitles,
+      playoffAppearances,
       seasonsPlayed: seasonHistory.length,
       seasonHistory: seasonHistory.slice(0, 25),
+      bestSeasons,
+      worstSeasons,
+      hallOfFamers: hofLegends,
+      franchiseLeaders: {
+        passYd: leadersByKey('passYd', 'Pass Yds'),
+        rushYd: leadersByKey('rushYd', 'Rush Yds'),
+        recYd: leadersByKey('recYd', 'Rec Yds'),
+        sacks: leadersByKey('sacks', 'Sacks'),
+      },
     },
     currentPlayers,
   }, id);

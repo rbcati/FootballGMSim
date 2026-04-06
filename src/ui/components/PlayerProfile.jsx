@@ -286,6 +286,7 @@ export default function PlayerProfile({
   onClose,
   actions,
   teams = [],
+  onNavigate = null,
   isUserOnClock = false,
   onDraftPlayer = null,
 }) {
@@ -344,6 +345,24 @@ export default function PlayerProfile({
     .filter((a) => a.type !== "SB_RING")
     .sort((a, b) => b.year - a.year);
   const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
+  const accoladesByYear = [...accolades].sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
+  const teamJourney = [...new Set((player?.careerStats ?? []).map((line) => line.team).filter(Boolean))];
+  const keyColumns = columns.filter((c) => !c.fmt && c.key !== "gamesPlayed").slice(0, 4);
+  const careerHighs = keyColumns
+    .map((col) => {
+      let best = { value: 0, season: null };
+      for (const s of stats) {
+        const value = s?.totals?.[col.key] ?? 0;
+        if (value > best.value) best = { value, season: seasonYear(s.seasonId) };
+      }
+      return { label: col.label, ...best };
+    })
+    .filter((entry) => entry.value > 0);
+  const bestSeason = [...stats].sort((a, b) => {
+    const aPrimary = a?.totals?.[keyColumns[0]?.key] ?? 0;
+    const bPrimary = b?.totals?.[keyColumns[0]?.key] ?? 0;
+    return bPrimary - aPrimary;
+  })[0];
 
   return (
     <div
@@ -631,6 +650,63 @@ export default function PlayerProfile({
                   }}>
                     <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>{chip.label}</div>
                     <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{chip.value}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: "var(--space-2)", display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Season archive</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Leaders</Button>
+              </div>
+            </section>
+          )}
+
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Legacy Context</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Hall of Fame</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{player.hof ? "Inducted" : "Not inducted"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Best Season</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{bestSeason ? seasonYear(bestSeason.seasonId) : "—"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Championships</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{ringCount}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Team Journey</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{teamJourney.length ? teamJourney.join(" → ") : "Single team / N/A"}</div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {careerHighs.length > 0 && (
+            <section>
+              <h3 style={sectionLabelStyle}>Career Highs</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+                {careerHighs.map((entry) => (
+                  <div key={entry.label} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>{entry.label}</div>
+                    <div style={{ fontSize: "var(--text-base)", fontWeight: 800 }}>{entry.value.toLocaleString()}</div>
+                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Season {entry.season ?? "—"}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {accoladesByYear.length > 0 && (
+            <section>
+              <h3 style={sectionLabelStyle}>Awards Timeline</h3>
+              <div style={{ display: "grid", gap: 4 }}>
+                {accoladesByYear.slice(-12).map((acc, idx) => (
+                  <div key={`${acc.type}-${acc.year}-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                    <strong style={{ color: "var(--text)" }}>{acc.year ?? "—"}</strong> · {acc.type}
                   </div>
                 ))}
               </div>
