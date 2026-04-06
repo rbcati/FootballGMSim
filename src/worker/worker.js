@@ -201,6 +201,26 @@ function buildTeamContractSnapshot(teamId) {
   const priorityExpiring = evaluations.filter((row) => row.recommendationTier === 'priority_resign').length;
   const likelyToTest = evaluations.filter((row) => row.negotiationRisk === 'high').length;
   const capRisk = expiring.filter((p) => Number(p?.age ?? 26) >= 30 && Number(p?.contract?.baseAnnual ?? 0) >= 10).length;
+  const memory = cache.getMeta()?.contractMarketMemory ?? {};
+  const userOfferRows = allFreeAgents
+    .filter((p) => Array.isArray(p?.offers) && p.offers.some((o) => Number(o?.teamId) === Number(teamId)))
+    .map((p) => {
+      const row = memory[String(p.id)] ?? {};
+      const snapshot = row?.snapshot ?? {};
+      return {
+        playerId: p.id,
+        name: p.name,
+        state: snapshot.state ?? 'evaluating_market',
+        urgency: snapshot.urgency ?? 'low',
+        bidderCount: Number(snapshot.bidderCount ?? p?.offers?.length ?? 0),
+        marketHeatBand: Number(snapshot.marketHeatBand ?? 1),
+        userLeads: Number(snapshot.bestTeamId ?? -1) === Number(teamId),
+      };
+    });
+  const bidRiskCount = userOfferRows.filter((r) => !r.userLeads && (r.urgency === 'high' || r.bidderCount >= 3)).length;
+  const closeToDecisionCount = userOfferRows.filter((r) => r.state === 'close_to_deciding' || r.state === 'decision_imminent').length;
+  const coolingCount = userOfferRows.filter((r) => r.state === 'market_cooling' || r.marketHeatBand <= 1.1).length;
+  const heatingCount = userOfferRows.filter((r) => r.marketHeatBand >= 1.35 || r.bidderCount >= 3).length;
 
   const hotPositionsRanked = Object.entries(hotPositions)
     .sort((a, b) => b[1] - a[1])
@@ -212,6 +232,11 @@ function buildTeamContractSnapshot(teamId) {
     priorityExpiring,
     likelyToTest,
     capRisk,
+    bidRiskCount,
+    closeToDecisionCount,
+    coolingCount,
+    heatingCount,
+    userOfferCount: userOfferRows.length,
     hotPositions: hotPositionsRanked,
   };
 }
@@ -1409,7 +1434,15 @@ if (res.injuries && res.injuries.length > 0) {
     // offseason_resign is the contract-extension window (User + AI renew
     // expiring deals before the FA bidding phase begins).
     // Reset currentWeek so the UI no longer shows "Week 22".
-    cache.setMeta({ phase: 'offseason_resign', currentWeek: 0, championTeamId: sbChampId, offseasonProgressionDone: false, draftState: null, freeAgencyState: null });
+  cache.setMeta({
+      phase: 'offseason_resign',
+      currentWeek: 0,
+      championTeamId: sbChampId,
+      offseasonProgressionDone: false,
+      draftState: null,
+      freeAgencyState: null,
+      contractMarketMemory: {},
+    });
 
   } else if (isPlayoffWeek) {
     // ── Regular playoff round → advance bracket to next round ───────────────
@@ -2498,7 +2531,10 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
   const liveMeta = ensureDynastyMeta(cache.getMeta());
   const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
   const heat = computeMarketHeat(player.pos, allFreeAgents);
-  const decisionTiming = buildDecisionTiming(player, heat, player.offers.length, liveMeta.phase);
+  const marketMemory = liveMeta?.contractMarketMemory?.[String(playerId)] ?? {};
+  const decisionTiming = buildDecisionTiming(player, heat, player.offers.length, liveMeta.phase, {
+    waitCycles: Number(marketMemory?.waitCycles ?? 0),
+  });
   let immediateOutcome = null;
   if (liveMeta.phase !== 'free_agency' || decisionTiming.resolveNow) {
     immediateOutcome = await resolvePendingFreeAgencyOffers({
@@ -2523,7 +2559,10 @@ async function handleSubmitOffer({ playerId, teamId, contract }, id) {
       post(toUI.NOTIFICATION, { level: 'warn', message: `${resolved.playerName} signed with ${resolved.signedTeamName}.` });
     }
   } else if (immediateOutcome?.results?.[0]?.status === 'pending') {
-    post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} is reviewing offers. ${decisionTiming.reason}.` });
+    const pending = immediateOutcome?.results?.[0];
+    if (pending?.changed || pending?.urgency === 'high') {
+      post(toUI.NOTIFICATION, { level: pending?.urgency === 'high' ? 'warn' : 'info', message: `${player.name}: ${pending?.reason ?? decisionTiming.reason}.` });
+    }
   } else if (!immediateOutcome) {
     post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} logged your bid. ${decisionTiming.reason}.` });
   }
@@ -2574,7 +2613,7 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
   };
 }
 
-function evaluatePlayerOfferDecision(player, offers = [], liveMeta) {
+function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {}) {
   if (!player || !offers.length) return { status: 'pending', reason: 'No offers yet', bestOffer: null };
   const freeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
   const heat = computeMarketHeat(player.pos, freeAgents);
@@ -2608,33 +2647,115 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta) {
   if (!bestOffer) return { status: 'pending', reason: 'No valid bids', bestOffer: null };
 
   const topValue = (bestOffer.contract.baseAnnual * bestOffer.contract.yearsTotal) + (bestOffer.contract.signingBonus || 0);
-  const timing = buildDecisionTiming(player, heat, offers.length, liveMeta?.phase);
-  if (!timing.resolveNow && offers.length < 2) {
-    return { status: 'pending', reason: timing.reason, bestOffer, topValue };
+  const userOffer = offers.find((o) => Number(o?.teamId) === Number(liveMeta?.userTeamId));
+  const userBidValue = userOffer
+    ? (userOffer.contract.baseAnnual * userOffer.contract.yearsTotal) + (userOffer.contract.signingBonus || 0)
+    : 0;
+  const moneyGapRatio = Math.max(0, (askTotalValue - topValue) / Math.max(1, askTotalValue));
+  const timing = buildDecisionTiming(player, heat, offers.length, liveMeta?.phase, {
+    waitCycles: Number(memory?.waitCycles ?? 0),
+    moneyGapRatio,
+  });
+  const acceptanceFloor = askTotalValue * (0.84 + (1 - ask.willingness) * 0.12);
+  const shouldWaitForMoney = topValue + 0.01 < acceptanceFloor;
+
+  if (!timing.resolveNow && (offers.length < 2 || shouldWaitForMoney)) {
+    return {
+      status: 'pending',
+      reason: shouldWaitForMoney ? 'Waiting to see if the market improves' : timing.reason,
+      bestOffer,
+      topValue,
+      askTotalValue,
+      timing,
+      marketHeat: heat,
+      bidderCount: offers.length,
+      userBidValue,
+      moneyGapRatio,
+      state: shouldWaitForMoney ? 'holding_for_improvement' : timing.state,
+      urgency: timing.risk,
+    };
   }
-  if (topValue + 0.01 < askTotalValue * (0.84 + (1 - ask.willingness) * 0.12)) {
-    return { status: 'pending', reason: 'Waiting for stronger offer', bestOffer, topValue };
-  }
-  return { status: 'signed', reason: 'Accepted strongest package', bestOffer, topValue };
+
+  return {
+    status: 'signed',
+    reason: 'Accepted strongest package',
+    bestOffer,
+    topValue,
+    askTotalValue,
+    timing,
+    marketHeat: heat,
+    bidderCount: offers.length,
+    userBidValue,
+    moneyGapRatio,
+    state: timing.state,
+    urgency: timing.risk,
+  };
+}
+
+function buildDecisionSnapshot(result = {}) {
+  return {
+    state: result?.state ?? 'evaluating_market',
+    reason: result?.reason ?? 'Evaluating the current market',
+    urgency: result?.urgency ?? 'low',
+    bidderCount: Number(result?.bidderCount ?? 0),
+    marketHeatBand: Math.round(Number(result?.marketHeat ?? 1) * 10) / 10,
+    moneyGapBand: Math.round(Number(result?.moneyGapRatio ?? 0) * 20) / 20,
+    bestTeamId: Number(result?.bestOffer?.teamId ?? -1),
+  };
+}
+
+function shouldEmitMarketUpdate(prev = {}, next = {}, userHasOffer = false) {
+  if (!userHasOffer) return false;
+  if (!prev?.snapshot) return true;
+  const a = prev.snapshot;
+  const b = next.snapshot;
+  if (a.bestTeamId !== b.bestTeamId) return true;
+  if (a.state !== b.state) return true;
+  if (a.urgency !== b.urgency) return true;
+  if (Math.abs((a.marketHeatBand ?? 1) - (b.marketHeatBand ?? 1)) >= 0.2) return true;
+  if (Math.abs((a.moneyGapBand ?? 0) - (b.moneyGapBand ?? 0)) >= 0.1) return true;
+  if ((a.bidderCount ?? 0) !== (b.bidderCount ?? 0)) return true;
+  return false;
+}
+
+function summarizePendingNotifications(rows = []) {
+  if (!rows.length) return [];
+  const holding = rows.filter((r) => r.state === 'holding_for_improvement').length;
+  const close = rows.filter((r) => r.state === 'close_to_deciding' || r.state === 'decision_imminent').length;
+  const cooling = rows.filter((r) => r.state === 'market_cooling').length;
+  const losingLead = rows.filter((r) => r.urgency === 'high' && !r.userLeads).length;
+
+  const lines = [];
+  if (holding >= 2) lines.push(`${holding} players are waiting for stronger offers.`);
+  if (close >= 2) lines.push(`${close} targets are close to deciding.`);
+  if (cooling >= 1 && holding === 0) lines.push(`${cooling} market${cooling > 1 ? 's are' : ' is'} cooling off.`);
+  if (losingLead >= 1) lines.push(`${losingLead} of your bids ${losingLead > 1 ? 'are' : 'is'} at risk.`);
+  return lines.slice(0, 2);
 }
 
 async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId = null, emitNotifications = false } = {}) {
   const liveMeta = ensureDynastyMeta(cache.getMeta());
   const userTeamId = Number(liveMeta?.userTeamId);
   const targetPlayerId = onlyPlayerId == null ? null : Number(onlyPlayerId);
+  const memory = liveMeta?.contractMarketMemory ?? {};
+  const nextMemory = { ...memory };
   const freeAgentsWithOffers = cache.getAllPlayers().filter((p) => {
     if (targetPlayerId != null && Number(p?.id) !== targetPlayerId) return false;
     return (!p.teamId || p.status === 'free_agent') && Array.isArray(p.offers) && p.offers.length > 0;
   });
 
   const results = [];
+  const pendingToNotify = [];
   for (const player of freeAgentsWithOffers) {
-    const decision = evaluatePlayerOfferDecision(player, player.offers ?? [], liveMeta);
+    const playerKey = String(player.id);
+    const prevMemory = nextMemory[playerKey] ?? {};
+    const decision = evaluatePlayerOfferDecision(player, player.offers ?? [], liveMeta, prevMemory);
     if (decision?.status === 'signed' && decision?.bestOffer) {
       const userWasInvolved = (player.offers ?? []).some((o) => Number(o?.teamId) === userTeamId);
       const resolved = await finalizeFreeAgencySigning(player, decision.bestOffer, liveMeta);
       if (resolved) {
         results.push({ ...resolved, status: 'signed', reason: decision.reason });
+        delete nextMemory[playerKey];
         if (emitNotifications && userWasInvolved) {
           post(toUI.NOTIFICATION, { level: 'info', message: `${resolved.playerName} signed with ${resolved.signedTeamName}.` });
         }
@@ -2642,11 +2763,46 @@ async function resolvePendingFreeAgencyOffers({ resolutionDay = 7, onlyPlayerId 
       }
     }
     const userHasOffer = (player.offers ?? []).some((o) => Number(o?.teamId) === userTeamId);
-    results.push({ playerId: player.id, playerName: player.name, status: 'pending', reason: decision?.reason ?? 'Still weighing options' });
-    if (emitNotifications && userHasOffer) {
-      post(toUI.NOTIFICATION, { level: 'info', message: `${player.name} has not chosen yet: ${decision?.reason ?? 'still weighing options'}.` });
+    const snapshot = buildDecisionSnapshot(decision);
+    const waitCycles = Number(prevMemory?.waitCycles ?? 0) + 1;
+    const changed = shouldEmitMarketUpdate(prevMemory, { snapshot }, userHasOffer);
+    const userLeads = Number(snapshot?.bestTeamId) === userTeamId;
+    nextMemory[playerKey] = { snapshot, waitCycles, lastUpdatedWeek: Number(liveMeta?.currentWeek ?? 1) };
+    results.push({
+      playerId: player.id,
+      playerName: player.name,
+      status: 'pending',
+      reason: decision?.reason ?? 'Still weighing options',
+      state: snapshot.state,
+      urgency: snapshot.urgency,
+      userLeads,
+      changed,
+    });
+    if (emitNotifications && userHasOffer && changed) {
+      pendingToNotify.push({
+        playerName: player.name,
+        reason: decision?.reason ?? 'Still weighing options',
+        state: snapshot.state,
+        urgency: snapshot.urgency,
+        userLeads,
+      });
     }
   }
+
+  if (emitNotifications && pendingToNotify.length > 0) {
+    const summaries = summarizePendingNotifications(pendingToNotify);
+    for (const summary of summaries) {
+      post(toUI.NOTIFICATION, { level: 'info', message: summary });
+    }
+    const highSignal = pendingToNotify.find((row) => row.urgency === 'high' || row.state === 'decision_imminent') ?? pendingToNotify[0];
+    if (highSignal && summaries.length < 2) {
+      post(toUI.NOTIFICATION, {
+        level: highSignal.urgency === 'high' ? 'warn' : 'info',
+        message: `${highSignal.playerName}: ${highSignal.reason}.`,
+      });
+    }
+  }
+  cache.setMeta({ contractMarketMemory: nextMemory });
 
   return {
     signedCount: results.filter((row) => row.status === 'signed').length,
@@ -2824,7 +2980,27 @@ async function handleGetFreeAgents(payload, id) {
             }
         }
 
-        const decisionTiming = buildDecisionTiming(p, heat, offers.length, meta.phase);
+        const mem = meta?.contractMarketMemory?.[String(p.id)] ?? {};
+        const topGapRatio = topOfferValue > 0
+          ? Math.max(0, ((ask.baseAnnual * ask.yearsTotal + (ask.signingBonus || 0)) - topOfferValue) / Math.max(1, (ask.baseAnnual * ask.yearsTotal + (ask.signingBonus || 0))))
+          : 0;
+        const decisionTiming = buildDecisionTiming(p, heat, offers.length, meta.phase, {
+          waitCycles: Number(mem?.waitCycles ?? 0),
+          moneyGapRatio: topGapRatio,
+        });
+        const decisionLabelByState = {
+          evaluating_market: 'Evaluating market',
+          holding_for_improvement: 'Waiting for stronger offer',
+          leaning_to_leader: 'Leaning toward top bid',
+          close_to_deciding: 'Decision likely soon',
+          market_cooling: 'Market cooling',
+          decision_imminent: 'Decision imminent',
+        };
+        const detailTone = userOffer
+          ? userOffer.teamId === topBid?.teamId
+            ? (offers.length >= 3 ? 'You’re leading, but another team is close' : 'Your bid leads')
+            : (userTrailReason || 'Another team currently leads')
+          : (offers.length >= 2 ? 'Warm market' : 'Open market');
 
         return {
           id:        p.id,
@@ -2839,8 +3015,11 @@ async function handleGetFreeAgents(payload, id) {
             heat: Math.round(heat * 100) / 100,
             heatLabel: marketHeatLabel(heat),
             bidderCount: offers.length,
-            decision: decisionTiming.resolveNow ? 'Can decide now' : 'Likely to wait',
+            decision: decisionLabelByState[decisionTiming.state] ?? 'Evaluating market',
             decisionReason: decisionTiming.reason,
+            urgency: decisionTiming.risk,
+            timingState: decisionTiming.state,
+            attention: detailTone,
           },
           demandProfile: {
             headline: profile.headline,
@@ -3343,7 +3522,7 @@ async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) 
       offering: userBundle,
       receiving: aiBundle,
     });
-    cache.setMeta({
+  cache.setMeta({
       incomingTradeOffers: remaining,
       lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1),
     });
@@ -4378,6 +4557,7 @@ async function handleAdvanceOffseason(payload, id) {
     offseasonProgressionDone: true,
     phase: 'free_agency',
     freeAgencyState: { day: 1, maxDays: 5, complete: false },
+    contractMarketMemory: {},
   });
 
   // AUTO-SAVE: phase transition — flush all progression/retirement changes before notifying UI.
@@ -4433,7 +4613,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
             ...meta.freeAgencyState,
             day: nextDay,
             complete: isComplete,
-        }
+        },
     };
 
     if (isComplete) {
@@ -4697,7 +4877,7 @@ async function handleStartNewSeason(payload, id) {
   const rawSchedule  = makeScheduleFn(teamDefs);
   const slimSchedule = slimifySchedule(rawSchedule, teamDefs);
 
-  cache.setMeta({
+    cache.setMeta({
     year:                    newYear,
     season:                  newSeason,
     currentSeasonId:         newSeasonId,
@@ -4707,6 +4887,7 @@ async function handleStartNewSeason(payload, id) {
     playoffSeeds:            null,
     draftState:              null,
     freeAgencyState:         null, // Reset FA state
+    contractMarketMemory:    {},
     championTeamId:          null,
     offseasonProgressionDone:false,
     ownerGoals: generateOwnerGoals(),

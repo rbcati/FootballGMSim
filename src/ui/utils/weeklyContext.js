@@ -91,7 +91,8 @@ export function evaluateWeeklyContext(league) {
   if (expiring.length >= 5 && week >= 8) {
     urgent.push({ tone: 'info', label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, tab: 'Financials' });
   }
-  if ((contractMarket?.priorityExpiring ?? 0) >= 2) {
+  const ownerContractPressure = ownerContext?.key?.includes('expiring_core_ignored');
+  if ((contractMarket?.priorityExpiring ?? 0) >= 2 && !ownerContractPressure) {
     urgent.push({
       tone: 'warning',
       label: 'Priority Expiring Starters',
@@ -99,7 +100,22 @@ export function evaluateWeeklyContext(league) {
       tab: 'Financials',
     });
   }
-  if ((contractMarket?.likelyToTest ?? 0) >= 2) {
+  if ((contractMarket?.bidRiskCount ?? 0) >= 1) {
+    urgent.push({
+      tone: 'danger',
+      label: 'Bid Risk',
+      detail: `${contractMarket.bidRiskCount} active bid${contractMarket.bidRiskCount > 1 ? 's are' : ' is'} at risk.`,
+      tab: 'Free Agency',
+    });
+  }
+  if ((contractMarket?.closeToDecisionCount ?? 0) >= 1) {
+    urgent.push({
+      tone: 'warning',
+      label: 'Decision Window',
+      detail: `${contractMarket.closeToDecisionCount} target${contractMarket.closeToDecisionCount > 1 ? 's are' : ' is'} close to deciding.`,
+      tab: 'Free Agency',
+    });
+  } else if ((contractMarket?.likelyToTest ?? 0) >= 2) {
     urgent.push({
       tone: 'info',
       label: 'Testing Market Risk',
@@ -130,7 +146,11 @@ export function evaluateWeeklyContext(league) {
     focus,
     advisorPulse,
     urgentItems: urgent.slice(0, 4),
-    marketPulse: contractMarket?.hotPositions?.length
+    marketPulse: (contractMarket?.bidRiskCount ?? 0) > 0
+      ? `${contractMarket.bidRiskCount} contract market${contractMarket.bidRiskCount > 1 ? 's are' : ' is'} heating up against your bids.`
+      : (contractMarket?.closeToDecisionCount ?? 0) > 0
+        ? `${contractMarket.closeToDecisionCount} target${contractMarket.closeToDecisionCount > 1 ? 's are' : ' is'} nearing a decision.`
+        : contractMarket?.hotPositions?.length
       ? `Market heating up at ${contractMarket.hotPositions.map((p) => p.pos).join(', ')}.`
       : incomingOffers[0]?.reason ?? (week >= 10 ? 'Deadline pressure is rising across the league.' : 'Market is active but selective.'),
   };

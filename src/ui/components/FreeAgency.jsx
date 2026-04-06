@@ -1026,7 +1026,10 @@ export default function FreeAgency({
                               {offers.count} bid{offers.count !== 1 ? "s" : ""}
                             </div>
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
-                              Market: {market.heatLabel ?? "Warm"} · {market.decision ?? "Awaiting bids"}
+                              {market.attention ?? `Market: ${market.heatLabel ?? "Warm"}`}
+                            </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
+                              {market.decision ?? "Evaluating market"}
                             </div>
                             {userIsTop && (
                               <span style={{
@@ -1168,7 +1171,10 @@ export default function FreeAgency({
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
-                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.heatLabel ?? "Warm"} market
+                                   {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "Warm"} market`}
+                                </div>
+                               <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
+                                   {mMarket.decision ?? "Evaluating market"}
                                </div>
                                {/* Top Bid info on mobile */}
                                {mHasBids && (
