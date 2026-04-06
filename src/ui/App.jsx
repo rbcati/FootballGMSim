@@ -407,7 +407,7 @@ function AppContent() {
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary>
-          <div className="view fade-in" key="new_league">
+          <div className="view fade-in view-enter" key="new_league">
             <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
           </div>
         </ErrorBoundary>
@@ -415,7 +415,7 @@ function AppContent() {
     }
     return (
       <ErrorBoundary>
-        <div className="view fade-in" key="save_slot_manager">
+        <div className="view fade-in view-enter" key="save_slot_manager">
           <SaveSlotManager
             activeSlot={activeSlot}
             onLoad={(slotKey) => { setActiveSlot(slotKey); actions.loadSlot(slotKey); }}
@@ -682,19 +682,21 @@ function AppContent() {
       )}
 
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
+      <div className="view fade-in view-enter" key="league_dashboard" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <LeagueDashboard
-        league={leagueReady ? league : null}
-        lastResults={authoritativeResults}
-        lastSimWeek={lastSimWeek}
-        busy={busy}
-        simulating={simulating}
-        actions={actions}
-        onAdvanceWeek={handleAdvanceWeek}
-        notifications={notifications}
-        onDismissNotification={actions.dismissNotification}
-        externalBoxScoreId={externalBoxScoreId}
-        onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
-      />
+          league={leagueReady ? league : null}
+          lastResults={authoritativeResults}
+          lastSimWeek={lastSimWeek}
+          busy={busy}
+          simulating={simulating}
+          actions={actions}
+          onAdvanceWeek={handleAdvanceWeek}
+          notifications={notifications}
+          onDismissNotification={actions.dismissNotification}
+          externalBoxScoreId={externalBoxScoreId}
+          onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
+        />
+      </div>
 
       {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
       {leagueReady && league && (

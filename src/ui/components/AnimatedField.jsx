@@ -66,9 +66,9 @@ function getDefensePositions(ballX, ballY, isHome) {
 }
 
 // Football shape for the ball
-function Football({ x, y, rotation = 0, size = 6 }) {
+function Football({ x, y, rotation = 0, size = 6, className = "" }) {
   return (
-    <g transform={`translate(${x},${y}) rotate(${rotation})`}>
+    <g className={className} transform={`translate(${x},${y}) rotate(${rotation})`}>
       <ellipse rx={size} ry={size * 0.55} fill="#8B4513" stroke="#5C3317" strokeWidth="1" />
       <line x1={-size * 0.5} y1="0" x2={size * 0.5} y2="0" stroke="white" strokeWidth="0.8" />
       <line x1={-size * 0.3} y1="-1.5" x2={-size * 0.3} y2="1.5" stroke="white" strokeWidth="0.6" />
@@ -513,6 +513,7 @@ export default function AnimatedField({
           y={animPhase >= 1 ? ballPos.y : FIELD_H / 2}
           rotation={play?.type === "pass" ? 45 : 0}
           size={7}
+          className={play?.type === 'pass' ? 'ball animate-pass' : (play?.type === 'kick' || play?.type === 'punt' || play?.type === 'field-goal' || play?.type === 'kickoff') ? 'ball animate-kick' : 'ball'}
         />
 
         {/* Particle burst on big plays */}
