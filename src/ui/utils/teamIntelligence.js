@@ -212,3 +212,58 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   return { score, reason, pos, ask };
 }
 
+export function classifyNeedFitForProspect(pos, intel) {
+  if (!pos) return { bucket: "Luxury pick", tone: "neutral", short: "No clear need match" };
+  const now = (intel?.needsNow ?? []).find((n) => n.pos === pos);
+  if (now) {
+    if ((now.severity ?? 0) >= 5) return { bucket: "Immediate need", tone: "urgent", short: now.label ?? `${pos} need now` };
+    return { bucket: "Future starter", tone: "strong", short: now.label ?? `${pos} starter path` };
+  }
+  const later = (intel?.needsLater ?? []).find((n) => n.pos === pos);
+  if (later) return { bucket: "Developmental need", tone: "medium", short: later.label ?? `${pos} depth path` };
+  const surplus = (intel?.surplus ?? []).find((s) => s.pos === pos);
+  if (surplus) return { bucket: "Luxury pick", tone: "light", short: `Already deep at ${pos}` };
+  return { bucket: "Depth upgrade", tone: "neutral", short: `Adds competition at ${pos}` };
+}
+
+export function describeProspectProfile(player) {
+  const age = safeNum(player?.age, 23);
+  const ovr = safeNum(player?.ovr, 60);
+  const pot = safeNum(player?.potential ?? player?.pot ?? player?.ovr, ovr);
+  const gap = pot - ovr;
+  const readiness = ovr >= 76 ? "Ready to contribute early" : ovr >= 69 ? "Rotational ready" : "Developmental timeline";
+  const upside = gap >= 12 || age <= 21 ? "High upside swing" : gap >= 7 ? "Balanced upside" : "Lower-ceiling profile";
+  const ageProfile = age <= 21 ? "Young-for-class profile" : age >= 24 ? "Older prospect profile" : "Typical draft age";
+  return { readiness, upside, ageProfile, gap };
+}
+
+export function scoreProspectForTeam(player, intel) {
+  const ovr = safeNum(player?.ovr, 60);
+  const pot = safeNum(player?.potential ?? player?.pot ?? player?.ovr, ovr);
+  const age = safeNum(player?.age, 23);
+  const pos = canonicalPos(player);
+  const profile = describeProspectProfile(player);
+  const fit = classifyNeedFitForProspect(pos, intel);
+
+  const needBoost =
+    fit.bucket === "Immediate need" ? 20 :
+    fit.bucket === "Future starter" ? 14 :
+    fit.bucket === "Developmental need" ? 9 :
+    fit.bucket === "Depth upgrade" ? 5 : 0;
+  const direction = intel?.direction ?? "middling";
+  const directionAdj =
+    direction === "contender"
+      ? (profile.readiness.includes("Ready") ? 8 : -3)
+      : direction === "rebuilding"
+        ? (profile.upside.includes("High") || age <= 21 ? 8 : -2)
+        : 0;
+
+  const score = ovr + gap * 1.2 + needBoost + directionAdj;
+  return {
+    pos,
+    score,
+    fit,
+    profile,
+    archetypeHint: `${profile.readiness} · ${profile.upside}`,
+  };
+}
