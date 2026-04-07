@@ -3,7 +3,7 @@ import { NAV_LABELS, ACTION_LABELS } from "../../src/ui/constants/navigationCopy
 
 describe("navigation copy", () => {
   it("keeps the mobile bottom navigation labels canonical", () => {
-    expect(NAV_LABELS.weekly).toBe("Hub");
+    expect(NAV_LABELS.weekly).toBe("Weekly");
     expect(NAV_LABELS.roster).toBe("Roster");
     expect(NAV_LABELS.standings).toBe("League");
     expect(NAV_LABELS.trades).toBe("Trades");

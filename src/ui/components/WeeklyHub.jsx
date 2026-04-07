@@ -11,6 +11,8 @@ import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildNeedsAttentionItems, buildPrimaryAction, buildTeamSnapshot, getDefaultExpandedSections } from "../utils/weeklyHubLayout.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
+import { ScreenHeader } from "./ScreenSystem.jsx";
+import { buildHeaderMetadata } from "../utils/screenSystem.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -126,7 +128,17 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   };
 
   return (
-    <div className="weekly-hub-v2 weekly-hub-v3">
+    <div className="weekly-hub-v2 weekly-hub-v3 app-screen-stack">
+      <ScreenHeader
+        title="Weekly Hub"
+        subtitle="Your command center for this week: context, priorities, and next action."
+        eyebrow={`${user.name} · ${phaseLabel(league.phase)}`}
+        metadata={buildHeaderMetadata([
+          { label: "Week", value: league.week ?? 1 },
+          { label: "Record", value: `${user.wins ?? 0}-${user.losses ?? 0}${(user.ties ?? 0) ? `-${user.ties}` : ""}` },
+          { label: "Cap", value: formatMoneyM(cap.capRoom) },
+        ])}
+      />
       <Card variant="primary" className="weekly-primary weekly-hero">
         <CardHeader className="weekly-primary__header">
           <div className="weekly-hero__identity">

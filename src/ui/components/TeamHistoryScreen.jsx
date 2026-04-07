@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 
 export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack }) {
   const [seasons, setSeasons] = useState([]);
@@ -30,14 +31,13 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   if (loading) return <div className="card" style={{ padding: 'var(--space-4)' }}>Loading team history…</div>;
 
   return (
-    <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <div className="card" style={{ padding: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-        <div>
-          <h3 style={{ margin: 0 }}>{activeTeam?.name ?? 'Team'} History</h3>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Franchise timeline, drought context, best/worst runs, and milestones.</div>
-        </div>
-        <button className="btn" onClick={onBack}>Back to History Hub</button>
-      </div>
+    <div className="app-screen-stack">
+      <ScreenHeader
+        title={`${activeTeam?.name ?? 'Team'} History`}
+        subtitle="Franchise timeline, drought context, best/worst runs, and milestones."
+        onBack={onBack}
+        backLabel="History Hub"
+      />
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(170px,1fr))', gap: 10 }}>
         <div className="stat-box"><div className="stat-label">Titles</div><div className="stat-value-large">{titles}</div></div>
@@ -45,16 +45,14 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         <div className="stat-box"><div className="stat-label">Current drought</div><div className="stat-value-large">{drought < 0 ? 'No title yet' : `${drought} seasons`}</div></div>
       </div>
 
-      <div className="card" style={{ padding: 'var(--space-4)' }}>
-        <h4 style={{ marginTop: 0 }}>Best and worst seasons</h4>
+      <SectionCard title="Best and worst seasons">
         <div style={{ fontSize: 'var(--text-sm)' }}>Best: {best ? `${best.year} (${best.wins}-${best.losses}${best.ties ? `-${best.ties}` : ''})` : '—'}</div>
         <div style={{ fontSize: 'var(--text-sm)' }}>Worst: {worst ? `${worst.year} (${worst.wins}-${worst.losses}${worst.ties ? `-${worst.ties}` : ''})` : '—'}</div>
-      </div>
+      </SectionCard>
 
-      <div className="card" style={{ padding: 'var(--space-4)' }}>
-        <h4 style={{ marginTop: 0 }}>Season-by-season timeline</h4>
+      <SectionCard title="Season-by-season timeline">
         <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-          {timeline.slice().reverse().map((s) => (
+          {timeline.length === 0 ? <EmptyState title="No team history yet" body="Play more seasons to populate this team timeline." /> : timeline.slice().reverse().map((s) => (
             <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong>{s.year}</strong>
@@ -65,7 +63,7 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
             </div>
           ))}
         </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
