@@ -32,6 +32,7 @@ import React, {
   useMemo,
   useCallback,
 } from "react";
+import { getClickableCardProps } from "../utils/clickableCard.js";
 
 // ── Momentum Bar ───────────────────────────────────────────────────────────────
 // Shows which team has the momentum based on recent plays.
@@ -212,10 +213,16 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
     if (!finished || !onOpenBoxScore || !event?.gameId) return;
     onOpenBoxScore(event.gameId);
   };
+  const interactive = finished && onOpenBoxScore && event?.gameId;
+  const interactiveProps = getClickableCardProps({
+    onOpen: handleClick,
+    disabled: !interactive,
+    ariaLabel: interactive ? `Open box score for ${awayAbbr} at ${homeAbbr}` : undefined,
+  });
 
   return (
     <div
-      className={`matchup-card ${isUser ? "user-game" : ""}`}
+      className={`matchup-card ${isUser ? "user-game" : ""} ${interactive ? "clickable-card" : ""}`}
       style={{
         padding: "var(--space-3) var(--space-4)",
         minWidth: 0,
@@ -228,9 +235,9 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
               boxShadow: "0 0 0 1px var(--accent)",
             }
           : {}),
-        cursor: finished && onOpenBoxScore && event?.gameId ? "pointer" : "default",
+        cursor: interactive ? "pointer" : "default",
       }}
-      onClick={handleClick}
+      {...interactiveProps}
     >
       {/* Away team */}
       <TeamBadge abbr={awayAbbr} size={32} isUser={awayId === userTeamId} />
@@ -317,6 +324,7 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
         </div>
       </div>
       <TeamBadge abbr={homeAbbr} size={32} isUser={homeId === userTeamId} />
+      {interactive ? <span className="clickable-card__chevron" aria-hidden="true">›</span> : null}
     </div>
   );
 }

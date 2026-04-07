@@ -75,6 +75,7 @@ import {
   deriveWeeklyHonors,
 } from "../utils/gamePresentation.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
+import { getClickableCardProps } from "../utils/clickableCard.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -877,12 +878,17 @@ function ScheduleTab({
                   `${seasonId}_w${selectedWeek}_${game.home}_${game.away}`,
                 )
             : undefined;
+          const clickableCardProps = getClickableCardProps({
+            onOpen: handleCardClick,
+            disabled: !isClickable,
+            ariaLabel: isClickable ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined,
+          });
 
           return (
             <div
               key={idx}
-              className="matchup-card"
-              onClick={handleCardClick}
+              className={`matchup-card ${isClickable ? "clickable-card" : ""}`}
+              {...clickableCardProps}
               style={{
                 ...(isUserGame
                   ? {
@@ -1140,6 +1146,7 @@ function ScheduleTab({
                   </div>
                 </div>
               </div>
+              {isClickable ? <span className="clickable-card__chevron" aria-hidden="true">›</span> : null}
             </div>
           );
         })}
@@ -1396,6 +1403,7 @@ export default function LeagueDashboard({
   );
   const ownerApprovalText = formatPercent(ownerApproval, "—");
   const pressure = deriveFranchisePressure(league);
+  const teamSummaryNav = () => setActiveTab("Roster Hub");
 
   return (
     <div>
@@ -1408,28 +1416,36 @@ export default function LeagueDashboard({
         marginBottom: "var(--space-2)",
         borderBottom: "1px solid var(--hairline)",
       }}>
-        <TeamLogo abbr={userAbbr} size={40} isUser />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: "var(--text)", lineHeight: 1.1 }}>
-            {userTeam?.name ?? "No Team Selected"}
+        <button
+          type="button"
+          className="team-summary-nav-card clickable-card"
+          onClick={teamSummaryNav}
+          aria-label={`Open ${userTeam?.name ?? "team"} hub`}
+        >
+          <TeamLogo abbr={userAbbr} size={40} isUser />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: "var(--text)", lineHeight: 1.1 }}>
+              {userTeam?.name ?? "No Team Selected"}
+            </div>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 1 }}>
+              <span style={{ fontWeight: 700, color: "var(--text)" }}>{userRecord}</span>
+              {userTeam && <span> · {userTeam.conf} {userTeam.div}</span>}
+              {league.week && <span> · Week {league.week}</span>}
+              {" · "}
+              <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
+                Owner {pressure?.owner?.state ?? "Stable"} {ownerApprovalText}
+              </span>
+              {pressure?.fans?.state ? <span>{` · Fans ${pressure.fans.state}`}</span> : null}
+              {pressure?.media?.state ? <span>{` · Media ${pressure.media.state}`}</span> : null}
+            </div>
           </div>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 1 }}>
-            <span style={{ fontWeight: 700, color: "var(--text)" }}>{userRecord}</span>
-            {userTeam && <span> · {userTeam.conf} {userTeam.div}</span>}
-            {league.week && <span> · Week {league.week}</span>}
-            {" · "}
-            <span style={{ color: ownerApproval == null ? "var(--text-muted)" : ownerApproval >= 70 ? "var(--success)" : ownerApproval >= 50 ? "var(--warning)" : "var(--danger)" }}>
-              Owner {pressure?.owner?.state ?? "Stable"} {ownerApprovalText}
-            </span>
-            {pressure?.fans?.state ? <span>{` · Fans ${pressure.fans.state}`}</span> : null}
-            {pressure?.media?.state ? <span>{` · Media ${pressure.media.state}`}</span> : null}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "right" }}>
             <div style={{ fontWeight: 700, color: "var(--text-muted)" }}>{league.year ?? 2025}</div>
             <div style={{ textTransform: "capitalize" }}>{league.phase}</div>
           </div>
+          <span className="clickable-card__chevron" aria-hidden="true">›</span>
+        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <NotificationCenter
             notifications={notifications}
             onDismiss={onDismissNotification}
@@ -1643,12 +1659,15 @@ export default function LeagueDashboard({
                         const gId = league.seasonId
                           ? `${league.seasonId}_w${prevWeek}_${hId}_${aId}`
                           : null;
+                        const interactiveProps = getClickableCardProps({
+                          onOpen: gId ? () => setSelectedGameId(gId) : undefined,
+                          disabled: !gId,
+                          ariaLabel: gId ? `Open box score for ${aA} at ${hA}` : undefined,
+                        });
                         return (
                           <span
                             key={i}
-                            onClick={
-                              gId ? () => setSelectedGameId(gId) : undefined
-                            }
+                            {...interactiveProps}
                             style={{
                               cursor: gId ? "pointer" : "default",
                               textDecoration: gId ? "underline dotted" : "none",

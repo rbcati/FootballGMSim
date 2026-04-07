@@ -662,8 +662,15 @@ function AppContent() {
           {authoritativeResults.map((r, i) => {
             const homeWin = r.homeScore > r.awayScore;
             const isUserGame = r.homeId === league.userTeamId || r.awayId === league.userTeamId;
+            const gameId = league?.seasonId ? `${league.seasonId}_w${lastSimWeek ?? Math.max(1, (league.week ?? 1) - 1)}_${r.homeId}_${r.awayId}` : null;
             return (
-              <span key={i} className={`app-result-item ${isUserGame ? 'app-result-user' : ''}`}>
+              <button
+                key={i}
+                type="button"
+                className={`app-result-item ${isUserGame ? 'app-result-user' : ''} ${gameId ? 'app-result-item-clickable' : ''}`}
+                onClick={gameId ? () => setExternalBoxScoreId(gameId) : undefined}
+                title={gameId ? "Open box score" : undefined}
+              >
                 <span style={{ fontWeight: homeWin ? 700 : 400, color: homeWin ? 'var(--text)' : 'var(--text-muted)' }}>
                   {r.homeName}
                 </span>
@@ -675,7 +682,7 @@ function AppContent() {
                 <span style={{ fontWeight: !homeWin ? 700 : 400, color: !homeWin ? 'var(--text)' : 'var(--text-muted)' }}>
                   {r.awayName}
                 </span>
-              </span>
+              </button>
             );
           })}
         </div>
