@@ -35,35 +35,9 @@ export default function SaveExportImport({ league, actions }) {
     clearMessages();
     setExporting(true);
     try {
-      // Collect all available league state
-      const exportData = {
-        version: "2.0",
-        exportDate: new Date().toISOString(),
-        appVersion: "2.0.0",
-        league: {
-          year: league?.year,
-          week: league?.week,
-          phase: league?.phase,
-          userTeamId: league?.userTeamId,
-          seasonId: league?.seasonId,
-          teams: league?.teams,
-          schedule: league?.schedule,
-          roster: league?.roster,
-          freeAgents: league?.freeAgents,
-          draftState: league?.draftState,
-          playoffSeeds: league?.playoffSeeds,
-          championTeamId: league?.championTeamId,
-          ownerApproval: league?.ownerApproval,
-          fanApproval: league?.fanApproval,
-        },
-      };
-
-      // Also try localStorage backup data
-      try {
-        const manifest = localStorage.getItem("gmsim_save_manifest");
-        if (manifest) exportData.saveManifest = JSON.parse(manifest);
-      } catch (_) { /* skip */ }
-
+      const resp = await actions?.exportSave?.();
+      const exportData = resp?.payload?.data;
+      if (!exportData) throw new Error('No export payload received');
       const json = JSON.stringify(exportData, null, 2);
       const blob = new Blob([json], { type: "application/json" });
 
@@ -86,7 +60,7 @@ export default function SaveExportImport({ league, actions }) {
     } finally {
       setExporting(false);
     }
-  }, [league]);
+  }, [league, actions]);
 
   // ── Import ─────────────────────────────────────────────────────────────────
   const processFile = useCallback(async (file) => {
@@ -108,22 +82,21 @@ export default function SaveExportImport({ league, actions }) {
       const text = await file.text();
       const data = JSON.parse(text);
 
-      if (!data.league || !data.version) {
-        setError("Invalid save file: missing league data or version");
+      if (!data.snapshot || !data.version) {
+        setError("Invalid save file: missing snapshot data or version");
         return;
       }
 
-      const userTeam = data.league.teams?.find(t => t.id === data.league.userTeamId);
       setImportPreview({
         version: data.version,
-        exportDate: data.exportDate,
-        year: data.league.year,
-        week: data.league.week,
-        phase: data.league.phase,
-        teamName: userTeam?.name || "Unknown",
-        teamAbbr: userTeam?.abbr || "???",
-        teamRecord: userTeam ? `${userTeam.wins}-${userTeam.losses}` : "0-0",
-        teamsCount: data.league.teams?.length || 0,
+        exportDate: data.exportedAt || data.exportDate,
+        year: data.meta?.year,
+        week: data.meta?.currentWeek,
+        phase: data.meta?.phase,
+        teamName: data.meta?.name || "Unknown",
+        teamAbbr: "???",
+        teamRecord: "-",
+        teamsCount: data.snapshot?.teams?.length || 0,
         fileSize: formatBytes(file.size),
         fileName: file.name,
       });
@@ -150,20 +123,9 @@ export default function SaveExportImport({ league, actions }) {
     clearMessages();
     setImporting(true);
     try {
-      // Store the import data in localStorage for recovery
-      const saveKey = `gmsim_import_${Date.now()}`;
-      localStorage.setItem(saveKey, JSON.stringify(importData));
-
-      // Signal a full reset + reimport via the worker
-      if (actions?.resetLeague) {
-        await actions.resetLeague();
-      }
-
-      // Store the league state
-      localStorage.setItem("gmsim_import_pending", JSON.stringify(importData.league));
-
-      setSuccess("Save imported! Reloading to apply changes...");
-      setTimeout(() => window.location.reload(), 1500);
+      await actions?.importSave?.(importData, `Imported ${new Date().toLocaleDateString()}`);
+      setSuccess("Save imported. Loading league...");
+      setTimeout(() => window.location.reload(), 800);
     } catch (err) {
       setError(`Import failed: ${err.message}`);
     } finally {

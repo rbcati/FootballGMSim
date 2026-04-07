@@ -91,6 +91,8 @@ export const toWorker = Object.freeze({
   SAVE_SLOT:          'SAVE_SLOT',            // { slotKey }
   DELETE_SLOT:        'DELETE_SLOT',          // { slotKey }
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
+  EXPORT_SAVE:        'EXPORT_SAVE',          // { leagueId? }
+  IMPORT_SAVE:        'IMPORT_SAVE',          // { data, saveName? }
 
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
@@ -181,6 +183,7 @@ export const toUI = Object.freeze({
 
   /** Extension response */
   EXTENSION_ASK:      'EXTENSION_ASK',        // { ask }
+  EXTENSION_RESPONSE: 'EXTENSION_RESPONSE',   // { status, reason, counter? }
 
   /** Roster / FA data responses */
   ROSTER_DATA:        'ROSTER_DATA',          // { teamId, team, players[] }
@@ -218,6 +221,8 @@ export const toUI = Object.freeze({
 
   /** Fatal worker error */
   ERROR:              'ERROR',               // { message, stack? }
+  SAVE_EXPORT:        'SAVE_EXPORT',          // { data }
+  SAVE_IMPORT_RESULT: 'SAVE_IMPORT_RESULT',   // { ok, leagueId }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page

@@ -46,6 +46,7 @@ import {
 import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
+import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -53,79 +54,9 @@ const POSITIONS = ["ALL", "QB", "WR", "RB", "TE", "OL", "DL", "LB", "CB", "S"];
 
 // Depth chart layout — each entry defines one positional row.
 // `match` is the set of pos strings that map to this group.
-const DEPTH_ROWS = [
-  // ── Offense ──────────────────────────────────────────────────
-  {
-    group: "OFFENSE",
-    key: "QB",
-    label: "Quarterback",
-    match: ["QB"],
-    slots: 3,
-  },
-  {
-    group: "OFFENSE",
-    key: "RB",
-    label: "Running Back",
-    match: ["RB", "HB", "FB"],
-    slots: 3,
-  },
-  {
-    group: "OFFENSE",
-    key: "WR",
-    label: "Wide Receiver",
-    match: ["WR", "FL", "SE"],
-    slots: 5,
-  },
-  { group: "OFFENSE", key: "TE", label: "Tight End", match: ["TE"], slots: 3 },
-  {
-    group: "OFFENSE",
-    key: "OL",
-    label: "Offensive Line",
-    match: ["OL", "OT", "LT", "RT", "OG", "LG", "RG", "C"],
-    slots: 5,
-  },
-  // ── Defense ──────────────────────────────────────────────────
-  {
-    group: "DEFENSE",
-    key: "DE",
-    label: "Defensive End",
-    match: ["DE", "EDGE"],
-    slots: 3,
-  },
-  {
-    group: "DEFENSE",
-    key: "DT",
-    label: "Defensive Tackle",
-    match: ["DT", "NT", "IDL"],
-    slots: 3,
-  },
-  {
-    group: "DEFENSE",
-    key: "LB",
-    label: "Linebacker",
-    match: ["LB", "MLB", "OLB", "ILB"],
-    slots: 4,
-  },
-  {
-    group: "DEFENSE",
-    key: "CB",
-    label: "Cornerback",
-    match: ["CB", "DB", "NCB"],
-    slots: 4,
-  },
-  {
-    group: "DEFENSE",
-    key: "S",
-    label: "Safety",
-    match: ["S", "SS", "FS"],
-    slots: 3,
-  },
-  // ── Special Teams ─────────────────────────────────────────────
-  { group: "SPECIAL", key: "K", label: "Kicker", match: ["K", "PK"], slots: 1 },
-  { group: "SPECIAL", key: "P", label: "Punter", match: ["P"], slots: 1 },
-];
+const DEPTH_ROWS = getDepthRows();
 
-const SLOT_LABELS = ["Starter", "Backup", "3rd", "4th", "5th"];
+const SLOT_LABELS = ["Starter", "Backup", "3rd", "4th", "5th", "6th", "7th", "8th"];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2058,14 +1989,16 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   }, [fetchRoster]);
 
   const handleReorderDepthChart = useCallback((posKey, draggedPlayerId, targetSlotIdx) => {
-      // Find players in this posKey
-      const groupPlayers = DEPTH_ROWS.find((r) => r.key === posKey)
-          ? players.filter(p => DEPTH_ROWS.find((r) => r.key === posKey).match.includes(p.pos))
-          : [];
+      const row = DEPTH_ROWS.find((r) => r.key === posKey);
+      if (!row) return;
+      const groupPlayers = players.filter((p) => {
+        const rowKey = p?.depthChart?.rowKey;
+        return rowKey ? rowKey === posKey : row.match.includes(p.pos);
+      });
 
       let sorted = [...groupPlayers].sort((a, b) => {
-         const aOrder = a.depthOrder > 0 ? a.depthOrder : 999;
-         const bOrder = b.depthOrder > 0 ? b.depthOrder : 999;
+         const aOrder = a?.depthChart?.order ?? (a.depthOrder > 0 ? a.depthOrder : 999);
+         const bOrder = b?.depthChart?.order ?? (b.depthOrder > 0 ? b.depthOrder : 999);
          if (aOrder !== bOrder) return aOrder - bOrder;
          return (b.ovr ?? 0) - (a.ovr ?? 0);
       });
@@ -2076,13 +2009,11 @@ export default function Roster({ league, actions, onPlayerSelect }) {
       const [draggedPlayer] = sorted.splice(draggedIdx, 1);
       sorted.splice(targetSlotIdx, 0, draggedPlayer);
 
-      // Re-assign order 1-based
-      const updates = sorted.map((p, i) => ({ playerId: p.id, newOrder: i + 1 }));
+      const updates = sorted.map((p, i) => ({ playerId: p.id, newOrder: i + 1, rowKey: posKey }));
 
-      // Optimistic update
       setPlayers(prev => prev.map(p => {
           const update = updates.find(u => u.playerId === p.id);
-          if (update) return { ...p, depthOrder: update.newOrder };
+          if (update) return { ...p, depthOrder: update.newOrder, depthChart: { ...(p.depthChart || {}), rowKey: posKey, order: update.newOrder } };
           return p;
       }));
 
@@ -2109,6 +2040,16 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   const capUsed = capSnapshot.capUsed;
   const capTotal = capSnapshot.capTotal;
   const capRoom = capSnapshot.capRoom;
+  const existingDepthAssignments = {};
+  for (const row of DEPTH_ROWS) {
+    existingDepthAssignments[row.key] = players
+      .filter((p) => (p?.depthChart?.rowKey ? p.depthChart.rowKey === row.key : row.match.includes(p.pos)))
+      .sort((a, b) => (a?.depthChart?.order ?? a.depthOrder ?? 999) - (b?.depthChart?.order ?? b.depthOrder ?? 999))
+      .map((p) => p.id);
+  }
+  const depthAssignments = autoBuildDepthChart(players, existingDepthAssignments);
+  const depthAlerts = depthWarnings(depthAssignments, players);
+
   const avgOvr = players.length
     ? Math.round(
         players.reduce((s, p) => s + (p.ovr ?? 70), 0) / players.length,
@@ -2347,7 +2288,18 @@ export default function Roster({ league, actions, onPlayerSelect }) {
               No players on roster.
             </div>
           ) : (
-            <DepthChartView players={players} />
+            <>
+              {depthAlerts.length > 0 && (
+                <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>
+                  {depthAlerts.slice(0, 6).map((warning, idx) => (
+                    <div key={`${warning.rowKey}-${idx}`} style={{ fontSize: 12, color: warning.severity === "error" ? "var(--danger)" : "var(--warning)" }}>
+                      {warning.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <DepthChartView players={players} onReorder={handleReorderDepthChart} />
+            </>
           )}
         </CardContent></Card>
       )}
