@@ -44,6 +44,7 @@ import {
   summarizeExpiring,
 } from "../utils/contractInsights.js";
 import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { normalizeManagement, TRADE_STATUSES, TRADE_STATUS_LABELS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
@@ -538,6 +539,17 @@ function RosterTable({
     onRefetch();
   };
 
+  const handleManagementUpdate = async (player, updates) => {
+    if (!actions?.updatePlayerManagement || !player?.id || !teamId) return;
+    try {
+      await actions.updatePlayerManagement(player.id, teamId, updates);
+      onRefetch?.();
+    } catch (e) {
+      console.error('[Roster] updatePlayerManagement failed', e);
+    }
+  };
+
+
   const comparePlayerA = players.find(p => p.id === compareIds[0]);
   const comparePlayerB = players.find(p => p.id === compareIds[1]);
 
@@ -880,6 +892,7 @@ function RosterTable({
                         }}
                       >
                         {player.name}
+                        <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>{TRADE_STATUS_LABELS[normalizeManagement(player).tradeStatus]}{normalizeManagement(player).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(player).contractPlan[0]]}` : ""}</div>
                       </button>
                       {isResignPhase && isZeroYears && (
                         <span
@@ -1055,13 +1068,23 @@ function RosterTable({
                     {/* Release / Extend */}
                     <TableCell style={{ textAlign: "center", padding: "0 var(--space-2)" }}>
                       {player?.id && (
-                        <button
-                          className={`trade-block-btn ${player?.onTradeBlock ? "active" : ""}`}
-                          onClick={() => player?.id && handleTradeBlockToggle(player.id)}
-                          title={player?.onTradeBlock ? "Remove from trade block" : "Place on trade block"}
-                        >
-                          {player?.onTradeBlock ? "🔴 On Block" : "➕ Trade Block"}
-                        </button>
+                        <div style={{ display: 'grid', gap: 4 }}>
+                          <select
+                            value={normalizeManagement(player).tradeStatus}
+                            onChange={(e) => handleManagementUpdate(player, { tradeStatus: e.target.value })}
+                            style={{ fontSize: 11, borderRadius: 6, border: '1px solid var(--hairline)', background: 'var(--surface)' }}
+                            title="Trade posture"
+                          >
+                            {TRADE_STATUSES.map((status) => <option key={status} value={status}>{TRADE_STATUS_LABELS[status]}</option>)}
+                          </select>
+                          <button
+                            className="trade-block-btn"
+                            onClick={() => handleManagementUpdate(player, { contractPlan: toggleContractPlan(player, 'trade_candidate') })}
+                            title="Toggle trade candidate contract plan"
+                          >
+                            {normalizeManagement(player).contractPlan.includes('trade_candidate') ? '✓ Trade candidate' : '+ Trade candidate'}
+                          </button>
+                        </div>
                       )}
                     </TableCell>
                     {/* Release / Extend */}

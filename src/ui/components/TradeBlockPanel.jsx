@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { normalizeManagement } from "../utils/playerManagement.js";
 
 export default function TradeBlockPanel({ roster, onRemove }) {
   if (!roster || !Array.isArray(roster)) {
@@ -8,7 +9,10 @@ export default function TradeBlockPanel({ roster, onRemove }) {
 
   const [open, setOpen] = useState(true);
   const blockPlayers = useMemo(
-    () => roster.filter((player) => player?.onTradeBlock === true),
+    () => roster.filter((player) => {
+      const m = normalizeManagement(player);
+      return player?.onTradeBlock === true || m.tradeStatus === 'actively_shopping' || m.contractPlan.includes('trade_candidate');
+    }),
     [roster],
   );
 

@@ -482,6 +482,8 @@ export function useWorker() {
       request(toWorker.COUNTER_INCOMING_TRADE, { offerId, offering, receiving }),
     toggleTradeBlock: (playerId, teamId) =>
       request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
+    updatePlayerManagement: (playerId, teamId, updates) =>
+      request(toWorker.UPDATE_PLAYER_MANAGEMENT, { playerId, teamId, updates }),
 
     /** Get contract extension demand from AI (returns Promise). */
     getExtensionAsk: (playerId) =>

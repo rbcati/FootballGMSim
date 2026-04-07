@@ -113,6 +113,7 @@ export function evaluateWeeklyContext(league) {
   const capRoom = safeNum(userTeam?.capRoom ?? userTeam?.capSpace, 0);
   const injuries = (userTeam?.roster ?? []).filter((p) => p?.injury || safeNum(p?.injuredWeeks) > 0);
   const expiring = (userTeam?.roster ?? []).filter((p) => safeNum(p?.contract?.yearsRemaining ?? p?.contractYearsLeft ?? p?.years ?? 2, 2) <= 1);
+  const priorityDeadline = (userTeam?.roster ?? []).filter((p) => Array.isArray(p?.contractPlan) && p.contractPlan.includes('prioritize_deadline'));
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
   const direction = classifyDirection(userTeam, week);
   const intel = buildTeamIntelligence(userTeam, { week });
@@ -154,6 +155,9 @@ export function evaluateWeeklyContext(league) {
     urgent.push({ tone: 'warning', level: 'recommendation', rank: 60, label: 'Cap Flex Unused', detail: `You still have $${capRoom.toFixed(1)}M in space.`, why: 'Unused cap in contention windows can waste roster opportunity.', tab: '💰 Cap' });
   }
 
+  if (priorityDeadline.length > 0) {
+    urgent.push({ tone: 'warning', level: 'urgent', rank: 78, label: 'Deadline Priorities', detail: `${priorityDeadline.length} players flagged for deadline action.`, why: 'Your contract plan marks these as must-act before value drops.', tab: 'Financials' });
+  }
   if (expiring.length >= 5 && week >= 8) {
     urgent.push({ tone: 'info', level: 'recommendation', rank: 58, label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, why: 'Delays increase free-agency replacement pressure.', tab: 'Financials' });
   }

@@ -13,6 +13,7 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile, describeRookieOnboarding } from "../utils/teamIntelligence.js";
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
+import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -343,6 +344,16 @@ export default function PlayerProfile({
   const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
   const moraleContext = useMemo(() => describePlayerMoraleContext(player, { team: userTeam, chemistry, week: data?.meta?.week ?? 1 }), [player, userTeam, chemistry, data?.meta?.week]);
   const onboardingContext = useMemo(() => ((isProspect || Number(player?.age ?? 30) <= 24) ? describeRookieOnboarding(player, teamIntel) : null), [isProspect, player, teamIntel]);
+
+  const management = useMemo(() => normalizeManagement(player), [player]);
+  const updateManagement = async (updates) => {
+    if (!player?.id || !actions?.updatePlayerManagement || !player?.teamId) return;
+    await actions.updatePlayerManagement(player.id, player.teamId, updates);
+    setData((prev) => {
+      if (!prev?.player) return prev;
+      return { ...prev, player: { ...prev.player, ...updates, onTradeBlock: updates?.tradeStatus === 'actively_shopping' } };
+    });
+  };
   const stats = data?.stats ?? [];
   const columns = getColumns(player?.pos);
 
@@ -631,6 +642,28 @@ export default function PlayerProfile({
                     >
                       Negotiate Extension
                     </Button>
+                  </div>
+                )}
+                {player.status === "active" && player?.teamId != null && (
+                  <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 6, maxWidth: 360 }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Trade posture</div>
+                    <select
+                      value={management.tradeStatus}
+                      onChange={(e) => updateManagement({ tradeStatus: e.target.value })}
+                      style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '4px 6px', background: 'var(--surface)' }}
+                      title={TRADE_STATUS_TOOLTIPS[management.tradeStatus]}
+                    >
+                      {TRADE_STATUSES.map((status) => (
+                        <option key={status} value={status}>{TRADE_STATUS_LABELS[status]}</option>
+                      ))}
+                    </select>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {CONTRACT_PLAN_FLAGS.map((flag) => (
+                        <Button key={flag} size="sm" variant="outline" onClick={() => updateManagement({ contractPlan: toggleContractPlan(player, flag) })} style={{ opacity: management.contractPlan.includes(flag) ? 1 : 0.7 }}>
+                          {management.contractPlan.includes(flag) ? '✓ ' : ''}{CONTRACT_PLAN_LABELS[flag]}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>

@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
+import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,7 @@ export default function FinancialsView({ league, actions }) {
   const [sortDir, setSortDir] = useState("desc");
   const [notification, setNotification] = useState(null);
   const [contractMarks, setContractMarks] = useState({});
+  const [applyingBatch, setApplyingBatch] = useState(false);
 
   const teamId = league?.userTeamId;
   const phase = league?.phase ?? "";
@@ -236,7 +238,8 @@ export default function FinancialsView({ league, actions }) {
         const estimatedDemand = Math.max(Number(p?.contract?.baseAnnual ?? 0) * 1.12, Number(p?.ovr ?? 60) * 0.14);
         const willingness = rec.negotiationRisk === 'Low' ? 'High' : rec.negotiationRisk === 'High' ? 'Low' : 'Medium';
         const marketPressure = rec.replacementDifficulty === 'High' ? 'High' : rec.replacementDifficulty === 'Medium' ? 'Medium' : 'Low';
-        return { ...p, rec, estimatedDemand, willingness, marketPressure };
+        const management = normalizeManagement(p);
+        return { ...p, rec, estimatedDemand, willingness, marketPressure, management };
       });
     const summary = {
       expiringStarters: expiring.filter((p) => (p.ovr ?? 0) >= 75).length,
@@ -247,6 +250,31 @@ export default function FinancialsView({ league, actions }) {
     return { rows: expiring, summary };
   }, [enriched, userTeam, league?.week]);
 
+
+  const applyExpiringBatchAction = useCallback(async (flag) => {
+    const rows = expiringDashboard.rows ?? [];
+    if (!rows.length || !actions?.updatePlayerManagement || !teamId) return;
+    setApplyingBatch(true);
+    try {
+      await Promise.all(rows.map((row) => {
+        const current = normalizeManagement(row);
+        const nextPlan = current.contractPlan.includes(flag)
+          ? current.contractPlan.filter((f) => f !== flag)
+          : [...current.contractPlan.filter((f) => f !== flag), flag];
+        return actions.updatePlayerManagement(row.id, teamId, {
+          contractPlan: nextPlan,
+          tradeStatus: flag === 'trade_candidate' ? 'actively_shopping' : current.tradeStatus,
+        });
+      }));
+      await fetchRoster();
+      setContractMarks((prev) => ({ ...prev, batchAction: flag }));
+      setNotification({ type: 'success', msg: `Updated contract plan: ${CONTRACT_PLAN_LABELS[flag]}.` });
+    } catch (e) {
+      setNotification({ type: 'error', msg: e?.message ?? 'Unable to apply contract plan batch action.' });
+    } finally {
+      setApplyingBatch(false);
+    }
+  }, [actions, expiringDashboard.rows, fetchRoster, teamId]);
   const capByYear = useMemo(() => {
     const years = [1, 2, 3, 4];
     return years.map((yr) => {
@@ -549,18 +577,18 @@ export default function FinancialsView({ league, actions }) {
             <StatBox label="Next-year cap risk" value={expiringDashboard.summary.capRiskNextYear} />
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'shortlist_extension' }))}>Shortlist for extension</Button>
-            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'mark_trade' }))}>Mark as trade candidate</Button>
-            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'defer_offseason' }))}>Defer to offseason</Button>
-            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'before_deadline' }))}>Prioritize before deadline</Button>
+            <Button className="btn" disabled={applyingBatch} onClick={() => applyExpiringBatchAction('shortlist_extension')}>Shortlist for extension</Button>
+            <Button className="btn" disabled={applyingBatch} onClick={() => applyExpiringBatchAction('trade_candidate')}>Mark as trade candidate</Button>
+            <Button className="btn" disabled={applyingBatch} onClick={() => applyExpiringBatchAction('defer_offseason')}>Defer to offseason</Button>
+            <Button className="btn" disabled={applyingBatch} onClick={() => applyExpiringBatchAction('prioritize_deadline')}>Prioritize before deadline</Button>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Recommended focus: {expiringDashboard.summary.expiringStarters >= 3 ? 'address starters now' : 'selective extensions'} · batch mode: {contractMarks.batchAction ?? 'none'}.
+            Recommended focus: {expiringDashboard.summary.expiringStarters >= 3 ? 'address starters now' : 'selective extensions'} · batch mode: {contractMarks.batchAction ? (CONTRACT_PLAN_LABELS[contractMarks.batchAction] ?? contractMarks.batchAction) : 'none'}.
           </div>
           <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>
             {expiringDashboard.rows.map((row) => (
               <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr repeat(7, minmax(70px, 1fr))', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 12 }}>
-                <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div><div style={{ color: row.rec.tone }}>{row.rec.label}</div></div>
+                <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div><div style={{ color: row.rec.tone }}>{row.rec.label}</div><div style={{ color: 'var(--text-subtle)' }}>Plan: {row.management.contractPlan[0] ? (CONTRACT_PLAN_LABELS[row.management.contractPlan[0]] ?? row.management.contractPlan[0]) : 'None'} · Trade status: {row.management.tradeStatus}</div></div>
                 <div>{row.ovr}/{row.potential ?? row.ovr}</div>
                 <div>{fmt(row.capHit)}</div>
                 <div>{fmt(row.estimatedDemand)}</div>

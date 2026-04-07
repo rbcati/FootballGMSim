@@ -4,13 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { computeTeamNeedsSummary } from '../utils/marketSignals.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
-import { rankTradePartners, playerAssetValue, pickAssetValue } from '../utils/tradeFinder.js';
+import { rankTradePartners, playerAssetValue, pickAssetValue, buildCounterAdjustment } from '../utils/tradeFinder.js';
+import { normalizeManagement, CONTRACT_PLAN_LABELS, TRADE_STATUS_LABELS } from '../utils/playerManagement.js';
 
 function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
 const prefLabel = {
-  starter_now: 'Prefers player value',
+  starter_now: 'Prefers starter-now package',
   pick_or_youth: 'Prefers pick/youth value',
+  future_control: 'Prefers future-control assets',
   balanced_package: 'Prefers balanced package',
 };
 
@@ -23,6 +25,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
   const [outgoingPlayers, setOutgoingPlayers] = useState([]);
   const [outgoingPicks, setOutgoingPicks] = useState([]);
   const [incomingPlayers, setIncomingPlayers] = useState([]);
+  const [helperReason, setHelperReason] = useState('');
 
   const userRoster = useMemo(() => [...(userTeam?.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0),), [userTeam]);
   const userPicks = useMemo(() => [...(userTeam?.picks ?? [])].sort((a, b) => Number(a.round ?? 7) - Number(b.round ?? 7)).slice(0, 8), [userTeam]);
@@ -51,25 +54,54 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
 
   const askWhatTheyOffer = () => {
     if (!selectedPartner) return;
-    const candidate = [...(selectedPartner.roster ?? [])]
-      .filter((p) => (p.ovr ?? 0) >= 68)
-      .sort((a, b) => Math.abs(playerAssetValue(a, { direction: 'balanced' }) - outgoingValue) - Math.abs(playerAssetValue(b, { direction: 'balanced' }) - outgoingValue))[0];
-    if (candidate) setIncomingPlayers([candidate.id]);
+    const partnerIntel = teamsWithIntel.find((t) => Number(t.id) === Number(selectedPartner.id))?.teamIntel ?? {};
+    const needNow = (partnerIntel?.needsNow ?? [])[0]?.pos ?? null;
+    const direction = partnerIntel?.direction ?? 'balanced';
+    const candidates = [...(selectedPartner.roster ?? [])]
+      .filter((p) => (p.ovr ?? 0) >= 64)
+      .filter((p) => {
+        const m = normalizeManagement(p);
+        return m.tradeStatus !== 'untouchable' && m.tradeStatus !== 'not_available';
+      })
+      .sort((a, b) => {
+        const aNeed = needNow && String(a?.pos).toUpperCase() === String(needNow).toUpperCase() ? -40 : 0;
+        const bNeed = needNow && String(b?.pos).toUpperCase() === String(needNow).toUpperCase() ? -40 : 0;
+        const aDir = direction === 'rebuilding' ? ((a.age ?? 30) <= 26 ? -18 : 8) : ((a.ovr ?? 0) >= 74 ? -14 : 6);
+        const bDir = direction === 'rebuilding' ? ((b.age ?? 30) <= 26 ? -18 : 8) : ((b.ovr ?? 0) >= 74 ? -14 : 6);
+        return Math.abs(playerAssetValue(a, { direction: 'balanced' }) - outgoingValue) + aNeed + aDir
+          - (Math.abs(playerAssetValue(b, { direction: 'balanced' }) - outgoingValue) + bNeed + bDir);
+      });
+    const candidate = candidates[0];
+    if (candidate) {
+      setIncomingPlayers([candidate.id]);
+      setHelperReason(`${selectedPartner.abbr} counters with ${candidate.name} based on ${direction} timeline and positional need.`);
+    }
   };
 
   const makeDealWork = () => {
     if (!selectedPartner) return;
     const theirRoster = [...(selectedPartner.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
     const incoming = incomingPlayers.map((id) => theirRoster.find((p) => Number(p.id) === Number(id))).filter(Boolean);
-    const incomingValue = incoming.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0);
-    if (incomingValue > outgoingValue * 1.12 && selectedOutgoingPicks.length === 0 && userPicks[0]) {
+    const adjustment = buildCounterAdjustment({
+      partnerTeam: teamsWithIntel.find((t) => Number(t.id) === Number(selectedPartner.id)) ?? selectedPartner,
+      outgoingPlayers: selectedOutgoingPlayers,
+      outgoingPicks: selectedOutgoingPicks,
+      incomingPlayers: incoming,
+      week,
+    });
+
+    if (adjustment.type === 'add_pick' && userPicks[0]) {
       setOutgoingPicks((prev) => prev.includes(userPicks[0].id) ? prev : [...prev, userPicks[0].id]);
-      return;
+    } else if (adjustment.playerId) {
+      setIncomingPlayers((prev) => prev.includes(adjustment.playerId) ? prev : [...prev, adjustment.playerId]);
+    } else if (adjustment.type === 'balance_salary') {
+      const lowerSalary = theirRoster.find((p) => !incomingPlayers.includes(p.id) && Number(p?.contract?.baseAnnual ?? 0) <= 8 && (p.ovr ?? 0) >= 64);
+      if (lowerSalary) setIncomingPlayers((prev) => prev.includes(lowerSalary.id) ? prev : [...prev, lowerSalary.id]);
+    } else if (adjustment.type === 'small_add') {
+      const fourth = userPicks.find((pk) => Number(pk.round ?? 7) >= 4) ?? userPicks[0];
+      if (fourth) setOutgoingPicks((prev) => prev.includes(fourth.id) ? prev : [...prev, fourth.id]);
     }
-    if (outgoingValue > incomingValue * 1.25) {
-      const addTarget = theirRoster.find((p) => !incomingPlayers.includes(p.id) && (p.ovr ?? 0) >= 65);
-      if (addTarget) setIncomingPlayers((prev) => [...prev, addTarget.id]);
-    }
+    setHelperReason(adjustment.explain);
   };
 
   const openTrade = async () => {
@@ -89,7 +121,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 4 }}>
                 {userRoster.slice(0, 32).map((p) => (
                   <button key={p.id} onClick={() => setOutgoingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: outgoingPlayers.includes(p.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '6px 8px' }}>
-                    {p.pos} {p.name} · {p.ovr} OVR · {money(p?.contract?.baseAnnual)}
+                    {p.pos} {p.name} · {p.ovr} OVR · {money(p?.contract?.baseAnnual)} · {TRADE_STATUS_LABELS[normalizeManagement(p).tradeStatus]}{normalizeManagement(p).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(p).contractPlan[0]]}` : ''}
                   </button>
                 ))}
               </div>
@@ -149,6 +181,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               <Button className="btn" onClick={askWhatTheyOffer}>Ask what they would offer</Button>
               <Button className="btn" onClick={makeDealWork}>Make this deal work</Button>
             </div>
+            {helperReason ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Adjustment note: {helperReason}</div> : null}
           </CardContent>
         </Card>
       )}
