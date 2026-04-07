@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile } from "../utils/teamIntelligence.js";
+import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -339,6 +340,8 @@ export default function PlayerProfile({
   const isProspect = player?.status === "draft_eligible";
   const prospectProfile = useMemo(() => (isProspect ? describeProspectProfile(player) : null), [isProspect, player]);
   const needFit = useMemo(() => (isProspect ? classifyNeedFitForProspect(player?.pos, teamIntel) : null), [isProspect, player?.pos, teamIntel]);
+  const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
+  const moraleContext = useMemo(() => describePlayerMoraleContext(player, { team: userTeam, chemistry, week: data?.meta?.week ?? 1 }), [player, userTeam, chemistry, data?.meta?.week]);
   const stats = data?.stats ?? [];
   const columns = getColumns(player?.pos);
 
@@ -713,6 +716,29 @@ export default function PlayerProfile({
               </div>
             </section>
           )}
+
+
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Morale & Role Context</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Current morale</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{moraleContext?.state ?? "Steady"} · {moraleContext?.score ?? player?.morale ?? "—"}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Team environment</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{chemistry?.state ?? "Stable"}</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                {(moraleContext?.reasons ?? []).slice(0, 3).map((reason, idx) => (
+                  <div key={`mctx-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• {reason}</div>
+                ))}
+              </div>
+            </section>
+          )}
+
 
           {!loading && player && (
             <section>

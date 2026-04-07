@@ -1,4 +1,5 @@
 import { classifyTeamDirection } from "./contractInsights.js";
+import { buildTeamChemistrySummary } from "./teamChemistry.js";
 
 const POSITION_TARGETS = {
   QB: { starters: 1, playableDepth: 2 },
@@ -77,6 +78,7 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
       capStressContracts: [],
       upsideGroups: [],
       warnings: [],
+      chemistry: buildTeamChemistrySummary(team, { week, direction }),
     };
   }
 
@@ -154,6 +156,8 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
   if (agingCoreWarnings.length > 0) warnings.push(agingCoreWarnings[0]);
   if (capStressContracts.length >= 2) warnings.push("Cap tied in aging veterans");
 
+  const chemistry = buildTeamChemistrySummary(team, { week, direction });
+
   return {
     direction,
     needsNow: needsNow.slice(0, 4),
@@ -164,6 +168,7 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
     capStressContracts,
     upsideGroups,
     warnings: warnings.slice(0, 4),
+    chemistry,
   };
 }
 
@@ -203,12 +208,15 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   const age = safeNum(player?.age, 28);
   const direction = intel?.direction ?? "middling";
   const directionFit = direction === "contender" ? (age <= 30 ? 1 : 0.75) : direction === "rebuilding" ? (age <= 27 ? 1 : 0.55) : (age <= 29 ? 1 : 0.8);
-  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20;
+  const chemistryAppeal = safeNum(intel?.chemistry?.freeAgencyAppeal, 0);
+  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20 + chemistryAppeal * 2;
   let reason = "Depth option";
   if (needNow) reason = `Immediate starter/depth at ${pos}`;
   else if (needLater) reason = `Future need coverage at ${pos}`;
   if (direction === "rebuilding" && age <= 26) reason = `${reason} with rebuild age profile`;
   if (ask > Math.max(capRoom, 1) * 0.75) reason = `Likely expensive for current cap flexibility`;
+  else if (chemistryAppeal >= 3) reason = `${reason} in a stable locker room`;
+  else if (chemistryAppeal <= -2) reason = `${reason}, but locker-room stability is a concern`;
   return { score, reason, pos, ask };
 }
 

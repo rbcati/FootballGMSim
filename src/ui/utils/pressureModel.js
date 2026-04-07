@@ -145,6 +145,7 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
   const rookieQb = roster.find((p) => String(p?.pos ?? '').toUpperCase() === 'QB' && safeNum(p?.age, 30) <= 24 && safeNum(p?.ovr, 0) >= 70);
   const transactionNarrative = detectTransactionNarrative(league, league?.userTeamId);
   const ownerGoals = Array.isArray(league?.ownerGoals) ? league.ownerGoals : [];
+  const chemistry = intel?.chemistry ?? null;
 
   let ownerScore = ownerApprovalBase;
   const ownerReasons = [];
@@ -194,6 +195,13 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
     fanReasons.unshift(transactionNarrative.fan);
     fanScore += transactionNarrative.fan.includes('backlash') ? -6 : 6;
   }
+  if (chemistry?.state === 'Strong locker room') {
+    fanScore += 4;
+    fanReasons.push('Strong locker room is visible to fans');
+  } else if (chemistry?.state === 'Fragmented') {
+    fanScore -= 7;
+    fanReasons.push('Fans sense tension inside the locker room');
+  }
 
   let mediaScore = 46;
   const mediaReasons = [];
@@ -216,6 +224,10 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
     mediaScore += 10;
     mediaReasons.push('Playoff stage amplified the narrative');
   }
+  if (chemistry?.state === 'Uneasy' || chemistry?.state === 'Fragmented') {
+    mediaScore += chemistry.state === 'Fragmented' ? 11 : 6;
+    mediaReasons.push('Media is tracking locker-room chemistry closely');
+  }
 
   ownerScore = clamp(Math.round(ownerScore));
   fanScore = clamp(Math.round(fanScore));
@@ -227,9 +239,11 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
     ? 'Owner patience is thinning. Job-security warnings are more likely if results do not stabilize.'
     : mediaScore >= 75
       ? 'Media scrutiny is amplifying every loss and major move.'
-      : fanScore < 45
-        ? 'Fan confidence is slipping despite long-term flexibility.'
-        : 'Pressure is manageable if weekly results stay aligned with your plan.';
+      : chemistry?.state === 'Fragmented'
+        ? 'Locker-room instability is now amplifying every external pressure signal.'
+        : fanScore < 45
+          ? 'Fan confidence is slipping despite long-term flexibility.'
+          : 'Pressure is manageable if weekly results stay aligned with your plan.';
 
   const fanNote = fanReasons[0] ?? 'Supporters are waiting for a clearer direction signal.';
   const mediaNote = mediaReasons[0] ?? 'Local media is tracking your next inflection point.';
