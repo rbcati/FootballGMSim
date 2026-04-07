@@ -13,13 +13,13 @@ import { Utils as UtilsImport } from './utils.js';
  * @param {Object} Utils - Utils dependency.
  * @returns {Array} Array of draft pick objects.
  */
-const generateDraftPicks = (teamId, startYear, years = 3, Utils) => {
+const generateDraftPicks = (teamId, startYear, years = 3, Utils, rounds = 7) => {
     const picks = [];
     // Fallback ID generator if Utils is missing or doesn't have id()
     const genId = Utils?.id || (() => Math.random().toString(36).slice(2, 10));
 
     for (let y = 0; y < years; y++) {
-        for (let r = 1; r <= 7; r++) {
+        for (let r = 1; r <= rounds; r++) {
             picks.push({
                 id: genId(),
                 round: r,
@@ -251,7 +251,8 @@ function makeLeague(teams, options = {}, dependencies = {}) {
 
             // Delegate tasks to specialized functions
             team.roster = initializeRoster(team, Constants, Utils, makePlayer, eliteNames);
-            team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils);
+            const draftRounds = Math.max(1, Math.min(12, Number(options?.settings?.draftRounds ?? 7)));
+            team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils, draftRounds);
 
             if (generateInitialStaff) {
                 team.staff = generateInitialStaff();

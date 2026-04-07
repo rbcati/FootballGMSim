@@ -94,6 +94,8 @@ export const toWorker = Object.freeze({
   RESET_LEAGUE:       'RESET_LEAGUE',         // wipe everything
   EXPORT_SAVE:        'EXPORT_SAVE',          // { leagueId? }
   IMPORT_SAVE:        'IMPORT_SAVE',          // { data, saveName? }
+  EXPORT_LEAGUE_CONFIG: 'EXPORT_LEAGUE_CONFIG', // {}
+  IMPORT_LEAGUE_CONFIG: 'IMPORT_LEAGUE_CONFIG', // { config }
 
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
@@ -226,6 +228,7 @@ export const toUI = Object.freeze({
   ERROR:              'ERROR',               // { message, stack? }
   SAVE_EXPORT:        'SAVE_EXPORT',          // { data }
   SAVE_IMPORT_RESULT: 'SAVE_IMPORT_RESULT',   // { ok, leagueId }
+  LEAGUE_CONFIG_EXPORT: 'LEAGUE_CONFIG_EXPORT', // { data }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page

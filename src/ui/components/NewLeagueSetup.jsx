@@ -43,6 +43,12 @@ const DRAFT_ORDER_TYPES = [
   { value: "random", label: "Random", desc: "Fully randomized draft order" },
 ];
 
+const SCHEDULE_BALANCE_OPTIONS = [
+  { value: "balanced", label: "Balanced" },
+  { value: "division-heavy", label: "Division Heavy" },
+  { value: "conference-heavy", label: "Conference Heavy" },
+];
+
 export default function NewLeagueSetup({ actions, onCancel }) {
   // Step management
   const [step, setStep] = useState(0); // 0: team, 1: settings, 2: confirm
@@ -71,6 +77,11 @@ export default function NewLeagueSetup({ actions, onCancel }) {
   const [playerMoodVolatility, setPlayerMoodVolatility] = useState(DEFAULT_LEAGUE_SETTINGS.playerMoodVolatility);
   const [staffImpactStrength, setStaffImpactStrength] = useState(DEFAULT_LEAGUE_SETTINGS.staffImpactStrength);
   const [freeAgencyAggressiveness, setFreeAgencyAggressiveness] = useState(DEFAULT_LEAGUE_SETTINGS.freeAgencyAggressiveness);
+  const [leagueSize, setLeagueSize] = useState(DEFAULT_LEAGUE_SETTINGS.leagueSize);
+  const [draftRounds, setDraftRounds] = useState(DEFAULT_LEAGUE_SETTINGS.draftRounds);
+  const [scheduleBalancePreset, setScheduleBalancePreset] = useState(DEFAULT_LEAGUE_SETTINGS.scheduleBalancePreset);
+  const [conferenceNames, setConferenceNames] = useState(DEFAULT_LEAGUE_SETTINGS.conferenceNames.join(", "));
+  const [divisionNames, setDivisionNames] = useState(DEFAULT_LEAGUE_SETTINGS.divisionNames.join(", "));
 
   // Team filter
   const [activeFilter, setActiveFilter] = useState(0);
@@ -122,11 +133,17 @@ export default function NewLeagueSetup({ actions, onCancel }) {
         playerMoodVolatility,
         staffImpactStrength,
         freeAgencyAggressiveness,
+        leagueSize,
+        draftRounds,
+        scheduleBalancePreset,
+        conferenceNames: conferenceNames.split(",").map(v => v.trim()).filter(Boolean),
+        divisionNames: divisionNames.split(",").map(v => v.trim()).filter(Boolean),
+        customDifficultyEnabled: true,
         difficultyPreset: difficulty,
         leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
       },
     });
-  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, actions]);
+  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions]);
 
   const canProceed = step === 0 ? selectedTeam !== null : true;
 
@@ -388,6 +405,10 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                   />
                 </div>
                 <div className="settings-group">
+                  <label className="settings-label">League Size</label>
+                  <Input className="settings-input" type="number" min={4} max={32} value={leagueSize} onChange={e => setLeagueSize(Math.max(4, Math.min(32, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
                   <label className="settings-label">Season Length</label>
                   <Input className="settings-input" type="number" min={4} max={24} value={seasonLength} onChange={e => setSeasonLength(Math.max(4, Math.min(24, Number(e.target.value))))} />
                 </div>
@@ -451,6 +472,24 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                 <div className="settings-group">
                   <label className="settings-label">Staff Impact Strength (0-100)</label>
                   <Input className="settings-input" type="number" min={0} max={100} value={staffImpactStrength} onChange={e => setStaffImpactStrength(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Draft Rounds</label>
+                  <Input className="settings-input" type="number" min={1} max={12} value={draftRounds} onChange={e => setDraftRounds(Math.max(1, Math.min(12, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Schedule Balance Preset</label>
+                  <select className="settings-select" value={scheduleBalancePreset} onChange={e => setScheduleBalancePreset(e.target.value)}>
+                    {SCHEDULE_BALANCE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </select>
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Conference Names (comma separated)</label>
+                  <Input className="settings-input" type="text" value={conferenceNames} onChange={e => setConferenceNames(e.target.value)} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Division Names (comma separated)</label>
+                  <Input className="settings-input" type="text" value={divisionNames} onChange={e => setDivisionNames(e.target.value)} />
                 </div>
                 <div className="settings-group">
                   <label className="settings-label">Free Agency Aggressiveness (0-100)</label>

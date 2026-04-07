@@ -472,16 +472,22 @@ function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
   );
 }
 
-function StandingsTab({ teams, userTeamId, onTeamSelect }) {
-  const [activeConf, setActiveConf] = useState("AFC");
+function StandingsTab({ teams, userTeamId, onTeamSelect, leagueSettings }) {
+  const confNames = Array.isArray(leagueSettings?.conferenceNames) && leagueSettings.conferenceNames.length
+    ? leagueSettings.conferenceNames
+    : CONFS;
+  const divNames = Array.isArray(leagueSettings?.divisionNames) && leagueSettings.divisionNames.length
+    ? leagueSettings.divisionNames
+    : DIVS.map((d) => d.name);
+  const [activeConf, setActiveConf] = useState(confNames[0] || "AFC");
   const [viewMode, setViewMode] = useState("division"); // "division" | "playoff"
 
   // Normalise activeConf label → numeric index for comparison
-  const activeConfIdx = activeConf === "AFC" ? 0 : 1;
+  const activeConfIdx = Math.max(0, confNames.indexOf(activeConf));
 
   const grouped = useMemo(() => {
     const confTeams = teams.filter((t) => confIdx(t.conf) === activeConfIdx);
-    const groups = DIVS.map(({ name, idx }) => ({
+    const groups = divNames.map((name, idx) => ({
       div: name,
       teams: confTeams
         .filter((t) => divIdx(t.div) === idx)
@@ -503,7 +509,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
       });
     }
     return groups;
-  }, [teams, activeConfIdx, userTeamId]);
+  }, [teams, activeConfIdx, userTeamId, divNames]);
 
   return (
     <div>
@@ -511,7 +517,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
         <Tabs value={activeConf} onValueChange={setActiveConf}>
           <TabsList style={{ minHeight: 34 }}>
-            {CONFS.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
+            {confNames.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
           </TabsList>
         </Tabs>
         <Tabs value={viewMode} onValueChange={setViewMode}>
@@ -1802,6 +1808,7 @@ export default function LeagueDashboard({
               teams={league.teams}
               userTeamId={league.userTeamId}
               onTeamSelect={setSelectedTeamId}
+              leagueSettings={league.settings}
             />
           </TabErrorBoundary>
         )}

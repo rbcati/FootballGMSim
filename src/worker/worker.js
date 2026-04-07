@@ -133,6 +133,12 @@ function getSafeMeta() {
   };
 }
 
+function getLeagueSetting(key, fallback = null) {
+  const meta = getSafeMeta();
+  const settings = normalizeLeagueSettings(meta?.settings ?? {});
+  return settings?.[key] ?? fallback;
+}
+
 function normalizeFranchiseInvestments(raw = {}) {
   const base = {
     stadiumLevel: 1,
@@ -1026,6 +1032,19 @@ async function handleNewLeague(payload, id) {
       leagueName: options.name ?? options.settings?.leagueName ?? '',
     });
 
+    const conferenceNames = Array.isArray(options?.settings?.conferenceNames) && options.settings.conferenceNames.length
+      ? options.settings.conferenceNames
+      : resolvedSettings.conferenceNames;
+    const divisionNames = Array.isArray(options?.settings?.divisionNames) && options.settings.divisionNames.length
+      ? options.settings.divisionNames
+      : resolvedSettings.divisionNames;
+    const targetLeagueSize = Math.max(4, Math.min(teamDefs.length, Number(resolvedSettings.leagueSize || teamDefs.length)));
+    const configuredTeams = (teamDefs ?? []).slice(0, targetLeagueSize).map((team, idx) => ({
+      ...team,
+      conf: Number.isFinite(Number(team?.conf)) ? Number(team.conf) : (idx % Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))),
+      div: Number.isFinite(Number(team?.div)) ? Number(team.div) : (Math.floor(idx / Math.max(1, Number(resolvedSettings.conferenceCount ?? 2))) % Math.max(1, Number(resolvedSettings.divisionCountPerConference ?? 4))),
+    }));
+
     // Generate new League ID
     const leagueId = await createUniqueLeagueId();
     configureActiveLeague(leagueId);
@@ -1042,7 +1061,10 @@ async function handleNewLeague(payload, id) {
     }
 
     // Generate via existing core logic
-    const league = makeLeague(teamDefs, options, {
+    const league = makeLeague(configuredTeams, {
+        ...options,
+        settings: resolvedSettings,
+      }, {
         makeSchedule: makeScheduleFn,
         generateInitialStaff: generateInitialStaff
     });
@@ -1055,7 +1077,7 @@ async function handleNewLeague(payload, id) {
     const seasonId = `s${league.season ?? 1}`;
     const meta = {
       id:              'league',
-      name:            `League ${leagueId}`, // Store name in league meta too
+      name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
       currentSeasonId: seasonId,
       currentWeek:     1,
@@ -1063,7 +1085,12 @@ async function handleNewLeague(payload, id) {
       season:          league.season ?? 1,
       phase:           'regular',
       difficulty:      options.difficulty ?? 'Normal',
-      settings:        resolvedSettings,
+      settings:        normalizeLeagueSettings({
+        ...resolvedSettings,
+        conferenceNames,
+        divisionNames,
+        leagueSize: configuredTeams.length,
+      }),
       commissionerMode: !!options.godMode,
       commissionerEverEnabled: !!options.godMode,
       commissionerLog: [],
@@ -1514,7 +1541,7 @@ async function handleAdvanceWeek(payload, id) {
   const BATCH_SIZE = 2;
   const gamesToSim = [...league._weekGames];
   const results    = [];
-  const injuryFactor = Math.max(0, Number(meta?.settings?.injuryFrequency ?? 50) / 50);
+  const injuryFactor = Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50);
 
   for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
     const batch = gamesToSim.slice(i, i + BATCH_SIZE);
@@ -2766,6 +2793,81 @@ async function handleExportSave(payload, id) {
   }
 }
 
+async function handleExportLeagueConfig(payload, id) {
+  try {
+    const meta = getSafeMeta();
+    const data = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      leagueConfig: {
+        settings: normalizeLeagueSettings(meta?.settings ?? {}),
+        identity: {
+          leagueName: meta?.name ?? '',
+          conferenceNames: normalizeLeagueSettings(meta?.settings ?? {}).conferenceNames,
+          divisionNames: normalizeLeagueSettings(meta?.settings ?? {}).divisionNames,
+          teams: (cache.getAllTeams() ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            abbr: t.abbr,
+            conf: t.conf,
+            div: t.div,
+            colorPrimary: t.colorPrimary ?? null,
+            colorSecondary: t.colorSecondary ?? null,
+          })),
+        },
+      },
+    };
+    post(toUI.LEAGUE_CONFIG_EXPORT, { data }, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'League config export failed.' }, id);
+  }
+}
+
+async function handleImportLeagueConfig({ config }, id) {
+  if (!cache.isLoaded()) {
+    post(toUI.ERROR, { message: 'No league loaded' }, id);
+    return;
+  }
+  const incoming = config?.leagueConfig ?? config ?? {};
+  const incomingSettings = normalizeLeagueSettings(incoming?.settings ?? {});
+  const identity = incoming?.identity ?? {};
+  const updatesByTeam = new Map();
+  for (const row of (identity?.teams ?? [])) {
+    if (row?.id == null) continue;
+    updatesByTeam.set(Number(row.id), row);
+  }
+  for (const team of cache.getAllTeams()) {
+    const next = updatesByTeam.get(Number(team.id));
+    if (!next) continue;
+    cache.updateTeam(team.id, {
+      name: typeof next.name === 'string' ? next.name.slice(0, 48) : team.name,
+      abbr: typeof next.abbr === 'string' ? next.abbr.slice(0, 4).toUpperCase() : team.abbr,
+      conf: Number.isFinite(Number(next.conf)) ? Number(next.conf) : team.conf,
+      div: Number.isFinite(Number(next.div)) ? Number(next.div) : team.div,
+      colorPrimary: typeof next.colorPrimary === 'string' ? next.colorPrimary.slice(0, 24) : team.colorPrimary,
+      colorSecondary: typeof next.colorSecondary === 'string' ? next.colorSecondary.slice(0, 24) : team.colorSecondary,
+    });
+  }
+  cache.setMeta({
+    name: typeof identity?.leagueName === 'string' && identity.leagueName.trim()
+      ? identity.leagueName.trim().slice(0, 80)
+      : getSafeMeta()?.name,
+    settings: normalizeLeagueSettings({
+      ...(getSafeMeta()?.settings ?? {}),
+      ...incomingSettings,
+      leagueName: typeof identity?.leagueName === 'string' ? identity.leagueName.slice(0, 80) : incomingSettings.leagueName,
+      conferenceNames: Array.isArray(identity?.conferenceNames) ? identity.conferenceNames.slice(0, 4) : incomingSettings.conferenceNames,
+      divisionNames: Array.isArray(identity?.divisionNames) ? identity.divisionNames.slice(0, 8) : incomingSettings.divisionNames,
+    }),
+    commissionerLog: appendCommissionerLog({
+      type: 'config-import',
+      details: { teamChanges: updatesByTeam.size },
+    }),
+  });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 async function handleImportSave({ data, saveName }, id) {
   try {
     const snapshot = data?.snapshot;
@@ -2863,7 +2965,7 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   if (team && contract) {
     const newCapHit = (contract.baseAnnual ?? 0) + ((contract.signingBonus ?? 0) / (contract.yearsTotal || 1));
     const projectedCapUsed = (team.capUsed ?? 0) + newCapHit;
-    const hardCap = Constants.SALARY_CAP.HARD_CAP;
+    const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
     if (projectedCapUsed > hardCap) {
       post(toUI.ERROR, {
         message: `Signing blocked: this deal would put ${team.name} at $${projectedCapUsed.toFixed(1)}M — over the $${hardCap}M hard cap. Free up cap room first.`
@@ -2977,6 +3079,12 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
   if ((signingTeam.capRoom ?? 0) < capHit) {
     const nextOffers = (player.offers ?? []).filter((o) => Number(o?.teamId) !== signingTeamId);
     cache.updatePlayer(player.id, { offers: nextOffers });
+    return null;
+  }
+
+  const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const projectedCap = Number(signingTeam?.capUsed ?? 0) + capHit;
+  if (projectedCap > hardCap) {
     return null;
   }
 
@@ -3931,7 +4039,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   // Before executing an accepted trade, verify neither team would breach the
   // $301.2M hard cap after swapping players.
   if (accepted) {
-    const hardCap = Number(meta?.settings?.salaryCap ?? Constants.SALARY_CAP.HARD_CAP);
+    const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
 
     // Helper: sum cap hit for a list of player IDs
     const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
@@ -4207,7 +4315,10 @@ async function handleUpdateSettings({ settings }, id) {
     return true;
   }));
   const nextSettings = normalizeLeagueSettings({ ...(current?.settings ?? {}), ...allowedEntries });
-  cache.setMeta({ settings: nextSettings });
+  cache.setMeta({
+    settings: nextSettings,
+    ...(nextSettings?.leagueName ? { name: String(nextSettings.leagueName).slice(0, 80) } : {}),
+  });
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
@@ -4245,6 +4356,7 @@ async function handleApplyCommissionerActions({ actions = [] }, id) {
   }
 
   const normalized = Array.isArray(actions) ? actions : [];
+  let appliedCount = 0;
   for (const action of normalized) {
     if (action?.entityType === 'player') {
       const playerId = Number(action.entityId);
@@ -4252,37 +4364,67 @@ async function handleApplyCommissionerActions({ actions = [] }, id) {
       if (!player) continue;
       const field = String(action.field ?? '');
       const value = action.value;
-      const allowed = new Set(['ovr', 'potential', 'age', 'morale', 'salary', 'injuryWeeksRemaining', 'injured', 'teamId']);
+      const allowed = new Set(['ovr', 'potential', 'age', 'morale', 'salary', 'injuryWeeksRemaining', 'injured', 'teamId', 'contractYears', 'devTrait', 'personality', 'ratings']);
       if (!allowed.has(field)) continue;
       const updates = {};
       if (field === 'salary') {
-        updates.contract = { ...(player.contract ?? {}), baseAnnual: Math.max(0.5, Number(value) || 0.5) };
+        const maxSalary = Number(getLeagueSetting('maxSalary', 65));
+        const minSalary = Number(getLeagueSetting('minSalary', 0.75));
+        updates.contract = { ...(player.contract ?? {}), baseAnnual: Math.max(minSalary, Math.min(maxSalary, Number(value) || minSalary)) };
+      } else if (field === 'contractYears') {
+        const maxYears = Number(getLeagueSetting('maxContractYears', 6));
+        updates.contract = { ...(player.contract ?? {}), yearsTotal: Math.max(1, Math.min(maxYears, Number(value) || 1)) };
       } else if (field === 'teamId') {
         updates.teamId = (value === null || value === '') ? null : Number(value);
+      } else if (field === 'ratings' && value && typeof value === 'object') {
+        updates.ratings = { ...(player.ratings ?? {}), ...value };
       } else {
         updates[field] = value;
       }
       cache.updatePlayer(playerId, updates);
+      appliedCount++;
     } else if (action?.entityType === 'team') {
       const teamId = Number(action.entityId);
       const team = cache.getTeam(teamId);
       if (!team) continue;
       const field = String(action.field ?? '');
-      const allowed = new Set(['wins', 'losses', 'capRoom', 'capSpace', 'name', 'abbr', 'confName', 'divName']);
+      const allowed = new Set(['wins', 'losses', 'capRoom', 'capSpace', 'name', 'abbr', 'conf', 'div', 'capTotal', 'colorPrimary', 'colorSecondary']);
       if (!allowed.has(field)) continue;
       cache.updateTeam(teamId, { [field]: action.value });
+      appliedCount++;
     } else if (action?.entityType === 'draftPick') {
       const pick = resolvePickById(action.entityId);
       if (!pick) continue;
       pick.currentOwner = Number(action.value);
       cache.setDraftPick(pick);
+      appliedCount++;
+    } else if (action?.entityType === 'league') {
+      if (action.field === 'revealHiddenRatingsForCommissioner') {
+        cache.setMeta({
+          settings: normalizeLeagueSettings({
+            ...(meta?.settings ?? {}),
+            revealHiddenRatingsForCommissioner: !!action.value,
+          }),
+        });
+        appliedCount++;
+      }
+    } else if (action?.entityType === 'forceTrade') {
+      const from = Number(action?.fromTeamId);
+      const to = Number(action?.toTeamId);
+      for (const pid of (action?.playerIdsFrom ?? [])) {
+        cache.updatePlayer(Number(pid), { teamId: to });
+      }
+      for (const pid of (action?.playerIdsTo ?? [])) {
+        cache.updatePlayer(Number(pid), { teamId: from });
+      }
+      appliedCount++;
     }
   }
 
   cache.setMeta({
     commissionerLog: appendCommissionerLog({
       type: 'bulk-actions',
-      details: { count: normalized.length },
+      details: { count: normalized.length, appliedCount },
     }),
   });
   await flushDirty();
@@ -5208,8 +5350,8 @@ async function handleAdvanceOffseason(payload, id) {
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
   const allPlayers = cache.getAllPlayers();
-  const progressionEnv = Math.max(0, Math.min(100, Number(meta?.settings?.progressionEnvironmentStrength ?? 50)));
-  const staffImpact = Math.max(0, Math.min(100, Number(meta?.settings?.staffImpactStrength ?? 50)));
+  const progressionEnv = Math.max(0, Math.min(100, Number(getLeagueSetting('progressionEnvironmentStrength', 50))));
+  const staffImpact = Math.max(0, Math.min(100, Number(getLeagueSetting('staffImpactStrength', 50))));
   const envScale = 0.75 + (progressionEnv / 100) * 0.5;
   const staffScale = 0.7 + (staffImpact / 100) * 0.6;
   const teamEnvironments = {};
@@ -6304,6 +6446,8 @@ async function handleMessage(event) {
       case toWorker.RESET_LEAGUE:       return await handleResetLeague(payload, id);
       case toWorker.EXPORT_SAVE:        return await handleExportSave(payload, id);
       case toWorker.IMPORT_SAVE:        return await handleImportSave(payload, id);
+      case toWorker.EXPORT_LEAGUE_CONFIG: return await handleExportLeagueConfig(payload, id);
+      case toWorker.IMPORT_LEAGUE_CONFIG: return await handleImportLeagueConfig(payload, id);
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
@@ -6405,7 +6549,7 @@ async function handleWatchGame(payload, id) {
     league,
     isPlayoff: meta.phase === 'playoffs',
     generateLogs: true,
-    injuryFactor: Math.max(0, Number(meta?.settings?.injuryFrequency ?? 50) / 50),
+    injuryFactor: Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50),
   });
 
   const res = batchResults[0];

@@ -62,6 +62,27 @@ export default function SaveExportImport({ league, actions }) {
     }
   }, [league, actions]);
 
+  const handleExportConfig = useCallback(async () => {
+    clearMessages();
+    try {
+      const resp = await actions?.exportLeagueConfig?.();
+      const exportData = resp?.payload?.data;
+      if (!exportData) throw new Error("No config payload received");
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const filename = `footballgm_config_${league?.year || "2025"}_${date}.json`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSuccess(`Exported league config "${filename}"`);
+    } catch (err) {
+      setError(`Config export failed: ${err.message}`);
+    }
+  }, [actions, league]);
+
   // ── Import ─────────────────────────────────────────────────────────────────
   const processFile = useCallback(async (file) => {
     clearMessages();
@@ -82,8 +103,10 @@ export default function SaveExportImport({ league, actions }) {
       const text = await file.text();
       const data = JSON.parse(text);
 
-      if (!data.snapshot || !data.version) {
-        setError("Invalid save file: missing snapshot data or version");
+      const isSave = !!(data.snapshot && data.version);
+      const isConfig = !!(data.leagueConfig || data?.version === 1);
+      if (!isSave && !isConfig) {
+        setError("Invalid file: expected full save export or league config export");
         return;
       }
 
@@ -96,7 +119,8 @@ export default function SaveExportImport({ league, actions }) {
         teamName: data.meta?.name || "Unknown",
         teamAbbr: "???",
         teamRecord: "-",
-        teamsCount: data.snapshot?.teams?.length || 0,
+        teamsCount: data.snapshot?.teams?.length || data?.leagueConfig?.identity?.teams?.length || 0,
+        fileType: isConfig ? "config" : "save",
         fileSize: formatBytes(file.size),
         fileName: file.name,
       });
@@ -123,9 +147,14 @@ export default function SaveExportImport({ league, actions }) {
     clearMessages();
     setImporting(true);
     try {
-      await actions?.importSave?.(importData, `Imported ${new Date().toLocaleDateString()}`);
-      setSuccess("Save imported. Loading league...");
-      setTimeout(() => window.location.reload(), 800);
+      if (importData?.snapshot) {
+        await actions?.importSave?.(importData, `Imported ${new Date().toLocaleDateString()}`);
+        setSuccess("Save imported. Loading league...");
+        setTimeout(() => window.location.reload(), 800);
+      } else {
+        await actions?.importLeagueConfig?.(importData);
+        setSuccess("League config imported.");
+      }
     } catch (err) {
       setError(`Import failed: ${err.message}`);
     } finally {
@@ -217,6 +246,9 @@ export default function SaveExportImport({ league, actions }) {
           <button style={btnStyle(true)} onClick={handleExport} disabled={exporting}>
             {exporting ? "Exporting..." : "Download Save File"}
           </button>
+          <button style={btnStyle(false)} onClick={handleExportConfig}>
+            Export League Config
+          </button>
           <button style={btnStyle(false)} onClick={copyToClipboard}>
             Copy to Clipboard
           </button>
@@ -269,7 +301,7 @@ export default function SaveExportImport({ league, actions }) {
               <div>Team: <strong style={{ color: "var(--text)" }}>{importPreview.teamName} ({importPreview.teamAbbr})</strong></div>
               <div>Record: <strong>{importPreview.teamRecord}</strong></div>
               <div>Season: <strong>{importPreview.year}</strong> · Week {importPreview.week} · {importPreview.phase}</div>
-              <div>Teams: {importPreview.teamsCount} · Version: {importPreview.version}</div>
+              <div>Type: {importPreview.fileType === "config" ? "League Config" : "Full Save"} · Teams: {importPreview.teamsCount} · Version: {importPreview.version}</div>
               {importPreview.exportDate && <div>Exported: {formatDate(importPreview.exportDate)}</div>}
             </div>
             <div style={{
