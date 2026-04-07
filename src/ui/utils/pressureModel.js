@@ -1,3 +1,5 @@
+import { franchiseInvestmentSummary } from './franchiseInvestments.js';
+
 function safeNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -146,6 +148,7 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
   const transactionNarrative = detectTransactionNarrative(league, league?.userTeamId);
   const ownerGoals = Array.isArray(league?.ownerGoals) ? league.ownerGoals : [];
   const chemistry = intel?.chemistry ?? null;
+  const investments = intel?.investments ?? franchiseInvestmentSummary(userTeam);
 
   let ownerScore = ownerApprovalBase;
   const ownerReasons = [];
@@ -171,6 +174,13 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
   if (ownerContext?.triggerKey === 'missed_owner_goals') {
     ownerReasons.unshift('Owner directives are behind pace');
     ownerScore -= 8;
+  }
+  if (investments.ownerBusinessDelta >= 5) {
+    ownerScore += 4;
+    ownerReasons.push('Owner approves organizational business posture');
+  } else if (investments.ownerBusinessDelta <= -4) {
+    ownerScore -= 4;
+    ownerReasons.push('Owner questions short-term business efficiency');
   }
 
   let fanScore = fanApprovalBase;
@@ -202,6 +212,13 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
     fanScore -= 7;
     fanReasons.push('Fans sense tension inside the locker room');
   }
+  if (investments.fanSentimentDelta >= 6) {
+    fanScore += 5;
+    fanReasons.push('Fans appreciate franchise investment direction');
+  } else if (investments.fanSentimentDelta <= -5) {
+    fanScore -= 5;
+    fanReasons.push('Fans dislike current pricing and fan-experience direction');
+  }
 
   let mediaScore = 46;
   const mediaReasons = [];
@@ -227,6 +244,10 @@ export function deriveFranchisePressure(league, { intel = null, direction = 'bal
   if (chemistry?.state === 'Uneasy' || chemistry?.state === 'Fragmented') {
     mediaScore += chemistry.state === 'Fragmented' ? 11 : 6;
     mediaReasons.push('Media is tracking locker-room chemistry closely');
+  }
+  if (Math.abs(investments.mediaNarrativeDelta) >= 3) {
+    mediaReasons.push(investments.mediaNarrativeDelta > 0 ? 'Media highlights the organization’s infrastructure push' : 'Media questions the franchise off-field direction');
+    mediaScore += investments.mediaNarrativeDelta > 0 ? 4 : 6;
   }
 
   ownerScore = clamp(Math.round(ownerScore));

@@ -596,6 +596,8 @@ export function useWorker() {
      */
     updateMedicalStaff: (teamId, medStaff) =>
       send(toWorker.UPDATE_MEDICAL_STAFF, { teamId, medStaff }),
+    updateFranchiseInvestments: (teamId, updates) =>
+      send(toWorker.UPDATE_FRANCHISE_INVESTMENTS, { teamId, updates }),
 
     /** Dismiss a notification. */
     dismissNotification: (id) =>

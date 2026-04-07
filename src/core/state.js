@@ -441,6 +441,16 @@ export const State = {
       }
 
       migratedTeam.fanApproval = migratedTeam?.fanApproval ?? 50;
+      migratedTeam.franchiseInvestments = migratedTeam?.franchiseInvestments ?? {
+        stadiumLevel: 1,
+        concessionsStrategy: 'balanced',
+        trainingLevel: 1,
+        scoutingLevel: 1,
+        scoutingRegion: 'national',
+        ownerCapacity: 10,
+        usedCapacity: 4,
+        history: [],
+      };
       migratedTeam.rivalTeamId = migratedTeam?.rivalTeamId ?? null;
 
       // Ensure team stats are initialized

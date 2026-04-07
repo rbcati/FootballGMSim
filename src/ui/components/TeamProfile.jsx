@@ -15,6 +15,7 @@ import { deriveTeamCapSnapshot, formatMoneyM, safeRound, toFiniteNumber } from "
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildTeamChemistrySummary } from "../utils/teamChemistry.js";
+import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -148,6 +149,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const teamIntel = useMemo(() => buildTeamIntelligence({ ...team, roster: players }, { week: 10 }), [team, players]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity({ ...team, roster: players }, { intel: teamIntel, direction: teamIntel?.direction }), [team, players, teamIntel]);
   const chemistry = useMemo(() => buildTeamChemistrySummary({ ...team, roster: players }, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [team, players, data?.meta?.week, teamIntel]);
+  const investments = useMemo(() => franchiseInvestmentSummary(team), [team]);
 
   return (
     <>
@@ -305,6 +307,18 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
                 <StatBox label="Point Differential" value={`${diff >= 0 ? "+" : ""}${safeRound(diff, 0)}`} sub={`${diffPerGame >= 0 ? "+" : ""}${safeRound(diffPerGame, 1)} per game`} />
                 <StatBox label="Roster Age" value={safeRound(avgAge, 1)} sub={avgAge >= 29 ? "Veteran-heavy" : avgAge <= 25 ? "Young core" : "Balanced"} />
                 <StatBox label="Availability Pressure" value={injuryCount} sub={`${expiringCount} expiring deals`} />
+              </div>
+            </section>
+            <section>
+              <h3 style={sectionHeadingStyle}>Organization investments</h3>
+              <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", background: "var(--surface-strong)", display: "grid", gap: 6 }}>
+                <div><strong>{investments.stadiumLabel}</strong> · {investments.concessionsLabel}</div>
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{investments.trainingLabel} · {investments.scoutingLabel} · {investments.scoutingRegionLabel}</div>
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>FA appeal {investments.freeAgentAppealDelta >= 0 ? "+" : ""}{investments.freeAgentAppealDelta} · Fan sentiment {investments.fanSentimentDelta >= 0 ? "+" : ""}{investments.fanSentimentDelta} · Scouting confidence {investments.scoutingConfidenceDelta >= 0 ? "+" : ""}{investments.scoutingConfidenceDelta}</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Adjust investments</Button>
+                  <Button size="sm" variant="outline" onClick={() => onNavigate?.("Staff")}>Staff and scouting</Button>
+                </div>
               </div>
             </section>
 

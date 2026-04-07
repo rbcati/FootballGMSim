@@ -75,6 +75,7 @@ export default function NewsFeed({ league, mode = 'full' }) {
   const userTeam = league?.teams?.find((t) => t.id === userTeamId) ?? null;
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
   const chemistry = teamIntel?.chemistry;
+  const investments = teamIntel?.investments;
   const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel }), [league, teamIntel]);
 
   const latestFive = useMemo(() => mergedNews.slice(0, 5), [mergedNews]);
@@ -134,6 +135,11 @@ export default function NewsFeed({ league, mode = 'full' }) {
           {chemistry?.state ? (
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
               Locker room: <strong style={{ color: 'var(--text)' }}>{chemistry.state}</strong> · {chemistry.reasons?.[0] ?? 'Chemistry signals are steady.'}
+            </div>
+          ) : null}
+          {investments ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Org investment: <strong style={{ color: 'var(--text)' }}>{investments.stadiumLabel}</strong> · {investments.concessionsLabel} · Scouting {investments.scoutingRegionLabel}
             </div>
           ) : null}
         </div>

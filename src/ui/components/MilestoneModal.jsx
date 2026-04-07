@@ -13,6 +13,7 @@ import { teamColor } from "../../data/team-utils.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
 
 // ── Playoff Bracket Modal ────────────────────────────────────────────────────
 
@@ -281,6 +282,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
   const coachingMoment = buildCoachingNarrativeCards(league, { limit: 1 })[0] ?? null;
   const userTeam = teams.find((t) => t.id === league?.userTeamId) ?? null;
   const chemistry = buildTeamIntelligence(userTeam, { week: league?.week ?? 1 })?.chemistry;
+  const investments = franchiseInvestmentSummary(userTeam);
 
   const color = teamColor(champ.abbr ?? "");
   const winPct = (champ.wins + champ.losses) > 0 ? champ.wins / (champ.wins + champ.losses) : null;
@@ -422,6 +424,24 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
           <div style={{ fontSize: "0.75rem", color: "var(--text-subtle)", marginBottom: 4 }}>Locker-room recap</div>
           <div style={{ fontSize: "0.82rem", color: "var(--text)" }}>{chemistry.state} ({chemistry.score}/100)</div>
           <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>{chemistry.reasons?.[0] ?? "Chemistry held steady."}</div>
+        </div>
+      )}
+      {investments && (
+        <div style={{
+          minWidth: 280,
+          maxWidth: 440,
+          background: "rgba(17,24,39,0.72)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: "10px 12px",
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-subtle)", marginBottom: 4 }}>Organizational investment recap</div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
+            {investments.stadiumLabel} · {investments.concessionsLabel}
+          </div>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-subtle)", marginTop: 4 }}>
+            Training and facilities shifted free-agent appeal by {investments.freeAgentAppealDelta >= 0 ? "+" : ""}{investments.freeAgentAppealDelta}; scouting confidence shifted by {investments.scoutingConfidenceDelta >= 0 ? "+" : ""}{investments.scoutingConfidenceDelta}.
+          </div>
         </div>
       )}
 

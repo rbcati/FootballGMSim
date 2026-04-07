@@ -26,6 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { getProspectRegionTag, getScoutingAccuracy } from "../utils/franchiseInvestments.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -96,11 +97,13 @@ function getScoutReport(trueOvr, playerId, scoutAccuracy = 0.65) {
   return { grade, gradeColor, range: `${low}–${high}` };
 }
 
-function ScoutBadge({ playerId, trueOvr }) {
-  const { grade, gradeColor, range } = getScoutReport(trueOvr, playerId);
+function ScoutBadge({ player, team }) {
+  const accuracy = getScoutingAccuracy(team, player);
+  const { grade, gradeColor, range } = getScoutReport(player?.ovr, player?.id, accuracy);
+  const region = getProspectRegionTag(player);
   return (
     <span
-      title={`Scout range: ${range} OVR`}
+      title={`Scout range: ${range} OVR · ${Math.round(accuracy * 100)}% confidence · Region ${region}`}
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -1735,7 +1738,7 @@ function DraftBoard({
                         {/* Fog of War: show scout grade before drafted, true OVR after */}
                         {isDraftComplete
                           ? <OvrBadge ovr={p.ovr} />
-                          : <ScoutBadge playerId={p.id} trueOvr={p.ovr} />
+                          : <ScoutBadge player={p} team={(league?.teams ?? []).find((t) => t.id === league?.userTeamId)} />
                         }
                       </TableCell>
                       <TableCell

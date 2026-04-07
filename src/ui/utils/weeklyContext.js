@@ -2,6 +2,7 @@ import { evaluateOwnerMessageContext } from './ownerMessages.js';
 import { buildDirectionGuidance, buildTeamIntelligence } from './teamIntelligence.js';
 import { buildStorylineCards } from './leagueNarratives.js';
 import { deriveFranchisePressure } from './pressureModel.js';
+import { franchiseInvestmentSummary } from './franchiseInvestments.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -88,8 +89,9 @@ function mapPhaseShortcuts(phase) {
   return [
     { label: 'Game Plan', tab: 'Game Plan' },
     { label: 'Roster', tab: 'Roster' },
+    { label: 'Financials', tab: 'Financials' },
     { label: 'Injuries', tab: 'Injuries' },
-    { label: 'Trades', tab: 'Trades' },
+    { label: 'Staff', tab: 'Staff' },
   ];
 }
 
@@ -117,6 +119,7 @@ export function evaluateWeeklyContext(league) {
   const contractMarket = league?.contractMarket ?? null;
   const storylineCards = buildStorylineCards(league);
   const chemistry = intel?.chemistry;
+  const investments = franchiseInvestmentSummary(userTeam);
 
   const ownerContext = evaluateOwnerMessageContext({
     league,
@@ -176,6 +179,17 @@ export function evaluateWeeklyContext(league) {
       detail: intel.warnings[0],
       why: 'Ignoring roster pressure points increases emergency spending later.',
       tab: 'Roster',
+    });
+  }
+  if ((investments?.capacityLeft ?? 0) <= 1) {
+    urgent.push({
+      tone: 'warning',
+      level: 'recommendation',
+      rank: 67,
+      label: 'Investment capacity tight',
+      detail: 'Owner-approved organization budget is nearly maxed out.',
+      why: 'Further facility or scouting upgrades may require tradeoffs.',
+      tab: 'Financials',
     });
   }
 

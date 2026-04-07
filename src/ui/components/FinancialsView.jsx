@@ -20,6 +20,7 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -182,6 +183,7 @@ export default function FinancialsView({ league, actions }) {
   }, [league?.phase, fetchRoster]);
 
   const team = rosterData?.team ?? {};
+  const userTeam = (league?.teams ?? []).find((t) => t.id === teamId) ?? null;
   const players = rosterData?.players ?? [];
 
   const hardCap = team.capTotal ?? HARD_CAP;
@@ -410,6 +412,10 @@ export default function FinancialsView({ league, actions }) {
           </button>
         </div>
       )}
+
+      <div style={{ marginBottom: "var(--space-5)" }}>
+        <FranchiseInvestmentsPanel team={userTeam} actions={actions} />
+      </div>
 
       {/* ── Cap Bar ── */}
       <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>

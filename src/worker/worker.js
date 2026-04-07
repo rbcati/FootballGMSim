@@ -124,6 +124,29 @@ function getSafeMeta() {
   return ensureDynastyMeta(cache.getMeta() ?? {});
 }
 
+function normalizeFranchiseInvestments(raw = {}) {
+  const base = {
+    stadiumLevel: 1,
+    concessionsStrategy: 'balanced',
+    trainingLevel: 1,
+    scoutingLevel: 1,
+    scoutingRegion: 'national',
+    ownerCapacity: 10,
+    usedCapacity: 4,
+    history: [],
+  };
+  const merged = { ...base, ...(raw || {}) };
+  merged.stadiumLevel = Math.max(1, Math.min(5, Math.round(Number(merged.stadiumLevel) || 1)));
+  merged.trainingLevel = Math.max(1, Math.min(5, Math.round(Number(merged.trainingLevel) || 1)));
+  merged.scoutingLevel = Math.max(1, Math.min(5, Math.round(Number(merged.scoutingLevel) || 1)));
+  merged.ownerCapacity = Math.max(6, Math.min(14, Math.round(Number(merged.ownerCapacity) || 10)));
+  merged.usedCapacity = Math.max(0, Math.min(merged.ownerCapacity, Math.round(Number(merged.usedCapacity) || 4)));
+  if (!['fan_friendly', 'balanced', 'premium'].includes(merged.concessionsStrategy)) merged.concessionsStrategy = 'balanced';
+  if (!['national', 'southeast', 'southwest', 'midwest', 'west'].includes(merged.scoutingRegion)) merged.scoutingRegion = 'national';
+  merged.history = Array.isArray(merged.history) ? merged.history.slice(0, 20) : [];
+  return merged;
+}
+
 /**
  * Resolve team context for user-driven contract/roster actions.
  * Uses explicit payload teamId when provided, otherwise safely falls back
@@ -271,6 +294,7 @@ function buildViewState() {
     ovr:       t.ovr       ?? 75,
     rosterCount: cache.getPlayersByTeam(t.id).length,
     fanApproval: t?.fanApproval ?? 50,
+    franchiseInvestments: normalizeFranchiseInvestments(t?.franchiseInvestments),
     rivalTeamId: t?.rivalTeamId ?? null,
     picks: Array.isArray(t?.picks)
       ? t.picks.map((pk) => ({ id: pk.id, round: pk.round, season: pk.season, currentOwner: pk.currentOwner, originalOwner: pk.originalOwner }))
@@ -1002,6 +1026,7 @@ async function handleNewLeague(payload, id) {
         ptsFor:     0,
         ptsAgainst: 0,
         fanApproval: t?.fanApproval ?? 50,
+        franchiseInvestments: normalizeFranchiseInvestments(t?.franchiseInvestments),
         rivalTeamId: t?.rivalTeamId ?? null,
       };
     });
@@ -3501,6 +3526,37 @@ async function handleUpdateMedicalStaff({ teamId, medStaff }, id) {
     post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
+async function handleUpdateFranchiseInvestments({ teamId, updates }, id) {
+  const resolved = resolveTeamContext(teamId);
+  if (!resolved.ok) return post(toUI.ERROR, { message: resolved.message }, id);
+  const team = cache.getTeam(resolved.teamId);
+  if (!team) return post(toUI.ERROR, { message: 'Team not found for franchise investment update' }, id);
+
+  const current = normalizeFranchiseInvestments(team?.franchiseInvestments);
+  const merged = normalizeFranchiseInvestments({ ...current, ...(updates || {}) });
+
+  if (updates?.stadiumLevel != null) merged.usedCapacity += Math.max(0, Number(merged.stadiumLevel) - Number(current.stadiumLevel));
+  if (updates?.trainingLevel != null) merged.usedCapacity += Math.max(0, Number(merged.trainingLevel) - Number(current.trainingLevel));
+  if (updates?.scoutingLevel != null) merged.usedCapacity += Math.max(0, Number(merged.scoutingLevel) - Number(current.scoutingLevel));
+  merged.usedCapacity = Math.max(0, Math.min(merged.ownerCapacity, merged.usedCapacity));
+
+  const now = getSafeMeta();
+  merged.history = [
+    {
+      week: now?.currentWeek ?? 1,
+      year: now?.year ?? 2025,
+      changes: Object.keys(updates || {}),
+      summary: 'Franchise investment priorities updated.',
+    },
+    ...(current.history ?? []),
+  ].slice(0, 20);
+
+  cache.updateTeam(resolved.teamId, { franchiseInvestments: merged });
+  await NewsEngine.logNews('TRANSACTION', `${team.abbr} updated organizational investments: stadium ${merged.stadiumLevel}/5, training ${merged.trainingLevel}/5, scouting ${merged.scoutingLevel}/5, concessions ${merged.concessionsStrategy.replace('_', ' ')}.`, resolved.teamId);
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 // ── Handler: EXTENSION ──────────────────────────────────────────────────────
 
 async function handleGetExtensionAsk({ playerId }, id) {
@@ -5417,6 +5473,7 @@ async function handleGetTeamProfile({ teamId }, id) {
       capUsed:     team.capUsed     || 0,
       capRoom:     team.capRoom     || 0,
       capTotal:    team.capTotal    || Constants.SALARY_CAP.HARD_CAP,
+      franchiseInvestments: normalizeFranchiseInvestments(team?.franchiseInvestments),
       staff:       team.staff ?? null,
       strategies:  team.strategies ?? null,
     },
@@ -5887,6 +5944,7 @@ async function handleMessage(event) {
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);
       case toWorker.CONDUCT_DRILL:      return await handleConductDrill(payload, id);
       case toWorker.UPDATE_MEDICAL_STAFF: return await handleUpdateMedicalStaff(payload, id);
+      case toWorker.UPDATE_FRANCHISE_INVESTMENTS: return await handleUpdateFranchiseInvestments(payload, id);
       case toWorker.TRADE_OFFER:        return await handleTradeOffer(payload, id);
       case toWorker.ACCEPT_INCOMING_TRADE: return await handleAcceptIncomingTrade(payload, id);
       case toWorker.REJECT_INCOMING_TRADE: return await handleRejectIncomingTrade(payload, id);

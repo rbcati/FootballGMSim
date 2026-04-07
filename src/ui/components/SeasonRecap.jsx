@@ -9,6 +9,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity, buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
+import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
 
 function AnimatedSection({ delay = 0, children, title, icon }) {
   const [visible, setVisible] = useState(false);
@@ -187,6 +188,7 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction: teamIntel?.direction }), [userTeam, pressure, teamIntel]);
   const chemistry = teamIntel?.chemistry;
+  const investments = useMemo(() => franchiseInvestmentSummary(userTeam), [userTeam]);
   const carouselCards = useMemo(() => buildCoachingNarrativeCards(league, { limit: 3 }), [league]);
 
   return (
@@ -302,6 +304,18 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.narrativeNotes.media}</div>
             </div>
             <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{pressure.consequence}</div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {investments && (
+        <AnimatedSection delay={700} title="Franchise investments" icon="🏟️">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>{investments.stadiumLabel}</strong> · {investments.concessionsLabel}
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Training {investments.profile.trainingLevel}/5 improved free-agent appeal by {investments.freeAgentAppealDelta >= 0 ? "+" : ""}{investments.freeAgentAppealDelta}.</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>Scouting {investments.profile.scoutingLevel}/5 with {investments.scoutingRegionLabel} emphasis boosted confidence by {investments.scoutingConfidenceDelta >= 0 ? "+" : ""}{investments.scoutingConfidenceDelta}.</div>
+            </div>
           </div>
         </AnimatedSection>
       )}

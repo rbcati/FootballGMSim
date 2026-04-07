@@ -1,5 +1,6 @@
 import { classifyTeamDirection } from "./contractInsights.js";
 import { buildTeamChemistrySummary } from "./teamChemistry.js";
+import { franchiseInvestmentSummary, getProspectRegionTag } from "./franchiseInvestments.js";
 
 const POSITION_TARGETS = {
   QB: { starters: 1, playableDepth: 2 },
@@ -67,9 +68,11 @@ function describeNeed(pos, starters, target, avgStarterOvr, depthCount) {
 export function buildTeamIntelligence(team, { week = 1 } = {}) {
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const direction = classifyTeamDirection(team, week);
+  const investments = franchiseInvestmentSummary(team);
   if (!roster.length) {
     return {
       direction,
+      investments,
       needsNow: [],
       needsLater: [],
       surplus: [],
@@ -160,6 +163,7 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
 
   return {
     direction,
+    investments,
     needsNow: needsNow.slice(0, 4),
     needsLater: needsLater.slice(0, 3),
     surplus: surplus.slice(0, 3),
@@ -209,7 +213,8 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   const direction = intel?.direction ?? "middling";
   const directionFit = direction === "contender" ? (age <= 30 ? 1 : 0.75) : direction === "rebuilding" ? (age <= 27 ? 1 : 0.55) : (age <= 29 ? 1 : 0.8);
   const chemistryAppeal = safeNum(intel?.chemistry?.freeAgencyAppeal, 0);
-  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20 + chemistryAppeal * 2;
+  const investmentAppeal = safeNum(intel?.investments?.freeAgentAppealDelta, 0);
+  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20 + chemistryAppeal * 2 + investmentAppeal;
   let reason = "Depth option";
   if (needNow) reason = `Immediate starter/depth at ${pos}`;
   else if (needLater) reason = `Future need coverage at ${pos}`;
@@ -217,6 +222,7 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   if (ask > Math.max(capRoom, 1) * 0.75) reason = `Likely expensive for current cap flexibility`;
   else if (chemistryAppeal >= 3) reason = `${reason} in a stable locker room`;
   else if (chemistryAppeal <= -2) reason = `${reason}, but locker-room stability is a concern`;
+  if (investmentAppeal >= 6) reason = `${reason}; facilities and franchise environment are a selling point`;
   return { score, reason, pos, ask };
 }
 
@@ -265,13 +271,16 @@ export function scoreProspectForTeam(player, intel) {
       : direction === "rebuilding"
         ? (profile.upside.includes("High") || age <= 21 ? 8 : -2)
         : 0;
+  const regionFocus = intel?.investments?.profile?.scoutingRegion ?? 'national';
+  const playerRegion = getProspectRegionTag(player);
+  const regionAdj = regionFocus !== 'national' && regionFocus === playerRegion ? 4 : 0;
 
-  const score = ovr + gap * 1.2 + needBoost + directionAdj;
+  const score = ovr + gap * 1.2 + needBoost + directionAdj + regionAdj;
   return {
     pos,
     score,
     fit,
     profile,
-    archetypeHint: `${profile.readiness} · ${profile.upside}`,
+    archetypeHint: `${profile.readiness} · ${profile.upside}${regionAdj > 0 ? ' · Regional visibility boost' : ''}`,
   };
 }

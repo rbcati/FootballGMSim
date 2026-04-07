@@ -110,6 +110,7 @@ export const toWorker = Object.freeze({
 
   /** Medical Staff */
   UPDATE_MEDICAL_STAFF: 'UPDATE_MEDICAL_STAFF', // { teamId, medStaff: [...] }
+  UPDATE_FRANCHISE_INVESTMENTS: 'UPDATE_FRANCHISE_INVESTMENTS', // { teamId, updates }
 
   /** Box score retrieval */
   GET_BOX_SCORE:      'GET_BOX_SCORE',        // { gameId }
