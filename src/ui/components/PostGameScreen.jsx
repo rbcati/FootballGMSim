@@ -21,7 +21,12 @@ class PostGameErrorBoundary extends Component {
   componentDidCatch(err) { console.error('[PostGameScreen] render crash:', err); }
   render() {
     if (!this.state.crashed) return this.props.children;
-    return (
+  
+  const notableMoments = (logs || [])
+    .filter((l) => l?.isTouchdown || l?.turnover || /field goal|sack|interception|fumble/i.test(l?.text ?? ""))
+    .slice(-5)
+    .reverse();
+  return (
       <div style={{
         position: "fixed", inset: 0, zIndex: 9700,
         background: "rgba(0,0,0,0.92)", display: "flex",
@@ -225,6 +230,7 @@ function PostGameScreenInner({
   const [activeTab, setActiveTab] = useState("leaders"); // "leaders" | "grades"
   // Show "Game Saved ✓" for 3 seconds on mount to confirm the auto-save happened
   const [showSaved, setShowSaved] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
   React.useEffect(() => {
     const t = setTimeout(() => setShowSaved(false), 3000);
     return () => clearTimeout(t);
@@ -399,6 +405,26 @@ function PostGameScreenInner({
               )}
             </div>
           )}
+
+          <div style={{ marginBottom: 12, background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 12, padding: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+              <strong style={{ fontSize: "0.8rem" }}>Game Center recap</strong>
+              <button className="btn" style={{ padding: "6px 10px", fontSize: "0.72rem" }} onClick={() => setShowDetails((v) => !v)}>
+                {showDetails ? "Hide details" : "Expand details"}
+              </button>
+            </div>
+            {showDetails && (
+              <div style={{ marginTop: 8, display: "grid", gap: 6 }}>
+                {notableMoments.length === 0 ? (
+                  <div style={{ fontSize: "0.74rem", color: "var(--text-muted)" }}>No notable moments logged for this game.</div>
+                ) : notableMoments.map((m, i) => (
+                  <div key={i} style={{ fontSize: "0.74rem", color: "var(--text-muted)", padding: "6px 8px", background: "var(--surface-strong)", borderRadius: 8 }}>
+                    Q{m.quarter ?? "?"} {m.clock ?? ""} · {m.text ?? "Momentum swing"}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* ── Tab switcher (Leaders / Grades) ── */}
           {(showLeaders || logs.length > 0) && (

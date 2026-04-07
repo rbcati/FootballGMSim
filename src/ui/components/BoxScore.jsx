@@ -1,1877 +1,256 @@
-/**
- * LeagueDashboard.jsx
- *
- * Tabbed dashboard using the legacy CSS design system (hub.css, components.css,
- * base.css).  Receives the view-model slice from the Web Worker via `league` prop.
- *
- * Tabs:
- *  - Standings   — AFC/NFC conference tables (conf/div numeric + string safe)
- *  - Schedule    — Current-week matchup cards with final scores
- *  - Leaders     — Simple per-stat top-5 tables
- *  - Roster      — Full player grid with release controls
- *  - Free Agency — FA pool with sign / filter controls
- *  - Trades      — Side-by-side roster trade interface
- */
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  deriveLeaders,
+  deriveMomentumNotes,
+  deriveQuarterScores,
+  deriveScoringSummary,
+  deriveTeamTotals,
+  describeStatLine,
+  toPlayerArray,
+} from "../utils/boxScorePresentation.js";
 
-import React, { useState, useMemo, useEffect, Component } from "react";
-import DonutChart from "./DonutChart";
-import NotificationCenter from "./NotificationCenter.jsx";
-import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
-import HomeDashboard from "./HomeDashboard.jsx";
-import Roster from "./Roster.jsx";
-import RosterHub from "./RosterHub.jsx";
-import Draft from "./Draft.jsx";
-import RookieDraft from "./RookieDraft.jsx";
-import Coaches from "./Coaches.jsx";
-import FreeAgency from "./FreeAgency.jsx";
-import FreeAgencyHub from "./FreeAgencyHub.jsx";
-import TradeCenter from "./TradeCenter.jsx";
-import TradeFinder from "./TradeFinder.jsx";
-import BoxScore from "./BoxScore.jsx";
-import LeagueHistory from "./LeagueHistory.jsx";
-import HallOfFame from "./HallOfFame.jsx";
-import PlayerProfile from "./PlayerProfile.jsx";
-import PlayerDetailModal from "./PlayerDetailModal.jsx";
-import TeamProfile from "./TeamProfile.jsx";
-import Leaders from "./Leaders.jsx";
-import AwardRaces from "./AwardRaces.jsx";
-import PlayerStats from "./PlayerStats.jsx";
-import StrategyPanel from "./StrategyPanel.jsx";
-import GamePlanScreen from "./GamePlanScreen.jsx";
-import NewsFeed from "./NewsFeed.jsx";
-import StatLeadersWidget from "./StatLeadersWidget.jsx";
-import FinancialsView from "./FinancialsView.jsx";
-import PostseasonHub from "./PostseasonHub.jsx";
-import TrainingCamp from "./TrainingCamp.jsx";
-import StaffManagement from "./StaffManagement.jsx";
-import SaveExportImport from "./SaveExportImport.jsx";
-import MockDraft from "./MockDraft.jsx";
-import InjuryReport from "./InjuryReport.jsx";
-import GodMode from "./GodMode.jsx";
-import SeasonRecap from "./SeasonRecap.jsx";
-import MobileNav from "./MobileNav.jsx";
-import WeeklyHub from "./WeeklyHub.jsx";
-import { derivePregameAngles, derivePostgameStory } from "../utils/gamePresentation.js";
-
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
-
-// Map MobileNav tab IDs → LeagueDashboard tab names
-const MOBILE_TAB_MAP = {
-  hub: "Weekly Hub",
-  home: "Home",
-  standings: "Standings",
-  schedule: "Schedule",
-  roster: "Roster",
-  roster_hub: "Roster Hub",
-  leaders: "Leaders",
-  free_agency: "Free Agency",
-  fa_hub: "FA Hub",
-  trades: "Trades",
-  trade_finder: "Trade Finder",
-  draft: "Draft",
-  draft_room: "Draft Room",
-  mock_draft: "Mock Draft",
-  coaches: "Coaches",
-  staff: "Staff",
-  financials: "Financials",
-  strategy: "Strategy",
-  game_plan: "Game Plan",
-  news: "Standings",
-  player_stats: "Stats",
-  awards: "Award Races",
-  history: "History",
-  hall_of_fame: "Hall of Fame",
-  training: "Training",
-  injuries: "Injuries",
-  god_mode: "God Mode",
-  saves: "Saves",
-  season_recap: "Season Recap",
-};
-
-// Reverse map: dashboard tab → MobileNav tab ID
-const REVERSE_TAB_MAP = Object.fromEntries(
-  Object.entries(MOBILE_TAB_MAP).map(([k, v]) => [v, k])
-);
-
-// ── TabErrorBoundary ─────────────────────────────────────────────────────────
-// Catches render-phase exceptions inside individual tabs.  A crash in one tab
-// surfaces a localised error panel rather than tearing down the whole dashboard.
-
-class TabErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  componentDidCatch(error, info) {
-    console.error("[TabErrorBoundary] Tab render error:", error, info);
-  }
-
-  render() {
-    if (!this.state.hasError) return this.props.children;
-
-    const label = this.props.label ?? "This tab";
-    return (
-      <div
-        style={{
-          padding: "var(--space-8)",
-          textAlign: "center",
-          color: "var(--danger)",
-          background: "rgba(255,69,58,0.07)",
-          borderRadius: "var(--radius-md)",
-          border: "1px solid var(--danger)",
-        }}
-      >
-        <div style={{ fontSize: "1.5rem", marginBottom: "var(--space-3)" }}>
-          ⚠️
-        </div>
-        <div style={{ fontWeight: 700, marginBottom: "var(--space-2)" }}>
-          {label} encountered a render error
-        </div>
-        <div
-          style={{
-            fontSize: "var(--text-xs)",
-            color: "var(--text-muted)",
-            marginBottom: "var(--space-4)",
-            fontFamily: "monospace",
-            maxWidth: 480,
-            margin: "0 auto var(--space-4)",
-          }}
-        >
-          {this.state.error?.message ?? String(this.state.error)}
-        </div>
-        <button
-          className="btn"
-          onClick={() => this.setState({ hasError: false, error: null })}
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+function TeamButton({ team, onSelect }) {
+  if (!team) return <span>—</span>;
+  if (!onSelect) return <span>{team.abbr}</span>;
+  return <button className="btn-link" onClick={() => onSelect(team.id)}>{team.abbr}</button>;
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const BASE_TABS = [
-  "Weekly Hub",
-  "Home",
-  "Standings",
-  "Schedule",
-  "Stats",
-  "Leaders",
-  "Award Races",
-  "Strategy",
-  "Game Plan",
-  "Roster",
-  "Depth Chart",
-  "Roster Hub",
-  "Training",
-  "Injuries",
-  "Financials",
-  "Draft",
-  "Draft Room",
-  "Mock Draft",
-  "Coaches",
-  "Staff",
-  "Free Agency",
-  "FA Hub",
-  "Trades",
-  "Trade Finder",
-  "History",
-  "Hall of Fame",
-  "Season Recap",
-  "Saves",
-  "God Mode",
-];
-
-// Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
-// div: 0=East  1=North  2=South  3=West
-const DIVS = [
-  { name: "East", idx: 0 },
-  { name: "North", idx: 1 },
-  { name: "South", idx: 2 },
-  { name: "West", idx: 3 },
-];
-
-const CONFS = ["AFC", "NFC"];
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-// Deterministic colour from team abbreviation so logos feel branded
-function teamColor(abbr = "") {
-  const palette = [
-    "#0A84FF",
-    "#34C759",
-    "#FF9F0A",
-    "#FF453A",
-    "#5E5CE6",
-    "#64D2FF",
-    "#FFD60A",
-    "#30D158",
-    "#FF6961",
-    "#AEC6CF",
-    "#FF6B35",
-    "#B4A0E5",
-  ];
-  let hash = 0;
-  for (let i = 0; i < abbr.length; i++)
-    hash = abbr.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
+function PlayerButton({ player, onSelect }) {
+  if (!player) return <span>—</span>;
+  if (!onSelect) return <span>{player.name}</span>;
+  return <button className="btn-link" onClick={() => onSelect(player.playerId)}>{player.name}</button>;
 }
 
-/**
- * Normalise a conf value to the 0/1 index regardless of whether teams store
- * it as a number (0=AFC, 1=NFC) or a string ('AFC'/'NFC').
- */
-function confIdx(val) {
-  if (typeof val === "number") return val;
-  return val === "AFC" ? 0 : 1;
-}
-
-/** Normalise a div value to its 0-3 index. */
-function divIdx(val) {
-  if (typeof val === "number") return val;
-  const map = { East: 0, North: 1, South: 2, West: 3 };
-  return map[val] ?? 0;
-}
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-/** Circular team "logo" placeholder with first 3 chars of abbreviation. */
-function TeamLogo({ abbr, size = 56, isUser = false }) {
-  const color = teamColor(abbr);
+function LeaderCard({ label, player, line, onPlayerSelect }) {
+  if (!player) return null;
   return (
-    <div
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        background: `${color}22`,
-        border: `3px solid ${isUser ? "var(--accent)" : color}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 900,
-        fontSize: size * 0.28,
-        color: isUser ? "var(--accent)" : color,
-        flexShrink: 0,
-        letterSpacing: "-0.5px",
-      }}
-    >
-      {abbr?.slice(0, 3) ?? "?"}
+    <div className="bs-leader-card">
+      <div className="bs-leader-label">{label}</div>
+      <div className="bs-leader-name"><PlayerButton player={player} onSelect={onPlayerSelect} /></div>
+      <div className="bs-leader-line">{line}</div>
     </div>
   );
 }
 
-/** Win-pct helper. */
-function winPct(wins, losses, ties) {
-  const games = wins + losses + ties;
-  if (games === 0) return ".000";
-  return ((wins + ties * 0.5) / games).toFixed(3).replace(/^0/, "");
-}
-
-/** Six-tier colour-coded OVR pill (Madden-style). */
-export function OvrPill({ ovr, size = "sm" }) {
-  let cls = "rating-color-bad";
-  let label = "";
-  if (ovr >= 95)      { cls = "rating-color-goat";  label = "GOAT"; }
-  else if (ovr >= 88) { cls = "rating-color-elite"; label = "ELITE"; }
-  else if (ovr >= 78) { cls = "rating-color-star";  label = "STAR"; }
-  else if (ovr >= 68) { cls = "rating-color-good";  label = ""; }
-  else if (ovr >= 58) { cls = "rating-color-avg";   label = ""; }
-
+function StatCompareRow({ label, homeValue, awayValue }) {
   return (
-    <span
-      className={`ovr-pill ${cls}`}
-      title={label ? `${label} (${ovr} OVR)` : `${ovr} OVR`}
-      style={size === "lg" ? { minWidth: 42, fontSize: "var(--text-sm)", padding: "3px 8px" } : {}}
-    >
-      {ovr}
-    </span>
-  );
-}
-
-// ── Standings Tab ─────────────────────────────────────────────────────────────
-
-// Helper: compute streak from recentResults array (["W","L","W",...])
-function computeStreak(results = []) {
-  if (!results.length) return null;
-  const last = results[results.length - 1];
-  let count = 0;
-  for (let i = results.length - 1; i >= 0; i--) {
-    if (results[i] === last) count++;
-    else break;
-  }
-  return { type: last, count };
-}
-
-// Compute conference standings for playoff picture
-function getConferenceRankings(teams, confVal) {
-  const ci = typeof confVal === "string" ? (confVal === "AFC" ? 0 : 1) : confVal;
-  const confTeams = teams
-    .filter(t => confIdx(t.conf) === ci)
-    .sort((a, b) => {
-      const pa = parseFloat(winPct(a.wins, a.losses, a.ties));
-      const pb = parseFloat(winPct(b.wins, b.losses, b.ties));
-      return pb - pa || b.wins - a.wins;
-    });
-
-  // 7 teams make playoffs: 4 division winners (seeds 1-4) + 3 wild cards (seeds 5-7)
-  // For simplicity: top team from each division gets a div seed, rest sorted for WC
-  const divMap = {};
-  confTeams.forEach(t => {
-    const d = divIdx(t.div);
-    if (!divMap[d] || parseFloat(winPct(t.wins, t.losses, t.ties)) > parseFloat(winPct(divMap[d].wins, divMap[d].losses, divMap[d].ties))) {
-      divMap[d] = t;
-    }
-  });
-  const divWinners = new Set(Object.values(divMap).map(t => t.id));
-  const divWinnerList = Object.values(divMap).sort((a, b) => parseFloat(winPct(b.wins, b.losses, b.ties)) - parseFloat(winPct(a.wins, a.losses, a.ties)));
-  const wildcards = confTeams.filter(t => !divWinners.has(t.id));
-
-  return { divWinnerList, wildcards, divWinners, confTeams };
-}
-
-function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
-  const ci = activeConf === "AFC" ? 0 : 1;
-  const { divWinnerList, wildcards, divWinners } = useMemo(
-    () => getConferenceRankings(teams, ci),
-    [teams, ci]
-  );
-
-  const allRanked = [...divWinnerList, ...wildcards];
-  const cutoff = 7; // 7 playoff teams
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-      {/* Section headers */}
-      <div style={{ fontSize: "var(--text-xs)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "1px", color: "var(--success)", marginBottom: "var(--space-1)" }}>
-        In Playoffs (Top 7)
-      </div>
-
-      {allRanked.map((team, i) => {
-        const isIn = i < cutoff;
-        const seed = i + 1;
-        const isDivWin = divWinners.has(team.id);
-        const isUser = team.id === userTeamId;
-        const divName = ["East","North","South","West"][divIdx(team.div)] ?? "";
-        const gamesPlayed = team.wins + team.losses + team.ties;
-
-        return (
-          <React.Fragment key={team.id}>
-            {i === cutoff && (
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", margin: "var(--space-2) 0" }}>
-                <div style={{ flex: 1, height: 1, background: "var(--danger)", opacity: 0.5 }} />
-                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--danger)", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  Out of Playoffs
-                </span>
-                <div style={{ flex: 1, height: 1, background: "var(--danger)", opacity: 0.5 }} />
-              </div>
-            )}
-            <div
-              style={{
-                display: "flex", alignItems: "center", gap: "var(--space-3)",
-                padding: "var(--space-2) var(--space-3)",
-                background: isUser ? "var(--accent-muted)" : isIn ? "var(--surface)" : "rgba(255,69,58,0.04)",
-                borderRadius: "var(--radius-sm)",
-                border: `1px solid ${isUser ? "var(--accent)" : isIn && i === cutoff - 1 ? "rgba(52,199,89,0.2)" : "var(--hairline)"}`,
-                cursor: "pointer", transition: "background 0.15s",
-              }}
-              onClick={() => onTeamSelect?.(team.id)}
-            >
-              {/* Seed */}
-              <span style={{ width: 22, textAlign: "center", fontWeight: 800, fontSize: "var(--text-sm)", color: i < 4 ? "var(--warning)" : "var(--text-muted)" }}>
-                {seed}
-              </span>
-
-              {/* Team logo */}
-              <TeamLogo abbr={team.abbr} size={28} isUser={isUser} />
-
-              {/* Name */}
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: isUser ? 700 : 500, fontSize: "var(--text-sm)", color: isUser ? "var(--accent)" : "var(--text)" }}>
-                  {team.abbr}
-                  {isUser && <span style={{ marginLeft: 4, color: "var(--accent)", fontSize: 10 }}>★</span>}
-                </div>
-                <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
-                  {divName}{isDivWin ? " ✓" : ""}
-                </div>
-              </div>
-
-              {/* Record */}
-              <span style={{ fontSize: "var(--text-xs)", fontVariantNumeric: "tabular-nums", color: "var(--text-muted)" }}>
-                {team.wins}-{team.losses}{team.ties > 0 ? `-${team.ties}` : ""}
-              </span>
-
-              {/* Playoff badge */}
-              {isIn ? (
-                <span className={`playoff-badge ${isDivWin ? "playoff-badge-div" : i < cutoff - 1 ? "playoff-badge-in" : "playoff-badge-bubble"}`}>
-                  {isDivWin ? `DIV ${["AFC","NFC"][ci]}` : "WC"}
-                </span>
-              ) : (
-                i === cutoff ? (
-                  <span className="playoff-badge playoff-badge-bubble">BUBBLE</span>
-                ) : (
-                  <span className="playoff-badge playoff-badge-out">OUT</span>
-                )
-              )}
-            </div>
-          </React.Fragment>
-        );
-      })}
+    <div className="bs-compare-row">
+      <span>{awayValue ?? "—"}</span>
+      <span className="bs-compare-label">{label}</span>
+      <span>{homeValue ?? "—"}</span>
     </div>
   );
 }
 
-function StandingsTab({ teams, userTeamId, onTeamSelect }) {
-  const [activeConf, setActiveConf] = useState("AFC");
-  const [viewMode, setViewMode] = useState("division"); // "division" | "playoff"
+function PlayerTable({ title, players, cols, onPlayerSelect }) {
+  if (!players.length) return null;
+  return (
+    <section className="bs-section">
+      <h4>{title}</h4>
+      <div className="bs-table-wrap">
+        <table className="box-score-table">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Pos</th>
+              {cols.map((col) => <th key={col.key}>{col.label}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {players.map((p) => (
+              <tr key={`${p.teamId}-${p.playerId}`}>
+                <td><PlayerButton player={p} onSelect={onPlayerSelect} /></td>
+                <td>{p.pos}</td>
+                {cols.map((col) => <td key={col.key}>{p.stats?.[col.key] ?? "—"}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
 
-  // Normalise activeConf label → numeric index for comparison
-  const activeConfIdx = activeConf === "AFC" ? 0 : 1;
+export default function BoxScore({ gameId, actions, league, onClose, onPlayerSelect, onTeamSelect }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [game, setGame] = useState(null);
+  const [expanded, setExpanded] = useState(false);
 
-  const grouped = useMemo(() => {
-    const confTeams = teams.filter((t) => confIdx(t.conf) === activeConfIdx);
-    const groups = DIVS.map(({ name, idx }) => ({
-      div: name,
-      teams: confTeams
-        .filter((t) => divIdx(t.div) === idx)
-        .sort((a, b) => {
-          const pa = winPct(a.wins, a.losses, a.ties);
-          const pb = winPct(b.wins, b.losses, b.ties);
-          return pb - pa || b.wins - a.wins;
-        }),
-    })).filter((g) => g.teams.length > 0);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setError("");
+    setGame(null);
 
-    // Sort groups so the user's division is first
-    if (userTeamId) {
-      groups.sort((a, b) => {
-        const aHasUser = a.teams.some((t) => t.id === userTeamId);
-        const bHasUser = b.teams.some((t) => t.id === userTeamId);
-        if (aHasUser && !bHasUser) return -1;
-        if (!aHasUser && bHasUser) return 1;
-        return 0;
+    actions?.getBoxScore?.(gameId)
+      .then((res) => {
+        if (!alive) return;
+        setGame(res?.game ?? null);
+        if (!res?.game) setError(res?.error ?? "Box score unavailable for this game.");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setError(err?.message ?? "Unable to load box score.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
       });
-    }
-    return groups;
-  }, [teams, activeConfIdx, userTeamId]);
+
+    return () => { alive = false; };
+  }, [actions, gameId]);
+
+  const teamsById = useMemo(() => {
+    const map = {};
+    const teams = league?.teams ?? [];
+    teams.forEach((t) => { map[t.id] = t; });
+    return map;
+  }, [league?.teams]);
+
+  const homeTeam = teamsById[game?.homeId] ?? { id: game?.homeId, abbr: game?.homeAbbr ?? "HOME", wins: 0, losses: 0, ties: 0 };
+  const awayTeam = teamsById[game?.awayId] ?? { id: game?.awayId, abbr: game?.awayAbbr ?? "AWAY", wins: 0, losses: 0, ties: 0 };
+
+  const leaders = useMemo(() => deriveLeaders(game), [game]);
+  const scoring = useMemo(() => deriveScoringSummary(game?.stats?.playLogs ?? [], teamsById), [game, teamsById]);
+  const momentumNotes = useMemo(() => deriveMomentumNotes(game?.stats?.playLogs ?? []), [game]);
+  const quarterScores = useMemo(() => deriveQuarterScores(game, game?.stats?.playLogs ?? []), [game]);
+
+  const awayPlayers = useMemo(() => toPlayerArray(game?.stats?.away, game?.awayId), [game]);
+  const homePlayers = useMemo(() => toPlayerArray(game?.stats?.home, game?.homeId), [game]);
+  const playerRows = useMemo(() => [...awayPlayers, ...homePlayers], [awayPlayers, homePlayers]);
+  const teamTotals = useMemo(() => ({
+    home: deriveTeamTotals(game?.stats?.home),
+    away: deriveTeamTotals(game?.stats?.away),
+  }), [game]);
+
+  const topPassers = playerRows.filter((p) => (p.stats?.passAtt ?? 0) > 0).sort((a, b) => (b.stats?.passYd ?? 0) - (a.stats?.passYd ?? 0)).slice(0, 6);
+  const topRushers = playerRows.filter((p) => (p.stats?.rushAtt ?? 0) > 0).sort((a, b) => (b.stats?.rushYd ?? 0) - (a.stats?.rushYd ?? 0)).slice(0, 6);
+  const topReceivers = playerRows.filter((p) => (p.stats?.receptions ?? 0) > 0).sort((a, b) => (b.stats?.recYd ?? 0) - (a.stats?.recYd ?? 0)).slice(0, 6);
+  const topDefenders = playerRows.filter((p) => (p.stats?.tackles ?? 0) + (p.stats?.sacks ?? 0) + (p.stats?.interceptions ?? 0) > 0).sort((a, b) => ((b.stats?.tackles ?? 0) + (b.stats?.sacks ?? 0) * 2 + (b.stats?.interceptions ?? 0) * 2) - ((a.stats?.tackles ?? 0) + (a.stats?.sacks ?? 0) * 2 + (a.stats?.interceptions ?? 0) * 2)).slice(0, 8);
 
   return (
-    <div>
-      {/* Conference tab pills + view mode toggle */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-3)", marginBottom: "var(--space-6)" }}>
-        <Tabs value={activeConf} onValueChange={setActiveConf}>
-          <TabsList>
-            {CONFS.map(c => <TabsTrigger key={c} value={c}>{c}</TabsTrigger>)}
-          </TabsList>
-        </Tabs>
-        <Tabs value={viewMode} onValueChange={setViewMode}>
-          <TabsList>
-            <TabsTrigger value="division">Divisions</TabsTrigger>
-            <TabsTrigger value="playoff">Playoff Picture</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {viewMode === "playoff" ? (
-        <PlayoffPictureView
-          teams={teams}
-          activeConf={activeConf}
-          userTeamId={userTeamId}
-          onTeamSelect={onTeamSelect}
-        />
-      ) : (
-      <div style={{ display: "grid", gap: "var(--space-6)" }}>
-        {grouped.map(({ div, teams: divTeams }) => (
-          <Card key={div} className="card-premium">
-            <CardHeader>
-              <CardTitle className="text-xs uppercase tracking-widest text-[color:var(--text-muted)]">{activeConf} {div}</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="h-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead style={{ paddingLeft: "var(--space-5)" }}>Team</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>W</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>L</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>T</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>PCT</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>PF</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>PA</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>STRK</TableHead>
-                      <TableHead style={{ textAlign: "center" }}>OVR</TableHead>
-                      <TableHead style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>CAP</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {divTeams.map((team, idx) => {
-                      const isUser = team.id === userTeamId;
-                      return (
-                        <TableRow
-                          key={team.id}
-                          className={isUser ? "user-team-row" : ""}
-                        >
-                          <TableCell style={{ paddingLeft: "var(--space-4)" }}>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "var(--space-3)",
-                              }}
-                            >
-                              <span
-                                style={{
-                                  width: 20,
-                                  textAlign: "center",
-                                  color: "var(--text-subtle)",
-                                  fontSize: "var(--text-xs)",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {idx + 1}
-                              </span>
-                              <TeamLogo
-                                abbr={team.abbr}
-                                size={32}
-                                isUser={isUser}
-                              />
-                              <div>
-                                <div
-                                  style={{
-                                    fontWeight: 600,
-                                    color: "var(--text)",
-                                    fontSize: "var(--text-sm)",
-                                    cursor: "pointer",
-                                  }}
-                                  onClick={() => onTeamSelect?.(team.id)}
-                                >
-                                  {team.name}
-                                  {isUser && (
-                                    <span
-                                      style={{
-                                        marginLeft: 6,
-                                        fontSize: "var(--text-xs)",
-                                        color: "var(--accent)",
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      ★
-                                    </span>
-                                  )}
-                                </div>
-                                <div
-                                  style={{
-                                    fontSize: "var(--text-xs)",
-                                    color: "var(--text-subtle)",
-                                  }}
-                                >
-                                  {team.abbr}
-                                </div>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell
-                            style={{
-                              textAlign: "center",
-                              fontWeight: 700,
-                              color: "var(--text)",
-                            }}
-                          >
-                            {team.wins}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{team.losses}</TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{team.ties}</TableCell>
-                          <TableCell style={{ textAlign: "center", fontWeight: 600 }}>
-                            {winPct(team.wins, team.losses, team.ties)}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>{team.ptsFor}</TableCell>
-                          <TableCell style={{ textAlign: "center" }}>
-                            {team.ptsAgainst}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>
-                            {(() => {
-                              const streak = computeStreak(team.recentResults ?? []);
-                              if (!streak) return <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>—</span>;
-                              return (
-                                <span className={`streak-badge streak-${streak.type.toLowerCase()}`}>
-                                  {streak.type}{streak.count}
-                                </span>
-                              );
-                            })()}
-                          </TableCell>
-                          <TableCell style={{ textAlign: "center" }}>
-                            <OvrPill ovr={team.ovr} />
-                          </TableCell>
-                          <TableCell
-                            style={{
-                              textAlign: "right",
-                              paddingRight: "var(--space-4)",
-                              color: "var(--success)",
-                              fontSize: "var(--text-sm)",
-                            }}
-                          >
-                            ${(team.capRoom ?? 0).toFixed(1)}M
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-        ))}
-
-        {grouped.length === 0 && (
-          <div
-            style={{
-              color: "var(--text-muted)",
-              textAlign: "center",
-              padding: "var(--space-8)",
-            }}
-          >
-            No teams found for {activeConf}.
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content modal-large box-score-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="box-score-header bs-header-sticky">
+          <div>
+            <div className="muted" style={{ fontSize: 12 }}>Week {game?.week ?? "—"} · {game?.seasonId ?? ""}</div>
+            <h2 style={{ margin: "2px 0 8px" }}>Game Center Recap</h2>
           </div>
-        )}
-      </div>
-      )} {/* end playoff/division ternary */}
-    </div>
-  );
-}
-
-// ── Schedule Tab ──────────────────────────────────────────────────────────────
-
-function ScheduleTab({
-  schedule,
-  teams,
-  currentWeek,
-  userTeamId,
-  nextGameStakes,
-  seasonId,
-  onGameSelect,
-  playoffSeeds,
-  onTeamRoster,
-}) {
-  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
-
-  const teamById = useMemo(() => {
-    const map = {};
-    teams.forEach((t) => {
-      map[t.id] = t;
-    });
-    return map;
-  }, [teams]);
-
-  // Build a fast teamId → seed lookup from the playoff seeds structure.
-  const seedByTeam = useMemo(() => {
-    if (!playoffSeeds) return {};
-    const map = {};
-    for (const confSeeds of Object.values(playoffSeeds)) {
-      for (const s of confSeeds) {
-        map[s.teamId] = s.seed;
-      }
-    }
-    return map;
-  }, [playoffSeeds]);
-
-  // Guard: if schedule is missing (e.g. older save format) show a clear message
-  // instead of crashing or showing blank content.
-  if (!schedule?.weeks?.length) {
-    return (
-      <div
-        style={{
-          padding: "var(--space-8)",
-          textAlign: "center",
-          color: "var(--text-muted)",
-          fontSize: "var(--text-sm)",
-        }}
-      >
-        Schedule data is not available for this save. Advance the season to
-        regenerate.
-      </div>
-    );
-  }
-
-  const isPlayoffs = selectedWeek >= 19;
-
-  const totalWeeks = schedule?.weeks?.length ?? 0;
-  const weekData = schedule?.weeks?.find((w) => w.week === selectedWeek);
-  const games = weekData?.games ?? [];
-
-  return (
-    <div>
-      {/* Week selector */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "var(--space-3)",
-          marginBottom: "var(--space-6)",
-          flexWrap: "wrap",
-        }}
-      >
-        <span
-          style={{
-            fontSize: "var(--text-sm)",
-            color: "var(--text-muted)",
-            fontWeight: 600,
-          }}
-        >
-          Week
-        </span>
-        <div className="standings-tabs" style={{ flexWrap: "wrap" }}>
-          {Array.from({ length: totalWeeks }, (_, i) => i + 1).map((w) => (
-            <button
-              key={w}
-              className={`standings-tab${selectedWeek === w ? " active" : ""}`}
-              onClick={() => setSelectedWeek(w)}
-              style={{ minWidth: 36 }}
-            >
-              {w}
-            </button>
-          ))}
+          <button className="btn" onClick={onClose}>Close</button>
         </div>
-      </div>
 
-      {/* Game cards grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: "var(--space-4)",
-        }}
-      >
-        {games.map((game, idx) => {
-          const home = teamById[game.home] ?? {
-            name: `Team ${game.home}`,
-            abbr: "???",
-            wins: 0,
-            losses: 0,
-            ties: 0,
-          };
-          const away = teamById[game.away] ?? {
-            name: `Team ${game.away}`,
-            abbr: "???",
-            wins: 0,
-            losses: 0,
-            ties: 0,
-          };
-          const isUserGame = home.id === userTeamId || away.id === userTeamId;
-          const showStakes =
-            isUserGame &&
-            !game.played &&
-            nextGameStakes > 50 &&
-            selectedWeek === currentWeek;
-          const isClickable = game.played && onGameSelect && seasonId;
-          const matchupAngles = !game.played
-            ? derivePregameAngles({ league: { teams, schedule }, game, week: selectedWeek })
-            : [];
-          const postgameStory = game.played
-            ? derivePostgameStory({ league: { teams, phase: selectedWeek >= 19 ? "playoffs" : "regular" }, game, week: selectedWeek })
-            : null;
-          const handleCardClick = isClickable
-            ? () =>
-                onGameSelect(
-                  `${seasonId}_w${selectedWeek}_${game.home}_${game.away}`,
-                )
-            : undefined;
+        {loading && <div className="box-score-container">Loading box score…</div>}
+        {!loading && error && <div className="box-score-container">{error}</div>}
 
-          return (
-            <div
-              key={idx}
-              className="matchup-card"
-              onClick={handleCardClick}
-              style={{
-                ...(isUserGame
-                  ? {
-                      borderColor: "var(--accent)",
-                      boxShadow: "0 0 0 1px var(--accent), var(--shadow-lg)",
-                    }
-                  : {}),
-                ...(isClickable ? { cursor: "pointer" } : {}),
-              }}
-            >
-              {/* Card header */}
-              <div className="matchup-header">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                  }}
-                >
-                  <span>Week {selectedWeek}</span>
-                  {showStakes && (
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: "var(--radius-pill)",
-                        background:
-                          nextGameStakes > 80
-                            ? "var(--danger)"
-                            : "var(--warning)",
-                        color: "#fff",
-                        fontWeight: 700,
-                        fontSize: "var(--text-xs)",
-                        letterSpacing: "0.5px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {nextGameStakes > 80 ? "🔥 RIVALRY" : "⚠️ STAKES"}
-                    </span>
-                  )}
-                </div>
-                <span
-                  style={{
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius-pill)",
-                    background: game.played
-                      ? "var(--success)22"
-                      : "var(--accent)22",
-                    color: game.played ? "var(--success)" : "var(--accent)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {game.played ? "Final" : "Scheduled"}
-                </span>
+        {!loading && !error && game && (
+          <div className="box-score-container">
+            <section className="bs-score-hero">
+              <div>
+                <TeamButton team={awayTeam} onSelect={onTeamSelect} />
+                <div className="bs-record">{awayTeam.wins ?? 0}-{awayTeam.losses ?? 0}{awayTeam.ties ? `-${awayTeam.ties}` : ""}</div>
               </div>
-              {!game.played && matchupAngles.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: "var(--space-2)" }}>
-                  {matchupAngles.map((angle) => (
-                    <Badge key={`${angle.key}-${angle.label}`} variant={angle.tone === "danger" ? "destructive" : angle.tone === "warning" ? "secondary" : "outline"}>
-                      {angle.label}
-                    </Badge>
+              <div className="bs-scoreline">{game.awayScore} - {game.homeScore}</div>
+              <div>
+                <TeamButton team={homeTeam} onSelect={onTeamSelect} />
+                <div className="bs-record">{homeTeam.wins ?? 0}-{homeTeam.losses ?? 0}{homeTeam.ties ? `-${homeTeam.ties}` : ""}</div>
+              </div>
+            </section>
+
+            <section className="bs-section">
+              <div className="bs-section-header">
+                <h4>Game recap</h4>
+                <button className="btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "Compact" : "Expand details"}</button>
+              </div>
+              <div className="bs-leaders-grid">
+                <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} />
+                <LeaderCard label="Rushing leader" player={leaders.rush} line={describeStatLine(leaders.rush, ["rushAtt", "rushYd", "rushTD"])} onPlayerSelect={onPlayerSelect} />
+                <LeaderCard label="Receiving leader" player={leaders.receive} line={describeStatLine(leaders.receive, ["receptions", "recYd", "recTD"])} onPlayerSelect={onPlayerSelect} />
+                <LeaderCard label="Defensive leader" player={leaders.defense} line={describeStatLine(leaders.defense, ["tackles", "sacks", "interceptions", "forcedFumbles"])} onPlayerSelect={onPlayerSelect} />
+              </div>
+            </section>
+
+            <section className="bs-section">
+              <h4>Team comparison</h4>
+              <div className="bs-compare-grid">
+                <StatCompareRow label="Total Yards" awayValue={teamTotals.away.totalYards} homeValue={teamTotals.home.totalYards} />
+                <StatCompareRow label="Pass Yards" awayValue={teamTotals.away.passYards} homeValue={teamTotals.home.passYards} />
+                <StatCompareRow label="Rush Yards" awayValue={teamTotals.away.rushYards} homeValue={teamTotals.home.rushYards} />
+                <StatCompareRow label="Turnovers" awayValue={teamTotals.away.turnovers} homeValue={teamTotals.home.turnovers} />
+                <StatCompareRow label="Sacks" awayValue={teamTotals.away.sacks} homeValue={teamTotals.home.sacks} />
+                <StatCompareRow label="3rd Down" awayValue={`${teamTotals.away.thirdDownMade}/${teamTotals.away.thirdDownAtt}`} homeValue={`${teamTotals.home.thirdDownMade}/${teamTotals.home.thirdDownAtt}`} />
+              </div>
+            </section>
+
+            {expanded && (
+              <>
+                <PlayerTable
+                  title="Passing leaders"
+                  players={topPassers}
+                  cols={[{ key: "passComp", label: "Comp" }, { key: "passAtt", label: "Att" }, { key: "passYd", label: "Yds" }, { key: "passTD", label: "TD" }, { key: "interceptions", label: "INT" }]}
+                  onPlayerSelect={onPlayerSelect}
+                />
+                <PlayerTable
+                  title="Rushing leaders"
+                  players={topRushers}
+                  cols={[{ key: "rushAtt", label: "Att" }, { key: "rushYd", label: "Yds" }, { key: "rushTD", label: "TD" }, { key: "fumblesLost", label: "FUM" }]}
+                  onPlayerSelect={onPlayerSelect}
+                />
+                <PlayerTable
+                  title="Receiving leaders"
+                  players={topReceivers}
+                  cols={[{ key: "targets", label: "Tgt" }, { key: "receptions", label: "Rec" }, { key: "recYd", label: "Yds" }, { key: "recTD", label: "TD" }]}
+                  onPlayerSelect={onPlayerSelect}
+                />
+                <PlayerTable
+                  title="Defensive leaders"
+                  players={topDefenders}
+                  cols={[{ key: "tackles", label: "Tkl" }, { key: "sacks", label: "Sacks" }, { key: "interceptions", label: "INT" }, { key: "passesDefended", label: "PD" }, { key: "forcedFumbles", label: "FF" }]}
+                  onPlayerSelect={onPlayerSelect}
+                />
+              </>
+            )}
+
+            {!!scoring.length && (
+              <section className="bs-section">
+                <h4>Scoring summary</h4>
+                <div className="bs-list">
+                  {scoring.slice(expanded ? 0 : 6).map((item) => (
+                    <div key={item.id} className="bs-list-item">
+                      <span>Q{item.quarter} {item.clock}</span>
+                      <span><strong>{item.teamAbbr}</strong> · {item.type}</span>
+                      <span>{item.text}</span>
+                    </div>
                   ))}
                 </div>
-              )}
-
-              {/* Final score display */}
-              {game.played && game.homeScore !== undefined && (
-                <>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "baseline",
-                      gap: "var(--space-3)",
-                      padding: "var(--space-1) 0",
-                      fontSize: "var(--text-xl)",
-                      fontWeight: 800,
-                    }}
-                  >
-                    <span
-                      style={{
-                        color:
-                          game.awayScore > game.homeScore
-                            ? "var(--text)"
-                            : "var(--text-muted)",
-                      }}
-                    >
-                      {isPlayoffs && seedByTeam[away.id]
-                        ? `(${seedByTeam[away.id]}) `
-                        : ""}
-                      {away.abbr} {game.awayScore}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-subtle)",
-                        fontWeight: 400,
-                      }}
-                    >
-                      –
-                    </span>
-                    <span
-                      style={{
-                        color:
-                          game.homeScore > game.awayScore
-                            ? "var(--text)"
-                            : "var(--text-muted)",
-                      }}
-                    >
-                      {game.homeScore} {home.abbr}
-                      {isPlayoffs && seedByTeam[home.id]
-                        ? ` (${seedByTeam[home.id]})`
-                        : ""}
-                    </span>
-                  </div>
-                  {isClickable && (
-                    <div
-                      style={{
-                        textAlign: "center",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--accent)",
-                        marginBottom: "var(--space-1)",
-                      }}
-                    >
-                      View Box Score →
-                    </div>
-                  )}
-                  {postgameStory && (
-                    <div style={{ marginBottom: "var(--space-2)", padding: "6px 8px", border: "1px solid var(--hairline)", borderRadius: 8, background: "var(--surface-strong)" }}>
-                      <div style={{ fontWeight: 700, fontSize: "var(--text-xs)", color: "var(--text)" }}>{postgameStory.headline}</div>
-                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{postgameStory.detail}</div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Teams */}
-              <div className="matchup-content">
-                <div className="matchup-team away">
-                  <TeamLogo
-                    abbr={away.abbr}
-                    size={64}
-                    isUser={away.id === userTeamId}
-                  />
-                  <div
-                    className="team-name-matchup"
-                    onClick={
-                      onTeamRoster
-                        ? (e) => {
-                            e.stopPropagation();
-                            onTeamRoster(away.id);
-                          }
-                        : undefined
-                    }
-                    style={{ cursor: onTeamRoster ? "pointer" : "default" }}
-                    title={
-                      onTeamRoster
-                        ? `View ${away.name ?? away.abbr} roster`
-                        : undefined
-                    }
-                  >
-                    {isPlayoffs && seedByTeam[away.id] ? (
-                      <span
-                        style={{
-                          fontSize: "var(--text-xs)",
-                          color: "var(--accent)",
-                          marginRight: 3,
-                        }}
-                      >
-                        ({seedByTeam[away.id]})
-                      </span>
-                    ) : null}
-                    {away.abbr}
-                  </div>
-                  <div className="team-record-matchup">
-                    {away.wins}-{away.losses}
-                    {away.ties > 0 ? `-${away.ties}` : ""}
-                  </div>
-                </div>
-                <div className="matchup-vs">
-                  <span className="vs-badge">VS</span>
-                  <span className="at-badge">at</span>
-                </div>
-                <div className="matchup-team home">
-                  <TeamLogo
-                    abbr={home.abbr}
-                    size={64}
-                    isUser={home.id === userTeamId}
-                  />
-                  <div
-                    className="team-name-matchup"
-                    onClick={
-                      onTeamRoster
-                        ? (e) => {
-                            e.stopPropagation();
-                            onTeamRoster(home.id);
-                          }
-                        : undefined
-                    }
-                    style={{ cursor: onTeamRoster ? "pointer" : "default" }}
-                    title={
-                      onTeamRoster
-                        ? `View ${home.name ?? home.abbr} roster`
-                        : undefined
-                    }
-                  >
-                    {isPlayoffs && seedByTeam[home.id] ? (
-                      <span
-                        style={{
-                          fontSize: "var(--text-xs)",
-                          color: "var(--accent)",
-                          marginRight: 3,
-                        }}
-                      >
-                        ({seedByTeam[home.id]})
-                      </span>
-                    ) : null}
-                    {home.abbr}
-                  </div>
-                  <div className="team-record-matchup">
-                    {home.wins}-{home.losses}
-                    {home.ties > 0 ? `-${home.ties}` : ""}
-                  </div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-
-        {games.length === 0 && (
-          <p
-            style={{
-              color: "var(--text-muted)",
-              gridColumn: "1/-1",
-              textAlign: "center",
-              padding: "var(--space-8)",
-            }}
-          >
-            No games found for week {selectedWeek}.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Leaders Tab ───────────────────────────────────────────────────────────────
-
-function LeadersTab({ teams }) {
-  const leaders = useMemo(
-    () => [
-      {
-        label: "Most Wins",
-        rows: [...teams].sort((a, b) => b.wins - a.wins).slice(0, 5),
-        value: (t) => `${t.wins}W`,
-      },
-      {
-        label: "Top Offense (PF)",
-        rows: [...teams].sort((a, b) => b.ptsFor - a.ptsFor).slice(0, 5),
-        value: (t) => `${t.ptsFor} pts`,
-      },
-      {
-        label: "Best Defense (PA)",
-        rows: [...teams]
-          .sort((a, b) => a.ptsAgainst - b.ptsAgainst)
-          .slice(0, 5),
-        value: (t) => `${t.ptsAgainst} PA`,
-      },
-      {
-        label: "Highest Rated",
-        rows: [...teams].sort((a, b) => b.ovr - a.ovr).slice(0, 5),
-        value: (t) => `OVR ${t.ovr}`,
-      },
-    ],
-    [teams],
-  );
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-        gap: "var(--space-6)",
-      }}
-    >
-      {leaders.map(({ label, rows, value }) => (
-        <div
-          key={label}
-          className="card"
-          style={{ padding: 0, overflow: "hidden" }}
-        >
-          <div
-            style={{
-              padding: "var(--space-3) var(--space-5)",
-              background: "var(--surface-strong)",
-              borderBottom: "1px solid var(--hairline)",
-            }}
-          >
-            <span className="hub-section-title" style={{ marginBottom: 0 }}>
-              {label}
-            </span>
-          </div>
-          <div
-            className="hub-rankings-list"
-            style={{ padding: "var(--space-3)" }}
-          >
-            {rows.map((team, i) => (
-              <div key={team.id} className="hub-ranking-item">
-                <span
-                  className="hub-ranking-rank"
-                  style={i === 0 ? { color: "var(--warning)" } : {}}
-                >
-                  {i + 1}
-                </span>
-                <TeamLogo abbr={team.abbr} size={28} />
-                <span className="hub-ranking-team">{team.name}</span>
-                <span
-                  className="hub-ranking-record"
-                  style={{ fontWeight: 600, color: "var(--text)" }}
-                >
-                  {value(team)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ── Main Component ─────────────────────────────────────────────────────────────
-
-// ── Quick-Jump FAB ─────────────────────────────────────────────────────────
-function QuickJumpFab({ onNavigate }) {
-  const [open, setOpen] = useState(false);
-
-  const items = [
-    { label: "Roster", icon: "👥", tab: "Roster" },
-    { label: "Standings", icon: "📊", tab: "Standings" },
-    { label: "Schedule", icon: "📅", tab: "Schedule" },
-    { label: "Trades", icon: "🔄", tab: "Trades" },
-  ];
-
-  return (
-    <div className="quick-jump-fab">
-      {open && (
-        <div className="quick-jump-menu">
-          {items.map((item) => (
-            <button
-              key={item.tab}
-              onClick={() => {
-                onNavigate(item.tab);
-                setOpen(false);
-              }}
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <button
-        className="quick-jump-fab-btn"
-        onClick={() => setOpen(!open)}
-        title="Quick navigation"
-      >
-        {open ? "X" : "="}
-      </button>
-    </div>
-  );
-}
-
-export default function LeagueDashboard({ league, busy, simulating, actions, onAdvanceWeek, notifications = [], onDismissNotification }) {
-  const [activeTab, setActiveTab] = useState("Weekly Hub");
-  const [selectedGameId, setSelectedGameId] = useState(null);
-  const [selectedPlayerId, setSelectedPlayerId] = useState(null);
-  const [selectedTeamId, setSelectedTeamId] = useState(null);
-  const [comparePlayerId, setComparePlayerId] = useState(null);
-
-  // Track the previous phase so we can detect transitions.
-  const prevPhaseRef = React.useRef(null);
-
-  // Dynamic tabs: add Postseason when in playoffs
-  const TABS = useMemo(() => {
-    const isPlayoffs = league?.phase === "playoffs" || league?.playoffSeeds;
-    if (isPlayoffs) {
-      // Insert "Postseason" after "Schedule"
-      const copy = [...BASE_TABS];
-      const idx = copy.indexOf("Schedule");
-      copy.splice(idx + 1, 0, "Postseason");
-      return copy;
-    }
-    return BASE_TABS;
-  }, [league?.phase, league?.playoffSeeds]);
-
-  // Auto-navigate based on phase transitions:
-  //  draft       → go to Draft tab (so the user sees the board immediately)
-  //  draft→preseason → new season started; leave Draft tab so the stale
-  //                    DraftComplete panel no longer shows.
-  //  playoffs    → auto-switch to Postseason tab on first entry
-  useEffect(() => {
-    const prevPhase = prevPhaseRef.current;
-    prevPhaseRef.current = league?.phase;
-
-    if (league?.phase === "draft") {
-      setActiveTab("Draft");
-    } else if (prevPhase === "draft" && league?.phase === "preseason") {
-      setActiveTab("Home");
-    } else if (league?.phase === "playoffs" && prevPhase !== "playoffs") {
-      setActiveTab("Postseason");
-    }
-  }, [league?.phase]);
-
-  if (!league) return null;
-
-  // NOTE: a missing schedule only affects the Schedule tab.
-  // Do NOT block the whole dashboard — all other tabs remain usable.
-
-  const userTeam = league.teams?.find((t) => t.id === league.userTeamId);
-  const userAbbr = userTeam?.abbr ?? "---";
-  const userRecord = userTeam
-    ? `${userTeam.wins}-${userTeam.losses}${userTeam.ties ? `-${userTeam.ties}` : ""}`
-    : "0-0";
-
-  const totalGames =
-    league.teams.reduce((s, t) => s + t.wins + t.losses + t.ties, 0) / 2;
-  const avgScore = league.teams.length
-    ? Math.round(
-        league.teams.reduce((s, t) => s + t.ptsFor, 0) /
-          Math.max(1, totalGames * 2),
-      )
-    : 0;
-  const avgOvr = league.teams.length
-    ? Math.round(
-        league.teams.reduce((s, t) => s + t.ovr, 0) / league.teams.length,
-      )
-    : 75;
-
-  const capTotal = userTeam?.capTotal ?? 255;
-  const capUsed = userTeam?.capUsed ?? 0;
-  const deadCap = userTeam?.deadCap ?? 0;
-  const capRoom = userTeam?.capRoom ?? capTotal - capUsed;
-
-  return (
-    <div>
-      {/* ── Hub Header — compact single row ── */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-3)",
-        padding: "var(--space-3) 0",
-        marginBottom: "var(--space-2)",
-        borderBottom: "1px solid var(--hairline)",
-      }}>
-        <TeamLogo abbr={userAbbr} size={40} isUser />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 800, fontSize: "var(--text-base)", color: "var(--text)", lineHeight: 1.1 }}>
-            {userTeam?.name ?? "No Team Selected"}
-          </div>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 1 }}>
-            <span style={{ fontWeight: 700, color: "var(--text)" }}>{userRecord}</span>
-            {userTeam && <span> · {userTeam.conf} {userTeam.div}</span>}
-            {league.week && <span> · Week {league.week}</span>}
-            {" · "}
-            <span style={{ color: (league.ownerApproval ?? 75) >= 70 ? "var(--success)" : (league.ownerApproval ?? 75) >= 50 ? "var(--warning)" : "var(--danger)" }}>
-              Owner {league.ownerApproval ?? 75}%
-            </span>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "right" }}>
-            <div style={{ fontWeight: 700, color: "var(--text-muted)" }}>{league.year ?? 2025}</div>
-            <div style={{ textTransform: "capitalize" }}>{league.phase}</div>
-          </div>
-          <NotificationCenter
-            notifications={notifications}
-            onDismiss={onDismissNotification}
-            onDismissAll={() => {
-              notifications.forEach(n => onDismissNotification?.(n.id));
-            }}
-          />
-        </div>
-      </div>
-
-      {/* ── Contextual Action Banners (compact) ── */}
-      {league.phase === "offseason_resign" && (
-        <div onClick={() => setActiveTab("Roster")} className="action-banner action-banner-success">
-          ✍️ <strong>Expiring Contracts</strong> — review before Free Agency
-        </div>
-      )}
-      {league.phase === "preseason" && (
-        <div className="action-banner action-banner-warning">
-          ⚠️ <strong>Roster Cutdown:</strong>{" "}
-          <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? "var(--danger)" : "var(--success)" }}>
-            {userTeam?.rosterCount ?? 0}
-          </span>
-          {" "}/ 53 — must release {Math.max(0, (userTeam?.rosterCount ?? 0) - 53)} players
-        </div>
-      )}
-      {league.phase === "playoffs" && activeTab !== "Postseason" && (
-        <div onClick={() => setActiveTab("Postseason")} className="action-banner action-banner-gold">
-          🏆 <strong>PLAYOFFS</strong> — click to view bracket
-        </div>
-      )}
-      {league.phase === "draft" && activeTab !== "Draft" && (
-        <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
-          🏈 <strong>Draft Board is Open</strong> — click to make picks
-        </div>
-      )}
-
-      {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
-      {activeTab !== "Home" && league.phase !== "draft" && <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: "var(--space-4)",
-          marginBottom: "var(--space-4)",
-        }}
-      >
-        {/* Cap Space widget — consolidated financials */}
-        <div className="stat-box">
-          <div className="stat-label">Cap Space</div>
-          <div
-            className="stat-value-large"
-            style={{
-              color:
-                capRoom > 10
-                  ? "var(--success)"
-                  : capRoom > 0
-                    ? "var(--warning)"
-                    : "var(--danger)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            ${capRoom.toFixed(1)}M
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
-              <DonutChart data={[
-                  { value: capUsed - deadCap, color: "var(--accent)" },
-                  { value: deadCap, color: "var(--danger)" },
-                  { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
-              ]} size={36} strokeWidth={6} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: "var(--text-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                      <span style={{ color: "var(--accent)" }}>Act: ${(capUsed - deadCap).toFixed(1)}</span>
-                      {deadCap > 0 && <span style={{ color: "var(--danger)" }}>Ded: ${deadCap.toFixed(1)}</span>}
-                  </div>
-                  <div>Tot: ${capTotal.toFixed(0)}</div>
-              </div>
-          </div>
-        </div>
-
-        {/* Standings snapshot */}
-        <div className="stat-box">
-          <div className="stat-label">Standings</div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 8,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--text-xl)",
-                fontWeight: 800,
-                color: "var(--text)",
-              }}
-            >
-              {userRecord}
-            </span>
-            <span
-              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-            >
-              {userTeam
-                ? `${typeof userTeam.conf === "number" ? CONFS[userTeam.conf] : userTeam.conf} ${typeof userTeam.div === "number" ? DIVS.find((d) => d.idx === userTeam.div)?.name : userTeam.div}`
-                : ""}
-            </span>
-          </div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginTop: 2,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            Avg PPG: {avgScore} · Lg OVR: {avgOvr}
-          </div>
-        </div>
-
-        {/* Last Game + compact league scores */}
-        <div className="stat-box">
-          {(() => {
-            const prevWeek = (league.week || 1) - 1;
-            const weekData = league.schedule?.weeks?.find(
-              (w) => w.week === prevWeek,
-            );
-            const allGames = weekData?.games?.filter((g) => g.played) ?? [];
-            const userGame = allGames.find(
-              (g) =>
-                g.home === league.userTeamId ||
-                (typeof g.home === "object" &&
-                  g.home.id === league.userTeamId) ||
-                g.away === league.userTeamId ||
-                (typeof g.away === "object" && g.away.id === league.userTeamId),
-            );
-            const otherGames = allGames.filter((g) => g !== userGame);
-
-            const teamById = {};
-            league.teams?.forEach((t) => {
-              teamById[t.id] = t;
-            });
-
-            if (userGame) {
-              const homeId =
-                typeof userGame.home === "object"
-                  ? userGame.home.id
-                  : userGame.home;
-              const awayId =
-                typeof userGame.away === "object"
-                  ? userGame.away.id
-                  : userGame.away;
-              const isHome = homeId === league.userTeamId;
-              const userScore = isHome
-                ? userGame.homeScore
-                : userGame.awayScore;
-              const oppScore = isHome ? userGame.awayScore : userGame.homeScore;
-              const oppId = isHome ? awayId : homeId;
-              const oppAbbr = teamById[oppId]?.abbr ?? "???";
-              const win = userScore > oppScore;
-              const resultChar = win ? "W" : userScore === oppScore ? "T" : "L";
-              const resultColor = win
-                ? "var(--success)"
-                : userScore === oppScore
-                  ? "var(--text-muted)"
-                  : "var(--danger)";
-
-              return (
-                <>
-                  <div className="stat-label">Last Game</div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "var(--text-lg)",
-                        fontWeight: 800,
-                        color: resultColor,
-                      }}
-                    >
-                      {resultChar}
-                    </span>
-                    <span
-                      style={{ fontSize: "var(--text-base)", fontWeight: 700 }}
-                    >
-                      {userScore}-{oppScore}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      vs {oppAbbr}
-                    </span>
-                  </div>
-                  {/* Compact other league scores — click to open BoxScore */}
-                  {otherGames.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 10,
-                        color: "var(--text-subtle)",
-                        lineHeight: 1.5,
-                        fontVariantNumeric: "tabular-nums",
-                        maxHeight: 48,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {otherGames.slice(0, 6).map((g, i) => {
-                        const hId =
-                          typeof g.home === "object" ? g.home.id : g.home;
-                        const aId =
-                          typeof g.away === "object" ? g.away.id : g.away;
-                        const hA = teamById[hId]?.abbr ?? "?";
-                        const aA = teamById[aId]?.abbr ?? "?";
-                        const gId = league.seasonId
-                          ? `${league.seasonId}_w${prevWeek}_${hId}_${aId}`
-                          : null;
-                        return (
-                          <span
-                            key={i}
-                            onClick={
-                              gId ? () => setSelectedGameId(gId) : undefined
-                            }
-                            style={{
-                              cursor: gId ? "pointer" : "default",
-                              textDecoration: gId ? "underline dotted" : "none",
-                            }}
-                            title={gId ? "View box score" : undefined}
-                          >
-                            {aA} {g.awayScore}-{g.homeScore} {hA}
-                            {i < Math.min(otherGames.length, 6) - 1
-                              ? " · "
-                              : ""}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              );
-            }
-            return (
-              <>
-                <div className="stat-label">Last Game</div>
-                <div
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  No results yet
-                </div>
-              </>
-            );
-          })()}
-        </div>
-
-      </div>}
-
-      {/* ── Tab Navigation ── sticky, horizontally scrollable, no wrap ── */}
-      <div
-        className="standings-tabs"
-        style={{
-          marginBottom: "var(--space-4)",
-          flexWrap: "nowrap",
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
-          position: "sticky",
-          top: 0,
-          zIndex: 10,
-          background: "var(--bg)",
-          paddingTop: "var(--space-2)",
-          paddingBottom: "var(--space-2)",
-          margin: "0 calc(var(--space-4) * -1) var(--space-4)",
-          padding: "var(--space-2) var(--space-4)",
-          borderBottom: "1px solid var(--hairline)",
-        }}
-      >
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            className={`standings-tab${activeTab === tab ? " active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-            style={{ flexShrink: 0 }}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Tab Content — each tab is independently error-bounded ── */}
-      <div className="fade-in" key={activeTab}>
-        {activeTab === "Weekly Hub" && (
-          <TabErrorBoundary label="Weekly Hub">
-            <WeeklyHub
-              league={league}
-              actions={actions}
-              onNavigate={setActiveTab}
-              onPlayerSelect={setSelectedPlayerId}
-              onAdvanceWeek={onAdvanceWeek}
-              busy={busy}
-              simulating={simulating}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Home" && (
-          <TabErrorBoundary label="Home">
-            <HomeDashboard
-              league={league}
-              onTeamSelect={setSelectedTeamId}
-              onPlayerSelect={setSelectedPlayerId}
-              onTabChange={setActiveTab}
-            />
-            {league.phase !== "preseason" && (
-              <div style={{ marginTop: "var(--space-4)" }}>
-                <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} />
-              </div>
+              </section>
             )}
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Standings" && (
-          <TabErrorBoundary label="Standings">
-            <StandingsTab
-              teams={league.teams}
-              userTeamId={league.userTeamId}
-              onTeamSelect={setSelectedTeamId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Schedule" && (
-          <TabErrorBoundary label="Schedule">
-            <ScheduleTab
-              schedule={league.schedule}
-              teams={league.teams}
-              currentWeek={league.week}
-              userTeamId={league.userTeamId}
-              nextGameStakes={league.nextGameStakes}
-              seasonId={league.seasonId}
-              onGameSelect={setSelectedGameId}
-              playoffSeeds={league.playoffSeeds}
-              onTeamRoster={(teamId) => {
-                setSelectedTeamId(teamId);
-              }}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Stats" && (
-          <TabErrorBoundary label="Stats">
-            <PlayerStats
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Leaders" && (
-          <TabErrorBoundary label="Leaders">
-            <Leaders
-              onPlayerSelect={setSelectedPlayerId}
-              userTeamId={league.userTeamId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Award Races" && (
-          <TabErrorBoundary label="Award Races">
-            <AwardRaces
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Strategy" && (
-          <TabErrorBoundary label="Strategy">
-            <StrategyPanel league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Game Plan" && (
-          <TabErrorBoundary label="Game Plan">
-            <GamePlanScreen league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Roster" && (
-          <TabErrorBoundary label="Roster">
-            <Roster
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Depth Chart" && (
-          <TabErrorBoundary label="Depth Chart">
-            <DragAndDropDepthChart
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Roster Hub" && (
-          <TabErrorBoundary label="Roster Hub">
-            <RosterHub
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Financials" && (
-          <TabErrorBoundary label="Financials">
-            <FinancialsView league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Draft" && (
-          <TabErrorBoundary label="Draft">
-            <Draft
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Draft Room" && (
-          <TabErrorBoundary label="Draft Room">
-            <RookieDraft
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Coaches" && (
-          <TabErrorBoundary label="Coaches">
-            <Coaches league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Free Agency" && (
-          <TabErrorBoundary label="Free Agency">
-            <FreeAgency
-              userTeamId={league.userTeamId}
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-              onNavigate={setActiveTab}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "FA Hub" && (
-          <TabErrorBoundary label="FA Hub">
-            <FreeAgencyHub
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-              onNavigate={setActiveTab}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Trades" && (
-          <TabErrorBoundary label="Trades">
-            <TradeCenter
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Trade Finder" && (
-          <TabErrorBoundary label="Trade Finder">
-            <TradeFinder
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "History" && (
-          <TabErrorBoundary label="History">
-            <LeagueHistory onPlayerSelect={setSelectedPlayerId} league={league} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Hall of Fame" && (
-          <TabErrorBoundary label="Hall of Fame">
-            <HallOfFame onPlayerSelect={setSelectedPlayerId} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Postseason" && (
-          <TabErrorBoundary label="Postseason">
-            <PostseasonHub league={league} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Training" && (
-          <TabErrorBoundary label="Training">
-            <TrainingCamp
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Staff" && (
-          <TabErrorBoundary label="Staff">
-            <StaffManagement league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Saves" && (
-          <TabErrorBoundary label="Saves">
-            <SaveExportImport league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Mock Draft" && (
-          <TabErrorBoundary label="Mock Draft">
-            <MockDraft
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Injuries" && (
-          <TabErrorBoundary label="Injuries">
-            <InjuryReport
-              league={league}
-              onPlayerSelect={setSelectedPlayerId}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "God Mode" && (
-          <TabErrorBoundary label="God Mode">
-            <GodMode league={league} actions={actions} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Season Recap" && (
-          <TabErrorBoundary label="Season Recap">
-            <SeasonRecap
-              league={league}
-              onPlayerSelect={setSelectedPlayerId}
-              onTeamSelect={setSelectedTeamId}
-            />
-          </TabErrorBoundary>
+
+            <section className="bs-section">
+              <h4>Quarter-by-quarter</h4>
+              <div className="bs-table-wrap">
+                <table className="box-score-table">
+                  <thead><tr><th>Team</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr></thead>
+                  <tbody>
+                    <tr><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td><td>{quarterScores.away[0] ?? "—"}</td><td>{quarterScores.away[1] ?? "—"}</td><td>{quarterScores.away[2] ?? "—"}</td><td>{quarterScores.away[3] ?? "—"}</td><td>{game.awayScore}</td></tr>
+                    <tr><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td><td>{quarterScores.home[0] ?? "—"}</td><td>{quarterScores.home[1] ?? "—"}</td><td>{quarterScores.home[2] ?? "—"}</td><td>{quarterScores.home[3] ?? "—"}</td><td>{game.homeScore}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {!!momentumNotes.length && (
+              <section className="bs-section">
+                <h4>Turning points</h4>
+                <div className="bs-list">
+                  {momentumNotes.map((note) => (
+                    <div key={note.id} className="bs-list-item"><span>Q{note.quarter}</span><span>{note.text}</span></div>
+                  ))}
+                </div>
+              </section>
+            )}
+          </div>
         )}
       </div>
-
-      {/* ── Quick-Jump FAB (mobile) ── */}
-      <QuickJumpFab onNavigate={setActiveTab} />
-
-      {/* ── Mobile Navigation (bottom bar + slide-in) ── */}
-      <MobileNav
-        activeTab={REVERSE_TAB_MAP[activeTab] || "hub"}
-        onTabChange={(mobileTabId) => {
-          const dashTab = MOBILE_TAB_MAP[mobileTabId];
-          if (dashTab) setActiveTab(dashTab);
-        }}
-        league={league}
-      />
-
-      {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
-      {selectedGameId && (
-        <TabErrorBoundary label="Box Score">
-          <BoxScore
-            gameId={selectedGameId}
-            actions={actions}
-          onClose={() => setSelectedGameId(null)}
-          onPlayerSelect={(id) => {
-            setSelectedGameId(null);
-            setSelectedPlayerId(id);
-          }}
-          />
-        </TabErrorBoundary>
-      )}
-
-      {/* ── Player Profile modal ── */}
-      {selectedPlayerId && (
-        <TabErrorBoundary label="Player Profile">
-          <PlayerProfile
-            playerId={selectedPlayerId}
-            onClose={() => setSelectedPlayerId(null)}
-            actions={actions}
-            teams={league.teams}
-            onNavigate={setActiveTab}
-          />
-        </TabErrorBoundary>
-      )}
-
-      {/* ── Team Profile modal ── */}
-      {selectedTeamId != null && (
-        <TabErrorBoundary label="Team Profile">
-          <TeamProfile
-            teamId={selectedTeamId}
-            onClose={() => setSelectedTeamId(null)}
-            onPlayerSelect={(id) => {
-              setSelectedTeamId(null);
-              setSelectedPlayerId(id);
-            }}
-            actions={actions}
-            onNavigate={setActiveTab}
-          />
-        </TabErrorBoundary>
-      )}
     </div>
   );
 }
