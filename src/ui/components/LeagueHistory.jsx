@@ -50,6 +50,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
+  const [recordBook, setRecordBook] = useState(null);
   const [allPlayers, setAllPlayers] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState("seasons");
@@ -71,6 +72,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league }) {
       if (!mounted) return;
       setSeasons(seasonsRes?.payload?.seasons ?? seasonsRes?.seasons ?? []);
       setRecords(recordsRes?.payload?.records ?? null);
+      setRecordBook(recordsRes?.payload?.recordBook ?? null);
       setAllPlayers(playersRes?.payload?.stats ?? []);
       setTransactions(txRes?.payload?.transactions ?? []);
       setLoading(false);
@@ -107,7 +109,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league }) {
         </TabsContent>
 
         <TabsContent value="records">
-          <RecordsExplorer records={records} seasons={seasons} onPlayerSelect={onPlayerSelect} />
+          <RecordsExplorer records={records} recordBook={recordBook} seasons={seasons} onPlayerSelect={onPlayerSelect} />
         </TabsContent>
 
         <TabsContent value="awards">
@@ -237,7 +239,7 @@ function SeasonExplorer({ seasons, onPlayerSelect }) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SummaryBox label="Champion" value={selected?.champion?.name ?? "TBD"} />
-            <SummaryBox label="Runner-up" value="Not stored in save data" muted />
+            <SummaryBox label="Runner-up" value={selected?.runnerUp?.name ?? "—"} muted={!selected?.runnerUp} />
             <SummaryBox label="MVP" value={selected?.awards?.mvp?.name ?? "—"} onClick={selected?.awards?.mvp?.playerId != null ? () => onPlayerSelect?.(selected.awards.mvp.playerId) : undefined} />
           </div>
 
@@ -271,12 +273,12 @@ function SeasonExplorer({ seasons, onPlayerSelect }) {
   );
 }
 
-function RecordsExplorer({ records, seasons, onPlayerSelect }) {
+function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
   const [scope, setScope] = useState("singleSeason");
 
   if (!records) return <div className="py-8 text-center text-[color:var(--text-muted)]">No records tracked yet.</div>;
 
-  const source = scope === "singleSeason" ? records.singleSeason : records.allTime;
+  const source = scope === "singleSeason" ? (recordBook?.singleSeason ?? records.singleSeason) : (recordBook?.career ?? records.allTime);
 
   const teamSeasonRecords = useMemo(() => {
     const bestWins = { year: null, team: null, value: -1 };
@@ -306,7 +308,8 @@ function RecordsExplorer({ records, seasons, onPlayerSelect }) {
       </Tabs>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(RECORD_LABELS).map(([key, label]) => {
+        {Object.entries(recordBook?.singleSeason ?? RECORD_LABELS).map(([key, raw]) => {
+          const label = typeof raw === "string" ? raw : RECORD_LABELS[key] ?? key;
           const rec = source?.[key];
           if (!rec?.playerId) return null;
           return (
