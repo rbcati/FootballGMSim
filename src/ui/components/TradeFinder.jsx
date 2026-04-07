@@ -1,421 +1,156 @@
-/**
- * TradeFinder.jsx — Basic trade finder with team browser,
- * value comparison, and stadium-theme premium styling.
- *
- * Props:
- *  - league: league view-model
- *  - actions: worker actions
- *  - onPlayerSelect: (playerId) => void
- */
+import React, { useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { computeTeamNeedsSummary } from '../utils/marketSignals.js';
+import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
+import { rankTradePartners, playerAssetValue, pickAssetValue } from '../utils/tradeFinder.js';
 
-import React, { useState, useMemo, useCallback } from "react";
-import { OvrPill } from "./LeagueDashboard.jsx";
-import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
-import { buildDirectionGuidance, buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
+function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
-const POS_COLORS = {
-  QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
-  OL: "#f59e0b", DL: "#ec4899", LB: "#0ea5e9", CB: "#14b8a6",
-  S: "#6366f1", K: "#9ca3af", P: "#6b7280",
+const prefLabel = {
+  starter_now: 'Prefers player value',
+  pick_or_youth: 'Prefers pick/youth value',
+  balanced_package: 'Prefers balanced package',
 };
 
-function teamColor(abbr = "") {
-  const palette = [
-    "#0A84FF","#34C759","#FF9F0A","#FF453A","#5E5CE6",
-    "#64D2FF","#FFD60A","#30D158","#FF6961","#AEC6CF",
-  ];
-  let hash = 0;
-  for (let i = 0; i < abbr.length; i++)
-    hash = abbr.charCodeAt(i) + ((hash << 5) - hash);
-  return palette[Math.abs(hash) % palette.length];
-}
-
-function PlayerChip({ player, selected, onClick }) {
-  const pos = player.pos || player.position;
-  const posColor = POS_COLORS[pos] || "#9ca3af";
-
-  return (
-    <div
-      onClick={onClick}
-      className={`hover-lift ${selected ? "pulse-glow" : ""}`}
-      style={{
-        display: "flex", alignItems: "center", gap: "var(--space-2)",
-        padding: "var(--space-2) var(--space-3)",
-        background: selected ? "var(--accent-muted)" : "var(--surface)",
-        border: `1px solid ${selected ? "var(--accent)" : "var(--hairline)"}`,
-        borderRadius: "var(--radius-md)",
-        cursor: "pointer", transition: "all 0.15s ease",
-        borderLeft: `3px solid ${posColor}`,
-      }}
-    >
-      <span className={`pos-badge pos-${pos?.toLowerCase()}`} style={{ fontSize: 9 }}>{pos}</span>
-      <span style={{
-        fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--text)",
-        flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>
-        {player.name}
-      </span>
-      <OvrPill ovr={player.ovr || 50} />
-      <span style={{ fontSize: 9, color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
-        ${(player.baseAnnual || 0).toFixed(1)}M
-      </span>
-    </div>
-  );
-}
-
-function TradeValueBar({ label, value, maxValue, color }) {
-  const pct = maxValue > 0 ? Math.min(100, (value / maxValue) * 100) : 0;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", width: 40, textAlign: "right" }}>
-        {label}
-      </span>
-      <div style={{
-        flex: 1, height: 8, borderRadius: 4,
-        background: "var(--hairline)", overflow: "hidden",
-      }}>
-        <div style={{
-          height: "100%", borderRadius: 4, background: color,
-          width: `${pct}%`,
-          transition: "width 0.4s cubic-bezier(0.2, 0.8, 0.2, 1)",
-        }} />
-      </div>
-      <span style={{
-        fontSize: "var(--text-xs)", fontWeight: 700, color,
-        width: 36, textAlign: "right", fontVariantNumeric: "tabular-nums",
-      }}>
-        {Math.round(value)}
-      </span>
-    </div>
-  );
-}
-
-function TradeBalanceMeter({ delta }) {
-  const clamped = Math.max(-60, Math.min(60, delta));
-  const markerPct = ((clamped + 60) / 120) * 100;
-  const abs = Math.abs(delta);
-  const label = abs < 8 ? "Fair" : abs < 20 ? (delta > 0 ? "Favoring Them" : "Favoring You") : (delta > 0 ? "Overpay" : "Strong Value");
-  const tone = abs < 8 ? "var(--success)" : abs < 20 ? "var(--warning)" : "var(--danger)";
-
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.68rem", color: "var(--text-muted)", marginBottom: 6 }}>
-        <span>Favoring You</span>
-        <span style={{ color: tone, fontWeight: 800 }}>{label}</span>
-        <span>Favoring Them</span>
-      </div>
-      <div style={{ position: "relative", height: 12, borderRadius: 999, background: "linear-gradient(90deg, rgba(52,199,89,0.35), rgba(255,255,255,0.18) 50%, rgba(255,159,10,0.35))", border: "1px solid var(--hairline)" }}>
-        <div style={{ position: "absolute", left: "50%", top: -2, bottom: -2, width: 1, background: "rgba(255,255,255,0.65)" }} />
-        <div style={{ position: "absolute", left: `calc(${markerPct}% - 5px)`, top: -3, width: 10, height: 18, borderRadius: 4, background: tone, boxShadow: "0 0 0 2px rgba(255,255,255,0.25)" }} />
-      </div>
-      <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--text-subtle)", textAlign: "right" }}>
-        Delta: {delta > 0 ? `+${Math.round(delta)} sent by you` : `${Math.round(Math.abs(delta))} net to you`}
-      </div>
-    </div>
-  );
-}
-
 export default function TradeFinder({ league, actions, onPlayerSelect }) {
-  const [selectedPartner, setSelectedPartner] = useState(null);
-  const [userOffering, setUserOffering] = useState([]); // player IDs from user team
-  const [partnerOffering, setPartnerOffering] = useState([]); // player IDs from partner team
-  const [posFilter, setPosFilter] = useState("ALL");
+  const teams = league?.teams ?? [];
+  const userTeam = teams.find((t) => Number(t.id) === Number(league?.userTeamId));
+  const week = Number(league?.week ?? 1);
 
-  const teams = league?.teams || [];
-  const userTeamId = league?.userTeamId;
-  const userTeam = teams.find(t => t.id === userTeamId);
-  const partnerTeam = selectedPartner != null ? teams.find(t => t.id === selectedPartner) : null;
+  const [selectedPartnerId, setSelectedPartnerId] = useState(null);
+  const [outgoingPlayers, setOutgoingPlayers] = useState([]);
+  const [outgoingPicks, setOutgoingPicks] = useState([]);
+  const [incomingPlayers, setIncomingPlayers] = useState([]);
 
-  const otherTeams = useMemo(() =>
-    teams.filter(t => t.id !== userTeamId).sort((a, b) => (b.ovr || 0) - (a.ovr || 0)),
-    [teams, userTeamId]
-  );
+  const userRoster = useMemo(() => [...(userTeam?.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0),), [userTeam]);
+  const userPicks = useMemo(() => [...(userTeam?.picks ?? [])].sort((a, b) => Number(a.round ?? 7) - Number(b.round ?? 7)).slice(0, 8), [userTeam]);
 
-  const userRoster = useMemo(() => {
-    let roster = [...(userTeam?.roster || [])];
-    if (posFilter !== "ALL") {
-      roster = roster.filter(p => (p.pos || p.position) === posFilter);
-    }
-    return roster.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
-  }, [userTeam?.roster, posFilter]);
+  const teamsWithIntel = useMemo(() => teams.map((t) => ({
+    ...t,
+    teamIntel: buildTeamIntelligence(t, { week }),
+    needsSummary: computeTeamNeedsSummary(t),
+  })), [teams, week]);
 
-  const partnerRoster = useMemo(() => {
-    let roster = [...(partnerTeam?.roster || [])];
-    if (posFilter !== "ALL") {
-      roster = roster.filter(p => (p.pos || p.position) === posFilter);
-    }
-    return roster.sort((a, b) => (b.ovr || 0) - (a.ovr || 0));
-  }, [partnerTeam?.roster, posFilter]);
-  const userNeedsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
-  const partnerNeedsSummary = useMemo(() => computeTeamNeedsSummary(partnerTeam), [partnerTeam]);
-  const userIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
+  const selectedPartner = useMemo(() => teams.find((t) => Number(t.id) === Number(selectedPartnerId)), [teams, selectedPartnerId]);
 
-  // Simple trade value calculation
-  const calcValue = useCallback((playerIds, roster) => {
-    return playerIds.reduce((sum, id) => {
-      const p = roster?.find(r => r.id === id);
-      if (!p) return sum;
-      const ovr = p.ovr || 50;
-      const age = p.age || 25;
-      const ageFactor = age < 27 ? 1.15 : age < 30 ? 1.0 : age < 33 ? 0.8 : 0.6;
-      return sum + (ovr * ageFactor);
-    }, 0);
-  }, []);
+  const selectedOutgoingPlayers = useMemo(() => outgoingPlayers.map((id) => userRoster.find((p) => Number(p.id) === Number(id))).filter(Boolean), [outgoingPlayers, userRoster]);
+  const selectedOutgoingPicks = useMemo(() => outgoingPicks.map((id) => userPicks.find((p) => String(p.id) === String(id))).filter(Boolean), [outgoingPicks, userPicks]);
 
-  const userValue = calcValue(userOffering, userTeam?.roster);
-  const partnerValue = calcValue(partnerOffering, partnerTeam?.roster);
-  const maxValue = Math.max(userValue, partnerValue, 1);
-  const tradeDelta = userValue - partnerValue;
-  const tradeImpact = useMemo(() => {
-    const incomingPositions = partnerOffering.map((id) => partnerTeam?.roster?.find((r) => r.id === id)?.pos).filter(Boolean);
-    const outgoingPositions = userOffering.map((id) => userTeam?.roster?.find((r) => r.id === id)?.pos).filter(Boolean);
-    return summarizeTradeImpact({ intel: userIntel, incomingPositions, outgoingPositions, capBefore: userTeam?.capRoom ?? 0, capAfter: userTeam?.capRoom ?? 0 });
-  }, [partnerOffering, userOffering, partnerTeam?.roster, userTeam?.roster, userIntel, userTeam?.capRoom]);
+  const partnerRanks = useMemo(() => rankTradePartners({
+    teams: teamsWithIntel,
+    userTeamId: league?.userTeamId,
+    outgoingPlayers: selectedOutgoingPlayers,
+    outgoingPicks: selectedOutgoingPicks,
+    week,
+  }), [teamsWithIntel, league?.userTeamId, selectedOutgoingPlayers, selectedOutgoingPicks, week]);
 
-  const toggleUserPlayer = (id) => {
-    setUserOffering(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const outgoingValue = selectedOutgoingPlayers.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0)
+    + selectedOutgoingPicks.reduce((sum, p) => sum + pickAssetValue(p, { week, direction: 'balanced' }), 0);
+
+  const askWhatTheyOffer = () => {
+    if (!selectedPartner) return;
+    const candidate = [...(selectedPartner.roster ?? [])]
+      .filter((p) => (p.ovr ?? 0) >= 68)
+      .sort((a, b) => Math.abs(playerAssetValue(a, { direction: 'balanced' }) - outgoingValue) - Math.abs(playerAssetValue(b, { direction: 'balanced' }) - outgoingValue))[0];
+    if (candidate) setIncomingPlayers([candidate.id]);
   };
 
-  const togglePartnerPlayer = (id) => {
-    setPartnerOffering(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const makeDealWork = () => {
+    if (!selectedPartner) return;
+    const theirRoster = [...(selectedPartner.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+    const incoming = incomingPlayers.map((id) => theirRoster.find((p) => Number(p.id) === Number(id))).filter(Boolean);
+    const incomingValue = incoming.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0);
+    if (incomingValue > outgoingValue * 1.12 && selectedOutgoingPicks.length === 0 && userPicks[0]) {
+      setOutgoingPicks((prev) => prev.includes(userPicks[0].id) ? prev : [...prev, userPicks[0].id]);
+      return;
+    }
+    if (outgoingValue > incomingValue * 1.25) {
+      const addTarget = theirRoster.find((p) => !incomingPlayers.includes(p.id) && (p.ovr ?? 0) >= 65);
+      if (addTarget) setIncomingPlayers((prev) => [...prev, addTarget.id]);
+    }
   };
 
-  const handlePropose = useCallback(() => {
-    if (actions?.proposeTrade && userOffering.length > 0 && partnerOffering.length > 0) {
-      actions.proposeTrade({
-        teamId: selectedPartner,
-        offering: userOffering,
-        requesting: partnerOffering,
-      });
-    }
-  }, [actions, selectedPartner, userOffering, partnerOffering]);
-
-  const posFilters = ["ALL", "QB", "RB", "WR", "TE", "OL", "DL", "LB", "CB", "S"];
+  const openTrade = async () => {
+    if (!selectedPartner || !actions?.submitTrade || incomingPlayers.length === 0 || (outgoingPlayers.length + outgoingPicks.length) === 0) return;
+    await actions.submitTrade(userTeam.id, selectedPartner.id, { playerIds: outgoingPlayers, pickIds: outgoingPicks }, { playerIds: incomingPlayers, pickIds: [] });
+  };
 
   return (
-    <div className="fade-in">
-      {/* ── Team Selector ── */}
-      {!selectedPartner && (
-        <div>
-          <div style={{
-            fontSize: "var(--text-sm)", fontWeight: 800, color: "var(--text)",
-            marginBottom: "var(--space-3)",
-          }}>
-            Select Trade Partner
-          </div>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))",
-            gap: "var(--space-2)",
-          }}>
-            {otherTeams.map(team => (
-              <div
-                key={team.id}
-                className="card-premium hover-lift"
-                onClick={() => {
-                  setSelectedPartner(team.id);
-                  setUserOffering([]);
-                  setPartnerOffering([]);
-                }}
-                style={{
-                  padding: "var(--space-3)", cursor: "pointer",
-                  display: "flex", alignItems: "center", gap: "var(--space-2)",
-                }}
-              >
-                <div style={{
-                  width: 32, height: 32, borderRadius: "50%",
-                  background: `${teamColor(team.abbr)}22`,
-                  border: `2px solid ${teamColor(team.abbr)}`,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 900, fontSize: 10, color: teamColor(team.abbr),
-                  flexShrink: 0,
-                }}>
-                  {team.abbr?.slice(0, 3)}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontWeight: 700, fontSize: "var(--text-xs)", color: "var(--text)",
-                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                  }}>
-                    {team.abbr}
-                  </div>
-                  <div style={{ fontSize: 9, color: "var(--text-muted)" }}>
-                    {team.wins || 0}-{team.losses || 0} · OVR {team.ovr || "?"}
-                  </div>
-                </div>
+    <div className="fade-in" style={{ display: 'grid', gap: 12 }}>
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Trade Finder</CardTitle></CardHeader>
+        <CardContent style={{ display: 'grid', gap: 10 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Select outgoing assets first, then review ranked partner fit.</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Outgoing Players</div>
+              <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 4 }}>
+                {userRoster.slice(0, 32).map((p) => (
+                  <button key={p.id} onClick={() => setOutgoingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: outgoingPlayers.includes(p.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '6px 8px' }}>
+                    {p.pos} {p.name} · {p.ovr} OVR · {money(p?.contract?.baseAnnual)}
+                  </button>
+                ))}
               </div>
-            ))}
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Outgoing Picks (Optional Package)</div>
+              <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 4 }}>
+                {userPicks.map((pk) => (
+                  <button key={pk.id} onClick={() => setOutgoingPicks((prev) => prev.includes(pk.id) ? prev.filter((id) => id !== pk.id) : [...prev, pk.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: outgoingPicks.includes(pk.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '6px 8px' }}>
+                    {pk.season} R{pk.round} pick
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
-      {/* ── Trade Interface ── */}
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Likely Trade Partners</CardTitle></CardHeader>
+        <CardContent style={{ display: 'grid', gap: 8 }}>
+          {partnerRanks.slice(0, 8).map((row) => (
+            <div key={row.teamId} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, background: Number(selectedPartnerId) === Number(row.teamId) ? 'var(--accent-muted)' : 'var(--surface)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <strong>{row.teamName}</strong>
+                <Badge variant="outline">Fit {row.fitScore}</Badge>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {row.direction} · Need: {row.positionNeed} · Urgency: {row.urgency} · Cap: {row.capAbility}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{prefLabel[row.preference]}.</div>
+              <div style={{ fontSize: 12 }}>{row.reasons[0] ?? 'Contextual fit available after selecting package.'}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                <Button className="btn" onClick={() => setSelectedPartnerId(row.teamId)}>Open trade with this team</Button>
+                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); askWhatTheyOffer(); }}>Ask what they would offer</Button>
+                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); makeDealWork(); }}>Make this deal work</Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
       {selectedPartner && (
-        <div>
-          {/* Back + partner header */}
-          <div style={{
-            display: "flex", alignItems: "center", gap: "var(--space-3)",
-            marginBottom: "var(--space-4)",
-          }}>
-            <button
-              className="btn-premium"
-              onClick={() => setSelectedPartner(null)}
-              style={{
-                background: "var(--surface-strong)", color: "var(--text-muted)",
-                border: "1px solid var(--hairline)", minHeight: 36,
-              }}
-            >
-              Back
-            </button>
-            <div style={{
-              fontSize: "var(--text-sm)", fontWeight: 800, color: "var(--text)",
-            }}>
-              Trade with {partnerTeam?.name || partnerTeam?.abbr}
+        <Card className="card-premium">
+          <CardHeader><CardTitle>Active Package vs {selectedPartner.abbr}</CardTitle></CardHeader>
+          <CardContent style={{ display: 'grid', gap: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Incoming players</div>
+            <div style={{ display: 'grid', gap: 4, maxHeight: 180, overflow: 'auto' }}>
+              {(selectedPartner.roster ?? []).slice(0, 28).map((p) => (
+                <button key={p.id} onClick={() => setIncomingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: incomingPlayers.includes(p.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '6px 8px' }}>
+                  <span onClick={(e) => { e.stopPropagation(); onPlayerSelect?.(p.id); }}>{p.pos} {p.name}</span> · {p.ovr} OVR
+                </button>
+              ))}
             </div>
-          </div>
-
-          {/* Position filter */}
-          <div className="division-tabs" style={{ marginBottom: "var(--space-3)" }}>
-            {posFilters.map(p => (
-              <button
-                key={p}
-                className={`division-tab${posFilter === p ? " active" : ""}`}
-                onClick={() => setPosFilter(p)}
-                style={{ fontSize: 10 }}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
-
-          {/* Trade value comparison */}
-          <div className="card-premium" style={{
-            padding: "var(--space-3) var(--space-4)",
-            marginBottom: "var(--space-4)",
-          }}>
-            <div style={{
-              fontSize: "var(--text-xs)", fontWeight: 700,
-              color: "var(--text-muted)", textTransform: "uppercase",
-              letterSpacing: "0.5px", marginBottom: "var(--space-2)",
-            }}>
-              Trade Value
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Button className="btn btn-primary" onClick={openTrade}>Propose Trade</Button>
+              <Button className="btn" onClick={askWhatTheyOffer}>Ask what they would offer</Button>
+              <Button className="btn" onClick={makeDealWork}>Make this deal work</Button>
             </div>
-            <TradeValueBar
-              label={userTeam?.abbr || "YOU"}
-              value={userValue}
-              maxValue={maxValue}
-              color="var(--accent)"
-            />
-            <div style={{ height: 4 }} />
-            <TradeValueBar
-              label={partnerTeam?.abbr || "THEM"}
-              value={partnerValue}
-              maxValue={maxValue}
-              color="var(--warning)"
-            />
-            <TradeBalanceMeter delta={tradeDelta} />
-            <div style={{ marginTop: 6, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
-              Trade value is an estimate based on OVR + age curve (not full AI acceptance logic).
-            </div>
-            <div style={{ marginTop: 6, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
-              {userTeam?.abbr ?? "You"}: {formatNeedsLine(userNeedsSummary)}
-            </div>
-            <div style={{ marginTop: 2, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
-              {partnerTeam?.abbr ?? "Partner"}: {formatNeedsLine(partnerNeedsSummary)}
-            </div>
-            <div style={{ marginTop: 4, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
-              {buildDirectionGuidance(userIntel)}
-            </div>
-            <div style={{ marginTop: 2, fontSize: "0.68rem", color: "var(--text-subtle)" }}>
-              {tradeImpact.needHits.length ? `Need fit: ${tradeImpact.needHits.join(", ")}` : "Need fit: no top need addressed"} · {tradeImpact.timeline}
-            </div>
-
-            {userOffering.length > 0 && partnerOffering.length > 0 && (
-              <div style={{
-                marginTop: "var(--space-3)", textAlign: "center",
-              }}>
-                <span style={{
-                  fontSize: "var(--text-xs)", fontWeight: 700,
-                  color: Math.abs(tradeDelta) < 8 ? "#34C759" : Math.abs(tradeDelta) < 20 ? "#FF9F0A" : "#FF453A",
-                }}>
-                  {Math.abs(userValue - partnerValue) < 10
-                    ? "Fair Trade"
-                    : userValue > partnerValue
-                      ? "You're overpaying"
-                      : "You're getting a deal"
-                  }
-                </span>
-              </div>
-            )}
-          </div>
-
-          {/* Side by side rosters */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "var(--space-3)",
-          }}>
-            {/* User side */}
-            <div>
-              <div style={{
-                fontSize: "var(--text-xs)", fontWeight: 800,
-                color: "var(--accent)", marginBottom: "var(--space-2)",
-                textTransform: "uppercase", letterSpacing: "0.5px",
-              }}>
-                Your Players ({userOffering.length})
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", maxHeight: 460, overflowY: "auto" }}>
-                {userRoster.slice(0, 30).map(p => (
-                  <PlayerChip
-                    key={p.id}
-                    player={p}
-                    selected={userOffering.includes(p.id)}
-                    onClick={() => toggleUserPlayer(p.id)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* Partner side */}
-            <div>
-              <div style={{
-                fontSize: "var(--text-xs)", fontWeight: 800,
-                color: "var(--warning)", marginBottom: "var(--space-2)",
-                textTransform: "uppercase", letterSpacing: "0.5px",
-              }}>
-                Their Players ({partnerOffering.length})
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", maxHeight: 460, overflowY: "auto" }}>
-                {partnerRoster.slice(0, 30).map(p => (
-                  <PlayerChip
-                    key={p.id}
-                    player={p}
-                    selected={partnerOffering.includes(p.id)}
-                    onClick={() => togglePartnerPlayer(p.id)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Propose button */}
-          {userOffering.length > 0 && partnerOffering.length > 0 && (
-            <button
-              className="btn-premium btn-primary-premium"
-              onClick={handlePropose}
-              style={{
-                width: "100%", marginTop: "var(--space-4)",
-                fontSize: "var(--text-sm)",
-              }}
-            >
-              Propose Trade ({userOffering.length} for {partnerOffering.length})
-            </button>
-          )}
-        </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
