@@ -14,6 +14,8 @@ export default function ExtensionNegotiationModal({
   const [ask, setAsk] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [offer, setOffer] = useState(null);
+  const [response, setResponse] = useState(null);
 
   useEffect(() => {
     let stale = false;
@@ -22,7 +24,7 @@ export default function ExtensionNegotiationModal({
       .getExtensionAsk(player.id)
       .then((resp) => {
         if (stale) return;
-        if (resp?.payload?.ask) setAsk(resp.payload.ask);
+        if (resp?.payload?.ask) { setAsk(resp.payload.ask); setOffer(resp.payload.ask); }
         setLoading(false);
       })
       .catch(() => {
@@ -48,10 +50,18 @@ export default function ExtensionNegotiationModal({
   );
 
   const handleAccept = async () => {
-    if (!isAskValid || submitting) return;
+    if (!isAskValid || submitting || !offer) return;
     setSubmitting(true);
-    await actions.extendContract(player.id, teamId, ask);
-    onComplete();
+    setResponse(null);
+    try {
+      const resp = await actions.extendContract(player.id, teamId, offer);
+      const payload = resp?.payload || {};
+      setResponse(payload);
+      if (payload.status === 'accepted') onComplete();
+      if (payload.status === 'counter' && payload.counter) setOffer(payload.counter);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -125,10 +135,10 @@ export default function ExtensionNegotiationModal({
                   borderRadius: "var(--radius-md)",
                 }}
               >
-                {safeRound(askYears, 0)} Years
+                {safeRound(toFiniteNumber(offer?.yearsTotal ?? offer?.years, askYears), 0)} Years
                 <br />
                 <span style={{ fontSize: "0.62em", color: "var(--text)" }}>
-                  {formatMoneyM(askBaseAnnual)} / yr
+                  {formatMoneyM(toFiniteNumber(offer?.baseAnnual, askBaseAnnual))} / yr
                 </span>
               </div>
               <div
@@ -139,9 +149,16 @@ export default function ExtensionNegotiationModal({
                   marginBottom: "var(--space-5)",
                 }}
               >
-                Includes {formatMoneyM(askSigningBonus)} signing bonus
+                Includes {formatMoneyM(toFiniteNumber(offer?.signingBonus, askSigningBonus))} signing bonus
               </div>
+              {response?.reason && (
+                <div style={{ marginBottom: 10, fontSize: 12, color: response.status === 'accepted' ? 'var(--success)' : 'var(--warning)' }}>
+                  {response.reason}
+                  {Array.isArray(response.reasons) && response.reasons.length > 0 ? ` · ${response.reasons.join(', ')}` : ''}
+                </div>
+              )}
               <div style={{ display: "flex", gap: "var(--space-3)" }}>
+
                 <Button className="btn" onClick={onClose} style={{ flex: 1 }}>
                   Reject
                 </Button>
@@ -155,7 +172,7 @@ export default function ExtensionNegotiationModal({
                     color: "#fff",
                   }}
                 >
-                  Accept Deal
+                  {submitting ? "Negotiating..." : "Submit Offer"}
                 </Button>
               </div>
             </div>

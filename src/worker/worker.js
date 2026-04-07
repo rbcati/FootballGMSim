@@ -93,6 +93,7 @@ import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer 
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
+import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -505,11 +506,33 @@ function transferPickOwnership(pickIds = [], fromTeamId, toTeamId) {
   cache.updateTeam(Number(toTeamId), { picks: toPicks });
 }
 
+function ensureTeamDepthChart(teamId) {
+  const players = cache.getPlayersByTeam(teamId);
+  if (!players?.length) return;
+  const existing = {};
+  for (const p of players) {
+    const rowKey = p?.depthChart?.rowKey;
+    if (!rowKey) continue;
+    if (!existing[rowKey]) existing[rowKey] = [];
+    existing[rowKey].push({ id: Number(p.id), order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
+  }
+  Object.keys(existing).forEach((k) => {
+    existing[k] = existing[k].sort((a, b) => a.order - b.order).map((row) => row.id);
+  });
+
+  const assignments = autoBuildDepthChart(players, existing);
+  const updated = applyDepthChartToPlayers(players, assignments);
+  for (const p of updated) {
+    cache.updatePlayer(p.id, { depthOrder: p.depthOrder, depthChart: p.depthChart });
+  }
+}
+
 /**
  * Build a compact player list for a single team roster view.
  */
 function buildRosterView(teamId) {
   const team = cache.getTeam(teamId);
+  ensureTeamDepthChart(teamId);
   const players = cache.getPlayersByTeam(teamId);
 
   // Sort players by OVR to determine starters (simple heuristic for morale)
@@ -1302,6 +1325,11 @@ async function handleAdvanceWeek(payload, id) {
   if (!['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
       post(toUI.ERROR, { message: `Cannot advance week in phase "${meta.phase}". Use the correct action.` }, id);
       return;
+  }
+
+  // Ensure depth chart integrity before every simulation step.
+  for (const team of cache.getAllTeams()) {
+    ensureTeamDepthChart(team.id);
   }
 
   // ── Preseason Cutdown Check ──────────────────────────────────────────────
@@ -2662,6 +2690,74 @@ async function migrateLegacySaveToSlot1IfNeeded() {
   await Saves.save({ ...legacy, id: 'save_slot_1', lastPlayed: Date.now() });
 }
 
+async function handleExportSave(payload, id) {
+  try {
+    const leagueId = payload?.leagueId || getActiveLeagueId();
+    if (!leagueId) return post(toUI.ERROR, { message: 'No active save to export.' }, id);
+    await flushDirty();
+    configureActiveLeague(leagueId);
+    await openDB();
+    const snapshot = await snapshotActiveLeagueDB();
+    const meta = cache.getMeta() || {};
+    post(toUI.SAVE_EXPORT, {
+      data: {
+        version: 3,
+        exportedAt: new Date().toISOString(),
+        leagueId,
+        meta: {
+          name: meta.name,
+          year: meta.year,
+          currentWeek: meta.currentWeek,
+          phase: meta.phase,
+          userTeamId: meta.userTeamId,
+        },
+        snapshot,
+      },
+    }, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'Export failed.' }, id);
+  }
+}
+
+async function handleImportSave({ data, saveName }, id) {
+  try {
+    const snapshot = data?.snapshot;
+    if (!snapshot || typeof snapshot !== 'object') {
+      post(toUI.ERROR, { message: 'Invalid import payload.' }, id);
+      return;
+    }
+    const leagueId = await createUniqueLeagueId();
+    await writeLeagueSnapshot(leagueId, snapshot);
+    configureActiveLeague(leagueId);
+    await openDB();
+    const meta = await Meta.load();
+    cache.load({
+      meta,
+      teams: await Teams.loadAll(),
+      players: await Players.loadAll(),
+      season: await Seasons.current(),
+      weekGames: await Games.byWeek(meta?.currentSeasonId, meta?.currentWeek),
+      draftPicks: await DraftPicks.bySeason(meta?.currentSeasonId),
+      news: await News.latest(200),
+      availableCoaches: meta?.availableCoaches ?? [],
+    });
+    const userTeam = cache.getTeam(meta?.userTeamId);
+    await Saves.save({
+      id: leagueId,
+      name: String(saveName || meta?.name || 'Imported League').slice(0, 80),
+      year: meta?.year,
+      teamId: meta?.userTeamId,
+      teamAbbr: userTeam?.abbr ?? '???',
+      lastPlayed: Date.now(),
+    });
+    _saveIsExplicitlyLoaded = true;
+    post(toUI.SAVE_IMPORT_RESULT, { ok: true, leagueId }, id);
+    post(toUI.FULL_STATE, buildViewState());
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'Import failed.' }, id);
+  }
+}
+
 // ── Handler: SAVE_NOW ─────────────────────────────────────────────────────────
 
 async function handleSaveNow(payload, id) {
@@ -3596,42 +3692,65 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  // Cap Check
-  // Calculate impact: new hit vs old hit
-  const newCapHit = (contract.baseAnnual || 0) + ((contract.signingBonus || 0) / (contract.yearsTotal || 1));
-  const currentCapHit = player.contract
-      ? ((player.contract.baseAnnual || 0) + ((player.contract.signingBonus || 0) / (player.contract.yearsTotal || 1)))
-      : 0;
+  const requested = calculateExtensionDemand(player, ensureDynastyMeta(cache.getMeta())?.difficulty ?? 'Normal');
+  const offeredAnnual = Number(contract?.baseAnnual ?? 0);
+  const offeredYears = Number(contract?.yearsTotal ?? contract?.years ?? 0);
+  const offeredGuarantee = Number(contract?.guaranteedPct ?? 0);
+  const annualGap = offeredAnnual - Number(requested?.baseAnnual ?? 0);
+  const yearsGap = offeredYears - Number(requested?.yearsTotal ?? requested?.years ?? 0);
 
-  const diff = newCapHit - currentCapHit;
+  const reasons = [];
+  if (player.age >= 30) reasons.push('veteran security');
+  if ((player.ovr ?? 0) >= 85) reasons.push('elite production');
+  if ((team?.wins ?? 0) >= 10) reasons.push('contender status');
+  if ((player.schemeFit ?? 60) < 55) reasons.push('scheme uncertainty');
 
-  if (diff > (team.capRoom || 0)) {
-      post(toUI.ERROR, { message: `Not enough cap room ($${diff.toFixed(1)}M needed)` }, id);
-      return;
+  const inSeason = ['regular', 'preseason', 'playoffs'].includes(ensureDynastyMeta(cache.getMeta())?.phase);
+  if (inSeason && (player.personality?.moneyPriority ?? 0.6) > 0.75) {
+    post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: 'Won’t negotiate in-season', reasons }, id);
+    return;
   }
 
-  // Update Player Contract
-  // Extensions effectively replace the current contract logic in this simplified model
-  cache.updatePlayer(playerId, { contract });
+  if (annualGap >= -0.2 && yearsGap >= -1 && offeredGuarantee >= 0.45) {
+    const newCapHit = (contract.baseAnnual || 0) + ((contract.signingBonus || 0) / (contract.yearsTotal || 1));
+    const currentCapHit = player.contract ? ((player.contract.baseAnnual || 0) + ((player.contract.signingBonus || 0) / (player.contract.yearsTotal || 1))) : 0;
+    const diff = newCapHit - currentCapHit;
+    if (diff > (team.capRoom || 0)) {
+      post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: `Cap room short by $${diff.toFixed(1)}M`, reasons }, id);
+      return;
+    }
 
-  // Update Team Cap
-  recalculateTeamCap(resolvedTeamId);
-
-  // Log Transaction
-  const meta = ensureDynastyMeta(cache.getMeta());
-  await Transactions.add({
+    cache.updatePlayer(playerId, { contract, negotiationStatus: 'SIGNED' });
+    recalculateTeamCap(resolvedTeamId);
+    const meta = ensureDynastyMeta(cache.getMeta());
+    await Transactions.add({
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
       week: meta.currentWeek,
       teamId: resolvedTeamId,
-      details: { playerId, contract }
-  });
-  await NewsEngine.logTransaction('EXTEND', { teamId: resolvedTeamId, playerId, contract });
+      details: { playerId, contract, reasons },
+    });
+    await NewsEngine.logTransaction('EXTEND', { teamId: resolvedTeamId, playerId, contract });
+    await flushDirty();
+    post(toUI.EXTENSION_RESPONSE, { status: 'accepted', reason: 'Offer accepted', reasons }, id);
+    post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() });
+    return;
+  }
 
-  await flushDirty();
-
-  // Return updated roster and state
-  post(toUI.STATE_UPDATE, { roster: buildRosterView(resolvedTeamId), ...buildViewState() }, id);
+  const counter = {
+    ...requested,
+    years: Math.max(offeredYears, requested?.years ?? 2),
+    yearsTotal: Math.max(offeredYears, requested?.yearsTotal ?? requested?.years ?? 2),
+    baseAnnual: Math.max(offeredAnnual + 0.8, requested?.baseAnnual ?? offeredAnnual + 1),
+    signingBonus: Math.max(Number(contract?.signingBonus ?? 0), Number(requested?.signingBonus ?? 0)),
+    guaranteedPct: Math.max(offeredGuarantee + 0.05, Number(requested?.guaranteedPct ?? 0.5)),
+  };
+  post(toUI.EXTENSION_RESPONSE, {
+    status: 'counter',
+    reason: annualGap < -1 ? 'Offer below market value' : 'Needs stronger security terms',
+    reasons,
+    counter,
+  }, id);
 }
 
 // ── Handler: TRADE_OFFER ──────────────────────────────────────────────────────
@@ -4343,14 +4462,25 @@ async function handleGetDraftState(payload, id) {
 }
 
 
-async function handleUpdateDepthChart({ updates }, id) {
-  if (!Array.isArray(updates)) return;
-  updates.forEach(u => {
+async function handleUpdateDepthChart({ updates, positions }, id) {
+  const normalizedUpdates = Array.isArray(updates) ? updates : (Array.isArray(positions) ? positions : []);
+  if (!normalizedUpdates.length) return;
+  normalizedUpdates.forEach((u) => {
       const p = cache.getPlayer(u.playerId);
       if (p) {
-          cache.updatePlayer(p.id, { depthOrder: u.newOrder });
+          const rowKey = u.rowKey ?? p?.depthChart?.rowKey ?? null;
+          cache.updatePlayer(p.id, {
+            depthOrder: Number(u.newOrder) || 1,
+            depthChart: {
+              ...(p.depthChart || {}),
+              rowKey,
+              order: Number(u.newOrder) || 1,
+            },
+          });
       }
   });
+  const userTeamId = ensureDynastyMeta(cache.getMeta())?.userTeamId;
+  if (userTeamId != null) ensureTeamDepthChart(userTeamId);
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
@@ -5950,6 +6080,8 @@ async function handleMessage(event) {
       case toWorker.SAVE_SLOT:          return await handleSaveSlot(payload, id);
       case toWorker.DELETE_SLOT:        return await handleDeleteSlot(payload, id);
       case toWorker.RESET_LEAGUE:       return await handleResetLeague(payload, id);
+      case toWorker.EXPORT_SAVE:        return await handleExportSave(payload, id);
+      case toWorker.IMPORT_SAVE:        return await handleImportSave(payload, id);
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);

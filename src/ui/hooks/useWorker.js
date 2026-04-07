@@ -434,6 +434,8 @@ export function useWorker() {
 
     loadSlot: (slotKey)          => send(toWorker.LOAD_SLOT, { slotKey }),
     saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),
+    exportSave: (leagueId)       => request(toWorker.EXPORT_SAVE, { leagueId }, { silent: true }),
+    importSave: (data, saveName) => request(toWorker.IMPORT_SAVE, { data, saveName }),
     deleteSlot: (slotKey)        => request(toWorker.DELETE_SLOT, { slotKey }, { silent: true }),
 
     /** Wipe the save and restart. */
@@ -570,8 +572,8 @@ export function useWorker() {
     startNewSeason: () => send(toWorker.START_NEW_SEASON),
 
     /** Update depth chart order for the user's team. */
-    updateDepthChart: (positions) =>
-      request(toWorker.UPDATE_DEPTH_CHART, { positions }),
+    updateDepthChart: (updates) =>
+      request(toWorker.UPDATE_DEPTH_CHART, { updates }),
 
     /** Update team strategy / GM decisions (fire-and-forget, non-blocking). */
     updateStrategy: (payload) =>
