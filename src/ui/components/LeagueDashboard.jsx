@@ -25,11 +25,12 @@ import RookieDraft from "./RookieDraft.jsx";
 import Coaches from "./Coaches.jsx";
 import FreeAgency from "./FreeAgency.jsx";
 import FreeAgencyHub from "./FreeAgencyHub.jsx";
-import TradeCenter from "./TradeCenter.jsx";
 import TradeFinder from "./TradeFinder.jsx";
-import BoxScore from "./BoxScore.jsx";
+import GameDetailScreen from "./GameDetailScreen.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
 import HallOfFame from "./HallOfFame.jsx";
+import HistoryHub from "./HistoryHub.jsx";
+import TradeWorkspace from "./TradeWorkspace.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
 import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
@@ -221,9 +222,14 @@ const BASE_TABS = [
   "Free Agency",
   "FA Hub",
   "Trades",
+  "Trade Center",
   "Trade Finder",
+  "Game Detail",
+  "History Hub",
   "History",
+  "Team History",
   "Hall of Fame",
+  "Awards & Records",
   "Analytics",
   "Offseason",
   "Season Recap",
@@ -1318,6 +1324,7 @@ export default function LeagueDashboard({
 }) {
   const [activeTab, setActiveTab] = useState("Weekly Hub");
   const [selectedGameId, setSelectedGameId] = useState(null);
+  const [lastGameTab, setLastGameTab] = useState("Schedule");
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
@@ -1357,13 +1364,14 @@ export default function LeagueDashboard({
   }, [league?.phase]);
 
   // If an external box score request comes from the LiveGame scoreboard,
-  // open the BoxScore modal for that game and then notify the parent
-  // that we've consumed the request.
+  // open the dedicated Game Detail screen and consume the request.
   useEffect(() => {
     if (!externalBoxScoreId) return;
+    setLastGameTab(activeTab);
     setSelectedGameId(externalBoxScoreId);
+    setActiveTab("Game Detail");
     onConsumeExternalBoxScore?.();
-  }, [externalBoxScoreId, onConsumeExternalBoxScore]);
+  }, [externalBoxScoreId, onConsumeExternalBoxScore, activeTab]);
 
   if (!league) return null;
   const isInitialized = Boolean(Array.isArray(league?.teams) && league.teams.length > 0);
@@ -1403,6 +1411,12 @@ export default function LeagueDashboard({
   const ownerApprovalText = formatPercent(ownerApproval, "—");
   const pressure = deriveFranchisePressure(league);
   const teamSummaryNav = () => setActiveTab("Roster Hub");
+  const openGameDetail = (gameId, sourceTab = activeTab) => {
+    if (!gameId) return;
+    setLastGameTab(sourceTab);
+    setSelectedGameId(gameId);
+    setActiveTab("Game Detail");
+  };
 
   return (
     <div>
@@ -1657,7 +1671,7 @@ export default function LeagueDashboard({
                         const aA = teamById[aId]?.abbr ?? "?";
                         const gId = resolveCompletedGameId(g, { seasonId: league.seasonId, week: prevWeek });
                         const interactiveProps = getClickableCardProps({
-                          onOpen: gId ? () => setSelectedGameId(gId) : undefined,
+                          onOpen: gId ? () => openGameDetail(gId, "Weekly Hub") : undefined,
                           disabled: !gId,
                           ariaLabel: gId ? `Open box score for ${aA} at ${hA}` : undefined,
                         });
@@ -1798,7 +1812,7 @@ export default function LeagueDashboard({
               onAdvanceWeek={onAdvanceWeek}
               busy={busy}
               simulating={simulating}
-              onOpenBoxScore={setSelectedGameId}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "Weekly Hub")}
             />
           </TabErrorBoundary>
         )}
@@ -1838,7 +1852,7 @@ export default function LeagueDashboard({
               userTeamId={league.userTeamId}
               nextGameStakes={league.nextGameStakes}
               seasonId={league.seasonId}
-              onGameSelect={setSelectedGameId}
+              onGameSelect={(gameId) => openGameDetail(gameId, "Schedule")}
               playoffSeeds={league.playoffSeeds}
               onTeamRoster={(teamId) => {
                 setSelectedTeamId(teamId);
@@ -1985,19 +1999,12 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Trades" && (
           <TabErrorBoundary label="Trades">
-            <div style={{ display: "grid", gap: "var(--space-4)" }}>
-              <TradeFinder
-                league={league}
-                actions={actions}
-                onPlayerSelect={setSelectedPlayerId}
-                onOpenTradeCenter={() => setActiveTab("Trades")}
-              />
-              <TradeCenter
-                league={league}
-                actions={actions}
-                onPlayerSelect={setSelectedPlayerId}
-              />
-            </div>
+            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Trade Center" && (
+          <TabErrorBoundary label="Trade Center">
+            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
           </TabErrorBoundary>
         )}
         {activeTab === "Trade Finder" && (
@@ -2016,14 +2023,44 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
 
+        {activeTab === "Game Detail" && (
+          <TabErrorBoundary label="Game Detail">
+            <GameDetailScreen
+              gameId={selectedGameId}
+              league={league}
+              actions={actions}
+              onBack={() => setActiveTab(lastGameTab || "Schedule")}
+              onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "History Hub" && (
+          <TabErrorBoundary label="History Hub">
+            <HistoryHub onNavigate={setActiveTab} />
+          </TabErrorBoundary>
+        )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
+            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} league={league} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Team History" && (
+          <TabErrorBoundary label="Team History">
             <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} league={league} />
           </TabErrorBoundary>
         )}
         {activeTab === "Hall of Fame" && (
           <TabErrorBoundary label="Hall of Fame">
             <HallOfFame onPlayerSelect={setSelectedPlayerId} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Awards & Records" && (
+          <TabErrorBoundary label="Awards & Records">
+            <div style={{ display: "grid", gap: "var(--space-4)" }}>
+              <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
+              <RecordBook league={league} />
+            </div>
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (
@@ -2124,26 +2161,6 @@ export default function LeagueDashboard({
         }}
         league={league}
       />
-
-      {/* ── Box Score modal (portal-style, rendered above all tabs) ── */}
-      {selectedGameId && (
-        <TabErrorBoundary label="Box Score">
-          <BoxScore
-            gameId={selectedGameId}
-            actions={actions}
-            league={league}
-          onClose={() => setSelectedGameId(null)}
-          onPlayerSelect={(id) => {
-            setSelectedGameId(null);
-            setSelectedPlayerId(id);
-          }}
-          onTeamSelect={(id) => {
-            setSelectedGameId(null);
-            setSelectedTeamId(id);
-          }}
-          />
-        </TabErrorBoundary>
-      )}
 
       {/* ── Player Profile modal ── */}
       {selectedPlayerId && (

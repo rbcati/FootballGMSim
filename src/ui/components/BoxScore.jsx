@@ -71,7 +71,7 @@ function PlayerTable({ title, players, cols, onPlayerSelect }) {
   );
 }
 
-export default function BoxScore({ gameId, actions, league, onClose, onPlayerSelect, onTeamSelect }) {
+export default function BoxScore({ gameId, actions, league, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [game, setGame] = useState(null);
@@ -135,15 +135,17 @@ export default function BoxScore({ gameId, actions, league, onClose, onPlayerSel
   ));
   const unavailableMessage = "No archived postgame data was found for this matchup.";
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content modal-large box-score-modal" onClick={(e) => e.stopPropagation()}>
+  const shell = (
+      <div className={`${embedded ? "card" : "modal-content modal-large box-score-modal"}`} onClick={(e) => !embedded && e.stopPropagation()}>
         <div className="box-score-header bs-header-sticky">
           <div>
             <div className="muted" style={{ fontSize: 12 }}>Week {headerWeek} · {headerSeason}</div>
             <h2 style={{ margin: "2px 0 8px" }}>Final Game Book</h2>
           </div>
-          <button className="btn" onClick={onClose}>Close</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            {onBack && <button className="btn" onClick={onBack}>Back</button>}
+            {!embedded && <button className="btn" onClick={onClose}>Close</button>}
+          </div>
         </div>
 
         {loading && <div className="box-score-container">Loading box score…</div>}
@@ -265,6 +267,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onPlayerSel
           </div>
         )}
       </div>
-    </div>
   );
+
+  if (embedded) return shell;
+  return <div className="modal-overlay" onClick={onClose}>{shell}</div>;
 }
