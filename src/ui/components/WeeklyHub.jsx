@@ -47,7 +47,7 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
-export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating, onPlayerSelect, onTeamSelect }) {
+export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating, onPlayerSelect, onTeamSelect, onOpenBoxScore }) {
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const injuries = useMemo(() => getInjuries(league), [league]);
@@ -76,6 +76,19 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
     });
     return userGame ? derivePostgameStory({ league, game: userGame, week: targetWeek }) : null;
   }, [league]);
+  const latestUserGameId = useMemo(() => {
+    const targetWeek = Number(league?.week ?? 1) - 1;
+    if (!league?.seasonId || targetWeek < 1) return null;
+    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === targetWeek);
+    const userGame = (weekData?.games ?? []).find((g) => {
+      const homeId = normalizeTeamId(g?.home);
+      const awayId = normalizeTeamId(g?.away);
+      return g?.played && (homeId === league?.userTeamId || awayId === league?.userTeamId);
+    });
+    if (!userGame) return null;
+    return `${league.seasonId}_w${targetWeek}_${normalizeTeamId(userGame.home)}_${normalizeTeamId(userGame.away)}`;
+  }, [league]);
+
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -207,7 +220,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
                 ))}
               </div>
               <div>Framing is based on schedule context, records, streaks, and rivalry/division state.</div>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Open schedule matchup board</Button>
+              <Button size="sm" variant="outline" onClick={() => (latestUserGameId ? onOpenBoxScore?.(latestUserGameId) : onNavigate?.("Schedule"))}>Open schedule matchup board</Button>
             </CardContent>
           </Card>
         </section>

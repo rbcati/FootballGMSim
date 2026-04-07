@@ -1801,6 +1801,7 @@ export default function LeagueDashboard({
               onAdvanceWeek={onAdvanceWeek}
               busy={busy}
               simulating={simulating}
+              onOpenBoxScore={setSelectedGameId}
             />
           </TabErrorBoundary>
         )}
@@ -2125,10 +2126,15 @@ export default function LeagueDashboard({
           <BoxScore
             gameId={selectedGameId}
             actions={actions}
+            league={league}
           onClose={() => setSelectedGameId(null)}
           onPlayerSelect={(id) => {
             setSelectedGameId(null);
             setSelectedPlayerId(id);
+          }}
+          onTeamSelect={(id) => {
+            setSelectedGameId(null);
+            setSelectedTeamId(id);
           }}
           />
         </TabErrorBoundary>
