@@ -2887,13 +2887,20 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
     waitCycles: Number(memory?.waitCycles ?? 0),
     moneyGapRatio,
   });
-  const acceptanceFloor = askTotalValue * (0.84 + (1 - ask.willingness) * 0.12);
-  const shouldWaitForMoney = topValue + 0.01 < acceptanceFloor;
+  const waitCycles = Number(memory?.waitCycles ?? 0);
+  const coolingDrop = Math.min(0.12, waitCycles * 0.06);
+  const acceptanceFloor = askTotalValue * Math.max(0.72, (0.84 + (1 - ask.willingness) * 0.12) - coolingDrop);
+  const minimumGapForWait = offers.length >= 3 ? 0.06 : 0.1;
+  const shouldWaitForMoney = topValue + 0.01 < acceptanceFloor && moneyGapRatio >= minimumGapForWait;
+  const canUseWaitState = !timing.atWaitCap && (
+    timing.eliteMarket
+      || ((player?.ovr ?? 0) >= 84 && offers.length >= 2 && heat >= 1.08 && moneyGapRatio >= minimumGapForWait)
+  );
 
-  if (!timing.resolveNow && (offers.length < 2 || shouldWaitForMoney)) {
+  if (!timing.resolveNow && shouldWaitForMoney && canUseWaitState) {
     return {
       status: 'pending',
-      reason: shouldWaitForMoney ? 'Waiting to see if the market improves' : timing.reason,
+      reason: waitCycles >= 1 ? 'Counter expected' : 'Reviewing final offers',
       bestOffer,
       topValue,
       askTotalValue,
@@ -2902,7 +2909,7 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
       bidderCount: offers.length,
       userBidValue,
       moneyGapRatio,
-      state: shouldWaitForMoney ? 'holding_for_improvement' : timing.state,
+      state: waitCycles >= 1 ? 'market_cooling' : 'holding_for_improvement',
       urgency: timing.risk,
     };
   }
@@ -2957,7 +2964,7 @@ function summarizePendingNotifications(rows = []) {
   const losingLead = rows.filter((r) => r.urgency === 'high' && !r.userLeads).length;
 
   const lines = [];
-  if (holding >= 2) lines.push(`${holding} players are waiting for stronger offers.`);
+  if (holding >= 2) lines.push(`${holding} players are reviewing final offers.`);
   if (close >= 2) lines.push(`${close} targets are close to deciding.`);
   if (cooling >= 1 && holding === 0) lines.push(`${cooling} market${cooling > 1 ? 's are' : ' is'} cooling off.`);
   if (losingLead >= 1) lines.push(`${losingLead} of your bids ${losingLead > 1 ? 'are' : 'is'} at risk.`);
@@ -3237,11 +3244,11 @@ async function handleGetFreeAgents(payload, id) {
         });
         const decisionLabelByState = {
           evaluating_market: 'Evaluating market',
-          holding_for_improvement: 'Waiting for stronger offer',
+          holding_for_improvement: 'Reviewing final offers',
           leaning_to_leader: 'Leaning toward top bid',
-          close_to_deciding: 'Decision likely soon',
+          close_to_deciding: 'Decision next week',
           market_cooling: 'Market cooling',
-          decision_imminent: 'Decision imminent',
+          decision_imminent: 'Decision next week',
         };
         const detailTone = userOffer
           ? userOffer.teamId === topBid?.teamId
@@ -3258,7 +3265,7 @@ async function handleGetFreeAgents(payload, id) {
           ? 'Ready to decide now'
           : decisionTiming.patienceWeeks <= 2
             ? 'Likely to decide soon'
-            : `Can wait ${decisionTiming.patienceWeeks} more cycles`;
+            : `Decision window: ${decisionTiming.patienceWeeks} cycle${decisionTiming.patienceWeeks > 1 ? 's' : ''}`;
         const topPreferences = [
           ['money', profile.moneyPriority],
           ['contender', profile.contenderPriority],
