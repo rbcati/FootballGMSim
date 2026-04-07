@@ -461,16 +461,20 @@ function updateTradeOfferMemory(metaObj, offers = []) {
   return next;
 }
 
-function getPickRoundValue(round) {
+function getPickRoundValue(round, { week = 1, teamDirection = 'balanced', projectedRange = 'mid' } = {}) {
   const PICK_VALUES = [0, 950, 360, 150, 70, 30, 12, 4];
-  return PICK_VALUES[Number(round ?? 4)] ?? 8;
+  const base = PICK_VALUES[Number(round ?? 4)] ?? 8;
+  const rangeAdj = projectedRange === 'early' ? 1.22 : projectedRange === 'late' ? 0.88 : 1.0;
+  const stageAdj = Number(week) >= 10 ? 1.1 : Number(week) >= 6 ? 1.05 : 1.0;
+  const directionAdj = teamDirection === 'rebuilding' ? 1.15 : teamDirection === 'contender' ? 0.92 : 1.0;
+  return base * rangeAdj * stageAdj * directionAdj;
 }
 
-function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}) {
-  const playerVal = playerIds.reduce((sum, pid) => sum + _tradeValue(cache.getPlayer(Number(pid))), 0);
+function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {}) {
+  const playerVal = playerIds.reduce((sum, pid) => sum + _tradeValue(cache.getPlayer(Number(pid)), context), 0);
   const pickVal = pickIds.reduce((sum, pid) => {
     const pick = resolvePickById(pid);
-    return sum + getPickRoundValue(pick?.round);
+    return sum + getPickRoundValue(pick?.round, { week: context?.week ?? 1, teamDirection: context?.teamDirection ?? 'balanced', projectedRange: pick?.projectedRange ?? 'mid' });
   }, 0);
   return playerVal + pickVal;
 }
@@ -3760,18 +3764,32 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
  * A deal is accepted by the AI if the receiving side value is ≥ 85 % of the
  * offering side value (15 % discount for uncertainty / home-team premium).
  */
-function _tradeValue(player) {
+function _tradeValue(player, context = {}) {
   if (!player) return 0;
-  const POS_MULT = { QB: 2.0, WR: 1.2, RB: 0.9, TE: 1.1, OL: 1.0,
-                     DL: 1.0, LB: 0.95, CB: 1.05, S: 0.9 };
+  const POS_MULT = { QB: 2.3, EDGE: 1.4, DE: 1.35, OT: 1.35, WR: 1.25, CB: 1.2, TE: 1.08, OL: 1.0, DL: 1.0, LB: 0.96, RB: 0.88, S: 0.92 };
   const ovr = player.ovr ?? 70;
+  const pot = player.potential ?? ovr;
   const age = player.age ?? 27;
+  const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
+  const baseAnnual = Number(player?.contract?.baseAnnual ?? 0);
+  const schemeFit = Number(player?.schemeFit ?? 65);
+  const morale = Number(player?.morale ?? 70);
   const posMult = POS_MULT[player.pos] ?? 1.0;
-  // Age curve: peak at 26, -3 % per year over 30, premium for youth
-  const ageFactor = age <= 26 ? 1.0 + (26 - age) * 0.02
-                 : age <= 30 ? 1.0
-                 :             Math.max(0.5, 1.0 - (age - 30) * 0.06);
-  return Math.pow(ovr, 1.8) * posMult * ageFactor;
+  const direction = context?.teamDirection ?? 'balanced';
+  const needPositions = context?.needPositions ?? [];
+  const scarcityBonus = needPositions.includes(player?.pos) ? 1.08 : 1.0;
+  const ageFactor = age <= 25 ? 1.08 : age <= 29 ? 1.0 : Math.max(0.45, 1.0 - (age - 29) * 0.07);
+  const potentialFactor = 0.92 + Math.max(0, Math.min(0.25, (pot - ovr) / 100));
+  const controlFactor = yearsRemaining >= 3 ? 1.08 : yearsRemaining === 2 ? 1.02 : 0.93;
+  const salaryFactor = Math.max(0.68, 1 - (baseAnnual / 42));
+  const fitFactor = 0.9 + Math.max(0, Math.min(0.18, schemeFit / 500));
+  const moraleFactor = morale < 52 ? 0.94 : morale >= 80 ? 1.02 : 1.0;
+  const directionFactor = direction === 'contender'
+    ? (age <= 30 ? 1.05 : 0.9)
+    : direction === 'rebuilding'
+      ? (age <= 27 ? 1.08 : 0.82)
+      : 1.0;
+  return Math.pow(ovr, 1.72) * posMult * ageFactor * potentialFactor * controlFactor * salaryFactor * fitFactor * moraleFactor * directionFactor * scarcityBonus;
 }
 
 function tradeNeedsSummary(teamId) {
@@ -3815,10 +3833,6 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
     return;
   }
 
-  const offerVal    = calcAssetBundleValue(offering);
-  const receiveVal  = calcAssetBundleValue(receiving);
-
-  // AI acceptance threshold scales by difficulty
   const meta = ensureDynastyMeta(cache.getMeta());
   const week = Number(meta?.currentWeek ?? 1);
   const diff = meta.difficulty || 'Normal';
@@ -3827,6 +3841,17 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const aiNeeds = tradeNeedsSummary(toTeamId);
   const aiGetsPositions = tradePackagePositions(offering?.playerIds ?? []);
   const aiGivesPositions = tradePackagePositions(receiving?.playerIds ?? []);
+  const offerVal    = calcAssetBundleValue(offering, { week, teamDirection: aiDirection, needPositions: aiNeeds.needs });
+  const receiveVal  = calcAssetBundleValue(receiving, { week, teamDirection: aiDirection, needPositions: aiNeeds.needs });
+  const receivingPlayers = (receiving?.playerIds ?? []).map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const blockedOutgoing = receivingPlayers.find((p) => p?.tradeStatus === 'untouchable');
+  if (blockedOutgoing) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'untouchable', reason: `${to?.abbr ?? 'They'} will not move ${blockedOutgoing.name}.` }, id);
+    return;
+  }
+  const softBlockOutgoing = receivingPlayers.filter((p) => p?.tradeStatus === 'soft_block');
+
+  // AI acceptance threshold scales by difficulty
   let diffMult = 1.0;
   if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
   if (diff === 'Hard') diffMult = 1.15; // AI demands 15% more
@@ -3839,7 +3864,20 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 
   const directionPremium = aiDirection === 'contender' && userDirection !== 'contender' ? 1.06 : 1.0;
   const fitDiscount = aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 0.95 : 1.0;
-  const threshold = receiveVal * diffMult * directionPremium * fitDiscount;
+  const softBlockPenalty = softBlockOutgoing.length > 0 ? 1.08 : 1.0;
+  const threshold = receiveVal * diffMult * directionPremium * fitDiscount * softBlockPenalty;
+  if (offerVal < threshold * 0.72) {
+    post(toUI.TRADE_RESPONSE, {
+      accepted: false,
+      offerValue: Math.round(offerVal),
+      receiveValue: Math.round(receiveVal),
+      rejectionType: 'value',
+      requiredValue: Math.round(threshold),
+      valueGap: Math.round(Math.max(0, threshold - offerVal)),
+      reason: `${to?.abbr ?? 'They'} reject quickly — this is well below market for their timeline.`,
+    }, id);
+    return;
+  }
   const accepted = offerVal >= threshold;
 
   // ── Hard Cap Trade Validation ────────────────────────────────────────────────

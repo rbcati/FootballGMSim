@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
+import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -155,6 +156,7 @@ export default function FinancialsView({ league, actions }) {
   const [sortCol, setSortCol] = useState("capHit");
   const [sortDir, setSortDir] = useState("desc");
   const [notification, setNotification] = useState(null);
+  const [contractMarks, setContractMarks] = useState({});
 
   const teamId = league?.userTeamId;
   const phase = league?.phase ?? "";
@@ -224,6 +226,26 @@ export default function FinancialsView({ league, actions }) {
       return 0;
     });
   }, [enriched, sortCol, sortDir]);
+
+  const expiringDashboard = useMemo(() => {
+    const direction = classifyTeamDirection(userTeam, Number(league?.week ?? 1));
+    const expiring = enriched
+      .filter((p) => Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 0) <= 1)
+      .map((p) => {
+        const rec = evaluateResignRecommendation(p, { team: userTeam, direction, roster: enriched });
+        const estimatedDemand = Math.max(Number(p?.contract?.baseAnnual ?? 0) * 1.12, Number(p?.ovr ?? 60) * 0.14);
+        const willingness = rec.negotiationRisk === 'Low' ? 'High' : rec.negotiationRisk === 'High' ? 'Low' : 'Medium';
+        const marketPressure = rec.replacementDifficulty === 'High' ? 'High' : rec.replacementDifficulty === 'Medium' ? 'Medium' : 'Low';
+        return { ...p, rec, estimatedDemand, willingness, marketPressure };
+      });
+    const summary = {
+      expiringStarters: expiring.filter((p) => (p.ovr ?? 0) >= 75).length,
+      likelyWalk: expiring.filter((p) => p.rec.tier === 'let_walk').length,
+      estimatedExtensionCost: expiring.reduce((sum, p) => sum + p.estimatedDemand, 0),
+      capRiskNextYear: expiring.filter((p) => (p.age ?? 0) >= 30 && p.estimatedDemand >= 12).length,
+    };
+    return { rows: expiring, summary };
+  }, [enriched, userTeam, league?.week]);
 
   const capByYear = useMemo(() => {
     const years = [1, 2, 3, 4];
@@ -516,6 +538,42 @@ export default function FinancialsView({ league, actions }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardHeader><CardTitle>Expiring Contracts Dashboard</CardTitle></CardHeader>
+        <CardContent style={{ display: "grid", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+            <StatBox label="Expiring starters" value={expiringDashboard.summary.expiringStarters} />
+            <StatBox label="Likely walk" value={expiringDashboard.summary.likelyWalk} />
+            <StatBox label="Est. extension cost" value={fmt(expiringDashboard.summary.estimatedExtensionCost)} />
+            <StatBox label="Next-year cap risk" value={expiringDashboard.summary.capRiskNextYear} />
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'shortlist_extension' }))}>Shortlist for extension</Button>
+            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'mark_trade' }))}>Mark as trade candidate</Button>
+            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'defer_offseason' }))}>Defer to offseason</Button>
+            <Button className="btn" onClick={() => setContractMarks((prev) => ({ ...prev, batchAction: 'before_deadline' }))}>Prioritize before deadline</Button>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Recommended focus: {expiringDashboard.summary.expiringStarters >= 3 ? 'address starters now' : 'selective extensions'} · batch mode: {contractMarks.batchAction ?? 'none'}.
+          </div>
+          <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--hairline)', borderRadius: 8 }}>
+            {expiringDashboard.rows.map((row) => (
+              <div key={row.id} style={{ display: 'grid', gridTemplateColumns: '1.3fr repeat(7, minmax(70px, 1fr))', gap: 8, padding: '8px 10px', borderBottom: '1px solid var(--hairline)', fontSize: 12 }}>
+                <div><strong>{row.name}</strong><div style={{ color: 'var(--text-muted)' }}>{row.pos} · age {row.age} · morale {row.morale ?? 70}</div><div style={{ color: row.rec.tone }}>{row.rec.label}</div></div>
+                <div>{row.ovr}/{row.potential ?? row.ovr}</div>
+                <div>{fmt(row.capHit)}</div>
+                <div>{fmt(row.estimatedDemand)}</div>
+                <div>{row.willingness}</div>
+                <div>{row.marketPressure}</div>
+                <div>{row.rec.replacementDifficulty}</div>
+                <div style={{ color: 'var(--text-muted)' }}>{row.rec.reason}</div>
+              </div>
+            ))}
+            {expiringDashboard.rows.length === 0 && <div style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)' }}>No expiring players currently.</div>}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── June 1st Explanation ── */}
       <div

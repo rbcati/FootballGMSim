@@ -596,6 +596,7 @@ export default function FreeAgency({
   const [flash, setFlash] = useState(null);
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showCapPreview, setShowCapPreview] = useState(false);
+  const [viewMode, setViewMode] = useState("table");
 
   // Keep ref to avoid stale closure during mount load
   const loadCountRef = useRef(0);
@@ -985,6 +986,10 @@ export default function FreeAgency({
                 {pos}
               </Button>
             ))}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              <Button className="btn" onClick={() => setViewMode("table")} style={{ opacity: viewMode === "table" ? 1 : 0.75 }}>Table</Button>
+              <Button className="btn" onClick={() => setViewMode("cards")} style={{ opacity: viewMode === "cards" ? 1 : 0.75 }}>Cards</Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -1025,7 +1030,7 @@ export default function FreeAgency({
           </div>
         ) : (
           <div>
-            <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
+            {viewMode === "table" && <div className="desktop-only table-wrapper" style={{ overflowX: "auto" }}>
               <Table className="standings-table" style={{ width: "100%" }}>
                 <TableHeader>
                   <TableRow>
@@ -1267,7 +1272,24 @@ export default function FreeAgency({
                   })}
                 </TableBody>
               </Table>
-            </div>
+            </div>}
+
+            {viewMode === "cards" && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+                {sortedAgents.slice(0, 80).map((player, idx) => (
+                  <Card key={player.id} className="card-premium" style={{ padding: "var(--space-3)" }}>
+                    <div style={{ fontWeight: 700 }}>{idx + 1}. {player.name}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
+                    <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <Button className="btn" onClick={() => onPlayerSelect && onPlayerSelect(player.id)}>View profile</Button>
+                      <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>Negotiate</Button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             {/* Mobile Card Layout */}
             <div className="mobile-only" style={{ display: "none", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
