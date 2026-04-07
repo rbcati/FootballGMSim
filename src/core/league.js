@@ -215,6 +215,16 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                 capSpace: Constants.SALARY_CAP?.BASE || 220,
                 scoutingPoints: 100,
                 fanApproval: 50,
+                franchiseInvestments: {
+                  stadiumLevel: 1,
+                  concessionsStrategy: 'balanced',
+                  trainingLevel: 1,
+                  scoutingLevel: 1,
+                  scoutingRegion: 'national',
+                  ownerCapacity: 10,
+                  usedCapacity: 4,
+                  history: [],
+                },
                 rivalTeamId: null
             };
             team.offScheme = team?.offScheme ?? 'Pro Style';

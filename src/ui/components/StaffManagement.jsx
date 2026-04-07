@@ -12,6 +12,7 @@ import React, { useState, useMemo, useCallback } from "react";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
+import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 
 // ── Seeded RNG ──────────────────────────────────────────────────────────────
 
@@ -857,6 +858,9 @@ export default function StaffManagement({ league, actions }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ marginBottom: "var(--space-4, 16px)" }}>Staff Management</h1>
+      <div style={{ marginBottom: "var(--space-4, 16px)" }}>
+        <FranchiseInvestmentsPanel team={userTeam} actions={actions} compact />
+      </div>
 
       {/* Budget bar */}
       <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />

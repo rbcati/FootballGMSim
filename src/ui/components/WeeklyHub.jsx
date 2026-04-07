@@ -9,6 +9,7 @@ import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalize
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
+import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -127,6 +128,11 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           </div>
         </CardContent>
       </Card>
+
+      <section className="weekly-section">
+        <h3 className="weekly-section__title">Franchise investment pulse</h3>
+        <FranchiseInvestmentsPanel team={user} actions={actions} compact onNavigate={onNavigate} />
+      </section>
 
       <section className="weekly-section">
         <h3 className="weekly-section__title">Top priorities</h3>
