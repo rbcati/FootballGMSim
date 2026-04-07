@@ -218,51 +218,68 @@ export function buildDecisionTiming(
   const moneyGapRatio = safeNum(context.moneyGapRatio, 0);
   const bidderPressure = Math.max(0, offerCount - 1);
   const isOffseason = phase === 'free_agency' || phase === 'offseason_resign';
+  const eliteMarket = ovr >= 90 && offerCount >= 3 && (marketHeat >= 1.25 || moneyGapRatio >= 0.08);
+  const maxWaitCycles = eliteMarket ? 2 : 1;
+  const atWaitCap = waitCycles >= maxWaitCycles;
 
-  const patienceBase = 0.28
-    + (ovr >= 86 ? 0.18 : ovr >= 80 ? 0.1 : 0)
-    + (age <= 25 ? 0.08 : age >= 31 ? -0.12 : 0)
-    + (marketHeat - 1) * 0.24
-    + bidderPressure * 0.05
-    + (isOffseason ? 0.08 : -0.05);
+  const patienceBase = 0.12
+    + (ovr >= 92 ? 0.16 : ovr >= 86 ? 0.09 : ovr >= 80 ? 0.03 : 0)
+    + (age <= 25 ? 0.04 : age >= 31 ? -0.06 : 0)
+    + (marketHeat - 1) * 0.14
+    + bidderPressure * 0.035
+    + (isOffseason ? 0.03 : -0.03);
 
-  const fatigue = Math.min(0.42, waitCycles * 0.08);
-  const leverage = Math.min(0.28, moneyGapRatio * 0.45);
+  const fatigue = Math.min(0.5, waitCycles * 0.24);
+  const leverage = Math.min(0.18, moneyGapRatio * 0.32);
   const holdOut = Math.max(0.04, Math.min(0.95, patienceBase + leverage - fatigue));
 
-  let state = 'evaluating_market';
-  let reason = 'Evaluating the current market';
-  if (offerCount <= 1 && holdOut < 0.33) {
+  let state = 'decision_imminent';
+  let reason = 'Decision next week';
+  if (offerCount <= 1 && holdOut < 0.3) {
     state = 'decision_imminent';
-    reason = 'Ready to sign if this offer holds';
-  } else if (holdOut >= 0.64) {
+    reason = 'Ready to decide now';
+  } else if (holdOut >= 0.58 && offerCount >= 2 && (ovr >= 84 || marketHeat >= 1.2)) {
     state = 'holding_for_improvement';
-    reason = 'Waiting to see if the market improves';
-  } else if (holdOut >= 0.52) {
+    reason = 'Reviewing final offers';
+  } else if (holdOut >= 0.45 && offerCount >= 2) {
     state = 'evaluating_market';
-    reason = 'Reviewing bids and fit before deciding';
-  } else if (holdOut >= 0.42) {
+    reason = 'Counter expected';
+  } else if (holdOut >= 0.35) {
     state = 'leaning_to_leader';
-    reason = 'Leaning toward the strongest current package';
+    reason = 'Leaning toward current top offer';
   } else {
     state = 'close_to_deciding';
-    reason = 'Decision likely soon';
+    reason = 'Decision next week';
   }
 
-  if (waitCycles >= 3 && offerCount <= 1 && marketHeat < 1.12) {
+  if (waitCycles >= 1 && offerCount <= 1 && marketHeat < 1.12) {
     state = 'market_cooling';
-    reason = 'Market is cooling and a decision is close';
+    reason = 'Market cooling';
   }
-  if (waitCycles >= 4 && holdOut < 0.6) {
+  if (waitCycles >= 1 && holdOut < 0.55) {
     state = 'decision_imminent';
-    reason = 'Decision is imminent';
+    reason = 'Decision next week';
+  }
+  if (atWaitCap) {
+    state = 'decision_imminent';
+    reason = eliteMarket ? 'Final review window ending' : 'Market cooling';
   }
 
-  const resolveNow = state === 'decision_imminent' || (waitCycles >= 5 && holdOut < 0.72);
+  const resolveNow = state === 'decision_imminent' || atWaitCap;
   const risk = holdOut >= 0.66 ? 'high' : holdOut >= 0.48 ? 'medium' : 'low';
-  const patienceWeeks = Math.max(1, Math.min(6, Math.round(2 + holdOut * 4 - waitCycles * 0.6)));
+  const patienceWeeks = atWaitCap ? 0 : Math.max(0, Math.min(maxWaitCycles, Math.round(maxWaitCycles - waitCycles)));
 
-  return { resolveNow, reason, state, risk, patienceWeeks, holdOut: Math.round(holdOut * 1000) / 1000 };
+  return {
+    resolveNow,
+    reason,
+    state,
+    risk,
+    patienceWeeks,
+    holdOut: Math.round(holdOut * 1000) / 1000,
+    maxWaitCycles,
+    eliteMarket,
+    atWaitCap,
+  };
 }
 
 export function marketHeatLabel(v) {

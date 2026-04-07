@@ -614,14 +614,20 @@ class AiLogic {
 
         if (!bestOffer) return { signed: false, offer: null };
         const bestValue = (bestOffer.contract.baseAnnual * bestOffer.contract.yearsTotal) + (bestOffer.contract.signingBonus || 0);
-        const timing = buildDecisionTiming(player, heat, player.offers.length, 'free_agency');
-        const dayDiscount = Math.max(0, day - 2) * 0.04;
-        const threshold = askTotal * (0.92 - dayDiscount);
-        if (bestValue >= threshold && (timing.resolveNow || day >= 3)) {
+        const waitCycles = Math.max(0, Number(day) - 1);
+        const timing = buildDecisionTiming(player, heat, player.offers.length, 'free_agency', { waitCycles });
+        const coolingDrop = Math.min(0.14, waitCycles * 0.07);
+        const threshold = askTotal * Math.max(0.7, 0.88 - coolingDrop);
+        const weakOffer = bestValue < threshold * 0.84;
+        if (!weakOffer && (timing.resolveNow || day >= 2)) {
             return { signed: true, offer: bestOffer };
         }
 
-        return { signed: false, offer: bestOffer }; // Wait for better offer
+        if (timing.atWaitCap || day >= 3) {
+            return { signed: true, offer: bestOffer };
+        }
+
+        return { signed: false, offer: bestOffer }; // Short review window
     }
 }
 
