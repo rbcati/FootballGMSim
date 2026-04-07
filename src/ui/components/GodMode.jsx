@@ -10,8 +10,8 @@
  *  - actions: worker action dispatchers (applyGodMode, toggleGodMode, etc.)
  */
 
-import React, { useState, useMemo, useCallback } from "react";
-import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings } from "../../core/leagueSettings.js";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from "../../core/leagueSettings.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -253,6 +253,18 @@ function PlayerEditor({ league, changes, setChanges }) {
             <NumberInput value={selectedPlayer.salary ?? selectedPlayer.contract?.amount ?? 1}
               onChange={v => updatePlayer("salary", v)} prefix="$" suffix="M" min={0.5} max={60} step={0.5} />
           </SettingRow>
+          <SettingRow label="Contract Years">
+            <NumberInput value={selectedPlayer.contractYears ?? selectedPlayer.contract?.yearsTotal ?? 1}
+              onChange={v => updatePlayer("contractYears", v)} min={1} max={10} />
+          </SettingRow>
+          <SettingRow label="Morale">
+            <SliderInput value={selectedPlayer.morale ?? 70}
+              onChange={v => updatePlayer("morale", v)} min={0} max={100} />
+          </SettingRow>
+          <SettingRow label="Injury Weeks">
+            <NumberInput value={selectedPlayer.injuryWeeksRemaining ?? 0}
+              onChange={v => updatePlayer("injuryWeeksRemaining", v)} min={0} max={52} />
+          </SettingRow>
           <SettingRow label="Speed">
             <SliderInput value={selectedPlayer.ratings?.speed ?? selectedPlayer.speed ?? 50}
               onChange={v => updatePlayer("speed", v)} min={20} max={99} />
@@ -311,6 +323,23 @@ function TeamEditor({ league, changes, setChanges }) {
           background: "var(--bg)", border: "1px solid var(--hairline)",
           borderRadius: 8, padding: 14,
         }}>
+          <SettingRow label="Team Name">
+            <input
+              type="text"
+              defaultValue={team.name ?? ""}
+              onChange={e => updateTeam("name", e.target.value)}
+              style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--hairline)", background: "var(--bg)", color: "var(--text)" }}
+            />
+          </SettingRow>
+          <SettingRow label="Abbreviation">
+            <input
+              type="text"
+              defaultValue={team.abbr ?? ""}
+              maxLength={4}
+              onChange={e => updateTeam("abbr", e.target.value.toUpperCase())}
+              style={{ width: 72, padding: "4px 8px", borderRadius: 6, border: "1px solid var(--hairline)", background: "var(--bg)", color: "var(--text)" }}
+            />
+          </SettingRow>
           <SettingRow label="Wins">
             <NumberInput value={team.wins ?? 0} onChange={v => updateTeam("wins", v)}
               min={0} max={20} />
@@ -426,6 +455,9 @@ export default function GodMode({ league, actions }) {
 
   // ── Local settings state (initialized from league or defaults) ──────────
   const [settings, setSettings] = useState(() => normalizeLeagueSettings(league?.settings ?? {}));
+  useEffect(() => {
+    setSettings(normalizeLeagueSettings(league?.settings ?? {}));
+  }, [league?.settings]);
 
   const updateSetting = useCallback((key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -520,10 +552,37 @@ export default function GodMode({ league, actions }) {
 
       {/* ── League Rules ──────────────────────────────────────────────── */}
       <Section title="League Rules" icon={SECTION_ICONS.leagueRules} defaultOpen>
+        <SettingRow label="League Name">
+          <input
+            type="text"
+            value={settings.leagueName ?? ""}
+            onChange={e => updateSetting("leagueName", e.target.value)}
+            style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--hairline)", background: "var(--bg)", color: "var(--text)", minWidth: 220 }}
+          />
+        </SettingRow>
+        <SettingRow label="Conference Names">
+          <input
+            type="text"
+            value={(settings.conferenceNames || []).join(", ")}
+            onChange={e => updateSetting("conferenceNames", e.target.value.split(",").map(v => v.trim()).filter(Boolean))}
+            style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--hairline)", background: "var(--bg)", color: "var(--text)", minWidth: 220 }}
+          />
+        </SettingRow>
+        <SettingRow label="Division Names">
+          <input
+            type="text"
+            value={(settings.divisionNames || []).join(", ")}
+            onChange={e => updateSetting("divisionNames", e.target.value.split(",").map(v => v.trim()).filter(Boolean))}
+            style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid var(--hairline)", background: "var(--bg)", color: "var(--text)", minWidth: 220 }}
+          />
+        </SettingRow>
         <SettingRow label="Salary Cap">
           <NumberInput value={settings.salaryCap} onChange={v => updateSetting("salaryCap", v)}
             prefix="$" suffix="M" min={50} max={500} step={5} />
         </SettingRow>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
+          Rule safety: {getRuleEditType("salaryCap")}
+        </div>
         <SettingRow label="Roster Size">
           <NumberInput value={settings.rosterSize} onChange={v => updateSetting("rosterSize", v)}
             min={30} max={75} />
@@ -532,9 +591,16 @@ export default function GodMode({ league, actions }) {
           <NumberInput value={settings.playoffTeams} onChange={v => updateSetting("playoffTeams", v)}
             min={4} max={32} />
         </SettingRow>
+        <div style={{ fontSize: 11, color: "var(--warning)" }}>
+          Playoff teams and season length are offseason-only edits.
+        </div>
         <SettingRow label="Schedule Length">
           <NumberInput value={settings.seasonLength} onChange={v => updateSetting("seasonLength", v)}
             suffix=" games" min={10} max={24} />
+        </SettingRow>
+        <SettingRow label="Reveal Hidden Ratings">
+          <ToggleSwitch value={!!settings.revealHiddenRatingsForCommissioner}
+            onChange={v => updateSetting("revealHiddenRatingsForCommissioner", v)} />
         </SettingRow>
       </Section>
 

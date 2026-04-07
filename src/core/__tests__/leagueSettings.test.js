@@ -21,4 +21,10 @@ describe('leagueSettings', () => {
     expect(getRuleEditType('playoffTeams')).toBe('offseason-only');
     expect(getRuleEditType('leagueSize')).toBe('new-league-only');
   });
+
+  it('restores identity defaults when arrays are missing', () => {
+    const normalized = normalizeLeagueSettings({ conferenceNames: null, divisionNames: [] });
+    expect(normalized.conferenceNames.length).toBeGreaterThan(0);
+    expect(normalized.divisionNames.length).toBeGreaterThan(0);
+  });
 });

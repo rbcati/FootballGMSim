@@ -436,6 +436,8 @@ export function useWorker() {
     saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),
     exportSave: (leagueId)       => request(toWorker.EXPORT_SAVE, { leagueId }, { silent: true }),
     importSave: (data, saveName) => request(toWorker.IMPORT_SAVE, { data, saveName }),
+    exportLeagueConfig: ()       => request(toWorker.EXPORT_LEAGUE_CONFIG, {}, { silent: true }),
+    importLeagueConfig: (config) => request(toWorker.IMPORT_LEAGUE_CONFIG, { config }),
     deleteSlot: (slotKey)        => request(toWorker.DELETE_SLOT, { slotKey }, { silent: true }),
 
     /** Wipe the save and restart. */
