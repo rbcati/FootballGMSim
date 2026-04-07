@@ -43,7 +43,7 @@ function teamColor(abbr = "") {
 }
 
 // ── Prospect Card (combine-style) ──
-function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick, tagLabel }) {
+function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick, tagLabel, onToggleShortlist, onToggleAvoid }) {
   const pos = player.pos || player.position;
   const posColor = POS_COLORS[pos] || "#9ca3af";
   const radarAttrs = getPlayerRadarAttributes({ ...player, ...(player.ratings || {}) });
@@ -149,6 +149,16 @@ function ProspectCard({ player, rank, isOnClock, onDraft, onSelect, userPick, ta
       {tagLabel && (
         <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-subtle)", textAlign: "center" }}>{tagLabel}</div>
       )}
+
+      {typeof player.scoutingConfidence === 'number' && (
+        <div style={{ marginTop: 4, fontSize: 10, textAlign: 'center', color: 'var(--text-subtle)' }}>
+          Confidence {Math.round(player.scoutingConfidence * 100)}% · ±{player.uncertaintyBand ?? 0}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+        <button className="btn" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={(e) => { e.stopPropagation(); onToggleShortlist?.(player.id); }}>Target</button>
+        <button className="btn" style={{ flex: 1, fontSize: 10, padding: '3px 6px' }} onClick={(e) => { e.stopPropagation(); onToggleAvoid?.(player.id); }}>Avoid</button>
+      </div>
 
       {/* Draft button */}
       {userPick && (
@@ -327,6 +337,12 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
     if (actions?.draftPlayer) {
       actions.draftPlayer(playerId);
     }
+  }, [actions]);
+
+  const handleBoardToggle = useCallback((playerId, mode) => {
+    if (!actions?.updateDraftBoard) return;
+    if (mode === 'shortlist') actions.updateDraftBoard({ playerId, updates: { toggleShortlist: true } });
+    if (mode === 'avoid') actions.updateDraftBoard({ playerId, updates: { toggleAvoid: true } });
   }, [actions]);
 
   const handleAutoDraft = useCallback(() => {
@@ -533,6 +549,8 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
               onSelect={onPlayerSelect}
               userPick={isUserPick}
               tagLabel={player._tagLabel}
+              onToggleShortlist={(id) => handleBoardToggle(id, 'shortlist')}
+              onToggleAvoid={(id) => handleBoardToggle(id, 'avoid')}
             />
           ))}
           {availableProspects.length === 0 && (

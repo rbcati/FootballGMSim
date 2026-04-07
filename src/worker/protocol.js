@@ -111,6 +111,10 @@ export const toWorker = Object.freeze({
   HIRE_COACH:         'HIRE_COACH',           // { teamId, coachId, role }
   FIRE_COACH:         'FIRE_COACH',           // { teamId, role }
   GET_AVAILABLE_COACHES: 'GET_AVAILABLE_COACHES', // {}
+  GET_STAFF_STATE: 'GET_STAFF_STATE',
+  HIRE_STAFF_MEMBER: 'HIRE_STAFF_MEMBER',
+  FIRE_STAFF_MEMBER: 'FIRE_STAFF_MEMBER',
+  UPDATE_DRAFT_BOARD: 'UPDATE_DRAFT_BOARD',
 
   /** Training Camp / Weekly Practice */
   CONDUCT_DRILL:      'CONDUCT_DRILL',        // { teamId, intensity, drillType, positionGroups }
@@ -196,6 +200,7 @@ export const toUI = Object.freeze({
 
   /** Coaching Data */
   AVAILABLE_COACHES:  'AVAILABLE_COACHES',    // { coaches[] }
+  STAFF_STATE: 'STAFF_STATE',
 
   /** Box score response */
   BOX_SCORE:          'BOX_SCORE',            // { gameId, game }

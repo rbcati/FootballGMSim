@@ -473,6 +473,10 @@ export function useWorker() {
 
     /** Fetch available coaches (returns a Promise — does NOT set busy). */
     getAvailableCoaches: () => request(toWorker.GET_AVAILABLE_COACHES, {}, { silent: true }),
+    getStaffState: () => request(toWorker.GET_STAFF_STATE, {}, { silent: true }),
+    hireStaffMember: (payload) => request(toWorker.HIRE_STAFF_MEMBER, payload, { silent: true }),
+    fireStaffMember: (payload) => request(toWorker.FIRE_STAFF_MEMBER, payload, { silent: true }),
+    updateDraftBoard: (payload) => send(toWorker.UPDATE_DRAFT_BOARD, payload),
 
     /** Hire a coach (replaces existing). */
     hireCoach: (payload) => send(toWorker.HIRE_COACH, payload),
