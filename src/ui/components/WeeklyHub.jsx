@@ -9,6 +9,7 @@ import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalize
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
+import { buildNeedsAttentionItems, buildPrimaryAction, buildTeamSnapshot, getDefaultExpandedSections } from "../utils/weeklyHubLayout.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 
 function getUserTeam(league) {
@@ -32,11 +33,6 @@ function getNextGame(league) {
   return null;
 }
 
-function getInjuries(league) {
-  const roster = getUserTeam(league)?.roster ?? [];
-  return roster.filter((p) => p.injury || p.injuredWeeks > 0).slice(0, 4);
-}
-
 function phaseLabel(phase) {
   if (phase === "regular") return "Regular Season";
   if (phase === "playoffs") return "Playoffs";
@@ -47,22 +43,36 @@ function phaseLabel(phase) {
   return "Offseason";
 }
 
+function SectionHeader({ title, subtitle }) {
+  return (
+    <div className="weekly-section-head">
+      <h3 className="weekly-section__title">{title}</h3>
+      {subtitle ? <p className="weekly-section__subtitle">{subtitle}</p> : null}
+    </div>
+  );
+}
+
+function ExpandableSection({ title, subtitle, defaultOpen, children }) {
+  return (
+    <details className="weekly-expandable" open={defaultOpen}>
+      <summary className="weekly-expandable__summary">
+        <div>
+          <h3 className="weekly-section__title">{title}</h3>
+          {subtitle ? <p className="weekly-section__subtitle">{subtitle}</p> : null}
+        </div>
+        <span className="weekly-expandable__chevron">▾</span>
+      </summary>
+      <div className="weekly-expandable__body">{children}</div>
+    </details>
+  );
+}
+
 export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, busy, simulating, onPlayerSelect, onTeamSelect, onOpenBoxScore }) {
+  const defaults = getDefaultExpandedSections();
   const user = useMemo(() => getUserTeam(league), [league]);
   const nextGame = useMemo(() => getNextGame(league), [league]);
-  const injuries = useMemo(() => getInjuries(league), [league]);
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
   const teamIntel = useMemo(() => buildTeamIntelligence(user, { week: league?.week ?? 1 }), [user, league?.week]);
-  const pregameAngles = useMemo(() => {
-    if (!nextGame) return [];
-    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === Number(nextGame.week));
-    const game = (weekData?.games ?? []).find((g) => {
-      const homeId = normalizeTeamId(g?.home);
-      const awayId = normalizeTeamId(g?.away);
-      return homeId === league?.userTeamId || awayId === league?.userTeamId;
-    });
-    return game ? derivePregameAngles({ league, game, week: nextGame.week }) : [];
-  }, [league, nextGame]);
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(user, { pressure: weeklyContext?.pressure, intel: teamIntel, direction: weeklyContext?.direction }), [user, weeklyContext, teamIntel]);
   const userLastGameStory = useMemo(() => {
@@ -89,7 +99,6 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
     return `${league.seasonId}_w${targetWeek}_${normalizeTeamId(userGame.home)}_${normalizeTeamId(userGame.away)}`;
   }, [league]);
 
-
   if (!league || !user || !weeklyContext) return null;
 
   const cap = deriveTeamCapSnapshot(user, { fallbackCapTotal: 255 });
@@ -99,87 +108,84 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
   const topOfferIdentity = topOffer ? getOfferIdentity(topOffer) : null;
-  const chemistry = weeklyContext?.chemistry ?? weeklyContext?.teamIntel?.chemistry;
-  const topPriorities = weeklyContext.topPriorities?.length
-    ? weeklyContext.topPriorities
-    : [{ tone: "ok", level: "recommendation", label: "All Clear", detail: "No urgent blockers right now.", why: "You can safely advance once prep is set.", tab: "Weekly Hub" }];
+  const attentionItems = buildNeedsAttentionItems(weeklyContext, { limit: 5 });
+  const primaryAction = buildPrimaryAction({ league, nextGame, topNeeds: attentionItems, topOffer, latestUserGameId });
+  const snapshotTiles = buildTeamSnapshot({
+    user,
+    weeklyContext,
+    cap: formatMoneyM(cap.capRoom),
+    nextGame,
+    userLastGameStory,
+  });
+  const pregameAngles = nextGame ? derivePregameAngles({ league, game: null, week: nextGame.week }) : [];
+
+  const handlePrimaryAction = () => {
+    if (primaryAction.type === "boxscore" && primaryAction.gameId) return onOpenBoxScore?.(primaryAction.gameId);
+    if (primaryAction.type === "navigate") return onNavigate?.(primaryAction.tab);
+    return onAdvanceWeek?.();
+  };
 
   return (
-    <div className="weekly-hub-v2">
+    <div className="weekly-hub-v2 weekly-hub-v3">
       <Card variant="primary" className="weekly-primary weekly-hero">
         <CardHeader className="weekly-primary__header">
           <div className="weekly-hero__identity">
-            <p className="weekly-hud__eyebrow">{phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
-            <CardTitle className="weekly-hero__title">
-              {nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"} · ${ACTION_LABELS.readyToAdvance}` : ACTION_LABELS.advanceFranchise}
-            </CardTitle>
-            <p className="weekly-primary__subtitle">
-              {weeklyContext.phasePriority}
-            </p>
+            <p className="weekly-hud__eyebrow">{user.name} · {phaseLabel(league.phase)} · Week {league.week ?? 1}</p>
+            <CardTitle className="weekly-hero__title">{primaryAction.label}</CardTitle>
+            <p className="weekly-primary__subtitle">{primaryAction.detail}</p>
           </div>
           <div className="weekly-hud__meta">
             <Badge variant="outline">{user.wins ?? 0}-{user.losses ?? 0}{(user.ties ?? 0) ? `-${user.ties}` : ""}</Badge>
-            <Badge>{`Owner ${pressure?.owner?.state ?? "Stable"} ${ownerDisplay}`}</Badge>
-            {pressure?.fans?.state ? <Badge variant="secondary">{`Fans ${pressure.fans.state}`}</Badge> : null}
-            {pressure?.media?.state ? <Badge variant="outline">{`Media ${pressure.media.state}`}</Badge> : null}
+            <Badge>Owner {pressure?.owner?.state ?? "Stable"} {ownerDisplay}</Badge>
+            {pressure?.fans?.state ? <Badge variant="secondary">Fans {pressure.fans.state}</Badge> : null}
+            {pressure?.media?.state ? <Badge variant="outline">Media {pressure.media.state}</Badge> : null}
             <Badge variant="secondary">Cap {formatMoneyM(cap.capRoom)}</Badge>
-            {injuries.length > 0 && <Badge variant="destructive">{injuries.length} injuries</Badge>}
           </div>
         </CardHeader>
-        <CardContent className="weekly-hero__actions" style={{ display: "grid", gap: 10 }}>
-          <Button
-            size="lg"
-            className="weekly-hero__action-main"
-            disabled={busy || simulating}
-            onClick={onAdvanceWeek}
-          >
-            {simulating ? ACTION_LABELS.simulating : busy ? ACTION_LABELS.working : ACTION_LABELS.advanceWeek}
+        <CardContent className="weekly-hero__actions">
+          <Button size="lg" className="weekly-hero__action-main" disabled={busy || simulating} onClick={handlePrimaryAction}>
+            {busy || simulating ? ACTION_LABELS.working : primaryAction.cta}
           </Button>
-          <div className="weekly-tools-row">
-            {(weeklyContext.phaseShortcuts ?? []).slice(0, 4).map((shortcut) => (
-              <Button key={shortcut.tab} variant="secondary" onClick={() => onNavigate?.(shortcut.tab)}>{shortcut.label}</Button>
-            ))}
-          </div>
+          <Button size="sm" variant="secondary" onClick={onAdvanceWeek} disabled={busy || simulating}>{simulating ? ACTION_LABELS.simulating : ACTION_LABELS.advanceWeek}</Button>
+          {(weeklyContext.phaseShortcuts ?? []).slice(0, 3).map((shortcut) => (
+            <Button key={shortcut.tab} size="sm" variant="outline" onClick={() => onNavigate?.(shortcut.tab)}>{shortcut.label}</Button>
+          ))}
         </CardContent>
       </Card>
 
       <section className="weekly-section">
-        <h3 className="weekly-section__title">Franchise investment pulse</h3>
-        <FranchiseInvestmentsPanel team={user} actions={actions} compact onNavigate={onNavigate} />
+        <SectionHeader title="What just happened" subtitle="Result context first, then what is next." />
+        <div className="weekly-card-grid">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Latest Result</p>
+              <strong>{userLastGameStory?.headline ?? "No completed game yet"}</strong>
+              <p>{userLastGameStory?.detail ?? "Play a game to populate recap context."}</p>
+              <Button size="sm" variant="outline" onClick={() => (latestUserGameId ? onOpenBoxScore?.(latestUserGameId) : onNavigate?.("Schedule"))}>Review box score</Button>
+            </CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Next Opponent</p>
+              <strong>{nextGame ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? nextGame.opp?.abbr ?? "TBD"}` : "No upcoming matchup"}</strong>
+              <p>{pregameAngles[0]?.label ?? weeklyContext.phasePriority}</p>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Open schedule</Button>
+            </CardContent>
+          </Card>
+        </div>
       </section>
-      {teamIntel?.organization && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Organization quality</h3>
-          <div className="weekly-urgent-list">
-            {[
-              ['Development Environment', teamIntel.organization.developmentEnvironment],
-              ['Player Care / Recovery', teamIntel.organization.recoveryEnvironment],
-              ['FA Destination Quality', teamIntel.organization.freeAgentDestination],
-              ['Scout Confidence', teamIntel.organization.scoutingConfidence],
-            ].map(([label, env]) => (
-              <div key={label} className="weekly-urgent-item tone-info">
-                <div>
-                  <strong>{label}: {env?.state}</strong>
-                  <span>{env?.reasons?.[0] ?? "No signal yet."}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       <section className="weekly-section">
-        <h3 className="weekly-section__title">Top priorities</h3>
+        <SectionHeader title="Actions needed now" subtitle="Urgent items only. Top 5 max." />
         <div className="weekly-urgent-list">
-          {topPriorities.map((item, idx) => (
+          {attentionItems.map((item, idx) => (
             <button key={`${item.label}-${idx}`} className={`weekly-urgent-item tone-${item.tone}`} onClick={() => onNavigate?.(item.tab)}>
               <div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                <div className="weekly-inline-meta">
                   <strong>{item.label}</strong>
                   <Badge variant={item.level === "blocker" ? "destructive" : "outline"}>{item.level === "blocker" ? "Blocker" : "Recommended"}</Badge>
                 </div>
                 <span>{item.detail}</span>
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 2 }}>{item.why}</div>
               </div>
               <span>›</span>
             </button>
@@ -187,298 +193,110 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
         </div>
       </section>
 
-
       <section className="weekly-section">
-        <h3 className="weekly-section__title">League storylines</h3>
-        <div className="weekly-urgent-list">
-          {(weeklyContext.storylineCards?.length ? weeklyContext.storylineCards : [{ title: 'No major storyline spikes this week', detail: 'The league picture is stable. Use this week to prep depth and game plan edges.', tone: 'ok', tab: 'Standings' }]).map((story, idx) => (
-            <button key={`${story.id ?? story.title}-${idx}`} className={`weekly-urgent-item tone-${story.tone ?? 'ok'}`} onClick={() => onNavigate?.(story.tab ?? 'Standings')}>
-              <div>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong>{story.title}</strong>
-                  <Badge variant="outline">{(story.category ?? 'story').replaceAll('_', ' ')}</Badge>
-                </div>
-                <span>{story.detail}</span>
-              </div>
-              <span>›</span>
-            </button>
+        <SectionHeader title="Team snapshot" subtitle="Compact status only." />
+        <div className="weekly-stat-grid">
+          {snapshotTiles.map((tile) => (
+            <Card key={tile.label} variant="secondary" className="weekly-stat-tile">
+              <CardContent className="weekly-stat-tile__body">
+                <span>{tile.label}</span>
+                <strong>{tile.value}</strong>
+                <small>{tile.context}</small>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </section>
 
-      {nextGame && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Pregame framing</h3>
-          <Card variant="secondary">
-            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
-              <strong style={{ color: "var(--text)" }}>Week {nextGame.week} {nextGame.isHome ? "vs" : "at"} {nextGame.opp?.name ?? nextGame.opp?.abbr ?? "TBD"}</strong>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {(pregameAngles.length ? pregameAngles : [{ label: "Standard game week", tone: "ok" }]).map((angle) => (
-                  <Badge key={angle.key ?? angle.label} variant={angle.tone === "danger" ? "destructive" : angle.tone === "warning" ? "secondary" : "outline"}>
-                    {angle.label}
-                  </Badge>
-                ))}
+      <ExpandableSection title="Front office / organization" subtitle="Investments, ownership, and infrastructure." defaultOpen={defaults.frontOffice}>
+        <div className="weekly-card-grid">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardHeader><CardTitle className="text-sm">Franchise investments</CardTitle></CardHeader>
+            <CardContent><FranchiseInvestmentsPanel team={user} actions={actions} compact onNavigate={onNavigate} /></CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Pressure & ownership digest</p>
+              <div className="weekly-digest-list">
+                <div><strong>Owner:</strong> {pressure?.owner?.state ?? "Stable"}</div>
+                <div><strong>Fans:</strong> {pressure?.fans?.state ?? "Hopeful"}</div>
+                <div><strong>Media:</strong> {pressure?.media?.state ?? "Watching"}</div>
+                <div><strong>Directives:</strong> {(pressure?.directives ?? []).slice(0, 2).map((d) => `${d.theme} (${d.progress}%)`).join(" · ") || "No active directives"}</div>
               </div>
-              <div>Framing is based on schedule context, records, streaks, and rivalry/division state.</div>
-              <Button size="sm" variant="outline" onClick={() => (latestUserGameId ? onOpenBoxScore?.(latestUserGameId) : onNavigate?.("Schedule"))}>Open schedule matchup board</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open owner directives</Button>
             </CardContent>
           </Card>
-        </section>
-      )}
-
-      {(userLastGameStory || weeklyHonors) && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Postgame pulse</h3>
-          <div className="weekly-urgent-list">
-            {userLastGameStory && (
-              <button className="weekly-urgent-item tone-info" onClick={() => onNavigate?.("Schedule")}>
-                <div>
-                  <strong>{userLastGameStory.headline}</strong>
-                  <span>{userLastGameStory.detail}</span>
+          {teamIntel?.organization && (
+            <Card variant="secondary" className="weekly-hub-card">
+              <CardContent className="weekly-hub-card__body">
+                <p className="weekly-card-eyebrow">Organization quality digest</p>
+                <div className="weekly-digest-list">
+                  <div><strong>Development:</strong> {teamIntel.organization.developmentEnvironment?.state}</div>
+                  <div><strong>Recovery:</strong> {teamIntel.organization.recoveryEnvironment?.state}</div>
+                  <div><strong>FA destination:</strong> {teamIntel.organization.freeAgentDestination?.state}</div>
+                  <div><strong>Scouting:</strong> {teamIntel.organization.scoutingConfidence?.state}</div>
                 </div>
-                <span>›</span>
-              </button>
-            )}
-            {weeklyHonors?.statementWin && (
-              <button className="weekly-urgent-item tone-warning" onClick={() => onNavigate?.("Schedule")}>
-                <div>
-                  <strong>Statement win · Week {weeklyHonors.week}</strong>
-                  <span>{weeklyHonors.statementWin.detail}</span>
-                </div>
-                <span>›</span>
-              </button>
-            )}
-          </div>
-        </section>
-      )}
-
-      {weeklyHonors && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Weekly honors</h3>
-          <Card variant="secondary">
-            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
-              <strong style={{ color: "var(--text)" }}>Week {weeklyHonors.week} recognition</strong>
-              {weeklyHonors.teamOfWeekId != null && (
-                <div>Team of the week: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onTeamSelect?.(weeklyHonors.teamOfWeekId)}>{league?.teams?.find((t) => t.id === weeklyHonors.teamOfWeekId)?.name ?? "Open team profile"}</button></div>
-              )}
-              {weeklyHonors.story && <div>Headline: {weeklyHonors.story.headline}</div>}
-              {weeklyHonors.playerOfWeek && (
-                <div>
-                  Player of the week: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.playerOfWeek.playerId)}>{weeklyHonors.playerOfWeek.name}</button>
-                  {weeklyHonors.playerOfWeek.line ? ` · ${weeklyHonors.playerOfWeek.line}` : ""}
-                </div>
-              )}
-              {weeklyHonors.rookieOfWeek && (
-                <div>
-                  Rookie spotlight: <button className="btn-link" style={{ fontSize: "inherit" }} onClick={() => onPlayerSelect?.(weeklyHonors.rookieOfWeek.playerId)}>{weeklyHonors.rookieOfWeek.name}</button>
-                  {weeklyHonors.rookieOfWeek.line ? ` · ${weeklyHonors.rookieOfWeek.line}` : ""}
-                </div>
-              )}
-              {weeklyHonors.topScoringGame && (
-                <div>
-                  Top scoring game: {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.away))?.abbr ?? "AWY"} {weeklyHonors.topScoringGame.awayScore} - {weeklyHonors.topScoringGame.homeScore} {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.home))?.abbr ?? "HME"}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      {coachingIdentity && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Coaching pulse</h3>
-          <Card variant="secondary">
-            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
-              <strong style={{ color: "var(--text)" }}>{coachingIdentity.continuity.label} · {coachingIdentity.seat.label}</strong>
-              <div>{coachingIdentity.philosophy.offSchemeName} / {coachingIdentity.philosophy.defSchemeName} · {coachingIdentity.teamTone}</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {(coachingIdentity.continuity.tags?.length ? coachingIdentity.continuity.tags : ["System install in progress"]).map((tag) => (
-                  <Badge key={tag} variant="outline">{tag}</Badge>
-                ))}
-              </div>
-              {(coachingIdentity.rosterFitNotes ?? []).slice(0, 2).map((note, idx) => (
-                <div key={`${note}-${idx}`}>• {note}</div>
-              ))}
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Staff")}>Open staff operations</Button>
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      <section className="weekly-section">
-        <h3 className="weekly-section__title">Team-building guidance</h3>
-        <Card variant="secondary">
-          <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
-            <strong style={{ color: "var(--text)" }}>{weeklyContext?.directionGuidance}</strong>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {(weeklyContext?.teamIntel?.needsNow ?? []).slice(0, 3).map((n) => (
-                <Badge key={`wn-${n.pos}`} variant="destructive">Need now: {n.pos}</Badge>
-              ))}
-              {(weeklyContext?.teamIntel?.surplus ?? []).slice(0, 2).map((s) => (
-                <Badge key={`ws-${s.pos}`} variant="outline">Surplus: {s.pos}</Badge>
-              ))}
-            </div>
-            {(weeklyContext?.teamIntel?.warnings ?? []).slice(0, 2).map((w, idx) => (
-              <div key={`${w}-${idx}`}>• {w}</div>
-            ))}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Roster")}>Open Roster</Button>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Open Trades</Button>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Free Agency")}>Open Free Agency</Button>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Room")}>Open Draft</Button>
-            </div>
-          </CardContent>
-        </Card>
-      </section>
-
-
-      {chemistry && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Locker-room pulse</h3>
-          <Card variant="secondary">
-            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
-              <strong style={{ color: "var(--text)" }}>{chemistry.state} · Score {chemistry.score}</strong>
-              {(chemistry.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`chem-r-${idx}`}>• {reason}</div>)}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {(chemistry.leaders ?? []).slice(0, 2).map((leader) => <Badge key={`chem-lead-${leader.playerId}`} variant="outline">{leader.role}: {leader.name}</Badge>)}
-                {(chemistry.tensions ?? []).slice(0, 1).map((t) => <Badge key={`chem-ten-${t.text}`} variant="secondary">Tension: {t.pos}</Badge>)}
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-
-      <section className="weekly-section">
-        <h3 className="weekly-section__title">Pressure points</h3>
-        <div className="weekly-secondary-grid">
-          <Card variant="secondary">
-            <CardHeader><CardTitle className="text-sm">Owner Pressure</CardTitle></CardHeader>
-            <CardContent className="text-sm text-[color:var(--text-muted)]">
-              <strong style={{ color: "var(--text)" }}>{pressure?.owner?.state ?? "Stable"} · {pressure?.owner?.score ?? ownerDisplay}</strong>
-              {(pressure?.owner?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`owner-r-${idx}`}>• {reason}</div>)}
-            </CardContent>
-          </Card>
-          <Card variant="secondary">
-            <CardHeader><CardTitle className="text-sm">Fan Sentiment</CardTitle></CardHeader>
-            <CardContent className="text-sm text-[color:var(--text-muted)]">
-              <strong style={{ color: "var(--text)" }}>{pressure?.fans?.state ?? "Hopeful"} · {pressure?.fans?.score ?? "—"}</strong>
-              {(pressure?.fans?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`fan-r-${idx}`}>• {reason}</div>)}
-            </CardContent>
-          </Card>
-          <Card variant="secondary">
-            <CardHeader><CardTitle className="text-sm">Media Temperature</CardTitle></CardHeader>
-            <CardContent className="text-sm text-[color:var(--text-muted)]">
-              <strong style={{ color: "var(--text)" }}>{pressure?.media?.state ?? "Watching"} · {pressure?.media?.score ?? "—"}</strong>
-              {(pressure?.media?.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`media-r-${idx}`}>• {reason}</div>)}
-            </CardContent>
-          </Card>
-          <Card variant="secondary">
-            <CardHeader><CardTitle className="text-sm">Owner Directives</CardTitle></CardHeader>
-            <CardContent className="text-sm text-[color:var(--text-muted)]">
-              {(pressure?.directives ?? []).slice(0, 2).map((directive) => (
-                <div key={directive.theme} style={{ marginBottom: 4 }}>
-                  <strong style={{ color: "var(--text)" }}>{directive.theme}</strong> · {directive.progress}%
-                </div>
-              ))}
-              {!(pressure?.directives ?? []).length && <div>No active directive snapshot.</div>}
-            </CardContent>
-          </Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Cap Situation</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{formatMoneyM(cap.capRoom)} room</CardContent></Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Expiring Contracts</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.expiringCount ?? 0} expiring</CardContent></Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Injuries</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.injuriesCount ?? 0} active injuries</CardContent></Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Trade Activity</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.pressurePoints?.incomingTradeCount ?? 0} incoming offers</CardContent></Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Market Pulse</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{weeklyContext.marketPulse}</CardContent></Card>
-          <Card variant="secondary"><CardHeader><CardTitle className="text-sm">Next Milestone</CardTitle></CardHeader><CardContent className="text-sm text-[color:var(--text-muted)]">{nextGame ? `Week ${nextGame.week}: ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}` : weeklyContext.pressurePoints?.nextMilestone}</CardContent></Card>
+                <small>{teamIntel.organization.developmentEnvironment?.reasons?.[0] ?? "No additional notes."}</small>
+              </CardContent>
+            </Card>
+          )}
         </div>
-        {pressure?.consequence ? (
-          <div style={{ marginTop: 8, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
-            Consequence outlook: {pressure.consequence}
-          </div>
-        ) : null}
-      </section>
+      </ExpandableSection>
 
-      {topOffer && (
-        <section className="weekly-section">
-          <h3 className="weekly-section__title">Incoming trade offer</h3>
-          <Card variant="secondary">
-            <CardHeader>
-              <CardTitle className="text-sm">{topOffer.offeringTeamAbbr ?? "Team"} is calling</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <strong style={{ color: "var(--text)" }}>You Receive</strong>
-                  {([...(topOfferSummary?.receive?.players ?? []), ...(topOfferSummary?.receive?.picks ?? [])].slice(0, 3)).map((item) => (
-                    <div key={item.key}>• {item.label}</div>
-                  ))}
-                </div>
-                <div>
-                  <strong style={{ color: "var(--text)" }}>You Give</strong>
-                  {([...(topOfferSummary?.give?.players ?? []), ...(topOfferSummary?.give?.picks ?? [])].slice(0, 3)).map((item) => (
-                    <div key={item.key}>• {item.label}</div>
-                  ))}
-                </div>
-              </div>
-              {topOfferSummary ? (
-                <div>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Offer ref: {topOfferIdentity?.label}</div>
-                  <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.userImpact.abbr}</strong> OVR {topOfferSummary.userImpact.ovr.before} → {topOfferSummary.userImpact.ovr.after} · {topOfferSummary.userImpact.capLine}</div>
-                  {topOfferSummary.userImpact.rankImpact.lines.length ? <div>Depth: {topOfferSummary.userImpact.rankImpact.lines.join(" · ")}</div> : null}
-                  <div><strong style={{ color: "var(--text)" }}>{topOfferSummary.offeringImpact.abbr}</strong> OVR {topOfferSummary.offeringImpact.ovr.before} → {topOfferSummary.offeringImpact.ovr.after} · {topOfferSummary.offeringImpact.capLine}</div>
-                  {topOfferSummary.offeringImpact.rankImpact.lines.length ? <div>Depth: {topOfferSummary.offeringImpact.rankImpact.lines.join(" · ")}</div> : null}
-                </div>
-              ) : null}
-              {topOfferSummary ? <div><strong style={{ color: "var(--text)" }}>GM read:</strong> {topOfferSummary.recommendation}</div> : null}
-              <div>{topOffer.reason}</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {(topOfferSummary?.tags ?? []).slice(0, 3).map((tag) => <Badge key={`hub-tag-${tag}`} variant="outline">{tag}</Badge>)}
-                <Badge variant="outline">{topOffer.stance ?? "Market call"}</Badge>
-                <Badge variant={topOffer.urgency === "high" ? "destructive" : "secondary"}>{topOffer.urgency === "high" ? "High urgency" : "Standard urgency"}</Badge>
-                <Badge variant="outline">AI framing: {topOffer.offerType?.replaceAll("_", " ") ?? "trade call"}</Badge>
-                <Badge variant="outline">Final acceptance uses AI logic</Badge>
-              </div>
-              {topOfferSummary ? <div style={{ fontSize: "var(--text-xs)" }}>{topOfferSummary.estimateLabel}</div> : null}
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>
-                <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(topOffer.id)}>Reject</Button>
-                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Review in Trades</Button>
+      <ExpandableSection title="More / expanded insights" subtitle="Storylines and long-form guidance." defaultOpen={defaults.insights}>
+        <div className="weekly-card-stack">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">League storylines</p>
+              <div className="weekly-digest-list">
+                {(weeklyContext.storylineCards?.length ? weeklyContext.storylineCards : [{ title: "No major storyline spikes", detail: "League picture is stable.", tab: "Standings" }]).slice(0, 2).map((story, idx) => (
+                  <button key={`${story.title}-${idx}`} className="weekly-digest-action" onClick={() => onNavigate?.(story.tab ?? "Standings")}>{story.title} — {story.detail}</button>
+                ))}
               </div>
             </CardContent>
           </Card>
-        </section>
-      )}
 
-      <section className="weekly-section">
-        <h3 className="weekly-section__title">Phase guidance</h3>
-        <Card variant="secondary">
-          <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 4, paddingTop: 16 }}>
-            <strong style={{ color: "var(--text)" }}>{weeklyContext?.focus?.title ?? "Keep advancing with discipline."}</strong>
-            <div>{weeklyContext?.focus?.subtitle ?? "Stay active in every phase."}</div>
-            <div>GM pulse: {weeklyContext?.advisorPulse}</div>
-            {league.phase === "offseason_resign" && <div>Start in <strong style={{ color: "var(--text)" }}>FA Hub</strong> for market pressure and expiring risk. Move to <strong style={{ color: "var(--text)" }}>Free Agency</strong> when you are ready to submit or revise specific bids.</div>}
-            {league.phase === "free_agency" && <div>Start in <strong style={{ color: "var(--text)" }}>FA Hub</strong> to scan market pressure, then use <strong style={{ color: "var(--text)" }}>Free Agency</strong> as the transaction workspace for contract entry and cap checks.</div>}
-          </CardContent>
-        </Card>
-      </section>
+          {weeklyHonors && (
+            <Card variant="secondary" className="weekly-hub-card">
+              <CardContent className="weekly-hub-card__body">
+                <p className="weekly-card-eyebrow">Weekly honors</p>
+                <div className="weekly-digest-list">
+                  {weeklyHonors.teamOfWeekId != null && <div>Team: <button className="btn-link" onClick={() => onTeamSelect?.(weeklyHonors.teamOfWeekId)}>{league?.teams?.find((t) => t.id === weeklyHonors.teamOfWeekId)?.name ?? "Open team"}</button></div>}
+                  {weeklyHonors.playerOfWeek && <div>Player: <button className="btn-link" onClick={() => onPlayerSelect?.(weeklyHonors.playerOfWeek.playerId)}>{weeklyHonors.playerOfWeek.name}</button></div>}
+                  {weeklyHonors.rookieOfWeek && <div>Rookie: <button className="btn-link" onClick={() => onPlayerSelect?.(weeklyHonors.rookieOfWeek.playerId)}>{weeklyHonors.rookieOfWeek.name}</button></div>}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-      <section className="weekly-section">
-        <h3 className="weekly-section__title">League universe</h3>
-        <Card variant="secondary">
-          <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "flex", gap: 8, flexWrap: "wrap", paddingTop: 16 }}>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Room")}>Draft room</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Draft Board")}>Big board</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Mock Draft")}>Mock draft planner</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Analytics")}>Open analytics hub</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Review cap & contracts</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>League injury report</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("History")}>Open season archive</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Hall of Fame")}>View Hall of Fame</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Browse stat leaders</Button>
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Season Recap")}>Open season recap</Button>
-          </CardContent>
-        </Card>
-      </section>
+          {coachingIdentity && (
+            <Card variant="secondary" className="weekly-hub-card">
+              <CardContent className="weekly-hub-card__body">
+                <p className="weekly-card-eyebrow">Coaching pulse</p>
+                <strong>{coachingIdentity.continuity.label} · {coachingIdentity.seat.label}</strong>
+                <p>{coachingIdentity.philosophy.offSchemeName} / {coachingIdentity.philosophy.defSchemeName}</p>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Staff")}>Open staff operations</Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {topOffer && (
+            <Card variant="secondary" className="weekly-hub-card">
+              <CardContent className="weekly-hub-card__body">
+                <p className="weekly-card-eyebrow">Top trade offer</p>
+                <strong>{topOffer.offeringTeamAbbr ?? "Team"} is calling</strong>
+                <p>{topOffer.reason}</p>
+                {topOfferSummary ? <small>{topOfferIdentity?.label} · {topOfferSummary.estimateLabel}</small> : null}
+                <div className="weekly-inline-actions">
+                  <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(topOffer.id)}>Accept</Button>
+                  <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(topOffer.id)}>Reject</Button>
+                  <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Open trades</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </ExpandableSection>
     </div>
   );
 }
