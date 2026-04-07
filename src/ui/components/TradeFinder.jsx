@@ -16,7 +16,7 @@ const prefLabel = {
   balanced_package: 'Prefers balanced package',
 };
 
-export default function TradeFinder({ league, actions, onPlayerSelect }) {
+export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTradeCenter }) {
   const teams = league?.teams ?? [];
   const userTeam = teams.find((t) => Number(t.id) === Number(league?.userTeamId));
   const week = Number(league?.week ?? 1);
@@ -121,7 +121,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
               <div style={{ maxHeight: 220, overflow: 'auto', display: 'grid', gap: 4 }}>
                 {userRoster.slice(0, 32).map((p) => (
                   <button key={p.id} onClick={() => setOutgoingPlayers((prev) => prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id])} style={{ textAlign: 'left', border: '1px solid var(--hairline)', background: outgoingPlayers.includes(p.id) ? 'var(--accent-muted)' : 'var(--surface)', borderRadius: 8, padding: '6px 8px' }}>
-                    {p.pos} {p.name} · {p.ovr} OVR · {money(p?.contract?.baseAnnual)} · {TRADE_STATUS_LABELS[normalizeManagement(p).tradeStatus]}{normalizeManagement(p).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(p).contractPlan[0]]}` : ''}
+                    {p.pos} {p.name} · Age {p.age ?? '—'} · OVR {p.ovr ?? '—'} · POT {p.potential ?? p.ovr ?? '—'} · {money(p?.contract?.baseAnnual)} · Yrs {p?.contract?.yearsRemaining ?? p?.contract?.years ?? '—'} · Morale {p?.morale ?? '—'}{p?.injury ? ` · ${p.injury}` : ''} · {TRADE_STATUS_LABELS[normalizeManagement(p).tradeStatus]}{normalizeManagement(p).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(p).contractPlan[0]]}` : ''}
                   </button>
                 ))}
               </div>
@@ -150,14 +150,14 @@ export default function TradeFinder({ league, actions, onPlayerSelect }) {
                 <Badge variant="outline">Fit {row.fitScore}</Badge>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {row.direction} · Need: {row.positionNeed} · Urgency: {row.urgency} · Cap: {row.capAbility}
+                {row.direction} · Record {(teams.find((t) => Number(t.id) === Number(row.teamId))?.wins ?? 0)}-{(teams.find((t) => Number(t.id) === Number(row.teamId))?.losses ?? 0)} · Need: {row.positionNeed} · Urgency: {row.urgency} · Cap: {row.capAbility}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{prefLabel[row.preference]}.</div>
               <div style={{ fontSize: 12 }}>{row.reasons[0] ?? 'Contextual fit available after selecting package.'}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-                <Button className="btn" onClick={() => setSelectedPartnerId(row.teamId)}>Open trade with this team</Button>
-                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); askWhatTheyOffer(); }}>Ask what they would offer</Button>
-                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); makeDealWork(); }}>Make this deal work</Button>
+                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); onOpenTradeCenter?.(row.teamId); }}>Open trade with this team</Button>
+                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); onOpenTradeCenter?.(row.teamId); askWhatTheyOffer(); }}>Ask what they would offer</Button>
+                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); onOpenTradeCenter?.(row.teamId); makeDealWork(); }}>Make this deal work</Button>
               </div>
             </div>
           ))}

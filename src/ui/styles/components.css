@@ -834,3 +834,43 @@ label {
   .weekly-secondary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .save-slot-v2__actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* Phase 4A recovery mobile polish */
+.trade-center-v2 .card-premium,
+.trade-center-v2 .card {
+  border-radius: var(--radius-lg);
+}
+.trade-panel-card__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-strong);
+}
+.box-score-modal .modal-content {
+  max-height: 92vh;
+}
+@media (max-width: 768px) {
+  .trade-center-v2 {
+    gap: var(--space-2);
+  }
+  .trade-asset-row {
+    min-height: 48px;
+    grid-template-columns: 22px auto minmax(0,1fr);
+    row-gap: 2px;
+  }
+  .trade-asset-row__salary {
+    grid-column: 2 / -1;
+    font-size: 10px;
+  }
+  .matchup-card {
+    padding: var(--space-3);
+  }
+  .box-score-modal {
+    width: min(100vw - 10px, 960px);
+    margin: 0;
+    border-radius: 14px;
+  }
+  .bs-scoreline {
+    font-size: 1.6rem;
+  }
+}

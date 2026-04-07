@@ -97,6 +97,7 @@ import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoal
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
+import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -1619,7 +1620,7 @@ if (res.injuries && res.injuries.length > 0) {
       const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
       if (!isNaN(homeId) && !isNaN(awayId)) {
         post(toUI.GAME_EVENT, {
-          gameId:    `${seasonId}_w${week}_${homeId}_${awayId}`,
+          gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
           week,
           homeId,
           awayId,
@@ -1854,9 +1855,13 @@ if (res.injuries && res.injuries.length > 0) {
   const gameResults = results.map(r => {
     const rawH   = r.home ?? r.homeTeamId;
     const rawA   = r.away ?? r.awayTeamId;
-    const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
-    const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+    const homeId = toTeamId(rawH);
+    const awayId = toTeamId(rawA);
+    const canonicalGameId = buildCanonicalGameId({ seasonId, week, homeId, awayId });
     return {
+      gameId: canonicalGameId,
+      seasonId,
+      week,
       homeId,
       awayId,
       homeName:  r.homeTeamName ?? cache.getTeam(homeId)?.name ?? '?',
@@ -2051,17 +2056,19 @@ function applyGameResultToCache(result, week, seasonId) {
     }
   }
 
-  const gameId = `${seasonId}_w${week}_${hId}_${aId}`;
-  cache.addGame({
-    id:        gameId,
+  const archivedGame = buildArchivedGame({
     seasonId,
     week,
-    homeId:    hId,
-    awayId:    aId,
+    homeId: hId,
+    awayId: aId,
     homeScore: scoreHome,
     awayScore: scoreAway,
-    stats:     result.boxScore ?? null,
+    stats: result.boxScore ?? null,
+    recap: result.recap ?? null,
+    drives: result.drives ?? null,
+    quarterScores: result.quarterScores ?? result.linescore ?? null,
   });
+  cache.addGame(archivedGame);
 }
 
 /** Mark all games in a week as played in the slim schedule. */
@@ -2623,7 +2630,16 @@ async function handleGetBoxScore({ gameId }, id) {
   try {
     // Look for the game in the current week's hot cache first
     const hotGame = cache.getWeekGames().find(g => g.id === gameId);
-    const game    = hotGame ?? await Games.load(gameId);
+    let game = hotGame ?? await Games.load(gameId);
+
+    if (!game) {
+      const parsed = String(gameId).match(/(.+)_w(\d+)_(\d+)_(\d+)$/);
+      if (parsed) {
+        const [, seasonKey, weekValue, homeValue, awayValue] = parsed;
+        const possible = (await Games.bySeason(seasonKey)) ?? [];
+        game = possible.find((g) => Number(g?.week) === Number(weekValue) && Number(g?.homeId) === Number(homeValue) && Number(g?.awayId) === Number(awayValue)) ?? null;
+      }
+    }
 
     if (!game) {
       post(toUI.BOX_SCORE, { gameId, game: null, error: 'Game not found' }, id);
@@ -6709,7 +6725,7 @@ async function handleWatchGame(payload, id) {
     const homeId = Number(typeof res.home === 'object' ? res.home.id : (res.home ?? res.homeTeamId));
     const awayId = Number(typeof res.away === 'object' ? res.away.id : (res.away ?? res.awayTeamId));
     post(toUI.GAME_EVENT, {
-        gameId:    `${seasonId}_w${week}_${homeId}_${awayId}`,
+        gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
         week,
         homeId,
         awayId,
