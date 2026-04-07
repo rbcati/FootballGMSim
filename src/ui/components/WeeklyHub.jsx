@@ -7,6 +7,8 @@ import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
 import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalizeTeamId } from "../utils/gamePresentation.js";
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -60,6 +62,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
     return game ? derivePregameAngles({ league, game, week: nextGame.week }) : [];
   }, [league, nextGame]);
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
+  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(user, { pressure: weeklyContext?.pressure, intel: buildTeamIntelligence(user, { week: league?.week ?? 1 }), direction: weeklyContext?.direction }), [user, weeklyContext, league?.week]);
   const userLastGameStory = useMemo(() => {
     const targetWeek = Number(league?.week ?? 1) - 1;
     if (targetWeek < 1) return null;
@@ -235,6 +238,27 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
                   Top scoring game: {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.away))?.abbr ?? "AWY"} {weeklyHonors.topScoringGame.awayScore} - {weeklyHonors.topScoringGame.homeScore} {league?.teams?.find((t) => t.id === normalizeTeamId(weeklyHonors.topScoringGame.home))?.abbr ?? "HME"}
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
+      {coachingIdentity && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Coaching pulse</h3>
+          <Card variant="secondary">
+            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
+              <strong style={{ color: "var(--text)" }}>{coachingIdentity.continuity.label} · {coachingIdentity.seat.label}</strong>
+              <div>{coachingIdentity.philosophy.offSchemeName} / {coachingIdentity.philosophy.defSchemeName} · {coachingIdentity.teamTone}</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(coachingIdentity.continuity.tags?.length ? coachingIdentity.continuity.tags : ["System install in progress"]).map((tag) => (
+                  <Badge key={tag} variant="outline">{tag}</Badge>
+                ))}
+              </div>
+              {(coachingIdentity.rosterFitNotes ?? []).slice(0, 2).map((note, idx) => (
+                <div key={`${note}-${idx}`}>• {note}</div>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Staff")}>Open staff operations</Button>
             </CardContent>
           </Card>
         </section>

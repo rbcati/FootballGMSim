@@ -7,6 +7,8 @@
 
 import React, { useState, useEffect, useMemo } from "react";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { deriveTeamCoachingIdentity, buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 
 function AnimatedSection({ delay = 0, children, title, icon }) {
   const [visible, setVisible] = useState(false);
@@ -182,6 +184,9 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
   const seasonNarrative = buildSeasonNarrative({ champion, standings, userTeam, year });
   const awardWatches = getAwardWinnerCards(league);
   const pressure = useMemo(() => deriveFranchisePressure(league), [league]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
+  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction: teamIntel?.direction }), [userTeam, pressure, teamIntel]);
+  const carouselCards = useMemo(() => buildCoachingNarrativeCards(league, { limit: 3 }), [league]);
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -296,6 +301,26 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.narrativeNotes.media}</div>
             </div>
             <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{pressure.consequence}</div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {(coachingIdentity || carouselCards.length > 0) && (
+        <AnimatedSection delay={840} title="Coaching continuity & carousel" icon="🎙️">
+          <div style={{ display: "grid", gap: 8 }}>
+            {coachingIdentity && (
+              <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+                <strong style={{ color: "var(--text)" }}>{coachingIdentity.continuity.label}</strong> · {coachingIdentity.seat.label}
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{coachingIdentity.continuity.detail}</div>
+                <div style={{ fontSize: 12, color: "var(--text-subtle)", marginTop: 4 }}>{coachingIdentity.philosophy.offSchemeName} / {coachingIdentity.philosophy.defSchemeName}</div>
+              </div>
+            )}
+            {carouselCards.slice(0, 2).map((card) => (
+              <div key={card.id} style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+                <strong style={{ color: "var(--text)" }}>{card.title}</strong>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{card.detail}</div>
+              </div>
+            ))}
           </div>
         </AnimatedSection>
       )}

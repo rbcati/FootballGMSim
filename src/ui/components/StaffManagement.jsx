@@ -9,6 +9,9 @@
  */
 
 import React, { useState, useMemo, useCallback } from "react";
+import { deriveFranchisePressure } from "../utils/pressureModel.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 
 // ── Seeded RNG ──────────────────────────────────────────────────────────────
 
@@ -779,6 +782,12 @@ export default function StaffManagement({ league, actions }) {
   const [physioCandidates, setPhysioCandidates] = useState(generated.physioCandidates);
   const coaches = generated.coaches;
 
+  const userTeam = useMemo(() => (league?.teams ?? []).find((t) => t.id === teamId) ?? null, [league?.teams, teamId]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
+  const direction = teamIntel?.direction ?? "balanced";
+  const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel, direction }), [league, teamIntel, direction]);
+  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction }), [userTeam, pressure, teamIntel, direction]);
+
   const [hiringPanel, setHiringPanel] = useState(null); // "scouts" | "physios" | null
   const [fireTarget, setFireTarget] = useState(null);   // { member, type }
 
@@ -851,6 +860,36 @@ export default function StaffManagement({ league, actions }) {
 
       {/* Budget bar */}
       <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
+
+      {coachingIdentity && (
+        <div className="card" style={{ padding: "var(--space-4, 16px)", marginBottom: "var(--space-4, 16px)", display: "grid", gap: 10 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <strong>{coachingIdentity.teamTone}</strong>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{coachingIdentity.continuity.label} · {coachingIdentity.seat.label}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+            {coachingIdentity.philosophy.offSchemeName} ({coachingIdentity.philosophy.offense}) · {coachingIdentity.philosophy.defSchemeName} ({coachingIdentity.philosophy.defense})
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
+            {coachingIdentity.staffRows.map((row) => (
+              <div key={row.role} style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px", background: "var(--surface)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase" }}>{row.role}</div>
+                <div style={{ fontWeight: 700 }}>{row.name}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{row.philosophy}</div>
+                <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{row.tenureLabel} · {row.seat}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {(coachingIdentity.continuity.tags?.length ? coachingIdentity.continuity.tags : ["No major staff shakeup tags"]).map((tag) => (
+              <span key={tag} style={{ fontSize: 11, border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 8px", color: "var(--text-muted)" }}>{tag}</span>
+            ))}
+          </div>
+          {(coachingIdentity.rosterFitNotes ?? []).slice(0, 3).map((note, idx) => (
+            <div key={`${note}-${idx}`} style={{ fontSize: 12, color: "var(--text-muted)" }}>• {note}</div>
+          ))}
+        </div>
+      )}
 
       {/* ── Coaching Staff ──────────────────────────────────────────── */}
       <CollapsibleSection

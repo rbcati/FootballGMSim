@@ -4,7 +4,7 @@
  * Modal: franchise history, all-time record, titles, and current top roster.
  * Opens when a team name is clicked in Standings or other views.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import RelocateModal from "./RelocateModal.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { deriveTeamCapSnapshot, formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -142,6 +144,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const avgAge = players.length ? (players.reduce((sum, p) => sum + toFiniteNumber(p.age, 0), 0) / players.length) : 0;
   const injuryCount = players.filter((p) => toFiniteNumber(p.injuryWeeksRemaining, 0) > 0).length;
   const expiringCount = players.filter((p) => toFiniteNumber(p.contract?.years ?? p.years, 0) <= 1).length;
+  const teamIntel = useMemo(() => buildTeamIntelligence({ ...team, roster: players }, { week: 10 }), [team, players]);
+  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity({ ...team, roster: players }, { intel: teamIntel, direction: teamIntel?.direction }), [team, players, teamIntel]);
 
   return (
     <>
@@ -301,6 +305,35 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
                 <StatBox label="Availability Pressure" value={injuryCount} sub={`${expiringCount} expiring deals`} />
               </div>
             </section>
+
+            {coachingIdentity && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Coaching & Franchise Tone</h3>
+                <div style={{ display: "grid", gap: 8, marginBottom: "var(--space-2)" }}>
+                  <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", background: "var(--surface-strong)" }}>
+                    <strong>{coachingIdentity.teamTone}</strong> · {coachingIdentity.continuity.label} · {coachingIdentity.seat.label}
+                    <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", marginTop: 4 }}>
+                      {coachingIdentity.philosophy.offSchemeName} ({coachingIdentity.philosophy.offense}) / {coachingIdentity.philosophy.defSchemeName} ({coachingIdentity.philosophy.defense})
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 8 }}>
+                    {coachingIdentity.staffRows.map((row) => (
+                      <div key={row.role} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-2)", background: "var(--surface-strong)" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textTransform: "uppercase", fontWeight: 700 }}>{row.role}</div>
+                        <div style={{ fontWeight: 700 }}>{row.name}</div>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{row.tenureLabel}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(coachingIdentity.continuity.tags?.length ? coachingIdentity.continuity.tags : ["No major continuity tags"]).map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}
+                  </div>
+                  {(coachingIdentity.rosterFitNotes ?? []).slice(0, 2).map((note, idx) => (
+                    <div key={`${note}-${idx}`} style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>• {note}</div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── Franchise Stats ── */}
             <section>

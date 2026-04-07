@@ -11,6 +11,7 @@
 import React, { useState, useEffect } from "react";
 import { teamColor } from "../../data/team-utils.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
+import { buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 
 // ── Playoff Bracket Modal ────────────────────────────────────────────────────
 
@@ -276,6 +277,7 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
   const champ = teams.find((t) => t.id === championTeamId);
   if (!champ) return null;
   const pressure = deriveFranchisePressure(league);
+  const coachingMoment = buildCoachingNarrativeCards(league, { limit: 1 })[0] ?? null;
 
   const color = teamColor(champ.abbr ?? "");
   const winPct = (champ.wins + champ.losses) > 0 ? champ.wins / (champ.wins + champ.losses) : null;
@@ -402,6 +404,20 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
           <div style={{ fontSize: "0.78rem", color: "var(--text-subtle)", marginTop: 4 }}>
             {pressure.consequence}
           </div>
+        </div>
+      )}
+      {coachingMoment && (
+        <div style={{
+          minWidth: 280,
+          maxWidth: 440,
+          background: "rgba(17,24,39,0.72)",
+          border: "1px solid rgba(255,255,255,0.12)",
+          borderRadius: 12,
+          padding: "10px 12px",
+        }}>
+          <div style={{ fontSize: "0.75rem", color: "var(--text-subtle)", marginBottom: 4 }}>Coaching carousel watch</div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text)" }}>{coachingMoment.title}</div>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>{coachingMoment.detail}</div>
         </div>
       )}
       <button
