@@ -770,18 +770,16 @@ function HiringPanel({ title, candidates, accentColor, onHire, budgetRemaining, 
 
 export default function StaffManagement({ league, actions }) {
   const teamId = league?.userTeamId ?? 0;
-  const leagueYear = league?.season ?? league?.year ?? 2024;
+  const [staffState, setStaffState] = useState(null);
+  const [hiringPanel, setHiringPanel] = useState(null);
 
-  const generated = useMemo(
-    () => generateStaffPool(leagueYear, teamId),
-    [leagueYear, teamId],
-  );
+  const refresh = useCallback(async () => {
+    if (!actions?.getStaffState) return;
+    const res = await actions.getStaffState();
+    if (res?.payload) setStaffState(res.payload);
+  }, [actions]);
 
-  const [scouts, setScouts] = useState(generated.scouts);
-  const [medStaff, setMedStaff] = useState(generated.medStaff);
-  const [scoutCandidates, setScoutCandidates] = useState(generated.scoutCandidates);
-  const [physioCandidates, setPhysioCandidates] = useState(generated.physioCandidates);
-  const coaches = generated.coaches;
+  React.useEffect(() => { refresh(); }, [refresh]);
 
   const userTeam = useMemo(() => (league?.teams ?? []).find((t) => t.id === teamId) ?? null, [league?.teams, teamId]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
@@ -789,268 +787,73 @@ export default function StaffManagement({ league, actions }) {
   const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel, direction }), [league, teamIntel, direction]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction }), [userTeam, pressure, teamIntel, direction]);
 
-  const [hiringPanel, setHiringPanel] = useState(null); // "scouts" | "physios" | null
-  const [fireTarget, setFireTarget] = useState(null);   // { member, type }
+  const staff = staffState?.staff ?? {};
+  const market = staffState?.market ?? [];
+  const draftBoard = staffState?.draftBoard ?? { shortlist: [], avoid: [] };
 
-  // Budget calculation
-  const totalUsed = useMemo(() => {
-    const coachCost = coaches.reduce((s, c) => s + c.salary, 0);
-    const scoutCost = scouts.reduce((s, c) => s + c.salary, 0);
-    const medCost = medStaff.reduce((s, c) => s + c.salary, 0);
-    return +(coachCost + scoutCost + medCost).toFixed(1);
-  }, [coaches, scouts, medStaff]);
+  const roles = {
+    coach: ['headCoach', 'offCoordinator', 'defCoordinator'],
+    scout: ['leadScout', 'proScout'],
+    physio: ['headTrainer', 'capAdvisor'],
+  };
 
+  const staffListFor = (keys) => keys.map((key) => ({ ...(staff?.[key] ?? {}), roleKey: key, role: staff?.[key]?.role ?? key })).filter((m) => m?.id);
+
+  const coaches = staffListFor(roles.coach);
+  const scouts = staffListFor(roles.scout);
+  const medStaff = staffListFor(roles.physio);
+
+  const totalUsed = useMemo(() => [...coaches, ...scouts, ...medStaff].reduce((s, c) => s + Number(c?.salary ?? 0), 0), [coaches, scouts, medStaff]);
   const budgetRemaining = +(STAFF_BUDGET_TOTAL - totalUsed).toFixed(1);
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-
-  const handleFire = useCallback((member, type) => {
-    setFireTarget({ member, type });
-  }, []);
-
-  const confirmFire = useCallback(() => {
-    if (!fireTarget) return;
-    const { member, type } = fireTarget;
-
-    if (type === "scout") {
-      setScouts(prev => prev.filter(s => s.id !== member.id));
-      setScoutCandidates(prev => [...prev, { ...member, id: member.id + "_rehire" }]);
-    } else if (type === "physio") {
-      setMedStaff(prev => {
-        const next = prev.filter(s => s.id !== member.id);
-        // Sync fired physio staff to worker
-        if (actions?.updateMedicalStaff) actions.updateMedicalStaff(teamId, next);
-        return next;
-      });
-      setPhysioCandidates(prev => [...prev, { ...member, id: member.id + "_rehire" }]);
-    }
-
-    setFireTarget(null);
-  }, [fireTarget, actions, teamId]);
-
-  const handleHireScout = useCallback((candidate) => {
-    if (candidate.salary > budgetRemaining) return;
-    setScouts(prev => [...prev, candidate]);
-    setScoutCandidates(prev => prev.filter(c => c.id !== candidate.id));
-    setHiringPanel(null);
-  }, [budgetRemaining]);
-
-  const handleHirePhysio = useCallback((candidate) => {
-    if (candidate.salary > budgetRemaining) return;
-    setMedStaff(prev => {
-      const next = [...prev, candidate];
-      // Sync hired physio staff to worker so traits reduce injury chance in sim
-      if (actions?.updateMedicalStaff) actions.updateMedicalStaff(teamId, next);
-      return next;
-    });
-    setPhysioCandidates(prev => prev.filter(c => c.id !== candidate.id));
-    setHiringPanel(null);
-  }, [budgetRemaining, actions, teamId]);
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  const COLORS = {
-    coach: "#f59e0b",
-    scout: "#3b82f6",
-    physio: "#22c55e",
+  const handleFire = async (member) => {
+    await actions?.fireStaffMember?.({ teamId, roleKey: member.roleKey });
+    await refresh();
   };
+
+  const handleHire = async (candidate) => {
+    await actions?.hireStaffMember?.({ teamId, roleKey: candidate.roleKey, candidate });
+    setHiringPanel(null);
+    await refresh();
+  };
+
+  const enrich = (m) => ({ ...m, performance: m?.rating ?? 60, traits: Object.entries(m?.attrs ?? {}).slice(0, 3).map(([k,v]) => ({ id:k, name:`${k}: ${Math.round(v)}`, icon:'•', color:'#60a5fa', bg:'rgba(96,165,250,0.15)', description:k })) });
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ marginBottom: "var(--space-4, 16px)" }}>Staff Management</h1>
-      {teamIntel?.organization && (
-        <div style={{ marginBottom: "var(--space-3)", border: "1px solid var(--hairline)", borderRadius: 10, padding: "8px 10px", background: "var(--surface-strong)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)" }}>ORGANIZATION QUALITY</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-            Development {teamIntel.organization.developmentEnvironment.state} · Recovery {teamIntel.organization.recoveryEnvironment.state} · Scout confidence {teamIntel.organization.scoutingConfidence.state}
-          </div>
-        </div>
-      )}
-      <div style={{ marginBottom: "var(--space-4, 16px)" }}>
-        <FranchiseInvestmentsPanel team={userTeam} actions={actions} compact />
+      <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
+      {staffState?.bonuses && <div className="card" style={{ padding: 10, marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
+        Development {staffState.bonuses.developmentDelta >= 0 ? '+' : ''}{(staffState.bonuses.developmentDelta*100).toFixed(1)}% · Rookie adaptation {staffState.bonuses.rookieAdaptationDelta >= 0 ? '+' : ''}{(staffState.bonuses.rookieAdaptationDelta*100).toFixed(1)}% · Injury volatility {(staffState.bonuses.injuryRateDelta*100).toFixed(1)}%
+      </div>}
+
+      <CollapsibleSection title="Coaching Staff" count={coaches.length} accentColor="#f59e0b" defaultOpen>
+        <div style={{ display: 'grid', gap: 10 }}>{coaches.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#f59e0b" onFire={handleFire} type="coach" />)}</div>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Scouting Department" count={scouts.length} accentColor="#3b82f6" defaultOpen>
+        <div style={{ display: 'grid', gap: 10 }}>{scouts.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#3b82f6" onFire={handleFire} type="scout" />)}</div>
+        <button className="btn" onClick={() => setHiringPanel('scout')}>Hire Scout Staff</button>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Medical + Contracts" count={medStaff.length} accentColor="#22c55e" defaultOpen>
+        <div style={{ display: 'grid', gap: 10 }}>{medStaff.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#22c55e" onFire={handleFire} type="physio" />)}</div>
+        <button className="btn" onClick={() => setHiringPanel('support')}>Hire Support Staff</button>
+      </CollapsibleSection>
+
+      <div className="card" style={{ padding: 10, marginTop: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 700 }}>Draft board watchlist</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Shortlist: {draftBoard.shortlist?.length ?? 0} · Avoid: {draftBoard.avoid?.length ?? 0}</div>
       </div>
 
-      {/* Budget bar */}
-      <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
-
-      {coachingIdentity && (
-        <div className="card" style={{ padding: "var(--space-4, 16px)", marginBottom: "var(--space-4, 16px)", display: "grid", gap: 10 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-            <strong>{coachingIdentity.teamTone}</strong>
-            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{coachingIdentity.continuity.label} · {coachingIdentity.seat.label}</span>
-          </div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            {coachingIdentity.philosophy.offSchemeName} ({coachingIdentity.philosophy.offense}) · {coachingIdentity.philosophy.defSchemeName} ({coachingIdentity.philosophy.defense})
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 8 }}>
-            {coachingIdentity.staffRows.map((row) => (
-              <div key={row.role} style={{ border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px", background: "var(--surface)" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase" }}>{row.role}</div>
-                <div style={{ fontWeight: 700 }}>{row.name}</div>
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{row.philosophy}</div>
-                <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{row.tenureLabel} · {row.seat}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {(coachingIdentity.continuity.tags?.length ? coachingIdentity.continuity.tags : ["No major staff shakeup tags"]).map((tag) => (
-              <span key={tag} style={{ fontSize: 11, border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 8px", color: "var(--text-muted)" }}>{tag}</span>
-            ))}
-          </div>
-          {(coachingIdentity.rosterFitNotes ?? []).slice(0, 3).map((note, idx) => (
-            <div key={`${note}-${idx}`} style={{ fontSize: 12, color: "var(--text-muted)" }}>• {note}</div>
-          ))}
-        </div>
-      )}
-
-      {/* ── Coaching Staff ──────────────────────────────────────────── */}
-      <CollapsibleSection
-        title="Coaching Staff"
-        subtitle="Head Coach, Offensive & Defensive Coordinators"
-        count={coaches.length}
-        accentColor={COLORS.coach}
-        defaultOpen={true}
-      >
-        <div style={{ display: "grid", gap: "var(--space-3, 12px)" }}>
-          {coaches.map(c => (
-            <StaffCard
-              key={c.id}
-              member={c}
-              accentColor={COLORS.coach}
-              type="coach"
-            />
-          ))}
-          {coaches.length === 0 && (
-            <div className="card padding-md text-muted" style={{ textAlign: "center" }}>
-              No coaching staff hired.
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-      {/* ── Scouting Department ─────────────────────────────────────── */}
-      <CollapsibleSection
-        title="Scouting Department"
-        subtitle="Draft evaluation, prospect analysis, talent identification"
-        count={scouts.length}
-        accentColor={COLORS.scout}
-        defaultOpen={true}
-      >
-        <div style={{ display: "grid", gap: "var(--space-3, 12px)" }}>
-          {scouts.map(s => (
-            <StaffCard
-              key={s.id}
-              member={s}
-              accentColor={COLORS.scout}
-              onFire={(m) => handleFire(m, "scout")}
-              type="scout"
-            />
-          ))}
-          {scouts.length === 0 && (
-            <div className="card padding-md text-muted" style={{ textAlign: "center" }}>
-              No scouts on staff. Hire scouts to improve your draft evaluations.
-            </div>
-          )}
-          <button
-            className="btn"
-            onClick={() => setHiringPanel("scouts")}
-            style={{
-              width: "100%",
-              padding: "var(--space-3, 12px)",
-              background: "var(--surface)",
-              border: "1px dashed var(--accent)",
-              borderRadius: "var(--radius-sm, 6px)",
-              color: "var(--accent)",
-              fontWeight: 700,
-              fontSize: "var(--text-sm, 13px)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 16 }}>+</span> Hire Scout
-          </button>
-        </div>
-      </CollapsibleSection>
-
-      {/* ── Medical Staff ──────────────────────────────────────────── */}
-      <CollapsibleSection
-        title="Medical Staff"
-        subtitle="Injury prevention, rehabilitation, conditioning"
-        count={medStaff.length}
-        accentColor={COLORS.physio}
-        defaultOpen={true}
-      >
-        <div style={{ display: "grid", gap: "var(--space-3, 12px)" }}>
-          {medStaff.map(p => (
-            <StaffCard
-              key={p.id}
-              member={p}
-              accentColor={COLORS.physio}
-              onFire={(m) => handleFire(m, "physio")}
-              type="physio"
-            />
-          ))}
-          {medStaff.length === 0 && (
-            <div className="card padding-md text-muted" style={{ textAlign: "center" }}>
-              No medical staff on payroll. Hire physios to reduce injuries and speed recovery.
-            </div>
-          )}
-          <button
-            className="btn"
-            onClick={() => setHiringPanel("physios")}
-            style={{
-              width: "100%",
-              padding: "var(--space-3, 12px)",
-              background: "var(--surface)",
-              border: "1px dashed var(--accent)",
-              borderRadius: "var(--radius-sm, 6px)",
-              color: "var(--accent)",
-              fontWeight: 700,
-              fontSize: "var(--text-sm, 13px)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 6,
-            }}
-          >
-            <span style={{ fontSize: 16 }}>+</span> Hire Medical Staff
-          </button>
-        </div>
-      </CollapsibleSection>
-
-      {/* ── Hiring Panel Modal ─────────────────────────────────────── */}
-      {hiringPanel === "scouts" && (
+      {hiringPanel && (
         <HiringPanel
-          title="Available Scouts"
-          candidates={scoutCandidates}
-          accentColor={COLORS.scout}
-          onHire={handleHireScout}
+          title="Staff Market"
+          candidates={market.filter((m) => hiringPanel === 'scout' ? ['leadScout','proScout'].includes(m.roleKey) : ['headTrainer','capAdvisor'].includes(m.roleKey))}
+          accentColor={hiringPanel === 'scout' ? '#3b82f6' : '#22c55e'}
+          onHire={handleHire}
           budgetRemaining={budgetRemaining}
           onClose={() => setHiringPanel(null)}
-        />
-      )}
-
-      {hiringPanel === "physios" && (
-        <HiringPanel
-          title="Available Medical Staff"
-          candidates={physioCandidates}
-          accentColor={COLORS.physio}
-          onHire={handleHirePhysio}
-          budgetRemaining={budgetRemaining}
-          onClose={() => setHiringPanel(null)}
-        />
-      )}
-
-      {/* ── Fire Confirmation Dialog ───────────────────────────────── */}
-      {fireTarget && (
-        <ConfirmDialog
-          message={`Are you sure you want to fire ${fireTarget.member.name} (${fireTarget.member.role})? Their $${fireTarget.member.salary}M salary will be freed up.`}
-          onConfirm={confirmFire}
-          onCancel={() => setFireTarget(null)}
         />
       )}
     </div>
