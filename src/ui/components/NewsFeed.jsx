@@ -142,6 +142,11 @@ export default function NewsFeed({ league, mode = 'full' }) {
               Org investment: <strong style={{ color: 'var(--text)' }}>{investments.stadiumLabel}</strong> · {investments.concessionsLabel} · Scouting {investments.scoutingRegionLabel}
             </div>
           ) : null}
+          {teamIntel?.organization ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Dev/Recovery: <strong style={{ color: 'var(--text)' }}>{teamIntel.organization.developmentEnvironment.state}</strong> / <strong style={{ color: 'var(--text)' }}>{teamIntel.organization.recoveryEnvironment.state}</strong> · {teamIntel.organization.developmentEnvironment.reasons?.[0]}
+            </div>
+          ) : null}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>

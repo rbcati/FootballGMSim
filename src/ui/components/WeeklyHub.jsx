@@ -52,6 +52,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const injuries = useMemo(() => getInjuries(league), [league]);
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
+  const teamIntel = useMemo(() => buildTeamIntelligence(user, { week: league?.week ?? 1 }), [user, league?.week]);
   const pregameAngles = useMemo(() => {
     if (!nextGame) return [];
     const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === Number(nextGame.week));
@@ -63,7 +64,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
     return game ? derivePregameAngles({ league, game, week: nextGame.week }) : [];
   }, [league, nextGame]);
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
-  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(user, { pressure: weeklyContext?.pressure, intel: buildTeamIntelligence(user, { week: league?.week ?? 1 }), direction: weeklyContext?.direction }), [user, weeklyContext, league?.week]);
+  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(user, { pressure: weeklyContext?.pressure, intel: teamIntel, direction: weeklyContext?.direction }), [user, weeklyContext, teamIntel]);
   const userLastGameStory = useMemo(() => {
     const targetWeek = Number(league?.week ?? 1) - 1;
     if (targetWeek < 1) return null;
@@ -133,6 +134,26 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
         <h3 className="weekly-section__title">Franchise investment pulse</h3>
         <FranchiseInvestmentsPanel team={user} actions={actions} compact onNavigate={onNavigate} />
       </section>
+      {teamIntel?.organization && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Organization quality</h3>
+          <div className="weekly-urgent-list">
+            {[
+              ['Development Environment', teamIntel.organization.developmentEnvironment],
+              ['Player Care / Recovery', teamIntel.organization.recoveryEnvironment],
+              ['FA Destination Quality', teamIntel.organization.freeAgentDestination],
+              ['Scout Confidence', teamIntel.organization.scoutingConfidence],
+            ].map(([label, env]) => (
+              <div key={label} className="weekly-urgent-item tone-info">
+                <div>
+                  <strong>{label}: {env?.state}</strong>
+                  <span>{env?.reasons?.[0] ?? "No signal yet."}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="weekly-section">
         <h3 className="weekly-section__title">Top priorities</h3>

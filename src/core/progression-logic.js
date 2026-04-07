@@ -153,7 +153,8 @@ function applyCliffCognitiveDrop(player, secondaryDrop) {
  * @returns {{ gainers: Object[], regressors: Object[], breakouts: Object[], wallHits: Object[] }}
  *   Top gainers, shocking regressors, breakout seasons, and "hitting the wall" events.
  */
-export function processPlayerProgression(players) {
+export function processPlayerProgression(players, options = {}) {
+  const teamEnvironments = options?.teamEnvironments ?? {};
   const gainers    = []; // players with progressionDelta >= +4
   const regressors = []; // players with progressionDelta <= -3
   const breakouts  = []; // explicit Breakout Season events (for news)
@@ -170,6 +171,10 @@ export function processPlayerProgression(players) {
     let cliffEvent  = false;
     let bustEvent   = false;
     let breakoutEvent = false;
+    const org = teamEnvironments?.[player.teamId] ?? null;
+    const growthMod = Number.isFinite(Number(org?.youngGrowthBonus)) ? Number(org.youngGrowthBonus) : 0;
+    const volatilityMod = Number.isFinite(Number(org?.volatilityDampener)) ? Number(org.volatilityDampener) : 0;
+    const rookieMod = Number.isFinite(Number(org?.rookieAdaptation)) ? Number(org.rookieAdaptation) : 0;
 
     // ── Resolve dev trait multipliers (Task 3) ────────────────────────────
     const devTrait = player.devTrait ?? 'Normal';
@@ -195,7 +200,7 @@ export function processPlayerProgression(players) {
     if (age <= 24 && player.personality?.traits?.includes('High Work Ethic')) {
       if (Utils.random() < 0.10) {
         const rawDelta = Utils.rand(5, 8);
-        ovrDelta = Math.round(rawDelta * traitMods.growth);
+        ovrDelta = Math.round(rawDelta * traitMods.growth * (1 + growthMod * 0.35));
         breakoutEvent = true;
       }
     }
@@ -218,7 +223,7 @@ export function processPlayerProgression(players) {
       if (roll < effectiveBreakoutProb) {
         // Breakout: +5 to +8 OVR (scaled by dev trait)
         const rawDelta = Utils.rand(5, 8);
-        ovrDelta = Math.round(rawDelta * traitMods.growth);
+        ovrDelta = Math.round(rawDelta * traitMods.growth * (1 + growthMod * 0.35));
         breakoutEvent = true;
       } else if (roll < effectiveBustProb) {
         // Bust: -2 to -4 OVR (dev trait does NOT protect from bust)
@@ -227,7 +232,7 @@ export function processPlayerProgression(players) {
       } else {
         // Normal growth: +0 to +3 (was +1 to +3 — Task 10 allows stagnation)
         const rawDelta = Utils.rand(0, 3);
-        ovrDelta = Math.round(rawDelta * traitMods.growth);
+        ovrDelta = Math.round(rawDelta * traitMods.growth * (1 + growthMod * 0.45));
       }
     }
 
@@ -262,6 +267,18 @@ export function processPlayerProgression(players) {
 
     // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)
     if (!cliffEvent && !wallEvent && ovrDelta !== 0) {
+      if (age <= 24 && rookieMod !== 0) {
+        ovrDelta += rookieMod > 0 ? 1 : -1;
+      }
+      if (Math.abs(ovrDelta) >= 2 && volatilityMod !== 0) {
+        const direction = Math.sign(ovrDelta);
+        const damp = Math.round(Math.abs(ovrDelta) * Math.abs(volatilityMod) * 0.6);
+        if (damp > 0) {
+          ovrDelta = volatilityMod > 0
+            ? ovrDelta - (damp * direction)
+            : ovrDelta + (damp * direction);
+        }
+      }
       nudgeRatingsBy(player, ovrDelta);
     }
 

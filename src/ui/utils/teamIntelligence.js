@@ -1,6 +1,7 @@
 import { classifyTeamDirection } from "./contractInsights.js";
 import { buildTeamChemistrySummary } from "./teamChemistry.js";
 import { franchiseInvestmentSummary, getProspectRegionTag } from "./franchiseInvestments.js";
+import { deriveTeamCoachingIdentity } from "./coachingIdentity.js";
 
 const POSITION_TARGETS = {
   QB: { starters: 1, playableDepth: 2 },
@@ -65,11 +66,92 @@ function describeNeed(pos, starters, target, avgStarterOvr, depthCount) {
   return `${pos} depth`;
 }
 
+function classifyEnvironmentBand(score) {
+  if (score >= 80) return "Elite";
+  if (score >= 64) return "Strong";
+  if (score >= 46) return "Average";
+  return "Poor";
+}
+
+function buildOrganizationQuality({ team, direction, chemistry, investments, week }) {
+  const coaching = deriveTeamCoachingIdentity(team, { direction });
+  const continuityYears = safeNum(coaching?.continuity?.avgTenure, 0);
+  const continuityBoost = coaching?.continuity?.state === "stable" ? 8 : coaching?.continuity?.state === "blended" ? 4 : -3;
+  const chemistryStability = safeNum(chemistry?.score, 60);
+  const directionBoost = direction === "contender" ? 3 : direction === "rebuilding" ? 1 : 0;
+  const trainingScore = safeNum(investments?.profile?.trainingLevel, 1) * 10;
+  const scoutingScore = safeNum(investments?.profile?.scoutingLevel, 1) * 8;
+
+  const devScore = Math.max(25, Math.min(92, Math.round(
+    22 + trainingScore + continuityBoost + (continuityYears * 2.4) + ((chemistryStability - 60) * 0.42) + directionBoost
+  )));
+  const recoveryScore = Math.max(25, Math.min(92, Math.round(
+    25 + trainingScore * 0.9 + continuityBoost * 0.7 + ((chemistryStability - 60) * 0.48) - Math.max(0, week - 14) * 0.8
+  )));
+  const destinationScore = Math.max(20, Math.min(94, Math.round(
+    30 + safeNum(chemistry?.freeAgencyAppeal, 0) * 6 + safeNum(investments?.freeAgentAppealDelta, 0) * 1.2 + continuityBoost + directionBoost
+  )));
+  const scoutScore = Math.max(20, Math.min(95, Math.round(
+    28 + scoutingScore + (investments?.profile?.scoutingRegion === "national" ? 2 : 5) + continuityBoost * 0.4
+  )));
+
+  const developmentEnvironment = {
+    score: devScore,
+    state: classifyEnvironmentBand(devScore),
+    reasons: [
+      `Training complex ${investments?.profile?.trainingLevel ?? 1}/5`,
+      coaching?.continuity?.label ?? "Coaching continuity is unsettled",
+      chemistry?.state === "Strong locker room" ? "Locker room stability supports growth" : chemistry?.state === "Fragmented" ? "Locker-room tension adds volatility" : "Locker room is mostly steady",
+    ].slice(0, 3),
+    modifiers: {
+      youngGrowthBonus: devScore >= 80 ? 0.22 : devScore >= 64 ? 0.12 : devScore < 46 ? -0.1 : 0,
+      volatilityDampener: devScore >= 80 ? 0.12 : devScore >= 64 ? 0.07 : devScore < 46 ? -0.06 : 0,
+      rookieAdaptation: devScore >= 80 ? 0.2 : devScore >= 64 ? 0.1 : devScore < 46 ? -0.1 : 0,
+    },
+  };
+  const recoveryEnvironment = {
+    score: recoveryScore,
+    state: classifyEnvironmentBand(recoveryScore),
+    reasons: [
+      `Player care baseline from training ${investments?.profile?.trainingLevel ?? 1}/5`,
+      chemistryStability >= 70 ? "Consistent culture supports weekly readiness" : "Culture volatility can affect readiness rhythm",
+      coaching?.continuity?.state === "transition" ? "Staff transition slows routine consistency" : "Staff routines are established",
+    ].slice(0, 3),
+    modifiers: {
+      injuryChanceMod: recoveryScore >= 80 ? 0.92 : recoveryScore >= 64 ? 0.96 : recoveryScore < 46 ? 1.06 : 1,
+      moraleLift: recoveryScore >= 80 ? 2 : recoveryScore >= 64 ? 1 : recoveryScore < 46 ? -1 : 0,
+    },
+  };
+  const freeAgentDestination = {
+    score: destinationScore,
+    state: classifyEnvironmentBand(destinationScore),
+    reasons: [
+      destinationScore >= 64 ? "Players view this as a stable destination" : "Players see mixed destination signals",
+      safeNum(investments?.freeAgentAppealDelta, 0) >= 6 ? "Facilities and infrastructure boost appeal" : "Facility edge is modest",
+      chemistry?.state === "Fragmented" ? "Media and locker-room instability reduce trust" : "Locker-room tone supports recruiting",
+    ].slice(0, 3),
+    appealDelta: destinationScore >= 80 ? 7 : destinationScore >= 64 ? 4 : destinationScore < 46 ? -4 : 0,
+  };
+  const scoutingConfidence = {
+    score: scoutScore,
+    state: classifyEnvironmentBand(scoutScore),
+    reasons: [
+      `Scouting department ${investments?.profile?.scoutingLevel ?? 1}/5`,
+      investments?.profile?.scoutingRegion === "national" ? "National balance across classes" : `Regional focus: ${investments?.scoutingRegionLabel ?? investments?.profile?.scoutingRegion}`,
+      scoutScore >= 70 ? "Confidence improves fit/sleeper reads without removing uncertainty" : "Wider uncertainty range on fringe prospects",
+    ].slice(0, 3),
+    confidenceDelta: scoutScore >= 80 ? 0.1 : scoutScore >= 64 ? 0.06 : scoutScore < 46 ? -0.05 : 0,
+  };
+  return { developmentEnvironment, recoveryEnvironment, freeAgentDestination, scoutingConfidence };
+}
+
 export function buildTeamIntelligence(team, { week = 1 } = {}) {
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const direction = classifyTeamDirection(team, week);
   const investments = franchiseInvestmentSummary(team);
   if (!roster.length) {
+    const chemistry = buildTeamChemistrySummary(team, { week, direction });
+    const organization = buildOrganizationQuality({ team, direction, chemistry, investments, week });
     return {
       direction,
       investments,
@@ -81,7 +163,8 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
       capStressContracts: [],
       upsideGroups: [],
       warnings: [],
-      chemistry: buildTeamChemistrySummary(team, { week, direction }),
+      chemistry,
+      organization,
     };
   }
 
@@ -160,6 +243,7 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
   if (capStressContracts.length >= 2) warnings.push("Cap tied in aging veterans");
 
   const chemistry = buildTeamChemistrySummary(team, { week, direction });
+  const organization = buildOrganizationQuality({ team, direction, chemistry, investments, week });
 
   return {
     direction,
@@ -173,6 +257,7 @@ export function buildTeamIntelligence(team, { week = 1 } = {}) {
     upsideGroups,
     warnings: warnings.slice(0, 4),
     chemistry,
+    organization,
   };
 }
 
@@ -214,7 +299,8 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   const directionFit = direction === "contender" ? (age <= 30 ? 1 : 0.75) : direction === "rebuilding" ? (age <= 27 ? 1 : 0.55) : (age <= 29 ? 1 : 0.8);
   const chemistryAppeal = safeNum(intel?.chemistry?.freeAgencyAppeal, 0);
   const investmentAppeal = safeNum(intel?.investments?.freeAgentAppealDelta, 0);
-  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20 + chemistryAppeal * 2 + investmentAppeal;
+  const destinationAppeal = safeNum(intel?.organization?.freeAgentDestination?.appealDelta, 0);
+  const score = (needNow ? 60 : needLater ? 35 : 10) + affordability * 20 + directionFit * 20 + chemistryAppeal * 2 + investmentAppeal + destinationAppeal;
   let reason = "Depth option";
   if (needNow) reason = `Immediate starter/depth at ${pos}`;
   else if (needLater) reason = `Future need coverage at ${pos}`;
@@ -223,6 +309,8 @@ export function scoreFreeAgentForTeam(player, intel, capRoom = 0) {
   else if (chemistryAppeal >= 3) reason = `${reason} in a stable locker room`;
   else if (chemistryAppeal <= -2) reason = `${reason}, but locker-room stability is a concern`;
   if (investmentAppeal >= 6) reason = `${reason}; facilities and franchise environment are a selling point`;
+  if (destinationAppeal >= 6) reason = `${reason}; destination quality is trending up`;
+  else if (destinationAppeal <= -3) reason = `${reason}; destination concerns may raise bid pressure`;
   return { score, reason, pos, ask };
 }
 
@@ -282,5 +370,33 @@ export function scoreProspectForTeam(player, intel) {
     fit,
     profile,
     archetypeHint: `${profile.readiness} · ${profile.upside}${regionAdj > 0 ? ' · Regional visibility boost' : ''}`,
+  };
+}
+
+export function describeRookieOnboarding(player, intel = null) {
+  if (!player) return null;
+  const pos = canonicalPos(player);
+  const dev = intel?.organization?.developmentEnvironment;
+  const recovery = intel?.organization?.recoveryEnvironment;
+  const chemistry = intel?.chemistry;
+  const depthNow = (intel?.needsNow ?? []).some((n) => n.pos === pos);
+  const depthLater = (intel?.needsLater ?? []).some((n) => n.pos === pos);
+  const crowded = (intel?.surplus ?? []).some((s) => s.pos === pos);
+  const notes = [];
+  if ((dev?.score ?? 55) >= 64) notes.push("Stable landing spot with strong development support");
+  else if ((dev?.score ?? 55) < 46) notes.push("Unstable development environment may slow adjustment");
+  if ((recovery?.score ?? 55) >= 64) notes.push("Player-care routines should support weekly readiness");
+  if ((intel?.organization?.scoutingConfidence?.score ?? 55) >= 64) notes.push("Scouting confidence suggests clearer onboarding expectations");
+  if (depthNow) notes.push("Clear early path to role reps");
+  else if (depthLater) notes.push("Developmental depth role likely early");
+  if (crowded) notes.push("Crowded room may slow early snaps");
+  if (chemistry?.state === "Strong locker room") notes.push("Veteran room stability should help transition");
+  const adaptationScore = Math.max(20, Math.min(90, Math.round(
+    52 + safeNum(dev?.modifiers?.rookieAdaptation, 0) * 70 + (depthNow ? 8 : 0) + (crowded ? -8 : 0) + (chemistry?.state === "Strong locker room" ? 5 : chemistry?.state === "Fragmented" ? -6 : 0)
+  )));
+  return {
+    score: adaptationScore,
+    state: adaptationScore >= 76 ? "Strong onboarding setup" : adaptationScore >= 58 ? "Manageable onboarding setup" : "Challenging onboarding setup",
+    notes: notes.slice(0, 4),
   };
 }

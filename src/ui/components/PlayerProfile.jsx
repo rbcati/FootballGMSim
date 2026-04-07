@@ -11,7 +11,7 @@ import { getTeamIdentity } from "../../data/team-utils.js";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
-import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile } from "../utils/teamIntelligence.js";
+import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile, describeRookieOnboarding } from "../utils/teamIntelligence.js";
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
@@ -342,6 +342,7 @@ export default function PlayerProfile({
   const needFit = useMemo(() => (isProspect ? classifyNeedFitForProspect(player?.pos, teamIntel) : null), [isProspect, player?.pos, teamIntel]);
   const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
   const moraleContext = useMemo(() => describePlayerMoraleContext(player, { team: userTeam, chemistry, week: data?.meta?.week ?? 1 }), [player, userTeam, chemistry, data?.meta?.week]);
+  const onboardingContext = useMemo(() => ((isProspect || Number(player?.age ?? 30) <= 24) ? describeRookieOnboarding(player, teamIntel) : null), [isProspect, player, teamIntel]);
   const stats = data?.stats ?? [];
   const columns = getColumns(player?.pos);
 
@@ -710,6 +711,11 @@ export default function PlayerProfile({
                   <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{needFit?.bucket ?? "Depth upgrade"}</div>
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{needFit?.short ?? "No strong fit signal."}</div>
                 </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Rookie onboarding</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{onboardingContext?.state ?? "Manageable onboarding setup"}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{onboardingContext?.notes?.[0] ?? "Landing spot context updates as roster and staff change."}</div>
+                </div>
               </div>
               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 6 }}>
                 Note: scouting certainty is limited to data currently stored in this save.
@@ -735,6 +741,9 @@ export default function PlayerProfile({
                 {(moraleContext?.reasons ?? []).slice(0, 3).map((reason, idx) => (
                   <div key={`mctx-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• {reason}</div>
                 ))}
+                {Number(player?.age ?? 40) <= 25 && teamIntel?.organization?.developmentEnvironment?.reasons?.[0] ? (
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• Development environment: {teamIntel.organization.developmentEnvironment.reasons[0]}</div>
+                ) : null}
               </div>
             </section>
           )}
