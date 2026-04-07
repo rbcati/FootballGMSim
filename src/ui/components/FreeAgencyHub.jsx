@@ -114,6 +114,9 @@ export default function FreeAgencyHub({ league, actions, onNavigate }) {
             <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
           </div>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildDirectionGuidance(teamIntel)}</div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+            Destination quality: <strong style={{ color: "var(--text)" }}>{teamIntel?.organization?.freeAgentDestination?.state ?? "Average"}</strong> · {teamIntel?.organization?.freeAgentDestination?.reasons?.[0] ?? "Build facilities, continuity, and chemistry to improve pitch."}
+          </div>
           {recommended.map(({ p, fit }) => (
             <div key={p.id} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
               {p.name} ({fit.pos}) · {fit.reason}

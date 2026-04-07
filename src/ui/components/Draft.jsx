@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { getProspectRegionTag, getScoutingAccuracy } from "../utils/franchiseInvestments.js";
+import { getProspectRegionTag, getScoutingConfidenceProfile } from "../utils/franchiseInvestments.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -98,12 +98,13 @@ function getScoutReport(trueOvr, playerId, scoutAccuracy = 0.65) {
 }
 
 function ScoutBadge({ player, team }) {
-  const accuracy = getScoutingAccuracy(team, player);
+  const profile = getScoutingConfidenceProfile(team, player);
+  const accuracy = profile.accuracy;
   const { grade, gradeColor, range } = getScoutReport(player?.ovr, player?.id, accuracy);
-  const region = getProspectRegionTag(player);
+  const region = profile.regionTag ?? getProspectRegionTag(player);
   return (
     <span
-      title={`Scout range: ${range} OVR · ${Math.round(accuracy * 100)}% confidence · Region ${region}`}
+      title={`Scout range: ${range} OVR · ${profile.confidence} (${Math.round(accuracy * 100)}%) · ${profile.fogBand} · Region ${region} · ${profile.reasons.join(' · ')}`}
       style={{
         display: "inline-flex",
         alignItems: "center",

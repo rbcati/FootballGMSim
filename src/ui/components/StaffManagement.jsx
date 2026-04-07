@@ -858,6 +858,14 @@ export default function StaffManagement({ league, actions }) {
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <h1 style={{ marginBottom: "var(--space-4, 16px)" }}>Staff Management</h1>
+      {teamIntel?.organization && (
+        <div style={{ marginBottom: "var(--space-3)", border: "1px solid var(--hairline)", borderRadius: 10, padding: "8px 10px", background: "var(--surface-strong)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)" }}>ORGANIZATION QUALITY</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            Development {teamIntel.organization.developmentEnvironment.state} · Recovery {teamIntel.organization.recoveryEnvironment.state} · Scout confidence {teamIntel.organization.scoutingConfidence.state}
+          </div>
+        </div>
+      )}
       <div style={{ marginBottom: "var(--space-4, 16px)" }}>
         <FranchiseInvestmentsPanel team={userTeam} actions={actions} compact />
       </div>

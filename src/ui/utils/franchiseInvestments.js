@@ -117,3 +117,25 @@ export function getScoutingAccuracy(team, player) {
   const regionalBonus = inv.scoutingRegion !== 'national' && inv.scoutingRegion === regionTag ? 0.08 : 0;
   return Math.max(0.5, Math.min(0.92, base + regionalBonus));
 }
+
+export function getScoutingConfidenceProfile(team, player) {
+  const inv = normalizeFranchiseInvestments(team?.franchiseInvestments);
+  const accuracy = getScoutingAccuracy(team, player);
+  const regionTag = getProspectRegionTag(player);
+  const inRegion = inv.scoutingRegion !== 'national' && inv.scoutingRegion === regionTag;
+  const fogBand = accuracy >= 0.84 ? 'Tight range' : accuracy >= 0.72 ? 'Moderate range' : 'Wide range';
+  const confidence = accuracy >= 0.84 ? 'High confidence' : accuracy >= 0.72 ? 'Balanced confidence' : accuracy >= 0.62 ? 'Limited confidence' : 'Low confidence';
+  const reasons = [];
+  reasons.push(`Scouting department ${inv.scoutingLevel}/5`);
+  reasons.push(inRegion ? `Regional emphasis matches ${regionTag}` : inv.scoutingRegion === 'national' ? 'National coverage spreads attention' : `Regional focus is ${inv.scoutingRegion}`);
+  if (inv.scoutingLevel <= 2) reasons.push('Fringe prospects carry extra uncertainty');
+  else if (inv.scoutingLevel >= 4) reasons.push('Sleeper and fit signals are clearer');
+  return {
+    accuracy,
+    fogBand,
+    confidence,
+    reasons: reasons.slice(0, 3),
+    regionTag,
+    inRegion,
+  };
+}

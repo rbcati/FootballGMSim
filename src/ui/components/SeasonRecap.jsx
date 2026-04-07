@@ -319,6 +319,21 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
           </div>
         </AnimatedSection>
       )}
+      {teamIntel?.organization && (
+        <AnimatedSection delay={760} title="Organization quality" icon="🧭">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Development: {teamIntel.organization.developmentEnvironment.state}</strong>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{teamIntel.organization.developmentEnvironment.reasons?.[0]}</div>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Recovery: {teamIntel.organization.recoveryEnvironment.state}</strong>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{teamIntel.organization.recoveryEnvironment.reasons?.[0]}</div>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>Destination quality: {teamIntel.organization.freeAgentDestination.state} · Scout confidence: {teamIntel.organization.scoutingConfidence.state}.</div>
+          </div>
+        </AnimatedSection>
+      )}
 
 
       {chemistry && (

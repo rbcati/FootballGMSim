@@ -16,7 +16,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import PlayerRadarChart, { getPlayerRadarAttributes } from "./PlayerRadarChart.jsx";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import { launchConfetti } from "../../confetti.js";
-import { buildTeamIntelligence, classifyNeedFitForProspect, scoreProspectForTeam } from "../utils/teamIntelligence.js";
+import { buildTeamIntelligence, classifyNeedFitForProspect, describeRookieOnboarding, scoreProspectForTeam } from "../utils/teamIntelligence.js";
 
 const POS_COLORS = {
   QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
@@ -280,9 +280,10 @@ export default function RookieDraft({ league, actions, onPlayerSelect }) {
       const pos = p.pos || p.position;
       const fit = classifyNeedFitForProspect(pos, teamIntel);
       const scouting = scoreProspectForTeam(p, teamIntel);
+      const onboarding = describeRookieOnboarding(p, teamIntel);
       const upside = (Number(p?.potential ?? p?.pot ?? p?.ovr ?? 60) - Number(p?.ovr ?? 60)) >= 8 || Number(p?.age ?? 30) <= 21;
       const tagLabel = idx < 10 ? "Best Player Available" : fit.bucket === "Immediate need" ? "Best Need Fit" : upside ? "Long-term Upside" : "Balanced Option";
-      return { ...p, _tagLabel: `${tagLabel} · ${fit.bucket}`, _fit: fit, _scouting: scouting };
+      return { ...p, _tagLabel: `${tagLabel} · ${fit.bucket}${onboarding?.state ? ` · ${onboarding.state}` : ""}`, _fit: fit, _scouting: scouting, _onboarding: onboarding };
     });
   }, [draftClass, draftedIds, posFilter, searchQuery, teamIntel]);
 

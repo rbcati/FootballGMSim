@@ -192,6 +192,28 @@ export function evaluateWeeklyContext(league) {
       tab: 'Financials',
     });
   }
+  const org = intel?.organization;
+  if (org?.developmentEnvironment?.state === 'Poor') {
+    urgent.push({
+      tone: 'warning',
+      level: 'recommendation',
+      rank: 72,
+      label: 'Development environment lagging',
+      detail: org.developmentEnvironment.reasons?.[0] ?? 'Young-player growth support is below league average.',
+      why: 'Poor support can slow rookie adaptation and increase outcome volatility.',
+      tab: 'Staff',
+    });
+  } else if (org?.developmentEnvironment?.state === 'Elite') {
+    urgent.push({
+      tone: 'info',
+      level: 'recommendation',
+      rank: 56,
+      label: 'Young core development edge',
+      detail: org.developmentEnvironment.reasons?.[0] ?? 'Environment supports steady young-player growth.',
+      why: 'Sustained organizational quality compounds over multiple seasons.',
+      tab: 'Roster',
+    });
+  }
 
   const ownerContractPressure = ownerContext?.key?.includes('expiring_core_ignored');
   if ((contractMarket?.priorityExpiring ?? 0) >= 2 && !ownerContractPressure) {

@@ -321,6 +321,17 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
                 </div>
               </div>
             </section>
+            {teamIntel?.organization && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Organization quality summary</h3>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", background: "var(--surface-strong)", display: "grid", gap: 6 }}>
+                  <div><strong>Development Environment: {teamIntel.organization.developmentEnvironment.state}</strong> · {teamIntel.organization.developmentEnvironment.reasons?.[0]}</div>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}><strong>Player Care / Recovery: {teamIntel.organization.recoveryEnvironment.state}</strong> · {teamIntel.organization.recoveryEnvironment.reasons?.[0]}</div>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}><strong>Free-Agent Destination: {teamIntel.organization.freeAgentDestination.state}</strong> · {teamIntel.organization.freeAgentDestination.reasons?.[0]}</div>
+                  <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}><strong>Scout Confidence: {teamIntel.organization.scoutingConfidence.state}</strong> · {teamIntel.organization.scoutingConfidence.reasons?.[0]}</div>
+                </div>
+              </section>
+            )}
 
             {coachingIdentity && (
               <section>

@@ -148,6 +148,7 @@ export function buildStorylineCards(league) {
 
   const userIntel = buildTeamIntelligence(user, { week: safeNum(league?.week, 1) });
   const chemistry = userIntel?.chemistry;
+  const organization = userIntel?.organization;
   if (chemistry?.state === 'Strong locker room') {
     cards.push({
       id: `chemistry-strong-${league.week ?? 1}`,
@@ -166,6 +167,49 @@ export function buildStorylineCards(league) {
       tone: chemistry.state === 'Fragmented' ? 'danger' : 'warning',
       title: chemistry.state === 'Fragmented' ? 'Media questions whether the room is losing belief' : 'Locker room entering uneasy stretch',
       detail: chemistry.reasons?.[0] ?? 'Role and morale tension are becoming visible.',
+      tab: 'Roster',
+    });
+  }
+  if (organization?.developmentEnvironment?.state === 'Elite') {
+    cards.push({
+      id: `org-dev-elite-${league.week ?? 1}`,
+      category: 'culture',
+      priority: 70,
+      tone: 'success',
+      title: 'Young core is thriving in a stable environment',
+      detail: organization.developmentEnvironment.reasons?.[0] ?? 'Development routines are translating into clearer growth arcs.',
+      tab: 'Weekly Hub',
+    });
+  } else if (organization?.developmentEnvironment?.state === 'Poor') {
+    cards.push({
+      id: `org-dev-poor-${league.week ?? 1}`,
+      category: 'culture',
+      priority: 83,
+      tone: 'warning',
+      title: 'Media questions organizational player development support',
+      detail: organization.developmentEnvironment.reasons?.[0] ?? 'Development environment signals are lagging behind playoff-caliber standards.',
+      tab: 'Staff',
+    });
+  }
+  if (organization?.freeAgentDestination?.state === 'Strong' || organization?.freeAgentDestination?.state === 'Elite') {
+    cards.push({
+      id: `org-fa-${league.week ?? 1}`,
+      category: 'culture',
+      priority: 66,
+      tone: 'info',
+      title: 'Top free agents increasingly view the franchise as a destination',
+      detail: organization.freeAgentDestination.reasons?.[0] ?? 'Facilities, continuity, and chemistry are strengthening destination quality.',
+      tab: 'Free Agency',
+    });
+  }
+  if (league?.phase === 'preseason' && (organization?.developmentEnvironment?.state === 'Strong' || organization?.developmentEnvironment?.state === 'Elite')) {
+    cards.push({
+      id: `rookie-onboard-${league.week ?? 1}`,
+      category: 'culture',
+      priority: 64,
+      tone: 'info',
+      title: 'Strong rookie onboarding helped the draft class settle in quickly',
+      detail: organization.developmentEnvironment.reasons?.[1] ?? 'Coaching continuity and chemistry are helping rookies adjust to pro tempo.',
       tab: 'Roster',
     });
   }

@@ -281,7 +281,9 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
   const pressure = deriveFranchisePressure(league);
   const coachingMoment = buildCoachingNarrativeCards(league, { limit: 1 })[0] ?? null;
   const userTeam = teams.find((t) => t.id === league?.userTeamId) ?? null;
-  const chemistry = buildTeamIntelligence(userTeam, { week: league?.week ?? 1 })?.chemistry;
+  const intel = buildTeamIntelligence(userTeam, { week: league?.week ?? 1 });
+  const chemistry = intel?.chemistry;
+  const organization = intel?.organization;
   const investments = franchiseInvestmentSummary(userTeam);
 
   const color = teamColor(champ.abbr ?? "");
@@ -442,6 +444,23 @@ function SeasonCompleteSplash({ championTeamId, teams, onProceed, league }) {
           <div style={{ fontSize: "0.78rem", color: "var(--text-subtle)", marginTop: 4 }}>
             Training and facilities shifted free-agent appeal by {investments.freeAgentAppealDelta >= 0 ? "+" : ""}{investments.freeAgentAppealDelta}; scouting confidence shifted by {investments.scoutingConfidenceDelta >= 0 ? "+" : ""}{investments.scoutingConfidenceDelta}.
           </div>
+        </div>
+      )}
+      {organization && (
+        <div
+          style={{
+            width: "min(540px, 92vw)",
+            borderRadius: 12,
+            border: "1px solid var(--hairline)",
+            background: "rgba(12,18,31,0.72)",
+            padding: "12px 14px",
+          }}
+        >
+          <div style={{ fontSize: "0.68rem", letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--text-subtle)" }}>
+            Organization quality
+          </div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text)" }}>Development {organization.developmentEnvironment.state} · Recovery {organization.recoveryEnvironment.state}</div>
+          <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginTop: 4 }}>{organization.developmentEnvironment.reasons?.[0] ?? "Development context remained stable."}</div>
         </div>
       )}
 

@@ -4860,7 +4860,25 @@ async function handleAdvanceOffseason(payload, id) {
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
   const allPlayers = cache.getAllPlayers();
-  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers);
+  const teamEnvironments = {};
+  for (const team of allTeams) {
+    const inv = team?.franchiseInvestments ?? {};
+    const trainingLevel = Math.max(1, Math.min(5, Math.round(Number(inv?.trainingLevel ?? 1) || 1)));
+    const roster = Array.isArray(team?.roster) ? team.roster : allPlayers.filter((p) => Number(p?.teamId) === Number(team?.id));
+    const moraleAvg = roster.length ? roster.reduce((sum, p) => sum + (Number(p?.morale ?? 70) || 70), 0) / roster.length : 70;
+    const stableMorale = moraleAvg >= 74 ? 1 : moraleAvg <= 60 ? -1 : 0;
+    const staff = team?.staff ?? {};
+    const continuityCount = ['headCoach', 'offCoordinator', 'defCoordinator', 'offCoord', 'defCoord']
+      .map((key) => staff?.[key])
+      .filter(Boolean)
+      .reduce((sum, member) => sum + (Number(member?.yearsWithTeam ?? member?.tenure ?? 0) >= 2 ? 1 : 0), 0);
+    const continuitySignal = continuityCount >= 2 ? 1 : continuityCount === 0 ? -1 : 0;
+    const youngGrowthBonus = trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0;
+    const volatilityDampener = continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0;
+    const rookieAdaptation = (trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0);
+    teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation };
+  }
+  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments });
 
   // Flush progression mutations (ratings, ovr, progressionDelta, potential)
   for (const player of allPlayers) {
