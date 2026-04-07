@@ -98,6 +98,8 @@ export const toWorker = Object.freeze({
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
   UPDATE_SETTINGS:    'UPDATE_SETTINGS',      // { settings }
+  TOGGLE_COMMISSIONER_MODE: 'TOGGLE_COMMISSIONER_MODE', // { enabled }
+  APPLY_COMMISSIONER_ACTIONS: 'APPLY_COMMISSIONER_ACTIONS', // { actions: [] }
 
   /** Roster / Free Agency */
   GET_ROSTER:         'GET_ROSTER',           // { teamId }

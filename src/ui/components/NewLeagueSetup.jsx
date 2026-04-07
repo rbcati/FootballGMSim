@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { DEFAULT_LEAGUE_SETTINGS } from "../../core/leagueSettings.js";
 
 const CONF_NAMES = ["AFC", "NFC"];
 const DIV_NAMES = ["East", "North", "South", "West"];
@@ -60,6 +61,16 @@ export default function NewLeagueSetup({ actions, onCancel }) {
   const [injuryFrequency, setInjuryFrequency] = useState("normal");
   const [tradeRealism, setTradeRealism] = useState("normal");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [seasonLength, setSeasonLength] = useState(DEFAULT_LEAGUE_SETTINGS.seasonLength);
+  const [playoffTeams, setPlayoffTeams] = useState(DEFAULT_LEAGUE_SETTINGS.playoffTeams);
+  const [capFloor, setCapFloor] = useState(DEFAULT_LEAGUE_SETTINGS.capFloor);
+  const [progressionVolatility, setProgressionVolatility] = useState(DEFAULT_LEAGUE_SETTINGS.progressionVolatility);
+  const [regressionSeverity, setRegressionSeverity] = useState(DEFAULT_LEAGUE_SETTINGS.regressionSeverity);
+  const [scoutingFogStrength, setScoutingFogStrength] = useState(DEFAULT_LEAGUE_SETTINGS.scoutingFogStrength);
+  const [ownerPatienceStrictness, setOwnerPatienceStrictness] = useState(DEFAULT_LEAGUE_SETTINGS.ownerPatienceStrictness);
+  const [playerMoodVolatility, setPlayerMoodVolatility] = useState(DEFAULT_LEAGUE_SETTINGS.playerMoodVolatility);
+  const [staffImpactStrength, setStaffImpactStrength] = useState(DEFAULT_LEAGUE_SETTINGS.staffImpactStrength);
+  const [freeAgencyAggressiveness, setFreeAgencyAggressiveness] = useState(DEFAULT_LEAGUE_SETTINGS.freeAgencyAggressiveness);
 
   // Team filter
   const [activeFilter, setActiveFilter] = useState(0);
@@ -95,8 +106,27 @@ export default function NewLeagueSetup({ actions, onCancel }) {
       godMode,
       injuryFrequency,
       tradeRealism,
+      settings: {
+        seasonLength,
+        playoffTeams,
+        salaryCap,
+        capFloor,
+        playoffSeeding: playoffFormat,
+        draftOrderLogic: draftOrder,
+        injuryFrequency: injuryFrequency === "none" ? 0 : injuryFrequency === "low" ? 25 : injuryFrequency === "high" ? 75 : 50,
+        tradeDifficulty: tradeRealism === "easy" ? 30 : tradeRealism === "strict" ? 75 : 50,
+        progressionVolatility,
+        regressionSeverity,
+        scoutingFogStrength,
+        ownerPatienceStrictness,
+        playerMoodVolatility,
+        staffImpactStrength,
+        freeAgencyAggressiveness,
+        difficultyPreset: difficulty,
+        leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
+      },
     });
-  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, actions]);
+  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, actions]);
 
   const canProceed = step === 0 ? selectedTeam !== null : true;
 
@@ -357,6 +387,18 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                     max={999}
                   />
                 </div>
+                <div className="settings-group">
+                  <label className="settings-label">Season Length</label>
+                  <Input className="settings-input" type="number" min={4} max={24} value={seasonLength} onChange={e => setSeasonLength(Math.max(4, Math.min(24, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Playoff Teams</label>
+                  <Input className="settings-input" type="number" min={2} max={32} value={playoffTeams} onChange={e => setPlayoffTeams(Math.max(2, Math.min(32, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Cap Floor ($M)</label>
+                  <Input className="settings-input" type="number" min={0} max={salaryCap} value={capFloor} onChange={e => setCapFloor(Math.max(0, Math.min(salaryCap, Number(e.target.value))))} />
+                </div>
 
                 {/* Injury Frequency */}
                 <div className="settings-group">
@@ -385,6 +427,34 @@ export default function NewLeagueSetup({ actions, onCancel }) {
                     <option value="normal">Normal (Balanced)</option>
                     <option value="strict">Strict (Very selective AI)</option>
                   </select>
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Progression Volatility (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={progressionVolatility} onChange={e => setProgressionVolatility(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Regression Severity (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={regressionSeverity} onChange={e => setRegressionSeverity(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Scouting Fog Strength (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={scoutingFogStrength} onChange={e => setScoutingFogStrength(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Owner Patience Strictness (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={ownerPatienceStrictness} onChange={e => setOwnerPatienceStrictness(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Player Mood Volatility (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={playerMoodVolatility} onChange={e => setPlayerMoodVolatility(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Staff Impact Strength (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={staffImpactStrength} onChange={e => setStaffImpactStrength(Math.max(0, Math.min(100, Number(e.target.value))))} />
+                </div>
+                <div className="settings-group">
+                  <label className="settings-label">Free Agency Aggressiveness (0-100)</label>
+                  <Input className="settings-input" type="number" min={0} max={100} value={freeAgencyAggressiveness} onChange={e => setFreeAgencyAggressiveness(Math.max(0, Math.min(100, Number(e.target.value))))} />
                 </div>
 
                 {/* God Mode */}

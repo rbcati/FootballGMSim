@@ -1328,8 +1328,9 @@ export function simGameStats(home, away, options = {}) {
     // Also apply HC Team Builder / Disciplinarian injury mod
     const homeHCInjMod = homeHCMods.injuryChanceMod || 1.0;
     const awayHCInjMod = awayHCMods.injuryChanceMod || 1.0;
-    const homeTotalInjMod = homeInjuryMod * homeHCInjMod;
-    const awayTotalInjMod = awayInjuryMod * awayHCInjMod;
+    const leagueInjuryFactor = Number.isFinite(Number(options?.injuryFactor)) ? Number(options.injuryFactor) : 1.0;
+    const homeTotalInjMod = homeInjuryMod * homeHCInjMod * leagueInjuryFactor;
+    const awayTotalInjMod = awayInjuryMod * awayHCInjMod * leagueInjuryFactor;
     // Attach injury modifier to mods so generateStatsForTeam can use it
     homeMods.injuryChanceMod = homeTotalInjMod;
     awayMods.injuryChanceMod = awayTotalInjMod;

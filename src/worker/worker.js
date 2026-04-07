@@ -94,6 +94,7 @@ import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
+import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -122,7 +123,14 @@ function yieldFrame() {
  * Always returns an object so call sites never crash on missing cache meta.
  */
 function getSafeMeta() {
-  return ensureDynastyMeta(cache.getMeta() ?? {});
+  const safe = ensureDynastyMeta(cache.getMeta() ?? {});
+  return {
+    ...safe,
+    settings: normalizeLeagueSettings(safe?.settings ?? {}),
+    commissionerMode: !!safe?.commissionerMode,
+    commissionerEverEnabled: !!safe?.commissionerEverEnabled,
+    commissionerLog: Array.isArray(safe?.commissionerLog) ? safe.commissionerLog : [],
+  };
 }
 
 function normalizeFranchiseInvestments(raw = {}) {
@@ -380,6 +388,11 @@ function buildViewState() {
     lastTradeActivityWeek: Number(meta?.lastTradeActivityWeek ?? 0),
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
+    settings: normalizeLeagueSettings(meta?.settings ?? {}),
+    godMode: !!meta?.commissionerMode,
+    commissionerMode: !!meta?.commissionerMode,
+    commissionerEverEnabled: !!meta?.commissionerEverEnabled,
+    commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog.slice(-100) : [],
     teams,
   };
 }
@@ -896,6 +909,14 @@ async function handleLoadSave({ leagueId }, id) {
         recalculateTeamCap(team.id);
       }
 
+      // Migration/defaulting for league customization + commissioner metadata.
+      cache.setMeta({
+        settings: normalizeLeagueSettings(meta?.settings ?? {}),
+        commissionerMode: !!meta?.commissionerMode,
+        commissionerEverEnabled: !!meta?.commissionerEverEnabled,
+        commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
+      });
+
       // Auto-generate draft class if save is in draft phase but prospects are missing.
       // This guards against iOS saves where the worker restarted mid-draft.
       if (meta.phase === 'draft') {
@@ -990,6 +1011,20 @@ async function handleNewLeague(payload, id) {
   try {
     const { teams: teamDefs, options = {} } = payload;
     const userTeamId = options.userTeamId ?? 0;
+    const resolvedSettings = normalizeLeagueSettings({
+      ...(options.settings ?? {}),
+      difficultyPreset: options.difficulty ?? options.settings?.difficultyPreset ?? DEFAULT_LEAGUE_SETTINGS.difficultyPreset,
+      playoffSeeding: options.playoffFormat ?? options.settings?.playoffSeeding,
+      draftOrderLogic: options.draftOrder ?? options.settings?.draftOrderLogic,
+      salaryCap: options.salaryCap ?? options.settings?.salaryCap,
+      injuryFrequency: typeof options.injuryFrequency === 'string'
+        ? (options.injuryFrequency === 'none' ? 0 : options.injuryFrequency === 'low' ? 25 : options.injuryFrequency === 'high' ? 75 : 50)
+        : options.settings?.injuryFrequency,
+      tradeDifficulty: typeof options.tradeRealism === 'string'
+        ? (options.tradeRealism === 'easy' ? 30 : options.tradeRealism === 'strict' ? 75 : 50)
+        : options.settings?.tradeDifficulty,
+      leagueName: options.name ?? options.settings?.leagueName ?? '',
+    });
 
     // Generate new League ID
     const leagueId = await createUniqueLeagueId();
@@ -1028,7 +1063,10 @@ async function handleNewLeague(payload, id) {
       season:          league.season ?? 1,
       phase:           'regular',
       difficulty:      options.difficulty ?? 'Normal',
-      settings:        options.settings ?? {},
+      settings:        resolvedSettings,
+      commissionerMode: !!options.godMode,
+      commissionerEverEnabled: !!options.godMode,
+      commissionerLog: [],
       newsItems: [],
       ownerGoals: generateOwnerGoals(),
       retiredPlayers: [],
@@ -1047,6 +1085,9 @@ async function handleNewLeague(payload, id) {
       const { roster, ...teamWithoutRoster } = t;
       return {
         ...teamWithoutRoster,
+        capTotal: resolvedSettings.salaryCap,
+        capRoom: resolvedSettings.salaryCap,
+        capSpace: resolvedSettings.salaryCap,
         wins:       0,
         losses:     0,
         ties:       0,
@@ -1473,6 +1514,7 @@ async function handleAdvanceWeek(payload, id) {
   const BATCH_SIZE = 2;
   const gamesToSim = [...league._weekGames];
   const results    = [];
+  const injuryFactor = Math.max(0, Number(meta?.settings?.injuryFrequency ?? 50) / 50);
 
   for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
     const batch = gamesToSim.slice(i, i + BATCH_SIZE);
@@ -1480,7 +1522,8 @@ async function handleAdvanceWeek(payload, id) {
     try {
       batchResults = simulateBatch(batch, {
         league,
-        isPlayoff: meta.phase === 'playoffs'
+        isPlayoff: meta.phase === 'playoffs',
+        injuryFactor,
       });
     } catch (simErr) {
       console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
@@ -3856,6 +3899,10 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   if (diff === 'Easy') diffMult = 0.9; // AI accepts at 90% of what user offers
   if (diff === 'Hard') diffMult = 1.15; // AI demands 15% more
   if (diff === 'Legendary') diffMult = 1.30; // AI demands 30% more
+  const settingsDifficulty = Number(meta?.settings?.tradeDifficulty);
+  if (Number.isFinite(settingsDifficulty)) {
+    diffMult *= (0.7 + (Math.max(0, Math.min(100, settingsDifficulty)) / 100) * 0.8);
+  }
 
   // E.g. User (fromTeam) offers 1000 value, wants 1000 value.
   // On Normal, AI wants 1000 * 1.0 = 1000 in return (offerVal >= receiveVal * 1.0)
@@ -3884,7 +3931,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   // Before executing an accepted trade, verify neither team would breach the
   // $301.2M hard cap after swapping players.
   if (accepted) {
-    const hardCap = Constants.SALARY_CAP.HARD_CAP;
+    const hardCap = Number(meta?.settings?.salaryCap ?? Constants.SALARY_CAP.HARD_CAP);
 
     // Helper: sum cap hit for a list of player IDs
     const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
@@ -4139,10 +4186,107 @@ async function handleUpdateSettings({ settings }, id) {
     post(toUI.ERROR, { message: 'No league loaded' }, id);
     return;
   }
-  const current = cache.getMeta();
-  cache.setMeta({ settings: { ...(current?.settings ?? {}), ...settings } });
+  const current = getSafeMeta();
+  const incoming = settings ?? {};
+  const blocked = [];
+  const phase = String(current?.phase ?? 'regular');
+  for (const key of Object.keys(incoming)) {
+    const ruleType = getRuleEditType(key);
+    if (ruleType === 'new-league-only') blocked.push(`${key} (new league only)`);
+    if (ruleType === 'offseason-only' && phase !== 'offseason' && phase !== 'preseason') {
+      blocked.push(`${key} (offseason only)`);
+    }
+  }
+  if (blocked.length > 0) {
+    post(toUI.NOTIFICATION, { level: 'warn', message: `Some settings were blocked: ${blocked.join(', ')}` });
+  }
+  const allowedEntries = Object.fromEntries(Object.entries(incoming).filter(([key]) => {
+    const type = getRuleEditType(key);
+    if (type === 'new-league-only') return false;
+    if (type === 'offseason-only' && phase !== 'offseason' && phase !== 'preseason') return false;
+    return true;
+  }));
+  const nextSettings = normalizeLeagueSettings({ ...(current?.settings ?? {}), ...allowedEntries });
+  cache.setMeta({ settings: nextSettings });
   await flushDirty();
-  post(toUI.STATE_UPDATE, { settings: cache.getMeta().settings }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+function appendCommissionerLog(entry) {
+  const meta = getSafeMeta();
+  const existing = Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [];
+  return [...existing.slice(-199), { at: Date.now(), ...entry }];
+}
+
+async function handleToggleCommissionerMode({ enabled }, id) {
+  if (!cache.isLoaded()) {
+    post(toUI.ERROR, { message: 'No league loaded' }, id);
+    return;
+  }
+  const nextEnabled = !!enabled;
+  const meta = getSafeMeta();
+  cache.setMeta({
+    commissionerMode: nextEnabled,
+    commissionerEverEnabled: !!meta?.commissionerEverEnabled || nextEnabled,
+    commissionerLog: appendCommissionerLog({
+      type: 'mode-toggle',
+      details: { enabled: nextEnabled },
+    }),
+  });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+async function handleApplyCommissionerActions({ actions = [] }, id) {
+  const meta = getSafeMeta();
+  if (!meta?.commissionerMode) {
+    post(toUI.ERROR, { message: 'Commissioner mode is disabled for this save.' }, id);
+    return;
+  }
+
+  const normalized = Array.isArray(actions) ? actions : [];
+  for (const action of normalized) {
+    if (action?.entityType === 'player') {
+      const playerId = Number(action.entityId);
+      const player = cache.getPlayer(playerId);
+      if (!player) continue;
+      const field = String(action.field ?? '');
+      const value = action.value;
+      const allowed = new Set(['ovr', 'potential', 'age', 'morale', 'salary', 'injuryWeeksRemaining', 'injured', 'teamId']);
+      if (!allowed.has(field)) continue;
+      const updates = {};
+      if (field === 'salary') {
+        updates.contract = { ...(player.contract ?? {}), baseAnnual: Math.max(0.5, Number(value) || 0.5) };
+      } else if (field === 'teamId') {
+        updates.teamId = (value === null || value === '') ? null : Number(value);
+      } else {
+        updates[field] = value;
+      }
+      cache.updatePlayer(playerId, updates);
+    } else if (action?.entityType === 'team') {
+      const teamId = Number(action.entityId);
+      const team = cache.getTeam(teamId);
+      if (!team) continue;
+      const field = String(action.field ?? '');
+      const allowed = new Set(['wins', 'losses', 'capRoom', 'capSpace', 'name', 'abbr', 'confName', 'divName']);
+      if (!allowed.has(field)) continue;
+      cache.updateTeam(teamId, { [field]: action.value });
+    } else if (action?.entityType === 'draftPick') {
+      const pick = resolvePickById(action.entityId);
+      if (!pick) continue;
+      pick.currentOwner = Number(action.value);
+      cache.setDraftPick(pick);
+    }
+  }
+
+  cache.setMeta({
+    commissionerLog: appendCommissionerLog({
+      type: 'bulk-actions',
+      details: { count: normalized.length },
+    }),
+  });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: UPDATE_STRATEGY ──────────────────────────────────────────────────
@@ -5064,6 +5208,10 @@ async function handleAdvanceOffseason(payload, id) {
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
   const allPlayers = cache.getAllPlayers();
+  const progressionEnv = Math.max(0, Math.min(100, Number(meta?.settings?.progressionEnvironmentStrength ?? 50)));
+  const staffImpact = Math.max(0, Math.min(100, Number(meta?.settings?.staffImpactStrength ?? 50)));
+  const envScale = 0.75 + (progressionEnv / 100) * 0.5;
+  const staffScale = 0.7 + (staffImpact / 100) * 0.6;
   const teamEnvironments = {};
   for (const team of allTeams) {
     const inv = team?.franchiseInvestments ?? {};
@@ -5077,9 +5225,9 @@ async function handleAdvanceOffseason(payload, id) {
       .filter(Boolean)
       .reduce((sum, member) => sum + (Number(member?.yearsWithTeam ?? member?.tenure ?? 0) >= 2 ? 1 : 0), 0);
     const continuitySignal = continuityCount >= 2 ? 1 : continuityCount === 0 ? -1 : 0;
-    const youngGrowthBonus = trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0;
-    const volatilityDampener = continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0;
-    const rookieAdaptation = (trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0);
+    const youngGrowthBonus = (trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) * envScale;
+    const volatilityDampener = (continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) * staffScale;
+    const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0)) * envScale;
     teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation };
   }
   const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments });
@@ -6161,6 +6309,8 @@ async function handleMessage(event) {
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
       case toWorker.RELEASE_PLAYER:     return await handleReleasePlayer(payload, id);
       case toWorker.UPDATE_SETTINGS:    return await handleUpdateSettings(payload, id);
+      case toWorker.TOGGLE_COMMISSIONER_MODE: return await handleToggleCommissionerMode(payload, id);
+      case toWorker.APPLY_COMMISSIONER_ACTIONS: return await handleApplyCommissionerActions(payload, id);
       case toWorker.GET_ROSTER:         return await handleGetRoster(payload, id);
       case toWorker.GET_FREE_AGENTS:    return await handleGetFreeAgents(payload, id);
       case toWorker.GET_AVAILABLE_COACHES: return await handleGetAvailableCoaches(payload, id);
@@ -6254,7 +6404,8 @@ async function handleWatchGame(payload, id) {
   const batchResults = simulateBatch([userGame], {
     league,
     isPlayoff: meta.phase === 'playoffs',
-    generateLogs: true
+    generateLogs: true,
+    injuryFactor: Math.max(0, Number(meta?.settings?.injuryFrequency ?? 50) / 50),
   });
 
   const res = batchResults[0];
