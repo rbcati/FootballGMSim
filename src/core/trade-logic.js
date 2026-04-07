@@ -504,15 +504,29 @@ export function evaluateCounterOffer({
   }
 
   const sweetenerNeeded = closeGap <= 180 && !hasUserPickSweetener;
-  if (isCounterRound && (closeGap <= 280 || sweetenerNeeded || hasAiPickSweetener)) {
+  const salaryStress = capRoom < 4;
+  const rebuilderPivot = aiDirection === 'rebuilding' && !hasUserPickSweetener;
+  if (isCounterRound && (closeGap <= 280 || sweetenerNeeded || hasAiPickSweetener || salaryStress || rebuilderPivot)) {
+    const askHint = salaryStress
+      ? 'balance_salary'
+      : sweetenerNeeded
+        ? 'add_pick'
+        : rebuilderPivot
+          ? 'add_young_asset'
+          : 'add_depth_piece';
+    const reason = askHint === 'balance_salary'
+      ? `${aiTeam?.abbr ?? 'They'} are close but need cap relief to finalize this.`
+      : askHint === 'add_young_asset'
+        ? `${aiTeam?.abbr ?? 'They'} need younger controllable value in this counter.`
+        : askHint === 'add_pick'
+          ? `${aiTeam?.abbr ?? 'They'} like the framework but want pick compensation to close it.`
+          : `${aiTeam?.abbr ?? 'They'} are close, but need one more sweetener.`;
     return {
       status: 'asks_more',
-      stance: 'We need a little more to get this done.',
-      reason: sweetenerNeeded
-        ? `${aiTeam?.abbr ?? 'They'} like the framework but want pick compensation to close it.`
-        : `${aiTeam?.abbr ?? 'They'} are close, but need one more sweetener.`,
-      askHint: sweetenerNeeded ? 'add_pick' : 'add_depth_piece',
-      rejectionType: 'value',
+      stance: 'We need a small realistic adjustment to close this.',
+      reason,
+      askHint,
+      rejectionType: askHint === 'balance_salary' ? 'cap' : 'value',
     };
   }
 
@@ -524,7 +538,7 @@ export function evaluateCounterOffer({
       : aiDirection === 'contender'
         ? `${aiTeam?.abbr ?? 'They'} pass — their current team direction prefers immediate contributors.`
         : `${aiTeam?.abbr ?? 'They'} pass on that counter.`,
-    askHint: closeGap > 700 ? 'major_upgrade' : 'value_gap',
+    askHint: closeGap > 700 ? 'major_upgrade' : aiDirection === 'rebuilding' ? 'younger_asset' : 'value_gap',
     rejectionType: closeGap > 700 ? 'value' : aiDirection === 'contender' ? 'direction' : 'fit',
   };
 }

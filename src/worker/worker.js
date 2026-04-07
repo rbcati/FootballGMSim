@@ -4543,13 +4543,49 @@ async function handleToggleTradeBlock({ playerId, teamId }, id) {
   }
 
   const isOnBlock = player?.onTradeBlock ?? false;
-  cache.updatePlayer(player.id, { onTradeBlock: !isOnBlock });
+  cache.updatePlayer(player.id, { onTradeBlock: !isOnBlock, tradeStatus: !isOnBlock ? 'actively_shopping' : 'available' });
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 
 // ── Handler: START_DRAFT ──────────────────────────────────────────────────────
 
+
+async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, id) {
+  const numericPlayerId = Number(playerId);
+  const player = cache.getPlayer(numericPlayerId);
+  if (!player) {
+    post(toUI.ERROR, { message: 'Player not found' }, id);
+    return;
+  }
+
+  const numericTeamId = Number(teamId);
+  if (!Number.isFinite(numericTeamId) || Number(player.teamId) !== numericTeamId) {
+    post(toUI.ERROR, { message: 'Player is not on the selected team' }, id);
+    return;
+  }
+
+  const validTradeStatuses = new Set(['untouchable', 'soft_block', 'available', 'actively_shopping', 'not_available']);
+  const validPlanFlags = new Set(['shortlist_extension', 'trade_candidate', 'defer_offseason', 'prioritize_deadline']);
+
+  const patch = {};
+  if (typeof updates.tradeStatus === 'string' && validTradeStatuses.has(updates.tradeStatus)) {
+    patch.tradeStatus = updates.tradeStatus;
+    patch.onTradeBlock = updates.tradeStatus === 'actively_shopping';
+  }
+  if (Array.isArray(updates.contractPlan)) {
+    patch.contractPlan = updates.contractPlan.filter((flag) => validPlanFlags.has(flag));
+  }
+
+  if (Object.keys(patch).length === 0) {
+    post(toUI.ERROR, { message: 'No valid management updates provided' }, id);
+    return;
+  }
+
+  cache.updatePlayer(player.id, patch);
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
 async function handleStartDraft(payload, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
@@ -6138,6 +6174,7 @@ async function handleMessage(event) {
       case toWorker.REJECT_INCOMING_TRADE: return await handleRejectIncomingTrade(payload, id);
       case toWorker.COUNTER_INCOMING_TRADE: return await handleCounterIncomingTrade(payload, id);
       case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
+      case toWorker.UPDATE_PLAYER_MANAGEMENT: return await handleUpdatePlayerManagement(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);
