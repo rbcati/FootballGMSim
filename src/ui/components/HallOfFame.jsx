@@ -218,6 +218,11 @@ function HofCard({ player, onPlayerSelect }) {
               {player.teamHistory.length > 4 ? " …" : ""}
             </div>
           )}
+          {Array.isArray(player.inductionReasons) && player.inductionReasons.length > 0 && (
+            <div className="text-[10px] text-[color:var(--text-muted)]">
+              Why inducted: {player.inductionReasons.slice(0, 2).join(" · ")}
+            </div>
+          )}
         </div>
 
         <div className="absolute top-2 right-2">

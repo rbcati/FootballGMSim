@@ -1,4 +1,6 @@
-export const ensureDynastyMeta = (meta) => ({
+import { ensureLeagueMemoryMeta } from './league-memory.js';
+
+export const ensureDynastyMeta = (meta) => ensureLeagueMemoryMeta({
   ...meta,
   newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
   ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],

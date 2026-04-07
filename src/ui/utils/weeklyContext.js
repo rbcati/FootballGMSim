@@ -118,7 +118,10 @@ export function evaluateWeeklyContext(league) {
   const direction = classifyDirection(userTeam, week);
   const intel = buildTeamIntelligence(userTeam, { week });
   const contractMarket = league?.contractMarket ?? null;
-  const storylineCards = buildStorylineCards(league);
+  const storylineCards = [
+    ...buildStorylineCards(league),
+    ...(Array.isArray(league?.seasonStorylines) ? league.seasonStorylines : []),
+  ].slice(0, 8);
   const chemistry = intel?.chemistry;
   const investments = franchiseInvestmentSummary(userTeam);
 

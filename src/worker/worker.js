@@ -92,6 +92,7 @@ import { processPlayerProgression } from '../core/progression-logic.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
+import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot } from '../core/league-memory.js';
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
@@ -395,6 +396,10 @@ function buildViewState() {
     lastTradeActivityWeek: Number(meta?.lastTradeActivityWeek ?? 0),
     retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
     records: meta?.records ?? null,
+    recordBook: meta?.recordBook ?? null,
+    leagueHistory: Array.isArray(meta?.leagueHistory) ? meta.leagueHistory.slice(-60) : [],
+    seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
+    hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
     godMode: !!meta?.commissionerMode,
     commissionerMode: !!meta?.commissionerMode,
@@ -1078,7 +1083,7 @@ async function handleNewLeague(payload, id) {
     }
 
     const seasonId = `s${league.season ?? 1}`;
-    const meta = {
+    const meta = ensureLeagueMemoryMeta({
       id:              'league',
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
       userTeamId:      userTeamId,
@@ -1107,7 +1112,7 @@ async function handleNewLeague(payload, id) {
         mostChampionships: null,
         highestOvrPlayer: null,
       },
-    };
+    });
 
     // Separate flat data from the league blob
     // Teams — strip rosters (players stored separately)
@@ -2203,15 +2208,21 @@ async function handleGetSeasonHistory({ seasonId }, id) {
 
 async function handleGetAllSeasons(payload, id) {
   const seasons = await Seasons.loadRecent(200);
-  post(toUI.ALL_SEASONS, { seasons }, id);
+  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
+  const merged = [...seasons];
+  for (const row of meta.leagueHistory || []) {
+    if (!merged.some((s) => s?.id === row?.id)) merged.push(row);
+  }
+  merged.sort((a, b) => (b?.year ?? 0) - (a?.year ?? 0));
+  post(toUI.ALL_SEASONS, { seasons: merged }, id);
 }
 
 // ── Handler: GET_RECORDS ──────────────────────────────────────────────────────
 
 async function handleGetRecords(payload, id) {
-  const meta = ensureDynastyMeta(cache.getMeta());
+  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
   const records = meta?.records ?? createEmptyRecords();
-  post(toUI.RECORDS, { records }, id);
+  post(toUI.RECORDS, { records, recordBook: meta?.recordBook ?? null }, id);
 }
 
 async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id) {
@@ -2295,6 +2306,7 @@ async function handleGetTransactions({ seasonId = null, teamId = null } = {}, id
 // ── Handler: GET_HALL_OF_FAME ────────────────────────────────────────────────
 
 async function handleGetHallOfFame(payload, id) {
+  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
   // Collect all HOF players from DB (retired + any active HOF)
   const allDBPlayers = await Players.loadAll();
   const hofPlayers = allDBPlayers.filter(p => p.hof === true);
@@ -2345,6 +2357,7 @@ async function handleGetHallOfFame(payload, id) {
       .sort((a, b) => (a.year ?? 0) - (b.year ?? 0))
       .slice(-10);
 
+    const classEntry = meta?.hallOfFame?.index?.[String(p.id)] ?? null;
     return {
       id: p.id,
       name: p.name,
@@ -2361,6 +2374,8 @@ async function handleGetHallOfFame(payload, id) {
       stats: { passYds, rushYds, recYds, passTDs, sacks, gamesPlayed },
       accoladeSummary: { mvps: mvpCount, superBowls: sbCount, proBowls: proCount },
       accoladeTimeline,
+      inductionReasons: classEntry?.reasons ?? p?.hofReasons ?? [],
+      hofScore: classEntry?.score ?? p?.hofScore ?? null,
     };
   }).sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
 
@@ -5503,6 +5518,7 @@ async function handleAdvanceOffseason(payload, id) {
   const agedPlayers = cache.getAllPlayers();
   const { retirements } = evaluateRetirements(agedPlayers);
 
+  const hofClass = [];
   for (const ret of retirements) {
     const player = cache.getPlayer(ret.id);
     if (!player) continue;
@@ -5510,18 +5526,8 @@ async function handleAdvanceOffseason(payload, id) {
     retired.push(ret);
     if (player.teamId != null) recalculateTeamCap(player.teamId);
 
-    // Calculate Hall of Fame induction
-    let isHof = false;
-    if (player.accolades && player.accolades.length > 0) {
-        let score = player.ovr;
-        for (const a of player.accolades) {
-            if (a.type === 'MVP') score += 10;
-            if (a.type === 'SB_MVP') score += 5;
-            if (a.type === 'OPOY' || a.type === 'DPOY') score += 5;
-            if (a.type === 'PRO_BOWL') score += 2;
-        }
-        if (score > 120) isHof = true;
-    }
+    const hofEval = evaluateHallOfFameCandidate(player, Number(meta?.year ?? 2025));
+    const isHof = hofEval.inducted;
 
     // Log news based on retirement type
     if (ret.reason && ret.reason.startsWith('sudden_')) {
@@ -5533,7 +5539,19 @@ async function handleAdvanceOffseason(payload, id) {
       NewsEngine.logNews('RETIREMENT', `END OF AN ERA: ${player.pos} ${player.name} has officially announced their retirement from professional football.`);
     }
 
-    cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: isHof });
+    if (isHof) {
+      const accoladeTrail = Array.isArray(player.accolades) ? [...player.accolades, { type: 'HOF', year: Number(meta?.year ?? 2025), reasons: hofEval.reasons, score: hofEval.score }] : [{ type: 'HOF', year: Number(meta?.year ?? 2025), reasons: hofEval.reasons, score: hofEval.score }];
+      cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: true, hofScore: hofEval.score, hofReasons: hofEval.reasons, accolades: accoladeTrail });
+      hofClass.push({ playerId: player.id, name: player.name, pos: player.pos, score: hofEval.score, reasons: hofEval.reasons });
+    } else {
+      cache.updatePlayer(player.id, { status: 'retired', teamId: null, hof: false });
+    }
+  }
+
+  if (hofClass.length > 0) {
+    const hofMeta = ensureLeagueMemoryMeta(cache.getMeta());
+    const updated = addHallOfFameClass(hofMeta, Number(meta?.year ?? 2025), hofClass);
+    cache.setMeta({ hallOfFame: updated.hallOfFame });
   }
 
   // ── Step 4: Generate news items for chaotic offseason events ──────────────
@@ -5670,7 +5688,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
  */
 async function archiveSeason(seasonId) {
   try {
-    const meta = ensureDynastyMeta(cache.getMeta());
+    let meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
     const teams = cache.getAllTeams();
 
     // 1. Ensure DB is up to date
@@ -5829,18 +5847,38 @@ async function archiveSeason(seasonId) {
 
     await flushDirty();
 
-    const seasonSummary = {
-      id: seasonId,
+    const championSummary = champion ? { id: champion.id, name: champion.name, abbr: champion.abbr, wins: champion.wins ?? null } : null;
+    const runnerUpTeam = champion ? standings.find((s) => Number(s.id) !== Number(champion.id) && (s.wins ?? 0) >= 10) : null;
+    const runnerUpSummary = runnerUpTeam ? { id: runnerUpTeam.id, name: runnerUpTeam.name, abbr: runnerUpTeam.abbr } : null;
+    const standingsRows = standings.map(s => ({
+      id: s.id, name: s.name, abbr: s.abbr, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct, pf: s.pf, pa: s.pa
+    }));
+    const seasonSummary = buildSeasonArchiveSummary({
       year,
-      champion: champion ? { id: champion.id, name: champion.name, abbr: champion.abbr } : null,
-      mvp: awards.mvp,
-      standings: standings.map(s => ({
-          id: s.id, name: s.name, wins: s.wins, losses: s.losses, ties: s.ties, pct: s.pct,
-          pf: s.pf, pa: s.pa
-      })),
-      leaders,
+      seasonId,
+      standings: standingsRows,
       awards,
-    };
+      leaders,
+      champion: championSummary,
+      runnerUp: runnerUpSummary,
+      userTeamId: meta.userTeamId,
+      transactions: await Transactions.bySeason(seasonId).catch(() => []),
+    });
+
+    meta = ensureLeagueMemoryMeta(meta);
+    const historyRows = [...(meta.leagueHistory || []).filter((s) => s?.id !== seasonId), seasonSummary]
+      .sort((a, b) => (a.year ?? 0) - (b.year ?? 0))
+      .slice(-160);
+    let memoryMeta = { ...meta, leagueHistory: historyRows };
+    memoryMeta = updateFranchiseHistory(memoryMeta, seasonSummary, teams);
+    memoryMeta = updateRecordBook(memoryMeta, { seasonStats: populatedStats, allPlayers: cache.getAllPlayers(), year, standings: standingsRows });
+    memoryMeta.seasonStorylines = buildSeasonStorylineSnapshot(memoryMeta, teams, meta.userTeamId);
+    cache.setMeta({
+      leagueHistory: memoryMeta.leagueHistory,
+      franchiseHistoryByTeam: memoryMeta.franchiseHistoryByTeam,
+      recordBook: memoryMeta.recordBook,
+      seasonStorylines: memoryMeta.seasonStorylines,
+    });
 
     await Seasons.save(seasonSummary);
   } catch (error) {
@@ -5934,6 +5972,7 @@ async function handleStartNewSeason(payload, id) {
 // ── Handler: GET_TEAM_PROFILE ─────────────────────────────────────────────────
 
 async function handleGetTeamProfile({ teamId }, id) {
+  const meta = ensureLeagueMemoryMeta(ensureDynastyMeta(cache.getMeta()));
   const numId = Number(teamId);
   const team  = cache.getTeam(numId);
   if (!team) { post(toUI.ERROR, { message: `Team ${teamId} not found` }, id); return; }
@@ -6071,6 +6110,8 @@ async function handleGetTeamProfile({ teamId }, id) {
     .sort((a, b) => b.ovr - a.ovr)
     .slice(0, 12);
 
+  const memFranchise = meta?.franchiseHistoryByTeam?.[String(numId)] ?? null;
+
   post(toUI.TEAM_PROFILE, {
     team: {
       id:          team.id,
@@ -6103,6 +6144,8 @@ async function handleGetTeamProfile({ teamId }, id) {
       bestSeasons,
       worstSeasons,
       hallOfFamers: hofLegends,
+      milestones: memFranchise?.milestones ?? [],
+      droughtYears: memFranchise?.lastChampionshipYear ? Math.max(0, Number(meta?.year ?? 2025) - Number(memFranchise.lastChampionshipYear)) : null,
       franchiseLeaders: {
         passYd: leadersByKey('passYd', 'Pass Yds'),
         rushYd: leadersByKey('rushYd', 'Rush Yds'),

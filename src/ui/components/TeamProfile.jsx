@@ -425,8 +425,21 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
                 />
                 <StatBox label="Div. Titles" value={franchise.divTitles || 0} />
                 <StatBox label="Playoff Apps" value={franchise.playoffAppearances || 0} />
+                <StatBox label="Title Drought" value={franchise.droughtYears != null ? `${franchise.droughtYears}y` : "—"} />
               </div>
             </section>
+            {Array.isArray(franchise.milestones) && franchise.milestones.length > 0 && (
+              <section>
+                <h3 style={sectionHeadingStyle}>Franchise Timeline Milestones</h3>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {franchise.milestones.slice(-8).reverse().map((ms, idx) => (
+                    <div key={`milestone-${idx}`} style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", fontSize: "var(--text-sm)" }}>
+                      <strong>{ms.year}</strong> · {ms.text}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* ── Cap snapshot ── */}
             <section>
