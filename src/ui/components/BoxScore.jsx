@@ -42,8 +42,8 @@ function StatCompareRow({ label, homeValue, awayValue }) {
   );
 }
 
-function PlayerTable({ title, players, cols, onPlayerSelect }) {
-  if (!players.length) return null;
+function PlayerTable({ title, players, cols, onPlayerSelect, emptyText }) {
+  if (!players.length) return (<section className="bs-section"><h4>{title}</h4><div className="bs-empty">{emptyText ?? `No ${title.toLowerCase()} available.`}</div></section>);
   return (
     <section className="bs-section">
       <h4>{title}</h4>
@@ -190,38 +190,38 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               </div>
             </section>
 
-            {expanded && (
-              <>
-                <PlayerTable
-                  title="Passing leaders"
-                  players={topPassers}
-                  cols={[{ key: "passComp", label: "Comp" }, { key: "passAtt", label: "Att" }, { key: "passYd", label: "Yds" }, { key: "passTD", label: "TD" }, { key: "interceptions", label: "INT" }]}
-                  onPlayerSelect={onPlayerSelect}
-                />
-                <PlayerTable
-                  title="Rushing leaders"
-                  players={topRushers}
-                  cols={[{ key: "rushAtt", label: "Att" }, { key: "rushYd", label: "Yds" }, { key: "rushTD", label: "TD" }, { key: "fumblesLost", label: "FUM" }]}
-                  onPlayerSelect={onPlayerSelect}
-                />
-                <PlayerTable
-                  title="Receiving leaders"
-                  players={topReceivers}
-                  cols={[{ key: "targets", label: "Tgt" }, { key: "receptions", label: "Rec" }, { key: "recYd", label: "Yds" }, { key: "recTD", label: "TD" }]}
-                  onPlayerSelect={onPlayerSelect}
-                />
-                <PlayerTable
-                  title="Defensive leaders"
-                  players={topDefenders}
-                  cols={[{ key: "tackles", label: "Tkl" }, { key: "sacks", label: "Sacks" }, { key: "interceptions", label: "INT" }, { key: "passesDefended", label: "PD" }, { key: "forcedFumbles", label: "FF" }]}
-                  onPlayerSelect={onPlayerSelect}
-                />
-              </>
-            )}
-
-            {!!scoring.length && (
-              <section className="bs-section">
-                <h4>Scoring summary</h4>
+            <PlayerTable
+              title="Passing leaders"
+              players={topPassers}
+              cols={[{ key: "passComp", label: "Comp" }, { key: "passAtt", label: "Att" }, { key: "passYd", label: "Yds" }, { key: "passTD", label: "TD" }, { key: "interceptions", label: "INT" }]}
+              onPlayerSelect={onPlayerSelect}
+              emptyText="No passing stats archived for this game."
+            />
+            <PlayerTable
+              title="Rushing leaders"
+              players={topRushers}
+              cols={[{ key: "rushAtt", label: "Att" }, { key: "rushYd", label: "Yds" }, { key: "rushTD", label: "TD" }, { key: "fumblesLost", label: "FUM" }]}
+              onPlayerSelect={onPlayerSelect}
+              emptyText="No rushing stats archived for this game."
+            />
+            <PlayerTable
+              title="Receiving leaders"
+              players={topReceivers}
+              cols={[{ key: "targets", label: "Tgt" }, { key: "receptions", label: "Rec" }, { key: "recYd", label: "Yds" }, { key: "recTD", label: "TD" }]}
+              onPlayerSelect={onPlayerSelect}
+              emptyText="No receiving stats archived for this game."
+            />
+            {topDefenders.length > 0 ? (
+              <PlayerTable
+                title="Defensive leaders"
+                players={topDefenders}
+                cols={[{ key: "tackles", label: "Tkl" }, { key: "sacks", label: "Sacks" }, { key: "interceptions", label: "INT" }, { key: "passesDefended", label: "PD" }, { key: "forcedFumbles", label: "FF" }]}
+                onPlayerSelect={onPlayerSelect}
+              />
+            ) : null}
+            <section className="bs-section">
+              <h4>Scoring summary</h4>
+              {!!scoring.length ? (
                 <div className="bs-list">
                   {scoring.slice(expanded ? 0 : 6).map((item) => (
                     <div key={item.id} className="bs-list-item">
@@ -231,8 +231,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                     </div>
                   ))}
                 </div>
-              </section>
-            )}
+              ) : <div className="bs-empty">No scoring-play log was archived for this matchup.</div>}
+            </section>
 
             <section className="bs-section">
               <h4>Quarter-by-quarter</h4>
@@ -247,16 +247,16 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               </div>
             </section>
 
-            {!!momentumNotes.length && (
-              <section className="bs-section">
+            <section className="bs-section">
                 <h4>Turning points</h4>
+                {!!momentumNotes.length ?
                 <div className="bs-list">
                   {momentumNotes.map((note) => (
                     <div key={note.id} className="bs-list-item"><span>Q{note.quarter}</span><span>{note.text}</span></div>
                   ))}
                 </div>
+              : <div className="bs-empty">No turning point annotations available.</div>}
               </section>
-            )}
 
             {game?.recap && (
               <section className="bs-section">

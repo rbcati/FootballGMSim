@@ -7624,3 +7624,13 @@ details[open] .nav-summary::after {
     font-size: 12px;
   }
 }
+
+
+.bs-empty { font-size: var(--text-xs); color: var(--text-muted); padding: 8px; border: 1px dashed var(--hairline); border-radius: 8px; }
+.trade-workspace .card { overflow: hidden; }
+@media (max-width: 760px) {
+  .bs-section { padding: 10px; }
+  .bs-list-item { padding: 10px; font-size: 13px; }
+  .trade-workspace-nav { top: calc(env(safe-area-inset-top) + 48px) !important; }
+  .trade-asset-row__name { min-width: 0; }
+}

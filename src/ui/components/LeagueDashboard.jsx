@@ -28,6 +28,8 @@ import FreeAgencyHub from "./FreeAgencyHub.jsx";
 import TradeFinder from "./TradeFinder.jsx";
 import GameDetailScreen from "./GameDetailScreen.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
+import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
+import AwardsRecordsScreen from "./AwardsRecordsScreen.jsx";
 import HallOfFame from "./HallOfFame.jsx";
 import HistoryHub from "./HistoryHub.jsx";
 import TradeWorkspace from "./TradeWorkspace.jsx";
@@ -2009,11 +2011,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Trade Finder" && (
           <TabErrorBoundary label="Trade Finder">
-            <TradeFinder
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
+            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialView="Finder" />
           </TabErrorBoundary>
         )}
         {isInitialized && activeTab === "📰 News" && (
@@ -2047,7 +2045,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Team History" && (
           <TabErrorBoundary label="Team History">
-            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} league={league} />
+            <TeamHistoryScreen league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onBack={() => setActiveTab("History Hub")} teamId={selectedTeamId ?? league?.userTeamId} />
           </TabErrorBoundary>
         )}
         {activeTab === "Hall of Fame" && (
@@ -2057,10 +2055,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Awards & Records" && (
           <TabErrorBoundary label="Awards & Records">
-            <div style={{ display: "grid", gap: "var(--space-4)" }}>
-              <AwardRaces actions={actions} onPlayerSelect={setSelectedPlayerId} />
-              <RecordBook league={league} />
-            </div>
+            <AwardsRecordsScreen actions={actions} league={league} onPlayerSelect={setSelectedPlayerId} onBack={() => setActiveTab("History Hub")} />
           </TabErrorBoundary>
         )}
         {activeTab === "Postseason" && (

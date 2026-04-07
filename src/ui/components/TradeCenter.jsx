@@ -255,11 +255,11 @@ function TradePlayerSheet({ player, onClose }) {
 
 // ── Main TradeCenter (drag-and-drop + all original features) ───────────────────
 
-export default function TradeCenter({ league, actions }) {
+export default function TradeCenter({ league, actions, initialTradeContext = null, onTradeContextChange }) {
   const myTeamId = league?.userTeamId;
   const toAssetId = (id) => String(id);
 
-  const [targetId, setTargetId] = useState(null);
+  const [targetId, setTargetId] = useState(initialTradeContext?.partnerTeamId ?? null);
   const [myRoster, setMyRoster] = useState([]);
   const [theirRoster, setTheirRoster] = useState([]);
   const [myTeam, setMyTeam] = useState(null);
@@ -369,6 +369,27 @@ export default function TradeCenter({ league, actions }) {
   };
 
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
+
+
+  useEffect(() => {
+    if (!initialTradeContext) return;
+    if (initialTradeContext.partnerTeamId != null) setTargetId(initialTradeContext.partnerTeamId);
+    if (Array.isArray(initialTradeContext.outgoingPlayerIds)) setOffering(new Set(initialTradeContext.outgoingPlayerIds.map(toAssetId)));
+    if (Array.isArray(initialTradeContext.incomingPlayerIds)) setReceiving(new Set(initialTradeContext.incomingPlayerIds.map(toAssetId)));
+    if (Array.isArray(initialTradeContext.outgoingPickIds) && initialTradeContext.outgoingPickIds.length) {
+      setMyPicks(initialTradeContext.outgoingPickIds.map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+    }
+  }, [initialTradeContext, myAvailablePicks]);
+
+  useEffect(() => {
+    onTradeContextChange?.({
+      partnerTeamId: targetId,
+      outgoingPlayerIds: [...offering].map((id) => Number(id)),
+      outgoingPickIds: myPicks.map((p) => p.id),
+      incomingPlayerIds: [...receiving].map((id) => Number(id)),
+      helperReason: tradeResult?.reason ?? '',
+    });
+  }, [targetId, offering, myPicks, receiving, tradeResult, onTradeContextChange]);
 
   useEffect(() => {
     if (!showSavedToast) return undefined;
@@ -532,6 +553,7 @@ export default function TradeCenter({ league, actions }) {
         <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveMyTeam?.abbr ?? "You"} · {formatNeedsLine(myNeedsSummary)}</div>
           {liveTheirTeam && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveTheirTeam?.abbr ?? "Them"} · {formatNeedsLine(theirNeedsSummary)}</div>}
+          {liveTheirTeam && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Direction: {buildTeamIntelligence(liveTheirTeam, { week: league?.week ?? 1 }).direction} · Preferred package based on needs/age curve.</div>}
         </div>
       </div>
       {counterOfferId && (
