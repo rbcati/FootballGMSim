@@ -7,6 +7,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import ResponsivePlayerAvatar from "./ResponsivePlayerAvatar.jsx";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { ScreenHeader, EmptyState } from "./ScreenSystem.jsx";
 
 export default function HallOfFame({ onPlayerSelect, actions }) {
   const [players, setPlayers] = useState(null);
@@ -64,29 +65,20 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
 
   if (!players || players.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-4">
-        <div className="text-5xl">&#127942;</div>
-        <div className="text-[color:var(--text-muted)] text-center max-w-sm">
-          The Hall of Fame is empty. Legendary players will be inducted here
-          when they retire with outstanding careers.
-        </div>
+      <div className="app-screen-stack">
+        <ScreenHeader title="Hall of Fame" subtitle="Career achievement archive and notable induction classes." />
+        <EmptyState title="No inductees yet." body="Legendary players will be inducted here once great careers conclude." />
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-black text-[color:var(--text)] m-0">Hall of Fame</h2>
-          <Badge variant="secondary">
-            {filteredPlayers.length}/{players.length} {players.length === 1 ? "Legend" : "Legends"}
-          </Badge>
-        </div>
-        <div className="text-xs text-[color:var(--text-muted)]">
-          Explore inductions, teams, awards, and peak greatness.
-        </div>
-      </div>
+    <div className="space-y-4 app-screen-stack">
+      <ScreenHeader
+        title="Hall of Fame"
+        subtitle="Explore inductions, teams, awards, and peak greatness."
+        metadata={[{ label: "Legends", value: `${filteredPlayers.length}/${players.length}` }]}
+      />
 
       <Card className="card-premium">
         <CardContent className="p-3 sm:p-4">

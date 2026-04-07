@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { filterAwardRows } from '../utils/historyDestinations.js';
+import { ScreenHeader, SectionCard, StickySubnav, EmptyState } from './ScreenSystem.jsx';
+import { getStickyTopOffset } from '../utils/screenSystem.js';
 
 const AWARD_KEYS = ['mvp', 'opoy', 'dpoy', 'roty'];
 
@@ -28,25 +30,23 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
   const recordRows = useMemo(() => Object.entries(records?.singleSeason ?? {}).map(([k, rec]) => ({ key: k, ...rec })), [records]);
 
   return (
-    <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <div className="card" style={{ padding: 'var(--space-4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h3 style={{ margin: 0 }}>Awards & Records</h3>
-          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Award history, league records, and fast browsing controls.</div>
-        </div>
-        <button className="btn" onClick={onBack}>Back to History Hub</button>
-      </div>
+    <div className="app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('compact') }}>
+      <ScreenHeader
+        title="Awards & Records"
+        subtitle="Award history, league records, and fast browsing controls."
+        onBack={onBack}
+        backLabel="History Hub"
+      />
 
-      <div className="card" style={{ padding: 'var(--space-3)', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <StickySubnav title="Filter">
         <button className={`standings-tab ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>All awards</button>
         <button className={`standings-tab ${scope === 'recent' ? 'active' : ''}`} onClick={() => setScope('recent')}>Recent awards</button>
-      </div>
+      </StickySubnav>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
-        <div className="card" style={{ padding: 'var(--space-4)' }}>
-          <h4 style={{ marginTop: 0 }}>Award history</h4>
+        <SectionCard title="Award history">
           <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-            {filteredAwardRows.map((row, idx) => (
+            {filteredAwardRows.length === 0 ? <EmptyState title="No award rows available." body="Advance the league to generate award history entries." /> : filteredAwardRows.map((row, idx) => (
               <div key={`${row.season}-${row.award}-${idx}`} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{row.season} · {row.award}</div>
                 {row.playerId != null ? <button className="btn-link" onClick={() => onPlayerSelect?.(row.playerId)}>{row.name}</button> : <strong>{row.name}</strong>}
@@ -54,12 +54,11 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
 
-        <div className="card" style={{ padding: 'var(--space-4)' }}>
-          <h4 style={{ marginTop: 0 }}>League records</h4>
+        <SectionCard title="League records">
           <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-            {recordRows.map((rec) => (
+            {recordRows.length === 0 ? <EmptyState title="No records yet." body="Record tables appear once this save archives statistical leaders." /> : recordRows.map((rec) => (
               <div key={rec.key} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rec.key}</div>
                 <div style={{ fontWeight: 700 }}>{Number(rec.value ?? 0).toLocaleString()}</div>
@@ -67,13 +66,12 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
               </div>
             ))}
           </div>
-        </div>
+        </SectionCard>
       </div>
 
-      <div className="card" style={{ padding: 'var(--space-4)' }}>
-        <h4 style={{ marginTop: 0 }}>Franchise records (current user team)</h4>
+      <SectionCard title="Franchise records (current user team)">
         <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{league?.teams?.find((t) => t.id === league?.userTeamId)?.name ?? 'Your team'} records are included in league record output when available in this save.</div>
-      </div>
+      </SectionCard>
     </div>
   );
 }

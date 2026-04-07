@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { EmptyState } from "./ScreenSystem.jsx";
 import {
   deriveLeaders,
   deriveMomentumNotes,
@@ -43,7 +44,7 @@ function StatCompareRow({ label, homeValue, awayValue }) {
 }
 
 function PlayerTable({ title, players, cols, onPlayerSelect, emptyText }) {
-  if (!players.length) return (<section className="bs-section"><h4>{title}</h4><div className="bs-empty">{emptyText ?? `No ${title.toLowerCase()} available.`}</div></section>);
+  if (!players.length) return (<section className="bs-section"><h4>{title}</h4><EmptyState title={`${title} unavailable`} body={emptyText ?? `No ${title.toLowerCase()} available.`} /></section>);
   return (
     <section className="bs-section">
       <h4>{title}</h4>
@@ -148,8 +149,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
           </div>
         </div>
 
-        {loading && <div className="box-score-container">Loading box score…</div>}
-        {!loading && error && !hasAnyPayload && <div className="box-score-container">{unavailableMessage}</div>}
+        {loading && <div className="box-score-container"><EmptyState title="Loading box score…" body="Pulling archived game detail and postgame context." /></div>}
+        {!loading && error && !hasAnyPayload && <div className="box-score-container"><EmptyState title="Game archive unavailable" body={unavailableMessage} /></div>}
 
         {!loading && hasAnyPayload && game && (
           <div className="box-score-container">
@@ -231,7 +232,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                     </div>
                   ))}
                 </div>
-              ) : <div className="bs-empty">No scoring-play log was archived for this matchup.</div>}
+              ) : <EmptyState title="No scoring log available" body="Scoring-play logs were not archived for this matchup." />}
             </section>
 
             <section className="bs-section">
@@ -255,7 +256,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                     <div key={note.id} className="bs-list-item"><span>Q{note.quarter}</span><span>{note.text}</span></div>
                   ))}
                 </div>
-              : <div className="bs-empty">No turning point annotations available.</div>}
+              : <EmptyState title="No turning points available" body="Turning-point annotations are unavailable for this game." />}
               </section>
 
             {game?.recap && (

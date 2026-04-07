@@ -1,5 +1,5 @@
 export const NAV_LABELS = Object.freeze({
-  weekly: "Hub",
+  weekly: "Weekly",
   roster: "Roster",
   standings: "League",
   trades: "Trades",

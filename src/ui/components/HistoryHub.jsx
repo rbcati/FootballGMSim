@@ -1,4 +1,5 @@
 import React from 'react';
+import { ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 
 const DESTINATIONS = [
   { key: 'History', title: 'League History', body: 'Season timelines, champions, and franchise arcs.' },
@@ -9,14 +10,13 @@ const DESTINATIONS = [
 
 export default function HistoryHub({ onNavigate }) {
   return (
-    <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <div className="card" style={{ padding: 'var(--space-4)' }}>
-        <h3 style={{ marginTop: 0 }}>History & Legacy</h3>
-        <p style={{ marginBottom: 0, color: 'var(--text-muted)' }}>
-          Dedicated archive routes make history systems first-class destinations instead of hidden secondary tabs.
-        </p>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 'var(--space-3)' }}>
+    <div className="app-screen-stack">
+      <ScreenHeader
+        title="History Hub"
+        subtitle="League archives, team legacy paths, and record books in one destination."
+      />
+      <SectionCard title="Choose a history destination" subtitle="Consistent archive routes with clear destination naming.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 'var(--space-3)' }}>
         {DESTINATIONS.map((item) => (
           <button
             key={item.key}
@@ -28,7 +28,8 @@ export default function HistoryHub({ onNavigate }) {
             <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{item.body}</div>
           </button>
         ))}
+        </div>
+      </SectionCard>
       </div>
-    </div>
   );
 }

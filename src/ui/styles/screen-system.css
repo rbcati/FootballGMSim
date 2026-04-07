@@ -1,0 +1,55 @@
+.app-screen-stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.app-screen-header {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 90%, transparent), var(--surface));
+  display: grid;
+  gap: var(--space-2);
+}
+.app-screen-header__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.app-screen-header__eyebrow {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.app-screen-header__title { margin: 0; font-size: clamp(1.05rem, 3.6vw, 1.45rem); }
+.app-screen-header__subtitle { margin: 0; color: var(--text-muted); font-size: var(--text-sm); }
+.app-screen-header__meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.app-screen-meta-pill { border: 1px solid var(--hairline); border-radius: 999px; padding: 2px 8px; font-size: var(--text-xs); color: var(--text-muted); }
+
+.app-section-card { padding: var(--space-3) var(--space-4); display: grid; gap: var(--space-2); }
+.app-section-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.app-section-card__title { margin: 0; font-size: var(--text-base); }
+.app-section-card__subtitle { margin: 2px 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.app-section-card__body { display: grid; gap: var(--space-2); }
+
+.app-empty-state { border: 1px dashed var(--hairline); border-radius: var(--radius-md); padding: var(--space-3); color: var(--text-muted); }
+.app-empty-state p { margin: 4px 0 0; font-size: var(--text-sm); }
+
+.app-sticky-subnav {
+  position: sticky;
+  top: var(--screen-sticky-top, calc(env(safe-area-inset-top) + 56px));
+  z-index: 12;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--hairline);
+  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+}
+.app-sticky-subnav__title { font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-bottom: 6px; }
+.app-sticky-subnav__content { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+
+@media (max-width: 768px) {
+  .app-screen-stack { gap: var(--space-2); }
+  .app-section-card { padding: var(--space-3); }
+}

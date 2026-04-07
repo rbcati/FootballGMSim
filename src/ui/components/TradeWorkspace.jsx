@@ -5,6 +5,8 @@ import TradeBlockPanel from './TradeBlockPanel.jsx';
 import { computeTeamNeedsSummary } from '../utils/marketSignals.js';
 import { mergeTradeWorkspaceState } from '../utils/tradeWorkspaceState.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
+import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
+import { getStickyTopOffset } from '../utils/screenSystem.js';
 
 const VIEWS = ['Finder', 'Builder', 'Block', 'Summary'];
 
@@ -30,15 +32,23 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const partnerIntel = useMemo(() => partnerTeam ? buildTeamIntelligence(partnerTeam, { week: league?.week ?? 1 }) : null, [partnerTeam, league?.week]);
 
   return (
-    <div className="trade-workspace" style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <div className="card trade-workspace-nav" style={{ padding: 'var(--space-3)', position: 'sticky', top: 'calc(env(safe-area-inset-top) + 56px)', zIndex: 5 }}>
-        <div style={{ fontWeight: 800, marginBottom: 8 }}>Trade Center Workspace</div>
+    <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
+      <ScreenHeader
+        title="Trade Workspace"
+        subtitle="Finder, Builder, block, and summary with one shared trade context."
+        metadata={[
+          { label: 'Record', value: `${myTeam?.wins ?? 0}-${myTeam?.losses ?? 0}` },
+          { label: 'Cap', value: `$${Number(myTeam?.capRoom ?? 0).toFixed(1)}M` },
+          { label: 'Partner', value: partnerTeam?.abbr ?? 'None' },
+        ]}
+      />
+      <StickySubnav title="Trade views">
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {VIEWS.map((v) => (
             <button key={v} className={`standings-tab${view === v ? ' active' : ''}`} onClick={() => setView(v)}>{v}</button>
           ))}
         </div>
-      </div>
+      </StickySubnav>
 
       {view === 'Finder' && (
         <TradeFinder
@@ -61,17 +71,15 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       )}
 
       {view === 'Block' && (
-        <div className="card" style={{ padding: 'var(--space-4)' }}>
-          <h3 style={{ marginTop: 0 }}>Trading Block</h3>
+        <SectionCard title="Trading Block" subtitle="Mark who you are willing to move before entering builder negotiations.">
           <TradeBlockPanel roster={myTeam?.roster ?? []} onRemove={(playerId) => actions?.toggleTradeBlock?.(playerId, myTeam?.id)} />
-        </div>
+        </SectionCard>
       )}
 
       {view === 'Summary' && (
-        <div className="card" style={{ padding: 'var(--space-4)', display: 'grid', gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Front Office Summary</h3>
+        <SectionCard title="Front Office Summary" subtitle="Live trade context from Finder + Builder.">
           <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-            Live trade context from Finder + Builder.
+            Decision support for your current package and partner.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))', gap: 10 }}>
             <div className="stat-box"><div className="stat-label">Record</div><div className="stat-value-large">{myTeam?.wins ?? 0}-{myTeam?.losses ?? 0}</div></div>
@@ -95,7 +103,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
               <div style={{ fontSize: 'var(--text-xs)' }}>Future needs: {(partnerNeeds?.needSoon?.slice(0, 3) ?? []).map((n) => n.pos).join(', ') || 'No future needs flagged'}.</div>
             </div>
           )}
-        </div>
+        </SectionCard>
       )}
     </div>
   );

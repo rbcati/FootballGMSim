@@ -75,7 +75,7 @@ export default function MobileNav({ activeTab, onTabChange, league }) {
 
       <nav className={`mobile-nav-panel ${menuOpen ? 'open' : ''}`} aria-label="Main navigation">
         <div className="mobile-nav-header">
-          <h2 className="mobile-nav-title">Franchise Command</h2>
+          <h2 className="mobile-nav-title">Franchise HQ</h2>
           {league && <p className="mobile-nav-subtitle">{league.year ?? league.seasonId} · {league.phase}</p>}
         </div>
 
