@@ -441,6 +441,13 @@ export function useWorker() {
     /** Wipe the save and restart. */
     reset: ()                    => send(toWorker.RESET_LEAGUE),
 
+    /** Update league rules/settings. */
+    updateSettings: (settings)   => send(toWorker.UPDATE_SETTINGS, { settings }),
+
+    /** Commissioner mode controls. */
+    toggleCommissionerMode: (enabled) => send(toWorker.TOGGLE_COMMISSIONER_MODE, { enabled }),
+    applyCommissionerActions: (actionsList) => send(toWorker.APPLY_COMMISSIONER_ACTIONS, { actions: actionsList }),
+
     /** Set which team the human manages. */
     setUserTeam: (teamId)        => send(toWorker.SET_USER_TEAM, { teamId }),
 

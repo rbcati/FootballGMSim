@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useMemo, useCallback } from "react";
+import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings } from "../../core/leagueSettings.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -23,33 +24,7 @@ const SECTION_ICONS = {
   financialSettings: "💰",
 };
 
-const DEFAULT_SETTINGS = {
-  salaryCap: 225,
-  rosterSize: 53,
-  playoffTeams: 14,
-  scheduleLength: 17,
-  draftRounds: 7,
-  prospectPoolSize: 450,
-  lotteryEnabled: true,
-  injuryFrequency: 50,
-  tradeRealism: 50,
-  aiAggressiveness: 50,
-  revenueSharing: true,
-  luxuryTaxRate: 20,
-  capFloor: 180,
-};
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function deepGet(obj, path, fallback) {
-  const keys = path.split(".");
-  let val = obj;
-  for (const k of keys) {
-    if (val == null) return fallback;
-    val = val[k];
-  }
-  return val ?? fallback;
-}
+const DEFAULT_SETTINGS = DEFAULT_LEAGUE_SETTINGS;
 
 // ── Collapsible Section ──────────────────────────────────────────────────────
 
@@ -450,21 +425,7 @@ export default function GodMode({ league, actions }) {
   const [changes, setChanges] = useState({});
 
   // ── Local settings state (initialized from league or defaults) ──────────
-  const [settings, setSettings] = useState(() => ({
-    salaryCap: deepGet(league, "settings.salaryCap", DEFAULT_SETTINGS.salaryCap),
-    rosterSize: deepGet(league, "settings.rosterSize", DEFAULT_SETTINGS.rosterSize),
-    playoffTeams: deepGet(league, "settings.playoffTeams", DEFAULT_SETTINGS.playoffTeams),
-    scheduleLength: deepGet(league, "settings.scheduleLength", DEFAULT_SETTINGS.scheduleLength),
-    draftRounds: deepGet(league, "settings.draftRounds", DEFAULT_SETTINGS.draftRounds),
-    prospectPoolSize: deepGet(league, "settings.prospectPoolSize", DEFAULT_SETTINGS.prospectPoolSize),
-    lotteryEnabled: deepGet(league, "settings.lotteryEnabled", DEFAULT_SETTINGS.lotteryEnabled),
-    injuryFrequency: deepGet(league, "settings.injuryFrequency", DEFAULT_SETTINGS.injuryFrequency),
-    tradeRealism: deepGet(league, "settings.tradeRealism", DEFAULT_SETTINGS.tradeRealism),
-    aiAggressiveness: deepGet(league, "settings.aiAggressiveness", DEFAULT_SETTINGS.aiAggressiveness),
-    revenueSharing: deepGet(league, "settings.revenueSharing", DEFAULT_SETTINGS.revenueSharing),
-    luxuryTaxRate: deepGet(league, "settings.luxuryTaxRate", DEFAULT_SETTINGS.luxuryTaxRate),
-    capFloor: deepGet(league, "settings.capFloor", DEFAULT_SETTINGS.capFloor),
-  }));
+  const [settings, setSettings] = useState(() => normalizeLeagueSettings(league?.settings ?? {}));
 
   const updateSetting = useCallback((key, value) => {
     setSettings(prev => ({ ...prev, [key]: value }));
@@ -472,10 +433,16 @@ export default function GodMode({ league, actions }) {
   }, []);
 
   const handleApply = useCallback(() => {
-    if (actions?.applyGodMode) {
-      actions.applyGodMode({ settings, changes });
-    } else if (actions?.updateSettings) {
+    if (actions?.updateSettings) {
       actions.updateSettings(settings);
+    }
+    const commissionerActions = Object.values(changes)
+      .filter(c => c.playerId != null || c.teamId != null)
+      .map(c => c.playerId != null
+        ? ({ entityType: "player", entityId: c.playerId, field: c.field, value: c.value })
+        : ({ entityType: "team", entityId: c.teamId, field: c.field, value: c.value }));
+    if (commissionerActions.length > 0 && actions?.applyCommissionerActions) {
+      actions.applyCommissionerActions(commissionerActions);
     }
     setChanges({});
   }, [actions, settings, changes]);
@@ -490,12 +457,11 @@ export default function GodMode({ league, actions }) {
   }, []);
 
   const handleEnableGodMode = useCallback(() => {
-    if (actions?.toggleGodMode) actions.toggleGodMode(true);
-    else if (actions?.enableGodMode) actions.enableGodMode();
+    if (actions?.toggleCommissionerMode) actions.toggleCommissionerMode(true);
   }, [actions]);
 
   // ── Locked gate ────────────────────────────────────────────────────────
-  if (!league.godMode) {
+  if (!league.commissionerMode && !league.godMode) {
     return <LockedScreen onEnable={handleEnableGodMode} />;
   }
 
@@ -513,7 +479,7 @@ export default function GodMode({ league, actions }) {
         <span style={{ fontSize: 20 }}>⚠️</span>
         <div>
           <div style={{ fontWeight: 700, fontSize: 14, color: "var(--danger)" }}>
-            God Mode Active
+            Commissioner Mode Active
           </div>
           <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
             Changes cannot be undone. Achievements may be disabled.
@@ -527,7 +493,7 @@ export default function GodMode({ league, actions }) {
         marginBottom: 20, flexWrap: "wrap", gap: 10,
       }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, color: "var(--text)", margin: 0 }}>
-          God Mode
+          Commissioner Mode
         </h1>
         <div style={{ display: "flex", gap: 8 }}>
           <button className="btn" onClick={handleReset} style={{
@@ -567,7 +533,7 @@ export default function GodMode({ league, actions }) {
             min={4} max={32} />
         </SettingRow>
         <SettingRow label="Schedule Length">
-          <NumberInput value={settings.scheduleLength} onChange={v => updateSetting("scheduleLength", v)}
+          <NumberInput value={settings.seasonLength} onChange={v => updateSetting("seasonLength", v)}
             suffix=" games" min={10} max={24} />
         </SettingRow>
       </Section>
@@ -605,12 +571,12 @@ export default function GodMode({ league, actions }) {
             onChange={v => updateSetting("injuryFrequency", v)} suffix="%" />
         </SettingRow>
         <SettingRow label="Trade Realism">
-          <SliderInput value={settings.tradeRealism}
-            onChange={v => updateSetting("tradeRealism", v)} suffix="%" />
+          <SliderInput value={settings.tradeDifficulty}
+            onChange={v => updateSetting("tradeDifficulty", v)} suffix="%" />
         </SettingRow>
         <SettingRow label="AI Aggressiveness">
-          <SliderInput value={settings.aiAggressiveness}
-            onChange={v => updateSetting("aiAggressiveness", v)} suffix="%" />
+          <SliderInput value={settings.freeAgencyAggressiveness}
+            onChange={v => updateSetting("freeAgencyAggressiveness", v)} suffix="%" />
         </SettingRow>
       </Section>
 
