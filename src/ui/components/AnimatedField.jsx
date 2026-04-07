@@ -121,21 +121,22 @@ function ParticleBurst({ x, y, color, count = 12, active }) {
   const particles = useMemo(() =>
     Array.from({ length: count }, (_, i) => {
       const angle = (i / count) * 2 * Math.PI;
-      const dist = 20 + Math.random() * 30;
-      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist };
+      const dist = 20 + Math.random() * 40;
+      const size = 1.5 + Math.random() * 2.5;
+      return { dx: Math.cos(angle) * dist, dy: Math.sin(angle) * dist + 10, size };
     }), [count] // eslint-disable-line
   );
   return (
     <g>
       {particles.map((p, i) => (
-        <circle key={i} cx={x} cy={y} r="3" fill={color} opacity="0.9">
+        <circle key={i} cx={x} cy={y} r={p.size} fill={color} opacity="0.9">
           <animateTransform
             attributeName="transform" type="translate"
             from="0 0" to={`${p.dx} ${p.dy}`}
             dur="0.6s" fill="freeze"
           />
           <animate attributeName="opacity" from="0.9" to="0" dur="0.6s" fill="freeze" />
-          <animate attributeName="r" from="3" to="1" dur="0.6s" fill="freeze" />
+          <animate attributeName="r" from={p.size} to="0" dur="0.6s" fill="freeze" />
         </circle>
       ))}
     </g>

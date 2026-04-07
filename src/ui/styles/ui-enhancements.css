@@ -2229,7 +2229,7 @@ body {
 .skip-btn,
 .close-game-btn,
 .watch-live-btn {
-  transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), filter 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.15s ease, box-shadow 0.15s ease;
 }
 
 .btn:active,
@@ -2241,9 +2241,9 @@ body {
 .skip-btn:active,
 .close-game-btn:active,
 .watch-live-btn:active {
-  transform: scale(0.96) translateY(1px) !important;
-  filter: brightness(0.95);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  transform: scale(0.95) translateY(2px) !important;
+  filter: brightness(0.9);
+  box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.3) !important;
 }
 
 .btn:hover,
@@ -2255,9 +2255,9 @@ body {
 .skip-btn:hover,
 .close-game-btn:hover,
 .watch-live-btn:hover {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   filter: brightness(1.1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
 }
 
 /* Animations for Field Effects */

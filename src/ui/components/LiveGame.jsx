@@ -668,6 +668,7 @@ export default function LiveGame({
 
   return (
     <div
+      className="fade-in"
       style={{
         background: "var(--surface)",
         border: "1px solid var(--hairline)",
