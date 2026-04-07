@@ -5410,6 +5410,8 @@ async function handleGetTeamProfile({ teamId }, id) {
       capUsed:     team.capUsed     || 0,
       capRoom:     team.capRoom     || 0,
       capTotal:    team.capTotal    || Constants.SALARY_CAP.HARD_CAP,
+      staff:       team.staff ?? null,
+      strategies:  team.strategies ?? null,
     },
     franchise: {
       allTimeWins,

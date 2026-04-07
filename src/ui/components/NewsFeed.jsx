@@ -35,6 +35,12 @@ const CATEGORY_MAP = {
   story_major_result: 'Major game result',
   pregame: 'Game-day framing',
   story_pregame: 'Game-day framing',
+  coaching_carousel: 'Coaching carousel',
+  coaching_transition: 'Coaching transition',
+  coaching_continuity: 'Staff continuity',
+  story_coaching_carousel: 'Coaching carousel',
+  story_coaching_transition: 'Coaching transition',
+  story_coaching_continuity: 'Staff continuity',
 };
 
 function categoryFor(item) {

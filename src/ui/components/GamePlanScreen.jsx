@@ -17,6 +17,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS } from "../../core/strategy.js";
+import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
+import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 
 // ── Local-storage key for game plan sliders ───────────────────────────────────
 const GP_STORAGE_KEY = "footballgm_gameplan_v1";
@@ -270,6 +272,8 @@ const COVERAGE_OPTIONS = [
 export default function GamePlanScreen({ league, actions }) {
   const userTeam   = league?.teams?.find(t => t.id === league.userTeamId);
   const strategies = userTeam?.strategies || {};
+  const teamIntel = buildTeamIntelligence(userTeam, { week: league?.week ?? 1 });
+  const coachingIdentity = deriveTeamCoachingIdentity(userTeam, { intel: teamIntel, direction: teamIntel?.direction });
 
   // ── Scheme state (synced with worker) ──
   const [offScheme, setOffScheme] = useState(strategies.offSchemeId || "WEST_COAST");
@@ -352,6 +356,17 @@ export default function GamePlanScreen({ league, actions }) {
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", paddingBottom: 100 }}>
+      {coachingIdentity && (
+        <div style={{ marginBottom: 12, border: "1px solid var(--hairline)", borderRadius: 10, background: "var(--surface)", padding: 10 }}>
+          <div style={{ fontSize: "0.68rem", fontWeight: 800, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.8px" }}>Coaching & Scheme Identity</div>
+          <div style={{ fontSize: "0.82rem", color: "var(--text)", marginTop: 4 }}>
+            {coachingIdentity.philosophy.offSchemeName} / {coachingIdentity.philosophy.defSchemeName} · {coachingIdentity.seat.label}
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "var(--text-muted)", marginTop: 3 }}>
+            {coachingIdentity.rosterFitNotes?.[0] ?? "Current scheme fit is tied to roster composition and staff philosophy."}
+          </div>
+        </div>
+      )}
 
       {/* ── Header ── */}
       <div style={{

@@ -1,4 +1,5 @@
 import { deriveWeeklyHonors, derivePregameAngles } from './gamePresentation.js';
+import { buildCoachingNarrativeCards } from './coachingIdentity.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -290,6 +291,11 @@ export function buildStorylineCards(league) {
       detail: `${away?.abbr ?? 'AWY'} ${honors.topScoringGame.awayScore}-${honors.topScoringGame.homeScore} ${home?.abbr ?? 'HME'} set the scoring pace.`,
       tab: 'Schedule',
     });
+  }
+
+  const coachingCards = buildCoachingNarrativeCards(league, { limit: 3 });
+  for (const card of coachingCards) {
+    cards.push(card);
   }
 
   if (next) {
