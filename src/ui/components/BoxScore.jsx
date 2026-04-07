@@ -128,21 +128,28 @@ export default function BoxScore({ gameId, actions, league, onClose, onPlayerSel
   const topReceivers = playerRows.filter((p) => (p.stats?.receptions ?? 0) > 0).sort((a, b) => (b.stats?.recYd ?? 0) - (a.stats?.recYd ?? 0)).slice(0, 6);
   const topDefenders = playerRows.filter((p) => (p.stats?.tackles ?? 0) + (p.stats?.sacks ?? 0) + (p.stats?.interceptions ?? 0) > 0).sort((a, b) => ((b.stats?.tackles ?? 0) + (b.stats?.sacks ?? 0) * 2 + (b.stats?.interceptions ?? 0) * 2) - ((a.stats?.tackles ?? 0) + (a.stats?.sacks ?? 0) * 2 + (a.stats?.interceptions ?? 0) * 2)).slice(0, 8);
 
+  const headerWeek = game?.week ?? gameId?.match(/_w(\d+)_/)?.[1] ?? "—";
+  const headerSeason = game?.seasonId ?? gameId?.split('_w')?.[0] ?? "";
+  const hasAnyPayload = Boolean(game && (
+    game.homeScore != null || game.awayScore != null || game.stats || game.recap || game.quarterScores
+  ));
+  const unavailableMessage = "No archived postgame data was found for this matchup.";
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content modal-large box-score-modal" onClick={(e) => e.stopPropagation()}>
         <div className="box-score-header bs-header-sticky">
           <div>
-            <div className="muted" style={{ fontSize: 12 }}>Week {game?.week ?? "—"} · {game?.seasonId ?? ""}</div>
-            <h2 style={{ margin: "2px 0 8px" }}>Game Center Recap</h2>
+            <div className="muted" style={{ fontSize: 12 }}>Week {headerWeek} · {headerSeason}</div>
+            <h2 style={{ margin: "2px 0 8px" }}>Final Game Book</h2>
           </div>
           <button className="btn" onClick={onClose}>Close</button>
         </div>
 
         {loading && <div className="box-score-container">Loading box score…</div>}
-        {!loading && error && <div className="box-score-container">{error}</div>}
+        {!loading && error && !hasAnyPayload && <div className="box-score-container">{unavailableMessage}</div>}
 
-        {!loading && !error && game && (
+        {!loading && hasAnyPayload && game && (
           <div className="box-score-container">
             <section className="bs-score-hero">
               <div>
@@ -246,6 +253,13 @@ export default function BoxScore({ gameId, actions, league, onClose, onPlayerSel
                     <div key={note.id} className="bs-list-item"><span>Q{note.quarter}</span><span>{note.text}</span></div>
                   ))}
                 </div>
+              </section>
+            )}
+
+            {game?.recap && (
+              <section className="bs-section">
+                <h4>Recap</h4>
+                <div className="bs-list-item">{game.recap}</div>
               </section>
             )}
           </div>

@@ -76,6 +76,7 @@ import {
 } from "../utils/gamePresentation.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
+import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -874,9 +875,7 @@ function ScheduleTab({
           })();
           const handleCardClick = isClickable
             ? () =>
-                onGameSelect(
-                  `${seasonId}_w${selectedWeek}_${game.home}_${game.away}`,
-                )
+                onGameSelect(resolveCompletedGameId(game, { seasonId, week: selectedWeek }))
             : undefined;
           const clickableCardProps = getClickableCardProps({
             onOpen: handleCardClick,
@@ -1656,9 +1655,7 @@ export default function LeagueDashboard({
                         const aId = toId(g.awayId);
                         const hA = teamById[hId]?.abbr ?? "?";
                         const aA = teamById[aId]?.abbr ?? "?";
-                        const gId = league.seasonId
-                          ? `${league.seasonId}_w${prevWeek}_${hId}_${aId}`
-                          : null;
+                        const gId = resolveCompletedGameId(g, { seasonId: league.seasonId, week: prevWeek });
                         const interactiveProps = getClickableCardProps({
                           onOpen: gId ? () => setSelectedGameId(gId) : undefined,
                           disabled: !gId,
@@ -1988,11 +1985,19 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Trades" && (
           <TabErrorBoundary label="Trades">
-            <TradeCenter
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-            />
+            <div style={{ display: "grid", gap: "var(--space-4)" }}>
+              <TradeFinder
+                league={league}
+                actions={actions}
+                onPlayerSelect={setSelectedPlayerId}
+                onOpenTradeCenter={() => setActiveTab("Trades")}
+              />
+              <TradeCenter
+                league={league}
+                actions={actions}
+                onPlayerSelect={setSelectedPlayerId}
+              />
+            </div>
           </TabErrorBoundary>
         )}
         {activeTab === "Trade Finder" && (
