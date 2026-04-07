@@ -1,5 +1,6 @@
 import { deriveWeeklyHonors, derivePregameAngles } from './gamePresentation.js';
 import { buildCoachingNarrativeCards } from './coachingIdentity.js';
+import { buildTeamIntelligence } from './teamIntelligence.js';
 
 function safeNum(v, d = 0) {
   const n = Number(v);
@@ -144,6 +145,30 @@ export function buildStorylineCards(league) {
   if (!league || !user) return cards;
   const streak = computeStreak(user?.recentResults ?? []);
   const teamMap = getTeamMap(league);
+
+  const userIntel = buildTeamIntelligence(user, { week: safeNum(league?.week, 1) });
+  const chemistry = userIntel?.chemistry;
+  if (chemistry?.state === 'Strong locker room') {
+    cards.push({
+      id: `chemistry-strong-${league.week ?? 1}`,
+      category: 'culture',
+      priority: 73,
+      tone: 'success',
+      title: 'Locker room is driving weekly consistency',
+      detail: chemistry.reasons?.[0] ?? 'Strong culture is reinforcing on-field focus.',
+      tab: 'Roster',
+    });
+  } else if (chemistry?.state === 'Uneasy' || chemistry?.state === 'Fragmented') {
+    cards.push({
+      id: `chemistry-tense-${league.week ?? 1}`,
+      category: 'culture',
+      priority: chemistry.state === 'Fragmented' ? 92 : 80,
+      tone: chemistry.state === 'Fragmented' ? 'danger' : 'warning',
+      title: chemistry.state === 'Fragmented' ? 'Media questions whether the room is losing belief' : 'Locker room entering uneasy stretch',
+      detail: chemistry.reasons?.[0] ?? 'Role and morale tension are becoming visible.',
+      tab: 'Roster',
+    });
+  }
 
   if (streak?.count >= 3) {
     cards.push({

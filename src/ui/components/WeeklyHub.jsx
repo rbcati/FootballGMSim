@@ -84,6 +84,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
   const topOfferIdentity = topOffer ? getOfferIdentity(topOffer) : null;
+  const chemistry = weeklyContext?.chemistry ?? weeklyContext?.teamIntel?.chemistry;
   const topPriorities = weeklyContext.topPriorities?.length
     ? weeklyContext.topPriorities
     : [{ tone: "ok", level: "recommendation", label: "All Clear", detail: "No urgent blockers right now.", why: "You can safely advance once prep is set.", tab: "Weekly Hub" }];
@@ -289,6 +290,24 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           </CardContent>
         </Card>
       </section>
+
+
+      {chemistry && (
+        <section className="weekly-section">
+          <h3 className="weekly-section__title">Locker-room pulse</h3>
+          <Card variant="secondary">
+            <CardContent className="text-sm text-[color:var(--text-muted)]" style={{ display: "grid", gap: 8, paddingTop: 16 }}>
+              <strong style={{ color: "var(--text)" }}>{chemistry.state} · Score {chemistry.score}</strong>
+              {(chemistry.reasons ?? []).slice(0, 2).map((reason, idx) => <div key={`chem-r-${idx}`}>• {reason}</div>)}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(chemistry.leaders ?? []).slice(0, 2).map((leader) => <Badge key={`chem-lead-${leader.playerId}`} variant="outline">{leader.role}: {leader.name}</Badge>)}
+                {(chemistry.tensions ?? []).slice(0, 1).map((t) => <Badge key={`chem-ten-${t.text}`} variant="secondary">Tension: {t.pos}</Badge>)}
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+
 
       <section className="weekly-section">
         <h3 className="weekly-section__title">Pressure points</h3>

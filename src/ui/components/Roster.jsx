@@ -45,6 +45,7 @@ import {
 } from "../utils/contractInsights.js";
 import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
+import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -505,6 +506,7 @@ function RosterTable({
   onPlayerSelect,
   phase,
   schemeName,
+  chemistry,
 }) {
   const isResignPhase = phase === "offseason_resign";
   // Default to EXPIRING view in resign phase
@@ -897,6 +899,7 @@ function RosterTable({
                 const morale = player.morale ?? 75;
                 const fitCol = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
+                const moraleContext = describePlayerMoraleContext(player, { team, chemistry, week });
                 const expiringDecision = isResignPhase && isExpiring
                   ? classifyExpiringDecision(player, { team, roster: players, direction: teamDirection })
                   : null;
@@ -1093,6 +1096,11 @@ function RosterTable({
                         >
                           {morale}
                         </span>
+                        {moraleContext?.reasons?.[0] && (
+                          <span style={{ fontSize: 9, color: "var(--text-subtle)", maxWidth: 120, lineHeight: 1.2, textAlign: "center" }}>
+                            {moraleContext.reasons[0]}
+                          </span>
+                        )}
                       </div>
                     </TableCell>
                     {/* Compare checkbox */}
@@ -2113,6 +2121,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
     [team, players, league?.week],
   );
   const directionGuidance = useMemo(() => buildDirectionGuidance(teamIntel), [teamIntel]);
+  const chemistry = teamIntel?.chemistry;
 
   return (
     <div>
@@ -2240,8 +2249,10 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
             {teamIntel.needsNow.slice(0, 2).map((n) => <Badge key={`need-${n.pos}`} variant="destructive">Need now: {n.pos}</Badge>)}
             {teamIntel.surplus.slice(0, 2).map((s) => <Badge key={`sur-${s.pos}`} variant="secondary">Surplus: {s.pos}</Badge>)}
+            {chemistry?.state ? <Badge variant={chemistry.state === "Fragmented" ? "destructive" : "outline"}>Chemistry: {chemistry.state}</Badge> : null}
           </div>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{directionGuidance}</div>
+          {chemistry?.reasons?.[0] ? <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• {chemistry.reasons[0]}</div> : null}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
             <span>{teamIntel.expiringStarters} expiring starter{teamIntel.expiringStarters === 1 ? "" : "s"}</span>
             {teamIntel.agingCoreWarnings[0] ? <span>{teamIntel.agingCoreWarnings[0]}</span> : null}
@@ -2312,6 +2323,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
             if (playerId != null) setSelectedPlayerId(playerId);
           }}
           phase={league?.phase}
+          chemistry={chemistry}
           schemeName={(() => {
             const ut = league?.teams?.find(t => t.id === league.userTeamId);
             const offId = ut?.strategies?.offSchemeId;

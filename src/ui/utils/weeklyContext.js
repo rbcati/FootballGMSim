@@ -116,6 +116,7 @@ export function evaluateWeeklyContext(league) {
   const intel = buildTeamIntelligence(userTeam, { week });
   const contractMarket = league?.contractMarket ?? null;
   const storylineCards = buildStorylineCards(league);
+  const chemistry = intel?.chemistry;
 
   const ownerContext = evaluateOwnerMessageContext({
     league,
@@ -153,6 +154,19 @@ export function evaluateWeeklyContext(league) {
   if (expiring.length >= 5 && week >= 8) {
     urgent.push({ tone: 'info', level: 'recommendation', rank: 58, label: 'Contract Clock', detail: `${expiring.length} rotation players are expiring.`, why: 'Delays increase free-agency replacement pressure.', tab: 'Financials' });
   }
+
+  if (chemistry?.state === 'Fragmented' || chemistry?.state === 'Uneasy') {
+    urgent.push({
+      tone: chemistry.state === 'Fragmented' ? 'danger' : 'warning',
+      level: 'recommendation',
+      rank: chemistry.state === 'Fragmented' ? 84 : 66,
+      label: 'Locker-room chemistry',
+      detail: `${chemistry.state}: ${chemistry.reasons?.[0] ?? 'morale and role tension need attention'}.`,
+      why: 'Chemistry influences consistency, free-agency appeal, and media pressure.',
+      tab: 'Roster',
+    });
+  }
+
   if ((intel?.warnings ?? []).length > 0) {
     urgent.push({
       tone: 'warning',
@@ -261,6 +275,7 @@ export function evaluateWeeklyContext(league) {
     },
     storylineCards,
     pressure,
+    chemistry,
     pressurePoints: {
       ownerApproval: safeNum(league?.ownerApproval ?? league?.ownerMood, null),
       ownerState: pressure?.owner?.state ?? null,

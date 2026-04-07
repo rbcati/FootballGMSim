@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { deriveTeamCapSnapshot, formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
+import { buildTeamChemistrySummary } from "../utils/teamChemistry.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
   const expiringCount = players.filter((p) => toFiniteNumber(p.contract?.years ?? p.years, 0) <= 1).length;
   const teamIntel = useMemo(() => buildTeamIntelligence({ ...team, roster: players }, { week: 10 }), [team, players]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity({ ...team, roster: players }, { intel: teamIntel, direction: teamIntel?.direction }), [team, players, teamIntel]);
+  const chemistry = useMemo(() => buildTeamChemistrySummary({ ...team, roster: players }, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [team, players, data?.meta?.week, teamIntel]);
 
   return (
     <>
@@ -334,6 +336,29 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
                 </div>
               </section>
             )}
+
+
+            <section>
+              <h3 style={sectionHeadingStyle}>Locker-Room Chemistry</h3>
+              <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", background: "var(--surface-strong)", display: "grid", gap: 6 }}>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <Badge variant={chemistry?.state === "Fragmented" ? "destructive" : chemistry?.state === "Uneasy" ? "secondary" : "outline"}>{chemistry?.state ?? "Stable"}</Badge>
+                  <Badge variant="outline">Score {chemistry?.score ?? "—"}</Badge>
+                  <Badge variant="secondary">Morale avg {chemistry?.moraleAverage ?? "—"}</Badge>
+                </div>
+                {(chemistry?.reasons ?? []).slice(0, 2).map((reason, idx) => (
+                  <div key={`chem-r-${idx}`} style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>• {reason}</div>
+                ))}
+                {(chemistry?.leaders ?? []).slice(0, 3).map((leader) => (
+                  <div key={`leader-${leader.playerId}`} style={{ fontSize: "var(--text-sm)" }}>
+                    <strong>{leader.name}</strong> ({leader.pos}) · {leader.role}
+                  </div>
+                ))}
+                {(chemistry?.tensions ?? []).slice(0, 2).map((tension, idx) => (
+                  <div key={`ten-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>⚠ {tension.text}</div>
+                ))}
+              </div>
+            </section>
 
             {/* ── Franchise Stats ── */}
             <section>

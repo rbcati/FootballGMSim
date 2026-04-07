@@ -186,6 +186,7 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
   const pressure = useMemo(() => deriveFranchisePressure(league), [league]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction: teamIntel?.direction }), [userTeam, pressure, teamIntel]);
+  const chemistry = teamIntel?.chemistry;
   const carouselCards = useMemo(() => buildCoachingNarrativeCards(league, { limit: 3 }), [league]);
 
   return (
@@ -301,6 +302,26 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{pressure.narrativeNotes.media}</div>
             </div>
             <div style={{ fontSize: 12, color: "var(--text-subtle)" }}>{pressure.consequence}</div>
+          </div>
+        </AnimatedSection>
+      )}
+
+
+      {chemistry && (
+        <AnimatedSection delay={760} title="Locker-room chemistry" icon="🧠">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>{chemistry.state}</strong> ({chemistry.score}/100)
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>{chemistry.reasons?.[0] ?? "Chemistry stayed stable through the season."}</div>
+            </div>
+            {(chemistry.leaders ?? []).slice(0, 2).map((leader) => (
+              <div key={`srec-leader-${leader.playerId}`} style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                • {leader.role}: <strong style={{ color: "var(--text)" }}>{leader.name}</strong>
+              </div>
+            ))}
+            {(chemistry.tensions ?? []).slice(0, 1).map((t) => (
+              <div key={`srec-ten-${t.text}`} style={{ fontSize: 12, color: "var(--warning)" }}>⚠ {t.text}</div>
+            ))}
           </div>
         </AnimatedSection>
       )}

@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { buildNarrativeNewsItems } from '../utils/leagueNarratives.js';
 import { deriveFranchisePressure } from '../utils/pressureModel.js';
+import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 
 const priorityColor = {
   high: '#ef4444',
@@ -41,6 +42,7 @@ const CATEGORY_MAP = {
   story_coaching_carousel: 'Coaching carousel',
   story_coaching_transition: 'Coaching transition',
   story_coaching_continuity: 'Staff continuity',
+  culture: 'Locker-room chemistry',
 };
 
 function categoryFor(item) {
@@ -70,7 +72,10 @@ export default function NewsFeed({ league, mode = 'full' }) {
       .slice(0, 70);
     return merged;
   }, [allNews, league]);
-  const pressure = useMemo(() => deriveFranchisePressure(league), [league]);
+  const userTeam = league?.teams?.find((t) => t.id === userTeamId) ?? null;
+  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
+  const chemistry = teamIntel?.chemistry;
+  const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel }), [league, teamIntel]);
 
   const latestFive = useMemo(() => mergedNews.slice(0, 5), [mergedNews]);
 
@@ -126,6 +131,11 @@ export default function NewsFeed({ league, mode = 'full' }) {
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             Media: <strong style={{ color: 'var(--text)' }}>{pressure.media.state}</strong> · {pressure.narrativeNotes.media}
           </div>
+          {chemistry?.state ? (
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Locker room: <strong style={{ color: 'var(--text)' }}>{chemistry.state}</strong> · {chemistry.reasons?.[0] ?? 'Chemistry signals are steady.'}
+            </div>
+          ) : null}
         </div>
       )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
