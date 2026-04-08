@@ -133,6 +133,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
 
   const headerWeek = game?.week ?? gameId?.match(/_w(\d+)_/)?.[1] ?? "—";
   const headerSeason = game?.seasonId ?? gameId?.split('_w')?.[0] ?? "";
+  const archiveQuality = game?.archiveQuality ?? (game?.stats?.playLogs?.length ? "full" : (game?.stats || game?.summary || game?.recap ? "partial" : "missing"));
   const hasAnyPayload = Boolean(game && (
     game.homeScore != null || game.awayScore != null || game.stats || game.recap || game.quarterScores
   ));
@@ -167,6 +168,15 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 <div className="bs-record">{homeTeam.wins ?? 0}-{homeTeam.losses ?? 0}{homeTeam.ties ? `-${homeTeam.ties}` : ""}</div>
               </div>
             </section>
+            {archiveQuality !== "full" && (
+              <section className="bs-section" style={{ marginTop: 4 }}>
+                <div className="bs-list-item" style={{ borderColor: "var(--warning)", color: "var(--text-muted)" }}>
+                  {archiveQuality === "partial"
+                    ? "Partial archive: final score and key summary data are available, but full drive/play detail was not stored."
+                    : "Archive missing: only limited matchup context could be recovered for this game."}
+                </div>
+              </section>
+            )}
 
             <section className="bs-section">
               <div className="bs-section-header">

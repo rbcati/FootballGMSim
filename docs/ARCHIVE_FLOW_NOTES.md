@@ -15,7 +15,8 @@ All UI surfaces should resolve completed game links through `resolveCompletedGam
 `GET_BOX_SCORE` now resolves in this order:
 1. hot in-memory week cache,
 2. direct IndexedDB lookup by canonical id,
-3. deterministic legacy fallback by parsing canonical id and matching season/week/home/away (with string/number season compatibility).
+3. deterministic legacy fallback by parsing canonical id and matching season/week/home/away (with string/number season compatibility),
+4. schedule-row reconstruction fallback (final score + matchup metadata) when no archived blob exists.
 
 ## Legacy save handling
 
@@ -25,3 +26,10 @@ This keeps legacy schedules linkable without inventing data or adding non-determ
 ## Partial archives
 
 If a game has only partial archived payload (e.g. score + recap, but sparse stats), Box Score renders available sections and only shows section-level empty states where detail is missing.
+
+Archive quality is now tagged as:
+- `full`: play-by-play and box payload present,
+- `partial`: final + recap/summary (or reconstructed schedule fallback),
+- `missing`: no recoverable archived payload.
+
+Schedule recap rows and completed-game cards surface this quality state so users are not shown fake “full box score” affordances.

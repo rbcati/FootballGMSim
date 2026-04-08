@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveQuarterScores, deriveScoringSummary } from './boxScorePresentation.js';
+import { deriveLeaders, deriveQuarterScores, deriveScoringSummary } from './boxScorePresentation.js';
 
 describe('box score presentation fallback', () => {
   it('builds quarter scores from logs when quarterScores missing', () => {
@@ -20,5 +20,17 @@ describe('box score presentation fallback', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].teamAbbr).toBe('BUF');
     expect(rows[0].type).toBe('TD');
+  });
+
+  it('uses archived summary leaders when detailed box stats are missing', () => {
+    const leaders = deriveLeaders({
+      summary: {
+        leaders: {
+          pass: { name: 'A. QB', pos: 'QB', stats: { passYd: 278, passTD: 2 } },
+        },
+      },
+    });
+    expect(leaders.pass?.name).toBe('A. QB');
+    expect(leaders.pass?.stats?.passYd).toBe(278);
   });
 });
