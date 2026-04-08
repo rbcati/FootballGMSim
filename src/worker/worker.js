@@ -451,6 +451,46 @@ function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) 
   };
 }
 
+function deriveArchivedLeadersFromBoxScore(boxScore = {}) {
+  const rows = [];
+  for (const side of ['home', 'away']) {
+    const sideRows = boxScore?.[side] ?? {};
+    for (const [playerId, row] of Object.entries(sideRows)) {
+      rows.push({ playerId, name: row?.name ?? 'Unknown', pos: row?.pos ?? '—', stats: row?.stats ?? {} });
+    }
+  }
+  const sortBy = (key, min = 1) => rows
+    .filter((r) => Number(r?.stats?.[key] ?? 0) >= min)
+    .sort((a, b) => Number(b?.stats?.[key] ?? 0) - Number(a?.stats?.[key] ?? 0))[0] ?? null;
+  const defense = rows
+    .filter((r) => (Number(r?.stats?.tackles ?? 0) + Number(r?.stats?.sacks ?? 0) * 2 + Number(r?.stats?.interceptions ?? 0) * 2) > 0)
+    .sort((a, b) => ((Number(b?.stats?.tackles ?? 0) + Number(b?.stats?.sacks ?? 0) * 2 + Number(b?.stats?.interceptions ?? 0) * 2)
+      - (Number(a?.stats?.tackles ?? 0) + Number(a?.stats?.sacks ?? 0) * 2 + Number(a?.stats?.interceptions ?? 0) * 2)))[0] ?? null;
+
+  return {
+    passing: sortBy('passYd', 20),
+    rushing: sortBy('rushYd', 10),
+    receiving: sortBy('recYd', 10),
+    defense,
+  };
+}
+
+function deriveArchivedDrives(playLogs = []) {
+  if (!Array.isArray(playLogs) || playLogs.length === 0) return null;
+  const scoringPlays = playLogs
+    .filter((log) => log?.isScore || log?.isTouchdown || /touchdown|field goal|safety/i.test(String(log?.text ?? '')))
+    .map((log, idx) => ({
+      id: `drv_${idx}`,
+      quarter: Number(log?.quarter ?? 1),
+      clock: log?.clock ?? log?.time ?? '',
+      teamId: Number(log?.teamId ?? log?.scoringTeamId ?? log?.team?.id ?? null),
+      result: log?.isTouchdown ? 'Touchdown' : /field goal/i.test(String(log?.text ?? '')) ? 'Field Goal' : /safety/i.test(String(log?.text ?? '')) ? 'Safety' : 'Score',
+      summary: log?.text ?? 'Scoring drive',
+      points: Number(log?.points ?? 0),
+    }));
+  return scoringPlays.length ? scoringPlays : null;
+}
+
 function allPlayersOnTeam(teamId, playerIds = []) {
   return (playerIds ?? []).every((pid) => {
     const player = cache.getPlayer(Number(pid));
@@ -2116,13 +2156,19 @@ function applyGameResultToCache(result, week, seasonId) {
     awayId: aId,
     homeScore: scoreHome,
     awayScore: scoreAway,
-    stats: result.boxScore ?? null,
+    stats: result.boxScore
+      ? {
+        ...result.boxScore,
+        playLogs: Array.isArray(result.playLogs) ? result.playLogs : [],
+      }
+      : null,
     recap: result.recap ?? null,
-    drives: result.drives ?? null,
+    drives: result.drives ?? deriveArchivedDrives(result.playLogs ?? []) ?? null,
     quarterScores: result.quarterScores ?? result.linescore ?? null,
     summary: {
       winnerId: scoreHome >= scoreAway ? hId : aId,
       margin,
+      leaders: deriveArchivedLeadersFromBoxScore(result.boxScore ?? {}),
       storyline: result.storyline ?? (margin <= 3
         ? 'One-score finish with late-game pressure on every possession.'
         : margin >= 17

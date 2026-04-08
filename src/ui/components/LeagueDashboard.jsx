@@ -787,10 +787,45 @@ function ScheduleTab({
     return true;
   });
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
+  const weekRecapItems = useMemo(() => (
+    games
+      .filter((game) => game?.played)
+      .map((game) => {
+        const home = teamById[game.home] ?? { abbr: "HOME" };
+        const away = teamById[game.away] ?? { abbr: "AWAY" };
+        const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+        const story = derivePostgameStory({ league, game, week: selectedWeek });
+        return { game, home, away, gameId, story };
+      })
+      .slice(0, 8)
+  ), [games, league, seasonId, selectedWeek, teamById]);
 
   return (
     <div>
       {/* Week selector */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "var(--space-3)",
+          marginBottom: "var(--space-3)",
+          position: "sticky",
+          top: "calc(var(--screen-sticky-top, 0px) + 8px)",
+          zIndex: 3,
+          background: "var(--surface)",
+          border: "1px solid var(--hairline)",
+          borderRadius: "var(--radius-md)",
+          padding: "var(--space-2) var(--space-3)",
+        }}
+      >
+        <strong style={{ fontSize: "var(--text-xs)", letterSpacing: ".4px", textTransform: "uppercase", color: "var(--text-muted)" }}>Filters</strong>
+        <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
+          <Button size="sm" variant={viewMode === "completed_only" ? "default" : "outline"} onClick={() => setViewMode("completed_only")}>Completed</Button>
+          <Button size="sm" variant={viewMode === "upcoming_only" ? "default" : "outline"} onClick={() => setViewMode("upcoming_only")}>Upcoming</Button>
+          <Button size="sm" variant={viewMode === "all_week" ? "default" : "outline"} onClick={() => setViewMode("all_week")}>All</Button>
+        </div>
+      </div>
       <div
         style={{
           display: "flex",
@@ -834,6 +869,30 @@ function ScheduleTab({
           </select>
         )}
       </div>
+
+      {weekRecapItems.length > 0 && (
+        <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <strong>Week {selectedWeek} recap</strong>
+            <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Scores + storylines at a glance</span>
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {weekRecapItems.map(({ game, away, home, gameId, story }, idx) => (
+              <button
+                key={`${game.home}-${game.away}-${idx}`}
+                className={`btn-link ${gameId ? "" : "disabled"}`}
+                onClick={gameId ? () => onGameSelect?.(gameId) : undefined}
+                style={{ textAlign: "left", fontSize: "var(--text-sm)", color: "var(--text-muted)" }}
+                title={gameId ? "View box score" : "Archive unavailable"}
+              >
+                <strong style={{ color: "var(--text)" }}>{away.abbr} {game.awayScore} @ {home.abbr} {game.homeScore}</strong>
+                {" · "}
+                {story?.headline ?? "Final"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Game cards grid */}
       <div
