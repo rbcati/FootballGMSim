@@ -2040,12 +2040,24 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
-            <LeagueHistory onPlayerSelect={setSelectedPlayerId} actions={actions} league={league} />
+            <LeagueHistory
+              onPlayerSelect={setSelectedPlayerId}
+              actions={actions}
+              league={league}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "History")}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Team History" && (
           <TabErrorBoundary label="Team History">
-            <TeamHistoryScreen league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onBack={() => setActiveTab("History Hub")} teamId={selectedTeamId ?? league?.userTeamId} />
+            <TeamHistoryScreen
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+              onBack={() => setActiveTab("History Hub")}
+              teamId={selectedTeamId ?? league?.userTeamId}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "Team History")}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Hall of Fame" && (
