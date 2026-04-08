@@ -50,6 +50,7 @@ import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
 import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
+import { resolveCompletedGameId } from './utils/gameResultIdentity.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -662,7 +663,10 @@ function AppContent() {
           {authoritativeResults.map((r, i) => {
             const homeWin = r.homeScore > r.awayScore;
             const isUserGame = r.homeId === league.userTeamId || r.awayId === league.userTeamId;
-            const gameId = league?.seasonId ? `${league.seasonId}_w${lastSimWeek ?? Math.max(1, (league.week ?? 1) - 1)}_${r.homeId}_${r.awayId}` : null;
+            const gameId = resolveCompletedGameId(r, {
+              seasonId: league?.seasonId,
+              week: lastSimWeek ?? Math.max(1, (league?.week ?? 1) - 1),
+            });
             return (
               <button
                 key={i}

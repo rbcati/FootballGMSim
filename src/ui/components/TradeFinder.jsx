@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,6 +6,7 @@ import { computeTeamNeedsSummary } from '../utils/marketSignals.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { rankTradePartners, playerAssetValue, pickAssetValue, buildCounterAdjustment } from '../utils/tradeFinder.js';
 import { normalizeManagement, CONTRACT_PLAN_LABELS, TRADE_STATUS_LABELS } from '../utils/playerManagement.js';
+import { buildAskOfferOutcome } from '../utils/tradeFinderOffers.js';
 
 function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
@@ -41,6 +42,28 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
   const [outgoingPicks, setOutgoingPicks] = useState(workspace?.outgoingPickIds ?? []);
   const [incomingPlayers, setIncomingPlayers] = useState(workspace?.incomingPlayerIds ?? []);
   const [helperReason, setHelperReason] = useState(workspace?.helperReason ?? '');
+  const [helperContext, setHelperContext] = useState(workspace?.helperContext ?? null);
+
+  useEffect(() => {
+    if (workspace?.partnerTeamId !== undefined && Number(workspace?.partnerTeamId) !== Number(selectedPartnerId)) {
+      setSelectedPartnerId(workspace?.partnerTeamId ?? null);
+    }
+    if (Array.isArray(workspace?.outgoingPlayerIds) && JSON.stringify(workspace.outgoingPlayerIds) !== JSON.stringify(outgoingPlayers)) {
+      setOutgoingPlayers(workspace.outgoingPlayerIds);
+    }
+    if (Array.isArray(workspace?.outgoingPickIds) && JSON.stringify(workspace.outgoingPickIds) !== JSON.stringify(outgoingPicks)) {
+      setOutgoingPicks(workspace.outgoingPickIds);
+    }
+    if (Array.isArray(workspace?.incomingPlayerIds) && JSON.stringify(workspace.incomingPlayerIds) !== JSON.stringify(incomingPlayers)) {
+      setIncomingPlayers(workspace.incomingPlayerIds);
+    }
+    if ((workspace?.helperReason ?? '') !== helperReason) {
+      setHelperReason(workspace?.helperReason ?? '');
+    }
+    if ((workspace?.helperContext ?? null) !== helperContext) {
+      setHelperContext(workspace?.helperContext ?? null);
+    }
+  }, [workspace]);
 
   useEffect(() => {
     onWorkspaceChange?.({
@@ -49,8 +72,9 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
       outgoingPickIds: outgoingPicks,
       incomingPlayerIds: incomingPlayers,
       helperReason,
+      helperContext,
     });
-  }, [selectedPartnerId, outgoingPlayers, outgoingPicks, incomingPlayers, helperReason, onWorkspaceChange]);
+  }, [selectedPartnerId, outgoingPlayers, outgoingPicks, incomingPlayers, helperReason, helperContext, onWorkspaceChange]);
 
   const userRoster = useMemo(() => [...(userTeam?.roster ?? [])].sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0),), [userTeam]);
   const userPicks = useMemo(() => [...(userTeam?.picks ?? [])].sort((a, b) => Number(a.round ?? 7) - Number(b.round ?? 7)).slice(0, 8), [userTeam]);
@@ -77,28 +101,25 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
   const outgoingValue = selectedOutgoingPlayers.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0)
     + selectedOutgoingPicks.reduce((sum, p) => sum + pickAssetValue(p, { week, direction: 'balanced' }), 0);
 
-  const askWhatTheyOffer = () => {
-    if (!selectedPartner) return;
-    const partnerIntel = teamsWithIntel.find((t) => Number(t.id) === Number(selectedPartner.id))?.teamIntel ?? {};
-    const needNow = (partnerIntel?.needsNow ?? [])[0]?.pos ?? null;
-    const direction = partnerIntel?.direction ?? 'balanced';
-    const candidates = [...(selectedPartner.roster ?? [])]
-      .filter((p) => (p.ovr ?? 0) >= 64)
-      .filter((p) => {
-        const m = normalizeManagement(p);
-        return m.tradeStatus !== 'untouchable' && m.tradeStatus !== 'not_available';
-      })
-      .sort((a, b) => {
-        const aNeed = needNow && String(a?.pos).toUpperCase() === String(needNow).toUpperCase() ? -40 : 0;
-        const bNeed = needNow && String(b?.pos).toUpperCase() === String(needNow).toUpperCase() ? -40 : 0;
-        return Math.abs(playerAssetValue(a, { direction: 'balanced' }) - outgoingValue) + aNeed - (Math.abs(playerAssetValue(b, { direction: 'balanced' }) - outgoingValue) + bNeed);
-      });
-    const candidate = candidates[0];
-    if (candidate) {
-      setIncomingPlayers([candidate.id]);
-      setHelperReason(`${selectedPartner.abbr} counters with ${candidate.name}: aligns with ${direction} direction and current need at ${needNow ?? 'best-value position'}.`);
+  const askWhatTheyOffer = useCallback((partnerId = selectedPartnerId) => {
+    const partner = teams.find((t) => Number(t.id) === Number(partnerId));
+    if (!partner) {
+      setHelperReason('Select a partner team before requesting an offer.');
+      setHelperContext({ status: 'error', reasons: ['No trade partner selected.'] });
+      return;
     }
-  };
+    const partnerIntel = teamsWithIntel.find((t) => Number(t.id) === Number(partner.id))?.teamIntel ?? {};
+    const outcome = buildAskOfferOutcome({ partnerTeam: partner, partnerIntel, outgoingValue });
+    setSelectedPartnerId(partner.id);
+    setIncomingPlayers(outcome.incomingPlayerIds ?? []);
+    setHelperReason(outcome.helperReason);
+    setHelperContext({
+      status: outcome.status,
+      partnerId: partner.id,
+      offerPlayerId: outcome?.context?.candidateId ?? null,
+      reasons: outcome.reasons ?? [],
+    });
+  }, [selectedPartnerId, teams, teamsWithIntel, outgoingValue]);
 
   const makeDealWork = () => {
     if (!selectedPartner) return;
@@ -159,13 +180,29 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
               <div style={{ fontSize: 12 }}>{prefLabel[row.preference]}. {row.reasons[0] ?? 'Contextual fit available after selecting package.'}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                 <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); onOpenTradeCenter?.(); }}>Open in Builder</Button>
-                <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); askWhatTheyOffer(); }}>Ask what they would offer</Button>
+                <Button className="btn" onClick={() => askWhatTheyOffer(row.teamId)}>Ask what they would offer</Button>
                 <Button className="btn" onClick={() => { setSelectedPartnerId(row.teamId); makeDealWork(); }}>Make this deal work</Button>
               </div>
             </div>
           ))}
         </CardContent>
       </Card>
+
+      {helperContext && (
+        <Card className="card-premium">
+          <CardHeader><CardTitle>Offer response</CardTitle></CardHeader>
+          <CardContent style={{ display: 'grid', gap: 8 }}>
+            <div style={{ fontSize: 12, color: helperContext.status === 'ok' ? 'var(--text)' : 'var(--warning)' }}>{helperReason}</div>
+            <ul style={{ margin: 0, paddingLeft: 16, display: 'grid', gap: 4, color: 'var(--text-muted)', fontSize: 12 }}>
+              {(helperContext.reasons ?? []).map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button className="btn btn-primary" onClick={() => onOpenTradeCenter?.()}>Open in Builder</Button>
+              <Button className="btn" onClick={() => askWhatTheyOffer(helperContext.partnerId)}>Refresh offer</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {selectedPartner && (
         <Card className="card-premium">

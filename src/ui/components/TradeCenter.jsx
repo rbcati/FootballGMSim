@@ -4,7 +4,7 @@
  * All original helpers preserved + drag-and-drop + real-time cap/value
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import PlayerCard from "./PlayerCard.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -278,6 +278,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const [previewPlayer, setPreviewPlayer] = useState(null);
   const [showSavedToast, setShowSavedToast] = useState(false);
   const incomingOffers = useMemo(() => Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [], [league?.incomingTradeOffers]);
+  const lastAppliedSeedRef = useRef(null);
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
@@ -374,10 +375,19 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
   useEffect(() => {
     if (!initialTradeContext) return;
-    if (initialTradeContext.partnerTeamId != null) setTargetId(initialTradeContext.partnerTeamId);
+    const seedSignature = JSON.stringify({
+      partnerTeamId: initialTradeContext.partnerTeamId ?? null,
+      outgoingPlayerIds: Array.isArray(initialTradeContext.outgoingPlayerIds) ? initialTradeContext.outgoingPlayerIds : [],
+      outgoingPickIds: Array.isArray(initialTradeContext.outgoingPickIds) ? initialTradeContext.outgoingPickIds : [],
+      incomingPlayerIds: Array.isArray(initialTradeContext.incomingPlayerIds) ? initialTradeContext.incomingPlayerIds : [],
+    });
+    if (lastAppliedSeedRef.current === seedSignature) return;
+    lastAppliedSeedRef.current = seedSignature;
+
+    if (initialTradeContext.partnerTeamId != null) setTargetId(Number(initialTradeContext.partnerTeamId));
     if (Array.isArray(initialTradeContext.outgoingPlayerIds)) setOffering(new Set(initialTradeContext.outgoingPlayerIds.map(toAssetId)));
     if (Array.isArray(initialTradeContext.incomingPlayerIds)) setReceiving(new Set(initialTradeContext.incomingPlayerIds.map(toAssetId)));
-    if (Array.isArray(initialTradeContext.outgoingPickIds) && initialTradeContext.outgoingPickIds.length) {
+    if (Array.isArray(initialTradeContext.outgoingPickIds)) {
       setMyPicks(initialTradeContext.outgoingPickIds.map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
     }
   }, [initialTradeContext, myAvailablePicks]);

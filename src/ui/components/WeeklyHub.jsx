@@ -10,6 +10,7 @@ import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/trade
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildNeedsAttentionItems, buildPrimaryAction, buildTeamSnapshot, getDefaultExpandedSections } from "../utils/weeklyHubLayout.js";
+import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { ScreenHeader } from "./ScreenSystem.jsx";
 import { buildHeaderMetadata } from "../utils/screenSystem.js";
@@ -98,7 +99,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
       return g?.played && (homeId === league?.userTeamId || awayId === league?.userTeamId);
     });
     if (!userGame) return null;
-    return `${league.seasonId}_w${targetWeek}_${normalizeTeamId(userGame.home)}_${normalizeTeamId(userGame.away)}`;
+    return resolveCompletedGameId(userGame, { seasonId: league.seasonId, week: targetWeek });
   }, [league]);
 
   if (!league || !user || !weeklyContext) return null;

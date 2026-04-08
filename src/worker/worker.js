@@ -2013,6 +2013,9 @@ function applyGameResultToCache(result, week, seasonId) {
         g => Number(g.home) === hId && Number(g.away) === aId
       );
       if (game) {
+        game.gameId = buildCanonicalGameId({ seasonId, week, homeId: hId, awayId: aId });
+        game.seasonId = seasonId;
+        game.week = Number(week);
         game.homeScore = scoreHome;
         game.awayScore = scoreAway;
       } else {
@@ -2637,7 +2640,13 @@ async function handleGetBoxScore({ gameId }, id) {
       if (parsed) {
         const [, seasonKey, weekValue, homeValue, awayValue] = parsed;
         const possible = (await Games.bySeason(seasonKey)) ?? [];
-        game = possible.find((g) => Number(g?.week) === Number(weekValue) && Number(g?.homeId) === Number(homeValue) && Number(g?.awayId) === Number(awayValue)) ?? null;
+        game = possible.find((g) =>
+          Number(g?.week) === Number(weekValue)
+          && (
+            (Number(g?.homeId) === Number(homeValue) && Number(g?.awayId) === Number(awayValue))
+            || (Number(g?.homeId) === Number(awayValue) && Number(g?.awayId) === Number(homeValue))
+          ),
+        ) ?? null;
       }
     }
 
@@ -2664,6 +2673,9 @@ async function handleGetBoxScore({ gameId }, id) {
         awayName:  awayTeam?.name ?? '?',
         awayAbbr:  awayTeam?.abbr ?? '???',
         stats:     game.stats ?? null,
+        recap:     game.recap ?? null,
+        quarterScores: game.quarterScores ?? null,
+        drives: game.drives ?? null,
       },
     }, id);
   } catch (err) {

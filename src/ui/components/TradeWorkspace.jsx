@@ -18,6 +18,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
     outgoingPickIds: [],
     incomingPlayerIds: [],
     helperReason: '',
+    helperContext: null,
   });
 
   const myTeam = useMemo(
