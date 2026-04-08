@@ -731,6 +731,8 @@ function ScheduleTab({
   onPlayerSelect,
 }) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+  const [viewMode, setViewMode] = useState("my_team");
+  const [selectedTeamId, setSelectedTeamId] = useState(userTeamId);
 
   const teamById = useMemo(() => {
     const map = {};
@@ -775,6 +777,15 @@ function ScheduleTab({
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData = schedule?.weeks?.find((w) => w.week === selectedWeek);
   const games = weekData?.games ?? [];
+  const filteredGames = games.filter((game) => {
+    const homeId = Number(game?.home?.id ?? game?.home);
+    const awayId = Number(game?.away?.id ?? game?.away);
+    if (viewMode === "my_team") return homeId === Number(userTeamId) || awayId === Number(userTeamId);
+    if (viewMode === "selected_team") return homeId === Number(selectedTeamId) || awayId === Number(selectedTeamId);
+    if (viewMode === "completed_only") return !!game?.played;
+    if (viewMode === "upcoming_only") return !game?.played;
+    return true;
+  });
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
 
   return (
@@ -810,6 +821,18 @@ function ScheduleTab({
             </button>
           ))}
         </div>
+        <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ minHeight: 34 }}>
+          <option value="my_team">My team schedule</option>
+          <option value="selected_team">Selected team</option>
+          <option value="all_week">All games this week</option>
+          <option value="completed_only">Completed only</option>
+          <option value="upcoming_only">Upcoming only</option>
+        </select>
+        {viewMode === "selected_team" && (
+          <select value={selectedTeamId ?? ""} onChange={(e) => setSelectedTeamId(Number(e.target.value))} style={{ minHeight: 34 }}>
+            {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Game cards grid */}
@@ -845,7 +868,7 @@ function ScheduleTab({
             </div>
           </div>
         )}
-        {games.map((game, idx) => {
+        {filteredGames.map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
             abbr: "???",
@@ -866,7 +889,8 @@ function ScheduleTab({
             !game.played &&
             nextGameStakes > 50 &&
             selectedWeek === currentWeek;
-          const isClickable = game.played && onGameSelect && seasonId;
+          const resolvedGameId = game.played ? resolveCompletedGameId(game, { seasonId, week: selectedWeek }) : null;
+          const isClickable = Boolean(game.played && onGameSelect && resolvedGameId);
           const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
           const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
           const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
@@ -883,7 +907,7 @@ function ScheduleTab({
           })();
           const handleCardClick = isClickable
             ? () =>
-                onGameSelect(resolveCompletedGameId(game, { seasonId, week: selectedWeek }))
+                onGameSelect(resolvedGameId)
             : undefined;
           const clickableCardProps = getClickableCardProps({
             onOpen: handleCardClick,
@@ -957,6 +981,9 @@ function ScheduleTab({
                   {game.played ? "Final" : "Scheduled"}
                 </span>
               </div>
+              {game.played && !resolvedGameId && (
+                <div style={{ fontSize: 12, color: "var(--warning)" }}>Final score available; archive ID missing in this save.</div>
+              )}
 
               {/* Final score display */}
               {game.played && game.homeScore !== undefined && (

@@ -17,11 +17,12 @@ function readMeta(slotNum) {
 export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, onNew }) {
   const [editing, setEditing] = useState(null);
   const [value, setValue] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const slots = useMemo(() => SLOT_KEYS.map((key, idx) => {
     const slotNum = idx + 1;
     return { key, slotNum, meta: readMeta(slotNum) };
-  }), []);
+  }), [refreshKey, activeSlot]);
 
   const persistName = (slotNum) => {
     const existing = readMeta(slotNum) ?? {};
@@ -74,7 +75,12 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
                   <div className="save-slot-v2__actions">
                     <Button onClick={() => onLoad?.(slot.key)}>Enter Franchise</Button>
                     <Button variant="secondary" onClick={() => onSave?.(slot.key)}>Save Here</Button>
-                    <Button variant="destructive" onClick={() => window.confirm('Delete this slot?') && onDelete?.(slot.key)}>Delete</Button>
+                    <Button variant="destructive" onClick={() => {
+                      if (!window.confirm('Delete this slot? This clears all franchise data in this slot.')) return;
+                      localStorage.removeItem(`footballgm_slot_${slot.slotNum}_meta`);
+                      onDelete?.(slot.key);
+                      setRefreshKey((k) => k + 1);
+                    }}>Delete</Button>
                   </div>
                 </>
               )}
