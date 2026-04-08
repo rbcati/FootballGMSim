@@ -5,6 +5,7 @@ export function mergeTradeWorkspaceState(prev, patch) {
     outgoingPickIds: Array.isArray(patch?.outgoingPickIds) ? patch.outgoingPickIds : (prev?.outgoingPickIds ?? []),
     incomingPlayerIds: Array.isArray(patch?.incomingPlayerIds) ? patch.incomingPlayerIds : (prev?.incomingPlayerIds ?? []),
     helperReason: patch?.helperReason ?? prev?.helperReason ?? '',
+    helperContext: patch?.helperContext ?? prev?.helperContext ?? null,
   };
 }
 

@@ -8,10 +8,19 @@ describe('trade workspace shared state', () => {
   });
 
   it('keeps previous values when patch omits fields', () => {
-    const prev = { partnerTeamId: 9, outgoingPlayerIds: [1], outgoingPickIds: [2], incomingPlayerIds: [8], helperReason: 'x' };
+    const prev = { partnerTeamId: 9, outgoingPlayerIds: [1], outgoingPickIds: [2], incomingPlayerIds: [8], helperReason: 'x', helperContext: { status: 'ok' } };
     const next = mergeTradeWorkspaceState(prev, { helperReason: 'updated' });
     expect(next.partnerTeamId).toBe(9);
     expect(next.outgoingPlayerIds).toEqual([1]);
     expect(next.helperReason).toBe('updated');
+    expect(next.helperContext).toEqual({ status: 'ok' });
+  });
+
+  it('allows partner switching while preserving existing package', () => {
+    const prev = { partnerTeamId: 1, outgoingPlayerIds: [11], outgoingPickIds: ['p-1'], incomingPlayerIds: [17], helperReason: 'seeded' };
+    const next = mergeTradeWorkspaceState(prev, { partnerTeamId: 5 });
+    expect(next.partnerTeamId).toBe(5);
+    expect(next.outgoingPlayerIds).toEqual([11]);
+    expect(next.outgoingPickIds).toEqual(['p-1']);
   });
 });

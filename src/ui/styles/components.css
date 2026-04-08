@@ -737,6 +737,35 @@ label {
 .weekly-expandable[open] .weekly-expandable__chevron { transform: rotate(180deg); }
 .weekly-expandable__body { padding: 8px; display: grid; gap: 8px; }
 
+.leaders-v2 { display: grid; gap: 10px; }
+.leaders-story-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.leaders-story-card div { font-size: var(--text-sm); color: var(--text-muted); }
+.leaders-filter-bar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 58px);
+  z-index: 9;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, var(--surface) 93%, transparent);
+  backdrop-filter: blur(10px);
+}
+.leaders-filter-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.leaders-filter-group-scroll { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 2px; }
+.leaders-board-shell { display: grid; gap: 8px; padding-top: 12px; }
+.leaders-board-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--text-muted); font-size: var(--text-sm); }
+.leaders-table-wrap { overflow-x: auto; border: 1px solid var(--hairline); border-radius: var(--radius-md); }
+.leaders-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.leaders-table th, .leaders-table td { padding: 8px 10px; border-bottom: 1px solid var(--hairline); text-align: left; white-space: nowrap; }
+.leaders-table th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-subtle); background: var(--surface-strong); position: sticky; top: 0; z-index: 1; }
+.leaders-table__row-user { background: rgba(10,132,255,0.08); }
+.leaders-rank { font-weight: 800; color: var(--text-subtle); }
+.leaders-value { font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+.leaders-team-cell { display: inline-flex; align-items: center; gap: 6px; }
+.leaders-footnote { display: flex; justify-content: space-between; align-items: center; color: var(--text-subtle); font-size: var(--text-xs); gap: 8px; }
+.leaders-empty { text-align: center; color: var(--text-muted); padding: var(--space-6); border: 1px dashed var(--hairline); border-radius: var(--radius-md); }
+
 
 .trade-center-v2 { display: grid; gap: var(--space-3); }
 .trade-header-card { border: 1px solid var(--hairline-strong); }

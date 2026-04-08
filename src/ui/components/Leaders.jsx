@@ -1,277 +1,182 @@
-/**
- * Leaders.jsx
- *
- * Enriched leaderboard tab with compact, mobile-first rows.
- */
-import React, { useEffect, useState } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import React, { useEffect, useMemo, useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPercent, toFiniteNumber } from "../utils/numberFormatting.js";
 import { buildStorylineCards } from "../utils/leagueNarratives.js";
-
-function posColor(pos) {
-  const map = {
-    QB: "#0A84FF", RB: "#34C759", WR: "#FF9F0A", TE: "#5E5CE6",
-    OL: "#64D2FF", OT: "#64D2FF", OG: "#64D2FF", C: "#64D2FF",
-    DL: "#FF453A", DE: "#FF453A", DT: "#FF453A", EDGE: "#FF453A",
-    LB: "#FFD60A", CB: "#30D158", S: "#30D158", SS: "#30D158", FS: "#30D158",
-  };
-  return map[pos?.toUpperCase()] ?? "var(--text-muted)";
-}
+import { coerceLeaderboardSelection } from "../utils/leaderboardFilters.js";
 
 const CATEGORY_LABELS = {
-  passing: "Passing", rushing: "Rushing", receiving: "Receiving", defense: "Defense",
+  passing: "Passing",
+  rushing: "Rushing",
+  receiving: "Receiving",
+  defense: "Defense",
 };
 
 const STAT_LABELS = {
   passYards: { label: "Pass Yards", abbr: "Yds" },
-  passTDs: { label: "Passing TDs", abbr: "TD" },
-  passerRating: { label: "Passer Rating", abbr: "RTG" },
+  passTDs: { label: "Pass TD", abbr: "TD" },
+  passerRating: { label: "Pass Rating", abbr: "RTG" },
   completions: { label: "Completions", abbr: "Cmp" },
   rushYards: { label: "Rush Yards", abbr: "Yds" },
-  rushTDs: { label: "Rush TDs", abbr: "TD" },
-  rushAttempts: { label: "Carries", abbr: "Car" },
-  recYards: { label: "Rec. Yards", abbr: "Yds" },
-  recTDs: { label: "Receiving TDs", abbr: "TD" },
+  rushTDs: { label: "Rush TD", abbr: "TD" },
+  rushAttempts: { label: "Rush Attempts", abbr: "Att" },
+  recYards: { label: "Rec Yards", abbr: "Yds" },
+  recTDs: { label: "Rec TD", abbr: "TD" },
   receptions: { label: "Receptions", abbr: "Rec" },
-  yac: { label: "Yards After Catch", abbr: "YAC" },
+  yac: { label: "YAC", abbr: "YAC" },
   sacks: { label: "Sacks", abbr: "Sack" },
   tackles: { label: "Tackles", abbr: "Tkl" },
   interceptions: { label: "Interceptions", abbr: "INT" },
-  forcedFumbles: { label: "Forced Fmbl.", abbr: "FF" },
-  pressures: { label: "Pressures", abbr: "Pres" },
+  forcedFumbles: { label: "Forced Fumbles", abbr: "FF" },
+  pressures: { label: "Pressures", abbr: "Prs" },
 };
 
-const META_KEYS = [
-  ["gp", "GP"], ["games", "GP"], ["gamesPlayed", "GP"], ["season", "Season"],
-  ["attempts", "Att"], ["targets", "Tgt"], ["passAttempts", "Att"],
-  ["passTDs", "TD"], ["recTDs", "TD"], ["rushTDs", "TD"],
-  ["interceptions", "INT"], ["ints", "INT"],
-];
-
-function formatStatValue(value) {
+function valueDisplay(value) {
   const n = toFiniteNumber(value, null);
   if (n == null) return "—";
   return Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
-function rankBadge(rank) {
-  if (rank === 1) return "🥇";
-  if (rank === 2) return "🥈";
-  if (rank === 3) return "🥉";
-  return `#${rank}`;
-}
-
-function metadataChips(row, valueKey) {
-  const chips = [];
-  for (const [key, label] of META_KEYS) {
-    if (key === valueKey) continue;
-    const n = toFiniteNumber(row?.[key], null);
-    if (n != null && n !== 0) chips.push({ label, value: Number.isInteger(n) ? n : n.toFixed(1) });
-    if (chips.length >= 3) break;
-  }
-
-  if (chips.length === 0) {
-    const pct = toFiniteNumber(row?.pct ?? row?.percentage, null);
-    if (pct != null) chips.push({ label: "%", value: formatPercent(pct, "—", { digits: 1, clamp: false }) });
-  }
-  return chips;
-}
-
-function LeaderRow({ row, index, onPlayerSelect, userTeamId, valueKey }) {
-  const rank = index + 1;
-  const isUserTeam = userTeamId != null && row.teamId === userTeamId;
-  const chips = metadataChips(row, valueKey);
-
+function LeaderboardTable({ rows, statLabel, onPlayerSelect, userTeamId }) {
   return (
-    <button
-      onClick={() => onPlayerSelect?.(row.playerId)}
-      disabled={!onPlayerSelect || row.playerId == null}
-      style={{
-        width: "100%",
-        border: "none",
-        borderBottom: "1px solid var(--hairline)",
-        background: isUserTeam ? "rgba(10,132,255,0.08)" : "transparent",
-        padding: "10px 12px",
-        textAlign: "left",
-        display: "grid",
-        gridTemplateColumns: "42px 1fr auto",
-        gap: 10,
-        cursor: onPlayerSelect && row.playerId != null ? "pointer" : "default",
-      }}
-    >
-      <div style={{ fontWeight: 800, fontSize: 12, color: rank <= 3 ? "#FFD60A" : "var(--text-subtle)" }}>{rankBadge(rank)}</div>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {row.name ?? `Player ${row.playerId ?? "—"}`}
-          </span>
-          <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{row.teamAbbr ?? "FA"}</span>
-          <Badge variant="outline" style={{ background: posColor(row.pos), borderColor: posColor(row.pos), color: "#fff", fontSize: 10, padding: "0 6px" }}>
-            {row.pos ?? "?"}
-          </Badge>
-          {isUserTeam && <span style={{ fontSize: 10, color: "var(--accent)", fontWeight: 800 }}>YOUR TEAM</span>}
-        </div>
-        {chips.length > 0 && (
-          <div style={{ marginTop: 4, display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {chips.map((chip) => (
-              <span key={`${chip.label}-${chip.value}`} style={{ fontSize: 10, color: "var(--text-subtle)", border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 6px" }}>
-                {chip.label} {chip.value}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div style={{ textAlign: "right", alignSelf: "center" }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", lineHeight: 1 }}>{formatStatValue(row.value)}</div>
-      </div>
-    </button>
-  );
-}
-
-function LeaderTable({ title, rows, onPlayerSelect, userTeamId, statKey }) {
-  if (!rows?.length) return null;
-  const leader = rows[0];
-  return (
-    <Card className="card-premium">
-      <CardHeader className="py-2 px-3 border-b border-[color:var(--hairline)]" style={{ background: "linear-gradient(90deg, rgba(10,132,255,0.16), rgba(10,132,255,0.03))" }}>
-        <CardTitle className="text-xs font-bold uppercase tracking-widest text-[color:var(--text-muted)]">{title}</CardTitle>
-        {leader && (
-          <div style={{ fontSize: 11, color: "var(--text-subtle)", marginTop: 4 }}>
-            Leader: <strong style={{ color: "var(--text)" }}>{leader.name ?? "—"}</strong> · {formatStatValue(leader.value)}
-          </div>
-        )}
-      </CardHeader>
-      <CardContent className="p-0">
-        {rows.map((row, i) => (
-          <LeaderRow key={row.playerId ?? `${title}-${i}`} row={row} index={i} onPlayerSelect={onPlayerSelect} userTeamId={userTeamId} valueKey={statKey} />
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function CategorySection({ catKey, stats, onPlayerSelect, userTeamId }) {
-  const entries = Object.entries(stats || {}).filter(([, rows]) => rows?.length);
-  if (!entries.length) return null;
-
-  return (
-    <section style={{ display: "grid", gap: 10 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: "var(--text-base)", fontWeight: 800, letterSpacing: ".02em" }}>{CATEGORY_LABELS[catKey] ?? catKey}</h3>
-        <span style={{ fontSize: 11, color: "var(--text-subtle)", textTransform: "uppercase", fontWeight: 700 }}>{entries.length} boards</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
-        {entries.map(([statKey, rows]) => (
-          <LeaderTable
-            key={statKey}
-            title={STAT_LABELS[statKey]?.label ?? statKey}
-            rows={rows}
-            onPlayerSelect={onPlayerSelect}
-            userTeamId={userTeamId}
-            statKey={statKey}
-          />
-        ))}
-      </div>
-    </section>
+    <div className="leaders-table-wrap">
+      <table className="leaders-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Player</th>
+            <th>Pos</th>
+            <th>Team</th>
+            <th>{statLabel}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, idx) => {
+            const rank = idx + 1;
+            const isUser = row.teamId != null && Number(row.teamId) === Number(userTeamId);
+            return (
+              <tr key={`${row.playerId}-${rank}`} className={isUser ? "leaders-table__row-user" : ""}>
+                <td className="leaders-rank">{rank}</td>
+                <td>
+                  {onPlayerSelect && row.playerId != null ? (
+                    <button className="btn-link" onClick={() => onPlayerSelect(row.playerId)}>{row.name ?? `Player ${row.playerId}`}</button>
+                  ) : (row.name ?? `Player ${row.playerId}`)}
+                </td>
+                <td>{row.pos ?? "—"}</td>
+                <td>
+                  <span className="leaders-team-cell">{row.teamAbbr ?? "FA"}{isUser ? <Badge variant="outline">You</Badge> : null}</span>
+                </td>
+                <td className="leaders-value">{valueDisplay(row.value)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
 export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigate, league }) {
-  const [mode, setMode] = useState("season");
+  const [scope, setScope] = useState("season");
   const [data, setData] = useState(null);
+  const [selection, setSelection] = useState({ category: "passing", statKey: "passYards" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [activeCategory, setActiveCategory] = useState("passing");
 
-  const storyline = (buildStorylineCards(league)[0] ?? null);
+  const storyline = buildStorylineCards(league)[0] ?? null;
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    actions
-      .getLeagueLeaders(mode)
-      .then((resp) => {
-        setData(resp.payload ?? resp);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Leaders fetch failed:", err);
-        setError(err.message ?? "Failed to load leaders");
-        setLoading(false);
-      });
-  }, [mode, actions]);
+    const mode = scope === "alltime" ? "alltime" : "season";
+    actions.getLeagueLeaders(mode)
+      .then((resp) => setData(resp.payload ?? resp))
+      .catch((err) => setError(err?.message ?? "Failed to load leaders"))
+      .finally(() => setLoading(false));
+  }, [scope, actions]);
 
   const categories = data?.categories ?? {};
-  const categoryKeys = Object.keys(categories);
-  const hasData = categoryKeys.some((k) => Object.values(categories[k] ?? {}).some((rows) => rows?.length > 0));
+  const normalized = useMemo(() => coerceLeaderboardSelection({ categories, selection }), [categories, selection]);
+  const rows = categories?.[normalized.category]?.[normalized.statKey] ?? [];
 
   useEffect(() => {
-    if (categoryKeys.length && !categoryKeys.includes(activeCategory)) {
-      setActiveCategory(categoryKeys[0]);
-    }
-  }, [activeCategory, categoryKeys]);
+    setSelection((prev) => ({ category: normalized.category, statKey: normalized.statKey }));
+  }, [normalized.category, normalized.statKey]);
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {storyline && (
-        <Card className="card-premium" style={{ border: "1px solid var(--hairline)" }}>
-          <CardContent className="py-3" style={{ display: "grid", gap: 4 }}>
-            <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--text-subtle)", fontWeight: 800 }}>League talking point</div>
-            <div style={{ fontWeight: 800 }}>{storyline.title}</div>
-            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{storyline.detail}</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.(storyline.tab ?? "Standings")}>Open {storyline.tab ?? 'Standings'}</button>
-              <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("Award Races")}>Award race board</button>
+    <div className="leaders-v2">
+      {storyline ? (
+        <Card className="card-premium">
+          <CardContent className="leaders-story-card">
+            <div>
+              <strong>{storyline.title}</strong>
+              <div>{storyline.detail}</div>
             </div>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.(storyline.tab ?? "Standings")}>Open {storyline.tab ?? "Standings"}</Button>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <Tabs value={mode} onValueChange={setMode}>
-          <TabsList>
-            <TabsTrigger value="season">Season Leaders</TabsTrigger>
-            <TabsTrigger value="alltime">All-Time Records</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {data?.year && <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{mode === "season" ? `${data.year} Season` : "All Seasons Combined"}</span>}
-        <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-          <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("History")}>Open archive</button>
-          <button className="btn" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => onNavigate?.("Hall of Fame")}>Hall of Fame</button>
+      <div className="leaders-filter-bar card">
+        <div className="leaders-filter-group">
+          {[{ key: "season", label: "Season" }, { key: "alltime", label: "All-Time" }, { key: "year", label: `${data?.year ?? league?.year ?? "Year"}` }].map((item) => (
+            <button
+              key={item.key}
+              className={`standings-tab${scope === item.key ? " active" : ""}`}
+              onClick={() => setScope(item.key)}
+              title={item.key === "year" ? "Current season year scope" : undefined}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="leaders-filter-group">
+          {normalized.categoryKeys.map((cat) => (
+            <button key={cat} className={`standings-tab${selection.category === cat ? " active" : ""}`} onClick={() => setSelection((prev) => ({ ...prev, category: cat }))}>
+              {CATEGORY_LABELS[cat] ?? cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="leaders-filter-group leaders-filter-group-scroll">
+          {normalized.statKeys.map((statKey) => (
+            <button key={statKey} className={`standings-tab${selection.statKey === statKey ? " active" : ""}`} onClick={() => setSelection((prev) => ({ ...prev, statKey }))}>
+              {STAT_LABELS[statKey]?.label ?? statKey}
+            </button>
+          ))}
         </div>
       </div>
 
-      {!loading && hasData && (
-        <div style={{ overflowX: "auto", paddingBottom: 2 }}>
-          <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-            <TabsList>
-              {categoryKeys.map((k) => (
-                <TabsTrigger key={k} value={k}>{CATEGORY_LABELS[k] ?? k}</TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-      )}
+      {loading ? <div className="leaders-empty">Loading leaders…</div> : null}
+      {!loading && error ? <div className="leaders-empty" style={{ color: "var(--danger)" }}>{error}</div> : null}
+      {!loading && !error && !rows.length ? <div className="leaders-empty">No stats available yet.</div> : null}
 
-      {loading && <div style={{ textAlign: "center", padding: "var(--space-12)", color: "var(--text-muted)" }}>Loading leaders…</div>}
-      {!loading && error && <div style={{ padding: "var(--space-6)", textAlign: "center", color: "var(--danger)", background: "rgba(255,69,58,0.07)", borderRadius: "var(--radius-md)", border: "1px solid var(--danger)" }}>{error}</div>}
-      {!loading && !error && !hasData && (
-        <div style={{ textAlign: "center", padding: "var(--space-12)", color: "var(--text-muted)" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "var(--space-3)" }}>📊</div>
-          <div>No stats available yet — play through a season to see leaders appear.</div>
-        </div>
-      )}
+      {!loading && !error && rows.length > 0 ? (
+        <Card className="card-premium">
+          <CardContent className="leaders-board-shell">
+            <div className="leaders-board-header">
+              <div>
+                <strong>{CATEGORY_LABELS[normalized.category] ?? normalized.category}</strong>
+                <div>{STAT_LABELS[normalized.statKey]?.label ?? normalized.statKey} board · {scope === "alltime" ? "All-Time" : `${data?.year ?? league?.year ?? "Season"} Season`}</div>
+              </div>
+              {rows[0] ? <Badge variant="secondary">Leader {rows[0].name ?? "—"} · {valueDisplay(rows[0].value)}</Badge> : null}
+            </div>
+            <LeaderboardTable
+              rows={rows}
+              statLabel={STAT_LABELS[normalized.statKey]?.abbr ?? "Value"}
+              onPlayerSelect={onPlayerSelect}
+              userTeamId={userTeamId}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {!loading && !error && hasData && (
-        <CategorySection
-          catKey={activeCategory}
-          stats={categories[activeCategory]}
-          onPlayerSelect={onPlayerSelect}
-          userTeamId={userTeamId}
-        />
-      )}
+      <div className="leaders-footnote">
+        <span>Completion % is shown when available: {formatPercent(rows?.[0]?.pct ?? rows?.[0]?.percentage, "—", { digits: 1, clamp: false })}.</span>
+        <Button size="sm" variant="ghost" onClick={() => onNavigate?.("History")}>Open archive</Button>
+      </div>
     </div>
   );
 }
