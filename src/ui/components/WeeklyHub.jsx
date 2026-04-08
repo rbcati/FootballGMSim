@@ -14,6 +14,7 @@ import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { ScreenHeader } from "./ScreenSystem.jsx";
 import { buildHeaderMetadata } from "../utils/screenSystem.js";
+import InfoTip from "./InfoTip.jsx";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -121,6 +122,40 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
     userLastGameStory,
   });
   const pregameAngles = nextGame ? derivePregameAngles({ league, game: null, week: nextGame.week }) : [];
+  const standingsSnapshot = useMemo(() => {
+    const teams = Array.isArray(league?.teams) ? league.teams : [];
+    const userTeam = teams.find((team) => Number(team.id) === Number(league?.userTeamId));
+    if (!userTeam) return null;
+    const byPct = [...teams].sort((a, b) => {
+      const aGames = (a.wins ?? 0) + (a.losses ?? 0) + (a.ties ?? 0);
+      const bGames = (b.wins ?? 0) + (b.losses ?? 0) + (b.ties ?? 0);
+      const aPct = aGames ? ((a.wins ?? 0) + 0.5 * (a.ties ?? 0)) / aGames : 0;
+      const bPct = bGames ? ((b.wins ?? 0) + 0.5 * (b.ties ?? 0)) / bGames : 0;
+      return bPct - aPct;
+    });
+    const conferenceTeams = byPct.filter((team) => Number(team.conf) === Number(userTeam.conf));
+    const confRank = conferenceTeams.findIndex((team) => Number(team.id) === Number(userTeam.id)) + 1;
+    const playoffLine = conferenceTeams[6] ?? null;
+    return {
+      confRank,
+      overallRank: byPct.findIndex((team) => Number(team.id) === Number(userTeam.id)) + 1,
+      playoffLineRecord: playoffLine ? `${playoffLine.wins ?? 0}-${playoffLine.losses ?? 0}` : "—",
+      aroundUser: conferenceTeams.slice(Math.max(0, confRank - 2), confRank + 1),
+    };
+  }, [league]);
+  const formLastFive = useMemo(() => {
+    const recent = Array.isArray(user?.recentResults) ? user.recentResults.slice(-5) : [];
+    const wins = recent.filter((res) => res === "W").length;
+    return { recent, wins, losses: recent.filter((res) => res === "L").length };
+  }, [user]);
+  const topStorylines = (weeklyContext.storylineCards?.length ? weeklyContext.storylineCards : []).slice(0, 3);
+  const quickActions = [
+    { label: "Set Lineup", tab: "Depth Chart" },
+    { label: "Game Plan", tab: "Game Plan" },
+    { label: "Roster", tab: "Roster" },
+    { label: "Trade Center", tab: "Trade Center" },
+    { label: "Finances", tab: "Financials" },
+  ];
 
   const handlePrimaryAction = () => {
     if (primaryAction.type === "boxscore" && primaryAction.gameId) return onOpenBoxScore?.(primaryAction.gameId);
@@ -185,6 +220,14 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Open schedule</Button>
             </CardContent>
           </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Standings & playoff race <InfoTip compact term="Playoff race" explanation="Tracks if you are above, on, or below the current conference playoff cut line." /></p>
+              <strong>{standingsSnapshot ? `${league?.teams?.find((t) => Number(t.id) === Number(league?.userTeamId))?.conf === 0 ? "AFC" : "NFC"} #${standingsSnapshot.confRank}` : "Race unavailable"}</strong>
+              <p>{standingsSnapshot ? `Overall #${standingsSnapshot.overallRank} · 7th-place line ${standingsSnapshot.playoffLineRecord}` : "Play a few games to establish standings context."}</p>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Standings")}>Open standings</Button>
+            </CardContent>
+          </Card>
         </div>
       </section>
 
@@ -218,6 +261,69 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               </CardContent>
             </Card>
           ))}
+        </div>
+      </section>
+
+      <section className="weekly-section">
+        <SectionHeader title="Momentum, pressure, and health" subtitle="The franchise pulse in one scan." />
+        <div className="weekly-card-grid">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Form (last 5)</p>
+              <strong>{formLastFive.recent.length ? formLastFive.recent.join(" · ") : "No recent games yet"}</strong>
+              <p>{formLastFive.recent.length ? `${formLastFive.wins}-${formLastFive.losses} in your last ${formLastFive.recent.length}` : "Form indicators appear after completed games."}</p>
+            </CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Pressure snapshot <InfoTip compact term="Owner/Fan/Media pressure" explanation="Higher pressure increases scrutiny, raises job risk, and changes narrative events." /></p>
+              <strong>Owner {pressure?.owner?.state ?? "Stable"} · Fans {pressure?.fans?.state ?? "Steady"} · Media {pressure?.media?.state ?? "Neutral"}</strong>
+              <p>{pressure?.owner?.reasons?.[0] ?? pressure?.media?.reasons?.[0] ?? "No active pressure spike this week."}</p>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open pressure view</Button>
+            </CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Cap + payroll</p>
+              <strong>{formatMoneyM(cap.capRoom)} cap room · {formatMoneyM(user?.capUsed ?? user?.payroll ?? 0)} payroll</strong>
+              <p>{(weeklyContext?.pressurePoints?.expiringCount ?? 0)} expiring contracts · {(weeklyContext?.pressurePoints?.incomingTradeCount ?? 0)} incoming trade calls</p>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Open finances</Button>
+            </CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Injury report</p>
+              <strong>{weeklyContext?.pressurePoints?.injuriesCount ?? 0} active injury cases</strong>
+              <p>{(weeklyContext?.pressurePoints?.injuriesCount ?? 0) > 0 ? "Check depth chart and medical staffing before advancing." : "Roster health is stable this week."}</p>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Review injuries</Button>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+
+      <section className="weekly-section">
+        <SectionHeader title="Top storylines + quick actions" subtitle="Three narratives, then execute." />
+        <div className="weekly-card-grid">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Top 3 storylines</p>
+              <div className="weekly-digest-list">
+                {(topStorylines.length ? topStorylines : [{ title: "No major storyline spikes", detail: "League context is stable this week.", tab: "Standings" }]).map((story, idx) => (
+                  <button key={`${story.title}-${idx}`} className="weekly-digest-action" onClick={() => onNavigate?.(story.tab ?? "Standings")}>{story.title} — {story.detail}</button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Quick actions</p>
+              <div className="weekly-inline-actions">
+                {quickActions.map((item) => (
+                  <Button key={item.label} size="sm" variant="outline" onClick={() => onNavigate?.(item.tab)}>{item.label}</Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </section>
 

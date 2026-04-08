@@ -4,6 +4,8 @@ import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack }) {
   const [seasons, setSeasons] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [queryYear, setQueryYear] = useState('');
+  const [scope, setScope] = useState('all');
   const activeTeam = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(teamId ?? league?.userTeamId)), [league?.teams, league?.userTeamId, teamId]);
 
   useEffect(() => {
@@ -21,6 +23,15 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
     const isChampion = s?.champion?.abbr === activeTeam?.abbr;
     return { year: s.year, wins: standing?.wins ?? 0, losses: standing?.losses ?? 0, ties: standing?.ties ?? 0, pf: standing?.pf ?? 0, pa: standing?.pa ?? 0, champion: isChampion, mvp: s?.awards?.mvp };
   }).filter((x) => x.wins + x.losses + x.ties > 0 || x.champion), [seasons, activeTeam]);
+
+  const filteredTimeline = useMemo(() => {
+    return timeline.filter((row) => {
+      if (scope === 'champions' && !row.champion) return false;
+      if (scope === 'playoff' && row.wins < 10) return false;
+      if (!queryYear.trim()) return true;
+      return String(row.year).includes(queryYear.trim());
+    });
+  }, [timeline, queryYear, scope]);
 
   const titles = timeline.filter((t) => t.champion).length;
   const playoffYears = timeline.filter((t) => t.wins >= 10).length;
@@ -51,8 +62,25 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
       </SectionCard>
 
       <SectionCard title="Season-by-season timeline">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          <input
+            value={queryYear}
+            onChange={(e) => setQueryYear(e.target.value)}
+            placeholder="Filter by year"
+            style={{ background: 'var(--surface)', border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 10px', color: 'var(--text)', minWidth: 160 }}
+          />
+          {[
+            { key: 'all', label: 'All-time' },
+            { key: 'playoff', label: 'Playoff-caliber' },
+            { key: 'champions', label: 'Championship years' },
+          ].map((opt) => (
+            <button key={opt.key} className="btn" onClick={() => setScope(opt.key)} style={{ opacity: scope === opt.key ? 1 : 0.7 }}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
-          {timeline.length === 0 ? <EmptyState title="No team history yet" body="Play more seasons to populate this team timeline." /> : timeline.slice().reverse().map((s) => (
+          {filteredTimeline.length === 0 ? <EmptyState title="No team history yet" body="Adjust filters or play more seasons to populate this timeline." /> : filteredTimeline.slice().reverse().map((s) => (
             <div key={s.year} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <strong>{s.year}</strong>

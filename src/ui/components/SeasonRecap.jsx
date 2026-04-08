@@ -10,6 +10,7 @@ import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity, buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
+import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 
 function AnimatedSection({ delay = 0, children, title, icon }) {
   const [visible, setVisible] = useState(false);
@@ -146,7 +147,7 @@ function getAwardWinnerCards(league) {
   }).filter(Boolean);
 }
 
-export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNavigate }) {
+export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNavigate, onOpenBoxScore }) {
   const [showConfetti, setShowConfetti] = useState(true);
 
   useEffect(() => {
@@ -190,6 +191,22 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
   const chemistry = teamIntel?.chemistry;
   const investments = useMemo(() => franchiseInvestmentSummary(userTeam), [userTeam]);
   const carouselCards = useMemo(() => buildCoachingNarrativeCards(league, { limit: 3 }), [league]);
+  const completedGames = useMemo(() => {
+    const seasonId = league?.seasonId;
+    if (!seasonId) return [];
+    const rows = [];
+    for (const week of league?.schedule?.weeks ?? []) {
+      for (const game of week?.games ?? []) {
+        if (!game?.played) continue;
+        rows.push({
+          game,
+          week: Number(week?.week ?? league?.week ?? 1),
+          gameId: resolveCompletedGameId(game, { seasonId, week: Number(week?.week ?? 1) }),
+        });
+      }
+    }
+    return rows.slice(-8).reverse();
+  }, [league]);
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -287,6 +304,37 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
           </div>
         </AnimatedSection>
       )}
+
+      <AnimatedSection delay={650} title="Completed games" icon="📘">
+        <div style={{ display: "grid", gap: 8 }}>
+          {completedGames.length === 0 ? (
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", color: "var(--text-muted)", fontSize: 12 }}>
+              No completed games are archived in the active season context yet.
+            </div>
+          ) : completedGames.map((row) => {
+            const homeTeam = teams.find((t) => Number(t.id) === Number(row.game.home));
+            const awayTeam = teams.find((t) => Number(t.id) === Number(row.game.away));
+            return (
+              <button
+                key={row.gameId}
+                onClick={() => row.gameId ? onOpenBoxScore?.(row.gameId) : null}
+                style={{
+                  textAlign: "left",
+                  border: "1px solid var(--hairline)",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: "var(--surface-strong, #1a1a2e)",
+                  color: "var(--text)",
+                  cursor: row.gameId ? "pointer" : "default",
+                }}
+              >
+                <strong>Week {row.week} · {awayTeam?.abbr ?? "AWY"} {row.game.awayScore ?? "—"} - {row.game.homeScore ?? "—"} {homeTeam?.abbr ?? "HME"}</strong>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{row.gameId ? "Open universal box score" : "Game detail unavailable"}</div>
+              </button>
+            );
+          })}
+        </div>
+      </AnimatedSection>
 
       {pressure && (
         <AnimatedSection delay={620} title="Organization reaction" icon="🏛️">

@@ -23,6 +23,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
 import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
+import InfoTip from "./InfoTip.jsx";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -417,6 +418,7 @@ export default function FinancialsView({ league, actions }) {
         <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
           Cap Management
         </h2>
+        <InfoTip term="Cap management" explanation="Cap room, dead money, and staff investments all change roster flexibility and future risk." />
         <Badge variant="secondary">
           {june1} Rule Active
         </Badge>
@@ -466,6 +468,15 @@ export default function FinancialsView({ league, actions }) {
       <div style={{ marginBottom: "var(--space-5)" }}>
         <FranchiseInvestmentsPanel team={userTeam} actions={actions} />
       </div>
+
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardHeader><CardTitle>How this works</CardTitle></CardHeader>
+        <CardContent style={{ display: "grid", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
+          <div><strong style={{ color: "var(--text)" }}>Weekly:</strong> cap overages and injuries force immediate roster moves. Training and medical investments affect development and recovery outcomes.</div>
+          <div><strong style={{ color: "var(--text)" }}>Seasonal:</strong> ticket/concession/stadium choices influence fan sentiment and ownership pressure, which feed future directives and franchise momentum.</div>
+          <div><strong style={{ color: "var(--text)" }}>Yearly:</strong> restructures and dead money can buy short-term wins but squeeze future cap. Use the multi-year commitments below to avoid cliff years.</div>
+        </CardContent>
+      </Card>
 
       {/* ── Cap Bar ── */}
       <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
