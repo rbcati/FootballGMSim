@@ -1,0 +1,52 @@
+
+> football-gm-sim@2.0.0 dev
+> vite
+
+
+  VITE v7.3.1  ready in 374 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+5:47:34 PM [vite] (client) warning: Duplicate "league" attribute in JSX element
+2071 |              onPlayerSelect={setSelectedPlayerId}
+2072 |              onNavigate={setActiveTab}
+2073 |              league={league} />
+     |              ^
+2074 |
+2075 |            </TabErrorBoundary>
+
+  Plugin: vite:esbuild
+  File: /app/src/ui/components/LeagueDashboard.jsx
+5:47:34 PM [vite] (client) warning: Duplicate "league" attribute in JSX element
+2082 |              onPlayerSelect={setSelectedPlayerId}
+2083 |              onNavigate={setActiveTab}
+2084 |              league={league} />
+     |              ^
+2085 |
+2086 |            </TabErrorBoundary>
+
+  Plugin: vite:esbuild
+  File: /app/src/ui/components/LeagueDashboard.jsx
+5:47:34 PM [vite] (client) warning: Duplicate "league" attribute in JSX element
+2211 |              onTeamSelect={setSelectedTeamId}
+2212 |              onNavigate={setActiveTab}
+2213 |              league={league} />
+     |              ^
+2214 |
+2215 |            </TabErrorBoundary>
+
+  Plugin: vite:esbuild
+  File: /app/src/ui/components/LeagueDashboard.jsx
+5:47:34 PM [vite] (client) warning: Duplicate "league" attribute in JSX element
+2228 |              onNavigate={setActiveTab}
+2229 |              onOpenBoxScore={(gameId) => openGameDetail(gameId, "Season Recap")}
+2230 |              league={league} />
+     |              ^
+2231 |
+2232 |            </TabErrorBoundary>
+
+  Plugin: vite:esbuild
+  File: /app/src/ui/components/LeagueDashboard.jsx
+5:54:20 PM [vite] (client) hmr update /src/ui/components/LeagueDashboard.jsx, /src/ui/styles/base.css
+5:54:27 PM [vite] (client) hmr update /src/ui/components/LeagueDashboard.jsx, /src/ui/styles/base.css
+5:55:29 PM [vite] (client) page reload src/core/game-simulator.js
