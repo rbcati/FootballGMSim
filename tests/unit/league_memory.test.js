@@ -27,7 +27,10 @@ describe('league memory helpers', () => {
       champion: { id: 0, name: 'Boston', abbr: 'BOS' },
       runnerUp: null,
       userTeamId: 0,
+      games: [{ id: 's7_w1_0_1', week: 1, homeId: 0, awayId: 1, homeScore: 24, awayScore: 17 }],
     });
+    expect(season.gameIndex).toHaveLength(1);
+    expect(season.gameIndex[0].id).toBe('s7_w1_0_1');
     meta = updateFranchiseHistory(meta, season, []);
     expect(meta.franchiseHistoryByTeam['0'].totals.championships).toBe(1);
     expect(meta.franchiseHistoryByTeam['0'].milestones.length).toBe(1);

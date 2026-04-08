@@ -19,5 +19,10 @@ At season archive time, `seasonSummary.gameIndex` stores a compact index of all 
 
 This gives history screens a stable pointer list for future deep-link features without duplicating full box-score blobs.
 
+## Shared history navigation
+- `League History` season explorer reads `selectedSeason.gameIndex` and deep-links rows directly into the shared `Game Detail` screen.
+- `Team History` builds a franchise-centric completed-game list by filtering archived `gameIndex` rows where `homeId` or `awayId` matches the selected team.
+- Both screens call the same `onOpenBoxScore(gameId)` callback used by Schedule/Weekly Hub/Postseason, so there is one canonical destination for completed-game detail.
+
 ## Legacy compatibility
 - If loading older saves where `summary` is missing, `GET_BOX_SCORE` synthesizes a fallback summary so the Game Detail header and storyline section still render.

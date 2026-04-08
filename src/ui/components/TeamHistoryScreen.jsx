@@ -1,7 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 
-export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack }) {
+function buildSeasonTeamMap(season) {
+  const map = {};
+  for (const row of season?.standings ?? []) {
+    map[Number(row?.id)] = row;
+  }
+  return map;
+}
+
+export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSelect, onBack, onOpenBoxScore }) {
   const [seasons, setSeasons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [queryYear, setQueryYear] = useState('');
@@ -38,6 +46,33 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const best = [...timeline].sort((a, b) => b.wins - a.wins)[0];
   const worst = [...timeline].sort((a, b) => a.wins - b.wins)[0];
   const drought = [...timeline].reverse().findIndex((t) => t.champion);
+  const completedGameRows = useMemo(() => {
+    const rows = [];
+    const targetTeamId = Number(activeTeam?.id);
+    if (!Number.isFinite(targetTeamId)) return rows;
+
+    for (const season of seasons ?? []) {
+      const teamMap = buildSeasonTeamMap(season);
+      for (const game of season?.gameIndex ?? []) {
+        const homeId = Number(game?.homeId);
+        const awayId = Number(game?.awayId);
+        if (homeId !== targetTeamId && awayId !== targetTeamId) continue;
+        rows.push({
+          gameId: game?.id,
+          year: season?.year,
+          week: game?.week,
+          home: teamMap[homeId],
+          away: teamMap[awayId],
+          homeScore: game?.homeScore,
+          awayScore: game?.awayScore,
+        });
+      }
+    }
+
+    return rows
+      .sort((a, b) => (Number(b.year) - Number(a.year)) || (Number(b.week) - Number(a.week)))
+      .slice(0, 24);
+  }, [activeTeam?.id, seasons]);
 
   if (loading) return <div className="card" style={{ padding: 'var(--space-4)' }}>Loading team history…</div>;
 
@@ -90,6 +125,28 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
               {s.mvp?.playerId != null ? <button className="btn-link" onClick={() => onPlayerSelect?.(s.mvp.playerId)}>League MVP: {s.mvp.name}</button> : null}
             </div>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Completed game history">
+        <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
+          {completedGameRows.length === 0 ? (
+            <EmptyState title="No archived results yet" body="Completed game links appear here as season history builds." />
+          ) : completedGameRows.map((row) => {
+            const clickable = Boolean(row.gameId && onOpenBoxScore);
+            return (
+              <button
+                key={`${row.gameId}-${row.year}-${row.week}`}
+                className="btn"
+                onClick={() => clickable ? onOpenBoxScore?.(row.gameId) : null}
+                style={{ textAlign: 'left', opacity: clickable ? 1 : 0.7, cursor: clickable ? 'pointer' : 'default' }}
+                title={clickable ? 'View box score' : undefined}
+              >
+                <strong>{row.year} · Week {row.week} · {row.away?.abbr ?? 'AWY'} {row.awayScore ?? '—'}-{row.homeScore ?? '—'} {row.home?.abbr ?? 'HME'}</strong>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{clickable ? 'Open shared game detail' : 'Game detail unavailable for this row'}</div>
+              </button>
+            );
+          })}
         </div>
       </SectionCard>
     </div>

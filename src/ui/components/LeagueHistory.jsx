@@ -46,7 +46,7 @@ const STAT_LABELS = {
 };
 const NOOP_ACTIONS = {};
 
-export default function LeagueHistory({ onPlayerSelect, actions, league }) {
+export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore }) {
   const api = actions ?? NOOP_ACTIONS;
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
@@ -105,7 +105,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league }) {
         </TabsList>
 
         <TabsContent value="seasons">
-          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} />
+          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} />
         </TabsContent>
 
         <TabsContent value="records">
@@ -196,7 +196,7 @@ function DraftHistoryExplorer({ seasons, league, onPlayerSelect }) {
   );
 }
 
-function SeasonExplorer({ seasons, onPlayerSelect }) {
+function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(seasons?.[0]?.id ?? null);
 
   useEffect(() => {
@@ -265,6 +265,29 @@ function SeasonExplorer({ seasons, onPlayerSelect }) {
             </div>
             <div className="text-xs text-[color:var(--text-muted)] mt-2">
               Playoff bracket/path is not currently stored in archived season summaries.
+            </div>
+          </section>
+          <section>
+            <h4 className="text-sm font-bold mb-2">Completed game archive</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {(selected?.gameIndex ?? []).slice(-12).reverse().map((game) => {
+                const clickable = Boolean(game?.id && onOpenBoxScore);
+                return (
+                  <button
+                    key={game.id}
+                    className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-left"
+                    onClick={() => clickable ? onOpenBoxScore?.(game.id) : null}
+                    style={{ cursor: clickable ? "pointer" : "default", opacity: clickable ? 1 : 0.75 }}
+                    title={clickable ? "View box score" : undefined}
+                  >
+                    <strong>Week {game.week}: {game.awayScore ?? "—"} - {game.homeScore ?? "—"}</strong>
+                    <div className="text-xs text-[color:var(--text-muted)]">{clickable ? "Open shared game detail" : "Archived index row only"}</div>
+                  </button>
+                );
+              })}
+              {(selected?.gameIndex ?? []).length === 0 && (
+                <div className="text-[color:var(--text-muted)]">No completed-game index stored for this archived season.</div>
+              )}
             </div>
           </section>
         </CardContent>
