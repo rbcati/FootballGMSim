@@ -794,8 +794,9 @@ function ScheduleTab({
         const home = teamById[game.home] ?? { abbr: "HOME" };
         const away = teamById[game.away] ?? { abbr: "AWAY" };
         const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+        const archiveQuality = game?.archiveQuality ?? (game?.gameId ? "full" : (gameId ? "partial" : "missing"));
         const story = derivePostgameStory({ league, game, week: selectedWeek });
-        return { game, home, away, gameId, story };
+        return { game, home, away, gameId, archiveQuality, story };
       })
       .slice(0, 8)
   ), [games, league, seasonId, selectedWeek, teamById]);
@@ -877,7 +878,7 @@ function ScheduleTab({
             <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Scores + storylines at a glance</span>
           </div>
           <div style={{ display: "grid", gap: 6 }}>
-            {weekRecapItems.map(({ game, away, home, gameId, story }, idx) => (
+            {weekRecapItems.map(({ game, away, home, gameId, archiveQuality, story }, idx) => (
               <button
                 key={`${game.home}-${game.away}-${idx}`}
                 className={`btn-link ${gameId ? "" : "disabled"}`}
@@ -888,6 +889,10 @@ function ScheduleTab({
                 <strong style={{ color: "var(--text)" }}>{away.abbr} {game.awayScore} @ {home.abbr} {game.homeScore}</strong>
                 {" · "}
                 {story?.headline ?? "Final"}
+                {" · "}
+                <span style={{ color: archiveQuality === "full" ? "var(--success)" : archiveQuality === "partial" ? "var(--warning)" : "var(--text-subtle)" }}>
+                  {archiveQuality === "full" ? "Full archive" : archiveQuality === "partial" ? "Partial archive" : "Archive unavailable"}
+                </span>
               </button>
             ))}
           </div>
@@ -949,7 +954,8 @@ function ScheduleTab({
             nextGameStakes > 50 &&
             selectedWeek === currentWeek;
           const resolvedGameId = game.played ? resolveCompletedGameId(game, { seasonId, week: selectedWeek }) : null;
-          const isClickable = Boolean(game.played && onGameSelect && resolvedGameId);
+          const archiveQuality = game?.archiveQuality ?? (game?.gameId ? "full" : (resolvedGameId ? "partial" : "missing"));
+          const isClickable = Boolean(game.played && onGameSelect && resolvedGameId && archiveQuality !== "missing");
           const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
           const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
           const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
@@ -1039,6 +1045,17 @@ function ScheduleTab({
                 >
                   {game.played ? "Final" : "Scheduled"}
                 </span>
+                {game.played && (
+                  <span style={{
+                    padding: "2px 8px",
+                    borderRadius: "var(--radius-pill)",
+                    background: archiveQuality === "full" ? "var(--success)22" : archiveQuality === "partial" ? "var(--warning)22" : "var(--surface-strong)",
+                    color: archiveQuality === "full" ? "var(--success)" : archiveQuality === "partial" ? "var(--warning)" : "var(--text-muted)",
+                    fontWeight: 700,
+                  }}>
+                    {archiveQuality === "full" ? "Full box score" : archiveQuality === "partial" ? "Partial archive" : "Archive unavailable"}
+                  </span>
+                )}
               </div>
               {game.played && !resolvedGameId && (
                 <div style={{ fontSize: 12, color: "var(--warning)" }}>Final score available; archive ID missing in this save.</div>

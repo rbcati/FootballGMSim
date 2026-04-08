@@ -45,14 +45,25 @@ export function deriveLeaders(game) {
   const homePlayers = toPlayerArray(game?.stats?.home, game?.homeId);
   const awayPlayers = toPlayerArray(game?.stats?.away, game?.awayId);
   const players = [...homePlayers, ...awayPlayers];
+  const summaryLeaders = game?.summary?.leaders ?? {};
+  const toFallbackLeader = (row) => {
+    if (!row) return null;
+    return {
+      playerId: row.playerId ?? null,
+      teamId: row.teamId ?? null,
+      name: row.name ?? "Unknown",
+      pos: row.pos ?? "—",
+      stats: row.stats ?? {},
+    };
+  };
 
   return {
-    pass: leader(players, "passYd", { min: 20 }),
-    rush: leader(players, "rushYd", { min: 10 }),
-    receive: leader(players, "recYd", { min: 10 }),
+    pass: leader(players, "passYd", { min: 20 }) ?? toFallbackLeader(summaryLeaders.pass),
+    rush: leader(players, "rushYd", { min: 10 }) ?? toFallbackLeader(summaryLeaders.rush),
+    receive: leader(players, "recYd", { min: 10 }) ?? toFallbackLeader(summaryLeaders.receive),
     defense: players
       .filter((p) => (p.stats?.tackles || 0) + ((p.stats?.sacks || 0) * 2) + ((p.stats?.interceptions || 0) * 2) > 0)
-      .sort((a, b) => ((b.stats?.tackles || 0) + ((b.stats?.sacks || 0) * 2) + ((b.stats?.interceptions || 0) * 2)) - ((a.stats?.tackles || 0) + ((a.stats?.sacks || 0) * 2) + ((a.stats?.interceptions || 0) * 2)))[0] ?? null,
+      .sort((a, b) => ((b.stats?.tackles || 0) + ((b.stats?.sacks || 0) * 2) + ((b.stats?.interceptions || 0) * 2)) - ((a.stats?.tackles || 0) + ((a.stats?.sacks || 0) * 2) + ((a.stats?.interceptions || 0) * 2)))[0] ?? toFallbackLeader(summaryLeaders.defense),
     special: leader(players, "fieldGoalsMade", { min: 1 }),
   };
 }

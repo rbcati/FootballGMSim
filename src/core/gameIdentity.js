@@ -24,6 +24,7 @@ export function buildArchivedGame({
   drives = null,
   quarterScores = null,
   summary = null,
+  archiveQuality = null,
 }) {
   const canonicalId = gameId ?? buildCanonicalGameId({ seasonId, week, homeId, awayId });
   return {
@@ -39,5 +40,6 @@ export function buildArchivedGame({
     drives: drives ?? null,
     summary: summary ?? null,
     stats: stats ?? null,
+    archiveQuality: archiveQuality ?? (Array.isArray(stats?.playLogs) && stats.playLogs.length ? 'full' : (stats || recap || summary ? 'partial' : 'missing')),
   };
 }
