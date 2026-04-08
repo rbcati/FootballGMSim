@@ -5,12 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { ACTION_LABELS } from "../constants/navigationCopy.js";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/numberFormatting.js";
-import { derivePregameAngles, deriveWeeklyHonors, derivePostgameStory, normalizeTeamId } from "../utils/gamePresentation.js";
+import { derivePregameAngles, deriveWeeklyHonors, normalizeTeamId } from "../utils/gamePresentation.js";
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildNeedsAttentionItems, buildPrimaryAction, buildTeamSnapshot, getDefaultExpandedSections } from "../utils/weeklyHubLayout.js";
-import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { ScreenHeader } from "./ScreenSystem.jsx";
 import { buildHeaderMetadata } from "../utils/screenSystem.js";
@@ -79,29 +79,18 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const teamIntel = useMemo(() => buildTeamIntelligence(user, { week: league?.week ?? 1 }), [user, league?.week]);
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
   const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(user, { pressure: weeklyContext?.pressure, intel: teamIntel, direction: weeklyContext?.direction }), [user, weeklyContext, teamIntel]);
-  const userLastGameStory = useMemo(() => {
-    const targetWeek = Number(league?.week ?? 1) - 1;
-    if (targetWeek < 1) return null;
-    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === targetWeek);
-    const userGame = (weekData?.games ?? []).find((g) => {
-      const homeId = normalizeTeamId(g?.home);
-      const awayId = normalizeTeamId(g?.away);
-      return g?.played && (homeId === league?.userTeamId || awayId === league?.userTeamId);
-    });
-    return userGame ? derivePostgameStory({ league, game: userGame, week: targetWeek }) : null;
-  }, [league]);
-  const latestUserGameId = useMemo(() => {
-    const targetWeek = Number(league?.week ?? 1) - 1;
-    if (!league?.seasonId || targetWeek < 1) return null;
-    const weekData = league?.schedule?.weeks?.find((w) => Number(w?.week) === targetWeek);
-    const userGame = (weekData?.games ?? []).find((g) => {
-      const homeId = normalizeTeamId(g?.home);
-      const awayId = normalizeTeamId(g?.away);
-      return g?.played && (homeId === league?.userTeamId || awayId === league?.userTeamId);
-    });
-    if (!userGame) return null;
-    return resolveCompletedGameId(userGame, { seasonId: league.seasonId, week: targetWeek });
-  }, [league]);
+  const latestCompletedGame = useMemo(() => findLatestUserCompletedGame(league), [league]);
+  const userLastGameStory = latestCompletedGame?.story ?? null;
+  const latestUserGameId = latestCompletedGame?.gameId ?? null;
+  const latestImmersion = latestCompletedGame?.immersion ?? null;
+  const userLastGame = latestCompletedGame?.game ?? null;
+  const userLastGameOpponent = useMemo(() => {
+    if (!userLastGame) return null;
+    const homeId = normalizeTeamId(userLastGame.home);
+    const awayId = normalizeTeamId(userLastGame.away);
+    const oppId = homeId === league?.userTeamId ? awayId : homeId;
+    return (league?.teams ?? []).find((t) => Number(t.id) === Number(oppId)) ?? null;
+  }, [league, userLastGame]);
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -209,6 +198,18 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <p className="weekly-card-eyebrow">Latest Result</p>
               <strong>{userLastGameStory?.headline ?? "No completed game yet"}</strong>
               <p>{userLastGameStory?.detail ?? "Play a game to populate recap context."}</p>
+              {userLastGame ? (
+                <p style={{ marginTop: 6, fontSize: 12, color: "var(--text-muted)" }}>
+                  {userLastGameOpponent ? `vs ${userLastGameOpponent.name} · ` : ""}
+                  {userLastGame.awayScore ?? 0}-{userLastGame.homeScore ?? 0}
+                  {latestImmersion?.streakImpact ? ` · ${latestImmersion.streakImpact}` : ""}
+                </p>
+              ) : null}
+              {latestImmersion?.playerOfGame ? (
+                <p style={{ marginTop: 6, fontSize: 12 }}>
+                  <strong>Top performer:</strong> {latestImmersion.playerOfGame.name} ({latestImmersion.playerOfGame.pos}) — {latestImmersion.playerOfGame.line ?? "impact game"}
+                </p>
+              ) : null}
               <Button size="sm" variant="outline" onClick={() => (latestUserGameId ? onOpenBoxScore?.(latestUserGameId) : onNavigate?.("Schedule"))}>Review box score</Button>
             </CardContent>
           </Card>

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 
 function teamColor(abbr = "") {
   const palette = [
@@ -40,7 +41,7 @@ const ROUND_LABELS = {
   22: "Super Bowl",
 };
 
-function MatchupCard({ game, teams, userTeamId, seedByTeam }) {
+function MatchupCard({ game, teams, userTeamId, seedByTeam, onOpenBoxScore, seasonId, week }) {
   if (!game) return null;
   const home = teams[game.home] ?? { abbr: "???", name: "TBD" };
   const away = teams[game.away] ?? { abbr: "???", name: "TBD" };
@@ -50,15 +51,22 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam }) {
 
   const homeWon = game.played && game.homeScore > game.awayScore;
   const awayWon = game.played && game.awayScore > game.homeScore;
+  const gameId = game?.played ? resolveCompletedGameId(game, { seasonId, week }) : null;
+  const clickable = Boolean(gameId && onOpenBoxScore);
 
   return (
     <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onOpenBoxScore?.(gameId) : undefined}
+      onKeyDown={clickable ? (e) => ((e.key === "Enter" || e.key === " ") ? onOpenBoxScore?.(gameId) : null) : undefined}
       style={{
         background: "var(--surface)",
         border: `2px solid ${isUserGame ? "var(--accent)" : "var(--hairline)"}`,
         borderRadius: "var(--radius-lg)",
         padding: "var(--space-3)",
         minWidth: 220,
+        cursor: clickable ? "pointer" : "default",
         boxShadow: isUserGame
           ? "0 0 12px rgba(10,132,255,0.2)"
           : "var(--shadow-sm)",
@@ -192,7 +200,7 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam }) {
   );
 }
 
-export default function PostseasonHub({ league }) {
+export default function PostseasonHub({ league, onOpenBoxScore }) {
   const { schedule, teams, playoffSeeds, userTeamId, week, championTeamId } =
     league;
 
@@ -380,6 +388,9 @@ export default function PostseasonHub({ league }) {
                     teams={teamMap}
                     userTeamId={userTeamId}
                     seedByTeam={seedByTeam}
+                    onOpenBoxScore={onOpenBoxScore}
+                    seasonId={league?.seasonId}
+                    week={weekData.week}
                   />
                 ))}
               </div>

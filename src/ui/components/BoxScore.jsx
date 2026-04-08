@@ -115,6 +115,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const scoring = useMemo(() => deriveScoringSummary(game?.stats?.playLogs ?? [], teamsById), [game, teamsById]);
   const momentumNotes = useMemo(() => deriveMomentumNotes(game?.stats?.playLogs ?? []), [game]);
   const quarterScores = useMemo(() => deriveQuarterScores(game, game?.stats?.playLogs ?? []), [game]);
+  const driveSummary = Array.isArray(game?.drives) ? game.drives : [];
+  const playLog = Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : [];
 
   const awayPlayers = useMemo(() => toPlayerArray(game?.stats?.away, game?.awayId), [game]);
   const homePlayers = useMemo(() => toPlayerArray(game?.stats?.home, game?.homeId), [game]);
@@ -170,6 +172,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <div className="bs-section-header">
                 <h4>Game recap</h4>
                 <button className="btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "Compact" : "Expand details"}</button>
+              </div>
+              <div className="bs-list-item" style={{ marginBottom: 10 }}>
+                {game?.summary?.storyline ?? game?.recap ?? "A complete box score was archived for this matchup."}
               </div>
               <div className="bs-leaders-grid">
                 <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} />
@@ -247,6 +252,20 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </table>
               </div>
             </section>
+            <section className="bs-section">
+              <h4>Drive summary</h4>
+              {!!driveSummary.length ? (
+                <div className="bs-list">
+                  {driveSummary.slice(expanded ? 0 : 8).map((drive, idx) => (
+                    <div key={`drive-${idx}`} className="bs-list-item">
+                      <span>Q{drive.quarter ?? "—"} {drive.startClock ?? drive.clock ?? ""}</span>
+                      <span>{drive.teamAbbr ?? teamsById?.[Number(drive.teamId)]?.abbr ?? "Drive"}</span>
+                      <span>{drive.result ?? drive.summary ?? `${drive.plays ?? 0} plays · ${drive.yards ?? 0} yds`}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <EmptyState title="No drive chart available" body="This game was simulated with summary-only detail." />}
+            </section>
 
             <section className="bs-section">
                 <h4>Turning points</h4>
@@ -258,6 +277,20 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </div>
               : <EmptyState title="No turning points available" body="Turning-point annotations are unavailable for this game." />}
               </section>
+            <section className="bs-section">
+              <h4>Play log</h4>
+              {!!playLog.length ? (
+                <div className="bs-list">
+                  {playLog.slice(expanded ? 0 : 20).map((play, idx) => (
+                    <div key={`play-${idx}`} className="bs-list-item">
+                      <span>Q{play.quarter ?? "—"} {play.clock ?? play.time ?? ""}</span>
+                      <span>{teamsById?.[Number(play.teamId)]?.abbr ?? "—"}</span>
+                      <span>{play.text ?? "Play event"}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : <EmptyState title="No play log archived" body="Full event-by-event tracking was not available for this game." />}
+            </section>
 
             {game?.recap && (
               <section className="bs-section">

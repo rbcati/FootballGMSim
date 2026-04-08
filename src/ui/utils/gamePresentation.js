@@ -207,15 +207,15 @@ function topPerformer(resultGame, side) {
   if (!rows.length) return null;
   const scored = rows.map((row) => {
     const s = row.stats;
-    const passYds = safeNum(s.passYds);
-    const rushYds = safeNum(s.rushYds);
-    const recYds = safeNum(s.recYds);
+    const passYds = safeNum(s.passYd);
+    const rushYds = safeNum(s.rushYd);
+    const recYds = safeNum(s.recYd);
     const tds = safeNum(s.passTD) + safeNum(s.rushTD) + safeNum(s.recTD);
     const sacks = safeNum(s.sacks);
-    const ints = safeNum(s.ints);
+    const ints = safeNum(s.interceptions);
     const tackles = safeNum(s.tackles);
-    const ff = safeNum(s.ff);
-    const fr = safeNum(s.fr);
+    const ff = safeNum(s.forcedFumbles);
+    const fr = safeNum(s.fumblesRecovered);
     const score = (passYds * 0.08) + (rushYds * 0.1) + (recYds * 0.1) + (tds * 12) + (sacks * 7) + (ints * 10) + (tackles * 0.4) + (ff * 4) + (fr * 4);
     return { ...row, score, tds, passYds, rushYds, recYds, sacks, ints, tackles };
   }).sort((a, b) => b.score - a.score);
@@ -264,7 +264,7 @@ export function deriveBoxScoreImmersion({ league, game, week }) {
       : null,
     notable,
     streakImpact,
-    hasPlayLog: Array.isArray(resultGame?.playLogs) && resultGame.playLogs.length > 0,
+    hasPlayLog: Array.isArray(resultGame?.boxScore?.playLogs) && resultGame.boxScore.playLogs.length > 0,
   };
 }
 

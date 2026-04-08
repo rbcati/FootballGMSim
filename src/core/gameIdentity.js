@@ -11,7 +11,20 @@ export function buildCanonicalGameId({ seasonId, week, homeId, awayId }) {
   return `${seasonId}_w${parsedWeek}_${hId}_${aId}`;
 }
 
-export function buildArchivedGame({ gameId, seasonId, week, homeId, awayId, homeScore, awayScore, stats = null, recap = null, drives = null, quarterScores = null }) {
+export function buildArchivedGame({
+  gameId,
+  seasonId,
+  week,
+  homeId,
+  awayId,
+  homeScore,
+  awayScore,
+  stats = null,
+  recap = null,
+  drives = null,
+  quarterScores = null,
+  summary = null,
+}) {
   const canonicalId = gameId ?? buildCanonicalGameId({ seasonId, week, homeId, awayId });
   return {
     id: canonicalId,
@@ -24,6 +37,7 @@ export function buildArchivedGame({ gameId, seasonId, week, homeId, awayId, home
     quarterScores: quarterScores ?? null,
     recap: recap ?? null,
     drives: drives ?? null,
+    summary: summary ?? null,
     stats: stats ?? null,
   };
 }
