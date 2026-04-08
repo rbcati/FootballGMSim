@@ -371,6 +371,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   };
 
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
+  const tradeDeadline = league?.tradeDeadline ?? null;
+  const tradeLocked = !!(tradeDeadline?.isLocked && !league?.commissionerMode);
 
 
   useEffect(() => {
@@ -409,7 +411,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   }, [showSavedToast]);
 
   const handlePropose = async () => {
-    if (!hasSelection || targetId == null) return;
+    if (!hasSelection || targetId == null || tradeLocked) return;
     setSubmitting(true);
     setTradeResult(null);
     try {
@@ -452,10 +454,20 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       ]}
     />
     <StickySubnav title="Package actions">
-      {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
+      {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting || tradeLocked}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
       <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); }}>Clear package</Button>
     </StickySubnav>
     <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
+      {(tradeDeadline?.isFinalWindow || tradeLocked) && (
+        <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)", borderColor: "rgba(245,158,11,0.45)" }}>
+          <strong style={{ display: "block", marginBottom: 4 }}>Trade deadline: Week {tradeDeadline?.deadlineWeek ?? "—"}</strong>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+            {tradeLocked
+              ? "Trade market is locked for normal gameplay until offseason."
+              : `${tradeDeadline?.weeksRemaining ?? 0} week(s) left before the deadline.`}
+          </div>
+        </div>
+      )}
       {showSavedToast && (
         <div style={{
           position: "fixed",
@@ -574,7 +586,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
               <span>{liveTheirTeam.wins ?? 0}-{liveTheirTeam.losses ?? 0}{(liveTheirTeam.ties ?? 0) ? `-${liveTheirTeam.ties}` : ""} · OVR {liveTheirTeam.ovr ?? "—"}</span>
             </div>
           )}
-          {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
+          {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting || tradeLocked}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
         </div>
         <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveMyTeam?.abbr ?? "You"} · {formatNeedsLine(myNeedsSummary)}</div>

@@ -295,6 +295,7 @@ let meta = getSafeMeta();
  */
 function buildViewState() {
   const meta = getSafeMeta();
+  const tradeDeadline = getTradeDeadlineSnapshot(meta);
   const teams = cache.getAllTeams().map(t => ({
     id:        t.id,
     name:      t.name,
@@ -402,6 +403,7 @@ function buildViewState() {
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
+    tradeDeadline,
     godMode: !!meta?.commissionerMode,
     commissionerMode: !!meta?.commissionerMode,
     commissionerEverEnabled: !!meta?.commissionerEverEnabled,
@@ -432,6 +434,21 @@ function pruneIncomingTradeOffers(metaObj) {
     normalized.push({ ...offer, id: stableId, signature });
   }
   return normalized;
+}
+
+function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) {
+  const settings = normalizeLeagueSettings(metaObj?.settings ?? {});
+  const deadlineWeek = Number(settings?.tradeDeadlineWeek ?? 9);
+  const currentWeek = Number(metaObj?.currentWeek ?? 1);
+  const weeksRemaining = deadlineWeek - currentWeek;
+  return {
+    deadlineWeek,
+    currentWeek,
+    weeksRemaining,
+    isLocked: currentWeek > deadlineWeek,
+    isFinalWindow: weeksRemaining >= 0 && weeksRemaining <= 2,
+    canOverride: !!metaObj?.commissionerMode,
+  };
 }
 
 function allPlayersOnTeam(teamId, playerIds = []) {
@@ -931,6 +948,28 @@ async function handleLoadSave({ leagueId }, id) {
         commissionerEverEnabled: !!meta?.commissionerEverEnabled,
         commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
       });
+
+      if (meta?.schedule?.weeks?.length) {
+        for (const weekRow of meta.schedule.weeks) {
+          const resolvedWeek = Number(weekRow?.week ?? 0);
+          for (const game of weekRow?.games ?? []) {
+            const homeId = Number(game?.home?.id ?? game?.home);
+            const awayId = Number(game?.away?.id ?? game?.away);
+            const hasFinal = game?.played || game?.homeScore != null || game?.awayScore != null;
+            if (!hasFinal || !Number.isFinite(homeId) || !Number.isFinite(awayId) || !Number.isFinite(resolvedWeek)) continue;
+            const canonicalGameId = buildCanonicalGameId({
+              seasonId: meta?.currentSeasonId,
+              week: resolvedWeek,
+              homeId,
+              awayId,
+            });
+            if (canonicalGameId && !game?.gameId) game.gameId = canonicalGameId;
+            if (game?.seasonId == null) game.seasonId = meta?.currentSeasonId;
+            if (game?.week == null) game.week = resolvedWeek;
+          }
+        }
+        cache.setMeta({ schedule: meta.schedule });
+      }
 
       // Auto-generate draft class if save is in draft phase but prospects are missing.
       // This guards against iOS saves where the worker restarted mid-draft.
@@ -1469,6 +1508,16 @@ async function handleAdvanceWeek(payload, id) {
   const week        = meta.currentWeek;
   const seasonId    = meta.currentSeasonId;
   const schedule    = expandSchedule(meta.schedule);
+  const tradeDeadline = getTradeDeadlineSnapshot(meta);
+
+  if (tradeDeadline.isFinalWindow && !tradeDeadline.isLocked) {
+    post(toUI.NOTIFICATION, {
+      level: 'warn',
+      message: tradeDeadline.weeksRemaining === 0
+        ? `Trade deadline is this week (Week ${tradeDeadline.deadlineWeek}).`
+        : `Trade deadline in ${tradeDeadline.weeksRemaining} week${tradeDeadline.weeksRemaining === 1 ? '' : 's'} (Week ${tradeDeadline.deadlineWeek}).`,
+    }, id);
+  }
 
   if (!schedule) { post(toUI.ERROR, { message: 'No schedule found' }, id); return; }
   // ── 0. Check for User Game to Prompt ────────────────────────────────────
@@ -2649,8 +2698,20 @@ async function handleGetBoxScore({ gameId }, id) {
       const parsed = String(gameId).match(/(.+)_w(\d+)_(\d+)_(\d+)$/);
       if (parsed) {
         const [, seasonKey, weekValue, homeValue, awayValue] = parsed;
-        const possible = (await Games.bySeason(seasonKey)) ?? [];
-        game = possible.find((g) =>
+        const seasonalCandidates = [];
+        seasonalCandidates.push(...((await Games.bySeason(seasonKey)) ?? []));
+        const numericSeasonKey = Number(seasonKey);
+        if (Number.isFinite(numericSeasonKey)) {
+          seasonalCandidates.push(...((await Games.bySeason(numericSeasonKey)) ?? []));
+        }
+        const deduped = [];
+        const seen = new Set();
+        for (const g of seasonalCandidates) {
+          if (!g?.id || seen.has(g.id)) continue;
+          seen.add(g.id);
+          deduped.push(g);
+        }
+        game = deduped.find((g) =>
           Number(g?.week) === Number(weekValue)
           && (
             (Number(g?.homeId) === Number(homeValue) && Number(g?.awayId) === Number(awayValue))
@@ -4108,6 +4169,15 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
 
   const meta = ensureDynastyMeta(cache.getMeta());
+  const deadline = getTradeDeadlineSnapshot(meta);
+  if (deadline.isLocked && !deadline.canOverride) {
+    post(toUI.TRADE_RESPONSE, {
+      accepted: false,
+      rejectionType: 'deadline',
+      reason: `Trade deadline passed after Week ${deadline.deadlineWeek}. Trades are locked until offseason.`,
+    }, id);
+    return;
+  }
   const week = Number(meta?.currentWeek ?? 1);
   const diff = meta.difficulty || 'Normal';
   const aiDirection = inferTeamDirection(to, week);
@@ -4280,6 +4350,11 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
 
 async function handleAcceptIncomingTrade({ offerId }, id) {
   const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const deadline = getTradeDeadlineSnapshot(latestMeta);
+  if (deadline.isLocked && !deadline.canOverride) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
+    return;
+  }
   const offers = pruneIncomingTradeOffers(latestMeta);
   const offer = offers.find((o) => o?.id === offerId);
   if (!offer) {
@@ -4312,6 +4387,11 @@ async function handleRejectIncomingTrade({ offerId }, id) {
 
 async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) {
   const latestMeta = ensureDynastyMeta(cache.getMeta());
+  const deadline = getTradeDeadlineSnapshot(latestMeta);
+  if (deadline.isLocked && !deadline.canOverride) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, counterStatus: 'locked', rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
+    return;
+  }
   const offers = pruneIncomingTradeOffers(latestMeta);
   const offer = offers.find((o) => o?.id === offerId);
   if (!offer) {

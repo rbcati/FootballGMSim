@@ -95,6 +95,9 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   if (!league || !user || !weeklyContext) return null;
 
   const cap = deriveTeamCapSnapshot(user, { fallbackCapTotal: 255 });
+  const capUrgent = league?.phase === "free_agency"
+    || Number(weeklyContext?.pressurePoints?.expiringCount ?? 0) > 0
+    || Number(cap.capRoom ?? 0) < 0;
   const ownerMood = league.ownerMood ?? league.ownerApproval;
   const ownerDisplay = formatPercent(ownerMood, "—", { digits: 0 });
   const pressure = weeklyContext?.pressure;
@@ -161,7 +164,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
         metadata={buildHeaderMetadata([
           { label: "Week", value: league.week ?? 1 },
           { label: "Record", value: `${user.wins ?? 0}-${user.losses ?? 0}${(user.ties ?? 0) ? `-${user.ties}` : ""}` },
-          { label: "Cap", value: formatMoneyM(cap.capRoom) },
+          ...(capUrgent ? [{ label: "Cap", value: formatMoneyM(cap.capRoom) }] : []),
         ])}
       />
       <Card variant="primary" className="weekly-primary weekly-hero">
@@ -176,7 +179,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
             <Badge>Owner {pressure?.owner?.state ?? "Stable"} {ownerDisplay}</Badge>
             {pressure?.fans?.state ? <Badge variant="secondary">Fans {pressure.fans.state}</Badge> : null}
             {pressure?.media?.state ? <Badge variant="outline">Media {pressure.media.state}</Badge> : null}
-            <Badge variant="secondary">Cap {formatMoneyM(cap.capRoom)}</Badge>
+            {capUrgent ? <Badge variant="secondary">Cap {formatMoneyM(cap.capRoom)}</Badge> : null}
           </div>
         </CardHeader>
         <CardContent className="weekly-hero__actions">
@@ -189,6 +192,19 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           ))}
         </CardContent>
       </Card>
+      {league?.tradeDeadline?.isFinalWindow || league?.tradeDeadline?.isLocked ? (
+        <Card variant="secondary" className="weekly-hub-card">
+          <CardContent className="weekly-hub-card__body">
+            <p className="weekly-card-eyebrow">Trade deadline</p>
+            <strong>
+              {league?.tradeDeadline?.isLocked
+                ? `Trades locked after Week ${league.tradeDeadline.deadlineWeek}`
+                : `${league.tradeDeadline.weeksRemaining} week${league.tradeDeadline.weeksRemaining === 1 ? "" : "s"} until Week ${league.tradeDeadline.deadlineWeek} deadline`}
+            </strong>
+            <p>{league?.tradeDeadline?.isLocked ? "Normal trade flow is closed until offseason." : "Plan final offers before advancing past the deadline."}</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <section className="weekly-section">
         <SectionHeader title="What just happened" subtitle="Result context first, then what is next." />
@@ -251,22 +267,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
       </section>
 
       <section className="weekly-section">
-        <SectionHeader title="Team snapshot" subtitle="Compact status only." />
-        <div className="weekly-stat-grid">
-          {snapshotTiles.map((tile) => (
-            <Card key={tile.label} variant="secondary" className="weekly-stat-tile">
-              <CardContent className="weekly-stat-tile__body">
-                <span>{tile.label}</span>
-                <strong>{tile.value}</strong>
-                <small>{tile.context}</small>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <section className="weekly-section">
-        <SectionHeader title="Momentum, pressure, and health" subtitle="The franchise pulse in one scan." />
+        <SectionHeader title="Standings + momentum snapshot" subtitle="High-signal pulse only." />
         <div className="weekly-card-grid">
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
@@ -283,46 +284,20 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open pressure view</Button>
             </CardContent>
           </Card>
-          <Card variant="secondary" className="weekly-hub-card">
+          {capUrgent ? <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
               <p className="weekly-card-eyebrow">Cap + payroll</p>
               <strong>{formatMoneyM(cap.capRoom)} cap room · {formatMoneyM(user?.capUsed ?? user?.payroll ?? 0)} payroll</strong>
               <p>{(weeklyContext?.pressurePoints?.expiringCount ?? 0)} expiring contracts · {(weeklyContext?.pressurePoints?.incomingTradeCount ?? 0)} incoming trade calls</p>
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Open finances</Button>
             </CardContent>
-          </Card>
+          </Card> : null}
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
               <p className="weekly-card-eyebrow">Injury report</p>
               <strong>{weeklyContext?.pressurePoints?.injuriesCount ?? 0} active injury cases</strong>
               <p>{(weeklyContext?.pressurePoints?.injuriesCount ?? 0) > 0 ? "Check depth chart and medical staffing before advancing." : "Roster health is stable this week."}</p>
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Review injuries</Button>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      <section className="weekly-section">
-        <SectionHeader title="Top storylines + quick actions" subtitle="Three narratives, then execute." />
-        <div className="weekly-card-grid">
-          <Card variant="secondary" className="weekly-hub-card">
-            <CardContent className="weekly-hub-card__body">
-              <p className="weekly-card-eyebrow">Top 3 storylines</p>
-              <div className="weekly-digest-list">
-                {(topStorylines.length ? topStorylines : [{ title: "No major storyline spikes", detail: "League context is stable this week.", tab: "Standings" }]).map((story, idx) => (
-                  <button key={`${story.title}-${idx}`} className="weekly-digest-action" onClick={() => onNavigate?.(story.tab ?? "Standings")}>{story.title} — {story.detail}</button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          <Card variant="secondary" className="weekly-hub-card">
-            <CardContent className="weekly-hub-card__body">
-              <p className="weekly-card-eyebrow">Quick actions</p>
-              <div className="weekly-inline-actions">
-                {quickActions.map((item) => (
-                  <Button key={item.label} size="sm" variant="outline" onClick={() => onNavigate?.(item.tab)}>{item.label}</Button>
-                ))}
-              </div>
             </CardContent>
           </Card>
         </div>
