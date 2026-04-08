@@ -13,6 +13,7 @@ import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
+import { ScreenHeader, SectionCard, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 
 // ── Seeded RNG ──────────────────────────────────────────────────────────────
 
@@ -820,9 +821,24 @@ export default function StaffManagement({ league, actions }) {
   const enrich = (m) => ({ ...m, performance: m?.rating ?? 60, traits: Object.entries(m?.attrs ?? {}).slice(0, 3).map(([k,v]) => ({ id:k, name:`${k}: ${Math.round(v)}`, icon:'•', color:'#60a5fa', bg:'rgba(96,165,250,0.15)', description:k })) });
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <h1 style={{ marginBottom: "var(--space-4, 16px)" }}>Staff Management</h1>
-      <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
+    <div style={{ maxWidth: 900, margin: "0 auto" }} className="app-screen-stack">
+      <ScreenHeader
+        eyebrow="Operations"
+        title="Staff Management"
+        subtitle="Run coaching, scouting, and support hiring from one workflow."
+        metadata={[
+          { label: "Budget Used", value: `$${totalUsed.toFixed(1)}M` },
+          { label: "Remaining", value: `$${budgetRemaining.toFixed(1)}M` },
+          { label: "Direction", value: direction },
+        ]}
+      />
+      <StickySubnav title="Quick actions">
+        <button className="btn" onClick={() => setHiringPanel('scout')}>Hire Scout</button>
+        <button className="btn" onClick={() => setHiringPanel('support')}>Hire Support</button>
+      </StickySubnav>
+      <SectionCard title="Budget">
+        <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
+      </SectionCard>
       {staffState?.bonuses && <div className="card" style={{ padding: 10, marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
         Development {staffState.bonuses.developmentDelta >= 0 ? '+' : ''}{(staffState.bonuses.developmentDelta*100).toFixed(1)}% · Rookie adaptation {staffState.bonuses.rookieAdaptationDelta >= 0 ? '+' : ''}{(staffState.bonuses.rookieAdaptationDelta*100).toFixed(1)}% · Injury volatility {(staffState.bonuses.injuryRateDelta*100).toFixed(1)}%
       </div>}
@@ -856,6 +872,7 @@ export default function StaffManagement({ league, actions }) {
           onClose={() => setHiringPanel(null)}
         />
       )}
+      {!staffState && <EmptyState title="No staff state yet" body="Load a save with staff data to unlock hiring and firing actions." />}
     </div>
   );
 }

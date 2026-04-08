@@ -41,6 +41,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
+import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -758,8 +759,18 @@ export default function FreeAgency({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="free-agency-container">
+    <div className="free-agency-container app-screen-stack">
       <style>{mobileStyle}</style>
+      <ScreenHeader
+        eyebrow="Operations"
+        title="Free Agency"
+        subtitle="Scan market pressure, filter targets, and place bids quickly."
+        metadata={[
+          { label: "Cap Room", value: `$${capRoom.toFixed(1)}M` },
+          { label: "Pool", value: sortedAgents.length },
+          { label: "Phase", value: faState?.phase ?? "loading" },
+        ]}
+      />
       <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
         <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 8 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Free Agency · transaction workspace</div>
@@ -887,6 +898,10 @@ export default function FreeAgency({
       )}
 
       {/* Filters Toolbar */}
+      <StickySubnav title="Filters and view">
+        <Button className="btn" onClick={() => setViewMode("table")} style={{ opacity: viewMode === "table" ? 1 : 0.75 }}>Table</Button>
+        <Button className="btn" onClick={() => setViewMode("cards")} style={{ opacity: viewMode === "cards" ? 1 : 0.75 }}>Cards</Button>
+      </StickySubnav>
       <Card
         className="card-premium"
         style={{
@@ -986,10 +1001,7 @@ export default function FreeAgency({
                 {pos}
               </Button>
             ))}
-            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-              <Button className="btn" onClick={() => setViewMode("table")} style={{ opacity: viewMode === "table" ? 1 : 0.75 }}>Table</Button>
-              <Button className="btn" onClick={() => setViewMode("cards")} style={{ opacity: viewMode === "cards" ? 1 : 0.75 }}>Cards</Button>
-            </div>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }} />
           </div>
         </CardContent>
       </Card>
@@ -1294,9 +1306,7 @@ export default function FreeAgency({
             {/* Mobile Card Layout */}
             <div className="mobile-only" style={{ display: "none", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
                {sortedAgents.length === 0 && (
-                  <div style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-6)" }}>
-                      No free agents match your filter.
-                  </div>
+                  <EmptyState title="No free agents match" body="Adjust filters, minimum OVR, or search criteria." />
                )}
                {sortedAgents.slice(0, 100).map((player, idx) => {
                   const isSigningThis = signingPlayerId === player.id;
