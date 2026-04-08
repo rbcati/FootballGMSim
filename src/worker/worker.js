@@ -407,6 +407,7 @@ function buildViewState() {
     commissionerEverEnabled: !!meta?.commissionerEverEnabled,
     commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog.slice(-100) : [],
     teams,
+    leagueId: getActiveLeagueId(), // Crucial: UI needs this to open the correct DB
   };
 }
 
