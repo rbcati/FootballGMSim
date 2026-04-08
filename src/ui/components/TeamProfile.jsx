@@ -298,6 +298,8 @@ export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, 
             <section>
               <h3 style={sectionHeadingStyle}>Current Season Identity</h3>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: "var(--space-2)" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Roster")}>Open roster</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trades")}>Open trade workspace</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Analytics")}>Team analytics</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Injuries")}>Injury report</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Financials</Button>

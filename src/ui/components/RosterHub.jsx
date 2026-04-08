@@ -14,6 +14,8 @@ import React, { useState, useMemo, useCallback } from "react";
 import { OvrPill } from "./LeagueDashboard.jsx";
 import PlayerCardGrid from "./PlayerCardGrid.jsx";
 import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
+import { ScreenHeader, SectionCard, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
+import { applyRangeFilter, inTier, cycleSort } from "../utils/managementList.js";
 
 // ── Position color map (matches stadium-theme.css pos-badge classes) ──
 const POS_COLORS = {
@@ -272,6 +274,10 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   const [posFilter, setPosFilter] = useState("ALL");
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDesc, setSortDesc] = useState(true);
+  const [ageRange, setAgeRange] = useState([20, 40]);
+  const [overallTier, setOverallTier] = useState("all");
+  const [expiringOnly, setExpiringOnly] = useState(false);
+  const [injuredOnly, setInjuredOnly] = useState(false);
 
   const activeTeamId = teamId ?? league?.userTeamId;
   const team = league?.teams?.find(t => t.id === activeTeamId);
@@ -296,6 +302,10 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
     if (group?.positions) {
       players = players.filter(p => group.positions.includes(p.pos || p.position));
     }
+    players = players.filter((p) => applyRangeFilter(p.age ?? 0, ageRange));
+    players = players.filter((p) => inTier(p.ovr || p.displayOvr || 0, overallTier));
+    if (expiringOnly) players = players.filter((p) => (p.years ?? p.contract?.years ?? 0) <= 1);
+    if (injuredOnly) players = players.filter((p) => (p.injuryWeeksRemaining || 0) > 0);
 
     // Sort
     players.sort((a, b) => {
@@ -331,13 +341,9 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   }, [roster, search, posFilter, sortKey, sortDesc]);
 
   const handleSortToggle = useCallback((key) => {
-    if (sortKey === key) {
-      setSortDesc(d => !d);
-    } else {
-      const opt = SORT_OPTIONS.find(o => o.key === key);
-      setSortKey(key);
-      setSortDesc(opt?.desc ?? true);
-    }
+    const next = cycleSort(sortKey, sortDesc ? "desc" : "asc", key, SORT_OPTIONS.filter((o) => o.desc).map((o) => o.key));
+    setSortKey(next.key);
+    setSortDesc(next.dir === "desc");
   }, [sortKey]);
 
   // Roster summary stats
@@ -351,9 +357,23 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
     : null;
 
   return (
-    <div className="fade-in">
+    <div className="fade-in app-screen-stack">
+      <ScreenHeader
+        eyebrow="Operations"
+        title={team?.name ? `${team.name} Roster` : "Roster"}
+        subtitle="Manage depth, contracts, and trade posture with fast card/table workflows."
+        metadata={[
+          { label: "Players", value: rosterSize },
+          { label: "Injured", value: injuredCount },
+          { label: "Cap Room", value: `$${(team?.capRoom ?? 0).toFixed(1)}M` },
+        ]}
+      />
+      <StickySubnav title="Roster controls">
+        <ViewToggle mode={viewMode} onChange={setViewMode} />
+      </StickySubnav>
       {/* ── Scheme banner ── */}
       {schemeName && (
+        <SectionCard title="Scheme context" subtitle="Track roster fit against your active offensive approach.">
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           background: "var(--surface)",
@@ -372,12 +392,14 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             </div>
           )}
         </div>
+        </SectionCard>
       )}
 
       {/* ── Header Stats + View Toggle ── */}
+      <SectionCard title="Roster overview">
       <div style={{
         display: "flex", alignItems: "flex-start",
-        gap: "var(--space-3)", marginBottom: "var(--space-4)",
+        gap: "var(--space-3)",
         flexWrap: "wrap",
       }}>
         <div style={{
@@ -391,26 +413,30 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
           <StatCard label="Payroll" value={`$${totalSalary.toFixed(1)}M`} />
           <StatCard label="Injured" value={injuredCount} color={injuredCount > 3 ? "var(--danger)" : "var(--text)"} />
         </div>
-        <ViewToggle mode={viewMode} onChange={setViewMode} />
       </div>
+      </SectionCard>
 
       {/* ── Cards view ── */}
       {viewMode === "cards" && (
-        <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
+        <SectionCard title="Card view" subtitle="Mobile-first browsing with visual player summaries.">
+          <PlayerCardGrid roster={roster} onPlayerSelect={onPlayerSelect} />
+        </SectionCard>
       )}
 
       {/* ── Depth Chart view ── */}
       {viewMode === "depth" && (
+        <SectionCard title="Depth chart" subtitle="Set starters and role hierarchy.">
         <DragAndDropDepthChart
           league={league}
           actions={actions}
           onPlayerSelect={onPlayerSelect}
         />
+        </SectionCard>
       )}
 
       {/* ── Table view (existing list with search/filter/sort) ── */}
       {viewMode === "table" && (
-        <>
+        <SectionCard title="Table view" subtitle="Dense sortable roster table for power-user management.">
           {/* Search + Sort */}
           <div style={{
             display: "flex", gap: "var(--space-2)",
@@ -424,6 +450,17 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
               className="settings-input"
               style={{ flex: 1, minWidth: 0 }}
             />
+            <input type="number" min={20} max={40} value={ageRange[0]} onChange={(e) => setAgeRange([Number(e.target.value), ageRange[1]])} className="settings-input" style={{ width: 64 }} />
+            <input type="number" min={20} max={40} value={ageRange[1]} onChange={(e) => setAgeRange([ageRange[0], Number(e.target.value)])} className="settings-input" style={{ width: 64 }} />
+            <select value={overallTier} onChange={(e) => setOverallTier(e.target.value)} className="settings-input" style={{ width: 130 }}>
+              <option value="all">All tiers</option>
+              <option value="elite">Elite</option>
+              <option value="starter">Starter</option>
+              <option value="depth">Depth</option>
+              <option value="fringe">Fringe</option>
+            </select>
+            <label style={{ fontSize: 12 }}><input type="checkbox" checked={expiringOnly} onChange={(e) => setExpiringOnly(e.target.checked)} /> Expiring</label>
+            <label style={{ fontSize: 12 }}><input type="checkbox" checked={injuredOnly} onChange={(e) => setInjuredOnly(e.target.checked)} /> Injured</label>
             <div style={{
               display: "flex", gap: "var(--space-1)",
               overflowX: "auto", flexShrink: 0,
@@ -479,32 +516,41 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             ))}
           </div>
 
-          {/* Player list */}
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-            gap: "var(--space-2)",
-          }}>
-            {filtered.length === 0 && (
-              <div style={{
-                gridColumn: "1 / -1",
-                textAlign: "center", padding: "var(--space-8)",
-                color: "var(--text-muted)", fontSize: "var(--text-sm)",
-              }}>
-                {search ? `No players matching "${search}"` : "No players found"}
-              </div>
-            )}
-            {filtered.map((player, i) => (
-              <div key={player.id} className={`stagger-${Math.min(i + 1, 8)}`}>
-                <PlayerRow
-                  player={player}
-                  isUser={isUserTeam}
-                  onSelect={onPlayerSelect}
-                  schemeName={schemeName}
-                />
-              </div>
-            ))}
+          <div style={{ overflowX: "auto" }}>
+            <table className="standings-table" style={{ width: "100%", minWidth: 900 }}>
+              <thead style={{ position: "sticky", top: 0, zIndex: 2 }}>
+                <tr>
+                  <th>Name</th><th>Pos</th><th>Age</th><th>OVR</th><th>POT</th><th>Morale</th><th>Injury</th><th>Salary</th><th>Years</th><th>Cap Hit</th><th>Fit</th><th>Flags</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((player) => {
+                  const fit = computeSchemeFit(player, schemeName);
+                  const salary = player.baseAnnual || player.contract?.baseAnnual || 0;
+                  const yearsLeft = player.years ?? player.contract?.years ?? 0;
+                  const injuryWeeks = player.injuryWeeksRemaining || 0;
+                  return (
+                    <tr key={player.id}>
+                      <td><button className="btn-link" onClick={() => onPlayerSelect?.(player.id)}>{player.name}</button></td>
+                      <td>{player.pos || player.position}</td>
+                      <td>{player.age}</td>
+                      <td>{player.ovr || player.displayOvr || 0}</td>
+                      <td>{player.potential || "—"}</td>
+                      <td>{Math.round(player.morale ?? 70)}</td>
+                      <td>{injuryWeeks > 0 ? `${injuryWeeks}w` : "—"}</td>
+                      <td>${salary.toFixed(1)}M</td>
+                      <td>{yearsLeft}</td>
+                      <td>${salary.toFixed(1)}M</td>
+                      <td style={{ color: schemeFitColor(fit) }}>{fit ?? "—"}</td>
+                      <td>{yearsLeft <= 1 ? "EXP " : ""}{injuryWeeks > 0 ? "INJ" : ""}</td>
+                      <td><button className="btn" onClick={() => onPlayerSelect?.(player.id)}>View</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+          {filtered.length === 0 && <EmptyState title="No roster matches" body={search ? `No players matching "${search}".` : "Adjust filters to see players."} />}
 
           {/* Summary Footer */}
           <div style={{
@@ -515,7 +561,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
             Showing {filtered.length} of {rosterSize} players
             {team && ` · Cap Room: $${(team.capRoom ?? 0).toFixed(1)}M`}
           </div>
-        </>
+        </SectionCard>
       )}
     </div>
   );

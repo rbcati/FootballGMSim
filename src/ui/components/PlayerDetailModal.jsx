@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo } from "react";
 import { getTeamIdentity } from "../../data/team-utils.js";
+import { ScreenHeader, EmptyState } from "./ScreenSystem.jsx";
 
 function fmtNumber(value) {
   return Number(value || 0).toLocaleString();
 }
 
-export default function PlayerDetailModal({ player, teams = [], onClose }) {
+export default function PlayerDetailModal({ player, teams = [], onClose, onNavigate, onTradeAction, onCompare }) {
   if (!player) return null;
 
   const careerStats = player?.careerStats ?? [];
@@ -58,19 +59,24 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
       >
         <div style={{ padding: "var(--space-4) var(--space-5)", borderBottom: "1px solid var(--hairline)", display: "flex", justifyContent: "space-between", gap: "var(--space-3)", alignItems: "flex-start", background: "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02))" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: "0.9px", color: "var(--text-subtle)", fontWeight: 700, marginBottom: "var(--space-1)" }}>Player Profile</div>
-            <div style={{ fontSize: "var(--text-2xl)", fontWeight: 900, lineHeight: 1.12 }}>{playerName}</div>
+            <ScreenHeader
+              compact
+              eyebrow="Player profile"
+              title={playerName}
+              subtitle={`${position} · Age ${player?.age ?? "—"} · ${player?.teamAbbr || player?.team || "Team N/A"}`}
+              metadata={[
+                { label: "OVR", value: player?.ovr ?? "—" },
+                { label: "POT", value: player?.potential ?? player?.pot ?? "—" },
+              ]}
+            />
             {player?.onTradeBlock && (
               <span className="trade-block-badge">🔴 On Trade Block</span>
             )}
-            <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)", marginTop: "var(--space-1)" }}>
-              {position} · Age {player?.age ?? "—"} · {player?.teamAbbr || player?.team || "Team N/A"}
-            </div>
             <div style={{ display: "flex", gap: "var(--space-2)", marginTop: "var(--space-2)", flexWrap: "wrap" }}>
-              <span className={`rating-pill rating-color-${(player?.ovr ?? 0) >= 85 ? "elite" : (player?.ovr ?? 0) >= 75 ? "good" : "avg"}`}>{player?.ovr ?? "—"} OVR</span>
-              <span style={{ padding: "3px 10px", borderRadius: "999px", border: "1px solid rgba(255,255,255,0.18)", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--text-muted)" }}>
-                Pot {player?.potential ?? player?.pot ?? "—"}
-              </span>
+              <button className="btn" onClick={() => onCompare?.(player.id)}>Compare</button>
+              <button className="btn" onClick={() => onNavigate?.("Trades")}>Open Trade Workspace</button>
+              <button className="btn" onClick={() => onTradeAction?.("toggle_trade_block", player.id)}>{player?.onTradeBlock ? "Remove Trade Block" : "Add Trade Block"}</button>
+              <button className="btn btn-primary" onClick={() => onNavigate?.("Free Agency")}>Negotiate Extension</button>
             </div>
           </div>
           <button className="btn" onClick={onClose} aria-label="Close player detail modal" style={{ borderRadius: "999px", minWidth: 40, minHeight: 40, padding: 0, fontSize: "1.1rem", fontWeight: 800 }}>✕</button>
@@ -82,7 +88,7 @@ export default function PlayerDetailModal({ player, teams = [], onClose }) {
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.6px" }}>{rows.length} seasons</div>
           </div>
           {careerStats.length === 0 ? (
-            <p className="no-stats" style={{ color: "var(--text-muted)" }}>No career stats recorded yet.</p>
+            <EmptyState title="No career stats yet" body="Career stat rows will appear once the player has logged games." />
           ) : (
             <div style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", background: "rgba(255,255,255,0.02)" }}>
               <table className="standings-table" style={{ width: "100%", fontSize: "0.76rem", lineHeight: 1.35 }}>

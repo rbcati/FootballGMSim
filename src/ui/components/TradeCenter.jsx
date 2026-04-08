@@ -14,6 +14,7 @@ import TradeBlockPanel from "./TradeBlockPanel.jsx";
 import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals.js";
 import { buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
+import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -429,6 +430,21 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   };
 
   return (
+    <div className="app-screen-stack">
+    <ScreenHeader
+      eyebrow="Operations"
+      title="Trade Builder"
+      subtitle="Build and evaluate offers with clearer asset, fit, and cap context."
+      metadata={[
+        { label: "Partner", value: liveTheirTeam?.abbr ?? "None" },
+        { label: "Outgoing", value: offering.size + myPicks.length },
+        { label: "Incoming", value: receiving.size + theirPicks.length },
+      ]}
+    />
+    <StickySubnav title="Package actions">
+      {targetId && <Button className="btn btn-primary" onClick={handlePropose} disabled={!hasSelection || submitting}>{submitting ? "Evaluating…" : counterOfferId ? "Send Counter" : "Propose Trade"}</Button>}
+      <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); }}>Clear package</Button>
+    </StickySubnav>
     <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
       {showSavedToast && (
         <div style={{
@@ -567,7 +583,7 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       {tradeResult && <TradeResult result={tradeResult} onDismiss={() => setTradeResult(null)} />}
 
       {targetId == null ? (
-        <div style={{ textAlign: "center", padding: "var(--space-10)", color: "var(--text-muted)" }}>Select a trade partner to begin.</div>
+        <EmptyState title="Select a trade partner" body="Choose another team to load available assets and package controls." />
       ) : loading ? (
         <div style={{ textAlign: "center", padding: "var(--space-8)", color: "var(--text-muted)" }}>Loading rosters…</div>
       ) : (
@@ -628,5 +644,6 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         </>
       )}
     </CardContent></Card>
+    </div>
   );
 }
