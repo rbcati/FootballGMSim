@@ -13,9 +13,9 @@ test.describe('Daily Regression Pass', () => {
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
-        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn');
+        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
         if (createBtn) {
-            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn');
+            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
             await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
             await page.locator('.team-select-btn, .team-card').first().click();
             await page.click('button:has-text("Continue")');
@@ -43,18 +43,22 @@ test.describe('Daily Regression Pass', () => {
         const hubVisible = await page.isVisible('.app-header');
         expect(hubVisible).toBeTruthy();
 
+        // Handle Onboarding Tour popup
+        if (await page.isVisible('button:has-text("Skip tour")')) {
+            await page.click('button:has-text("Skip tour")');
+            await page.waitForTimeout(500);
+        }
+
         // 3. Advance Week (Smoke Test Requirement)
+        await page.waitForFunction(() => window.state && window.state.league && window.state.league.week);
         const startWeek = await page.evaluate(() => window.state.league.week);
         console.log(`Current Week: ${startWeek}`);
 
         // Try different advance buttons
-        const advanceBtnTop = page.locator('.app-advance-btn');
+        const advanceBtnTop = page.locator('.app-advance-btn, button:has-text("Advance Week")').first();
 
         if (await advanceBtnTop.isVisible()) {
-            await page.evaluate(() => {
-                const btn = document.querySelector('.app-advance-btn');
-                if(btn) btn.click();
-            });
+            await advanceBtnTop.click();
         } else {
             console.log('No advance button found, forcing via JS');
             await page.evaluate(() => window.handleGlobalAdvance());
@@ -63,7 +67,7 @@ test.describe('Daily Regression Pass', () => {
         // Sometimes the prompt to simulate or watch game appears
         await page.waitForTimeout(1000);
         await page.evaluate(() => {
-             const skipBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Simulate (Skip)'));
+             const skipBtn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.includes('Simulate (Skip)') || b.innerText.includes('Sim to Playoffs'));
              if(skipBtn) skipBtn.click();
         });
 
@@ -88,12 +92,24 @@ test.describe('Daily Regression Pass', () => {
         await page.waitForTimeout(1000);
 
         // Ensure game loaded
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+        if (createBtn) {
+            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+            await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
+            await page.locator('.team-select-btn, .team-card').first().click();
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Start Dynasty")');
+        } else {
+            await page.waitForFunction(() => window.gameController !== undefined);
+            await page.evaluate(async () => {
+                if (!window.state?.league) {
+                    await window.gameController.startNewLeague();
+                }
+            });
+        }
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
 
         // 1. Test Strategy Persistence
@@ -156,12 +172,24 @@ test.describe('Daily Regression Pass', () => {
 
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+        if (createBtn) {
+            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+            await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
+            await page.locator('.team-select-btn, .team-card').first().click();
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Start Dynasty")');
+        } else {
+            await page.waitForFunction(() => window.gameController !== undefined);
+            await page.evaluate(async () => {
+                if (!window.state?.league) {
+                    await window.gameController.startNewLeague();
+                }
+            });
+        }
         await page.waitForFunction(() => window.state && window.state.league);
         try {
             await page.waitForSelector('.app-header', { state: 'visible', timeout: 60000 });
@@ -224,12 +252,24 @@ test.describe('Daily Regression Pass', () => {
 
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
-        await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+        if (createBtn) {
+            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn, button:has-text("Start New Franchise")');
+            await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
+            await page.locator('.team-select-btn, .team-card').first().click();
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Continue")');
+            await page.waitForTimeout(500);
+            await page.click('button:has-text("Start Dynasty")');
+        } else {
+            await page.waitForFunction(() => window.gameController !== undefined);
+            await page.evaluate(async () => {
+                if (!window.state?.league) {
+                    await window.gameController.startNewLeague();
+                }
+            });
+        }
         await page.waitForFunction(() => window.state && window.state.league);
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 20000 });
 

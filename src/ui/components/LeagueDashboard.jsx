@@ -2070,7 +2070,6 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}
@@ -2081,7 +2080,6 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}
@@ -2210,7 +2208,6 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}
@@ -2227,7 +2224,6 @@ export default function LeagueDashboard({
               onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "Season Recap")}
-              league={league}
             />
           </TabErrorBoundary>
         )}
