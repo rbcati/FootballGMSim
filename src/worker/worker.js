@@ -1975,6 +1975,7 @@ function applyGameResultToCache(result, week, seasonId) {
 
   const scoreHome = result.scoreHome ?? result.homeScore ?? 0;
   const scoreAway = result.scoreAway ?? result.awayScore ?? 0;
+  const margin = Math.abs(Number(scoreHome) - Number(scoreAway));
 
   const homeWin = scoreHome > scoreAway;
   const tie     = scoreHome === scoreAway;
@@ -2070,6 +2071,15 @@ function applyGameResultToCache(result, week, seasonId) {
     recap: result.recap ?? null,
     drives: result.drives ?? null,
     quarterScores: result.quarterScores ?? result.linescore ?? null,
+    summary: {
+      winnerId: scoreHome >= scoreAway ? hId : aId,
+      margin,
+      storyline: result.storyline ?? (margin <= 3
+        ? 'One-score finish with late-game pressure on every possession.'
+        : margin >= 17
+          ? 'Control game where one side separated early and never gave it back.'
+          : 'Balanced game that swung on a few decisive drives.'),
+    },
   });
   cache.addGame(archivedGame);
 }
@@ -2674,6 +2684,11 @@ async function handleGetBoxScore({ gameId }, id) {
         awayAbbr:  awayTeam?.abbr ?? '???',
         stats:     game.stats ?? null,
         recap:     game.recap ?? null,
+        summary: game.summary ?? {
+          winnerId: (Number(game?.homeScore ?? 0) >= Number(game?.awayScore ?? 0)) ? game.homeId : game.awayId,
+          margin: Math.abs(Number(game?.homeScore ?? 0) - Number(game?.awayScore ?? 0)),
+          storyline: 'Archived game loaded from legacy save format. Detailed storyline was reconstructed.',
+        },
         quarterScores: game.quarterScores ?? null,
         drives: game.drives ?? null,
       },
@@ -5890,6 +5905,7 @@ async function archiveSeason(seasonId) {
       champion: championSummary,
       runnerUp: runnerUpSummary,
       userTeamId: meta.userTeamId,
+      games: await Games.bySeason(seasonId).catch(() => []),
       transactions: await Transactions.bySeason(seasonId).catch(() => []),
     });
 

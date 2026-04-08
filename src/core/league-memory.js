@@ -120,7 +120,7 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
   ].filter(Boolean);
 }
 
-export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [] }) {
+export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [] }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
   return {
@@ -135,6 +135,14 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
       finals: champion && runnerUp ? `${champion.abbr} over ${runnerUp.abbr}` : null,
       wins: champion?.wins ?? null,
     },
+    gameIndex: (games || []).map((g) => ({
+      id: g.id,
+      week: g.week,
+      homeId: g.homeId,
+      awayId: g.awayId,
+      homeScore: g.homeScore,
+      awayScore: g.awayScore,
+    })),
     userTeamSummary: userRow ? {
       teamId: userRow.id,
       record: `${userRow.wins}-${userRow.losses}${userRow.ties ? `-${userRow.ties}` : ''}`,

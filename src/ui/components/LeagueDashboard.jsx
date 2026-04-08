@@ -2060,7 +2060,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Postseason" && (
           <TabErrorBoundary label="Postseason">
-            <PostseasonHub league={league} />
+            <PostseasonHub league={league} onOpenBoxScore={(gameId) => openGameDetail(gameId, "Postseason")} />
           </TabErrorBoundary>
         )}
         {activeTab === "Training" && (
