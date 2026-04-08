@@ -2128,6 +2128,7 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "Season Recap")}
               league={league}
             />
           </TabErrorBoundary>
