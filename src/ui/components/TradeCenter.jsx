@@ -458,16 +458,19 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); }}>Clear package</Button>
     </StickySubnav>
     <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
-      {(tradeDeadline?.isFinalWindow || tradeLocked) && (
-        <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)", borderColor: "rgba(245,158,11,0.45)" }}>
-          <strong style={{ display: "block", marginBottom: 4 }}>Trade deadline: Week {tradeDeadline?.deadlineWeek ?? "—"}</strong>
-          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-            {tradeLocked
-              ? "Trade market is locked for normal gameplay until offseason."
-              : `${tradeDeadline?.weeksRemaining ?? 0} week(s) left before the deadline.`}
-          </div>
+      <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)", borderColor: tradeDeadline?.isFinalWindow || tradeLocked ? "rgba(245,158,11,0.45)" : "var(--hairline)" }}>
+        <strong style={{ display: "block", marginBottom: 4 }}>Trade deadline: Week {tradeDeadline?.deadlineWeek ?? "—"}</strong>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          {tradeLocked
+            ? "Trade market is locked for normal gameplay until offseason (commissioner mode can override)."
+            : `${Math.max(0, tradeDeadline?.weeksRemaining ?? 0)} week(s) remaining before trade lock.`}
         </div>
-      )}
+        {tradeDeadline?.isFinalWindow && !tradeLocked && (
+          <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning)", fontWeight: 700 }}>
+            Warning: final two-week window before the deadline.
+          </div>
+        )}
+      </div>
       {showSavedToast && (
         <div style={{
           position: "fixed",

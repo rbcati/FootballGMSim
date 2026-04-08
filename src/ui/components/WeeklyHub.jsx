@@ -104,8 +104,10 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
   const topOfferIdentity = topOffer ? getOfferIdentity(topOffer) : null;
-  const attentionItems = buildNeedsAttentionItems(weeklyContext, { limit: 5 });
-  const primaryAction = buildPrimaryAction({ league, nextGame, topNeeds: attentionItems, topOffer, latestUserGameId });
+  const allAttentionItems = buildNeedsAttentionItems(weeklyContext, { limit: 99 });
+  const [showAllTasks, setShowAllTasks] = React.useState(false);
+  const attentionItems = showAllTasks ? allAttentionItems : allAttentionItems.slice(0, 5);
+  const primaryAction = buildPrimaryAction({ league, nextGame, topNeeds: allAttentionItems.slice(0, 5), topOffer, latestUserGameId });
   const snapshotTiles = buildTeamSnapshot({
     user,
     weeklyContext,
@@ -192,19 +194,23 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
           ))}
         </CardContent>
       </Card>
-      {league?.tradeDeadline?.isFinalWindow || league?.tradeDeadline?.isLocked ? (
-        <Card variant="secondary" className="weekly-hub-card">
-          <CardContent className="weekly-hub-card__body">
-            <p className="weekly-card-eyebrow">Trade deadline</p>
-            <strong>
-              {league?.tradeDeadline?.isLocked
-                ? `Trades locked after Week ${league.tradeDeadline.deadlineWeek}`
-                : `${league.tradeDeadline.weeksRemaining} week${league.tradeDeadline.weeksRemaining === 1 ? "" : "s"} until Week ${league.tradeDeadline.deadlineWeek} deadline`}
-            </strong>
-            <p>{league?.tradeDeadline?.isLocked ? "Normal trade flow is closed until offseason." : "Plan final offers before advancing past the deadline."}</p>
-          </CardContent>
-        </Card>
-      ) : null}
+      <Card variant="secondary" className="weekly-hub-card">
+        <CardContent className="weekly-hub-card__body">
+          <p className="weekly-card-eyebrow">Trade deadline</p>
+          <strong>
+            {league?.tradeDeadline?.isLocked
+              ? `Locked after Week ${league.tradeDeadline.deadlineWeek}`
+              : `${Math.max(0, league?.tradeDeadline?.weeksRemaining ?? 0)} week${(league?.tradeDeadline?.weeksRemaining ?? 0) === 1 ? "" : "s"} until Week ${league?.tradeDeadline?.deadlineWeek ?? "—"}`}
+          </strong>
+          <p>
+            {league?.tradeDeadline?.isLocked
+              ? "Standard trades are closed. Only commissioner mode can override this."
+              : league?.tradeDeadline?.isFinalWindow
+                ? "Final window warning: set your last offers before deadline week ends."
+                : "You still have runway to shape your roster before lock."}
+          </p>
+        </CardContent>
+      </Card>
 
       <section className="weekly-section">
         <SectionHeader title="What just happened" subtitle="Result context first, then what is next." />
@@ -264,6 +270,11 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
             </button>
           ))}
         </div>
+        {allAttentionItems.length > 5 && (
+          <Button size="sm" variant="outline" onClick={() => setShowAllTasks((v) => !v)}>
+            {showAllTasks ? "Collapse tasks" : `Expand tasks (${allAttentionItems.length - 5} more)`}
+          </Button>
+        )}
       </section>
 
       <section className="weekly-section">
@@ -281,7 +292,7 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <p className="weekly-card-eyebrow">Pressure snapshot <InfoTip compact term="Owner/Fan/Media pressure" explanation="Higher pressure increases scrutiny, raises job risk, and changes narrative events." /></p>
               <strong>Owner {pressure?.owner?.state ?? "Stable"} · Fans {pressure?.fans?.state ?? "Steady"} · Media {pressure?.media?.state ?? "Neutral"}</strong>
               <p>{pressure?.owner?.reasons?.[0] ?? pressure?.media?.reasons?.[0] ?? "No active pressure spike this week."}</p>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open pressure view</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open owner directives</Button>
             </CardContent>
           </Card>
           {capUrgent ? <Card variant="secondary" className="weekly-hub-card">
@@ -291,7 +302,16 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
               <p>{(weeklyContext?.pressurePoints?.expiringCount ?? 0)} expiring contracts · {(weeklyContext?.pressurePoints?.incomingTradeCount ?? 0)} incoming trade calls</p>
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Open finances</Button>
             </CardContent>
-          </Card> : null}
+          </Card> : (
+            <Card variant="secondary" className="weekly-hub-card">
+              <CardContent className="weekly-hub-card__body">
+                <p className="weekly-card-eyebrow">Cap + payroll</p>
+                <strong>Stable · folded into Finance module</strong>
+                <p>{formatMoneyM(cap.capRoom)} cap room with no immediate cap blockers.</p>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Open finances</Button>
+              </CardContent>
+            </Card>
+          )}
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
               <p className="weekly-card-eyebrow">Injury report</p>
@@ -316,9 +336,8 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
                 <div><strong>Owner:</strong> {pressure?.owner?.state ?? "Stable"}</div>
                 <div><strong>Fans:</strong> {pressure?.fans?.state ?? "Hopeful"}</div>
                 <div><strong>Media:</strong> {pressure?.media?.state ?? "Watching"}</div>
-                <div><strong>Directives:</strong> {(pressure?.directives ?? []).slice(0, 2).map((d) => `${d.theme} (${d.progress}%)`).join(" · ") || "No active directives"}</div>
               </div>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open owner directives</Button>
+              <Button size="sm" variant="outline" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open advisor feed</Button>
             </CardContent>
           </Card>
           {teamIntel?.organization && (
@@ -340,6 +359,21 @@ export default function WeeklyHub({ league, actions, onNavigate, onAdvanceWeek, 
 
       <ExpandableSection title="More / expanded insights" subtitle="Storylines and long-form guidance." defaultOpen={defaults.insights}>
         <div className="weekly-card-stack">
+          <Card variant="secondary" className="weekly-hub-card">
+            <CardContent className="weekly-hub-card__body">
+              <p className="weekly-card-eyebrow">Glossary</p>
+              <details>
+                <summary style={{ cursor: "pointer", fontWeight: 700 }}>Open quick help</summary>
+                <div className="weekly-digest-list" style={{ marginTop: 8 }}>
+                  <div><strong>Owner approval:</strong> Tracks tolerance for long-term plans vs. immediate wins.</div>
+                  <div><strong>Fan mood:</strong> Reflects excitement from results, stars, and visible direction.</div>
+                  <div><strong>Media watching:</strong> Measures narrative pressure; slumps amplify criticism.</div>
+                  <div><strong>Morale:</strong> Locker-room confidence that affects consistency and retention risk.</div>
+                  <div><strong>Trade realism:</strong> AI acceptance strictness based on value, fit, and direction.</div>
+                </div>
+              </details>
+            </CardContent>
+          </Card>
           <Card variant="secondary" className="weekly-hub-card">
             <CardContent className="weekly-hub-card__body">
               <p className="weekly-card-eyebrow">League storylines</p>
