@@ -254,6 +254,19 @@ function sortPlayers(players, sortKey, sortDir) {
   });
 }
 
+function getContractYearsLeft(player) {
+  return Number(player?.contract?.yearsRemaining ?? player?.contract?.yearsLeft ?? player?.contract?.years ?? 0);
+}
+
+function isInjuredPlayer(player) {
+  return Number(player?.injuryWeeksRemaining ?? player?.injury?.weeksRemaining ?? 0) > 0 || !!player?.injury;
+}
+
+function isStarterPlayer(player) {
+  const depthOrder = Number(player?.depthChart?.order ?? player?.depthOrder ?? 999);
+  return Number.isFinite(depthOrder) && depthOrder === 1;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function CapBar({ capUsed, capTotal, deadCap = 0 }) {
@@ -439,12 +452,11 @@ function RosterTable({
   phase,
   schemeName,
   chemistry,
+  initialFilter = "ALL",
 }) {
   const isResignPhase = phase === "offseason_resign";
   // Default to EXPIRING view in resign phase
-  const [posFilter, setPosFilter] = useState(
-    isResignPhase ? "EXPIRING" : "ALL",
-  );
+  const [posFilter, setPosFilter] = useState(initialFilter || (isResignPhase ? "EXPIRING" : "ALL"));
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
   const [releasing, setReleasing] = useState(null);
@@ -464,7 +476,15 @@ function RosterTable({
   const displayed = useMemo(() => {
     let filtered = players;
     if (posFilter === "EXPIRING") {
-      filtered = players.filter((p) => (p.contract?.years || 0) <= 1);
+      filtered = players.filter((p) => getContractYearsLeft(p) <= 1);
+    } else if (posFilter === "STARTERS") {
+      filtered = players.filter((p) => isStarterPlayer(p));
+    } else if (posFilter === "DEPTH") {
+      filtered = players.filter((p) => !isStarterPlayer(p));
+    } else if (posFilter === "INJURED") {
+      filtered = players.filter((p) => isInjuredPlayer(p));
+    } else if (posFilter === "DEVELOPMENT") {
+      filtered = players.filter((p) => Number(p?.age ?? 40) <= 24 || Number(p?.potential ?? 0) >= 80);
     } else if (posFilter !== "ALL") {
       filtered = players.filter(
         (p) =>
@@ -480,7 +500,11 @@ function RosterTable({
     [players, team, teamDirection],
   );
 
-  const activeFilters = isResignPhase ? ["EXPIRING", ...POSITIONS] : POSITIONS;
+  const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
+
+  useEffect(() => {
+    if (initialFilter) setPosFilter(initialFilter);
+  }, [initialFilter]);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -494,14 +518,14 @@ function RosterTable({
   const handleTag = async (player) => {
       if (window.confirm(`Apply Franchise Tag to ${player.name}?`)) {
           await actions.applyFranchiseTag(player.id, player.teamId);
-          fetchRoster();
+          onRefetch?.();
       }
   };
 
   const handleRestructure = async (player) => {
       if (window.confirm(`Restructure ${player.name}'s contract to save cap space this year?`)) {
           await actions.restructureContract(player.id, player.teamId);
-          fetchRoster();
+          onRefetch?.();
       }
   };
 
@@ -1183,7 +1207,7 @@ function RosterTable({
 // ── Depth Chart View ──────────────────────────────────────────────────────────
 
 /** Single player card inside a depth chart slot. */
-function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop }) {
+function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeName }) {
   if (!player) {
     return (
       <div
@@ -1214,7 +1238,6 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop }) {
     : isStarter
       ? "1px solid var(--accent)"
       : "1px solid var(--hairline)";
-  `1px solid var(--hairline)`;
 
   return (
     <div
@@ -1283,7 +1306,7 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop }) {
   );
 }
 
-function DepthChartView({ players, onReorder }) {
+function DepthChartView({ players, onReorder, schemeName }) {
   const handleDragStart = (e, player, posKey) => {
       e.dataTransfer.setData("text/plain", JSON.stringify({ playerId: player.id, posKey }));
   };
@@ -1449,6 +1472,7 @@ function DepthChartView({ players, onReorder }) {
                               <DepthCard
                                 player={depth[slotIdx] ?? null}
                                 isStarter={slotIdx === 0}
+                                schemeName={schemeName}
                                 onDragStart={(e) => depth[slotIdx] && handleDragStart(e, depth[slotIdx], row.key)}
                                 onDragOver={(e) => e.preventDefault()}
                                 onDrop={(e) => handleDrop(e, depth[slotIdx]?.id, row.key, slotIdx)}
@@ -1795,20 +1819,28 @@ function PlayerCard({ player, onSelect, showDecisionContext = false, decisionCon
  * Full card grid with position-filter pills and sort controls.
  * Mirrors the RosterTable filter/sort UI but renders PlayerCard tiles instead of rows.
  */
-function PlayerCardGrid({ players, onPlayerSelect, phase, team, week }) {
+function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFilter = "ALL" }) {
   const isResignPhase = phase === "offseason_resign";
-  const [posFilter, setPosFilter] = useState(isResignPhase ? "EXPIRING" : "ALL");
+  const [posFilter, setPosFilter] = useState(initialFilter || (isResignPhase ? "EXPIRING" : "ALL"));
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
 
-  const activeFilters = isResignPhase ? ["EXPIRING", ...POSITIONS] : POSITIONS;
+  const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
 
   const displayed = useMemo(() => {
     let filtered = players;
     if (posFilter === "EXPIRING") {
       filtered = players.filter(
-        (p) => (p.contract?.years ?? p.contract?.yearsLeft ?? p.contract?.yearsRemaining ?? 0) <= 1,
+        (p) => getContractYearsLeft(p) <= 1,
       );
+    } else if (posFilter === "STARTERS") {
+      filtered = players.filter((p) => isStarterPlayer(p));
+    } else if (posFilter === "DEPTH") {
+      filtered = players.filter((p) => !isStarterPlayer(p));
+    } else if (posFilter === "INJURED") {
+      filtered = players.filter((p) => isInjuredPlayer(p));
+    } else if (posFilter === "DEVELOPMENT") {
+      filtered = players.filter((p) => Number(p?.age ?? 40) <= 24 || Number(p?.potential ?? 0) >= 80);
     } else if (posFilter !== "ALL") {
       filtered = players.filter(
         (p) => p.pos === posFilter ||
@@ -1827,6 +1859,10 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week }) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("desc"); }
   };
+
+  useEffect(() => {
+    if (initialFilter) setPosFilter(initialFilter);
+  }, [initialFilter]);
 
   const SORT_OPTIONS = [
     { key: "ovr", label: "OVR" },
@@ -2012,6 +2048,10 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
   }, [fetchRoster]);
 
   useEffect(() => {
+    if (!initialState) return;
+    if (initialState.view) setViewMode(initialState.view);
+    if (initialState.filter) setInitialFilter(initialState.filter);
+  }, [initialState]);
     if (["cards", "table", "depth"].includes(initialViewMode)) {
       setViewMode(initialViewMode);
     }
@@ -2079,8 +2119,10 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
   const depthAssignments = autoBuildDepthChart(players, existingDepthAssignments);
   const depthAlerts = depthWarnings(depthAssignments, players);
   const unassignedDepthCount = players.filter((p) => !p?.depthChart?.rowKey).length;
-  const expiringCount = players.filter((p) => Number(p?.contract?.yearsRemaining ?? p?.contract?.years ?? 2) <= 1).length;
-  const injuredCount = players.filter((p) => Number(p?.injuryWeeksRemaining ?? 0) > 0 || p?.injury).length;
+  const expiringCount = players.filter((p) => getContractYearsLeft(p) <= 1).length;
+  const injuredCount = players.filter((p) => isInjuredPlayer(p)).length;
+  const starterCount = players.filter((p) => isStarterPlayer(p)).length;
+  const depthCount = Math.max(0, players.length - starterCount);
   const youngDevCount = players.filter((p) => Number(p?.age ?? 40) <= 24 && Number(p?.ovr ?? 0) >= 65).length;
 
   const avgOvr = players.length
@@ -2239,9 +2281,11 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
             </div>
           )}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Badge variant="outline">Expiring {expiringCount}</Badge>
-            <Badge variant="outline">Injured {injuredCount}</Badge>
-            <Badge variant="outline">Dev pieces {youngDevCount}</Badge>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("STARTERS"); }}>Starters {starterCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("depth"); setInitialFilter("DEPTH"); }}>Depth {depthCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("EXPIRING"); }}>Expiring {expiringCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("INJURED"); }}>Injured {injuredCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEVELOPMENT"); }}>Dev pieces {youngDevCount}</Button>
             <Badge variant={unassignedDepthCount > 0 ? "destructive" : "secondary"}>
               Depth setup {unassignedDepthCount > 0 ? `${unassignedDepthCount} unset` : "ready"}
             </Badge>
@@ -2294,6 +2338,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
           phase={league?.phase}
           team={team}
           week={league?.week}
+          initialFilter={initialFilter}
         />
       )}
 
@@ -2311,6 +2356,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
           }}
           phase={league?.phase}
           chemistry={chemistry}
+          initialFilter={initialFilter}
           schemeName={(() => {
             const ut = league?.teams?.find(t => t.id === league.userTeamId);
             const offId = ut?.strategies?.offSchemeId;
@@ -2344,7 +2390,12 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
                   ))}
                 </div>
               )}
-              <DepthChartView players={players} onReorder={handleReorderDepthChart} />
+              <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={(() => {
+                const ut = league?.teams?.find(t => t.id === league.userTeamId);
+                const offId = ut?.strategies?.offSchemeId;
+                const defId = ut?.strategies?.defSchemeId;
+                return OFFENSIVE_SCHEMES[offId]?.name || DEFENSIVE_SCHEMES[defId]?.name || 'scheme';
+              })()} />
             </>
           )}
         </CardContent></Card>

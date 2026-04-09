@@ -107,6 +107,30 @@ function storylineTag(card) {
   return "League Watch";
 }
 
+function deriveSmartDestination(item = {}) {
+  const rawTab = item?.tab;
+  const detail = `${item?.label ?? ""} ${item?.detail ?? ""} ${item?.why ?? ""}`.toLowerCase();
+  if (rawTab === "Transactions") {
+    if (detail.includes("offer") || detail.includes("inbox") || detail.includes("counter")) return "Transactions:Offers";
+    if (detail.includes("explore") || detail.includes("partner")) return "Transactions:Finder";
+    return "Transactions:Summary";
+  }
+  if (rawTab === "Roster" || rawTab === "Depth Chart") {
+    if (detail.includes("depth") || detail.includes("starter")) return "Roster:depth|STARTERS";
+    if (detail.includes("expir")) return "Roster:table|EXPIRING";
+    if (detail.includes("injur")) return "Roster:table|INJURED";
+    if (detail.includes("develop")) return "Roster:table|DEVELOPMENT";
+    return "Roster:table|ALL";
+  }
+  if (rawTab === "Stats" || detail.includes("leader") || detail.includes("passing") || detail.includes("rushing") || detail.includes("receiving")) {
+    if (detail.includes("defens") || detail.includes("sack") || detail.includes("tackle")) return "Stats:defense";
+    if (detail.includes("rush")) return "Stats:rushing";
+    if (detail.includes("receiv")) return "Stats:receiving";
+    return "Stats:passing";
+  }
+  return rawTab;
+}
+
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating, onOpenBoxScore }) {
   const userTeam = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)), [league]);
   const weekly = useMemo(() => evaluateWeeklyContext(league), [league]);
@@ -254,6 +278,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
         <div className="franchise-hq-urgent-list">
           {urgent.map((item, idx) => (
+            <button key={`${item.label}-${idx}`} className={`franchise-hq-urgent-item tone-${item.tone ?? "info"}`} onClick={() => onNavigate?.(deriveSmartDestination(item))}>
             <button
               key={`${item.label}-${idx}`}
               className={`franchise-hq-urgent-item tone-${item.tone ?? "info"}`}
@@ -289,7 +314,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <div className="weekly-expandable__body">
           <div className="franchise-story-list">
             {storylines.map((s, idx) => (
-              <button key={`${s.title}-${idx}`} className="franchise-story-item" onClick={() => onNavigate?.(s.tab ?? "League") }>
+              <button key={`${s.title}-${idx}`} className="franchise-story-item" onClick={() => onNavigate?.(deriveSmartDestination(s) ?? "League") }>
                 <div className="franchise-story-item__head">
                   <span className="franchise-story-tag">{storylineTag(s)}</span>
                   <span>View</span>

@@ -78,6 +78,7 @@ import {
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -1450,6 +1451,7 @@ export default function LeagueDashboard({
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
+  const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
 
@@ -1946,11 +1948,17 @@ export default function LeagueDashboard({
               <FranchiseHQ
                 league={safeLeague}
                 onNavigate={(tab) => {
-                  if (typeof tab === "string" && tab.startsWith("Transactions:")) {
-                    setTradeInitialView(tab.split(":")[1] || "Finder");
-                    setActiveTab("Transactions");
-                    return;
+                  const destination = normalizeManagementDestination(tab);
+                  if (destination.tradeView) {
+                    setTradeInitialView(destination.tradeView);
                   }
+                  if (destination.rosterState) {
+                    setRosterInitialState(destination.rosterState);
+                  }
+                  if (destination.statsFamily) {
+                    setStatsInitialFamily(destination.statsFamily);
+                  }
+                  setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
                   if (typeof tab === "string" && tab.startsWith("Stats:")) {
                     setStatsInitialFamily((tab.split(":")[1] || "passing").toLowerCase());
                     setActiveTab("Stats");
@@ -2055,6 +2063,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              initialState={rosterInitialState}
               initialViewMode={rosterInitialView}
             />
           </TabErrorBoundary>
@@ -2128,7 +2137,6 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}

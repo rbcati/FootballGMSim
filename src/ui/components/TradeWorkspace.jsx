@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import TradeFinder from './TradeFinder.jsx';
 import TradeCenter from './TradeCenter.jsx';
 import TradeBlockPanel from './TradeBlockPanel.jsx';
@@ -8,6 +8,7 @@ import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
 import { Badge } from '@/components/ui/badge';
+import { buildIncomingOfferPresentation } from '../utils/tradeOfferPresentation.js';
 
 const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
@@ -15,7 +16,8 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
     ? (initialView.split(':')[1] || 'Finder')
     : initialView;
-  const [view, setView] = useState(normalizedInitialView);
+  const safeInitialView = VIEWS.includes(normalizedInitialView) ? normalizedInitialView : 'Finder';
+  const [view, setView] = useState(safeInitialView);
   const [workspace, setWorkspace] = useState({
     partnerTeamId: null,
     outgoingPlayerIds: [],
@@ -36,6 +38,15 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const partnerNeeds = useMemo(() => partnerTeam ? computeTeamNeedsSummary(partnerTeam) : null, [partnerTeam]);
   const partnerIntel = useMemo(() => partnerTeam ? buildTeamIntelligence(partnerTeam, { week: league?.week ?? 1 }) : null, [partnerTeam, league?.week]);
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
+  const offerSummaries = useMemo(
+    () => incomingOffers.map((offer) => ({ offer, summary: buildIncomingOfferPresentation({ offer, league, userTeamId: league?.userTeamId }) })),
+    [incomingOffers, league],
+  );
+
+  useEffect(() => {
+    if (!safeInitialView) return;
+    setView(safeInitialView);
+  }, [safeInitialView]);
   React.useEffect(() => {
     if (!normalizedInitialView || normalizedInitialView === view) return;
     setView(normalizedInitialView);
@@ -97,6 +108,20 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       {view === 'Offers' && (
         <SectionCard title="Incoming Offers" subtitle="Review active trade calls and jump into Builder fast.">
           {!incomingOffers.length ? (
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', display: 'grid', gap: 6 }}>
+              <div>No offers right now. Open Finder to target a partner team, then request a counter package.</div>
+              <div style={{ fontSize: 'var(--text-xs)' }}>
+                Next step: start in <strong>Finder</strong>, shortlist 2-3 partners, then move to <strong>Builder</strong> when one responds.
+              </div>
+              <button className="btn" style={{ width: 'fit-content' }} onClick={() => setView('Finder')}>Go to Finder</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {offerSummaries.slice(0, 8).map(({ offer, summary }, idx) => (
+                <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 7 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+                    <Badge variant={offer?.urgency === 'high' ? 'destructive' : 'outline'}>{offer?.urgency ?? 'standard'}</Badge>
             <div className="card" style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
               <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>No active offers yet</div>
               <div style={{ marginBottom: 8 }}>Open Trade Finder to identify a partner, then move into Builder to compare assets and submit a package.</div>
@@ -117,6 +142,16 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
                     <Badge variant="secondary">AI assets {(offer?.offering?.playerIds ?? []).length + (offer?.offering?.pickIds ?? []).length}</Badge>
                     <Badge variant="secondary">Your assets {(offer?.receiving?.playerIds ?? []).length + (offer?.receiving?.pickIds ?? []).length}</Badge>
                   </div>
+                  <div style={{ fontSize: 'var(--text-xs)' }}>
+                    <strong>You receive:</strong> {[...summary.receive.players, ...summary.receive.picks].slice(0, 3).map((item) => item.label).join(', ') || 'No assets listed'}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)' }}>
+                    <strong>You send:</strong> {[...summary.give.players, ...summary.give.picks].slice(0, 3).map((item) => item.label).join(', ') || 'No assets listed'}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    {offer?.reason || summary?.recommendation || 'No scouting reason provided.'}
+                  </div>
+                  <button className="btn" style={{ marginTop: 2 }} onClick={() => setView('Builder')}>Open Builder</button>
                   <button className="btn" style={{ marginTop: 8 }} onClick={() => setView('Builder')}>Open Builder</button>
                 </div>
               ))}
