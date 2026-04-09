@@ -2012,7 +2012,7 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Roster({ league, actions, onPlayerSelect, initialViewMode = "table" }) {
+export default function Roster({ league, actions, onPlayerSelect, initialState = null, initialViewMode = "table" }) {
   const teamId = league?.userTeamId;
 
   const [loading, setLoading] = useState(false);
@@ -2052,6 +2052,8 @@ export default function Roster({ league, actions, onPlayerSelect, initialViewMod
     if (initialState.view) setViewMode(initialState.view);
     if (initialState.filter) setInitialFilter(initialState.filter);
   }, [initialState]);
+
+  useEffect(() => {
     if (["cards", "table", "depth"].includes(initialViewMode)) {
       setViewMode(initialViewMode);
     }

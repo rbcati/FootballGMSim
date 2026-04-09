@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import FranchiseHQ from '../FranchiseHQ.jsx';
+import LeagueDashboard from '../LeagueDashboard.jsx';
 import TradeWorkspace from '../TradeWorkspace.jsx';
 import Roster from '../Roster.jsx';
 import PlayerStats from '../PlayerStats.jsx';
@@ -58,6 +59,12 @@ describe('fresh save core screens', () => {
   it('renders HQ with no completed games', () => {
     expect(() => renderToString(
       <FranchiseHQ league={freshLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />,
+    )).not.toThrow();
+  });
+
+  it('renders dashboard with minimum playable league payload', () => {
+    expect(() => renderToString(
+      <LeagueDashboard league={freshLeague} actions={actions} busy={false} simulating={false} onAdvanceWeek={() => {}} />,
     )).not.toThrow();
   });
 
