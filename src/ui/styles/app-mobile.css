@@ -473,13 +473,15 @@
   border: 1px solid transparent;
   background: transparent;
   border-radius: var(--radius-sm);
-  min-height: 36px;
-  padding: 0;
+  min-height: 44px;
+  padding: 4px 6px;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(10, 132, 255, 0.24);
 }
 
 .app-result-item-clickable {
   cursor: pointer;
-  padding: 3px 6px;
+  min-height: 44px;
   transition: border-color .14s ease, background .14s ease, transform .14s ease;
 }
 

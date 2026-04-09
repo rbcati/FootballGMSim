@@ -79,6 +79,7 @@ import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
+import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -991,6 +992,10 @@ function ScheduleTab({
             ? () =>
                 onGameSelect(resolvedGameId)
             : undefined;
+          const scoreTapHandler = createBoxScoreTapHandler({
+            gameId: resolvedGameId,
+            onOpenBoxScore: onGameSelect,
+          });
           const clickableCardProps = getClickableCardProps({
             onOpen: handleCardClick,
             disabled: !isClickable,
@@ -1081,16 +1086,13 @@ function ScheduleTab({
               {/* Final score display */}
               {game.played && game.homeScore !== undefined && (
                 <>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "baseline",
-                      gap: "var(--space-3)",
-                      padding: "var(--space-1) 0",
-                      fontSize: "var(--text-xl)",
-                      fontWeight: 800,
-                    }}
+                  <button
+                    type="button"
+                    className={`score-tap-target ${scoreTapHandler ? "score-tap-target-clickable" : "score-tap-target-static"}`}
+                    onClick={scoreTapHandler}
+                    aria-label={scoreTapHandler ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined}
+                    aria-disabled={!scoreTapHandler}
+                    title={scoreTapHandler ? "View box score" : undefined}
                   >
                     <span
                       style={{
@@ -1127,7 +1129,7 @@ function ScheduleTab({
                         ? ` (${seedByTeam[home.id]})`
                         : ""}
                     </span>
-                  </div>
+                  </button>
                   {isClickable && (
                     <div
                       style={{
@@ -1810,24 +1812,27 @@ export default function LeagueDashboard({
                         const hA = teamById[hId]?.abbr ?? "?";
                         const aA = teamById[aId]?.abbr ?? "?";
                         const gId = resolveCompletedGameId(g, { seasonId: league.seasonId, week: prevWeek });
-                        const interactiveProps = getClickableCardProps({
-                          onOpen: gId ? () => openGameDetail(gId, "Weekly Hub") : undefined,
-                          disabled: !gId,
-                          ariaLabel: gId ? `Open box score for ${aA} at ${hA}` : undefined,
+                        const compactScoreTapHandler = createBoxScoreTapHandler({
+                          gameId: gId,
+                          onOpenBoxScore: (id) => openGameDetail(id, "Weekly Hub"),
                         });
                         return (
-                          <span
-                            key={i}
-                            {...interactiveProps}
-                            style={{
-                              cursor: gId ? "pointer" : "default",
-                              textDecoration: gId ? "underline dotted" : "none",
-                            }}
-                            title={gId ? "View box score" : undefined}
-                          >
-                            {aA} {g.awayScore}-{g.homeScore} {hA}
+                          <React.Fragment key={i}>
+                            {gId ? (
+                              <button
+                                type="button"
+                                className="compact-score-link"
+                                onClick={compactScoreTapHandler}
+                                aria-label={`Open box score for ${aA} at ${hA}`}
+                                title="View box score"
+                              >
+                                {aA} {g.awayScore}-{g.homeScore} {hA}
+                              </button>
+                            ) : (
+                              <span>{aA} {g.awayScore}-{g.homeScore} {hA}</span>
+                            )}
                             {i < arr.length - 1 ? " · " : ""}
-                          </span>
+                          </React.Fragment>
                         );
                       })}
                     </div>
