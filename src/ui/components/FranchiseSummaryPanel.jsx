@@ -24,6 +24,15 @@ function conferenceRank(league, userTeam) {
   };
 }
 
+function Tile({ label, value, quiet = false }) {
+  return (
+    <div className={`franchise-summary-tile${quiet ? " is-quiet" : ""}`}>
+      <span>{label}</span>
+      <div>{value}</div>
+    </div>
+  );
+}
+
 export default function FranchiseSummaryPanel({ league, compact = false, className = "" }) {
   const userTeam = useMemo(
     () => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)),
@@ -39,35 +48,42 @@ export default function FranchiseSummaryPanel({ league, compact = false, classNa
     ? userTeam.draftPicks.filter((p) => Number(p.season ?? p.year) === Number(league.year) + 1).length
     : 0;
 
-  const items = [
-    ["Record", `${safeNumber(userTeam.wins)}-${safeNumber(userTeam.losses)}${safeNumber(userTeam.ties) ? `-${safeNumber(userTeam.ties)}` : ""}`],
-    ["Conf/Div Rank", `#${rank?.confRank ?? "—"} conf · playoff line ${rank?.playoffLineRecord ?? "—"}`],
-    ["Team OVR", `${safeNumber(userTeam.ovr, "—")} (O ${safeNumber(userTeam.offOvr ?? userTeam.ovr)} / D ${safeNumber(userTeam.defOvr ?? userTeam.ovr)})`],
-    ["Cap Room", formatMoneyM(cap.capRoom)],
-    ["Payroll", formatMoneyM(cap.capUsed)],
-    ["Dead Money", formatMoneyM(cap.deadCap)],
-    ["Expiring", `${safeNumber(userTeam.expiringContracts ?? userTeam.contractsExpiring)} contracts`],
-    ["Roster Spots", `${safeNumber(userTeam.rosterCount, userTeam.roster?.length ?? 0)}/53`],
-    ["Next Draft Picks", `${nextDraftPicks}`],
-    ["Owner/Fans/Media", `${formatPercent(league.ownerApproval ?? league.ownerMood, "—", { digits: 0 })} · ${pressure?.fans?.state ?? "Steady"} · ${pressure?.media?.state ?? "Neutral"}`],
-    ["Last 5", recent.length ? recent.join(" · ") : "No recent form"],
-  ];
+  const record = `${safeNumber(userTeam.wins)}-${safeNumber(userTeam.losses)}${safeNumber(userTeam.ties) ? `-${safeNumber(userTeam.ties)}` : ""}`;
 
   return (
-    <section className={`card ${className}`.trim()} style={{ padding: compact ? "10px" : "var(--space-3)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+    <section className={`card franchise-summary-panel ${className}`.trim()} style={{ padding: compact ? "10px" : "var(--space-3)" }}>
+      <div className="franchise-summary-header">
         <strong style={{ fontSize: compact ? "var(--text-sm)" : "var(--text-base)" }}>Franchise Summary</strong>
         <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{league.year} · Week {league.week ?? 1}</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: compact ? "repeat(auto-fit,minmax(170px,1fr))" : "repeat(auto-fit,minmax(190px,1fr))", gap: 6 }}>
-        {items.map(([label, value]) => (
-          <div key={label} style={{ fontSize: compact ? "11px" : "12px", color: "var(--text-muted)" }}>
-            <span>{label}</span>
-            <div style={{ color: "var(--text)", fontWeight: 700 }}>{value}</div>
-          </div>
-        ))}
+
+      <div className="franchise-summary-tier">
+        <p className="franchise-summary-tier__label">Primary</p>
+        <div className="franchise-summary-grid primary">
+          <Tile label="Record" value={record} />
+          <Tile label="Conf / Playoff line" value={`#${rank?.confRank ?? "—"} conf · line ${rank?.playoffLineRecord ?? "—"}`} />
+          <Tile label="Team OVR" value={`${safeNumber(userTeam.ovr, "—")} (O ${safeNumber(userTeam.offOvr ?? userTeam.ovr)} / D ${safeNumber(userTeam.defOvr ?? userTeam.ovr)})`} />
+          <Tile label="Cap Room" value={formatMoneyM(cap.capRoom)} />
+          <Tile label="Owner / Fans / Media" value={`${formatPercent(league.ownerApproval ?? league.ownerMood, "—", { digits: 0 })} · ${pressure?.fans?.state ?? "Steady"} · ${pressure?.media?.state ?? "Neutral"}`} />
+        </div>
+      </div>
+
+      <div className="franchise-summary-tier">
+        <p className="franchise-summary-tier__label">Secondary</p>
+        <div className="franchise-summary-grid secondary">
+          <Tile label="Payroll" value={formatMoneyM(cap.capUsed)} quiet />
+          <Tile label="Dead Money" value={formatMoneyM(cap.deadCap)} quiet />
+          <Tile label="Expiring" value={`${safeNumber(userTeam.expiringContracts ?? userTeam.contractsExpiring)} contracts`} quiet />
+          <Tile label="Roster Spots" value={`${safeNumber(userTeam.rosterCount, userTeam.roster?.length ?? 0)}/53`} quiet />
+          <Tile label="Next Draft Picks" value={`${nextDraftPicks}`} quiet />
+          <Tile label="Last 5" value={recent.length ? recent.join(" · ") : "No recent form"} quiet />
+        </div>
+      </div>
+
+      <div className="franchise-summary-metadata">
+        <span>Phase: {league.phase ?? "regular"}</span>
+        <span>Owner state: {pressure?.owner?.state ?? "Stable"}</span>
       </div>
     </section>
   );
 }
-

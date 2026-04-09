@@ -930,3 +930,96 @@ label {
     font-size: 1.6rem;
   }
 }
+
+/* Franchise HQ polish */
+.franchise-hq { gap: 10px; }
+.franchise-hq-hero {
+  padding: var(--space-4);
+  border: 1px solid rgba(10,132,255,0.34);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(10,132,255,0.19), transparent 52%),
+    radial-gradient(120% 120% at 100% 0%, rgba(191,90,242,0.16), transparent 52%),
+    var(--surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+.franchise-hq-hero__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.franchise-hq-hero__eyebrow { margin: 0; font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-subtle); font-weight: 700; }
+.franchise-hq-hero__title { margin: 4px 0 0; font-size: 1.2rem; line-height: 1.2; }
+.franchise-hq-hero__subtitle { margin: 6px 0 0; font-size: 12px; color: var(--text-muted); max-width: 60ch; }
+.franchise-hq-hero__meta { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.franchise-hq-hero__cta { margin-top: 10px; }
+.franchise-hq-hero__cta-main { min-height: 44px; min-width: 220px; font-weight: 800; }
+.franchise-hq-chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.franchise-hq-chip {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  background: rgba(255,255,255,0.04);
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.franchise-hq-flow {
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.franchise-hq-flow__col { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 10px; background: rgba(255,255,255,0.02); }
+.franchise-hq-flow__label { margin: 0 0 4px; font-size: 10px; color: var(--text-subtle); letter-spacing: .08em; text-transform: uppercase; font-weight: 700; }
+.franchise-hq-flow__col strong { font-size: var(--text-sm); display: block; }
+.franchise-hq-flow__col p { margin: 5px 0 0; font-size: 12px; color: var(--text-muted); }
+
+.franchise-pulse-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.franchise-pulse-tile { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 8px; display: grid; gap: 2px; background: rgba(255,255,255,0.015); }
+.franchise-pulse-tile span { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); }
+.franchise-pulse-tile strong { font-size: 13px; color: var(--text); }
+.franchise-pulse-tile em { font-size: 11px; color: var(--accent); text-transform: capitalize; font-style: normal; }
+.franchise-pulse-tile small { font-size: 11px; color: var(--text-muted); line-height: 1.2; }
+
+.franchise-hq-section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.franchise-hq-section-head span { font-size: 11px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .08em; }
+.franchise-hq-urgent { padding: var(--space-3); border: 1px solid rgba(255,159,10,.35); background: linear-gradient(180deg, rgba(255,159,10,.08), rgba(255,159,10,.02)); }
+.franchise-hq-urgent-list { display: grid; gap: 7px; }
+.franchise-hq-urgent-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  padding: 9px 11px;
+  background: rgba(0,0,0,.12);
+  text-align: left;
+}
+.franchise-hq-urgent-item.tone-danger { border-color: rgba(255,69,58,.42); background: rgba(255,69,58,.09); }
+.franchise-hq-urgent-item.tone-warning { border-color: rgba(255,159,10,.42); background: rgba(255,159,10,.09); }
+.franchise-hq-urgent-item.tone-info { border-color: rgba(10,132,255,.42); background: rgba(10,132,255,.09); }
+.franchise-hq-urgent-item__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.franchise-hq-urgent-item p { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
+.franchise-hq-urgent-item > span { font-size: 11px; color: var(--text-subtle); font-weight: 700; }
+
+.franchise-story-list { display: grid; gap: 8px; }
+.franchise-story-item { border: 1px solid var(--hairline); border-radius: var(--radius-md); background: rgba(255,255,255,0.015); padding: 10px; text-align: left; display: grid; gap: 5px; }
+.franchise-story-item__head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-subtle); }
+.franchise-story-tag { border: 1px solid rgba(10,132,255,0.4); color: var(--accent); border-radius: var(--radius-pill); padding: 2px 7px; font-size: 10px; letter-spacing: .03em; }
+.franchise-story-item strong { font-size: var(--text-sm); }
+.franchise-story-item p { margin: 0; color: var(--text-muted); font-size: 12px; }
+
+.franchise-summary-panel { display: grid; gap: 10px; }
+.franchise-summary-header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.franchise-summary-tier { display: grid; gap: 6px; }
+.franchise-summary-tier__label { margin: 0; font-size: 10px; letter-spacing: .09em; color: var(--text-subtle); text-transform: uppercase; font-weight: 700; }
+.franchise-summary-grid { display: grid; gap: 7px; }
+.franchise-summary-grid.primary { grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); }
+.franchise-summary-grid.secondary { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.franchise-summary-tile { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 8px 9px; background: rgba(255,255,255,0.02); }
+.franchise-summary-tile span { font-size: 10px; letter-spacing: .06em; color: var(--text-subtle); text-transform: uppercase; }
+.franchise-summary-tile div { margin-top: 2px; color: var(--text); font-weight: 700; font-size: 12px; }
+.franchise-summary-tile.is-quiet div { font-weight: 600; color: var(--text-muted); }
+.franchise-summary-metadata { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-subtle); }
+
+@media (max-width: 760px) {
+  .franchise-hq-flow { grid-template-columns: 1fr; }
+}
