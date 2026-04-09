@@ -30,6 +30,11 @@ function getNextGame(league) {
 
 function conferenceContext(league, userTeam) {
   if (!league?.teams?.length || !userTeam) return null;
+  const normalizeConf = (team) => {
+    if (typeof team?.conf === "number") return team.conf;
+    if (typeof team?.conf === "string") return team.conf.toUpperCase() === "AFC" ? 0 : 1;
+    return 0;
+  };
   const pct = (team) => {
     const wins = safeNumber(team.wins);
     const losses = safeNumber(team.losses);
@@ -38,7 +43,7 @@ function conferenceContext(league, userTeam) {
     return games ? (wins + ties * 0.5) / games : 0;
   };
   const confTeams = [...league.teams]
-    .filter((t) => Number(t.conf) === Number(userTeam.conf))
+    .filter((t) => normalizeConf(t) === normalizeConf(userTeam))
     .sort((a, b) => pct(b) - pct(a));
   const confRank = confTeams.findIndex((t) => Number(t.id) === Number(userTeam.id)) + 1;
   const playoffLine = confTeams[6] ?? null;
@@ -278,23 +283,23 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
         <div className="franchise-hq-urgent-list">
           {urgent.map((item, idx) => (
-            <button key={`${item.label}-${idx}`} className={`franchise-hq-urgent-item tone-${item.tone ?? "info"}`} onClick={() => onNavigate?.(deriveSmartDestination(item))}>
             <button
-              key={`${item.label}-${idx}`}
-              className={`franchise-hq-urgent-item tone-${item.tone ?? "info"}`}
+              key={`${item?.label ?? "urgent"}-${idx}`}
+              className={`franchise-hq-urgent-item tone-${item?.tone ?? "info"}`}
               onClick={() => {
-                const tab = item.tab === "Roster" && String(item?.label ?? "").toLowerCase().includes("depth")
+                const directTab = item?.tab === "Roster" && String(item?.label ?? "").toLowerCase().includes("depth")
                   ? "Roster:depth"
-                  : item.tab;
-                onNavigate?.(tab);
+                  : item?.tab;
+                const destination = directTab ?? deriveSmartDestination(item);
+                if (destination) onNavigate?.(destination);
               }}
             >
               <div>
                 <div className="franchise-hq-urgent-item__meta">
-                  <strong>{item.label}</strong>
-                  <Badge variant={item.level === "blocker" ? "destructive" : "outline"}>{item.level === "blocker" ? "Blocker" : "Recommended"}</Badge>
+                  <strong>{item?.label ?? "Action item"}</strong>
+                  <Badge variant={item?.level === "blocker" ? "destructive" : "outline"}>{item?.level === "blocker" ? "Blocker" : "Recommended"}</Badge>
                 </div>
-                <p>{item.detail}</p>
+                <p>{item?.detail ?? "Open this recommendation to continue."}</p>
               </div>
               <span>Open →</span>
             </button>

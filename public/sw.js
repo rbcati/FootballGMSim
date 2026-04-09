@@ -59,6 +59,10 @@ self.addEventListener('activate', (event) => {
         )
       )
       .then(() => self.clients.claim())
+      .then(async () => {
+        const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        clients.forEach((client) => client.postMessage({ type: 'UPDATE_AVAILABLE', cacheName: CACHE_NAME }));
+      })
   );
 });
 
@@ -89,7 +93,7 @@ self.addEventListener('fetch', (event) => {
  */
 async function networkFirst(request) {
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-store' });
     if (response.ok && response.type !== 'opaque') {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());  // background update
