@@ -493,6 +493,7 @@ function AppContent() {
   }
 
   const bootstrapSummary = summarizeBootstrapState(league);
+  const leagueReady = bootstrapSummary.ready;
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
@@ -770,7 +771,7 @@ function AppContent() {
       )}
 
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
-        <LeagueDashboard
+      <LeagueDashboard
         league={leagueReady ? league : null}
         lastResults={authoritativeResults}
         lastSimWeek={lastSimWeek}

@@ -1954,23 +1954,12 @@ export default function LeagueDashboard({
                   }
                   if (destination.rosterState) {
                     setRosterInitialState(destination.rosterState);
+                    setRosterInitialView(destination.rosterState.view);
                   }
                   if (destination.statsFamily) {
                     setStatsInitialFamily(destination.statsFamily);
                   }
                   setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
-                  if (typeof tab === "string" && tab.startsWith("Stats:")) {
-                    setStatsInitialFamily((tab.split(":")[1] || "passing").toLowerCase());
-                    setActiveTab("Stats");
-                    return;
-                  }
-                  if (typeof tab === "string" && tab.startsWith("Roster:")) {
-                    const next = (tab.split(":")[1] || "table").toLowerCase();
-                    setRosterInitialView(next === "depth" ? "depth" : next === "cards" ? "cards" : "table");
-                    setActiveTab("Roster");
-                    return;
-                  }
-                  setActiveTab(tab);
                 }}
                 onAdvanceWeek={onAdvanceWeek}
                 busy={busy}

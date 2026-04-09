@@ -177,7 +177,6 @@ function OvrBadge({ ovr }) {
 
 const PER_GAME_KEYS = new Set(["passYards", "passTDs", "int", "rushAtt", "rushYards", "rushTDs", "receptions", "recYards", "recTDs", "tackles", "sacks", "defInt", "tfl", "fgMade", "fgAtt"]);
 
-export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "passing" }) {
 export default function PlayerStats({ actions, onPlayerSelect, league, initialFamily = "passing" }) {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -188,7 +187,6 @@ export default function PlayerStats({ actions, onPlayerSelect, league, initialFa
   const [sortDir, setSortDir] = useState("desc");
   const [statFamily, setStatFamily] = useState(initialFamily || "passing");
   const [rateMode, setRateMode] = useState("total");
-  const [statFamily, setStatFamily] = useState(initialFamily);
   const [viewMode, setViewMode] = useState("players");
 
   useEffect(() => {
