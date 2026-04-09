@@ -178,6 +178,7 @@ function OvrBadge({ ovr }) {
 const PER_GAME_KEYS = new Set(["passYards", "passTDs", "int", "rushAtt", "rushYards", "rushTDs", "receptions", "recYards", "recTDs", "tackles", "sacks", "defInt", "tfl", "fgMade", "fgAtt"]);
 
 export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "passing" }) {
+export default function PlayerStats({ actions, onPlayerSelect, league, initialFamily = "passing" }) {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -187,6 +188,14 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
   const [sortDir, setSortDir] = useState("desc");
   const [statFamily, setStatFamily] = useState(initialFamily || "passing");
   const [rateMode, setRateMode] = useState("total");
+  const [statFamily, setStatFamily] = useState(initialFamily);
+  const [viewMode, setViewMode] = useState("players");
+
+  useEffect(() => {
+    if (["passing", "rushing", "receiving", "defense"].includes(initialFamily)) {
+      setStatFamily(initialFamily);
+    }
+  }, [initialFamily]);
 
   // Fetch data on mount
   useEffect(() => {
@@ -265,6 +274,7 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
 
   // Determine Columns
   const activeColSetKey = getColSet(posFilter);
+  const safeWeek = Number(league?.week ?? 1);
   const familyColumns = {
     passing: ["passYards", "passTDs", "int", "passerRating"],
     rushing: ["rushAtt", "rushYards", "rushTDs"],
@@ -285,6 +295,51 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
     familyColumns[statFamily]?.includes(col.key) || !Object.values(familyColumns).flat().includes(col.key),
   );
   const tableCols = [...COLUMNS.BASE, ...dynCols];
+  const teamRows = useMemo(() => {
+    const map = new Map();
+    for (const row of stats) {
+      const teamAbbr = row?.teamAbbr ?? "FA";
+      const existing = map.get(teamAbbr) ?? {
+        id: teamAbbr,
+        name: teamAbbr,
+        pos: "TEAM",
+        teamAbbr,
+        ovr: 0,
+        age: 0,
+        gamesPlayed: 0,
+        passYards: 0,
+        passTDs: 0,
+        int: 0,
+        rushAtt: 0,
+        rushYards: 0,
+        rushTDs: 0,
+        receptions: 0,
+        recYards: 0,
+        recTDs: 0,
+        tackles: 0,
+        sacks: 0,
+        tfl: 0,
+        defInt: 0,
+      };
+      existing.gamesPlayed = Math.max(existing.gamesPlayed, Number(row?.gamesPlayed ?? 0));
+      for (const key of ["passYards","passTDs","int","rushAtt","rushYards","rushTDs","receptions","recYards","recTDs","tackles","sacks","tfl","defInt"]) {
+        existing[key] += Number(row?.[key] ?? 0);
+      }
+      map.set(teamAbbr, existing);
+    }
+    return [...map.values()];
+  }, [stats]);
+  const baseRows = useMemo(() => {
+    const rows = viewMode === "teams" ? [...teamRows] : [...displayedStats];
+    return rows.sort((a, b) => {
+      const valA = a?.[sortKey] ?? 0;
+      const valB = b?.[sortKey] ?? 0;
+      if (typeof valA === "string") {
+        return sortDir === "asc" ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+      }
+      return sortDir === "asc" ? Number(valA) - Number(valB) : Number(valB) - Number(valA);
+    });
+  }, [viewMode, teamRows, displayedStats, sortKey, sortDir]);
 
   if (loading) {
     return (
@@ -347,6 +402,16 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
             style={{ minWidth: 40, padding: "4px 10px" }}
           >
             {pos}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
+        {[
+          ["players", "Players"],
+          ["teams", "Teams"],
+        ].map(([key, label]) => (
+          <button key={key} className={`standings-tab${viewMode === key ? " active" : ""}`} onClick={() => setViewMode(key)}>
+            {label}
           </button>
         ))}
       </div>
@@ -418,7 +483,7 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
               </tr>
             </thead>
             <tbody>
-              {displayedStats.length === 0 && (
+              {baseRows.length === 0 && (
                 <tr>
                   <td
                     colSpan={tableCols.length + 1}
@@ -428,11 +493,13 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
                       color: "var(--text-muted)",
                     }}
                   >
-                    No {statFamily} stats found. Early weeks may only have small-sample results.
+                    {safeWeek <= 1
+                      ? `Week ${safeWeek}: ${statFamily} stats are still sparse. Sim a week, then check back.`
+                      : `No ${statFamily} stats found for this filter.`}
                   </td>
                 </tr>
               )}
-              {displayedStats.slice(0, 500).map((player, idx) => (
+              {baseRows.slice(0, 500).map((player, idx) => (
                 <tr key={player.id}>
                   <td
                     style={{
@@ -458,13 +525,13 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
                     else if (col.key === "name") {
                       content = (
                         <span
-                          onClick={() =>
-                            onPlayerSelect && onPlayerSelect(player.id)
-                          }
+                          onClick={() => {
+                            if (viewMode === "players" && onPlayerSelect) onPlayerSelect(player.id);
+                          }}
                           style={{
                             fontWeight: 600,
                             color: "var(--text)",
-                            cursor: "pointer",
+                            cursor: viewMode === "players" ? "pointer" : "default",
                           }}
                         >
                           {player.name}
@@ -498,7 +565,7 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
                   })}
                 </tr>
               ))}
-              {displayedStats.length > 500 && (
+              {baseRows.length > 500 && (
                 <tr>
                   <td
                     colSpan={tableCols.length + 1}
@@ -509,7 +576,7 @@ export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "
                       fontSize: "var(--text-xs)",
                     }}
                   >
-                    Showing top 500 of {displayedStats.length} players. Use
+                    Showing top 500 of {baseRows.length} rows. Use
                     filters to see more.
                   </td>
                 </tr>

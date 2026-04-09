@@ -19,6 +19,8 @@
 import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
 
+const WORKER_REQUEST_TIMEOUT_MS = 20000;
+
 // ── State shape ───────────────────────────────────────────────────────────────
 
 const INITIAL_STATE = {
@@ -192,8 +194,9 @@ export function useWorker() {
       // busy=true, so they must NOT dispatch IDLE which would zero out
       // simulating/simProgress mid-simulation.
       if (id && pendingRef.current.has(id)) {
-        const { resolve, reject, silent } = pendingRef.current.get(id);
+        const { resolve, reject, silent, timeoutId } = pendingRef.current.get(id);
         pendingRef.current.delete(id);
+        if (timeoutId) clearTimeout(timeoutId);
         if (type === toUI.ERROR) reject(new Error(payload.message || 'Worker request failed'));
         else resolve({ type, payload });
         dispatch({ type: silent ? 'CLEAR_BUSY' : 'IDLE' });
@@ -324,6 +327,10 @@ export function useWorker() {
     worker.postMessage(buildMsg(toWorker.INIT));
 
     return () => {
+      for (const pending of pendingRef.current.values()) {
+        if (pending?.timeoutId) clearTimeout(pending.timeoutId);
+      }
+      pendingRef.current.clear();
       worker.terminate();
       workerRef.current = null;
     };
@@ -346,7 +353,13 @@ export function useWorker() {
         return;
       }
       const msg = buildMsg(type, payload);
-      pendingRef.current.set(msg.id, { resolve, reject, silent });
+      const timeoutId = setTimeout(() => {
+        if (!pendingRef.current.has(msg.id)) return;
+        pendingRef.current.delete(msg.id);
+        reject(new Error(`Worker timeout while handling ${type}`));
+        dispatch({ type: 'ERROR', message: `Request timed out: ${type}. Please retry.` });
+      }, WORKER_REQUEST_TIMEOUT_MS);
+      pendingRef.current.set(msg.id, { resolve, reject, silent, timeoutId });
       if (!silent) dispatch({ type: 'BUSY' });
       workerRef.current.postMessage(msg);
     });
@@ -376,10 +389,8 @@ export function useWorker() {
     renameSave: (leagueId, name) => request(toWorker.RENAME_SAVE, { leagueId, name }, { silent: true }),
 
     /** Generate a new league. teams = array of team definitions. */
-    newLeague: (teams, options) => {
-      dispatch({ type: 'BUSY' });
-      send(toWorker.NEW_LEAGUE, { teams, options });
-    },
+    newLeague: (teams, options) =>
+      request(toWorker.NEW_LEAGUE, { teams, options }, { silent: false }),
 
     /** Watch the user game (returns a Promise resolving to logs). */
     watchGame: () => request(toWorker.WATCH_GAME, {}, { silent: false }),
@@ -432,7 +443,7 @@ export function useWorker() {
     /** Force an immediate DB flush. */
     save: ()                     => send(toWorker.SAVE_NOW),
 
-    loadSlot: (slotKey)          => send(toWorker.LOAD_SLOT, { slotKey }),
+    loadSlot: (slotKey)          => request(toWorker.LOAD_SLOT, { slotKey }, { silent: false }),
     saveSlot: (slotKey)          => send(toWorker.SAVE_SLOT, { slotKey }),
     exportSave: (leagueId)       => request(toWorker.EXPORT_SAVE, { leagueId }, { silent: true }),
     importSave: (data, saveName) => request(toWorker.IMPORT_SAVE, { data, saveName }),

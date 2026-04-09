@@ -47,6 +47,10 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
     if (!safeInitialView) return;
     setView(safeInitialView);
   }, [safeInitialView]);
+  React.useEffect(() => {
+    if (!normalizedInitialView || normalizedInitialView === view) return;
+    setView(normalizedInitialView);
+  }, [normalizedInitialView, view]);
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
@@ -118,9 +122,25 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
                     <Badge variant={offer?.urgency === 'high' ? 'destructive' : 'outline'}>{offer?.urgency ?? 'standard'}</Badge>
+            <div className="card" style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>No active offers yet</div>
+              <div style={{ marginBottom: 8 }}>Open Trade Finder to identify a partner, then move into Builder to compare assets and submit a package.</div>
+              <button className="btn btn-primary" onClick={() => setView('Finder')}>Open Trade Finder</button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {incomingOffers.slice(0, 8).map((offer, idx) => (
+                <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+                    <Badge variant="outline">Week {offer?.week ?? league?.week ?? 1}</Badge>
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                    Week {offer?.week ?? league?.week ?? 1} · Expires after week {offer?.expiresAfterWeek ?? '—'}
+                    Expires after week {offer?.expiresAfterWeek ?? '—'} · Sending {(offer?.offering?.playerIds ?? []).length} player(s), requesting {(offer?.receiving?.playerIds ?? []).length} player(s)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    <Badge variant="secondary">AI assets {(offer?.offering?.playerIds ?? []).length + (offer?.offering?.pickIds ?? []).length}</Badge>
+                    <Badge variant="secondary">Your assets {(offer?.receiving?.playerIds ?? []).length + (offer?.receiving?.pickIds ?? []).length}</Badge>
                   </div>
                   <div style={{ fontSize: 'var(--text-xs)' }}>
                     <strong>You receive:</strong> {[...summary.receive.players, ...summary.receive.picks].slice(0, 3).map((item) => item.label).join(', ') || 'No assets listed'}
@@ -132,6 +152,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
                     {offer?.reason || summary?.recommendation || 'No scouting reason provided.'}
                   </div>
                   <button className="btn" style={{ marginTop: 2 }} onClick={() => setView('Builder')}>Open Builder</button>
+                  <button className="btn" style={{ marginTop: 8 }} onClick={() => setView('Builder')}>Open Builder</button>
                 </div>
               ))}
             </div>

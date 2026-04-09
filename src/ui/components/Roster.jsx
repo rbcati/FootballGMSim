@@ -2012,14 +2012,13 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Roster({ league, actions, onPlayerSelect, initialState = null }) {
+export default function Roster({ league, actions, onPlayerSelect, initialViewMode = "table" }) {
   const teamId = league?.userTeamId;
 
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
-  const [viewMode, setViewMode] = useState(initialState?.view ?? "table"); // 'cards' | 'table' | 'depth'
-  const [initialFilter, setInitialFilter] = useState(initialState?.filter ?? "ALL");
+  const [viewMode, setViewMode] = useState(initialViewMode); // 'cards' | 'table' | 'depth'
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -2053,6 +2052,10 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
     if (initialState.view) setViewMode(initialState.view);
     if (initialState.filter) setInitialFilter(initialState.filter);
   }, [initialState]);
+    if (["cards", "table", "depth"].includes(initialViewMode)) {
+      setViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
 
   const handleReorderDepthChart = useCallback((posKey, draggedPlayerId, targetSlotIdx) => {
       const row = DEPTH_ROWS.find((r) => r.key === posKey);
