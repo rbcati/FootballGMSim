@@ -17,15 +17,14 @@ import React, { useState, useMemo, useEffect, Component } from "react";
 import DonutChart from "./DonutChart";
 import NotificationCenter from "./NotificationCenter.jsx";
 import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
-import HomeDashboard from "./HomeDashboard.jsx";
 import Roster from "./Roster.jsx";
 import RosterHub from "./RosterHub.jsx";
+import FranchiseHQ from "./FranchiseHQ.jsx";
+import FranchiseSummaryPanel from "./FranchiseSummaryPanel.jsx";
 import Draft from "./Draft.jsx";
 import RookieDraft from "./RookieDraft.jsx";
 import Coaches from "./Coaches.jsx";
 import FreeAgency from "./FreeAgency.jsx";
-import FreeAgencyHub from "./FreeAgencyHub.jsx";
-import TradeFinder from "./TradeFinder.jsx";
 import GameDetailScreen from "./GameDetailScreen.jsx";
 import LeagueHistory from "./LeagueHistory.jsx";
 import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
@@ -54,7 +53,6 @@ import InjuryReport from "./InjuryReport.jsx";
 import GodMode from "./GodMode.jsx";
 import SeasonRecap from "./SeasonRecap.jsx";
 import MobileNav from "./MobileNav.jsx";
-import WeeklyHub from "./WeeklyHub.jsx";
 import AnalyticsHub from "./AnalyticsHub.jsx";
 import GlossaryPopover from "./GlossaryPopover.jsx";
 import OnboardingTour from "./OnboardingTour.jsx";
@@ -90,8 +88,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Map MobileNav tab IDs → LeagueDashboard tab names
 const MOBILE_TAB_MAP = {
-  weekly: "Weekly Hub",
-  home: "Home",
+  weekly: "HQ",
+  home: "HQ",
+  history: "History Hub",
   standings: "Standings",
   schedule: "Schedule",
   roster: "Roster",
@@ -108,7 +107,7 @@ const MOBILE_TAB_MAP = {
   advisor: "🤖 GM Advisor",
 
   // Legacy aliases kept for compatibility with any older callers.
-  hub: "Weekly Hub",
+  hub: "HQ",
   free_agency: "Free Agency",
   trades: "Trades",
   mock_draft: "Mock Draft",
@@ -117,8 +116,10 @@ const MOBILE_TAB_MAP = {
 
 // Reverse map: dashboard tab → MobileNav tab ID (canonical IDs only).
 const REVERSE_TAB_MAP = {
+  HQ: "weekly",
   "Weekly Hub": "weekly",
-  Home: "home",
+  Home: "weekly",
+  "History Hub": "history",
   Standings: "standings",
   Schedule: "schedule",
   Roster: "roster",
@@ -200,15 +201,14 @@ class TabErrorBoundary extends Component {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const BASE_TABS = [
-  "Weekly Hub",
-  "Home",
+  "HQ",
   "Standings",
   "Schedule",
   "Stats",
   "Leaders",
   "League Leaders",
   "Award Races",
-  "Strategy",
+  "Analytics",
   "Game Plan",
   "Roster",
   "Depth Chart",
@@ -216,32 +216,48 @@ const BASE_TABS = [
   "Training",
   "Injuries",
   "Financials",
+  "Coaches",
+  "Staff",
+  "Transactions",
+  "Free Agency",
+  "Trades",
   "Draft",
   "Draft Room",
   "Mock Draft",
-  "Coaches",
-  "Staff",
-  "Free Agency",
-  "FA Hub",
-  "Trades",
-  "Trade Center",
-  "Trade Finder",
-  "Game Detail",
   "History Hub",
   "History",
   "Team History",
   "Hall of Fame",
   "Awards & Records",
-  "Analytics",
-  "Offseason",
   "Season Recap",
   "Saves",
   "God Mode",
+  "🤖 GM Advisor",
+  "Game Detail",
+  "Offseason",
   "💰 Cap",
   "🎓 Draft",
   "🎙️ Coaches",
-  "🤖 GM Advisor",
 ];
+
+const NAV_GROUPS = [
+  { title: "HQ", tabs: ["HQ"] },
+  { title: "Team", tabs: ["Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials"] },
+  { title: "League", tabs: ["Standings", "Schedule", "Stats", "Leaders", "Award Races", "Analytics"] },
+  { title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
+  { title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap"] },
+  { title: "Tools", tabs: ["Saves", "God Mode", "🤖 GM Advisor"] },
+];
+
+const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials"]);
+const TAB_ALIASES = {
+  "Weekly Hub": "HQ",
+  Home: "HQ",
+  "Trade Center": "Transactions",
+  "Trade Finder": "Transactions",
+  Trades: "Transactions",
+  "FA Hub": "Free Agency",
+};
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -1406,12 +1422,12 @@ function QuickJumpFab({ onNavigate }) {
 }
 
 function getPhasePriorityTabs(phase) {
-  if (phase === "offseason_resign") return ["Weekly Hub", "Roster", "FA Hub", "Financials"];
-  if (phase === "free_agency") return ["Weekly Hub", "Free Agency", "FA Hub", "Trades"];
-  if (phase === "draft") return ["Weekly Hub", "Draft", "Mock Draft", "🎓 Draft"];
-  if (phase === "preseason") return ["Weekly Hub", "Roster Hub", "Depth Chart", "Training"];
-  if (phase === "playoffs") return ["Weekly Hub", "Postseason", "Game Plan", "Injuries"];
-  return ["Weekly Hub", "Game Plan", "Roster", "Trades"];
+  if (phase === "offseason_resign") return ["HQ", "Roster", "Free Agency", "Financials"];
+  if (phase === "free_agency") return ["HQ", "Free Agency", "Trades", "Draft"];
+  if (phase === "draft") return ["HQ", "Draft", "Mock Draft", "Transactions"];
+  if (phase === "preseason") return ["HQ", "Roster Hub", "Depth Chart", "Training"];
+  if (phase === "playoffs") return ["HQ", "Postseason", "Game Plan", "Injuries"];
+  return ["HQ", "Game Plan", "Roster", "Transactions"];
 }
 
 export default function LeagueDashboard({
@@ -1427,7 +1443,7 @@ export default function LeagueDashboard({
   externalBoxScoreId,
   onConsumeExternalBoxScore,
 }) {
-  const [activeTab, setActiveTab] = useState("Weekly Hub");
+  const [activeTab, setActiveTab] = useState("HQ");
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [lastGameTab, setLastGameTab] = useState("Schedule");
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
@@ -1456,13 +1472,19 @@ export default function LeagueDashboard({
   //                    DraftComplete panel no longer shows.
   //  playoffs    → auto-switch to Postseason tab on first entry
   useEffect(() => {
+    if (TAB_ALIASES[activeTab]) {
+      setActiveTab(TAB_ALIASES[activeTab]);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
     const prevPhase = prevPhaseRef.current;
     prevPhaseRef.current = league?.phase;
 
     if (league?.phase === "draft") {
       setActiveTab("Draft");
     } else if (prevPhase === "draft" && league?.phase === "preseason") {
-      setActiveTab("Home");
+      setActiveTab("HQ");
     } else if (league?.phase === "playoffs" && prevPhase !== "playoffs") {
       setActiveTab("Postseason");
     }
@@ -1575,12 +1597,12 @@ export default function LeagueDashboard({
       </div>
 
       {/* ── Contextual Action Banners (compact) ── */}
-      {activeTab !== "Weekly Hub" && league.phase === "offseason_resign" && (
+      {activeTab !== "HQ" && league.phase === "offseason_resign" && (
         <div onClick={() => setActiveTab("Roster")} className="action-banner action-banner-success">
           ✍️ <strong>Expiring Contracts</strong> — review before Free Agency
         </div>
       )}
-      {activeTab !== "Weekly Hub" && league.phase === "preseason" && (
+      {activeTab !== "HQ" && league.phase === "preseason" && (
         <div className="action-banner action-banner-warning">
           ⚠️ <strong>Roster Cutdown:</strong>{" "}
           <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? "var(--danger)" : "var(--success)" }}>
@@ -1589,19 +1611,19 @@ export default function LeagueDashboard({
           {" "}/ 53 — must release {Math.max(0, (userTeam?.rosterCount ?? 0) - 53)} players
         </div>
       )}
-      {activeTab !== "Weekly Hub" && league.phase === "playoffs" && activeTab !== "Postseason" && (
+      {activeTab !== "HQ" && league.phase === "playoffs" && activeTab !== "Postseason" && (
         <div onClick={() => setActiveTab("Postseason")} className="action-banner action-banner-gold">
           🏆 <strong>PLAYOFFS</strong> — click to view bracket
         </div>
       )}
-      {activeTab !== "Weekly Hub" && league.phase === "draft" && activeTab !== "Draft" && (
+      {activeTab !== "HQ" && league.phase === "draft" && activeTab !== "Draft" && (
         <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
 
       {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
-      {activeTab !== "Home" && activeTab !== "Weekly Hub" && league.phase !== "draft" && <div
+      {activeTab !== "Home" && activeTab !== "HQ" && league.phase !== "draft" && <div
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
@@ -1865,7 +1887,7 @@ export default function LeagueDashboard({
         ))}
       </div>
 
-      {/* ── Tab Navigation ── sticky, horizontally scrollable, no wrap ── */}
+      {/* ── Grouped Navigation ── */}
       <div
         className="standings-tabs dashboard-main-tabs"
         style={{
@@ -1886,50 +1908,37 @@ export default function LeagueDashboard({
           borderBottom: "1px solid var(--hairline)",
         }}
       >
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            className={`standings-tab${activeTab === tab ? " active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              flexShrink: 0,
-              textTransform: "uppercase",
-              letterSpacing: "0.08em",
-              fontSize: "10px",
-              padding: "6px 9px",
-            }}
-          >
-            {tab}
-          </button>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.title} style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 10 }}>
+            <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-subtle)" }}>{group.title}</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {group.tabs.filter((tab) => TABS.includes(tab)).map((tab) => (
+                <button
+                  key={tab}
+                  className={`standings-tab${activeTab === tab ? " active" : ""}`}
+                  onClick={() => setActiveTab(tab)}
+                  style={{ flexShrink: 0, fontSize: "10px", padding: "6px 9px" }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
-        {activeTab === "Weekly Hub" && (
-          <TabErrorBoundary label="Weekly Hub">
-            <WeeklyHub
+        {TEAM_FACING_TABS.has(activeTab) ? <FranchiseSummaryPanel league={league} compact className="" /> : null}
+        {(activeTab === "HQ" || activeTab === "Weekly Hub" || activeTab === "Home") && (
+          <TabErrorBoundary label="Franchise HQ">
+            <FranchiseHQ
               league={league}
-              actions={actions}
               onNavigate={setActiveTab}
-              onPlayerSelect={setSelectedPlayerId}
-              onTeamSelect={setSelectedTeamId}
               onAdvanceWeek={onAdvanceWeek}
               busy={busy}
               simulating={simulating}
-              onOpenBoxScore={(gameId) => openGameDetail(gameId, "Weekly Hub")}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Home" && (
-          <TabErrorBoundary label="Home">
-            <HomeDashboard
-              league={league}
-              onTeamSelect={setSelectedTeamId}
-              onPlayerSelect={setSelectedPlayerId}
-              onTabChange={setActiveTab}
-              onAdvanceWeek={onAdvanceWeek}
-              isBusy={busy || simulating}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
             />
             {league.phase !== "preseason" && (
               <div style={{ marginTop: "var(--space-4)" }}>
@@ -2091,33 +2100,12 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
-        {activeTab === "FA Hub" && (
-          <TabErrorBoundary label="FA Hub">
-            <FreeAgencyHub
-              league={league}
-              actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
-              onNavigate={setActiveTab}
-              league={league}
-            />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Trades" && (
-          <TabErrorBoundary label="Trades">
+                {(activeTab === "Transactions" || activeTab === "Trades") && (
+          <TabErrorBoundary label="Transactions">
             <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
           </TabErrorBoundary>
         )}
-        {activeTab === "Trade Center" && (
-          <TabErrorBoundary label="Trade Center">
-            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
-          </TabErrorBoundary>
-        )}
-        {activeTab === "Trade Finder" && (
-          <TabErrorBoundary label="Trade Finder">
-            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialView="Finder" />
-          </TabErrorBoundary>
-        )}
-        {isInitialized && activeTab === "📰 News" && (
+                {isInitialized && activeTab === "📰 News" && (
           <TabErrorBoundary label="News">
             <NewsFeed league={league} mode="full" />
             <RecordBook league={league} />

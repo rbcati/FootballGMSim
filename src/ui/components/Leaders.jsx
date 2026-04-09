@@ -79,6 +79,7 @@ function LeaderboardTable({ rows, statLabel, onPlayerSelect, userTeamId }) {
 
 export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigate, league }) {
   const [scope, setScope] = useState("season");
+  const [viewMode, setViewMode] = useState("table");
   const [data, setData] = useState(null);
   const [selection, setSelection] = useState({ category: "passing", statKey: "passYards" });
   const [loading, setLoading] = useState(false);
@@ -147,13 +148,17 @@ export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigat
             </button>
           ))}
         </div>
+        <div className="leaders-filter-group">
+          <button className={`standings-tab${viewMode === "table" ? " active" : ""}`} onClick={() => setViewMode("table")}>Table</button>
+          <button className={`standings-tab${viewMode === "cards" ? " active" : ""}`} onClick={() => setViewMode("cards")}>Cards</button>
+        </div>
       </div>
 
       {loading ? <div className="leaders-empty">Loading leaders…</div> : null}
       {!loading && error ? <div className="leaders-empty" style={{ color: "var(--danger)" }}>{error}</div> : null}
       {!loading && !error && !rows.length ? <div className="leaders-empty">No stats available yet.</div> : null}
 
-      {!loading && !error && rows.length > 0 ? (
+      {!loading && !error && rows.length > 0 && viewMode === "table" ? (
         <Card className="card-premium">
           <CardContent className="leaders-board-shell">
             <div className="leaders-board-header">
@@ -171,6 +176,20 @@ export default function Leaders({ onPlayerSelect, userTeamId, actions, onNavigat
             />
           </CardContent>
         </Card>
+      ) : null}
+      {!loading && !error && rows.length > 0 && viewMode === "cards" ? (
+        <div className="weekly-card-grid">
+          {rows.slice(0, 24).map((row, idx) => (
+            <Card key={`${row.playerId}-${idx}`} className="card-premium">
+              <CardContent style={{ display: "grid", gap: 4 }}>
+                <strong>#{idx + 1} {row.name ?? `Player ${row.playerId}`}</strong>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{row.pos ?? "—"} · {row.teamAbbr ?? "FA"}</div>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>{STAT_LABELS[normalized.statKey]?.abbr ?? "Val"}: {valueDisplay(row.value)}</div>
+                {row.playerId != null ? <Button size="sm" variant="outline" onClick={() => onPlayerSelect?.(row.playerId)}>Open profile</Button> : null}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : null}
 
       <div className="leaders-footnote">
