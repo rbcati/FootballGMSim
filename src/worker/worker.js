@@ -97,6 +97,8 @@ import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoal
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
+import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
+import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
@@ -445,18 +447,13 @@ function pruneIncomingTradeOffers(metaObj) {
 }
 
 function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) {
-  const settings = normalizeLeagueSettings(metaObj?.settings ?? {});
-  const deadlineWeek = Number(settings?.tradeDeadlineWeek ?? 9);
-  const currentWeek = Number(metaObj?.currentWeek ?? 1);
-  const weeksRemaining = deadlineWeek - currentWeek;
-  return {
-    deadlineWeek,
-    currentWeek,
-    weeksRemaining,
-    isLocked: currentWeek > deadlineWeek,
-    isFinalWindow: weeksRemaining >= 0 && weeksRemaining <= 2,
-    canOverride: !!metaObj?.commissionerMode,
-  };
+  return getTradeWindowSnapshot({
+    currentWeek: metaObj?.currentWeek,
+    week: metaObj?.currentWeek,
+    phase: metaObj?.phase,
+    settings: metaObj?.settings,
+    commissionerMode: metaObj?.commissionerMode,
+  });
 }
 
 function deriveArchivedLeadersFromBoxScore(boxScore = {}) {
@@ -1118,6 +1115,18 @@ async function handleLoadSave({ leagueId }, id) {
       // Arm the flush guard — save is now confirmed loaded.
       _saveIsExplicitlyLoaded = true;
 
+      try {
+        const migration = migrateSaveMetaToCurrent(cache.getMeta() ?? {});
+        if (migration.migratedTo !== migration.migratedFrom) {
+          cache.setMeta(migration.migrated);
+          await flushDirty();
+          post(toUI.NOTIFICATION, { level: 'info', message: `Save migrated from schema v${migration.migratedFrom} to v${migration.migratedTo}.` });
+        }
+      } catch (migrationError) {
+        post(toUI.ERROR, { message: `Could not migrate save data safely: ${migrationError.message}` }, id);
+        return;
+      }
+
       // Update lastPlayed in Global DB
       const meta = ensureDynastyMeta(cache.getMeta());
       const userTeam = cache.getTeam(meta.userTeamId);
@@ -1242,19 +1251,48 @@ async function handleRenameSave({ leagueId, name }, id) {
       post(toUI.ERROR, { message: 'leagueId and name are required for RENAME_SAVE' }, id);
       return;
     }
-    // Update the save metadata in the Saves store
     const existing = await Saves.get(leagueId);
     if (!existing) {
       post(toUI.ERROR, { message: `Save ${leagueId} not found` }, id);
       return;
     }
     await Saves.put({ ...existing, name: name.trim() });
-    // Broadcast updated manifest entry so localStorage mirror stays in sync
     postManifestUpdate({ ...existing, name: name.trim() });
-    // Return updated saves list
     await handleGetAllSaves({}, id);
   } catch (e) {
     post(toUI.ERROR, { message: e.message }, id);
+  }
+}
+
+async function handleDuplicateSave({ leagueId, name }, id) {
+  if (!leagueId || !isValidSaveId(leagueId)) {
+    post(toUI.ERROR, { message: 'Invalid leagueId for DUPLICATE_SAVE' }, id);
+    return;
+  }
+  try {
+    const newLeagueId = await createUniqueLeagueId();
+    await copyLeagueData(leagueId, newLeagueId);
+    const original = await Saves.get(leagueId);
+    const duplicateName = String(name || `${original?.name ?? 'League'} (Copy)`).trim().slice(0, 80);
+    await Saves.save({
+      id: newLeagueId,
+      name: duplicateName,
+      year: original?.year,
+      teamId: original?.teamId,
+      teamAbbr: original?.teamAbbr ?? '???',
+      lastPlayed: Date.now(),
+    });
+    postManifestUpdate({
+      id: newLeagueId,
+      name: duplicateName,
+      year: original?.year,
+      teamId: original?.teamId,
+      teamAbbr: original?.teamAbbr ?? '???',
+      lastPlayed: Date.now(),
+    });
+    await handleGetAllSaves({}, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'Failed to duplicate save.' }, id);
   }
 }
 
@@ -3160,7 +3198,7 @@ async function handleExportSave(payload, id) {
     const meta = cache.getMeta() || {};
     post(toUI.SAVE_EXPORT, {
       data: {
-        version: 3,
+        version: CURRENT_SAVE_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
         leagueId,
         meta: {
@@ -3264,7 +3302,12 @@ async function handleImportSave({ data, saveName }, id) {
     await writeLeagueSnapshot(leagueId, snapshot);
     configureActiveLeague(leagueId);
     await openDB();
-    const meta = await Meta.load();
+    const rawMeta = await Meta.load();
+    const migration = migrateSaveMetaToCurrent(rawMeta ?? {});
+    if (migration.migratedTo !== migration.migratedFrom) {
+      await Meta.save(migration.migrated);
+    }
+    const meta = migration.migrated;
     cache.load({
       meta,
       teams: await Teams.loadAll(),
@@ -4539,7 +4582,7 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 
   const meta = ensureDynastyMeta(cache.getMeta());
   const deadline = getTradeDeadlineSnapshot(meta);
-  if (deadline.isLocked && !deadline.canOverride) {
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: meta?.settings, commissionerMode: deadline.canOverride })) {
     post(toUI.TRADE_RESPONSE, {
       accepted: false,
       rejectionType: 'deadline',
@@ -4778,7 +4821,7 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
 async function handleAcceptIncomingTrade({ offerId }, id) {
   const latestMeta = ensureDynastyMeta(cache.getMeta());
   const deadline = getTradeDeadlineSnapshot(latestMeta);
-  if (deadline.isLocked && !deadline.canOverride) {
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: latestMeta?.settings, commissionerMode: deadline.canOverride })) {
     post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
     return;
   }
@@ -4815,7 +4858,7 @@ async function handleRejectIncomingTrade({ offerId }, id) {
 async function handleCounterIncomingTrade({ offerId, offering, receiving }, id) {
   const latestMeta = ensureDynastyMeta(cache.getMeta());
   const deadline = getTradeDeadlineSnapshot(latestMeta);
-  if (deadline.isLocked && !deadline.canOverride) {
+  if (!isTradeWindowOpen({ week: deadline.currentWeek, phase: deadline.phase, settings: latestMeta?.settings, commissionerMode: deadline.canOverride })) {
     post(toUI.TRADE_RESPONSE, { accepted: false, counterStatus: 'locked', rejectionType: 'deadline', reason: `Trade deadline passed after Week ${deadline.deadlineWeek}.` }, id);
     return;
   }
@@ -7207,6 +7250,7 @@ async function handleMessage(event) {
       case toWorker.LOAD_SAVE:          return await handleLoadSave(payload, id);
       case toWorker.DELETE_SAVE:        return await handleDeleteSave(payload, id);
       case toWorker.RENAME_SAVE:        return await handleRenameSave(payload, id);
+      case toWorker.DUPLICATE_SAVE:     return await handleDuplicateSave(payload, id);
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);

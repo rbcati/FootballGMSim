@@ -120,6 +120,18 @@ export default function SaveManager({ actions, onCreate }) {
     setRenameValue(save.name || `League ${save.id?.slice(0, 6)}`);
   }, []);
 
+
+  const handleDuplicate = useCallback(async (save) => {
+    if (!save?.id) return;
+    const nextName = `${save.name || `League ${save.id?.slice(0, 6)}`} (Copy)`;
+    try {
+      await actions.duplicateSave?.(save.id, nextName);
+      await fetchSaves();
+    } catch (err) {
+      setSaveErrors((prev) => ({ ...prev, [save.id]: `Duplicate failed: ${err.message}` }));
+    }
+  }, [actions, fetchSaves]);
+
   const handleRenameConfirm = useCallback(async (id) => {
     const trimmed = renameValue.trim();
     if (!trimmed) { setRenamingId(null); return; }
@@ -216,22 +228,22 @@ export default function SaveManager({ actions, onCreate }) {
                   <div
                     key={save.id}
                     className={`sm-save-card ${isLoading ? "sm-save-loading" : ""} ${saveError ? "sm-save-errored" : ""} ${save.recovered ? "sm-save-recovered" : ""}`}
-                    onClick={() => !isBusy && !saveError && !save.recovered && handleLoad(save.id)}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && !isBusy && !saveError && !save.recovered && handleLoad(save.id)}
                     style={{ animationDelay: `${idx * 50}ms` }}
                   >
-                    {/* Team badge with team color */}
-                    <div
-                      className="sm-save-badge"
-                      style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}
+                    <button
+                      className="sm-save-main"
+                      type="button"
+                      disabled={isBusy || !!saveError || save.recovered}
+                      onClick={() => !isBusy && !saveError && !save.recovered && handleLoad(save.id)}
                     >
-                      {save.teamAbbr || "???"}
-                    </div>
+                      <div
+                        className="sm-save-badge"
+                        style={{ background: `linear-gradient(135deg, ${color}, ${color}cc)` }}
+                      >
+                        {save.teamAbbr || "???"}
+                      </div>
 
-                    {/* Info */}
-                    <div className="sm-save-info">
+                      <div className="sm-save-info">
                       <div className="sm-save-name">
                         {save.name || `League ${save.id?.slice(0, 6)}`}
                         {save.recovered && (
@@ -247,6 +259,7 @@ export default function SaveManager({ actions, onCreate }) {
                         <div className="sm-save-error">{saveError}</div>
                       )}
                     </div>
+                    </button>
 
                     {/* Actions */}
                     <div className="sm-save-actions" onClick={(e) => e.stopPropagation()}>
@@ -310,6 +323,14 @@ export default function SaveManager({ actions, onCreate }) {
                               <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
                               <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
+                          </button>
+                          <button
+                            className="sm-btn sm-btn-retry"
+                            disabled={isBusy || save.recovered}
+                            onClick={() => handleDuplicate(save)}
+                            title="Duplicate save"
+                          >
+                            ⧉
                           </button>
                           <button
                             className="sm-btn sm-btn-delete"

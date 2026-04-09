@@ -15,6 +15,8 @@ import { computeTeamNeedsSummary, formatNeedsLine } from "../utils/marketSignals
 import { buildTeamIntelligence, summarizeTradeImpact } from "../utils/teamIntelligence.js";
 import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/tradeOfferPresentation.js";
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
+import { isTradeWindowOpen, getTradeWindowSnapshot } from "../../core/tradeWindow.js";
+import { DeadlineBanner } from "./common/UiPrimitives.jsx";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -282,6 +284,11 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
   const otherTeams = useMemo(() => (league?.teams ?? []).filter(t => t.id !== myTeamId).sort((a, b) => a.name.localeCompare(b.name)), [league?.teams, myTeamId]);
 
+  useEffect(() => {
+    if (targetId != null) return;
+    if (otherTeams.length > 0) setTargetId(Number(otherTeams[0].id));
+  }, [otherTeams, targetId]);
+
   const myRosterMap = useMemo(() => new Map(myRoster.map((p) => [toAssetId(p.id), p])), [myRoster]);
   const theirRosterMap = useMemo(() => new Map(theirRoster.map((p) => [toAssetId(p.id), p])), [theirRoster]);
 
@@ -371,8 +378,18 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   };
 
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
-  const tradeDeadline = league?.tradeDeadline ?? null;
-  const tradeLocked = !!(tradeDeadline?.isLocked && !league?.commissionerMode);
+  const tradeDeadline = getTradeWindowSnapshot({
+    week: league?.week,
+    phase: league?.phase,
+    settings: league?.settings,
+    commissionerMode: league?.commissionerMode,
+  });
+  const tradeLocked = !isTradeWindowOpen({
+    week: league?.week,
+    phase: league?.phase,
+    settings: league?.settings,
+    commissionerMode: league?.commissionerMode,
+  });
 
 
   useEffect(() => {
@@ -458,18 +475,13 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       <Button className="btn" onClick={() => { setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); }}>Clear package</Button>
     </StickySubnav>
     <Card className="card-premium"><CardContent className="p-4 trade-center-v2">
-      <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-3) var(--space-4)", borderColor: tradeDeadline?.isFinalWindow || tradeLocked ? "rgba(245,158,11,0.45)" : "var(--hairline)" }}>
-        <strong style={{ display: "block", marginBottom: 4 }}>Trade deadline: Week {tradeDeadline?.deadlineWeek ?? "—"}</strong>
-        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-          {tradeLocked
-            ? "Trade market is locked for normal gameplay until offseason (commissioner mode can override)."
-            : `${Math.max(0, tradeDeadline?.weeksRemaining ?? 0)} week(s) remaining before trade lock.`}
-        </div>
-        {tradeDeadline?.isFinalWindow && !tradeLocked && (
-          <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning)", fontWeight: 700 }}>
-            Warning: final two-week window before the deadline.
-          </div>
-        )}
+      <div style={{ marginBottom: 'var(--space-4)' }}>
+        <DeadlineBanner
+          locked={tradeLocked}
+          message={tradeLocked
+            ? `Trade deadline passed after Week ${tradeDeadline?.deadlineWeek}. Normal trading unlocks in offseason.`
+            : `Week ${tradeDeadline?.deadlineWeek} deadline · ${Math.max(0, tradeDeadline?.weeksRemaining ?? 0)} week(s) remaining.`}
+        />
       </div>
       {showSavedToast && (
         <div style={{

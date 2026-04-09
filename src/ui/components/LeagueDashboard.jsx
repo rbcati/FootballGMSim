@@ -80,6 +80,7 @@ import { getClickableCardProps } from "../utils/clickableCard.js";
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
+import { safeGetLeagueState, canOpenBoxScore, getScheduleViewModel } from "../../state/selectors.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -795,15 +796,25 @@ function ScheduleTab({
   const totalWeeks = schedule?.weeks?.length ?? 0;
   const weekData = schedule?.weeks?.find((w) => w.week === selectedWeek);
   const games = weekData?.games ?? [];
-  const filteredGames = games.filter((game) => {
-    const homeId = Number(game?.home?.id ?? game?.home);
-    const awayId = Number(game?.away?.id ?? game?.away);
-    if (viewMode === "my_team") return homeId === Number(userTeamId) || awayId === Number(userTeamId);
-    if (viewMode === "selected_team") return homeId === Number(selectedTeamId) || awayId === Number(selectedTeamId);
-    if (viewMode === "completed_only") return !!game?.played;
-    if (viewMode === "upcoming_only") return !game?.played;
-    return true;
+  const scheduleModel = getScheduleViewModel({ week: currentWeek, userTeamId, schedule }, {
+    week: selectedWeek,
+    teamId: selectedTeamId,
+    mode: viewMode === 'selected_team' || viewMode === 'my_team' ? 'team' : 'league',
+    status: viewMode === 'completed_only' ? 'completed' : viewMode === 'upcoming_only' ? 'upcoming' : 'all',
   });
+  const filteredGames = (viewMode === 'my_team')
+    ? games.filter((game) => {
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      return homeId === Number(userTeamId) || awayId === Number(userTeamId);
+    })
+    : (viewMode === 'selected_team')
+      ? games.filter((game) => {
+        const homeId = Number(game?.home?.id ?? game?.home);
+        const awayId = Number(game?.away?.id ?? game?.away);
+        return homeId === Number(selectedTeamId) || awayId === Number(selectedTeamId);
+      })
+      : scheduleModel.games;
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
   const weekRecapItems = useMemo(() => (
     games
@@ -973,7 +984,7 @@ function ScheduleTab({
             selectedWeek === currentWeek;
           const resolvedGameId = game.played ? resolveCompletedGameId(game, { seasonId, week: selectedWeek }) : null;
           const archiveQuality = game?.archiveQuality ?? (game?.gameId ? "full" : (resolvedGameId ? "partial" : "missing"));
-          const isClickable = Boolean(game.played && onGameSelect && resolvedGameId && archiveQuality !== "missing");
+          const isClickable = Boolean(canOpenBoxScore({ ...game, gameId: resolvedGameId }) && onGameSelect && archiveQuality !== "missing");
           const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
           const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
           const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
@@ -2249,7 +2260,6 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}
@@ -2266,7 +2276,6 @@ export default function LeagueDashboard({
               onTeamSelect={setSelectedTeamId}
               onNavigate={setActiveTab}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "Season Recap")}
-              league={league}
             />
           </TabErrorBoundary>
         )}
