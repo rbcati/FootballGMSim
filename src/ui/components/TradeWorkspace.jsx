@@ -7,6 +7,8 @@ import { mergeTradeWorkspaceState } from '../utils/tradeWorkspaceState.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
+import { Badge } from '@/components/ui/badge';
+import { buildIncomingOfferPresentation } from '../utils/tradeOfferPresentation.js';
 
 const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
@@ -35,6 +37,15 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const partnerNeeds = useMemo(() => partnerTeam ? computeTeamNeedsSummary(partnerTeam) : null, [partnerTeam]);
   const partnerIntel = useMemo(() => partnerTeam ? buildTeamIntelligence(partnerTeam, { week: league?.week ?? 1 }) : null, [partnerTeam, league?.week]);
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
+  const offerSummaries = useMemo(
+    () => incomingOffers.map((offer) => ({ offer, summary: buildIncomingOfferPresentation({ offer, league, userTeamId: league?.userTeamId }) })),
+    [incomingOffers, league],
+  );
+
+  React.useEffect(() => {
+    if (!normalizedInitialView) return;
+    setView(normalizedInitialView);
+  }, [normalizedInitialView]);
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
@@ -92,18 +103,34 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       {view === 'Offers' && (
         <SectionCard title="Incoming Offers" subtitle="Review active trade calls and jump into Builder fast.">
           {!incomingOffers.length ? (
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              No offers right now. Open Finder to target a partner team, then request a counter package.
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', display: 'grid', gap: 6 }}>
+              <div>No offers right now. Open Finder to target a partner team, then request a counter package.</div>
+              <div style={{ fontSize: 'var(--text-xs)' }}>
+                Next step: start in <strong>Finder</strong>, shortlist 2-3 partners, then move to <strong>Builder</strong> when one responds.
+              </div>
+              <button className="btn" style={{ width: 'fit-content' }} onClick={() => setView('Finder')}>Go to Finder</button>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
-              {incomingOffers.slice(0, 8).map((offer, idx) => (
-                <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)' }}>
-                  <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+              {offerSummaries.slice(0, 8).map(({ offer, summary }, idx) => (
+                <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 7 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+                    <Badge variant={offer?.urgency === 'high' ? 'destructive' : 'outline'}>{offer?.urgency ?? 'standard'}</Badge>
+                  </div>
                   <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                     Week {offer?.week ?? league?.week ?? 1} · Expires after week {offer?.expiresAfterWeek ?? '—'}
                   </div>
-                  <button className="btn" style={{ marginTop: 6 }} onClick={() => setView('Builder')}>Open Builder</button>
+                  <div style={{ fontSize: 'var(--text-xs)' }}>
+                    <strong>You receive:</strong> {[...summary.receive.players, ...summary.receive.picks].slice(0, 3).map((item) => item.label).join(', ') || 'No assets listed'}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)' }}>
+                    <strong>You send:</strong> {[...summary.give.players, ...summary.give.picks].slice(0, 3).map((item) => item.label).join(', ') || 'No assets listed'}
+                  </div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    {offer?.reason || summary?.recommendation || 'No scouting reason provided.'}
+                  </div>
+                  <button className="btn" style={{ marginTop: 2 }} onClick={() => setView('Builder')}>Open Builder</button>
                 </div>
               ))}
             </div>

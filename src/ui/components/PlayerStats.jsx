@@ -7,6 +7,8 @@
  */
 
 import React, { useState, useEffect, useMemo } from "react";
+import { ScreenHeader, SectionCard } from "./ScreenSystem.jsx";
+import { Badge } from "@/components/ui/badge";
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -173,7 +175,9 @@ function OvrBadge({ ovr }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function PlayerStats({ actions, onPlayerSelect }) {
+const PER_GAME_KEYS = new Set(["passYards", "passTDs", "int", "rushAtt", "rushYards", "rushTDs", "receptions", "recYards", "recTDs", "tackles", "sacks", "defInt", "tfl", "fgMade", "fgAtt"]);
+
+export default function PlayerStats({ actions, onPlayerSelect, initialFamily = "passing" }) {
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -181,7 +185,8 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
   const [posFilter, setPosFilter] = useState("All");
   const [sortKey, setSortKey] = useState("passYards"); // Default sort
   const [sortDir, setSortDir] = useState("desc");
-  const [statFamily, setStatFamily] = useState("passing");
+  const [statFamily, setStatFamily] = useState(initialFamily || "passing");
+  const [rateMode, setRateMode] = useState("total");
 
   // Fetch data on mount
   useEffect(() => {
@@ -201,6 +206,10 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
         setLoading(false);
       });
   }, [actions]);
+
+  useEffect(() => {
+    if (initialFamily) setStatFamily(initialFamily);
+  }, [initialFamily]);
 
   // Handle Sort
   const handleSort = (key) => {
@@ -240,8 +249,10 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
 
     // 2. Sort
     return [...filtered].sort((a, b) => {
-      const valA = a[sortKey] ?? 0;
-      const valB = b[sortKey] ?? 0;
+      const baseA = a[sortKey] ?? 0;
+      const baseB = b[sortKey] ?? 0;
+      const valA = rateMode === "per_game" && PER_GAME_KEYS.has(sortKey) ? baseA / Math.max(1, a.gamesPlayed ?? 0) : baseA;
+      const valB = rateMode === "per_game" && PER_GAME_KEYS.has(sortKey) ? baseB / Math.max(1, b.gamesPlayed ?? 0) : baseB;
 
       if (typeof valA === "string") {
         return sortDir === "asc"
@@ -250,7 +261,7 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
       }
       return sortDir === "asc" ? valA - valB : valB - valA;
     });
-  }, [stats, posFilter, sortKey, sortDir]);
+  }, [stats, posFilter, sortKey, sortDir, rateMode]);
 
   // Determine Columns
   const activeColSetKey = getColSet(posFilter);
@@ -260,6 +271,16 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
     receiving: ["receptions", "recYards", "recTDs"],
     defense: ["tackles", "sacks", "defInt", "tfl"],
   };
+  useEffect(() => {
+    const defaultSortByFamily = {
+      passing: "passYards",
+      rushing: "rushYards",
+      receiving: "recYards",
+      defense: "tackles",
+    };
+    setSortKey((prev) => (familyColumns[statFamily]?.includes(prev) ? prev : defaultSortByFamily[statFamily] ?? "passYards"));
+    setSortDir("desc");
+  }, [statFamily]);
   const dynCols = (COLUMNS[activeColSetKey] || COLUMNS.ALL).filter((col) =>
     familyColumns[statFamily]?.includes(col.key) || !Object.values(familyColumns).flat().includes(col.key),
   );
@@ -294,8 +315,18 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
   }
 
   return (
-    <div>
+    <div className="app-screen-stack">
+      <ScreenHeader
+        title="Player Stats"
+        subtitle="Switch stat families, scan quickly, and drill into player profiles."
+        metadata={[
+          { label: "Players", value: displayedStats.length },
+          { label: "Family", value: statFamily },
+          { label: "Mode", value: rateMode === "per_game" ? "Per Game" : "Totals" },
+        ]}
+      />
       {/* Filters */}
+      <SectionCard title="Filters" subtitle="Position, stat family, and output mode.">
       <div
         style={{
           display: "flex",
@@ -325,7 +356,14 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
             {label}
           </button>
         ))}
+        <button className={`standings-tab${rateMode === "total" ? " active" : ""}`} onClick={() => setRateMode("total")}>Totals</button>
+        <button className={`standings-tab${rateMode === "per_game" ? " active" : ""}`} onClick={() => setRateMode("per_game")}>Per Game</button>
       </div>
+      <div style={{ display: "flex", gap: 6, marginBottom: "var(--space-3)", flexWrap: "wrap" }}>
+        <Badge variant="outline">Default sort: {sortKey}</Badge>
+        {stats.length === 0 ? <Badge variant="secondary">No games logged yet</Badge> : null}
+      </div>
+      </SectionCard>
 
       {/* Table */}
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -408,6 +446,9 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
                   </td>
                   {tableCols.map((col) => {
                     let content = player[col.key];
+                    if (rateMode === "per_game" && PER_GAME_KEYS.has(col.key)) {
+                      content = Number(content ?? 0) / Math.max(1, Number(player.gamesPlayed ?? 0));
+                    }
 
                     // Formatting special columns
                     if (col.key === "pos")

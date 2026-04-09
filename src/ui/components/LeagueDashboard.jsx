@@ -78,6 +78,7 @@ import {
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -1450,6 +1451,8 @@ export default function LeagueDashboard({
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
+  const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
+  const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
 
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
@@ -1938,16 +1941,17 @@ export default function LeagueDashboard({
               <FranchiseHQ
                 league={safeLeague}
                 onNavigate={(tab) => {
-                  if (typeof tab === "string" && tab.startsWith("Transactions:")) {
-                    setTradeInitialView(tab.split(":")[1] || "Finder");
-                    setActiveTab("Transactions");
-                    return;
+                  const destination = normalizeManagementDestination(tab);
+                  if (destination.tradeView) {
+                    setTradeInitialView(destination.tradeView);
                   }
-                  if (typeof tab === "string" && tab.startsWith("Stats:")) {
-                    setActiveTab("Stats");
-                    return;
+                  if (destination.rosterState) {
+                    setRosterInitialState(destination.rosterState);
                   }
-                  setActiveTab(tab);
+                  if (destination.statsFamily) {
+                    setStatsInitialFamily(destination.statsFamily);
+                  }
+                  setActiveTab(destination.tab);
                 }}
                 onAdvanceWeek={onAdvanceWeek}
                 busy={busy}
@@ -1995,6 +1999,7 @@ export default function LeagueDashboard({
             <PlayerStats
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              initialFamily={statsInitialFamily}
             />
           </TabErrorBoundary>
         )}
@@ -2038,6 +2043,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              initialState={rosterInitialState}
             />
           </TabErrorBoundary>
         )}
