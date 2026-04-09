@@ -1,0 +1,62 @@
+export const CURRENT_SAVE_SCHEMA_VERSION = 4;
+
+function migratePreVersioned(meta = {}) {
+  return {
+    ...meta,
+    saveVersion: 1,
+  };
+}
+
+function migrateV1ToV2(meta = {}) {
+  return {
+    ...meta,
+    settings: meta?.settings ?? {},
+    saveVersion: 2,
+  };
+}
+
+function migrateV2ToV3(meta = {}) {
+  return {
+    ...meta,
+    incomingTradeOffers: Array.isArray(meta?.incomingTradeOffers) ? meta.incomingTradeOffers : [],
+    commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
+    saveVersion: 3,
+  };
+}
+
+function migrateV3ToV4(meta = {}) {
+  return {
+    ...meta,
+    schedule: meta?.schedule && Array.isArray(meta?.schedule?.weeks)
+      ? meta.schedule
+      : { weeks: [] },
+    saveVersion: 4,
+  };
+}
+
+const MIGRATIONS = {
+  0: migratePreVersioned,
+  1: migrateV1ToV2,
+  2: migrateV2ToV3,
+  3: migrateV3ToV4,
+};
+
+export function migrateSaveMetaToCurrent(meta = {}) {
+  const startVersion = Number(meta?.saveVersion ?? 0);
+  if (!Number.isFinite(startVersion) || startVersion < 0) {
+    throw new Error('Invalid save schema version.');
+  }
+
+  let migrated = { ...(meta ?? {}) };
+  let version = startVersion;
+  while (version < CURRENT_SAVE_SCHEMA_VERSION) {
+    const migrate = MIGRATIONS[version];
+    if (typeof migrate !== 'function') {
+      throw new Error(`No migration available from save schema v${version}.`);
+    }
+    migrated = migrate(migrated);
+    version = Number(migrated?.saveVersion ?? version + 1);
+  }
+
+  return { migrated, migratedFrom: startVersion, migratedTo: version };
+}
