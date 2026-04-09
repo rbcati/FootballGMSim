@@ -181,6 +181,7 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
   const [posFilter, setPosFilter] = useState("All");
   const [sortKey, setSortKey] = useState("passYards"); // Default sort
   const [sortDir, setSortDir] = useState("desc");
+  const [statFamily, setStatFamily] = useState("passing");
 
   // Fetch data on mount
   useEffect(() => {
@@ -253,7 +254,15 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
 
   // Determine Columns
   const activeColSetKey = getColSet(posFilter);
-  const dynCols = COLUMNS[activeColSetKey] || COLUMNS.ALL;
+  const familyColumns = {
+    passing: ["passYards", "passTDs", "int", "passerRating"],
+    rushing: ["rushAtt", "rushYards", "rushTDs"],
+    receiving: ["receptions", "recYards", "recTDs"],
+    defense: ["tackles", "sacks", "defInt", "tfl"],
+  };
+  const dynCols = (COLUMNS[activeColSetKey] || COLUMNS.ALL).filter((col) =>
+    familyColumns[statFamily]?.includes(col.key) || !Object.values(familyColumns).flat().includes(col.key),
+  );
   const tableCols = [...COLUMNS.BASE, ...dynCols];
 
   if (loading) {
@@ -307,6 +316,13 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
             style={{ minWidth: 40, padding: "4px 10px" }}
           >
             {pos}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", marginBottom: "var(--space-3)" }}>
+        {[["passing", "Passing"], ["rushing", "Rushing"], ["receiving", "Receiving"], ["defense", "Defense"]].map(([key, label]) => (
+          <button key={key} className={`standings-tab${statFamily === key ? " active" : ""}`} onClick={() => setStatFamily(key)}>
+            {label}
           </button>
         ))}
       </div>
@@ -374,7 +390,7 @@ export default function PlayerStats({ actions, onPlayerSelect }) {
                       color: "var(--text-muted)",
                     }}
                   >
-                    No players found.
+                    No {statFamily} stats found. Early weeks may only have small-sample results.
                   </td>
                 </tr>
               )}

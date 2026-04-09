@@ -1982,7 +1982,7 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
-  const [viewMode, setViewMode] = useState("cards"); // 'cards' | 'table' | 'depth'
+  const [viewMode, setViewMode] = useState("table"); // 'cards' | 'table' | 'depth'
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -2072,6 +2072,10 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   }
   const depthAssignments = autoBuildDepthChart(players, existingDepthAssignments);
   const depthAlerts = depthWarnings(depthAssignments, players);
+  const unassignedDepthCount = players.filter((p) => !p?.depthChart?.rowKey).length;
+  const expiringCount = players.filter((p) => Number(p?.contract?.yearsRemaining ?? p?.contract?.years ?? 2) <= 1).length;
+  const injuredCount = players.filter((p) => Number(p?.injuryWeeksRemaining ?? 0) > 0 || p?.injury).length;
+  const youngDevCount = players.filter((p) => Number(p?.age ?? 40) <= 24 && Number(p?.ovr ?? 0) >= 65).length;
 
   const avgOvr = players.length
     ? Math.round(
@@ -2226,6 +2230,19 @@ export default function Roster({ league, actions, onPlayerSelect }) {
           {teamIntel.warnings.length > 0 && (
             <div style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>
               {teamIntel.warnings.slice(0, 2).join(" · ")}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Badge variant="outline">Expiring {expiringCount}</Badge>
+            <Badge variant="outline">Injured {injuredCount}</Badge>
+            <Badge variant="outline">Dev pieces {youngDevCount}</Badge>
+            <Badge variant={unassignedDepthCount > 0 ? "destructive" : "secondary"}>
+              Depth setup {unassignedDepthCount > 0 ? `${unassignedDepthCount} unset` : "ready"}
+            </Badge>
+          </div>
+          {unassignedDepthCount > 0 && (
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>
+              Depth chart still needs setup. Open the Depth view to lock starter/depth roles before kickoff.
             </div>
           )}
         </div>
