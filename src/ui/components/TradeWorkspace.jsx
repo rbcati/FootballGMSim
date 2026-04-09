@@ -8,10 +8,13 @@ import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
 
-const VIEWS = ['Finder', 'Builder', 'Block', 'Summary'];
+const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
 export default function TradeWorkspace({ league, actions, onPlayerSelect, initialView = 'Finder' }) {
-  const [view, setView] = useState(initialView);
+  const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
+    ? (initialView.split(':')[1] || 'Finder')
+    : initialView;
+  const [view, setView] = useState(normalizedInitialView);
   const [workspace, setWorkspace] = useState({
     partnerTeamId: null,
     outgoingPlayerIds: [],
@@ -31,6 +34,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   );
   const partnerNeeds = useMemo(() => partnerTeam ? computeTeamNeedsSummary(partnerTeam) : null, [partnerTeam]);
   const partnerIntel = useMemo(() => partnerTeam ? buildTeamIntelligence(partnerTeam, { week: league?.week ?? 1 }) : null, [partnerTeam, league?.week]);
+  const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
@@ -50,6 +54,14 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
           ))}
         </div>
       </StickySubnav>
+      <SectionCard title="Main trade path" subtitle="Fast workflow for every negotiation.">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: 'var(--text-xs)' }}>
+          <Badge variant={view === 'Finder' ? 'default' : 'outline'}>1) Identify partner</Badge>
+          <Badge variant={view === 'Builder' ? 'default' : 'outline'}>2) Compare assets</Badge>
+          <Badge variant={view === 'Builder' ? 'default' : 'outline'}>3) Propose package</Badge>
+          <Badge variant={view === 'Offers' ? 'default' : 'outline'}>4) Review response</Badge>
+        </div>
+      </SectionCard>
 
       {view === 'Finder' && (
         <TradeFinder
@@ -74,6 +86,28 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       {view === 'Block' && (
         <SectionCard title="Trading Block" subtitle="Mark who you are willing to move before entering builder negotiations.">
           <TradeBlockPanel roster={myTeam?.roster ?? []} onRemove={(playerId) => actions?.toggleTradeBlock?.(playerId, myTeam?.id)} />
+        </SectionCard>
+      )}
+
+      {view === 'Offers' && (
+        <SectionCard title="Incoming Offers" subtitle="Review active trade calls and jump into Builder fast.">
+          {!incomingOffers.length ? (
+            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+              No offers right now. Open Finder to target a partner team, then request a counter package.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: 8 }}>
+              {incomingOffers.slice(0, 8).map((offer, idx) => (
+                <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)' }}>
+                  <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    Week {offer?.week ?? league?.week ?? 1} · Expires after week {offer?.expiresAfterWeek ?? '—'}
+                  </div>
+                  <button className="btn" style={{ marginTop: 6 }} onClick={() => setView('Builder')}>Open Builder</button>
+                </div>
+              ))}
+            </div>
+          )}
         </SectionCard>
       )}
 

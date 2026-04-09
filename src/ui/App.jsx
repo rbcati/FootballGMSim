@@ -51,6 +51,7 @@ import ThemeToggle         from './components/ThemeToggle.jsx';
 import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { resolveCompletedGameId } from './utils/gameResultIdentity.js';
+import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -128,6 +129,7 @@ function AppContent() {
 
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
+  const [initFlow, setInitFlow] = useState(null);
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
   const advancingRef = useRef(false);
@@ -309,6 +311,23 @@ function AppContent() {
     setActiveSlot(pendingNewSlot);
     setPendingNewSlot(null);
   }, [league, pendingNewSlot, actions]);
+
+  useEffect(() => {
+    if (!initFlow?.active) return;
+    if (hasMinimumPlayableLeague(league)) {
+      setInitFlow(null);
+      return;
+    }
+    const timeoutMs = 15000;
+    const timer = setTimeout(() => {
+      setInitFlow((prev) => prev?.active ? {
+        ...prev,
+        timedOut: true,
+        message: 'Initialization is taking longer than expected. You can retry without losing this slot.',
+      } : prev);
+    }, timeoutMs);
+    return () => clearTimeout(timer);
+  }, [initFlow, league]);
   const getAdvanceLabel = () => {
     if (batchSim) return `Simulating…`;
     if (simulating) return `Simulating ${simProgress}%`;
@@ -419,29 +438,26 @@ function AppContent() {
         <div className="view fade-in" key="save_slot_manager">
           <SaveSlotManager
             activeSlot={activeSlot}
-            onLoad={(slotKey) => { setActiveSlot(slotKey); actions.loadSlot(slotKey); }}
+            onLoad={(slotKey) => {
+              setInitFlow({ active: true, mode: 'load', slotKey, timedOut: false, message: '' });
+              setActiveSlot(slotKey);
+              actions.loadSlot(slotKey);
+            }}
             onSave={(slotKey) => { setActiveSlot(slotKey); actions.saveSlot(slotKey); }}
             onDelete={(slotKey) => { actions.deleteSlot(slotKey); if (activeSlot === slotKey) setActiveSlot(null); }}
-            onNew={(slotKey) => { setPendingNewSlot(slotKey); setActiveView('new_league'); }}
+            onNew={(slotKey) => {
+              setInitFlow({ active: true, mode: 'new', slotKey, timedOut: false, message: '' });
+              setPendingNewSlot(slotKey);
+              setActiveView('new_league');
+            }}
           />
         </div>
       </ErrorBoundary>
     );
   }
 
-  // Validate that the league arriving from the worker is fully hydrated before
-  // rendering the dashboard.
-  const leagueReady = league &&
-    league.seasonId != null &&
-    typeof league.week === 'number' &&
-    Array.isArray(league.teams) &&
-    league.teams.length > 0;
-
-  if (league && !leagueReady) {
-    return <Loading message="Initializing league data…" />;
-  }
-
-  const userTeam = (leagueReady ? league : null)?.teams?.find(t => t.id === league.userTeamId);
+  const bootstrapSummary = summarizeBootstrapState(league);
+  const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   const isPostseason = league?.phase === 'playoffs';
@@ -603,6 +619,31 @@ function AppContent() {
       {error && (
         <div role="alert" className="app-banner app-banner-error">
           {error}
+        </div>
+      )}
+      {initFlow?.timedOut && (
+        <div role="alert" className="app-banner app-banner-error">
+          <span>{initFlow.message}</span>
+          <div style={{ display: 'inline-flex', gap: 8, marginLeft: 10 }}>
+            {initFlow.mode === 'load' && (
+              <button className="btn btn-primary app-banner-btn" onClick={() => actions.loadSlot(initFlow.slotKey)}>
+                Retry Load
+              </button>
+            )}
+            {initFlow.mode === 'new' && (
+              <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
+                Retry Setup
+              </button>
+            )}
+            <button className="btn app-banner-btn" onClick={() => setActiveSlot(null)}>
+              Back to Slots
+            </button>
+          </div>
+        </div>
+      )}
+      {!bootstrapSummary.ready && (
+        <div role="status" className="app-banner app-banner-info">
+          Loading playable league state… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
         </div>
       )}
 

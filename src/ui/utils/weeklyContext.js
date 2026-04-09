@@ -151,7 +151,7 @@ export function evaluateWeeklyContext(league) {
   }
 
   if (incomingOffers.length > 0) {
-    urgent.push({ tone: 'info', level: 'recommendation', rank: 62, label: 'Trade Calls Waiting', detail: `${incomingOffers.length} incoming offer${incomingOffers.length > 1 ? 's' : ''} in your inbox.`, why: 'Active offers can improve cap flexibility or fill needs fast.', tab: 'Trades' });
+    urgent.push({ tone: 'info', level: 'recommendation', rank: 62, label: 'Trade Calls Waiting', detail: `${incomingOffers.length} incoming offer${incomingOffers.length > 1 ? 's' : ''} in your inbox.`, why: 'Active offers can improve cap flexibility or fill needs fast.', tab: 'Transactions:Offers' });
   }
 
   if (capRoom >= 28 && direction !== 'rebuilding') {

@@ -73,10 +73,10 @@ function getPrimaryAction({ weekly, latestGameId, nextGame, busy, simulating }) 
   }
   if (nextGame) {
     return {
-      label: "Set Lineup",
+      label: "Finalize Week Plan",
       cta: "Set Lineup",
-      detail: `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? "TBD"} is next.`,
-      tab: "Depth Chart",
+      detail: `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? "TBD"} is next. Lock depth, then review roster fit.`,
+      tab: "Roster",
       onClick: "navigate",
       disabled: false,
     };
@@ -126,6 +126,8 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const expiring = safeNumber(weekly?.pressurePoints?.expiringCount);
   const latestDelta = recent.length ? recentWins - (recent.length - recentWins) : 0;
   const primaryAction = getPrimaryAction({ weekly, latestGameId: latest?.gameId, nextGame, busy, simulating });
+  const isEarlySave = safeNumber(league?.week, 1) <= 1 && safeNumber(userTeam?.wins) + safeNumber(userTeam?.losses) + safeNumber(userTeam?.ties) === 0;
+  const needsCutdown = league?.phase === "preseason" && safeNumber(userTeam?.rosterCount) > 53;
 
   const pulseTiles = [
     {
@@ -173,7 +175,9 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           <div>
             <p className="franchise-hq-hero__eyebrow">{userTeam.name} · {league.year} · Week {league.week ?? 1} · {league.phase ?? "regular"}</p>
             <h2 className="franchise-hq-hero__title">{latest?.story?.headline ?? (nextGame ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? "TBD"}` : "Season opener ahead")}</h2>
-            <p className="franchise-hq-hero__subtitle">{primaryAction.detail}</p>
+            <p className="franchise-hq-hero__subtitle">
+              {isEarlySave ? "Welcome to your new franchise. Set your lineup, review roster roles, and establish your week-1 identity." : primaryAction.detail}
+            </p>
           </div>
           <div className="franchise-hq-hero__meta">
             <Badge>{record}</Badge>
@@ -189,6 +193,8 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
 
         <div className="franchise-hq-chip-row">
+          {isEarlySave && <span className="franchise-hq-chip">Season opener setup</span>}
+          {needsCutdown && <span className="franchise-hq-chip">⚠ Cutdown required</span>}
           <span className="franchise-hq-chip">Cap {formatMoneyM(cap.capRoom)}</span>
           <span className="franchise-hq-chip">Injuries {injuries}</span>
           <span className="franchise-hq-chip">Expiring {expiring}</span>
@@ -206,7 +212,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <div className="franchise-hq-flow__col">
           <p className="franchise-hq-flow__label">Next Game</p>
           <strong>{nextGame ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? "TBD"}` : "No upcoming matchup"}</strong>
-          <p>{weekly?.phasePriority ?? "Keep momentum and execute your plan."}</p>
+          <p>{isEarlySave ? "Start with roster/depth decisions, then open Game Plan before kickoff." : (weekly?.phasePriority ?? "Keep momentum and execute your plan.")}</p>
         </div>
       </section>
 
@@ -250,7 +256,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
               <span>Open →</span>
             </button>
           ))}
-          {!urgent.length ? <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No urgent blockers this week.</div> : null}
+          {!urgent.length ? <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{isEarlySave ? "Start here: review roster, set depth chart, and check your opening matchup." : "No urgent blockers this week."}</div> : null}
         </div>
       </section>
 

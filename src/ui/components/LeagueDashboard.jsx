@@ -1449,6 +1449,7 @@ export default function LeagueDashboard({
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
+  const [tradeInitialView, setTradeInitialView] = useState("Finder");
 
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
@@ -1501,28 +1502,30 @@ export default function LeagueDashboard({
   }, [externalBoxScoreId, onConsumeExternalBoxScore, activeTab]);
 
   if (!league) return null;
-  const isInitialized = Boolean(Array.isArray(league?.teams) && league.teams.length > 0);
+  const safeTeams = Array.isArray(league?.teams) ? league.teams : [];
+  const safeLeague = { ...league, teams: safeTeams, week: Number(league?.week ?? 1) };
+  const isInitialized = safeTeams.length > 0;
 
   // NOTE: a missing schedule only affects the Schedule tab.
   // Do NOT block the whole dashboard — all other tabs remain usable.
 
-  const userTeam = league.teams?.find((t) => t.id === league.userTeamId);
+  const userTeam = safeTeams.find((t) => Number(t.id) === Number(league.userTeamId)) ?? safeTeams[0] ?? null;
   const userAbbr = userTeam?.abbr ?? "---";
   const userRecord = userTeam
     ? `${userTeam.wins}-${userTeam.losses}${userTeam.ties ? `-${userTeam.ties}` : ""}`
     : "0-0";
 
   const totalGames =
-    league.teams.reduce((s, t) => s + t.wins + t.losses + t.ties, 0) / 2;
-  const avgScore = league.teams.length
+    safeTeams.reduce((s, t) => s + t.wins + t.losses + t.ties, 0) / 2;
+  const avgScore = safeTeams.length
     ? Math.round(
-        league.teams.reduce((s, t) => s + t.ptsFor, 0) /
+        safeTeams.reduce((s, t) => s + t.ptsFor, 0) /
           Math.max(1, totalGames * 2),
       )
     : 0;
-  const avgOvr = league.teams.length
+  const avgOvr = safeTeams.length
     ? Math.round(
-        league.teams.reduce((s, t) => s + t.ovr, 0) / league.teams.length,
+        safeTeams.reduce((s, t) => s + t.ovr, 0) / safeTeams.length,
       )
     : 75;
 
@@ -1712,7 +1715,7 @@ export default function LeagueDashboard({
             const prevWeek = Number(lastSimWeek ?? ((league.week || 1) - 1));
 
             const teamById = {};
-            league.teams?.forEach((t) => {
+            safeTeams?.forEach((t) => {
               teamById[t.id] = t;
             });
 
@@ -1932,12 +1935,23 @@ export default function LeagueDashboard({
         {TEAM_FACING_TABS.has(activeTab) ? <FranchiseSummaryPanel league={league} compact className="" /> : null}
         {(activeTab === "HQ" || activeTab === "Weekly Hub" || activeTab === "Home") && (
           <TabErrorBoundary label="Franchise HQ">
-            <FranchiseHQ
-              league={league}
-              onNavigate={setActiveTab}
-              onAdvanceWeek={onAdvanceWeek}
-              busy={busy}
-              simulating={simulating}
+              <FranchiseHQ
+                league={safeLeague}
+                onNavigate={(tab) => {
+                  if (typeof tab === "string" && tab.startsWith("Transactions:")) {
+                    setTradeInitialView(tab.split(":")[1] || "Finder");
+                    setActiveTab("Transactions");
+                    return;
+                  }
+                  if (typeof tab === "string" && tab.startsWith("Stats:")) {
+                    setActiveTab("Stats");
+                    return;
+                  }
+                  setActiveTab(tab);
+                }}
+                onAdvanceWeek={onAdvanceWeek}
+                busy={busy}
+                simulating={simulating}
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
             />
             {league.phase !== "preseason" && (
@@ -2102,7 +2116,7 @@ export default function LeagueDashboard({
         )}
                 {(activeTab === "Transactions" || activeTab === "Trades") && (
           <TabErrorBoundary label="Transactions">
-            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} />
+            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialView={tradeInitialView} />
           </TabErrorBoundary>
         )}
                 {isInitialized && activeTab === "📰 News" && (
