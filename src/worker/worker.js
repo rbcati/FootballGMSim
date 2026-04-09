@@ -316,7 +316,15 @@ function buildViewState() {
     franchiseInvestments: normalizeFranchiseInvestments(t?.franchiseInvestments),
     rivalTeamId: t?.rivalTeamId ?? null,
     picks: Array.isArray(t?.picks)
-      ? t.picks.map((pk) => ({ id: pk.id, round: pk.round, season: pk.season, currentOwner: pk.currentOwner, originalOwner: pk.originalOwner }))
+      ? t.picks.map((pk) => ({
+        id: pk.id,
+        round: pk.round,
+        season: pk.season,
+        currentOwner: pk.currentOwner,
+        originalOwner: pk.originalOwner,
+        isCompensatory: !!pk?.isCompensatory,
+        compensatoryForName: pk?.compensatoryForName ?? null,
+      }))
       : [],
   }));
 
@@ -553,11 +561,162 @@ function getPickRoundValue(round, { week = 1, teamDirection = 'balanced', projec
   return base * rangeAdj * stageAdj * directionAdj;
 }
 
+const PREMIUM_POSITIONS = new Set(['QB', 'EDGE', 'DE', 'OT', 'WR', 'CB']);
+const LOW_PREMIUM_POSITIONS = new Set(['RB', 'TE', 'S', 'LB']);
+const POSITION_MARKET_WEIGHTS = {
+  QB: 1.5, EDGE: 1.24, DE: 1.2, OT: 1.2, WR: 1.15, CB: 1.14,
+  DL: 1.0, OL: 0.98, LB: 0.9, S: 0.86, TE: 0.82, RB: 0.74,
+};
+const POSITION_PAY_SCALARS = {
+  QB: 1.45, EDGE: 1.2, DE: 1.16, OT: 1.18, WR: 1.12, CB: 1.08,
+  DL: 0.94, OL: 0.95, LB: 0.86, S: 0.78, TE: 0.76, RB: 0.66,
+};
+
+function ensureCompMeta(metaObj = ensureDynastyMeta(cache.getMeta())) {
+  return {
+    ...metaObj,
+    offseasonFaMovements: Array.isArray(metaObj?.offseasonFaMovements) ? metaObj.offseasonFaMovements : [],
+    compPicksGeneratedForSeason: Array.isArray(metaObj?.compPicksGeneratedForSeason) ? metaObj.compPicksGeneratedForSeason : [],
+    compPickAwardsHistory: Array.isArray(metaObj?.compPickAwardsHistory) ? metaObj.compPickAwardsHistory : [],
+  };
+}
+
+function getContractAav(contract = {}) {
+  const years = Math.max(1, Number(contract?.yearsTotal ?? contract?.years ?? 1) || 1);
+  return Number(contract?.baseAnnual ?? 0) + (Number(contract?.signingBonus ?? 0) / years);
+}
+
+function evaluateCompMovementScore(row = {}) {
+  const years = Math.max(1, Number(row?.contract?.yearsTotal ?? row?.contract?.years ?? row?.years ?? 1) || 1);
+  const aav = Math.max(0, Number(row?.aav ?? row?.contract?.baseAnnual ?? 0));
+  const ovr = Number(row?.ovrAtDeparture ?? row?.ovr ?? 65);
+  return (aav * 2.35) + (years * 3.2) + Math.max(0, (ovr - 68) * 0.95);
+}
+
+function inferCompPickRound(score) {
+  if (score >= 95) return 3;
+  if (score >= 78) return 4;
+  if (score >= 61) return 5;
+  if (score >= 46) return 6;
+  return 7;
+}
+
+function recordOffseasonFaMovement({ player, oldTeamId, newTeamId, contract, source = 'worker_signing' } = {}) {
+  const metaObj = ensureCompMeta(cache.getMeta());
+  if (metaObj.phase !== 'free_agency') return;
+  if (!player || oldTeamId == null || newTeamId == null) return;
+  if (Number(oldTeamId) === Number(newTeamId)) return;
+
+  const years = Math.max(1, Number(contract?.yearsTotal ?? contract?.years ?? 1) || 1);
+  const aav = getContractAav(contract);
+  const qualifies = aav >= 2.5 && years >= 2 && Number(player?.ovr ?? 0) >= 66;
+  const next = [...metaObj.offseasonFaMovements, {
+    id: `${metaObj.year}-${player.id}-${newTeamId}-${Date.now()}`,
+    playerId: Number(player.id),
+    playerName: player.name,
+    pos: player.pos,
+    prevTeamId: Number(oldTeamId),
+    newTeamId: Number(newTeamId),
+    contract: {
+      yearsTotal: years,
+      years: Number(contract?.years ?? years),
+      baseAnnual: Number(contract?.baseAnnual ?? 0),
+      signingBonus: Number(contract?.signingBonus ?? 0),
+    },
+    aav,
+    years,
+    ovrAtDeparture: Number(player?.ovr ?? 65),
+    qualifying: qualifies,
+    externalSigning: true,
+    source,
+    compSeason: Number(metaObj.year ?? 0),
+  }];
+  cache.setMeta({
+    offseasonFaMovements: next.slice(-260),
+  });
+}
+
+function awardCompensatoryPicksForUpcomingDraft(metaObj = ensureCompMeta(cache.getMeta())) {
+  const year = Number(metaObj?.year ?? 0);
+  if (!year) return [];
+  if ((metaObj?.compPicksGeneratedForSeason ?? []).includes(year)) return [];
+
+  const allTeams = cache.getAllTeams();
+  const rows = (metaObj?.offseasonFaMovements ?? []).filter((row) =>
+    Number(row?.compSeason ?? year) === year && row?.qualifying && row?.externalSigning
+  );
+  const lossesByTeam = new Map();
+  const signingsByTeam = new Map();
+  for (const row of rows) {
+    const lossKey = Number(row?.prevTeamId);
+    const signKey = Number(row?.newTeamId);
+    const scored = { ...row, score: evaluateCompMovementScore(row) };
+    if (!lossesByTeam.has(lossKey)) lossesByTeam.set(lossKey, []);
+    if (!signingsByTeam.has(signKey)) signingsByTeam.set(signKey, []);
+    lossesByTeam.get(lossKey).push(scored);
+    signingsByTeam.get(signKey).push(scored);
+  }
+
+  const awards = [];
+  for (const team of allTeams) {
+    const teamId = Number(team.id);
+    const losses = (lossesByTeam.get(teamId) ?? []).slice().sort((a, b) => b.score - a.score);
+    const signings = (signingsByTeam.get(teamId) ?? []).slice().sort((a, b) => b.score - a.score);
+    const cancelledCount = Math.min(losses.length, signings.length);
+    const uncancelledLosses = losses.slice(cancelledCount).slice(0, 4);
+    for (const loss of uncancelledLosses) {
+      const round = inferCompPickRound(loss.score);
+      const pick = {
+        id: Utils.id(),
+        round,
+        season: year,
+        originalOwner: teamId,
+        currentOwner: teamId,
+        projectedRange: 'late',
+        isCompensatory: true,
+        compensatoryFor: loss.playerId,
+        compensatoryForName: loss.playerName,
+        compensatoryScore: Math.round(loss.score * 10) / 10,
+      };
+      const currentPicks = Array.isArray(team?.picks) ? [...team.picks] : [];
+      currentPicks.push(pick);
+      cache.updateTeam(teamId, { picks: currentPicks });
+      awards.push({ teamId, round, playerName: loss.playerName, score: pick.compensatoryScore, pickId: pick.id });
+    }
+  }
+
+  cache.setMeta({
+    compPicksGeneratedForSeason: [...(metaObj?.compPicksGeneratedForSeason ?? []), year],
+    compPickAwardsHistory: [...(metaObj?.compPickAwardsHistory ?? []), {
+      season: year,
+      generatedAt: Date.now(),
+      awards,
+    }].slice(-12),
+  });
+  return awards;
+}
+
 function calcAssetBundleValue({ playerIds = [], pickIds = [] } = {}, context = {}) {
-  const playerVal = playerIds.reduce((sum, pid) => sum + _tradeValue(cache.getPlayer(Number(pid)), context), 0);
+  const isDraftBoardMode = context?.marketMode === 'draft_board';
+  const playerVal = playerIds.reduce((sum, pid) => {
+    const player = cache.getPlayer(Number(pid));
+    let value = _tradeValue(player, context);
+    if (isDraftBoardMode && player) {
+      const age = Number(player?.age ?? 27);
+      const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
+      const veteranPenalty = age >= 30 ? 0.72 : age >= 28 ? 0.84 : 0.95;
+      const lowPremiumPenalty = LOW_PREMIUM_POSITIONS.has(player?.pos) ? 0.78 : 1.0;
+      const expiringPenalty = yearsRemaining <= 1 ? 0.78 : 1.0;
+      value *= veteranPenalty * lowPremiumPenalty * expiringPenalty;
+    }
+    return sum + value;
+  }, 0);
   const pickVal = pickIds.reduce((sum, pid) => {
     const pick = resolvePickById(pid);
-    return sum + getPickRoundValue(pick?.round, { week: context?.week ?? 1, teamDirection: context?.teamDirection ?? 'balanced', projectedRange: pick?.projectedRange ?? 'mid' });
+    let value = getPickRoundValue(pick?.round, { week: context?.week ?? 1, teamDirection: context?.teamDirection ?? 'balanced', projectedRange: pick?.projectedRange ?? 'mid' });
+    if (isDraftBoardMode) value *= 1.2;
+    if (pick?.isCompensatory) value *= 0.84;
+    return sum + value;
   }, 0);
   return playerVal + pickVal;
 }
@@ -3202,6 +3361,13 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
 
   const oldTeamId = player.teamId;
   cache.updatePlayer(player.id, { teamId: resolvedTeamId, contract, status: 'active', offers: [] });
+  recordOffseasonFaMovement({
+    player,
+    oldTeamId,
+    newTeamId: resolvedTeamId,
+    contract,
+    source: 'user_sign',
+  });
 
   // Update cap
   recalculateTeamCap(resolvedTeamId);
@@ -3314,11 +3480,19 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
     return null;
   }
 
+  const oldTeamId = player.teamId;
   cache.updatePlayer(player.id, {
     teamId: signingTeamId,
     status: 'active',
     contract: offer.contract,
     offers: [],
+  });
+  recordOffseasonFaMovement({
+    player,
+    oldTeamId,
+    newTeamId: signingTeamId,
+    contract: offer.contract,
+    source: 'offer_resolution',
   });
   recalculateTeamCap(signingTeamId);
 
@@ -4202,30 +4376,124 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
  */
 function _tradeValue(player, context = {}) {
   if (!player) return 0;
-  const POS_MULT = { QB: 2.3, EDGE: 1.4, DE: 1.35, OT: 1.35, WR: 1.25, CB: 1.2, TE: 1.08, OL: 1.0, DL: 1.0, LB: 0.96, RB: 0.88, S: 0.92 };
-  const ovr = player.ovr ?? 70;
-  const pot = player.potential ?? ovr;
-  const age = player.age ?? 27;
+  const ovr = Number(player.ovr ?? 70);
+  const pot = Number(player.potential ?? ovr);
+  const age = Number(player.age ?? 27);
   const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
   const baseAnnual = Number(player?.contract?.baseAnnual ?? 0);
   const schemeFit = Number(player?.schemeFit ?? 65);
   const morale = Number(player?.morale ?? 70);
-  const posMult = POS_MULT[player.pos] ?? 1.0;
+  const posMult = POSITION_MARKET_WEIGHTS[player.pos] ?? 0.9;
+  const payScalar = POSITION_PAY_SCALARS[player.pos] ?? 0.92;
   const direction = context?.teamDirection ?? 'balanced';
   const needPositions = context?.needPositions ?? [];
-  const scarcityBonus = needPositions.includes(player?.pos) ? 1.08 : 1.0;
-  const ageFactor = age <= 25 ? 1.08 : age <= 29 ? 1.0 : Math.max(0.45, 1.0 - (age - 29) * 0.07);
-  const potentialFactor = 0.92 + Math.max(0, Math.min(0.25, (pot - ovr) / 100));
-  const controlFactor = yearsRemaining >= 3 ? 1.08 : yearsRemaining === 2 ? 1.02 : 0.93;
-  const salaryFactor = Math.max(0.68, 1 - (baseAnnual / 42));
+  const scarcityBonus = needPositions.includes(player?.pos) ? 1.06 : 1.0;
+  const ageFactor = age <= 24
+    ? 1.09
+    : age <= 27
+      ? 1.02
+      : age <= 29
+        ? 0.95
+        : age <= 31
+          ? 0.78
+          : age <= 33
+            ? 0.62
+            : 0.48;
+  const potentialFactor = 0.9 + Math.max(0, Math.min(0.22, (pot - ovr) / 70));
+  const expectedAav = Math.max(1.5, ((ovr - 58) * 0.72) * payScalar);
+  const contractLoad = baseAnnual / expectedAav;
+  const surplusFactor = contractLoad <= 0.9 ? 1.15 : contractLoad <= 1.15 ? 1.0 : contractLoad <= 1.4 ? 0.82 : 0.62;
+  const controlFactor = yearsRemaining >= 3 ? 1.12 : yearsRemaining === 2 ? 1.02 : yearsRemaining === 1 ? 0.8 : 0.72;
+  const veteranContractDrag = (age >= 30 && contractLoad >= 1.2) ? 0.78 : 1.0;
   const fitFactor = 0.9 + Math.max(0, Math.min(0.18, schemeFit / 500));
-  const moraleFactor = morale < 52 ? 0.94 : morale >= 80 ? 1.02 : 1.0;
+  const moraleFactor = morale < 52 ? 0.92 : morale >= 80 ? 1.02 : 1.0;
   const directionFactor = direction === 'contender'
-    ? (age <= 30 ? 1.05 : 0.9)
+    ? (age <= 30 ? 1.04 : 0.86)
     : direction === 'rebuilding'
-      ? (age <= 27 ? 1.08 : 0.82)
+      ? (age <= 27 ? 1.1 : 0.8)
       : 1.0;
-  return Math.pow(ovr, 1.72) * posMult * ageFactor * potentialFactor * controlFactor * salaryFactor * fitFactor * moraleFactor * directionFactor * scarcityBonus;
+  const draftModePenalty = context?.marketMode === 'draft_board' && !PREMIUM_POSITIONS.has(player?.pos) ? 0.88 : 1.0;
+  const baseTalent = Math.pow(Math.max(45, ovr), 1.55);
+  const value = baseTalent * posMult * ageFactor * potentialFactor * surplusFactor * controlFactor * veteranContractDrag * fitFactor * moraleFactor * directionFactor * scarcityBonus * draftModePenalty;
+  return Math.max(0, value);
+}
+
+function evaluateTradeAvailability(player, context = {}) {
+  if (!player) return { status: 'available', multiplier: 1, reason: null };
+  if (player?.tradeStatus === 'untouchable') return { status: 'untouchable', multiplier: 999, reason: 'franchise QB not available' };
+  if (player?.tradeStatus === 'soft_block') return { status: 'reluctant', multiplier: 1.18, reason: 'core player not being shopped' };
+
+  const age = Number(player?.age ?? 27);
+  const ovr = Number(player?.ovr ?? 70);
+  const yearsRemaining = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 1);
+  const capHit = getContractAav(player?.contract);
+  const teamDirection = context?.teamDirection ?? 'balanced';
+
+  if (player?.pos === 'QB' && ovr >= 90 && age <= 33 && yearsRemaining >= 2) {
+    return { status: 'untouchable', multiplier: 999, reason: 'franchise QB not available' };
+  }
+  if (player?.pos === 'QB' && ovr >= 84 && age <= 30 && yearsRemaining >= 2) {
+    return { status: 'reluctant', multiplier: 1.45, reason: 'team values its QB stability' };
+  }
+  if (teamDirection === 'contender' && ovr >= 84 && age <= 30 && PREMIUM_POSITIONS.has(player?.pos)) {
+    return { status: 'reluctant', multiplier: 1.28, reason: 'contender core piece' };
+  }
+  if (age >= 30 && capHit >= 14 && yearsRemaining <= 2) {
+    return { status: 'actively_shopping', multiplier: 0.86, reason: 'veteran contract on market' };
+  }
+  return { status: 'available', multiplier: 1.0, reason: null };
+}
+
+function evaluateDraftBoardQbProtection(teamId, outgoingPickIds = []) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  if (meta?.phase !== 'draft' || !meta?.draftState || !Array.isArray(outgoingPickIds) || outgoingPickIds.length === 0) {
+    return { active: false, multiplier: 1 };
+  }
+
+  const rosterQbs = cache.getPlayersByTeam(Number(teamId))
+    .filter((p) => p?.pos === 'QB')
+    .sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0));
+  const topQbOvr = Number(rosterQbs?.[0]?.ovr ?? 0);
+  const secondQbOvr = Number(rosterQbs?.[1]?.ovr ?? 0);
+  const hasYoungStarter = rosterQbs.some((p) =>
+    Number(p?.age ?? 99) <= 26 && Number(p?.ovr ?? 0) >= 78 && Number(p?.contract?.years ?? p?.contract?.yearsRemaining ?? 1) >= 2
+  );
+  const qbRoomPoor = topQbOvr < 78 || ((topQbOvr + secondQbOvr) / 2) < 74;
+  if (!qbRoomPoor || hasYoungStarter) return { active: false, multiplier: 1 };
+
+  const availableQbs = cache.getAllPlayers()
+    .filter((p) => p?.status === 'draft_eligible' && p?.pos === 'QB')
+    .sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0));
+  const topAvailableQb = Number(availableQbs?.[0]?.ovr ?? 0);
+  const nextQb = Number(availableQbs?.[1]?.ovr ?? 0);
+  const dropoff = topAvailableQb - nextQb;
+  if (topAvailableQb < 78 || dropoff < 3) return { active: false, multiplier: 1 };
+
+  const targetPicks = outgoingPickIds
+    .map((pid) => resolvePickById(pid))
+    .filter(Boolean);
+  const draftState = meta.draftState;
+  const idxNow = Number(draftState.currentPickIndex ?? 0);
+  const pickLeverage = targetPicks.some((pk) => {
+    const idx = draftState.picks.findIndex((row) => String(row?.id) === String(pk?.id));
+    return idx >= idxNow && idx <= (idxNow + 7);
+  });
+  const inRange = targetPicks.some((pk) => Number(pk?.round ?? 99) <= 2);
+  if (!pickLeverage && !inRange) return { active: false, multiplier: 1 };
+
+  const multiplier = pickLeverage ? 1.75 : 1.45;
+  return {
+    active: true,
+    multiplier,
+    reason: 'pick protected due to QB need',
+    context: {
+      teamNeedsQB: qbRoomPoor,
+      hasYoungStarter,
+      topAvailableQBGrade: topAvailableQb,
+      dropoffToNextQB: dropoff,
+      pickLeverage: pickLeverage ? 'high' : 'medium',
+    },
+  };
 }
 
 function tradeNeedsSummary(teamId) {
@@ -4281,20 +4549,38 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
   const week = Number(meta?.currentWeek ?? 1);
   const diff = meta.difficulty || 'Normal';
+  const isDraftDay = meta?.phase === 'draft';
   const aiDirection = inferTeamDirection(to, week);
   const userDirection = inferTeamDirection(from, week);
   const aiNeeds = tradeNeedsSummary(toTeamId);
   const aiGetsPositions = tradePackagePositions(offering?.playerIds ?? []);
   const aiGivesPositions = tradePackagePositions(receiving?.playerIds ?? []);
-  const offerVal    = calcAssetBundleValue(offering, { week, teamDirection: aiDirection, needPositions: aiNeeds.needs });
-  const receiveVal  = calcAssetBundleValue(receiving, { week, teamDirection: aiDirection, needPositions: aiNeeds.needs });
+  const incomingPlayers = (offering?.playerIds ?? []).map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
+  const underwaterIncoming = incomingPlayers.find((p) => {
+    const expectedAav = Math.max(1.5, ((Number(p?.ovr ?? 70) - 58) * 0.72) * (POSITION_PAY_SCALARS[p?.pos] ?? 0.92));
+    const actualAav = getContractAav(p?.contract);
+    return actualAav > expectedAav * 1.28;
+  });
+  const lowPremiumIncoming = incomingPlayers.length > 0 && incomingPlayers.every((p) => LOW_PREMIUM_POSITIONS.has(p?.pos));
+  const valuationContext = {
+    week,
+    teamDirection: aiDirection,
+    needPositions: aiNeeds.needs,
+    marketMode: isDraftDay ? 'draft_board' : 'normal',
+  };
+  const offerVal    = calcAssetBundleValue(offering, valuationContext);
+  const receiveVal  = calcAssetBundleValue(receiving, valuationContext);
   const receivingPlayers = (receiving?.playerIds ?? []).map((pid) => cache.getPlayer(Number(pid))).filter(Boolean);
-  const blockedOutgoing = receivingPlayers.find((p) => p?.tradeStatus === 'untouchable');
+  const playerAvailability = receivingPlayers.map((p) => ({
+    player: p,
+    availability: evaluateTradeAvailability(p, { teamDirection: aiDirection }),
+  }));
+  const blockedOutgoing = playerAvailability.find((row) => row?.availability?.status === 'untouchable');
   if (blockedOutgoing) {
-    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'untouchable', reason: `${to?.abbr ?? 'They'} will not move ${blockedOutgoing.name}.` }, id);
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'untouchable', reason: `${to?.abbr ?? 'They'}: franchise QB not available.` }, id);
     return;
   }
-  const softBlockOutgoing = receivingPlayers.filter((p) => p?.tradeStatus === 'soft_block');
+  const reluctantOutgoing = playerAvailability.filter((row) => row?.availability?.status === 'reluctant');
 
   // AI acceptance threshold scales by difficulty
   let diffMult = 1.0;
@@ -4313,8 +4599,31 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
 
   const directionPremium = aiDirection === 'contender' && userDirection !== 'contender' ? 1.06 : 1.0;
   const fitDiscount = aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 0.95 : 1.0;
-  const softBlockPenalty = softBlockOutgoing.length > 0 ? 1.08 : 1.0;
-  const threshold = receiveVal * diffMult * directionPremium * fitDiscount * softBlockPenalty;
+  const reluctancePenalty = reluctantOutgoing.reduce((mult, row) => mult * Number(row?.availability?.multiplier ?? 1), 1);
+  const draftStructurePenalty = isDraftDay
+    ? ((receiving?.pickIds?.length ?? 0) > 0 && (offering?.pickIds?.length ?? 0) === 0 ? 1.3 : 1.0)
+      * ((offering?.playerIds?.length ?? 0) > 0 && (offering?.pickIds?.length ?? 0) === 0 ? 1.18 : 1.0)
+    : 1.0;
+  const qbProtection = evaluateDraftBoardQbProtection(toTeamId, receiving?.pickIds ?? []);
+  const threshold = receiveVal * diffMult * directionPremium * fitDiscount * reluctancePenalty * draftStructurePenalty * (qbProtection?.multiplier ?? 1);
+  const incomingQbFix = (offering?.playerIds ?? [])
+    .map((pid) => cache.getPlayer(Number(pid)))
+    .some((p) => p?.pos === 'QB' && Number(p?.ovr ?? 0) >= 80 && Number(p?.age ?? 35) <= 29);
+  if (isDraftDay && qbProtection?.active && !incomingQbFix && offerVal < threshold * 1.16) {
+    post(toUI.TRADE_RESPONSE, {
+      accepted: false,
+      offerValue: Math.round(offerVal),
+      receiveValue: Math.round(receiveVal),
+      rejectionType: 'draft_protection',
+      reason: `${to?.abbr ?? 'They'} keep this pick protected due to QB need.`,
+      requiredValue: Math.round(threshold),
+      reasonDetail: {
+        mode: 'draft board',
+        ...qbProtection?.context,
+      },
+    }, id);
+    return;
+  }
   if (offerVal < threshold * 0.72) {
     post(toUI.TRADE_RESPONSE, {
       accepted: false,
@@ -4323,7 +4632,9 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       rejectionType: 'value',
       requiredValue: Math.round(threshold),
       valueGap: Math.round(Math.max(0, threshold - offerVal)),
-      reason: `${to?.abbr ?? 'They'} reject quickly — this is well below market for their timeline.`,
+      reason: isDraftDay
+        ? `${to?.abbr ?? 'They'} prefer draft capital under draft-board logic.`
+        : `${to?.abbr ?? 'They'} reject quickly — this is well below market for their timeline.`,
     }, id);
     return;
   }
@@ -4387,8 +4698,12 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   const rejectionType = accepted ? null : (
     (to?.capRoom ?? 0) < 0 ? 'cap'
       : aiDirection === 'contender' && userDirection === 'rebuilding' && !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 'direction'
-        : !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) && aiGivesPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 'fit'
-          : 'value'
+          : !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) && aiGivesPositions.some((pos) => aiNeeds.needs.includes(pos)) ? 'fit'
+          : qbProtection?.active ? 'draft_protection'
+            : underwaterIncoming ? 'contract'
+              : lowPremiumIncoming && (offering?.pickIds?.length ?? 0) === 0 ? 'position_market'
+            : isDraftDay && (receiving?.pickIds?.length ?? 0) > 0 && (offering?.pickIds?.length ?? 0) === 0 ? 'draft_capital'
+              : 'value'
   );
   const reason = accepted
     ? 'Deal accepted'
@@ -4398,7 +4713,15 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
         ? `${to?.abbr ?? 'They'} are in a contender window and this package does not solve an immediate need.`
         : !aiGetsPositions.some((pos) => aiNeeds.needs.includes(pos)) && aiGivesPositions.some((pos) => aiNeeds.needs.includes(pos))
           ? `${to?.abbr ?? 'They'} view this as a roster-fit mismatch: they would give up a need position without filling one.`
-          : `Offer trails their internal value estimate by about ${Math.round(Math.max(0, threshold - offerVal))} points.`);
+          : qbProtection?.active
+            ? `${to?.abbr ?? 'They'} keep this pick protected due to QB need.`
+            : underwaterIncoming
+              ? `${to?.abbr ?? 'They'} view this player contract as underwater.`
+              : lowPremiumIncoming && (offering?.pickIds?.length ?? 0) === 0
+                ? `${to?.abbr ?? 'They'} do not value this position package as premium trade capital.`
+            : isDraftDay && (receiving?.pickIds?.length ?? 0) > 0 && (offering?.pickIds?.length ?? 0) === 0
+              ? `${to?.abbr ?? 'They'} prefer draft capital over veteran player swaps during the draft.`
+              : `Offer trails their internal value estimate by about ${Math.round(Math.max(0, threshold - offerVal))} points.`);
 
   post(toUI.TRADE_RESPONSE, {
     accepted,
@@ -4414,7 +4737,10 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
       aiSurplus: aiNeeds.surplus.slice(0, 2),
       incomingPos: aiGetsPositions,
       outgoingPos: aiGivesPositions,
-      model: 'asset value heuristic with timeline and needs adjustments',
+      model: isDraftDay ? 'draft board valuation mode (pick-first)' : 'asset value heuristic with timeline and needs adjustments',
+      tradeMode: isDraftDay ? 'draft board' : 'normal market',
+      qbProtection: qbProtection?.active ? qbProtection?.context : null,
+      reluctantPlayers: reluctantOutgoing.map((row) => ({ name: row?.player?.name, status: row?.availability?.status })),
     },
   }, id);
 
@@ -4928,6 +5254,8 @@ function buildDraftStateView() {
       playerName: pk.playerName ?? null,
       playerPos:  pk.playerPos ?? null,
       playerOvr:  pk.playerOvr ?? null,
+      isCompensatory: !!pk?.isCompensatory,
+      compensatoryForName: pk?.compensatoryForName ?? null,
       scoutStatus: p?.scoutStatus ?? null,
       combineStats: p?.combineStats ?? null,
     };
@@ -4944,6 +5272,8 @@ function buildDraftStateView() {
       teamId:     pk.teamId,
       teamName:   team?.name ?? '?',
       teamAbbr:   team?.abbr ?? '???',
+      isCompensatory: !!pk?.isCompensatory,
+      compensatoryForName: pk?.compensatoryForName ?? null,
       isUser:     pk.teamId === userTeamId,
     };
   });
@@ -4959,6 +5289,8 @@ function buildDraftStateView() {
       teamId:     currentPick.teamId,
       teamName:   team?.name ?? '?',
       teamAbbr:   team?.abbr ?? '???',
+      isCompensatory: !!currentPick?.isCompensatory,
+      compensatoryForName: currentPick?.compensatoryForName ?? null,
       isUser:     currentPick.teamId === userTeamId,
     };
   }
@@ -5043,6 +5375,7 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
     overall:    pk.overall,
     round:      pk.round,
     pickInRound:pk.pickInRound,
+    isCompensatory: !!pk?.isCompensatory,
     teamId,
     teamName:   team?.name ?? '?',
     teamAbbr:   team?.abbr ?? '???',
@@ -5188,7 +5521,7 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
 async function handleStartDraft(payload, id) {
-  const meta = ensureDynastyMeta(cache.getMeta());
+  const meta = ensureCompMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
   // Idempotent: if draft is already running, return current state
@@ -5203,8 +5536,9 @@ async function handleStartDraft(payload, id) {
     return;
   }
 
-  const ROUNDS    = 5;
+  const ROUNDS    = 7;
   const teams     = cache.getAllTeams();
+  awardCompensatoryPicksForUpcomingDraft(meta);
   const classSize = ROUNDS * teams.length;
 
   // Build elite name set from existing players to avoid collisions
@@ -5232,13 +5566,48 @@ async function handleStartDraft(payload, id) {
   }
 
   // Build full pick table
+  const compPicksByRound = {};
+  for (const team of teams) {
+    const comp = (team?.picks ?? []).filter((pk) =>
+      Number(pk?.season) === Number(meta?.year) && !!pk?.isCompensatory && Number(pk?.currentOwner ?? team.id) === Number(team.id)
+    );
+    for (const pk of comp) {
+      const round = Number(pk?.round ?? 7);
+      if (!compPicksByRound[round]) compPicksByRound[round] = [];
+      compPicksByRound[round].push({
+        id: pk.id,
+        teamId: Number(team.id),
+        isCompensatory: true,
+        compensatoryForName: pk?.compensatoryForName ?? null,
+      });
+    }
+  }
+
   const picks = [];
   let overall = 1;
   for (let round = 1; round <= ROUNDS; round++) {
     let pickInRound = 1;
     for (const teamId of draftOrder) {
-      picks.push({ overall, round, pickInRound, teamId,
+      picks.push({ id: `${meta.year}-${round}-${teamId}-${pickInRound}`, overall, round, pickInRound, teamId,
                    playerId: null, playerName: null, playerPos: null, playerOvr: null });
+      overall++;
+      pickInRound++;
+    }
+    const compRows = (compPicksByRound[round] ?? []).sort((a, b) => a.teamId - b.teamId);
+    for (const comp of compRows) {
+      picks.push({
+        id: comp.id ?? Utils.id(),
+        overall,
+        round,
+        pickInRound,
+        teamId: comp.teamId,
+        playerId: null,
+        playerName: null,
+        playerPos: null,
+        playerOvr: null,
+        isCompensatory: true,
+        compensatoryForName: comp.compensatoryForName,
+      });
       overall++;
       pickInRound++;
     }
@@ -5417,18 +5786,29 @@ async function handleAcceptDraftTrade({ proposal }, id) {
     return;
   }
 
-  // Transfer the current pick to the AI team
-  currentPick.teamId = aiTeamId;
-
-  // Give user a future draft pick asset (stored as trade compensation note)
-  // Also swap a later-round pick in this draft if the AI has one
-  const laterPicks = picks.filter(
-    (pk, idx) => idx > currentPickIndex && pk.teamId === aiTeamId && !pk.playerId
+  const aiOriginalPick = picks.find((pk, idx) =>
+    idx > currentPickIndex && pk.teamId === aiTeamId && !pk.playerId && Number(pk?.overall) === Number(proposal?.aiPickOverall)
   );
-  if (laterPicks.length > 0) {
-    // Give user the AI's latest available pick in this draft
-    const swapPick = laterPicks[laterPicks.length - 1];
-    swapPick.teamId = meta.userTeamId;
+  if (!aiOriginalPick) {
+    post(toUI.ERROR, { message: 'AI pick in proposal is no longer available' }, id);
+    return;
+  }
+
+  // Pick-for-pick swap is the default draft trade structure.
+  const userOriginalTeam = currentPick.teamId;
+  currentPick.teamId = aiTeamId;
+  aiOriginalPick.teamId = userOriginalTeam;
+
+  const sweetenerRound = Number(proposal?.sweetenerRound ?? 0);
+  if (sweetenerRound > 0) {
+    const extra = picks.find((pk, idx) =>
+      idx > currentPickIndex &&
+      pk.teamId === aiTeamId &&
+      !pk.playerId &&
+      Number(pk?.round ?? 9) >= sweetenerRound &&
+      Number(pk?.overall ?? 0) > Number(aiOriginalPick?.overall ?? 0)
+    );
+    if (extra) extra.teamId = userOriginalTeam;
   }
 
   // Persist and flush
@@ -5443,7 +5823,11 @@ async function handleAcceptDraftTrade({ proposal }, id) {
     { tradeTeamA: aiTeamId, tradeTeamB: meta.userTeamId }
   );
 
-  post(toUI.DRAFT_TRADE_RESULT, { accepted: true, newPickTeamId: aiTeamId }, id);
+  post(toUI.DRAFT_TRADE_RESULT, {
+    accepted: true,
+    newPickTeamId: aiTeamId,
+    reason: 'Draft-board logic: pick-for-pick package accepted.',
+  }, id);
   post(toUI.DRAFT_STATE, buildDraftStateView());
 }
 
@@ -5484,8 +5868,12 @@ function generateDraftTradeUpProposal() {
   if (draftPool.length === 0) return null;
 
   const bestProspect = draftPool[0];
+  const bestQb = draftPool.find((p) => p.pos === 'QB') ?? null;
+  const nextQb = draftPool.find((p, idx) => p.pos === 'QB' && idx > (bestQb ? draftPool.indexOf(bestQb) : -1)) ?? null;
+  const qbDropoff = bestQb ? Number(bestQb?.ovr ?? 0) - Number(nextQb?.ovr ?? 0) : 0;
   const isElite = (bestProspect.pos === 'QB' && (bestProspect.ovr ?? 0) >= 78) ||
-                  (bestProspect.ovr ?? 0) >= 82;
+                  (bestProspect.ovr ?? 0) >= 82 ||
+                  (bestQb && Number(bestQb?.ovr ?? 0) >= 79 && qbDropoff >= 4);
 
   if (!isElite) return null;
 
@@ -5497,6 +5885,9 @@ function generateDraftTradeUpProposal() {
     if (pk.teamId === meta.userTeamId) continue; // skip user picks
 
     const aiTeamId = pk.teamId;
+    const aiQbProtection = evaluateDraftBoardQbProtection(aiTeamId, [pk?.id]);
+    if (aiQbProtection?.active && bestProspect?.pos === 'QB') continue;
+
     const needs = AiLogic.calculateTeamNeeds(aiTeamId);
     const needMult = needs[bestProspect.pos] ?? 1.0;
 
@@ -5507,12 +5898,15 @@ function generateDraftTradeUpProposal() {
     if (!aiTeam) continue;
 
     // Find what the AI is offering: their current pick spot + a future pick description
+    const sweetenerRound = pk.round <= 1 ? 4 : pk.round <= 2 ? 5 : 6;
     const proposal = {
       aiTeamId,
       aiTeamName: aiTeam.name,
       aiTeamAbbr: aiTeam.abbr,
       aiPickOverall: pk.overall,
       aiPickRound: pk.round,
+      sweetenerRound,
+      tradeMode: 'draft board',
       targetProspect: {
         id: bestProspect.id,
         name: bestProspect.name,
@@ -5521,6 +5915,9 @@ function generateDraftTradeUpProposal() {
       },
       userPickOverall: currentPick.overall,
       userPickRound: currentPick.round,
+      rationale: bestProspect.pos === 'QB'
+        ? `QB board drop-off detected (${bestProspect.ovr} to ${Math.max(0, Number(nextQb?.ovr ?? 0))}).`
+        : 'Blue-chip target with board urgency.',
     };
 
     // Store so we don't re-propose this pick
@@ -5825,6 +6222,7 @@ async function handleAdvanceOffseason(payload, id) {
     phase: 'free_agency',
     freeAgencyState: { day: 1, maxDays: 5, complete: false },
     contractMarketMemory: {},
+    offseasonFaMovements: [],
   });
 
   // AUTO-SAVE: phase transition — flush all progression/retirement changes before notifying UI.
@@ -5884,6 +6282,13 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
     };
 
     if (isComplete) {
+        const compAwards = awardCompensatoryPicksForUpcomingDraft(ensureCompMeta(cache.getMeta()));
+        if (compAwards.length > 0) {
+            const preview = compAwards.slice(0, 4)
+              .map((row) => `${cache.getTeam(row.teamId)?.abbr ?? row.teamId} R${row.round}`)
+              .join(', ');
+            post(toUI.NOTIFICATION, { level: 'info', message: `Comp picks awarded for ${meta.year} draft: ${preview}${compAwards.length > 4 ? '…' : ''}.` });
+        }
         updates.phase = 'draft';
     }
 

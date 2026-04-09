@@ -522,12 +522,44 @@ class AiLogic {
                 const capHit = offer.contract.baseAnnual + (offer.contract.signingBonus / offer.contract.yearsTotal);
 
                 if (team && team.capRoom >= capHit) {
+                    const oldTeamId = player.teamId;
                     cache.updatePlayer(player.id, {
                         teamId,
                         status: 'active',
                         contract: offer.contract,
                         offers: [] // Clear offers
                     });
+
+                    const metaSnapshot = cache.getMeta() ?? {};
+                    if (metaSnapshot.phase === 'free_agency' && oldTeamId != null && Number(oldTeamId) !== Number(teamId)) {
+                        const existing = Array.isArray(metaSnapshot?.offseasonFaMovements) ? metaSnapshot.offseasonFaMovements : [];
+                        const years = Math.max(1, Number(offer?.contract?.yearsTotal ?? offer?.contract?.years ?? 1) || 1);
+                        const aav = Number(offer?.contract?.baseAnnual ?? 0) + (Number(offer?.contract?.signingBonus ?? 0) / years);
+                        const qualifies = aav >= 2.5 && years >= 2 && Number(player?.ovr ?? 0) >= 66;
+                        cache.setMeta({
+                            offseasonFaMovements: [...existing, {
+                                id: `${metaSnapshot.year}-${player.id}-${teamId}-${Date.now()}`,
+                                playerId: Number(player.id),
+                                playerName: player.name,
+                                pos: player.pos,
+                                prevTeamId: Number(oldTeamId),
+                                newTeamId: Number(teamId),
+                                contract: {
+                                    yearsTotal: years,
+                                    years: Number(offer?.contract?.years ?? years),
+                                    baseAnnual: Number(offer?.contract?.baseAnnual ?? 0),
+                                    signingBonus: Number(offer?.contract?.signingBonus ?? 0),
+                                },
+                                aav,
+                                years,
+                                ovrAtDeparture: Number(player?.ovr ?? 65),
+                                qualifying: qualifies,
+                                externalSigning: true,
+                                source: 'ai_fa_signing',
+                                compSeason: Number(metaSnapshot?.year ?? 0),
+                            }].slice(-260),
+                        });
+                    }
 
                     this.updateTeamCap(teamId);
 
