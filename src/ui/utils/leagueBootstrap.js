@@ -4,7 +4,8 @@ export function hasMinimumPlayableLeague(league) {
   const hasTeams = teams.length > 0;
   const hasPhase = typeof league.phase === 'string' && league.phase.length > 0;
   const hasWeek = Number.isFinite(Number(league.week ?? 1));
-  return hasTeams && hasPhase && hasWeek;
+  const hasUserTeam = teams.some((t) => Number(t?.id) === Number(league?.userTeamId));
+  return hasTeams && hasPhase && hasWeek && hasUserTeam;
 }
 
 export function summarizeBootstrapState(league) {

@@ -55,7 +55,7 @@ import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagu
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
-const APP_VERSION = '1.2.0-save-fix-ux';
+const APP_VERSION = '1.2.1-first-playable-reliability';
 
 // ── GameSimulation Error Boundary ────────────────────────────────────────────
 // Prevents a crash inside GameSimulation from killing the whole app.
@@ -447,7 +447,7 @@ function AppContent() {
     ) : null;
     if (activeView === 'new_league') {
       return (
-        <ErrorBoundary>
+        <ErrorBoundary contextHint="new-franchise-setup">
           <div className="view fade-in" key="new_league">
             {initTimeoutPanel}
             <NewLeagueSetup
@@ -464,11 +464,11 @@ function AppContent() {
               onCancel={() => setActiveView('saves')}
             />
           </div>
-        </ErrorBoundary>
-      );
-    }
-    return (
-      <ErrorBoundary>
+      </ErrorBoundary>
+    );
+  }
+  return (
+      <ErrorBoundary contextHint="save-slot-manager">
         <div className="view fade-in" key="save_slot_manager">
           {initTimeoutPanel}
           <SaveSlotManager
@@ -771,19 +771,21 @@ function AppContent() {
       )}
 
       {/* ── Main dashboard ─────────────────────────────────────────────── */}
-      <LeagueDashboard
-        league={leagueReady ? league : null}
-        lastResults={authoritativeResults}
-        lastSimWeek={lastSimWeek}
-        busy={busy}
-        simulating={simulating}
-        actions={actions}
-        onAdvanceWeek={handleAdvanceWeek}
-        notifications={notifications}
-        onDismissNotification={actions.dismissNotification}
-        externalBoxScoreId={externalBoxScoreId}
-        onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
-      />
+      <ErrorBoundary contextHint="first-playable-dashboard">
+        <LeagueDashboard
+          league={leagueReady ? league : null}
+          lastResults={authoritativeResults}
+          lastSimWeek={lastSimWeek}
+          busy={busy}
+          simulating={simulating}
+          actions={actions}
+          onAdvanceWeek={handleAdvanceWeek}
+          notifications={notifications}
+          onDismissNotification={actions.dismissNotification}
+          externalBoxScoreId={externalBoxScoreId}
+          onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
+        />
+      </ErrorBoundary>
 
       {/* ── Milestone modals (playoff bracket, season complete) ─────── */}
       {leagueReady && league && (
@@ -1082,7 +1084,7 @@ function Loading({ message }) {
 export class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, componentStack: '' };
   }
 
   static getDerivedStateFromError(error) {
@@ -1090,14 +1092,23 @@ export class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
-    console.error('[ErrorBoundary] Render crash caught:', error, info);
+    const componentStack = info?.componentStack ?? '';
+    this.setState({ componentStack });
+    const contextHint = this.props.contextHint ?? 'unknown-screen';
+    console.error(`[ErrorBoundary:${contextHint}] Render crash caught`, {
+      message: error?.message ?? String(error),
+      componentStack,
+      stack: error?.stack ?? null,
+    });
   }
 
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    const { error } = this.state;
+    const { error, componentStack } = this.state;
     const stack = error?.stack ?? String(error);
+    const message = error?.message ?? 'Unknown render error';
+    const contextHint = this.props.contextHint ?? 'unknown-screen';
 
     return (
       <div className="app-error-boundary-overlay">
@@ -1106,12 +1117,26 @@ export class ErrorBoundary extends Component {
           <p style={{ margin: '0 0 1rem' }}>
             A render error occurred. Copy the details below then reload.
           </p>
+          <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+            <strong>Context:</strong> <code>{contextHint}</code>
+          </div>
+          <div style={{ marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+            <strong>Message:</strong> {message}
+          </div>
           <details className="app-error-boundary-details">
             <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>
-              Error Details
+              Stack
             </summary>
             {stack}
           </details>
+          {componentStack && (
+            <details className="app-error-boundary-details" style={{ marginTop: '0.5rem' }}>
+              <summary style={{ cursor: 'pointer', marginBottom: '0.5rem' }}>
+                Component Trace
+              </summary>
+              {componentStack}
+            </details>
+          )}
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
