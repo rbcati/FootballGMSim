@@ -49,7 +49,7 @@ const SCHEDULE_BALANCE_OPTIONS = [
   { value: "conference-heavy", label: "Conference Heavy" },
 ];
 
-export default function NewLeagueSetup({ actions, onCancel }) {
+export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
   // Step management
   const [step, setStep] = useState(0); // 0: team, 1: settings, 2: confirm
 
@@ -106,44 +106,49 @@ export default function NewLeagueSetup({ actions, onCancel }) {
   const handleStart = useCallback(async () => {
     if (selectedTeam === null) return;
     setCreating(true);
-    await actions.newLeague(DEFAULT_TEAMS, {
-      userTeamId: selectedTeam,
-      year,
-      difficulty,
-      name: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
-      playoffFormat,
-      draftOrder,
-      salaryCap,
-      godMode,
-      injuryFrequency,
-      tradeRealism,
-      settings: {
-        seasonLength,
-        playoffTeams,
+    onStartCreate?.();
+    try {
+      await actions.newLeague(DEFAULT_TEAMS, {
+        userTeamId: selectedTeam,
+        year,
+        difficulty,
+        name: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
+        playoffFormat,
+        draftOrder,
         salaryCap,
-        capFloor,
-        playoffSeeding: playoffFormat,
-        draftOrderLogic: draftOrder,
-        injuryFrequency: injuryFrequency === "none" ? 0 : injuryFrequency === "low" ? 25 : injuryFrequency === "high" ? 75 : 50,
-        tradeDifficulty: tradeRealism === "easy" ? 30 : tradeRealism === "strict" ? 75 : 50,
-        progressionVolatility,
-        regressionSeverity,
-        scoutingFogStrength,
-        ownerPatienceStrictness,
-        playerMoodVolatility,
-        staffImpactStrength,
-        freeAgencyAggressiveness,
-        leagueSize,
-        draftRounds,
-        scheduleBalancePreset,
-        conferenceNames: conferenceNames.split(",").map(v => v.trim()).filter(Boolean),
-        divisionNames: divisionNames.split(",").map(v => v.trim()).filter(Boolean),
-        customDifficultyEnabled: true,
-        difficultyPreset: difficulty,
-        leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
-      },
-    });
-  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions]);
+        godMode,
+        injuryFrequency,
+        tradeRealism,
+        settings: {
+          seasonLength,
+          playoffTeams,
+          salaryCap,
+          capFloor,
+          playoffSeeding: playoffFormat,
+          draftOrderLogic: draftOrder,
+          injuryFrequency: injuryFrequency === "none" ? 0 : injuryFrequency === "low" ? 25 : injuryFrequency === "high" ? 75 : 50,
+          tradeDifficulty: tradeRealism === "easy" ? 30 : tradeRealism === "strict" ? 75 : 50,
+          progressionVolatility,
+          regressionSeverity,
+          scoutingFogStrength,
+          ownerPatienceStrictness,
+          playerMoodVolatility,
+          staffImpactStrength,
+          freeAgencyAggressiveness,
+          leagueSize,
+          draftRounds,
+          scheduleBalancePreset,
+          conferenceNames: conferenceNames.split(",").map(v => v.trim()).filter(Boolean),
+          divisionNames: divisionNames.split(",").map(v => v.trim()).filter(Boolean),
+          customDifficultyEnabled: true,
+          difficultyPreset: difficulty,
+          leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
+        },
+      });
+    } finally {
+      setCreating(false);
+    }
+  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions, onStartCreate]);
 
   const canProceed = step === 0 ? selectedTeam !== null : true;
 

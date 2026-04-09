@@ -310,6 +310,7 @@ function AppContent() {
     actions.saveSlot(pendingNewSlot);
     setActiveSlot(pendingNewSlot);
     setPendingNewSlot(null);
+    setInitFlow(null);
   }, [league, pendingNewSlot, actions]);
 
   useEffect(() => {
@@ -424,11 +425,44 @@ function AppContent() {
   }
 
   if (!league || activeSlot === null) {
+    const initTimeoutPanel = initFlow?.timedOut ? (
+      <div role="alert" className="app-banner app-banner-error" style={{ marginBottom: 12 }}>
+        <span>{initFlow.message}</span>
+        <div style={{ display: 'inline-flex', gap: 8, marginLeft: 10 }}>
+          {initFlow.mode === 'load' && (
+            <button className="btn btn-primary app-banner-btn" onClick={() => actions.loadSlot(initFlow.slotKey)}>
+              Retry Load
+            </button>
+          )}
+          {initFlow.mode === 'new' && (
+            <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
+              Retry Setup
+            </button>
+          )}
+          <button className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
+            Back to Slots
+          </button>
+        </div>
+      </div>
+    ) : null;
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary>
           <div className="view fade-in" key="new_league">
-            <NewLeagueSetup actions={actions} onCancel={() => setActiveView('saves')} />
+            {initTimeoutPanel}
+            <NewLeagueSetup
+              actions={actions}
+              onStartCreate={() => {
+                setInitFlow({
+                  active: true,
+                  mode: 'new',
+                  slotKey: pendingNewSlot,
+                  timedOut: false,
+                  message: '',
+                });
+              }}
+              onCancel={() => setActiveView('saves')}
+            />
           </div>
         </ErrorBoundary>
       );
@@ -436,6 +470,7 @@ function AppContent() {
     return (
       <ErrorBoundary>
         <div className="view fade-in" key="save_slot_manager">
+          {initTimeoutPanel}
           <SaveSlotManager
             activeSlot={activeSlot}
             onLoad={(slotKey) => {
@@ -446,8 +481,9 @@ function AppContent() {
             onSave={(slotKey) => { setActiveSlot(slotKey); actions.saveSlot(slotKey); }}
             onDelete={(slotKey) => { actions.deleteSlot(slotKey); if (activeSlot === slotKey) setActiveSlot(null); }}
             onNew={(slotKey) => {
-              setInitFlow({ active: true, mode: 'new', slotKey, timedOut: false, message: '' });
+              setInitFlow({ active: false, mode: 'new', slotKey, timedOut: false, message: '' });
               setPendingNewSlot(slotKey);
+              setActiveSlot(slotKey);
               setActiveView('new_league');
             }}
           />

@@ -1976,13 +1976,13 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Roster({ league, actions, onPlayerSelect }) {
+export default function Roster({ league, actions, onPlayerSelect, initialViewMode = "table" }) {
   const teamId = league?.userTeamId;
 
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
-  const [viewMode, setViewMode] = useState("table"); // 'cards' | 'table' | 'depth'
+  const [viewMode, setViewMode] = useState(initialViewMode); // 'cards' | 'table' | 'depth'
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -2010,6 +2010,12 @@ export default function Roster({ league, actions, onPlayerSelect }) {
   useEffect(() => {
     fetchRoster();
   }, [fetchRoster]);
+
+  useEffect(() => {
+    if (["cards", "table", "depth"].includes(initialViewMode)) {
+      setViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
 
   const handleReorderDepthChart = useCallback((posKey, draggedPlayerId, targetSlotIdx) => {
       const row = DEPTH_ROWS.find((r) => r.key === posKey);
