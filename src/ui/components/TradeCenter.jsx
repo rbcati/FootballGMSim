@@ -112,7 +112,7 @@ function CapImpact({ myTeam, theirTeam, myCapAfter, theirCapAfter }) {
 }
 
 function pickLabel(pk) {
-  return `${pk?.season ?? pk?.year ?? "Future"} R${pk?.round ?? "?"}`;
+  return `${pk?.season ?? pk?.year ?? "Future"} R${pk?.round ?? "?"}${pk?.isCompensatory ? " COMP" : ""}`;
 }
 
 function PickSelector({ side, picks, onChange, availablePicks = [] }) {

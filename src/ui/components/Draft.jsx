@@ -554,7 +554,7 @@ function TradeUpModal({
                     gap: 4,
                   }}
                 >
-                  {pk.year} R{pk.round}
+                  {pk.year} R{pk.round}{pk.isCompensatory ? " COMP" : ""}
                   <Button
                     className="btn"
                     onClick={() => removePick(pk.id)}
@@ -1250,6 +1250,11 @@ function DraftBoard({
                     Overall #{currentPick?.overall}
                   </span>
                 </div>
+                {currentPick?.isCompensatory && (
+                  <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
+                    Compensatory pick · {currentPick?.compensatoryForName ? `for loss of ${currentPick.compensatoryForName}` : "NFL comp selection"}
+                  </div>
+                )}
               </>
             )}
           </CardContent>
@@ -1340,7 +1345,7 @@ function DraftBoard({
                         color: "var(--text-subtle)",
                       }}
                     >
-                      R{pk.round}
+                      R{pk.round}{pk.isCompensatory ? " · COMP" : ""}
                     </span>
                   </div>
                 ))}
@@ -1374,7 +1379,7 @@ function DraftBoard({
                       <div
                         style={{ color: "var(--text-muted)", marginBottom: 1 }}
                       >
-                        #{pk.overall} {pk.teamAbbr}
+                        #{pk.overall} {pk.teamAbbr}{pk.isCompensatory ? " · COMP" : ""}
                       </div>
                       <div style={{ fontWeight: 600, color: "var(--text)" }}>
                         {pk.playerName}
