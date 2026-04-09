@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import TradeFinder from './TradeFinder.jsx';
 import TradeCenter from './TradeCenter.jsx';
 import TradeBlockPanel from './TradeBlockPanel.jsx';
@@ -16,7 +16,8 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
     ? (initialView.split(':')[1] || 'Finder')
     : initialView;
-  const [view, setView] = useState(normalizedInitialView);
+  const safeInitialView = VIEWS.includes(normalizedInitialView) ? normalizedInitialView : 'Finder';
+  const [view, setView] = useState(safeInitialView);
   const [workspace, setWorkspace] = useState({
     partnerTeamId: null,
     outgoingPlayerIds: [],
@@ -42,10 +43,10 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
     [incomingOffers, league],
   );
 
-  React.useEffect(() => {
-    if (!normalizedInitialView) return;
-    setView(normalizedInitialView);
-  }, [normalizedInitialView]);
+  useEffect(() => {
+    if (!safeInitialView) return;
+    setView(safeInitialView);
+  }, [safeInitialView]);
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>

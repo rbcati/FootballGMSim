@@ -34,4 +34,13 @@ describe("normalizeManagementDestination", () => {
       statsFamily: "passing",
     });
   });
+
+  it("leaves unknown tabs untouched", () => {
+    expect(normalizeManagementDestination("Financials")).toMatchObject({
+      tab: "Financials",
+      tradeView: null,
+      rosterState: null,
+      statsFamily: null,
+    });
+  });
 });

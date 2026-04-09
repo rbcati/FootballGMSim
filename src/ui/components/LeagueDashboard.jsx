@@ -1951,7 +1951,7 @@ export default function LeagueDashboard({
                   if (destination.statsFamily) {
                     setStatsInitialFamily(destination.statsFamily);
                   }
-                  setActiveTab(destination.tab);
+                  setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
                 }}
                 onAdvanceWeek={onAdvanceWeek}
                 busy={busy}
@@ -2116,7 +2116,6 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
               onNavigate={setActiveTab}
-              league={league}
             />
           </TabErrorBoundary>
         )}
