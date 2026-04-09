@@ -3,23 +3,27 @@ import { NAV_LABELS } from '../constants/navigationCopy.js';
 
 const NAV_GROUPS = [
   {
+    title: 'HQ',
+    items: [
+      { id: 'weekly', label: 'Franchise HQ', icon: WeeklyHubIcon },
+    ],
+  },
+  {
     title: 'Team',
     items: [
-      { id: 'weekly', label: 'Hub', icon: WeeklyHubIcon },
       { id: 'roster', label: 'Roster', icon: RosterIcon },
       { id: 'staff', label: 'Staff', icon: StaffIcon },
       { id: 'training', label: 'Training', icon: TrainingIcon },
       { id: 'injuries', label: 'Injuries', icon: InjuryIcon },
+      { id: 'cap', label: 'Finances', icon: FinancesIcon },
     ],
   },
   {
-    title: 'Front Office',
+    title: 'Transactions',
     items: [
       { id: 'trade', label: 'Trades', icon: TradesIcon },
       { id: 'freeagency', label: 'Free Agency', icon: FAIcon },
       { id: 'draft', label: 'Draft', icon: DraftIcon },
-      { id: 'cap', label: 'Finances', icon: FinancesIcon },
-      { id: 'advisor', label: 'GM Advisor', icon: AdvisorIcon },
     ],
   },
   {
@@ -28,7 +32,18 @@ const NAV_GROUPS = [
       { id: 'standings', label: 'Standings', icon: StandingsIcon },
       { id: 'schedule', label: 'Schedule', icon: ScheduleIcon },
       { id: 'leaders', label: 'Leaders', icon: LeadersIcon },
-      { id: 'home', label: 'League Home', icon: HomeIcon },
+    ],
+  },
+  {
+    title: 'History',
+    items: [
+      { id: 'history', label: 'History Hub', icon: HomeIcon },
+    ],
+  },
+  {
+    title: 'Tools',
+    items: [
+      { id: 'advisor', label: 'GM Advisor', icon: AdvisorIcon },
     ],
   },
 ];
