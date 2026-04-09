@@ -1450,6 +1450,8 @@ export default function LeagueDashboard({
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
+  const [rosterInitialView, setRosterInitialView] = useState("table");
+  const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
 
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
@@ -1501,7 +1503,13 @@ export default function LeagueDashboard({
     onConsumeExternalBoxScore?.();
   }, [externalBoxScoreId, onConsumeExternalBoxScore, activeTab]);
 
-  if (!league) return null;
+  if (!league) {
+    return (
+      <div className="card" style={{ padding: "var(--space-5)", color: "var(--text-muted)" }}>
+        Loading franchise dashboard…
+      </div>
+    );
+  }
   const safeTeams = Array.isArray(league?.teams) ? league.teams : [];
   const safeLeague = { ...league, teams: safeTeams, week: Number(league?.week ?? 1) };
   const isInitialized = safeTeams.length > 0;
@@ -1944,7 +1952,14 @@ export default function LeagueDashboard({
                     return;
                   }
                   if (typeof tab === "string" && tab.startsWith("Stats:")) {
+                    setStatsInitialFamily((tab.split(":")[1] || "passing").toLowerCase());
                     setActiveTab("Stats");
+                    return;
+                  }
+                  if (typeof tab === "string" && tab.startsWith("Roster:")) {
+                    const next = (tab.split(":")[1] || "table").toLowerCase();
+                    setRosterInitialView(next === "depth" ? "depth" : next === "cards" ? "cards" : "table");
+                    setActiveTab("Roster");
                     return;
                   }
                   setActiveTab(tab);
@@ -1994,7 +2009,9 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="Stats">
             <PlayerStats
               actions={actions}
+              league={league}
               onPlayerSelect={setSelectedPlayerId}
+              initialFamily={statsInitialFamily}
             />
           </TabErrorBoundary>
         )}
@@ -2038,6 +2055,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              initialViewMode={rosterInitialView}
             />
           </TabErrorBoundary>
         )}

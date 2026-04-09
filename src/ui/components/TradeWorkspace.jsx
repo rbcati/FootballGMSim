@@ -7,6 +7,7 @@ import { mergeTradeWorkspaceState } from '../utils/tradeWorkspaceState.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
+import { Badge } from '@/components/ui/badge';
 
 const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
@@ -35,6 +36,10 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
   const partnerNeeds = useMemo(() => partnerTeam ? computeTeamNeedsSummary(partnerTeam) : null, [partnerTeam]);
   const partnerIntel = useMemo(() => partnerTeam ? buildTeamIntelligence(partnerTeam, { week: league?.week ?? 1 }) : null, [partnerTeam, league?.week]);
   const incomingOffers = Array.isArray(league?.incomingTradeOffers) ? league.incomingTradeOffers : [];
+  React.useEffect(() => {
+    if (!normalizedInitialView || normalizedInitialView === view) return;
+    setView(normalizedInitialView);
+  }, [normalizedInitialView, view]);
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
@@ -92,18 +97,27 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       {view === 'Offers' && (
         <SectionCard title="Incoming Offers" subtitle="Review active trade calls and jump into Builder fast.">
           {!incomingOffers.length ? (
-            <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              No offers right now. Open Finder to target a partner team, then request a counter package.
+            <div className="card" style={{ padding: 'var(--space-4)', color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>No active offers yet</div>
+              <div style={{ marginBottom: 8 }}>Open Trade Finder to identify a partner, then move into Builder to compare assets and submit a package.</div>
+              <button className="btn btn-primary" onClick={() => setView('Finder')}>Open Trade Finder</button>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 8 }}>
               {incomingOffers.slice(0, 8).map((offer, idx) => (
                 <div key={offer?.id ?? idx} className="card" style={{ padding: 'var(--space-3)' }}>
-                  <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                    Week {offer?.week ?? league?.week ?? 1} · Expires after week {offer?.expiresAfterWeek ?? '—'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={{ fontWeight: 700 }}>Offer from {offer?.offeringTeamAbbr ?? offer?.offeringTeamName ?? `Team ${offer?.offeringTeamId ?? '—'}`}</div>
+                    <Badge variant="outline">Week {offer?.week ?? league?.week ?? 1}</Badge>
                   </div>
-                  <button className="btn" style={{ marginTop: 6 }} onClick={() => setView('Builder')}>Open Builder</button>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    Expires after week {offer?.expiresAfterWeek ?? '—'} · Sending {(offer?.offering?.playerIds ?? []).length} player(s), requesting {(offer?.receiving?.playerIds ?? []).length} player(s)
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                    <Badge variant="secondary">AI assets {(offer?.offering?.playerIds ?? []).length + (offer?.offering?.pickIds ?? []).length}</Badge>
+                    <Badge variant="secondary">Your assets {(offer?.receiving?.playerIds ?? []).length + (offer?.receiving?.pickIds ?? []).length}</Badge>
+                  </div>
+                  <button className="btn" style={{ marginTop: 8 }} onClick={() => setView('Builder')}>Open Builder</button>
                 </div>
               ))}
             </div>
