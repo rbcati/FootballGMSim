@@ -83,6 +83,11 @@ function PlayerAwardCard({ name, pos, team, ovr, stat, awardName, onClick }) {
   );
 }
 
+function GradePill({ grade }) {
+  const tone = grade === "A" ? "var(--success)" : grade === "B" ? "#74d680" : grade === "C" ? "var(--warning)" : grade === "D" ? "#ff7b7b" : "var(--danger)";
+  return <span style={{ border: `1px solid ${tone}55`, color: tone, background: `${tone}18`, borderRadius: 999, padding: "2px 8px", fontSize: 10, fontWeight: 800 }}>{grade}</span>;
+}
+
 function ConfettiOverlay() {
   return (
     <div style={{
@@ -207,6 +212,15 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
     }
     return rows.slice(-8).reverse();
   }, [league]);
+  const archivedReview = useMemo(() => {
+    const rows = Array.isArray(league?.leagueHistory) ? league.leagueHistory : [];
+    const currentYear = Number(league?.year ?? 0);
+    const latest = [...rows].reverse().find((row) => Number(row?.year ?? 0) === currentYear) ?? rows[rows.length - 1] ?? null;
+    return latest?.userTeamSummary ?? null;
+  }, [league]);
+  const seasonReview = archivedReview?.seasonReview ?? null;
+  const playerCards = Array.isArray(archivedReview?.playerReportCards) ? archivedReview.playerReportCards : [];
+  const offseasonPlan = archivedReview?.offseasonPlan ?? null;
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -301,6 +315,73 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
               #{standings.findIndex(t => t.id === userTeam.id) + 1}
             </strong>{" "}
             overall with a team OVR of {userTeam.ovr}.
+          </div>
+        </AnimatedSection>
+      )}
+      {seasonReview && (
+        <AnimatedSection delay={580} title="Front-office diagnosis" icon="🧪">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)", fontSize: 12, color: "var(--text-muted)" }}>
+              <strong style={{ color: "var(--text)" }}>{seasonReview.teamIdentitySummary}</strong>
+              <div style={{ marginTop: 6 }}>Offense: {seasonReview.offensiveStyleSummary}</div>
+              <div>Defense: {seasonReview.defensiveStyleSummary}</div>
+              <div style={{ marginTop: 6 }}>Sack diagnosis: {seasonReview.sackAttribution?.explanation}</div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+                <strong style={{ color: "var(--success)" }}>Top strengths</strong>
+                {(seasonReview.strengths ?? []).map((s) => <div key={s} style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>• {s}</div>)}
+              </div>
+              <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+                <strong style={{ color: "var(--warning)" }}>Top weaknesses</strong>
+                {(seasonReview.weaknesses ?? []).map((s) => <div key={s} style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>• {s}</div>)}
+              </div>
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {(seasonReview.unitGrades ?? []).slice(0, 8).map((unit) => (
+                <div key={unit.key} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)", display: "flex", gap: 8, alignItems: "center" }}>
+                  <GradePill grade={unit.grade} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>{unit.label}</div>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{unit.explanation}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {offseasonPlan && (
+        <AnimatedSection delay={600} title="Offseason priorities" icon="🗂️">
+          <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Free agency priorities</strong>
+              {(offseasonPlan.freeAgencyPriorities ?? []).slice(0, 3).map((item) => <div key={item.focus} style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>#{item.priority} {item.focus}</div>)}
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+              <strong style={{ color: "var(--text)" }}>Draft priorities</strong>
+              {(offseasonPlan.draftPriorities ?? []).slice(0, 3).map((item) => <div key={item.focus} style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>#{item.priority} {item.focus}</div>)}
+            </div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {playerCards.length > 0 && (
+        <AnimatedSection delay={640} title="Player report cards" icon="📒">
+          <div style={{ display: "grid", gap: 6 }}>
+            {playerCards.slice(0, 12).map((p) => (
+              <div key={p.playerId} style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid var(--hairline)", background: "var(--surface-strong, #1a1a2e)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <GradePill grade={p.grade} />
+                  <strong style={{ color: "var(--text)", fontSize: 12 }}>{p.name} · {p.pos}</strong>
+                  <span style={{ fontSize: 10, color: "var(--text-subtle)" }}>{p.offseasonTag}</span>
+                </div>
+                <div style={{ marginTop: 4, fontSize: 11, color: "var(--text-muted)" }}>{p.verdict}</div>
+                <div style={{ marginTop: 2, fontSize: 11, color: "var(--text-subtle)" }}>{p.gmView}</div>
+                <div style={{ marginTop: 2, fontSize: 11, color: "var(--text-subtle)" }}>{p.ownerView}</div>
+              </div>
+            ))}
           </div>
         </AnimatedSection>
       )}

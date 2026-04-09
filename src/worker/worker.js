@@ -6493,6 +6493,8 @@ async function archiveSeason(seasonId) {
       userTeamId: meta.userTeamId,
       games: await Games.bySeason(seasonId).catch(() => []),
       transactions: await Transactions.bySeason(seasonId).catch(() => []),
+      teams,
+      seasonStats: populatedStats,
     });
 
     meta = ensureLeagueMemoryMeta(meta);

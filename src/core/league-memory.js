@@ -9,6 +9,8 @@ const POSITION_HOF_BASELINE = {
   S: 160,
 };
 
+const REVIEW_PREMIUM_POSITIONS = new Set(['QB', 'WR', 'OT', 'EDGE', 'DE', 'CB']);
+
 function blankRecord() {
   return { holderId: null, holderName: null, teamId: null, teamAbbr: null, season: null, value: 0, detail: null };
 }
@@ -120,9 +122,285 @@ export function buildSeasonStorylineSnapshot(memoryMeta, teams, userTeamId) {
   ].filter(Boolean);
 }
 
-export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [] }) {
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function pct(numerator, denominator) {
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function toGrade(score = 60) {
+  if (score >= 92) return 'A';
+  if (score >= 85) return 'B';
+  if (score >= 77) return 'C';
+  if (score >= 68) return 'D';
+  return 'F';
+}
+
+function sumTotals(statsRows = [], key) {
+  return statsRows.reduce((sum, row) => sum + Number(row?.totals?.[key] ?? 0), 0);
+}
+
+function buildTeamSeasonMetrics(teamId, teamRows = [], standingsRow = null) {
+  const passAtt = sumTotals(teamRows, 'passAtt');
+  const passComp = sumTotals(teamRows, 'passComp');
+  const passYd = sumTotals(teamRows, 'passYd');
+  const passTD = sumTotals(teamRows, 'passTD');
+  const interceptionsThrown = sumTotals(teamRows, 'interceptions');
+  const sacksAllowed = sumTotals(teamRows, 'sacksAllowed');
+  const rushAtt = sumTotals(teamRows, 'rushAtt');
+  const rushYd = sumTotals(teamRows, 'rushYd');
+  const rushTD = sumTotals(teamRows, 'rushTD');
+  const recTargets = sumTotals(teamRows, 'targets');
+  const receptions = sumTotals(teamRows, 'receptions');
+  const recYd = sumTotals(teamRows, 'recYd');
+  const recTD = sumTotals(teamRows, 'recTD');
+  const tackles = sumTotals(teamRows, 'tackles');
+  const sacks = sumTotals(teamRows, 'sacks');
+  const defInts = sumTotals(teamRows, 'interceptionsDef') + sumTotals(teamRows, 'interceptionsMade');
+  const forcedFumbles = sumTotals(teamRows, 'forcedFumbles');
+  const fumbleRecoveries = sumTotals(teamRows, 'fumbleRecoveries');
+  const penalties = sumTotals(teamRows, 'penalties');
+  const games = Math.max(1, Number(standingsRow?.wins ?? 0) + Number(standingsRow?.losses ?? 0) + Number(standingsRow?.ties ?? 0));
+  const pointsFor = Number(standingsRow?.pf ?? standingsRow?.ptsFor ?? 0);
+  const pointsAgainst = Number(standingsRow?.pa ?? standingsRow?.ptsAgainst ?? 0);
+  const explosivePasses = teamRows.reduce((sum, row) => {
+    const yd = Number(row?.totals?.recYd ?? 0);
+    const catches = Number(row?.totals?.receptions ?? 0);
+    const approx = catches > 0 ? Math.round((yd / catches) >= 14 ? catches * 0.22 : catches * 0.12) : 0;
+    return sum + approx;
+  }, 0);
+  const explosiveRuns = teamRows.reduce((sum, row) => {
+    const ra = Number(row?.totals?.rushAtt ?? 0);
+    const ryd = Number(row?.totals?.rushYd ?? 0);
+    const approx = ra > 0 ? Math.round((ryd / ra) >= 4.6 ? ra * 0.13 : ra * 0.08) : 0;
+    return sum + approx;
+  }, 0);
+
+  const giveaways = interceptionsThrown + sumTotals(teamRows, 'fumblesLost');
+  const takeaways = defInts + forcedFumbles + fumbleRecoveries;
+  const oneScoreGames = Math.round(games * 0.48);
+  const oneScoreWins = Math.round(oneScoreGames * clamp(0.45 + ((pointsFor - pointsAgainst) / Math.max(140, games * 10)) * 0.6, 0.2, 0.82));
+
+  return {
+    teamId,
+    games,
+    offense: {
+      passAttempts: passAtt,
+      passCompletions: passComp,
+      passingYards: passYd,
+      yardsPerAttempt: passAtt > 0 ? passYd / passAtt : 0,
+      passingTds: passTD,
+      interceptionsThrown,
+      sacksAllowed,
+      sackRate: passAtt + sacksAllowed > 0 ? sacksAllowed / (passAtt + sacksAllowed) : 0,
+      rushingAttempts: rushAtt,
+      rushingYards: rushYd,
+      yardsPerCarry: rushAtt > 0 ? rushYd / rushAtt : 0,
+      rushingTds: rushTD,
+      explosivePassRate: passAtt > 0 ? explosivePasses / passAtt : 0,
+      explosiveRunRate: rushAtt > 0 ? explosiveRuns / rushAtt : 0,
+      catchRate: recTargets > 0 ? receptions / recTargets : (passAtt > 0 ? passComp / passAtt : 0),
+      redZoneTdRate: clamp(0.45 + (passTD + rushTD) / Math.max(1, games * 24), 0.2, 0.78),
+      thirdDownRate: clamp(0.34 + (passComp / Math.max(1, passAtt)) * 0.16 - ((sacksAllowed / Math.max(1, games)) * 0.008), 0.22, 0.58),
+      deepAttemptProxy: clamp(0.09 + ((passYd / Math.max(1, passAtt)) - 6.2) * 0.02, 0.05, 0.2),
+      pressureAllowedProxy: clamp((sacksAllowed / Math.max(1, games * 2.5)) + 0.18, 0.12, 0.48),
+      timeToThrowProxy: clamp(2.45 + (sacksAllowed / Math.max(1, games * 5)) + ((passYd / Math.max(1, passAtt)) > 7.8 ? 0.1 : 0), 2.1, 3.25),
+    },
+    defense: {
+      sacks,
+      pressureProxy: clamp((sacks / Math.max(1, games * 2.3)) + 0.2, 0.14, 0.46),
+      takeaways,
+      opponentYardsPerCarry: clamp(4.4 - ((tackles + sacks * 2) / Math.max(180, games * 20)) * 0.5, 3.7, 5.3),
+      explosiveRunsAllowedRate: clamp(0.11 - (sacks / Math.max(1, games * 95)), 0.06, 0.18),
+      explosivePassesAllowedRate: clamp(0.12 - (defInts / Math.max(1, games * 12)) + (pointsAgainst / Math.max(1, games * 700)), 0.07, 0.2),
+      thirdDownDefense: clamp(0.41 - (sacks / Math.max(1, games * 80)), 0.3, 0.5),
+      redZoneDefense: clamp(0.57 - (defInts / Math.max(1, games * 20)), 0.43, 0.7),
+      opponentPasserEfficiency: clamp(72 + (pointsAgainst / Math.max(1, games * 1.2)) - defInts * 0.8, 62, 118),
+    },
+    context: {
+      pointsFor,
+      pointsAgainst,
+      pointDifferential: pointsFor - pointsAgainst,
+      turnoverDifferential: takeaways - giveaways,
+      oneScoreWins,
+      oneScoreLosses: Math.max(0, oneScoreGames - oneScoreWins),
+      oneScoreGames,
+      penaltyRate: penalties / Math.max(1, games),
+      injuryGamesLost: teamRows.reduce((sum, row) => {
+        const gp = Number(row?.totals?.gamesPlayed ?? 0);
+        const age = Number(row?.age ?? 26);
+        const expected = age <= 30 ? games : Math.max(11, games - 1);
+        return sum + Math.max(0, expected - gp);
+      }, 0),
+    },
+  };
+}
+
+function buildSeasonReview({ team, standingsRow, teamStats = [], previousSummary = null }) {
+  const metrics = buildTeamSeasonMetrics(team?.id, teamStats, standingsRow);
+  const off = metrics.offense;
+  const def = metrics.defense;
+  const ctx = metrics.context;
+  const winPct = pct(Number(standingsRow?.wins ?? 0) + Number(standingsRow?.ties ?? 0) * 0.5, metrics.games);
+
+  const passProtectionScore = clamp(88 - off.sackRate * 420 - off.pressureAllowedProxy * 42, 42, 96);
+  const qbRoomScore = clamp(58 + off.yardsPerAttempt * 4.4 + off.passingTds / Math.max(1, metrics.games) * 2.8 - off.interceptionsThrown / Math.max(1, metrics.games) * 3.2 - off.sackRate * 120, 44, 97);
+  const runBlockScore = clamp(54 + off.yardsPerCarry * 8 + off.explosiveRunRate * 170, 45, 95);
+  const receivingScore = clamp(56 + off.catchRate * 42 + off.explosivePassRate * 160 + off.yardsPerAttempt * 1.5 - off.sackRate * 85, 44, 96);
+  const dlPassRushScore = clamp(53 + (def.sacks / Math.max(1, metrics.games)) * 9 + def.pressureProxy * 52, 43, 95);
+  const runDefenseScore = clamp(88 - def.opponentYardsPerCarry * 9 - def.explosiveRunsAllowedRate * 220, 42, 95);
+  const coverageScore = clamp(56 + (100 - def.opponentPasserEfficiency) * 0.48 + (1 - def.explosivePassesAllowedRate) * 18, 40, 96);
+  const specialTeamsScore = clamp(64 + (ctx.pointDifferential / Math.max(1, metrics.games)) * 1.5 - ctx.penaltyRate * 0.8, 48, 91);
+  const coachingScore = clamp(56 + winPct * 36 + (ctx.turnoverDifferential / Math.max(1, metrics.games)) * 3.2, 45, 95);
+  const disciplineScore = clamp(80 - ctx.penaltyRate * 1.6 + (ctx.turnoverDifferential / Math.max(1, metrics.games)) * 3.5, 40, 95);
+  const healthScore = clamp(86 - (ctx.injuryGamesLost / Math.max(1, metrics.games)) * 1.8, 35, 95);
+
+  const sackAttribution = [
+    { key: 'ol_pass_protection', score: clamp(off.sackRate * 100 + off.pressureAllowedProxy * 70, 0, 100), label: 'Pass protection was the main problem.' },
+    { key: 'qb_holding_ball', score: clamp((off.timeToThrowProxy - 2.45) * 55 + (off.deepAttemptProxy * 120), 0, 100), label: 'The QB contributed by holding the ball too long.' },
+    { key: 'receivers_not_open', score: clamp((1 - off.explosivePassRate) * 58 + (1 - off.catchRate) * 44, 0, 100), label: 'Receivers struggled to create openings downfield.' },
+  ].sort((a, b) => b.score - a.score);
+
+  const unitGrades = [
+    { key: 'qb_room', label: 'QB room', score: qbRoomScore, explanation: `YPA ${off.yardsPerAttempt.toFixed(1)}, INT ${off.interceptionsThrown}, sack rate ${(off.sackRate * 100).toFixed(1)}%.` },
+    { key: 'rb_room', label: 'RB room', score: runBlockScore - 2, explanation: `Run game averaged ${off.yardsPerCarry.toFixed(1)} YPC with ${(off.explosiveRunRate * 100).toFixed(1)}% explosive runs.` },
+    { key: 'wr_te_group', label: 'WR/TE group', score: receivingScore, explanation: `Catch rate ${(off.catchRate * 100).toFixed(1)}% and explosive pass rate ${(off.explosivePassRate * 100).toFixed(1)}%.` },
+    { key: 'ol_run_blocking', label: 'OL run blocking', score: runBlockScore, explanation: `Front generated ${off.yardsPerCarry.toFixed(1)} YPC with downhill consistency.` },
+    { key: 'ol_pass_protection', label: 'OL pass protection', score: passProtectionScore, explanation: `Allowed ${off.sacksAllowed} sacks, sack rate ${(off.sackRate * 100).toFixed(1)}%.` },
+    { key: 'dl_pass_rush', label: 'DL pass rush', score: dlPassRushScore, explanation: `${def.sacks} sacks and pressure proxy ${(def.pressureProxy * 100).toFixed(1)}%.` },
+    { key: 'dl_lb_run_defense', label: 'DL/LB run defense', score: runDefenseScore, explanation: `Estimated opponent YPC ${def.opponentYardsPerCarry.toFixed(1)} with explosive runs allowed ${(def.explosiveRunsAllowedRate * 100).toFixed(1)}%.` },
+    { key: 'coverage_unit', label: 'Coverage unit', score: coverageScore, explanation: `Opponent pass efficiency ${def.opponentPasserEfficiency.toFixed(1)} with explosive pass rate allowed ${(def.explosivePassesAllowedRate * 100).toFixed(1)}%.` },
+    { key: 'special_teams', label: 'Special teams', score: specialTeamsScore, explanation: `Field-position proxy held steady with point differential ${ctx.pointDifferential}.` },
+    { key: 'coaching_scheme_fit', label: 'Coaching / scheme fit', score: coachingScore, explanation: `Record ${(standingsRow?.wins ?? 0)}-${(standingsRow?.losses ?? 0)} with turnover differential ${ctx.turnoverDifferential}.` },
+    { key: 'discipline_consistency', label: 'Discipline / consistency', score: disciplineScore, explanation: `${ctx.penaltyRate.toFixed(1)} penalties per game, one-score record ${ctx.oneScoreWins}-${ctx.oneScoreLosses}.` },
+    { key: 'health_injury_luck', label: 'Health / injury luck', score: healthScore, explanation: `Estimated ${ctx.injuryGamesLost} injury games lost across primary roster.` },
+  ].map((item) => ({ ...item, grade: toGrade(item.score) }));
+
+  const strengths = [...unitGrades].sort((a, b) => b.score - a.score).slice(0, 3).map((g) => `${g.label} (${g.grade})`);
+  const weaknesses = [...unitGrades].sort((a, b) => a.score - b.score).slice(0, 3).map((g) => `${g.label} (${g.grade})`);
+
+  const previousDelta = previousSummary?.seasonReview?.aggregateMetrics?.context?.pointDifferential ?? null;
+  const trendText = previousDelta == null
+    ? 'Not enough prior season data for a reliable early/late trend split.'
+    : (ctx.pointDifferential >= previousDelta ? 'Late-season trajectory improved relative to last season baseline.' : 'Late-season trajectory slipped against the prior baseline.');
+
+  return {
+    teamIdentitySummary: `${team?.name ?? 'Team'} finished ${(standingsRow?.wins ?? 0)}-${(standingsRow?.losses ?? 0)} with a ${ctx.pointDifferential >= 0 ? '+' : ''}${ctx.pointDifferential} point differential.`,
+    offensiveStyleSummary: off.rushingAttempts > off.passAttempts ? 'Run-leaning offense built on early-down volume and controlled passing.' : 'Pass-leaning offense looking for chunk throws and efficiency from shotgun sets.',
+    defensiveStyleSummary: def.sacks / Math.max(1, metrics.games) >= 2.4 ? 'Aggressive pressure defense that tries to win on negative plays.' : 'Coverage-and-contain defense focused on limiting explosives.',
+    strengths,
+    weaknesses,
+    trendSummary: trendText,
+    sackAttribution: {
+      primary: sackAttribution[0]?.key ?? 'ol_pass_protection',
+      breakdown: sackAttribution.map((row) => ({ cause: row.key, share: Math.round(clamp(row.score, 0, 100)) })),
+      explanation: sackAttribution[0]?.label ?? 'Protection and pass design both contributed.',
+    },
+    unitGrades,
+    aggregateMetrics: metrics,
+  };
+}
+
+function buildPlayerReportCards({ team = {}, teamRows = [], review = null }) {
+  const ageCurvePenalty = (age) => (age >= 31 ? (age - 30) * 3.6 : 0);
+  const reportCards = teamRows.map((row) => {
+    const totals = row?.totals ?? {};
+    const ovr = Number(row?.ovr ?? 65);
+    const age = Number(row?.age ?? 26);
+    const baseProd = Number(totals.passYd ?? 0) / 90
+      + Number(totals.rushYd ?? 0) / 55
+      + Number(totals.recYd ?? 0) / 50
+      + Number(totals.tackles ?? 0) / 9
+      + Number(totals.sacks ?? 0) * 4
+      + Number(totals.interceptions ?? 0) * 5;
+    const expectation = (ovr - 55) * (REVIEW_PREMIUM_POSITIONS.has(row?.pos) ? 1.12 : 0.96);
+    const valueDelta = baseProd - expectation - ageCurvePenalty(age);
+    const score = clamp(72 + valueDelta * 0.85, 40, 98);
+    const tag = score >= 88
+      ? 'core starter'
+      : score >= 82 && age <= 28 ? 'extension target'
+      : score >= 75 ? 'replaceable starter'
+      : score >= 67 ? 'depth only'
+      : age >= 30 ? 'cap concern' : 'upgrade needed';
+    const verdict = score >= 86
+      ? 'Delivered above expectation in meaningful snaps.'
+      : score >= 76
+        ? 'Met baseline starter expectations with some volatility.'
+        : 'Performance lagged role expectations and needs competition.';
+    const gmNote = score >= 82
+      ? 'GM: role value and contract efficiency support keeping this player in plan.'
+      : score >= 72
+        ? 'GM: useful piece, but replaceability is moderate.'
+        : 'GM: role can be upgraded or replaced through draft/FA.';
+    const ownerNote = score >= 85
+      ? 'Owner: visible production justified the investment.'
+      : score >= 72
+        ? 'Owner: impact was mixed for salary level.'
+        : 'Owner: expensive snaps without enough return.';
+    return {
+      playerId: row.playerId,
+      name: row.name,
+      pos: row.pos,
+      age,
+      grade: toGrade(score),
+      score: Math.round(score),
+      verdict,
+      performanceVsExpectation: valueDelta >= 8 ? 'above expectation' : valueDelta >= -4 ? 'near expectation' : 'below expectation',
+      offseasonTag: tag,
+      gmView: gmNote,
+      ownerView: ownerNote,
+    };
+  });
+  return reportCards.sort((a, b) => b.score - a.score).slice(0, 36);
+}
+
+function buildOffseasonRecommendations({ review, reportCards = [], teamRows = [] }) {
+  const weakUnits = [...(review?.unitGrades ?? [])].sort((a, b) => a.score - b.score).slice(0, 4);
+  const expiring = teamRows
+    .filter((row) => Number(row?.contract?.years ?? row?.contract?.yearsRemaining ?? 2) <= 1)
+    .sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0));
+  const extensionTargets = reportCards.filter((row) => ['core starter', 'extension target'].includes(row.offseasonTag)).slice(0, 5);
+  const draftNeeds = weakUnits.slice(0, 3).map((unit, idx) => ({
+    priority: idx + 1,
+    focus: `Add ${unit.label.toLowerCase()} talent`,
+    reason: unit.explanation,
+  }));
+  const faNeeds = weakUnits.slice(0, 3).map((unit, idx) => ({
+    priority: idx + 1,
+    focus: `Veteran help for ${unit.label.toLowerCase()}`,
+    reason: `${unit.label} graded ${unit.grade}; immediate floor upgrade needed.`,
+  }));
+  return {
+    freeAgencyPriorities: faNeeds,
+    draftPriorities: draftNeeds,
+    internalResignPriorities: extensionTargets.map((row, idx) => ({
+      priority: idx + 1,
+      playerId: row.playerId,
+      name: row.name,
+      pos: row.pos,
+      reason: `${row.grade} season (${row.offseasonTag}).`,
+    })),
+    expiringStarterWatch: expiring.slice(0, 8).map((row) => ({
+      playerId: row.playerId,
+      name: row.name,
+      pos: row.pos,
+      ovr: row.ovr ?? null,
+    })),
+  };
+}
+
+export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, leaders, champion, runnerUp, userTeamId, transactions = [], games = [], teams = [], seasonStats = [] }) {
   const sorted = [...(standings || [])].sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
   const userRow = sorted.find((t) => Number(t.id) === Number(userTeamId)) || null;
+  const userTeam = teams.find((t) => Number(t?.id) === Number(userTeamId)) ?? null;
+  const userRows = seasonStats.filter((row) => Number(row?.teamId) === Number(userTeamId));
+  const previousSummary = null;
+  const seasonReview = userRow ? buildSeasonReview({ team: userTeam, standingsRow: userRow, teamStats: userRows, previousSummary }) : null;
+  const playerReportCards = userRow ? buildPlayerReportCards({ team: userTeam, teamRows: userRows, review: seasonReview }) : [];
+  const offseasonPlan = seasonReview ? buildOffseasonRecommendations({ review: seasonReview, reportCards: playerReportCards, teamRows: userRows }) : null;
+
   return {
     id: seasonId,
     year,
@@ -149,6 +427,9 @@ export function buildSeasonArchiveSummary({ year, seasonId, standings, awards, l
       pointsFor: userRow.pf ?? 0,
       pointsAgainst: userRow.pa ?? 0,
       playoffLikely: (userRow.wins ?? 0) >= 10,
+      seasonReview,
+      playerReportCards,
+      offseasonPlan,
     } : null,
     majorTransactions: (transactions || []).slice(0, 8),
   };
