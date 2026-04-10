@@ -79,6 +79,10 @@ import {
   buildDecisionTiming,
   marketHeatLabel,
 } from '../core/contract-market.js';
+import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
+import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
+import { summarizePlayerMood } from '../core/mood/playerMood.js';
+import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
   calculateOffensiveSchemeFit, calculateDefensiveSchemeFit,
   computeTeamSchemeFits, schemeOvrBonus,
@@ -2838,9 +2842,13 @@ async function handleGetPlayerCareer({ playerId }, id) {
     const allStats = [...historicalStats];
     if (liveSeasonStat) allStats.push(liveSeasonStat);
 
+    const playerTeam = player?.teamId != null ? cache.getTeam(player.teamId) : null;
+    const motivationProfile = buildContractProfile(player ?? {}, { tenureYears: Number(player?.tenureYears ?? 0) });
+    const motivationSummary = summarizePlayerMood(motivationProfile, getTeamContextForNegotiation(player ?? {}, playerTeam ?? {}, null, {}));
+
     post(toUI.PLAYER_CAREER, {
       playerId: strId,
-      player:   player ?? null,
+      player:   player ? { ...player, motivationProfile, motivationSummary } : null,
       stats:    allStats,
     }, id);
 
@@ -3582,18 +3590,35 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
     if (!directionCache.has(team.id)) {
       directionCache.set(team.id, inferTeamDirection(team, Number(liveMeta?.currentWeek ?? 1)));
     }
-    const score = scoreOffer(player, offer, {
+    const schemeFitScore = ['QB', 'RB', 'WR', 'TE', 'OL', 'K'].includes(player.pos)
+      ? calculateOffensiveSchemeFit(player, team?.staff?.headCoach?.offScheme || 'Balanced')
+      : calculateDefensiveSchemeFit(player, team?.staff?.headCoach?.defScheme || '4-3');
+    const teamContext = getTeamContextForNegotiation(player, team, null, {
+      teamDirection: directionCache.get(team.id),
+      needsAtPosition: AiLogic.calculateTeamNeeds(team.id)?.[player.pos] ?? 1,
+      rosterAtPosition: cache.getPlayersByTeam(team.id).filter((p) => p?.pos === player?.pos),
+    });
+    const legacyScore = scoreOffer(player, offer, {
       team,
       direction: directionCache.get(team.id),
       roleOpportunity: (AiLogic.calculateTeamNeeds(team.id)?.[player.pos] ?? 1) / 2.2,
-      fit: ['QB', 'RB', 'WR', 'TE', 'OL', 'K'].includes(player.pos)
-        ? calculateOffensiveSchemeFit(player, team?.staff?.headCoach?.offScheme || 'Balanced')
-        : calculateDefensiveSchemeFit(player, team?.staff?.headCoach?.defScheme || '4-3'),
+      fit: schemeFitScore,
       loyaltyBoost: Number(team.id) === Number(player.teamId) ? 0.35 : 0,
     }, { profile, askTotalValue });
+    const evalResult = evaluateContractOffer(player, {
+      ...teamContext,
+      schemeFitScore,
+      franchiseDirectionScore: directionCache.get(team.id) === 'contender' ? 78 : directionCache.get(team.id) === 'rebuilding' ? 44 : 58,
+    }, offer, {
+      profile,
+      askTotalValue,
+      askAnnual: ask.baseAnnual,
+      askYears: ask.yearsTotal,
+    });
+    const score = legacyScore * 55 + (evalResult.score / 100) * 45;
     if (score > bestScore) {
       bestScore = score;
-      bestOffer = offer;
+      bestOffer = { ...offer, _evaluation: evalResult, _teamContext: teamContext };
     }
   }
   if (!bestOffer) return { status: 'pending', reason: 'No valid bids', bestOffer: null };
@@ -3632,6 +3657,7 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
       moneyGapRatio,
       state: waitCycles >= 1 ? 'market_cooling' : 'holding_for_improvement',
       urgency: timing.risk,
+      negotiation: bestOffer?._evaluation ?? null,
     };
   }
 
@@ -3648,6 +3674,7 @@ function evaluatePlayerOfferDecision(player, offers = [], liveMeta, memory = {})
     moneyGapRatio,
     state: timing.state,
     urgency: timing.risk,
+    negotiation: bestOffer?._evaluation ?? null,
   };
 }
 
@@ -3660,6 +3687,7 @@ function buildDecisionSnapshot(result = {}) {
     marketHeatBand: Math.round(Number(result?.marketHeat ?? 1) * 10) / 10,
     moneyGapBand: Math.round(Number(result?.moneyGapRatio ?? 0) * 20) / 20,
     bestTeamId: Number(result?.bestOffer?.teamId ?? -1),
+    negotiationStance: result?.negotiation?.negotiationStance ?? 'testing_market',
   };
 }
 
@@ -3674,6 +3702,7 @@ function shouldEmitMarketUpdate(prev = {}, next = {}, userHasOffer = false) {
   if (Math.abs((a.marketHeatBand ?? 1) - (b.marketHeatBand ?? 1)) >= 0.2) return true;
   if (Math.abs((a.moneyGapBand ?? 0) - (b.moneyGapBand ?? 0)) >= 0.1) return true;
   if ((a.bidderCount ?? 0) !== (b.bidderCount ?? 0)) return true;
+  if ((a.negotiationStance ?? 'testing_market') !== (b.negotiationStance ?? 'testing_market')) return true;
   return false;
 }
 
@@ -3964,14 +3993,6 @@ async function handleGetFreeAgents(payload, id) {
           waitCycles: Number(mem?.waitCycles ?? 0),
           moneyGapRatio: topGapRatio,
         });
-        const decisionLabelByState = {
-          evaluating_market: 'Evaluating market',
-          holding_for_improvement: 'Reviewing final offers',
-          leaning_to_leader: 'Leaning toward top bid',
-          close_to_deciding: 'Decision next week',
-          market_cooling: 'Market cooling',
-          decision_imminent: 'Decision next week',
-        };
         const detailTone = userOffer
           ? userOffer.teamId === topBid?.teamId
             ? (offers.length >= 3 ? 'You’re leading, but another team is close' : 'Your bid leads')
@@ -3996,8 +4017,31 @@ async function handleGetFreeAgents(payload, id) {
           ['loyalty', profile.loyaltyPriority],
         ]
           .sort((a, b) => b[1] - a[1])
-          .slice(0, 2)
+          .slice(0, 3)
           .map(([tag]) => tag);
+
+        const teamNegotiationContext = getTeamContextForNegotiation(p, userTeam, null, {
+          teamDirection: userDirection,
+          needsAtPosition: AiLogic.calculateTeamNeeds(userTeamId)?.[p.pos] ?? 1,
+          rosterAtPosition: cache.getPlayersByTeam(userTeamId).filter((rp) => rp?.pos === p?.pos),
+        });
+        const userOfferEval = evaluateContractOffer(p, {
+          ...teamNegotiationContext,
+          schemeFitScore: Number(p?.schemeFit ?? 65),
+          franchiseDirectionScore: userDirection === 'contender' ? 78 : userDirection === 'rebuilding' ? 44 : 58,
+        }, userOffer ?? { contract: ask }, {
+          profile,
+          askTotalValue: (ask.baseAnnual * ask.yearsTotal) + (ask.signingBonus || 0),
+          askAnnual: ask.baseAnnual,
+          askYears: ask.yearsTotal,
+        });
+        const moodSummary = summarizePlayerMood(profile, teamNegotiationContext);
+        const decisionState = getFreeAgencyDecisionState({
+          negotiationStance: userOfferEval.negotiationStance,
+          bidderCount: offers.length,
+          urgency: decisionTiming.risk,
+          valueGap: userOfferEval.valueGap,
+        });
 
         return {
           id:        p.id,
@@ -4015,27 +4059,35 @@ async function handleGetFreeAgents(payload, id) {
             heat: Math.round(heat * 100) / 100,
             heatLabel: marketHeatLabel(heat),
             bidderCount: offers.length,
-            decision: decisionLabelByState[decisionTiming.state] ?? 'Evaluating market',
-            decisionReason: decisionTiming.reason,
+            decision: decisionState.summary,
+            decisionReason: `${decisionTiming.reason}. ${summarizeNegotiationStance(userOfferEval)}`,
             urgency: decisionTiming.risk,
             urgencyLabel: decisionTiming.risk === 'high'
               ? 'Decision expected soon'
               : decisionTiming.risk === 'medium'
                 ? 'Decision window open'
                 : 'No immediate deadline signal',
-            timingState: decisionTiming.state,
+            timingState: decisionState.state,
             attention: detailTone,
             patienceWeeks: decisionTiming.patienceWeeks,
             patienceLabel,
             riskLabel: riskLabelByRisk[decisionTiming.risk] ?? 'Risk unknown',
             knownMarket,
+            stateChips: decisionState.chips,
+            motivationSummary: moodSummary.summary,
+            fitScore: userOfferEval.score,
           },
           demandProfile: {
-            headline: profile.headline,
+            headline: moodSummary.summary,
             willingness: ask.willingness,
             askAnnual: ask.baseAnnual,
             askYears: ask.yearsTotal,
             priorities: topPreferences,
+            archetype: profile.archetype,
+            contractOutlook: moodSummary.contractOutlook,
+            negotiationStance: userOfferEval.negotiationStance,
+            fitScore: userOfferEval.score,
+            explanationSummary: userOfferEval.explanationSummary,
           },
           reSign: reSignInsight,
           offers: {

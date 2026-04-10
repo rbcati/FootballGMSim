@@ -1170,6 +1170,18 @@ export default function FreeAgency({
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
                               {market.urgencyLabel}{market.patienceLabel ? ` · ${market.patienceLabel}` : ""}
                             </div>
+                            {market.motivationSummary && (
+                              <div style={{ color: "var(--text-subtle)", marginTop: 1 }}>
+                                {market.motivationSummary}{market.fitScore ? ` · Fit ${market.fitScore}/100` : ""}
+                              </div>
+                            )}
+                            {market.stateChips?.length ? (
+                              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center', marginTop: 3 }}>
+                                {market.stateChips.slice(0, 2).map((chip) => (
+                                  <span key={chip} style={{ fontSize: 10, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px', color: 'var(--text-subtle)' }}>{chip}</span>
+                                ))}
+                              </div>
+                            ) : null}
                             {!!market.reSign?.recommendationTier && (
                               <div style={{ color: "var(--text-subtle)", marginTop: 1 }}>
                                 {RESIGN_TIER_LABEL[market.reSign.recommendationTier] ?? "Re-sign view unavailable"}: {market.reSign.shortReason}
@@ -1294,6 +1306,8 @@ export default function FreeAgency({
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}{player.scoutUncertaintyBand ? ` (Scout ${player.scoutOvr} ±${player.scoutUncertaintyBand})` : ''}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player?.demandProfile?.headline ?? 'Balanced motivations'}{player?.demandProfile?.fitScore ? ` · Fit ${player.demandProfile.fitScore}/100` : ''}</div>
+                    {Array.isArray(player?.market?.stateChips) && player.market.stateChips.length > 0 ? <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{player.market.stateChips.join(' · ')}</div> : null}
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                       <Button className="btn" onClick={() => onPlayerSelect && onPlayerSelect(player.id)}>View profile</Button>
                       <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>Negotiate</Button>

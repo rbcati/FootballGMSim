@@ -26,6 +26,17 @@ const ACCOLADE_META = {
   ROTY: { icon: "🌱", label: (yr) => `${yr} ROTY` },
 };
 
+
+function formatPriorityLabel(key) {
+  const labels = {
+    money: 'Money',
+    contender: 'Contender',
+    role: 'Role',
+    loyalty: 'Loyalty',
+    development: 'Development',
+  };
+  return labels[key] ?? key;
+}
 // ── Position group → stat column definitions ──────────────────────────────────
 
 function computePasserRating(t) {
@@ -784,6 +795,34 @@ export default function PlayerProfile({
                 {Number(player?.age ?? 40) <= 25 && teamIntel?.organization?.developmentEnvironment?.reasons?.[0] ? (
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• Development environment: {teamIntel.organization.developmentEnvironment.reasons[0]}</div>
                 ) : null}
+              </div>
+            </section>
+          )}
+
+
+          {!loading && player && player?.motivationProfile && (
+            <section>
+              <h3 style={sectionLabelStyle}>Motivation & Contract Outlook</h3>
+              <div style={{ display: 'grid', gap: 'var(--space-2)', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '10px' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 700 }}>Archetype</div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, marginTop: 2 }}>{String(player.motivationProfile.archetype || 'balanced').replace(/_/g, ' ')}</div>
+                </div>
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '10px' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 700 }}>Mood summary</div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, marginTop: 2 }}>{player?.motivationSummary?.summary ?? 'Balanced priorities'}</div>
+                </div>
+                <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '10px' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 700 }}>Contract outlook</div>
+                  <div style={{ fontSize: 'var(--text-sm)', fontWeight: 700, marginTop: 2 }}>{player?.motivationSummary?.contractOutlook ?? 'No clear market pressure.'}</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {(player?.motivationSummary?.priorities ?? []).map((p) => (
+                  <span key={p} style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '2px 8px', color: 'var(--text-subtle)' }}>
+                    {formatPriorityLabel(p)} priority
+                  </span>
+                ))}
               </div>
             </section>
           )}
