@@ -1998,7 +1998,8 @@ export default function LeagueDashboard({
                 onAdvanceWeek={onAdvanceWeek}
                 busy={busy}
                 simulating={simulating}
-              onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
+                onOpenBoxScore={(gameId) => openGameDetail(gameId, "HQ")}
+                onTeamSelect={setSelectedTeamId}
             />
             {league.phase !== "preseason" && (
               <div style={{ marginTop: "var(--space-4)" }}>
@@ -2073,7 +2074,15 @@ export default function LeagueDashboard({
         {activeTab === "News" && (
           <TabErrorBoundary label="News">
             <SectionSubnav items={["All", "Team", "League", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
-            <NewsFeed league={league} mode="full" segment={newsSubtab.toLowerCase()} />
+            <NewsFeed
+              league={league}
+              mode="full"
+              segment={newsSubtab.toLowerCase()}
+              onTeamSelect={setSelectedTeamId}
+              onPlayerSelect={setSelectedPlayerId}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "News")}
+              onNavigate={setActiveTab}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (
@@ -2244,7 +2253,14 @@ export default function LeagueDashboard({
         )}
                 {isInitialized && activeTab === "📰 News" && (
           <TabErrorBoundary label="News">
-            <NewsFeed league={league} mode="full" />
+            <NewsFeed
+              league={league}
+              mode="full"
+              onTeamSelect={setSelectedTeamId}
+              onPlayerSelect={setSelectedPlayerId}
+              onOpenBoxScore={(gameId) => openGameDetail(gameId, "News")}
+              onNavigate={setActiveTab}
+            />
           </TabErrorBoundary>
         )}
 

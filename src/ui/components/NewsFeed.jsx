@@ -1,13 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { buildNarrativeNewsItems } from '../utils/leagueNarratives.js';
 import { deriveFranchisePressure } from '../utils/pressureModel.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
-
-const priorityColor = {
-  high: '#ef4444',
-  medium: '#f59e0b',
-  low: '#334155',
-};
+import { buildNewsDeskModel } from '../utils/newsDesk.js';
 
 const tickerColor = {
   high: '#f59e0b',
@@ -15,76 +9,56 @@ const tickerColor = {
   low: '#94a3b8',
 };
 
-const CATEGORY_MAP = {
-  standings: 'Standings / Playoff race',
-  playoff_race: 'Standings / Playoff race',
-  awards_race: 'Awards race',
-  injury: 'Major injuries',
-  injury_fallout: 'Major injuries',
-  trade_completed: 'Trades',
-  trade_fallout: 'Trades',
-  cpu_trade: 'Trades',
-  free_agent_signed: 'Free agency',
-  record_broken: 'Records',
-  story_standings: 'Standings / Playoff race',
-  story_playoff_race: 'Standings / Playoff race',
-  story_awards_race: 'Awards race',
-  story_injury_fallout: 'Major injuries',
-  story_trade_fallout: 'Trades',
-  story_rivalry: 'Rivalries',
-  major_result: 'Major game result',
-  story_major_result: 'Major game result',
-  pregame: 'Game-day framing',
-  story_pregame: 'Game-day framing',
-  coaching_carousel: 'Coaching carousel',
-  coaching_transition: 'Coaching transition',
-  coaching_continuity: 'Staff continuity',
-  story_coaching_carousel: 'Coaching carousel',
-  story_coaching_transition: 'Coaching transition',
-  story_coaching_continuity: 'Staff continuity',
-  culture: 'Locker-room chemistry',
+const priorityColor = {
+  high: '#ef4444',
+  medium: '#f59e0b',
+  low: '#334155',
 };
 
-function categoryFor(item) {
-  const key = String(item?.category ?? item?.type ?? '').toLowerCase();
-  return CATEGORY_MAP[key] ?? 'League pulse';
+function StoryCard({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
+  if (!item) return null;
+  return (
+    <div style={{ borderLeft: `4px solid ${priorityColor[item?.priority] ?? '#334155'}`, padding: '10px 12px', background: 'var(--surface)', borderRadius: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 700 }}>{item?.headline}</div>
+        <span style={{ fontSize: 11, color: 'var(--text-subtle)', border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px' }}>{item?._categoryLabel}</span>
+      </div>
+      <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{item?.body}</div>
+      <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
+        Week {item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Your team' : ''}
+      </div>
+      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+        {item?.gameId ? <button className="btn" onClick={() => onOpenBoxScore?.(item.gameId)}>Box Score</button> : null}
+        {item?.teamId != null ? <button className="btn" onClick={() => onTeamSelect?.(item.teamId)}>Team Profile</button> : null}
+        {item?.playerId != null ? <button className="btn" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+      </div>
+    </div>
+  );
 }
 
-function sortWeight(item, idx) {
-  const priorityBase = item?.priority === 'high' ? 300 : item?.priority === 'medium' ? 180 : 80;
-  const sourceBoost = item?.source === 'storyline' ? 120 : 0;
-  const recency = Math.max(0, 60 - idx);
-  return (item?.sortWeight ?? 0) + priorityBase + sourceBoost + recency;
+function SectionBlock({ title, stories, ...handlers }) {
+  if (!stories?.length) return null;
+  return (
+    <section style={{ display: 'grid', gap: 8 }}>
+      <h3 style={{ margin: 0, fontSize: 'var(--text-sm)', textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-subtle)' }}>{title}</h3>
+      {stories.map((item, idx) => <StoryCard key={item?.id ?? `${title}-${idx}`} item={item} {...handlers} />)}
+    </section>
+  );
 }
 
-export default function NewsFeed({ league, mode = 'full', segment = 'all' }) {
+export default function NewsFeed({ league, mode = 'full', segment = 'all', onTeamSelect, onOpenBoxScore, onPlayerSelect, onNavigate }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [filter, setFilter] = useState(segment);
-
-  const allNews = useMemo(() => (Array.isArray(league?.newsItems) ? league.newsItems : []), [league?.newsItems]);
-  const userTeamId = league?.userTeamId;
-
-  const mergedNews = useMemo(() => {
-    const storylineNews = buildNarrativeNewsItems(league);
-    const merged = [...storylineNews, ...allNews]
-      .map((item, idx) => ({ ...item, _categoryLabel: categoryFor(item), _sortWeight: sortWeight(item, idx) }))
-      .sort((a, b) => b._sortWeight - a._sortWeight)
-      .slice(0, 70);
-    return merged;
-  }, [allNews, league]);
-  const userTeam = league?.teams?.find((t) => t.id === userTeamId) ?? null;
+  const desk = useMemo(() => buildNewsDeskModel(league, { segment: filter }), [league, filter]);
+  const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
-  const chemistry = teamIntel?.chemistry;
-  const investments = teamIntel?.investments;
   const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel }), [league, teamIntel]);
 
-  const latestFive = useMemo(() => mergedNews.slice(0, 5), [mergedNews]);
+  const latestFive = useMemo(() => desk.merged.slice(0, 5), [desk.merged]);
 
   useEffect(() => {
     if (mode !== 'ticker' || latestFive.length <= 1) return undefined;
-    const timer = setInterval(() => {
-      setActiveIndex((prev) => (prev + 1) % latestFive.length);
-    }, 4000);
+    const timer = setInterval(() => setActiveIndex((prev) => (prev + 1) % latestFive.length), 4000);
     return () => clearInterval(timer);
   }, [mode, latestFive.length]);
 
@@ -93,22 +67,11 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all' }) {
   }, [segment]);
 
   if (mode === 'ticker') {
-    if (!Array.isArray(latestFive) || latestFive.length === 0) return null;
+    if (!latestFive.length) return null;
     return (
       <div className="news-ticker" style={{ background: '#0f172a', borderBottom: '1px solid #334155', padding: '8px 16px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
         {latestFive.map((item, index) => (
-          <span
-            className="ticker-item"
-            key={item?.id ?? `${item?.headline ?? 'news'}_${index}`}
-            style={{
-              display: 'inline-block',
-              marginRight: 48,
-              fontSize: 13,
-              color: tickerColor[item?.priority] ?? '#ffffff',
-              opacity: activeIndex === index ? 1 : 0.55,
-              transition: 'opacity 0.35s ease',
-            }}
-          >
+          <span key={item?.id ?? index} style={{ display: 'inline-block', marginRight: 48, fontSize: 13, color: tickerColor[item?.priority] ?? '#fff', opacity: activeIndex === index ? 1 : 0.55 }}>
             {item?.headline}
           </span>
         ))}
@@ -116,70 +79,47 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all' }) {
     );
   }
 
-  const filtered = mergedNews.filter((item) => {
-    if (filter === 'team') return item?.teamId === userTeamId;
-    if (filter === 'league') return item?.teamId == null;
-    if (filter === 'high') return item?.priority === 'high';
-    if (filter === 'race') return /playoff|award|standing|rival/i.test(item?._categoryLabel ?? '');
-    if (filter === 'moves' || filter === 'transactions') return /trade|agency|draft|transaction/i.test(item?._categoryLabel ?? '');
-    return true;
-  }).slice(0, 50);
-
   return (
-    <div className="card" style={{ padding: 'var(--space-4)' }}>
-      {pressure && (
-        <div style={{ marginBottom: 10, border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface-strong)' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-subtle)', marginBottom: 3 }}>LOCAL PRESSURE BRIEFING</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Fans: <strong style={{ color: 'var(--text)' }}>{pressure.fans.state}</strong> · {pressure.narrativeNotes.fan}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-            Media: <strong style={{ color: 'var(--text)' }}>{pressure.media.state}</strong> · {pressure.narrativeNotes.media}
-          </div>
-          {chemistry?.state ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Locker room: <strong style={{ color: 'var(--text)' }}>{chemistry.state}</strong> · {chemistry.reasons?.[0] ?? 'Chemistry signals are steady.'}
-            </div>
-          ) : null}
-          {investments ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Org investment: <strong style={{ color: 'var(--text)' }}>{investments.stadiumLabel}</strong> · {investments.concessionsLabel} · Scouting {investments.scoutingRegionLabel}
-            </div>
-          ) : null}
-          {teamIntel?.organization ? (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Dev/Recovery: <strong style={{ color: 'var(--text)' }}>{teamIntel.organization.developmentEnvironment.state}</strong> / <strong style={{ color: 'var(--text)' }}>{teamIntel.organization.recoveryEnvironment.state}</strong> · {teamIntel.organization.developmentEnvironment.reasons?.[0]}
-            </div>
-          ) : null}
+    <div className="card" style={{ padding: 'var(--space-4)', display: 'grid', gap: 12 }}>
+      {pressure ? (
+        <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface-strong)', fontSize: 12 }}>
+          <strong>Local Pressure Briefing:</strong> Fans {pressure.fans.state} · Media {pressure.media.state}
         </div>
-      )}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      ) : null}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {[
           ['all', 'ALL'],
           ['team', 'TEAM'],
           ['league', 'LEAGUE'],
           ['transactions', 'TRANSACTIONS'],
-          ['high', 'MAJOR'],
         ].map(([value, label]) => (
           <button key={value} className="btn" onClick={() => setFilter(value)} style={{ opacity: filter === value ? 1 : 0.7 }}>
             {label}
           </button>
         ))}
       </div>
-      {!Array.isArray(filtered) || filtered.length === 0 ? (
-        <div style={{ color: 'var(--text-subtle)' }}>No news yet.</div>
-      ) : (
-        filtered.map((item, index) => (
-          <div key={item?.id ?? `${item?.headline ?? 'item'}_${index}`} style={{ borderLeft: `4px solid ${priorityColor[item?.priority] ?? '#334155'}`, padding: '10px 12px', marginBottom: 10, background: 'var(--surface)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 700 }}>{item?.headline}</div>
-              <span style={{ fontSize: 11, color: 'var(--text-subtle)', border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px' }}>{item?._categoryLabel}</span>
-            </div>
-            <div style={{ color: 'var(--text-muted)' }}>{item?.body}</div>
-            <div style={{ fontSize: 12, color: 'var(--text-subtle)', marginTop: 4 }}>Week {item?.week ?? '-'} · Season {item?.season ?? '-'}{item?.source === 'storyline' ? ' · League storyline' : ''}</div>
-          </div>
-        ))
-      )}
+
+      {desk.featured ? (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Featured Lead Story</h2>
+          <StoryCard item={desk.featured} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+        </section>
+      ) : <div style={{ color: 'var(--text-subtle)' }}>No news yet.</div>}
+
+      <SectionBlock title="Top Stories" stories={desk.topStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <SectionBlock title="Your Team Desk" stories={desk.teamStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <SectionBlock title="League Wide" stories={desk.leagueStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <SectionBlock title="Transactions Wire" stories={desk.transactions} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <SectionBlock title="This Week in the League" stories={desk.recap} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn" onClick={() => onNavigate?.('Team')}>Team</button>
+        <button className="btn" onClick={() => onNavigate?.('League')}>League</button>
+        <button className="btn" onClick={() => onNavigate?.('Schedule')}>Schedule</button>
+        <button className="btn" onClick={() => onNavigate?.('Contract Center')}>Contracts</button>
+        <button className="btn" onClick={() => onNavigate?.('💰 Cap')}>Cap</button>
+      </div>
     </div>
   );
 }
