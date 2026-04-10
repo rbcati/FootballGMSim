@@ -44,6 +44,7 @@ import NewsFeed from "./NewsFeed.jsx";
 import RecordBook from "./RecordBook.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
 import FinancialsView from "./FinancialsView.jsx";
+import ContractCenter from "./ContractCenter.jsx";
 import PostseasonHub from "./PostseasonHub.jsx";
 import TrainingCamp from "./TrainingCamp.jsx";
 import StaffManagement from "./StaffManagement.jsx";
@@ -221,6 +222,7 @@ const BASE_TABS = [
   "Training",
   "Injuries",
   "Financials",
+  "Contract Center",
   "Coaches",
   "Staff",
   "Transactions",
@@ -247,14 +249,14 @@ const BASE_TABS = [
 
 const NAV_GROUPS = [
   { title: "HQ", tabs: ["HQ"] },
-  { title: "Team", tabs: ["Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials"] },
+  { title: "Team", tabs: ["Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
   { title: "League", tabs: ["Standings", "Schedule", "Stats", "Leaders", "Award Races", "Analytics"] },
   { title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
   { title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap"] },
   { title: "Tools", tabs: ["Saves", "God Mode", "🤖 GM Advisor"] },
 ];
 
-const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials"]);
+const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
 const TAB_ALIASES = {
   "Weekly Hub": "HQ",
   Home: "HQ",
@@ -1453,7 +1455,7 @@ function QuickJumpFab({ onNavigate }) {
 }
 
 function getPhasePriorityTabs(phase) {
-  if (phase === "offseason_resign") return ["HQ", "Roster", "Free Agency", "Financials"];
+  if (phase === "offseason_resign") return ["HQ", "Contract Center", "Roster", "Free Agency", "Financials"];
   if (phase === "free_agency") return ["HQ", "Free Agency", "Trades", "Draft"];
   if (phase === "draft") return ["HQ", "Draft", "Mock Draft", "Transactions"];
   if (phase === "preseason") return ["HQ", "Roster Hub", "Depth Chart", "Training"];
@@ -2118,6 +2120,11 @@ export default function LeagueDashboard({
         {activeTab === "Financials" && (
           <TabErrorBoundary label="Financials">
             <FinancialsView league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Contract Center" && (
+          <TabErrorBoundary label="Contract Center">
+            <ContractCenter league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft" && (
