@@ -14,6 +14,7 @@ import {
 import NewsEngine from './news-engine.js';
 import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
 import { evaluateContractOffer } from './contracts/negotiation.js';
+import { evaluateReSigningPriority } from './retention/reSigning.js';
 
 class AiLogic {
 
@@ -325,7 +326,10 @@ class AiLogic {
             const isQB = p.pos === 'QB';
             const maxAge = isQB ? 32 : 30;
 
-            if ((p.ovr ?? 0) >= 80 && (p.age ?? 25) <= maxAge) {
+            const retention = evaluateReSigningPriority(p, team, { players: roster, phase: cache.getMeta()?.phase, week: cache.getMeta()?.currentWeek });
+            const shouldPrioritize = ['cornerstone_priority', 'strong_keep', 'extension_candidate'].includes(retention.recommendation);
+
+            if ((p.ovr ?? 0) >= 76 && (p.age ?? 25) <= maxAge && shouldPrioritize) {
                 const demand = calculateExtensionDemand(p);
                 if (!demand) continue;
 

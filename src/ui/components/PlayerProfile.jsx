@@ -14,6 +14,7 @@ import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatti
 import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile, describeRookieOnboarding } from "../utils/teamIntelligence.js";
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
+import { evaluateReSigningPriority, summarizeRetentionPlan } from "../../core/retention/reSigning.js";
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -824,6 +825,42 @@ export default function PlayerProfile({
                   </span>
                 ))}
               </div>
+            </section>
+          )}
+
+
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Contract Retention Panel</h3>
+              {(() => {
+                const userTeam = teams.find((t) => Number(t.id) === Number(player?.teamId)) || {};
+                const leagueCtx = { players: [], week: 1, phase: '' };
+                const priority = evaluateReSigningPriority(player, userTeam, leagueCtx);
+                const plan = summarizeRetentionPlan(player, { team: userTeam, league: leagueCtx, priority });
+                return (
+                  <>
+                    <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                      <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Contract status</div>
+                        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{priority.expiring ? 'Expiring now' : `${priority.yearsLeft} years remaining`}</div>
+                      </div>
+                      <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Extension eligibility</div>
+                        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{String(priority.extensionReadiness).replace(/_/g, ' ')}</div>
+                      </div>
+                      <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Expected market behavior</div>
+                        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{priority.profile.headline}</div>
+                      </div>
+                      <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Retention recommendation</div>
+                        <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{String(plan.recommendation).replace(/_/g, ' ')}</div>
+                      </div>
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{plan.recommendationSummary}</div>
+                  </>
+                );
+              })()}
             </section>
           )}
 
