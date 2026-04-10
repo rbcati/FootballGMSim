@@ -40,7 +40,7 @@ import React, { useEffect, useCallback, useRef, useState, Component, useMemo } f
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
-import GameSimulation      from './components/GameSimulation.jsx';
+import LiveGameViewer      from './components/LiveGameViewer.jsx';
 import PostGameScreen      from './components/PostGameScreen.jsx';
 import SaveSlotManager     from './components/SaveSlotManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
@@ -118,6 +118,7 @@ function AppContent() {
   const [activeView, setActiveView] = useState('saves');
   const [activeSlot, setActiveSlot] = useState(null);
   const [pendingNewSlot, setPendingNewSlot] = useState(null);
+  const [watchMode, setWatchMode] = useState('watch');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const { soundEnabled, toggleSound } = useSettings();
@@ -868,7 +869,10 @@ function AppContent() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <button
                   className="btn btn-primary"
-                  onClick={() => actions.watchGame()}
+                  onClick={() => {
+                    setWatchMode('watch');
+                    actions.watchGame();
+                  }}
                   disabled={busy}
                   style={{
                     width: '100%', minHeight: 52,
@@ -878,6 +882,38 @@ function AppContent() {
                   }}
                 >
                   {busy ? 'Loading...' : '🏈 Watch Game'}
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setWatchMode('fast');
+                    actions.watchGame();
+                  }}
+                  disabled={busy}
+                  style={{
+                    width: '100%', minHeight: 48,
+                    fontSize: 'var(--text-sm)', fontWeight: 700,
+                    cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
+                  ⚡ Fast Watch
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setWatchMode('instant');
+                    actions.watchGame();
+                  }}
+                  disabled={busy}
+                  style={{
+                    width: '100%', minHeight: 48,
+                    fontSize: 'var(--text-sm)', fontWeight: 700,
+                    cursor: 'pointer',
+                    borderRadius: 'var(--radius-md)',
+                  }}
+                >
+                  ⏭️ Sim to End
                 </button>
                 <button
                   className="btn"
@@ -901,7 +937,7 @@ function AppContent() {
         );
       })()}
 
-      {/* ── Live Game Viewer (premium GameSimulation) ── */}
+      {/* ── Live Game Viewer (watch mode foundation) ── */}
       {userGameLogs && (() => {
         // Determine actual home/away from the latest game event for the user's team
         const userEvent = gameEvents?.find(e => e.homeId === league?.userTeamId || e.awayId === league?.userTeamId);
@@ -917,11 +953,11 @@ function AppContent() {
             actions.clearUserGame();
             setTimeout(() => actions.advanceWeek({ skipUserGame: true }), 200);
           }}>
-            <GameSimulation
+            <LiveGameViewer
               logs={userGameLogs}
               homeTeam={homeTeam}
               awayTeam={awayTeam}
-              userTeamId={league?.userTeamId}
+              initialMode={watchMode}
               onComplete={(scores) => {
                 try {
                   // Belt-and-suspenders save immediately on game completion
@@ -937,9 +973,11 @@ function AppContent() {
                     phase: league?.phase,
                     logs: userGameLogs || [],
                   });
+                  setWatchMode('watch');
                   actions.clearUserGame();
                 } catch (err) {
                   console.error('[App] onComplete failed:', err);
+                  setWatchMode('watch');
                   actions.clearUserGame();
                 }
               }}
