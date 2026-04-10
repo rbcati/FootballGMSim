@@ -5,6 +5,7 @@ import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.j
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { getHQViewModel } from "../../state/selectors.js";
 import { getHQPrimaryAction } from "../utils/hqPrimaryAction.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { EmptyState, SectionCard, StatCard, TeamChip, TrendBadge } from "./common/UiPrimitives.jsx";
 
 function safeNum(value, fallback = 0) {
@@ -34,6 +35,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
   const latest = useMemo(() => findLatestUserCompletedGame(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
+  const latestPresentation = useMemo(() => (
+    latest ? buildCompletedGamePresentation(latest.game, { seasonId: vm.league?.seasonId, week: latest.week, source: "hq_recent_results" }) : null
+  ), [latest, vm.league?.seasonId]);
 
   if (!vm.userTeam) {
     return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
@@ -86,8 +90,13 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
           <div>Next game: {nextGame ? `Week ${nextGame.week} ${nextGame.isHome ? "vs" : "@"} ${nextGame?.opp?.name ?? "TBD"}` : "TBD"}</div>
           <div>Trend: <TrendBadge trend={trend} /> {recent.length ? recent.join(" ") : "No trend yet"}</div>
           <div>
-            <Button size="sm" disabled={!latest?.gameId} onClick={() => latest?.gameId && onOpenBoxScore?.(latest.gameId)}>
-              Open Last Box Score
+            <Button
+              size="sm"
+              disabled={!latestPresentation?.canOpen}
+              onClick={() => latest && openResolvedBoxScore(latest.game, { seasonId: vm.league?.seasonId, week: latest.week, source: "hq_recent_results" }, onOpenBoxScore)}
+              title={latestPresentation?.statusLabel}
+            >
+              {latestPresentation?.ctaLabel ?? "Open Last Box Score"}
             </Button>
           </div>
         </div>

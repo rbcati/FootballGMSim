@@ -1,4 +1,4 @@
-import { canOpenBoxScore } from '../../state/selectors.js';
+import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 
 export function openBoxScore(gameOrId, onOpen) {
   if (typeof onOpen !== 'function') return false;
@@ -6,7 +6,5 @@ export function openBoxScore(gameOrId, onOpen) {
     onOpen(String(gameOrId));
     return true;
   }
-  if (!canOpenBoxScore(gameOrId)) return false;
-  onOpen(String(gameOrId.gameId ?? gameOrId.id));
-  return true;
+  return openResolvedBoxScore(gameOrId, { source: 'openBoxScore' }, onOpen);
 }

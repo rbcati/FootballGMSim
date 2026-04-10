@@ -80,10 +80,10 @@ import {
 } from "../utils/gamePresentation.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
-import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
-import { safeGetLeagueState, canOpenBoxScore, getScheduleViewModel } from "../../state/selectors.js";
+import { safeGetLeagueState, getScheduleViewModel } from "../../state/selectors.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -842,10 +842,9 @@ function ScheduleTab({
       .map((game) => {
         const home = teamById[game.home] ?? { abbr: "HOME" };
         const away = teamById[game.away] ?? { abbr: "AWAY" };
-        const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
-        const archiveQuality = game?.archiveQuality ?? (game?.gameId ? "full" : (gameId ? "partial" : "missing"));
+        const presentation = buildCompletedGamePresentation(game, { seasonId, week: selectedWeek, teamById, source: "schedule_recap" });
         const story = derivePostgameStory({ league, game, week: selectedWeek });
-        return { game, home, away, gameId, archiveQuality, story };
+        return { game, home, away, presentation, story };
       })
       .slice(0, 8)
   ), [games, league, seasonId, selectedWeek, teamById]);
@@ -926,20 +925,20 @@ function ScheduleTab({
             <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Scores + storylines at a glance</span>
           </div>
           <div style={{ display: "grid", gap: 6 }}>
-            {weekRecapItems.map(({ game, away, home, gameId, archiveQuality, story }, idx) => (
+            {weekRecapItems.map(({ game, away, home, presentation, story }, idx) => (
               <button
                 key={`${game.home}-${game.away}-${idx}`}
-                className={`btn-link ${gameId ? "" : "disabled"}`}
-                onClick={gameId ? () => onGameSelect?.(gameId) : undefined}
+                className={`btn-link ${presentation.canOpen ? "" : "disabled"}`}
+                onClick={() => openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_recap" }, onGameSelect)}
                 style={{ textAlign: "left", fontSize: "var(--text-sm)", color: "var(--text-muted)" }}
-                title={gameId ? "View box score" : "Archive unavailable"}
+                title={presentation.canOpen ? presentation.ctaLabel : presentation.statusLabel}
               >
                 <strong style={{ color: "var(--text)" }}>{away.abbr} {game.awayScore} @ {home.abbr} {game.homeScore}</strong>
                 {" · "}
                 {story?.headline ?? "Final"}
                 {" · "}
-                <span style={{ color: archiveQuality === "full" ? "var(--success)" : archiveQuality === "partial" ? "var(--warning)" : "var(--text-subtle)" }}>
-                  {archiveQuality === "full" ? "Full archive" : archiveQuality === "partial" ? "Partial archive" : "Archive unavailable"}
+                <span style={{ color: presentation.archiveQuality === "full" ? "var(--success)" : presentation.archiveQuality === "partial" ? "var(--warning)" : "var(--text-subtle)" }}>
+                  {presentation.statusLabel}
                 </span>
               </button>
             ))}
@@ -1001,9 +1000,10 @@ function ScheduleTab({
             !game.played &&
             nextGameStakes > 50 &&
             selectedWeek === currentWeek;
-          const resolvedGameId = game.played ? resolveCompletedGameId(game, { seasonId, week: selectedWeek }) : null;
-          const archiveQuality = game?.archiveQuality ?? (game?.gameId ? "full" : (resolvedGameId ? "partial" : "missing"));
-          const isClickable = Boolean(canOpenBoxScore({ ...game, gameId: resolvedGameId }) && onGameSelect && archiveQuality !== "missing");
+          const presentation = game.played ? buildCompletedGamePresentation(game, { seasonId, week: selectedWeek, teamById, source: "schedule_card" }) : null;
+          const resolvedGameId = presentation?.resolvedGameId ?? null;
+          const archiveQuality = presentation?.archiveQuality ?? "missing";
+          const isClickable = Boolean(presentation?.canOpen && onGameSelect);
           const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
           const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
           const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
@@ -1019,8 +1019,7 @@ function ScheduleTab({
             return null;
           })();
           const handleCardClick = isClickable
-            ? () =>
-                onGameSelect(resolvedGameId)
+            ? () => openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_card" }, onGameSelect)
             : undefined;
           const scoreTapHandler = createBoxScoreTapHandler({
             gameId: resolvedGameId,
@@ -1122,7 +1121,7 @@ function ScheduleTab({
                     onClick={scoreTapHandler}
                     aria-label={scoreTapHandler ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined}
                     aria-disabled={!scoreTapHandler}
-                    title={scoreTapHandler ? "View box score" : undefined}
+                    title={scoreTapHandler ? presentation?.ctaLabel ?? "View box score" : presentation?.statusLabel}
                   >
                     <span
                       style={{
@@ -1169,7 +1168,7 @@ function ScheduleTab({
                         marginBottom: "var(--space-1)",
                       }}
                     >
-                      View Box Score →
+                      {presentation?.ctaLabel ?? "View Box Score"} →
                     </div>
                   )}
                   {postgame && (
@@ -1848,25 +1847,26 @@ export default function LeagueDashboard({
                         const aId = toId(g.awayId);
                         const hA = teamById[hId]?.abbr ?? "?";
                         const aA = teamById[aId]?.abbr ?? "?";
-                        const gId = resolveCompletedGameId(g, { seasonId: league.seasonId, week: prevWeek });
+                        const compactPresentation = buildCompletedGamePresentation(g, { seasonId: league.seasonId, week: prevWeek, source: "weekly_hub_compact_scores" });
+                        const gId = compactPresentation.resolvedGameId;
                         const compactScoreTapHandler = createBoxScoreTapHandler({
                           gameId: gId,
-                          onOpenBoxScore: (id) => openGameDetail(id, "Weekly Hub"),
+                          onOpenBoxScore: () => openResolvedBoxScore(g, { seasonId: league.seasonId, week: prevWeek, source: "weekly_hub_compact_scores" }, (id) => openGameDetail(id, "Weekly Hub")),
                         });
                         return (
                           <React.Fragment key={i}>
-                            {gId ? (
+                            {compactPresentation.canOpen ? (
                               <button
                                 type="button"
                                 className="compact-score-link"
                                 onClick={compactScoreTapHandler}
                                 aria-label={`Open box score for ${aA} at ${hA}`}
-                                title="View box score"
+                                title={compactPresentation.ctaLabel}
                               >
                                 {aA} {g.awayScore}-{g.homeScore} {hA}
                               </button>
                             ) : (
-                              <span>{aA} {g.awayScore}-{g.homeScore} {hA}</span>
+                              <span title={compactPresentation.statusLabel}>{aA} {g.awayScore}-{g.homeScore} {hA}</span>
                             )}
                             {i < arr.length - 1 ? " · " : ""}
                           </React.Fragment>

@@ -10,7 +10,7 @@ import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity, buildCoachingNarrativeCards } from "../utils/coachingIdentity.js";
 import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
-import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 
 function AnimatedSection({ delay = 0, children, title, icon }) {
   const [visible, setVisible] = useState(false);
@@ -206,7 +206,7 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
         rows.push({
           game,
           week: Number(week?.week ?? league?.week ?? 1),
-          gameId: resolveCompletedGameId(game, { seasonId, week: Number(week?.week ?? 1) }),
+          presentation: buildCompletedGamePresentation(game, { seasonId, week: Number(week?.week ?? 1), source: "season_recap" }),
         });
       }
     }
@@ -395,10 +395,11 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
           ) : completedGames.map((row) => {
             const homeTeam = teams.find((t) => Number(t.id) === Number(row.game.home));
             const awayTeam = teams.find((t) => Number(t.id) === Number(row.game.away));
+            const clickable = Boolean(row.presentation?.canOpen && onOpenBoxScore);
             return (
               <button
-                key={row.gameId}
-                onClick={() => row.gameId ? onOpenBoxScore?.(row.gameId) : null}
+                key={row.presentation?.resolvedGameId ?? `${row.week}-${row.game?.home}-${row.game?.away}`}
+                onClick={() => openResolvedBoxScore(row.game, { seasonId: league?.seasonId, week: row.week, source: "season_recap" }, onOpenBoxScore)}
                 style={{
                   textAlign: "left",
                   border: "1px solid var(--hairline)",
@@ -406,11 +407,13 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
                   padding: "10px 12px",
                   background: "var(--surface-strong, #1a1a2e)",
                   color: "var(--text)",
-                  cursor: row.gameId ? "pointer" : "default",
+                  cursor: clickable ? "pointer" : "default",
+                  opacity: clickable ? 1 : 0.75,
                 }}
+                title={clickable ? row.presentation?.ctaLabel : row.presentation?.statusLabel}
               >
                 <strong>Week {row.week} · {awayTeam?.abbr ?? "AWY"} {row.game.awayScore ?? "—"} - {row.game.homeScore ?? "—"} {homeTeam?.abbr ?? "HME"}</strong>
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{row.gameId ? "Open universal box score" : "Game detail unavailable"}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>{clickable ? row.presentation?.ctaLabel : row.presentation?.statusLabel}</div>
               </button>
             );
           })}

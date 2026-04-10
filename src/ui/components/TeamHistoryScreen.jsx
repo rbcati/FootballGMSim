@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
+import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 
 function buildSeasonTeamMap(season) {
   const map = {};
@@ -59,8 +60,11 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         if (homeId !== targetTeamId && awayId !== targetTeamId) continue;
         rows.push({
           gameId: game?.id,
+          id: game?.id,
           year: season?.year,
           week: game?.week,
+          homeId,
+          awayId,
           home: teamMap[homeId],
           away: teamMap[awayId],
           homeScore: game?.homeScore,
@@ -133,17 +137,18 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
           {completedGameRows.length === 0 ? (
             <EmptyState title="No archived results yet" body="Completed game links appear here as season history builds." />
           ) : completedGameRows.map((row) => {
-            const clickable = Boolean(row.gameId && onOpenBoxScore);
+            const presentation = buildCompletedGamePresentation(row, { seasonId: row.year, week: row.week, source: 'team_history' });
+            const clickable = Boolean(presentation.canOpen && onOpenBoxScore);
             return (
               <button
                 key={`${row.gameId}-${row.year}-${row.week}`}
                 className="btn"
-                onClick={() => clickable ? onOpenBoxScore?.(row.gameId) : null}
+                onClick={() => openResolvedBoxScore(row, { seasonId: row.year, week: row.week, source: 'team_history' }, onOpenBoxScore)}
                 style={{ textAlign: 'left', opacity: clickable ? 1 : 0.7, cursor: clickable ? 'pointer' : 'default' }}
-                title={clickable ? 'View box score' : undefined}
+                title={clickable ? presentation.ctaLabel : presentation.statusLabel}
               >
                 <strong>{row.year} · Week {row.week} · {row.away?.abbr ?? 'AWY'} {row.awayScore ?? '—'}-{row.homeScore ?? '—'} {row.home?.abbr ?? 'HME'}</strong>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{clickable ? 'Open shared game detail' : 'Game detail unavailable for this row'}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{clickable ? presentation.ctaLabel : presentation.statusLabel}</div>
               </button>
             );
           })}

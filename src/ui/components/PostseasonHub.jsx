@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 
 function teamColor(abbr = "") {
   const palette = [
@@ -51,15 +51,15 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam, onOpenBoxScore, seas
 
   const homeWon = game.played && game.homeScore > game.awayScore;
   const awayWon = game.played && game.awayScore > game.homeScore;
-  const gameId = game?.played ? resolveCompletedGameId(game, { seasonId, week }) : null;
-  const clickable = Boolean(gameId && onOpenBoxScore);
+  const presentation = game?.played ? buildCompletedGamePresentation(game, { seasonId, week, source: "postseason_hub" }) : null;
+  const clickable = Boolean(presentation?.canOpen && onOpenBoxScore);
 
   return (
     <div
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
-      onClick={clickable ? () => onOpenBoxScore?.(gameId) : undefined}
-      onKeyDown={clickable ? (e) => ((e.key === "Enter" || e.key === " ") ? onOpenBoxScore?.(gameId) : null) : undefined}
+      onClick={clickable ? () => openResolvedBoxScore(game, { seasonId, week, source: "postseason_hub" }, onOpenBoxScore) : undefined}
+      onKeyDown={clickable ? (e) => ((e.key === "Enter" || e.key === " ") ? openResolvedBoxScore(game, { seasonId, week, source: "postseason_hub" }, onOpenBoxScore) : null) : undefined}
       style={{
         background: "var(--surface)",
         border: `2px solid ${isUserGame ? "var(--accent)" : "var(--hairline)"}`,
@@ -195,6 +195,11 @@ function MatchupCard({ game, teams, userTeamId, seedByTeam, onOpenBoxScore, seas
         >
           {game.played ? "FINAL" : "UPCOMING"}
         </Badge>
+        {game.played && (
+          <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>
+            {presentation?.statusLabel ?? "Archive unavailable"}
+          </div>
+        )}
       </div>
     </div>
   );

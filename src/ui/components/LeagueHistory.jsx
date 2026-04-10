@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -271,17 +272,18 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
             <h4 className="text-sm font-bold mb-2">Completed game archive</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               {(selected?.gameIndex ?? []).slice(-12).reverse().map((game) => {
-                const clickable = Boolean(game?.id && onOpenBoxScore);
+                const presentation = buildCompletedGamePresentation(game, { seasonId: selected?.year, source: "league_history" });
+                const clickable = Boolean(presentation.canOpen && onOpenBoxScore);
                 return (
                   <button
                     key={game.id}
                     className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-left"
-                    onClick={() => clickable ? onOpenBoxScore?.(game.id) : null}
+                    onClick={() => openResolvedBoxScore(game, { seasonId: selected?.year, source: "league_history" }, onOpenBoxScore)}
                     style={{ cursor: clickable ? "pointer" : "default", opacity: clickable ? 1 : 0.75 }}
-                    title={clickable ? "View box score" : undefined}
+                    title={clickable ? presentation.ctaLabel : presentation.statusLabel}
                   >
                     <strong>Week {game.week}: {game.awayScore ?? "—"} - {game.homeScore ?? "—"}</strong>
-                    <div className="text-xs text-[color:var(--text-muted)]">{clickable ? "Open shared game detail" : "Archived index row only"}</div>
+                    <div className="text-xs text-[color:var(--text-muted)]">{clickable ? presentation.ctaLabel : presentation.statusLabel}</div>
                   </button>
                 );
               })}
