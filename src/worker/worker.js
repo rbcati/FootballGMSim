@@ -104,6 +104,7 @@ import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } fro
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
+import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule } from '../core/gameArchive.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2268,9 +2269,22 @@ function applyGameResultToCache(result, week, seasonId) {
   const scoreHome = result.scoreHome ?? result.homeScore ?? 0;
   const scoreAway = result.scoreAway ?? result.awayScore ?? 0;
   const margin = Math.abs(Number(scoreHome) - Number(scoreAway));
-  const archiveQuality = Array.isArray(result.playLogs) && result.playLogs.length > 0
-    ? 'full'
-    : (result.boxScore || result.recap || result.quarterScores || result.linescore ? 'partial' : 'partial');
+  const derivedQualityInput = normalizeArchivedGamePayload({
+    seasonId,
+    week,
+    homeId: hId,
+    awayId: aId,
+    homeScore: scoreHome,
+    awayScore: scoreAway,
+    quarterScores: result.quarterScores ?? result.linescore ?? null,
+    summary: result.summary ?? null,
+    recap: result.recap ?? null,
+    playerStats: result.boxScore ? { home: result.boxScore.home ?? {}, away: result.boxScore.away ?? {} } : null,
+    playLog: Array.isArray(result.playLogs) ? result.playLogs : [],
+    driveSummary: Array.isArray(result.drives) ? result.drives : null,
+    injuries: Array.isArray(result.injuries) ? result.injuries : [],
+  });
+  const archiveQuality = classifyArchiveQuality(derivedQualityInput);
 
   const homeWin = scoreHome > scoreAway;
   const tie     = scoreHome === scoreAway;
@@ -2356,7 +2370,7 @@ function applyGameResultToCache(result, week, seasonId) {
     }
   }
 
-  const archivedGame = buildArchivedGame({
+  const archivedGame = normalizeArchivedGamePayload(buildArchivedGame({
     seasonId,
     week,
     homeId: hId,
@@ -2383,7 +2397,11 @@ function applyGameResultToCache(result, week, seasonId) {
           : 'Balanced game that swung on a few decisive drives.'),
     },
     archiveQuality,
-  });
+  }));
+  const archiveValidation = validateArchivedGame(archivedGame);
+  if (!archiveValidation.valid) {
+    console.warn('[Worker] Archived game validation defects', archivedGame?.id, archiveValidation.defects);
+  }
   cache.addGame(archivedGame);
 }
 
@@ -2949,52 +2967,7 @@ async function handleGetBoxScore({ gameId }, id) {
 
   try {
     const parsedCanonical = String(gameId).match(/(.+)_w(\d+)_(\d+)_(\d+)$/);
-    const buildScheduleFallback = () => {
-      if (!parsedCanonical) return null;
-      const [, seasonKey, weekValue, homeValue, awayValue] = parsedCanonical;
-      const weekNum = Number(weekValue);
-      const seasonVariants = new Set([String(seasonKey), Number(seasonKey)]);
-      const scheduleWeeks = cache.getMeta()?.schedule?.weeks ?? [];
-      for (const weekRow of scheduleWeeks) {
-        const rowWeek = Number(weekRow?.week);
-        if (Number.isFinite(weekNum) && Number.isFinite(rowWeek) && rowWeek !== weekNum) continue;
-        for (const row of weekRow?.games ?? []) {
-          const rowHome = Number(row?.home?.id ?? row?.home ?? row?.homeId);
-          const rowAway = Number(row?.away?.id ?? row?.away ?? row?.awayId);
-          if (
-            !((rowHome === Number(homeValue) && rowAway === Number(awayValue))
-            || (rowHome === Number(awayValue) && rowAway === Number(homeValue)))
-          ) continue;
-          const rowSeason = row?.seasonId ?? cache.getMeta()?.currentSeasonId ?? seasonKey;
-          if (rowSeason != null && seasonVariants.size > 0 && !seasonVariants.has(rowSeason) && !seasonVariants.has(String(rowSeason))) continue;
-          const homeScore = Number(row?.homeScore ?? 0);
-          const awayScore = Number(row?.awayScore ?? 0);
-          const hasFinal = row?.played || row?.homeScore != null || row?.awayScore != null;
-          if (!hasFinal) continue;
-          return {
-            id: gameId,
-            seasonId: rowSeason,
-            week: rowWeek || weekNum,
-            homeId: rowHome,
-            awayId: rowAway,
-            homeScore,
-            awayScore,
-            quarterScores: row?.quarterScores ?? null,
-            recap: row?.recap ?? 'Legacy result restored from schedule final score. Detailed drive/play logs were not archived for this game.',
-            summary: {
-              winnerId: homeScore >= awayScore ? rowHome : rowAway,
-              margin: Math.abs(homeScore - awayScore),
-              storyline: 'Partial archive restored from schedule data. Final score and matchup metadata are available.',
-              leaders: row?.summary?.leaders ?? null,
-            },
-            stats: row?.stats ?? null,
-            drives: row?.drives ?? null,
-            archiveQuality: 'partial',
-          };
-        }
-      }
-      return null;
-    };
+    const buildScheduleFallback = () => recoverArchivedGameFromSchedule(gameId, cache.getMeta());
 
     // Look for the game in the current week's hot cache first
     const hotGame = cache.getWeekGames().find(g => g.id === gameId || g.gameId === gameId);
@@ -3028,6 +3001,8 @@ async function handleGetBoxScore({ gameId }, id) {
 
     if (!game) game = buildScheduleFallback();
 
+    game = normalizeArchivedGamePayload(game);
+
     if (!game) {
       post(toUI.BOX_SCORE, { gameId, game: null, error: 'Game not found' }, id);
       return;
@@ -3051,6 +3026,14 @@ async function handleGetBoxScore({ gameId }, id) {
         awayName:  awayTeam?.name ?? '?',
         awayAbbr:  awayTeam?.abbr ?? '???',
         stats:     game.stats ?? null,
+        teamStats: game.teamStats ?? null,
+        playerStats: game.playerStats ?? null,
+        scoringSummary: game.scoringSummary ?? [],
+        driveSummary: game.driveSummary ?? [],
+        turningPoints: game.turningPoints ?? [],
+        playLog: game.playLog ?? [],
+        notablePerformances: game.notablePerformances ?? [],
+        injuries: game.injuries ?? [],
         recap:     game.recap ?? null,
         summary: game.summary ?? {
           winnerId: (Number(game?.homeScore ?? 0) >= Number(game?.awayScore ?? 0)) ? game.homeId : game.awayId,
@@ -3059,7 +3042,7 @@ async function handleGetBoxScore({ gameId }, id) {
         },
         quarterScores: game.quarterScores ?? null,
         drives: game.drives ?? null,
-        archiveQuality: game.archiveQuality ?? (game?.stats?.playLogs?.length ? 'full' : (game?.stats || game?.summary || game?.recap ? 'partial' : 'missing')),
+        archiveQuality: classifyArchiveQuality(game),
       },
     }, id);
   } catch (err) {

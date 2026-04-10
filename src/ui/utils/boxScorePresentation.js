@@ -70,6 +70,21 @@ export function deriveLeaders(game) {
 
 export function deriveTeamTotals(sideStats) {
   const players = toPlayerArray(sideStats, null);
+  const hasAnyStats = players.some((p) => p?.stats && Object.keys(p.stats).length > 0);
+  if (!hasAnyStats) {
+    return {
+      passYards: null,
+      rushYards: null,
+      turnovers: null,
+      sacks: null,
+      penalties: null,
+      firstDowns: null,
+      totalYards: null,
+      thirdDownMade: null,
+      thirdDownAtt: null,
+      timePossession: null,
+    };
+  }
   return {
     passYards: sum(players.map((p) => p.stats?.passYd)),
     rushYards: sum(players.map((p) => p.stats?.rushYd)),

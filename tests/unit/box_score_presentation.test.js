@@ -33,7 +33,7 @@ describe("box score presentation helpers", () => {
 
   it("handles partial/missing stat data safely", () => {
     expect(toPlayerArray(null, 1)).toEqual([]);
-    expect(deriveTeamTotals(undefined).totalYards).toBe(0);
+    expect(deriveTeamTotals(undefined).totalYards).toBeNull();
   });
 
   it("builds scoring and quarter views from logs when quarter arrays are missing", () => {

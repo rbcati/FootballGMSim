@@ -1,4 +1,5 @@
 import { buildCanonicalGameId, toTeamId } from "../../core/gameIdentity.js";
+import { classifyArchiveQuality, normalizeArchivedGamePayload, recoverArchivedGameFromSchedule } from "../../core/gameArchive.js";
 
 const ARCHIVE_QUALITY_LABELS = {
   full: "Full box score",
@@ -7,12 +8,7 @@ const ARCHIVE_QUALITY_LABELS = {
 };
 
 function detectArchiveQuality(game) {
-  if (game?.archiveQuality === "full" || game?.archiveQuality === "partial" || game?.archiveQuality === "missing") {
-    return game.archiveQuality;
-  }
-  if (Array.isArray(game?.stats?.playLogs) && game.stats.playLogs.length > 0) return "full";
-  if (game?.stats || game?.summary || game?.recap || game?.drives || game?.quarterScores) return "partial";
-  return "missing";
+  return classifyArchiveQuality(game);
 }
 
 function hasFinalScore(game) {
@@ -53,7 +49,7 @@ export function resolveBoxScoreGameId(game, context = {}) {
 }
 
 export function getBoxScoreAvailability(game, context = {}) {
-  const normalized = normalizeCompletedGameRecord(game, context);
+  const normalized = normalizeArchivedGamePayload(normalizeCompletedGameRecord(game, context) ?? game);
   const resolvedGameId = resolveBoxScoreGameId(normalized, context);
   const archiveQuality = detectArchiveQuality(normalized);
   const isCompleted = hasFinalScore(normalized);
@@ -107,13 +103,15 @@ export function openResolvedBoxScore(game, context = {}, onOpen) {
 
 export function getGameDetailPayload(gameId, leagueState) {
   if (!gameId || !leagueState?.schedule?.weeks) return null;
+  const recovered = recoverArchivedGameFromSchedule(gameId, leagueState);
+  if (recovered) return recovered;
   const [seasonPart, weekPart, homePart, awayPart] = String(gameId).split("_");
   const week = Number((weekPart ?? "").replace("w", ""));
   const awayId = Number(awayPart);
   const homeId = Number(homePart);
   for (const weekRow of leagueState.schedule.weeks) {
     for (const game of weekRow?.games ?? []) {
-      const normalized = normalizeCompletedGameRecord(game, { seasonId: seasonPart, week: Number(weekRow?.week ?? week) });
+      const normalized = normalizeArchivedGamePayload(normalizeCompletedGameRecord(game, { seasonId: seasonPart, week: Number(weekRow?.week ?? week) }));
       if (inferCompletedGameIdentity(normalized, { seasonId: seasonPart, week: weekRow?.week }) === gameId) return normalized;
       if (
         Number(weekRow?.week) === week
