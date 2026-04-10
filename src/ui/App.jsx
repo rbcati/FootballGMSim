@@ -791,6 +791,8 @@ function AppContent() {
           onDismissNotification={actions.dismissNotification}
           externalBoxScoreId={externalBoxScoreId}
           onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
+          advanceLabel={getAdvanceLabel()}
+          advanceDisabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
         />
       </ErrorBoundary>
 

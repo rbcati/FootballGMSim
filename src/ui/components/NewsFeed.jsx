@@ -57,9 +57,9 @@ function sortWeight(item, idx) {
   return (item?.sortWeight ?? 0) + priorityBase + sourceBoost + recency;
 }
 
-export default function NewsFeed({ league, mode = 'full' }) {
+export default function NewsFeed({ league, mode = 'full', segment = 'all' }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(segment);
 
   const allNews = useMemo(() => (Array.isArray(league?.newsItems) ? league.newsItems : []), [league?.newsItems]);
   const userTeamId = league?.userTeamId;
@@ -87,6 +87,10 @@ export default function NewsFeed({ league, mode = 'full' }) {
     }, 4000);
     return () => clearInterval(timer);
   }, [mode, latestFive.length]);
+
+  useEffect(() => {
+    setFilter(segment);
+  }, [segment]);
 
   if (mode === 'ticker') {
     if (!Array.isArray(latestFive) || latestFive.length === 0) return null;
@@ -117,7 +121,7 @@ export default function NewsFeed({ league, mode = 'full' }) {
     if (filter === 'league') return item?.teamId == null;
     if (filter === 'high') return item?.priority === 'high';
     if (filter === 'race') return /playoff|award|standing|rival/i.test(item?._categoryLabel ?? '');
-    if (filter === 'moves') return /trade|agency|draft/i.test(item?._categoryLabel ?? '');
+    if (filter === 'moves' || filter === 'transactions') return /trade|agency|draft|transaction/i.test(item?._categoryLabel ?? '');
     return true;
   }).slice(0, 50);
 
@@ -152,11 +156,10 @@ export default function NewsFeed({ league, mode = 'full' }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {[
           ['all', 'ALL'],
-          ['high', 'MAJOR'],
-          ['race', 'RACES'],
-          ['moves', 'MOVES'],
-          ['team', 'YOUR TEAM'],
+          ['team', 'TEAM'],
           ['league', 'LEAGUE'],
+          ['transactions', 'TRANSACTIONS'],
+          ['high', 'MAJOR'],
         ].map(([value, label]) => (
           <button key={value} className="btn" onClick={() => setFilter(value)} style={{ opacity: filter === value ? 1 : 0.7 }}>
             {label}
