@@ -4,6 +4,7 @@ import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { getHQViewModel } from "../../state/selectors.js";
+import { getHQPrimaryAction } from "../utils/hqPrimaryAction.js";
 import { EmptyState, SectionCard, StatCard, TeamChip, TrendBadge } from "./common/UiPrimitives.jsx";
 
 function safeNum(value, fallback = 0) {
@@ -45,7 +46,19 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
   const recent = Array.isArray(team?.recentResults) ? team.recentResults.slice(-5) : [];
   const trend = recent.length ? (recent.filter((r) => r === "W").length >= Math.ceil(recent.length / 2) ? "up" : "down") : "steady";
 
-  const storylines = (weekly?.storylineCards ?? []).slice(0, 4);
+  const storylines = (weekly?.storylineCards ?? []).slice(0, 3);
+  const primaryAction = getHQPrimaryAction(vm.league);
+
+  const handlePrimaryAction = () => {
+    if (!primaryAction?.action) return;
+    if (primaryAction.action.type === 'box_score' && primaryAction.action.gameId) {
+      onOpenBoxScore?.(primaryAction.action.gameId);
+      return;
+    }
+    if (primaryAction.action.type === 'navigate' && primaryAction.action.tab) {
+      onNavigate?.(primaryAction.action.tab);
+    }
+  };
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-3)" }}>
@@ -55,6 +68,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
       >
         <div style={{ display: "grid", gap: 8 }}>
           <div><strong>{vm.league?.year}</strong> · Week {vm.league?.week ?? 1} · {vm.league?.phase ?? "regular"}</div>
+          <button className="btn btn-primary" style={{ textAlign: 'left', minHeight: 46 }} onClick={handlePrimaryAction}>
+            <div style={{ fontWeight: 800 }}>{primaryAction?.label ?? 'Review weekly priorities'}</div>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{primaryAction?.detail}</div>
+          </button>
           <div>Next opponent: {nextGame ? <>Week {nextGame.week} {nextGame.isHome ? "vs" : "@"} <TeamChip team={nextGame.opp} /></> : "No game scheduled"}</div>
           <div>Record context: <strong>{record}</strong></div>
           <div>Availability: {safeNum(weekly?.pressurePoints?.injuriesCount) > 0 ? `${safeNum(weekly?.pressurePoints?.injuriesCount)} injury flags` : "No major injuries"}</div>
@@ -79,9 +96,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
       <SectionCard title="Front Office">
         <div style={{ display: "grid", gap: 8 }}>
           <StatCard label="Cap Space" value={formatMoneyM(cap.capRoom)} note={`Used ${formatMoneyM(cap.capUsed)} / ${formatMoneyM(cap.capTotal)}`} />
-          <div>Roster/contracts: {safeNum(weekly?.pressurePoints?.expiringCount) > 0 ? `${safeNum(weekly?.pressurePoints?.expiringCount)} expiring players.` : "No immediate contract issue."}</div>
+          {safeNum(weekly?.pressurePoints?.expiringCount) > 0 ? <div>Contracts: <strong>{safeNum(weekly?.pressurePoints?.expiringCount)} expiring players.</strong></div> : null}
+          {safeNum(weekly?.pressurePoints?.injuriesCount) > 0 ? <div>Injuries: <strong>{safeNum(weekly?.pressurePoints?.injuriesCount)} players need coverage.</strong></div> : null}
           <div>Trade deadline: {deadline?.isLocked ? "Closed" : `Week ${deadline?.deadlineWeek ?? "—"}${deadline?.isFinalWindow ? " (approaching)" : ""}`}</div>
-          <div>Draft picks: {(team?.picks ?? []).length} currently held.</div>
+          {(team?.picks ?? []).length === 0 ? <div>Draft capital: no picks currently held.</div> : <div>Draft picks: {(team?.picks ?? []).length} currently held.</div>}
         </div>
       </SectionCard>
 
@@ -91,7 +109,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore }) {
         ) : (
           <div style={{ display: "grid", gap: 8 }}>
             {storylines.map((item) => (
-              <div key={item?.id ?? item?.title} className="card" style={{ padding: "var(--space-2) var(--space-3)" }}>
+              <div key={item?.id ?? item?.title} className="card franchise-story-item" style={{ padding: "var(--space-2) var(--space-3)" }}>
                 <strong>{item?.title ?? "League note"}</strong>
                 <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{item?.detail ?? item?.why ?? "No detail"}</div>
               </div>

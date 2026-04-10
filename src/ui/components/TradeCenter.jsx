@@ -17,6 +17,8 @@ import { buildIncomingOfferPresentation, getOfferIdentity } from "../utils/trade
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import { isTradeWindowOpen, getTradeWindowSnapshot } from "../../core/tradeWindow.js";
 import { DeadlineBanner } from "./common/UiPrimitives.jsx";
+import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
+import { getTradeLockReason } from "../utils/tradeLockReason.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -56,13 +58,17 @@ function OvrBadge({ ovr }) {
 }
 
 function PlayerCheckRow({ player, checked, onChange, onNameClick }) {
+  const asset = buildTradeAssetDisplay(player, { type: 'player' });
   return (
     <label className={`trade-asset-row ${checked ? "is-selected" : ""}`}>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(player.id, e.target.checked)} style={{ accentColor: "var(--accent)", width: 15, height: 15 }} />
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(player.id, e.target.checked)} style={{ accentColor: "var(--accent)", width: 16, height: 16 }} />
       <OvrBadge ovr={player.ovr} />
       <span className="trade-asset-row__pos">{player.pos}</span>
-      <span onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }} className="trade-asset-row__name">{player.name}</span>
-      <span className="trade-asset-row__salary">{fmtSalary(player.contract?.baseAnnual)}</span>
+      <span className="trade-asset-row__name" onClick={(e) => { e.preventDefault(); onNameClick?.(player.id); }}>
+        <strong>{asset.title}</strong>
+        <small>{asset.subtitle}</small>
+      </span>
+      <span className="trade-asset-row__salary">{asset.meta}</span>
     </label>
   );
 }
@@ -114,7 +120,8 @@ function CapImpact({ myTeam, theirTeam, myCapAfter, theirCapAfter }) {
 }
 
 function pickLabel(pk) {
-  return `${pk?.season ?? pk?.year ?? "Future"} R${pk?.round ?? "?"}${pk?.isCompensatory ? " COMP" : ""}`;
+  const display = buildTradeAssetDisplay(pk, { type: 'pick' });
+  return `${display.title}${display.subtitle ? ` · ${display.subtitle}` : ''}`;
 }
 
 function PickSelector({ side, picks, onChange, availablePicks = [] }) {
@@ -144,7 +151,7 @@ function PickSelector({ side, picks, onChange, availablePicks = [] }) {
         <div className="trade-pick-controls__chips">
           {picks.map(pk => (
             <span key={pk.id} className="trade-pick-chip">
-              {pickLabel(pk)}
+              🏷️ {pickLabel(pk)}
               <Button style={{ background: "none", border: "none", color: "inherit", padding: 0, fontSize: 12, minHeight: 0 }} onClick={() => onChange(side, pk, true)}>×</Button>
             </span>
           ))}
@@ -411,6 +418,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     }
   }, [initialTradeContext, myAvailablePicks]);
 
+  const lockReason = getTradeLockReason({ tradeLocked, tradeDeadline, phase: league?.phase });
+
   useEffect(() => {
     onTradeContextChange?.({
       partnerTeamId: targetId,
@@ -501,6 +510,12 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
         </div>
       )}
       {/* Header + propose button (original) */}
+      {lockReason ? (
+        <div className="card" style={{ padding: 'var(--space-3)', borderColor: 'var(--danger)', background: 'rgba(255,69,58,0.08)', marginBottom: 'var(--space-2)' }}>
+          <strong style={{ display: 'block', marginBottom: 4 }}>Trading actions are locked</strong>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{lockReason}</span>
+        </div>
+      ) : null}
       {incomingOffers.length > 0 && (
         <div className="card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -569,9 +584,9 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                       </div>
                     ) : null}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button size="sm" onClick={() => actions?.acceptIncomingTrade?.(offer.id)}>Accept</Button>
-                      <Button size="sm" variant="secondary" onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
-                      <Button size="sm" variant="outline" onClick={() => startCounterOffer(offer)}>Counter</Button>
+                      <Button size="sm" disabled={tradeLocked} onClick={() => actions?.acceptIncomingTrade?.(offer.id)}>Accept</Button>
+                      <Button size="sm" variant="secondary" disabled={tradeLocked} onClick={() => actions?.rejectIncomingTrade?.(offer.id)}>Reject</Button>
+                      <Button size="sm" variant="outline" disabled={tradeLocked} onClick={() => startCounterOffer(offer)}>Counter</Button>
                       <Button size="sm" variant="outline" onClick={() => setTargetId(Number(offer.offeringTeamId))}>Open Team</Button>
                     </div>
                   </div>
@@ -674,6 +689,31 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
           </div>
 
           {/* Trade block summary (original) */}
+          <div className="trade-offer-review">
+            <div className="trade-offer-review__col">
+              <h4>You Give</h4>
+              {[...offering].map((id) => myRosterMap.get(id)).filter(Boolean).map((player) => {
+                const display = buildTradeAssetDisplay(player, { type: 'player' });
+                return <div key={`give-${player.id}`} className="trade-offer-review__item"><strong>{display.title}</strong><span>{display.subtitle}</span></div>;
+              })}
+              {myPicks.map((pick) => {
+                const display = buildTradeAssetDisplay(pick, { type: 'pick' });
+                return <div key={`give-p-${pick.id}`} className="trade-offer-review__item pick"><strong>{display.title}</strong><span>{display.subtitle || 'Draft pick'}</span></div>;
+              })}
+            </div>
+            <div className="trade-offer-review__col">
+              <h4>You Receive</h4>
+              {[...receiving].map((id) => theirRosterMap.get(id)).filter(Boolean).map((player) => {
+                const display = buildTradeAssetDisplay(player, { type: 'player' });
+                return <div key={`recv-${player.id}`} className="trade-offer-review__item"><strong>{display.title}</strong><span>{display.subtitle}</span></div>;
+              })}
+              {theirPicks.map((pick) => {
+                const display = buildTradeAssetDisplay(pick, { type: 'pick' });
+                return <div key={`recv-p-${pick.id}`} className="trade-offer-review__item pick"><strong>{display.title}</strong><span>{display.subtitle || 'Draft pick'}</span></div>;
+              })}
+            </div>
+          </div>
+
           <TradeBlockSummary myRosterMap={myRosterMap} theirRosterMap={theirRosterMap} offering={offering} receiving={receiving} myPicks={myPicks} theirPicks={theirPicks} />
 
           {/* Player preview sheet (original) */}

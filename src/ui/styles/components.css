@@ -1023,3 +1023,89 @@ label {
 @media (max-width: 760px) {
   .franchise-hq-flow { grid-template-columns: 1fr; }
 }
+
+/* PR 3.5 shell/schedule/trade cleanup */
+.franchise-status-bar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 0px);
+  z-index: 30;
+  display: grid;
+  gap: 8px;
+  padding: 8px 0 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--hairline);
+  margin-bottom: var(--space-2);
+}
+.franchise-status-bar__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.franchise-status-bar__meta span {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.03);
+}
+.franchise-primary-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: var(--space-2);
+}
+
+.trade-asset-row__name {
+  display: grid;
+  gap: 2px;
+}
+.trade-asset-row__name small {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.trade-offer-review {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: var(--space-3);
+}
+.trade-offer-review__col {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  background: rgba(255,255,255,0.02);
+  display: grid;
+  gap: 6px;
+}
+.trade-offer-review__col h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-subtle);
+}
+.trade-offer-review__item {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  display: grid;
+  gap: 2px;
+  background: rgba(255,255,255,0.015);
+}
+.trade-offer-review__item.pick {
+  border-color: rgba(245,158,11,0.5);
+  background: rgba(245,158,11,0.10);
+}
+.trade-offer-review__item span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+@media (min-width: 900px) {
+  .trade-offer-review {
+    grid-template-columns: 1fr 1fr;
+  }
+}
