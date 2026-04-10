@@ -33,6 +33,7 @@ import React, {
   useCallback,
 } from "react";
 import { getClickableCardProps } from "../utils/clickableCard.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 
 // ── Momentum Bar ───────────────────────────────────────────────────────────────
 // Shows which team has the momentum based on recent plays.
@@ -209,11 +210,9 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
   const { homeId, awayId, homeAbbr, awayAbbr, homeScore, awayScore } = event;
   const isUser = homeId === userTeamId || awayId === userTeamId;
   const finished = !pending;
-  const handleClick = () => {
-    if (!finished || !onOpenBoxScore || !event?.gameId) return;
-    onOpenBoxScore(event.gameId);
-  };
-  const interactive = finished && onOpenBoxScore && event?.gameId;
+  const presentation = buildCompletedGamePresentation(event, { source: "live_game_matchup" });
+  const handleClick = () => openResolvedBoxScore(event, { source: "live_game_matchup" }, onOpenBoxScore);
+  const interactive = finished && Boolean(onOpenBoxScore && presentation.canOpen);
   const interactiveProps = getClickableCardProps({
     onOpen: handleClick,
     disabled: !interactive,

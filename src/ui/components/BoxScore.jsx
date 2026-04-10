@@ -9,6 +9,7 @@ import {
   describeStatLine,
   toPlayerArray,
 } from "../utils/boxScorePresentation.js";
+import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
 
 function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
@@ -87,8 +88,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
     actions?.getBoxScore?.(gameId)
       .then((res) => {
         if (!alive) return;
-        setGame(res?.game ?? null);
-        if (!res?.game) setError(res?.error ?? "Box score unavailable for this game.");
+        const payload = res?.game ?? getGameDetailPayload(gameId, league);
+        setGame(payload ?? null);
+        if (!payload) setError(res?.error ?? "Box score unavailable for this game.");
       })
       .catch((err) => {
         if (!alive) return;
@@ -133,7 +135,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
 
   const headerWeek = game?.week ?? gameId?.match(/_w(\d+)_/)?.[1] ?? "—";
   const headerSeason = game?.seasonId ?? gameId?.split('_w')?.[0] ?? "";
-  const archiveQuality = game?.archiveQuality ?? (game?.stats?.playLogs?.length ? "full" : (game?.stats || game?.summary || game?.recap ? "partial" : "missing"));
+  const availability = buildCompletedGamePresentation(game ?? { gameId }, { source: "game_detail_screen" });
+  const archiveQuality = availability.archiveQuality;
   const hasAnyPayload = Boolean(game && (
     game.homeScore != null || game.awayScore != null || game.stats || game.recap || game.quarterScores
   ));
@@ -153,7 +156,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
         </div>
 
         {loading && <div className="box-score-container"><EmptyState title="Loading box score…" body="Pulling archived game detail and postgame context." /></div>}
-        {!loading && error && !hasAnyPayload && <div className="box-score-container"><EmptyState title="Game archive unavailable" body={unavailableMessage} /></div>}
+        {!loading && error && !hasAnyPayload && <div className="box-score-container"><EmptyState title="Game archive unavailable" body={`${unavailableMessage} (${availability.statusLabel ?? "Archive unavailable"})`} /></div>}
 
         {!loading && hasAnyPayload && game && (
           <div className="box-score-container">

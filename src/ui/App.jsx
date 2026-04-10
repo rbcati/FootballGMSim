@@ -50,7 +50,7 @@ import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
 import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
-import { resolveCompletedGameId } from './utils/gameResultIdentity.js';
+import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
@@ -741,17 +741,23 @@ function AppContent() {
           {authoritativeResults.map((r, i) => {
             const homeWin = r.homeScore > r.awayScore;
             const isUserGame = r.homeId === league.userTeamId || r.awayId === league.userTeamId;
-            const gameId = resolveCompletedGameId(r, {
+            const gamePresentation = buildCompletedGamePresentation(r, {
               seasonId: league?.seasonId,
               week: lastSimWeek ?? Math.max(1, (league?.week ?? 1) - 1),
+              source: 'app_results_ticker',
             });
             return (
               <button
                 key={i}
                 type="button"
-                className={`app-result-item ${isUserGame ? 'app-result-user' : ''} ${gameId ? 'app-result-item-clickable' : ''}`}
-                onClick={gameId ? () => setExternalBoxScoreId(gameId) : undefined}
-                title={gameId ? "Open box score" : undefined}
+                className={`app-result-item ${isUserGame ? 'app-result-user' : ''} ${gamePresentation.canOpen ? 'app-result-item-clickable' : ''}`}
+                onClick={() => openResolvedBoxScore(r, {
+                  seasonId: league?.seasonId,
+                  week: lastSimWeek ?? Math.max(1, (league?.week ?? 1) - 1),
+                  source: 'app_results_ticker',
+                }, setExternalBoxScoreId)}
+                aria-disabled={!gamePresentation.canOpen}
+                title={gamePresentation.canOpen ? gamePresentation.ctaLabel : gamePresentation.statusLabel}
               >
                 <span style={{ fontWeight: homeWin ? 700 : 400, color: homeWin ? 'var(--text)' : 'var(--text-muted)' }}>
                   {r.homeName}
