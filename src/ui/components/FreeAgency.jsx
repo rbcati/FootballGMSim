@@ -1215,7 +1215,7 @@ export default function FreeAgency({
                             <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
                             </TableCell>
-                            <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
+                            <TableCell><OvrBadge ovr={player.ovr} />{player.scoutUncertaintyBand ? <div style={{fontSize:11,color:'var(--text-muted)'}}>{player.scoutConfidenceLabel} · ±{player.scoutUncertaintyBand}</div> : null}</TableCell>
                             <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
                             <TableCell style={{ textAlign: "center" }}>
                               <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
@@ -1291,7 +1291,7 @@ export default function FreeAgency({
                 {sortedAgents.slice(0, 80).map((player, idx) => (
                   <Card key={player.id} className="card-premium" style={{ padding: "var(--space-3)" }}>
                     <div style={{ fontWeight: 700 }}>{idx + 1}. {player.name}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}{player.scoutUncertaintyBand ? ` (Scout ${player.scoutOvr} ±${player.scoutUncertaintyBand})` : ''}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>

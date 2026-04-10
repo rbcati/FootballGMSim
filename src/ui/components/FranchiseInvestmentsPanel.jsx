@@ -60,6 +60,23 @@ export default function FranchiseInvestmentsPanel({ team, actions, compact = fal
           </div>
         </div>
 
+
+        <div style={CARD_STYLE}>
+          <div style={{ fontWeight: 700 }}>Development focus</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sets franchise-wide progression emphasis used in offseason development calculations.</div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[
+              ['balanced', 'Balanced'],
+              ['youth_development', 'Youth Development'],
+              ['win_now', 'Win Now'],
+              ['rehab_recovery', 'Rehab / Recovery'],
+              ['strength_conditioning', 'Strength & Conditioning'],
+            ].map(([key, label]) => (
+              <Button key={key} size="sm" variant={inv.trainingFocus === key ? 'default' : 'outline'} onClick={() => applyUpdate({ trainingFocus: key })}>{label}</Button>
+            ))}
+          </div>
+        </div>
+
         <div style={CARD_STYLE}>
           <div style={{ fontWeight: 700 }}>Scouting department · {inv.scoutingLevel}/5</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Higher quality tightens prospect confidence and improves sleeper visibility without perfect information.</div>
@@ -77,6 +94,7 @@ export default function FranchiseInvestmentsPanel({ team, actions, compact = fal
       </div>
 
       <div style={{ fontSize: 12, color: 'var(--text-muted)', display: 'grid', gap: 3 }}>
+        <div>Training focus: <strong>{summary.trainingFocusLabel}</strong>.</div>
         <div>Effects now: Fans {summary.fanSentimentDelta >= 0 ? '+' : ''}{summary.fanSentimentDelta}, Owner business {summary.ownerBusinessDelta >= 0 ? '+' : ''}{summary.ownerBusinessDelta}, FA appeal {summary.freeAgentAppealDelta >= 0 ? '+' : ''}{summary.freeAgentAppealDelta}.</div>
         <div>Scouting confidence {summary.scoutingConfidenceDelta >= 0 ? '+' : ''}{summary.scoutingConfidenceDelta} with <strong>{summary.scoutingRegionLabel}</strong> emphasis and readable uncertainty.</div>
       </div>

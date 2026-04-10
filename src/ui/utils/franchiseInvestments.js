@@ -6,6 +6,7 @@ const DEFAULT_INVESTMENTS = Object.freeze({
   scoutingRegion: 'national',
   ownerCapacity: 10,
   usedCapacity: 4,
+  trainingFocus: 'balanced',
   history: [],
 });
 
@@ -26,6 +27,7 @@ export function normalizeFranchiseInvestments(raw = {}) {
   merged.usedCapacity = clampInt(merged.usedCapacity, 0, merged.ownerCapacity);
   merged.concessionsStrategy = ['fan_friendly', 'balanced', 'premium'].includes(merged.concessionsStrategy) ? merged.concessionsStrategy : 'balanced';
   merged.scoutingRegion = REGION_OPTIONS.some((r) => r.key === merged.scoutingRegion) ? merged.scoutingRegion : 'national';
+  merged.trainingFocus = ['balanced','youth_development','win_now','rehab_recovery','strength_conditioning'].includes(merged.trainingFocus) ? merged.trainingFocus : 'balanced';
   merged.history = Array.isArray(merged.history) ? merged.history.slice(0, 20) : [];
   return merged;
 }
@@ -83,6 +85,7 @@ export function franchiseInvestmentSummary(team) {
     stadiumLabel: `Fan experience ${inv.stadiumLevel}/5`,
     trainingLabel: `Training complex ${inv.trainingLevel}/5`,
     scoutingLabel: `Scouting department ${inv.scoutingLevel}/5`,
+    trainingFocusLabel: inv.trainingFocus === 'youth_development' ? 'Youth Development' : inv.trainingFocus === 'win_now' ? 'Win Now' : inv.trainingFocus === 'rehab_recovery' ? 'Rehab / Recovery' : inv.trainingFocus === 'strength_conditioning' ? 'Strength & Conditioning' : 'Balanced',
     concessionsLabel: inv.concessionsStrategy === 'fan_friendly' ? 'Fan-friendly pricing' : inv.concessionsStrategy === 'premium' ? 'Premium pricing' : 'Balanced pricing',
     scoutingRegionLabel: REGION_OPTIONS.find((r) => r.key === inv.scoutingRegion)?.label ?? 'National balanced',
   };
