@@ -84,6 +84,12 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/b
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
 import { safeGetLeagueState, getScheduleViewModel } from "../../state/selectors.js";
+import {
+  SHELL_SECTIONS,
+  getShellSectionForDashboardTab,
+  normalizeDashboardTab,
+  normalizeShellSectionId,
+} from "../utils/shellNavigation.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -91,56 +97,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-// Map MobileNav tab IDs → LeagueDashboard tab names
-const MOBILE_TAB_MAP = {
-  weekly: "HQ",
-  home: "HQ",
-  history: "History Hub",
-  standings: "Standings",
-  schedule: "Schedule",
-  roster: "Roster",
-  leaders: "Leaders",
-  freeagency: "Free Agency",
-  trade: "Trades",
-  draft: "Draft",
-  mockdraft: "Mock Draft",
-  coaches: "Coaches",
-  staff: "Staff",
-  training: "Training",
-  injuries: "Injuries",
-  cap: "💰 Cap",
-  advisor: "🤖 GM Advisor",
-
-  // Legacy aliases kept for compatibility with any older callers.
-  hub: "HQ",
-  free_agency: "Free Agency",
-  trades: "Trades",
-  mock_draft: "Mock Draft",
-  financials: "Financials",
-};
-
-// Reverse map: dashboard tab → MobileNav tab ID (canonical IDs only).
-const REVERSE_TAB_MAP = {
-  HQ: "weekly",
-  "Weekly Hub": "weekly",
-  Home: "weekly",
-  "History Hub": "history",
-  Standings: "standings",
-  Schedule: "schedule",
-  Roster: "roster",
-  Leaders: "leaders",
-  "Free Agency": "freeagency",
-  Trades: "trade",
-  Draft: "draft",
-  "Mock Draft": "mockdraft",
-  Coaches: "coaches",
-  Staff: "staff",
-  Training: "training",
-  Injuries: "injuries",
-  "💰 Cap": "cap",
-  "🤖 GM Advisor": "advisor",
-};
 
 // ── TabErrorBoundary ─────────────────────────────────────────────────────────
 // Catches render-phase exceptions inside individual tabs.  A crash in one tab
@@ -208,6 +164,9 @@ class TabErrorBoundary extends Component {
 
 const BASE_TABS = [
   "HQ",
+  "Team",
+  "League",
+  "News",
   "Standings",
   "Schedule",
   "Stats",
@@ -258,12 +217,7 @@ const NAV_GROUPS = [
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
 const TAB_ALIASES = {
-  "Weekly Hub": "HQ",
-  Home: "HQ",
-  "Trade Center": "Transactions",
-  "Trade Finder": "Transactions",
   Trades: "Transactions",
-  "FA Hub": "Free Agency",
 };
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
@@ -1462,6 +1416,26 @@ function getPhasePriorityTabs(phase) {
   return ["HQ", "Game Plan", "Roster", "Transactions"];
 }
 
+const TEAM_SUBNAV = ["Overview", "Roster", "Contracts / Cap", "Stats", "Schedule", "History"];
+const LEAGUE_SUBNAV = ["Standings", "Schedule", "Team Stats", "Player Stats", "Records", "Playoffs"];
+
+function SectionSubnav({ items, activeItem, onChange }) {
+  return (
+    <div className="standings-tabs" style={{ marginBottom: "var(--space-3)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
+      {items.map((item) => (
+        <button
+          key={item}
+          className={`standings-tab${activeItem === item ? " active" : ""}`}
+          onClick={() => onChange(item)}
+          style={{ flexShrink: 0 }}
+        >
+          {item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function LeagueDashboard({
   league,
   lastResults = [],
@@ -1474,6 +1448,8 @@ export default function LeagueDashboard({
   onDismissNotification,
   externalBoxScoreId,
   onConsumeExternalBoxScore,
+  advanceLabel = "Advance",
+  advanceDisabled = false,
 }) {
   const [activeTab, setActiveTab] = useState("HQ");
   const [selectedGameId, setSelectedGameId] = useState(null);
@@ -1485,6 +1461,10 @@ export default function LeagueDashboard({
   const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
+  const [teamSubtab, setTeamSubtab] = useState("Overview");
+  const [leagueSubtab, setLeagueSubtab] = useState("Standings");
+  const [newsSubtab, setNewsSubtab] = useState("All");
+  const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 767 : false));
 
   // Track the previous phase so we can detect transitions.
   const prevPhaseRef = React.useRef(null);
@@ -1508,10 +1488,24 @@ export default function LeagueDashboard({
   //                    DraftComplete panel no longer shows.
   //  playoffs    → auto-switch to Postseason tab on first entry
   useEffect(() => {
-    if (TAB_ALIASES[activeTab]) {
-      setActiveTab(TAB_ALIASES[activeTab]);
+    const normalized = normalizeDashboardTab(activeTab);
+    if (TAB_ALIASES[normalized]) {
+      setActiveTab(TAB_ALIASES[normalized]);
+      return;
+    }
+    if (normalized !== activeTab) {
+      setActiveTab(normalized);
     }
   }, [activeTab]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mql = window.matchMedia("(max-width: 767px)");
+    const onChange = (e) => setIsMobile(e.matches);
+    setIsMobile(mql.matches);
+    mql.addEventListener?.("change", onChange);
+    return () => mql.removeEventListener?.("change", onChange);
+  }, []);
 
   useEffect(() => {
     const prevPhase = prevPhaseRef.current;
@@ -1588,6 +1582,23 @@ export default function LeagueDashboard({
     setLastGameTab(sourceTab);
     setSelectedGameId(gameId);
     setActiveTab("Game Detail");
+  };
+  const activeSection = getShellSectionForDashboardTab(activeTab);
+  const handleSectionChange = (sectionId) => {
+    const normalizedSection = normalizeShellSectionId(sectionId);
+    if (normalizedSection === SHELL_SECTIONS.team) {
+      setActiveTab("Team");
+      return;
+    }
+    if (normalizedSection === SHELL_SECTIONS.league) {
+      setActiveTab("League");
+      return;
+    }
+    if (normalizedSection === SHELL_SECTIONS.news) {
+      setActiveTab("News");
+      return;
+    }
+    setActiveTab("HQ");
   };
 
   return (
@@ -1667,11 +1678,11 @@ export default function LeagueDashboard({
         </div>
       )}
 
-      <div className="franchise-primary-nav">
+      {!isMobile && <div className="franchise-primary-nav">
         {["HQ","Roster","Schedule","Transactions","Standings"].map((tab) => (
           <button key={`shell-${tab}`} className={`standings-tab${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
         ))}
-      </div>
+      </div>}
 
       {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
       {activeTab !== "Home" && activeTab !== "HQ" && league.phase !== "draft" && <div
@@ -1924,7 +1935,7 @@ export default function LeagueDashboard({
 
       </div>}
 
-      <div className="standings-tabs" style={{ marginBottom: "var(--space-2)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
+      {!isMobile && <div className="standings-tabs" style={{ marginBottom: "var(--space-2)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
         {getPhasePriorityTabs(league.phase).filter((tab) => TABS.includes(tab)).map((tab) => (
           <button
             key={`priority-${tab}`}
@@ -1940,10 +1951,10 @@ export default function LeagueDashboard({
             {tab}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* ── Grouped Navigation ── */}
-      <div
+      {!isMobile && <div
         className="standings-tabs dashboard-main-tabs"
         style={{
           marginBottom: "var(--space-4)",
@@ -1980,7 +1991,7 @@ export default function LeagueDashboard({
             </div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
@@ -2013,6 +2024,51 @@ export default function LeagueDashboard({
                 <StatLeadersWidget onPlayerSelect={setSelectedPlayerId} actions={actions} />
               </div>
             )}
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Team" && (
+          <TabErrorBoundary label="Team">
+            <SectionSubnav items={TEAM_SUBNAV} activeItem={teamSubtab} onChange={setTeamSubtab} />
+            {teamSubtab === "Overview" && (
+              <div style={{ display: "grid", gap: "var(--space-3)" }}>
+                <div className="card" style={{ padding: "var(--space-4)" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Team Identity</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                    <TeamLogo abbr={userAbbr} size={48} isUser />
+                    <div>
+                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{userTeam?.name ?? "Your Team"}</div>
+                      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>{userRecord} · OFF {userTeam?.off ?? "—"} · DEF {userTeam?.def ?? "—"} · OVR {userTeam?.ovr ?? "—"}</div>
+                    </div>
+                  </div>
+                </div>
+                <FranchiseSummaryPanel league={league} compact />
+                <div className="card" style={{ padding: "var(--space-4)", color: "var(--text-muted)" }}>
+                  Cap snapshot: <strong style={{ color: "var(--text)" }}>{formatMoneyM(capRoom)}</strong> room · Used {formatMoneyM(capUsed)} / {formatMoneyM(capTotal)}.
+                </div>
+              </div>
+            )}
+            {teamSubtab === "Roster" && <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialState={rosterInitialState} initialViewMode={rosterInitialView} />}
+            {teamSubtab === "Contracts / Cap" && <ContractCenter league={league} actions={actions} />}
+            {teamSubtab === "Stats" && <PlayerStats actions={actions} league={league} onPlayerSelect={setSelectedPlayerId} initialFamily={statsInitialFamily} />}
+            {teamSubtab === "Schedule" && <ScheduleTab schedule={league.schedule} teams={league.teams} currentWeek={league.week} userTeamId={league.userTeamId} nextGameStakes={league.nextGameStakes} seasonId={league.seasonId} onGameSelect={(gameId) => openGameDetail(gameId, "Team")} playoffSeeds={league.playoffSeeds} onTeamRoster={setSelectedTeamId} league={league} onPlayerSelect={setSelectedPlayerId} />}
+            {teamSubtab === "History" && <TeamHistoryScreen league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onBack={() => setTeamSubtab("Overview")} teamId={league?.userTeamId} onOpenBoxScore={(gameId) => openGameDetail(gameId, "Team")} />}
+          </TabErrorBoundary>
+        )}
+        {activeTab === "League" && (
+          <TabErrorBoundary label="League">
+            <SectionSubnav items={LEAGUE_SUBNAV} activeItem={leagueSubtab} onChange={setLeagueSubtab} />
+            {leagueSubtab === "Standings" && <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} leagueSettings={league.settings} />}
+            {leagueSubtab === "Schedule" && <ScheduleTab schedule={league.schedule} teams={league.teams} currentWeek={league.week} userTeamId={league.userTeamId} nextGameStakes={league.nextGameStakes} seasonId={league.seasonId} onGameSelect={(gameId) => openGameDetail(gameId, "League")} playoffSeeds={league.playoffSeeds} onTeamRoster={setSelectedTeamId} league={league} onPlayerSelect={setSelectedPlayerId} />}
+            {leagueSubtab === "Team Stats" && <AnalyticsHub league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onTeamSelect={setSelectedTeamId} onNavigate={setActiveTab} />}
+            {leagueSubtab === "Player Stats" && <Leaders onPlayerSelect={setSelectedPlayerId} userTeamId={league.userTeamId} actions={actions} onNavigate={setActiveTab} league={league} />}
+            {leagueSubtab === "Records" && <RecordBook league={league} />}
+            {leagueSubtab === "Playoffs" && <PostseasonHub league={league} onOpenBoxScore={(gameId) => openGameDetail(gameId, "League")} />}
+          </TabErrorBoundary>
+        )}
+        {activeTab === "News" && (
+          <TabErrorBoundary label="News">
+            <SectionSubnav items={["All", "Team", "League", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
+            <NewsFeed league={league} mode="full" segment={newsSubtab.toLowerCase()} />
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (
@@ -2184,7 +2240,6 @@ export default function LeagueDashboard({
                 {isInitialized && activeTab === "📰 News" && (
           <TabErrorBoundary label="News">
             <NewsFeed league={league} mode="full" />
-            <RecordBook league={league} />
           </TabErrorBoundary>
         )}
 
@@ -2323,15 +2378,16 @@ export default function LeagueDashboard({
       </div>
 
       {/* ── Quick-Jump FAB (mobile) ── */}
-      <QuickJumpFab onNavigate={setActiveTab} />
+      {!isMobile && <QuickJumpFab onNavigate={setActiveTab} />}
 
       {/* ── Mobile Navigation (bottom bar + slide-in) ── */}
       <MobileNav
-        activeTab={REVERSE_TAB_MAP[activeTab] || "weekly"}
-        onTabChange={(mobileTabId) => {
-          const dashTab = MOBILE_TAB_MAP[mobileTabId];
-          if (dashTab) setActiveTab(dashTab);
-        }}
+        activeSection={activeSection}
+        onSectionChange={handleSectionChange}
+        onDestinationChange={(tab) => setActiveTab(tab)}
+        onAdvance={onAdvanceWeek}
+        advanceLabel={advanceLabel}
+        advanceDisabled={advanceDisabled}
         league={league}
       />
 

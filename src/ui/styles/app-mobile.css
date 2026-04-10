@@ -862,6 +862,22 @@
   color: var(--accent);
 }
 
+.mobile-bottom-tab-advance {
+  background: var(--accent);
+  color: #111;
+  border-radius: 999px;
+  min-width: 84px;
+  padding: 8px 10px;
+  font-weight: 700;
+  transform: translateY(-12px);
+  box-shadow: 0 8px 22px rgba(255, 183, 3, 0.35);
+}
+
+.mobile-bottom-tab-advance:disabled {
+  opacity: 0.6;
+  transform: translateY(-8px);
+}
+
 .mobile-bottom-label {
   font-size: 10px;
   line-height: 1.2;
