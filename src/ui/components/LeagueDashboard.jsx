@@ -62,6 +62,8 @@ import CapManager from "./CapManager.jsx";
 import DraftBigBoard from "./DraftBigBoard.jsx";
 import CoachingScreen from "./CoachingScreen.jsx";
 import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
+import { getAppShellContext } from "../utils/appShellContext.js";
+import { getScheduleFiltersState, persistScheduleFiltersState } from "../utils/scheduleFiltersState.js";
 import {
   clampPercent,
   deriveTeamCapSnapshot,
@@ -749,9 +751,16 @@ function ScheduleTab({
   league,
   onPlayerSelect,
 }) {
-  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
-  const [viewMode, setViewMode] = useState("my_team");
-  const [selectedTeamId, setSelectedTeamId] = useState(userTeamId);
+  const initialFilters = useMemo(() => getScheduleFiltersState({
+    selectedWeek: Number(currentWeek ?? 1),
+    viewMode: 'my_team',
+    selectedTeamId: Number(userTeamId ?? 0),
+    statusFilter: 'all',
+  }), [currentWeek, userTeamId]);
+  const [selectedWeek, setSelectedWeek] = useState(initialFilters.selectedWeek);
+  const [viewMode, setViewMode] = useState(initialFilters.viewMode);
+  const [selectedTeamId, setSelectedTeamId] = useState(initialFilters.selectedTeamId);
+  const [statusFilter, setStatusFilter] = useState(initialFilters.statusFilter);
 
   const teamById = useMemo(() => {
     const map = {};
@@ -800,8 +809,12 @@ function ScheduleTab({
     week: selectedWeek,
     teamId: selectedTeamId,
     mode: viewMode === 'selected_team' || viewMode === 'my_team' ? 'team' : 'league',
-    status: viewMode === 'completed_only' ? 'completed' : viewMode === 'upcoming_only' ? 'upcoming' : 'all',
+    status: statusFilter,
   });
+  useEffect(() => {
+    persistScheduleFiltersState({ selectedWeek, viewMode, selectedTeamId, statusFilter });
+  }, [selectedWeek, viewMode, selectedTeamId, statusFilter]);
+
   const filteredGames = (viewMode === 'my_team')
     ? games.filter((game) => {
       const homeId = Number(game?.home?.id ?? game?.home);
@@ -815,6 +828,11 @@ function ScheduleTab({
         return homeId === Number(selectedTeamId) || awayId === Number(selectedTeamId);
       })
       : scheduleModel.games;
+  const visibleGames = filteredGames.filter((game) => {
+    if (statusFilter === 'completed') return Boolean(game?.played);
+    if (statusFilter === 'upcoming') return !Boolean(game?.played);
+    return true;
+  });
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
   const weekRecapItems = useMemo(() => (
     games
@@ -851,9 +869,9 @@ function ScheduleTab({
       >
         <strong style={{ fontSize: "var(--text-xs)", letterSpacing: ".4px", textTransform: "uppercase", color: "var(--text-muted)" }}>Filters</strong>
         <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center", flexWrap: "wrap" }}>
-          <Button size="sm" variant={viewMode === "completed_only" ? "default" : "outline"} onClick={() => setViewMode("completed_only")}>Completed</Button>
-          <Button size="sm" variant={viewMode === "upcoming_only" ? "default" : "outline"} onClick={() => setViewMode("upcoming_only")}>Upcoming</Button>
-          <Button size="sm" variant={viewMode === "all_week" ? "default" : "outline"} onClick={() => setViewMode("all_week")}>All</Button>
+          <Button size="sm" variant={statusFilter === "completed" ? "default" : "outline"} onClick={() => setStatusFilter("completed")}>Completed</Button>
+          <Button size="sm" variant={statusFilter === "upcoming" ? "default" : "outline"} onClick={() => setStatusFilter("upcoming")}>Upcoming</Button>
+          <Button size="sm" variant={statusFilter === "all" ? "default" : "outline"} onClick={() => setStatusFilter("all")}>All</Button>
         </div>
       </div>
       <div
@@ -889,10 +907,9 @@ function ScheduleTab({
         <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ minHeight: 34 }}>
           <option value="my_team">My team schedule</option>
           <option value="selected_team">Selected team</option>
-          <option value="all_week">All games this week</option>
-          <option value="completed_only">Completed only</option>
-          <option value="upcoming_only">Upcoming only</option>
+          <option value="all_week">League view (week slate)</option>
         </select>
+        <span className="badge">{viewMode === 'my_team' ? 'My Team View' : viewMode === 'selected_team' ? 'Selected Team View' : 'League View'}</span>
         {viewMode === "selected_team" && (
           <select value={selectedTeamId ?? ""} onChange={(e) => setSelectedTeamId(Number(e.target.value))} style={{ minHeight: 34 }}>
             {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
@@ -961,7 +978,7 @@ function ScheduleTab({
             </div>
           </div>
         )}
-        {filteredGames.map((game, idx) => {
+        {visibleGames.map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
             abbr: "???",
@@ -1291,7 +1308,7 @@ function ScheduleTab({
           );
         })}
 
-        {games.length === 0 && (
+        {visibleGames.length === 0 && (
           <p
             style={{
               color: "var(--text-muted)",
@@ -1563,6 +1580,7 @@ export default function LeagueDashboard({
   );
   const ownerApprovalText = formatPercent(ownerApproval, "—");
   const pressure = deriveFranchisePressure(league);
+  const shell = getAppShellContext(league);
   const teamSummaryNav = () => setActiveTab("Roster Hub");
   const openGameDetail = (gameId, sourceTab = activeTab) => {
     if (!gameId) return;
@@ -1573,15 +1591,8 @@ export default function LeagueDashboard({
 
   return (
     <div>
-      {/* ── Hub Header — compact single row ── */}
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-3)",
-        padding: "var(--space-3) 0",
-        marginBottom: "var(--space-2)",
-        borderBottom: "1px solid var(--hairline)",
-      }}>
+      {/* ── Franchise shell status bar ── */}
+      <div className="franchise-status-bar">
         <button
           type="button"
           className="team-summary-nav-card clickable-card"
@@ -1620,6 +1631,13 @@ export default function LeagueDashboard({
             }}
           />
         </div>
+        <div className="franchise-status-bar__meta">
+          <span><strong>{shell.teamAbbr}</strong> {shell.teamName}</span>
+          <span>{shell.year}</span>
+          <span>Week {shell.week}</span>
+          <span style={{ textTransform: 'capitalize' }}>{shell.phase}</span>
+          <span>Cap {shell.capSummary}</span>
+        </div>
       </div>
 
       {/* ── Contextual Action Banners (compact) ── */}
@@ -1647,6 +1665,12 @@ export default function LeagueDashboard({
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
+
+      <div className="franchise-primary-nav">
+        {["HQ","Roster","Schedule","Transactions","Standings"].map((tab) => (
+          <button key={`shell-${tab}`} className={`standings-tab${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
+        ))}
+      </div>
 
       {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
       {activeTab !== "Home" && activeTab !== "HQ" && league.phase !== "draft" && <div
