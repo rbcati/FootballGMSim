@@ -7,6 +7,7 @@ import {
   deriveScoringSummary,
   deriveTeamTotals,
   describeStatLine,
+  getGameDetailSections,
   toPlayerArray,
 } from "../utils/boxScorePresentation.js";
 import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
@@ -120,6 +121,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const quarterScores = useMemo(() => deriveQuarterScores(game, game?.playLog ?? game?.stats?.playLogs ?? []), [game]);
   const driveSummary = Array.isArray(game?.driveSummary) ? game.driveSummary : (Array.isArray(game?.drives) ? game.drives : []);
   const playLog = Array.isArray(game?.playLog) ? game.playLog : (Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : []);
+  const sections = useMemo(() => getGameDetailSections(game ?? {}), [game]);
 
   const awayPlayers = useMemo(() => toPlayerArray(game?.playerStats?.away ?? game?.stats?.away, game?.awayId), [game]);
   const homePlayers = useMemo(() => toPlayerArray(game?.playerStats?.home ?? game?.stats?.home, game?.homeId), [game]);
@@ -190,6 +192,11 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <div className="bs-list-item" style={{ marginBottom: 10 }}>
                 {game?.summary?.storyline ?? game?.recap ?? "A complete box score was archived for this matchup."}
               </div>
+              {game?.summary?.playerOfGame?.name && (
+                <div className="bs-list-item" style={{ marginBottom: 10 }}>
+                  <strong>Player of the game:</strong> <PlayerButton player={game.summary.playerOfGame} onSelect={onPlayerSelect} />
+                </div>
+              )}
               <div className="bs-leaders-grid">
                 <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} />
                 <LeaderCard label="Rushing leader" player={leaders.rush} line={describeStatLine(leaders.rush, ["rushAtt", "rushYd", "rushTD"])} onPlayerSelect={onPlayerSelect} />
@@ -198,7 +205,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               </div>
             </section>
 
-            <section className="bs-section">
+            {sections.teamComparison && <section className="bs-section">
               <h4>Team comparison</h4>
               <div className="bs-compare-grid">
                 <StatCompareRow label="Total Yards" awayValue={teamTotals.away.totalYards ?? "Unavailable"} homeValue={teamTotals.home.totalYards ?? "Unavailable"} />
@@ -208,7 +215,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 <StatCompareRow label="Sacks" awayValue={teamTotals.away.sacks ?? "Unavailable"} homeValue={teamTotals.home.sacks ?? "Unavailable"} />
                 <StatCompareRow label="3rd Down" awayValue={teamTotals.away.thirdDownAtt != null ? `${teamTotals.away.thirdDownMade ?? 0}/${teamTotals.away.thirdDownAtt}` : "Unavailable"} homeValue={teamTotals.home.thirdDownAtt != null ? `${teamTotals.home.thirdDownMade ?? 0}/${teamTotals.home.thirdDownAtt}` : "Unavailable"} />
               </div>
-            </section>
+            </section>}
 
             <PlayerTable
               title="Passing leaders"
@@ -239,7 +246,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 onPlayerSelect={onPlayerSelect}
               />
             ) : null}
-            <section className="bs-section">
+            {sections.scoringSummary && <section className="bs-section">
               <h4>Scoring summary</h4>
               {!!scoring.length ? (
                 <div className="bs-list">
@@ -252,9 +259,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                   ))}
                 </div>
               ) : <EmptyState title="No scoring log available" body="Scoring-play logs were not archived for this matchup." />}
-            </section>
+            </section>}
 
-            <section className="bs-section">
+            {sections.quarterByQuarter && <section className="bs-section">
               <h4>Quarter-by-quarter</h4>
               <div className="bs-table-wrap">
                 <table className="box-score-table">
@@ -265,8 +272,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                   </tbody>
                 </table>
               </div>
-            </section>
-            <section className="bs-section">
+            </section>}
+            {sections.driveSummary && <section className="bs-section">
               <h4>Drive summary</h4>
               {!!driveSummary.length ? (
                 <div className="bs-list">
@@ -279,9 +286,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                   ))}
                 </div>
               ) : <EmptyState title="No drive chart available" body="This game was simulated with summary-only detail." />}
-            </section>
+            </section>}
 
-            <section className="bs-section">
+            {sections.turningPoints && <section className="bs-section">
                 <h4>Turning points</h4>
                 {!!momentumNotes.length ?
                 <div className="bs-list">
@@ -290,8 +297,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                   ))}
                 </div>
               : <EmptyState title="No turning points available" body="Turning-point annotations are unavailable for this game." />}
-              </section>
-            <section className="bs-section">
+              </section>}
+            {sections.playLog && <section className="bs-section">
               <h4>Play log</h4>
               {!!playLog.length ? (
                 <div className="bs-list">
@@ -304,7 +311,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                   ))}
                 </div>
               ) : <EmptyState title="No play log archived" body="Full event-by-event tracking was not available for this game." />}
-            </section>
+            </section>}
 
             {game?.recap && (
               <section className="bs-section">

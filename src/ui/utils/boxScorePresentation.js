@@ -178,3 +178,21 @@ export function deriveMomentumNotes(logs = []) {
     text: log.text ?? "Momentum shifted",
   }));
 }
+
+export function getGameDetailSections(game = {}) {
+  const scoringCount = Array.isArray(game?.scoringSummary) ? game.scoringSummary.length : 0;
+  const driveCount = Array.isArray(game?.driveSummary) ? game.driveSummary.length : (Array.isArray(game?.drives) ? game.drives.length : 0);
+  const turningCount = Array.isArray(game?.turningPoints) ? game.turningPoints.length : 0;
+  const playLogCount = Array.isArray(game?.playLog) ? game.playLog.length : (Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs.length : 0);
+  const hasTeamStats = Boolean(game?.teamStats?.home || game?.teamStats?.away || game?.playerStats || game?.stats);
+  return {
+    recap: Boolean(game?.summary?.storyline || game?.recap),
+    teamComparison: hasTeamStats,
+    leaders: hasTeamStats,
+    scoringSummary: scoringCount > 0 || playLogCount > 0,
+    driveSummary: driveCount > 0,
+    turningPoints: turningCount > 0 || playLogCount > 0,
+    playLog: playLogCount > 0,
+    quarterByQuarter: Boolean(game?.quarterScores || (game?.homeScore != null && game?.awayScore != null)),
+  };
+}
