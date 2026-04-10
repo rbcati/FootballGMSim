@@ -62,6 +62,9 @@ import GMAdvisor from "./GMAdvisor.jsx";
 import CapManager from "./CapManager.jsx";
 import DraftBigBoard from "./DraftBigBoard.jsx";
 import CoachingScreen from "./CoachingScreen.jsx";
+import TeamHub from "./TeamHub.jsx";
+import LeagueHub from "./LeagueHub.jsx";
+import SectionSubnav from "./SectionSubnav.jsx";
 import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
 import { getAppShellContext } from "../utils/appShellContext.js";
 import { getScheduleFiltersState, persistScheduleFiltersState } from "../utils/scheduleFiltersState.js";
@@ -1416,26 +1419,6 @@ function getPhasePriorityTabs(phase) {
   return ["HQ", "Game Plan", "Roster", "Transactions"];
 }
 
-const TEAM_SUBNAV = ["Overview", "Roster", "Contracts / Cap", "Stats", "Schedule", "History"];
-const LEAGUE_SUBNAV = ["Standings", "Schedule", "Team Stats", "Player Stats", "Records", "Playoffs"];
-
-function SectionSubnav({ items, activeItem, onChange }) {
-  return (
-    <div className="standings-tabs" style={{ marginBottom: "var(--space-3)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
-      {items.map((item) => (
-        <button
-          key={item}
-          className={`standings-tab${activeItem === item ? " active" : ""}`}
-          onClick={() => onChange(item)}
-          style={{ flexShrink: 0 }}
-        >
-          {item}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function LeagueDashboard({
   league,
   lastResults = [],
@@ -1461,8 +1444,6 @@ export default function LeagueDashboard({
   const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
-  const [teamSubtab, setTeamSubtab] = useState("Overview");
-  const [leagueSubtab, setLeagueSubtab] = useState("Standings");
   const [newsSubtab, setNewsSubtab] = useState("All");
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 767 : false));
 
@@ -2028,41 +2009,65 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Team" && (
           <TabErrorBoundary label="Team">
-            <SectionSubnav items={TEAM_SUBNAV} activeItem={teamSubtab} onChange={setTeamSubtab} />
-            {teamSubtab === "Overview" && (
-              <div style={{ display: "grid", gap: "var(--space-3)" }}>
-                <div className="card" style={{ padding: "var(--space-4)" }}>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Team Identity</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
-                    <TeamLogo abbr={userAbbr} size={48} isUser />
-                    <div>
-                      <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{userTeam?.name ?? "Your Team"}</div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>{userRecord} · OFF {userTeam?.off ?? "—"} · DEF {userTeam?.def ?? "—"} · OVR {userTeam?.ovr ?? "—"}</div>
-                    </div>
-                  </div>
-                </div>
-                <FranchiseSummaryPanel league={league} compact />
-                <div className="card" style={{ padding: "var(--space-4)", color: "var(--text-muted)" }}>
-                  Cap snapshot: <strong style={{ color: "var(--text)" }}>{formatMoneyM(capRoom)}</strong> room · Used {formatMoneyM(capUsed)} / {formatMoneyM(capTotal)}.
-                </div>
-              </div>
-            )}
-            {teamSubtab === "Roster" && <Roster league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialState={rosterInitialState} initialViewMode={rosterInitialView} />}
-            {teamSubtab === "Contracts / Cap" && <ContractCenter league={league} actions={actions} />}
-            {teamSubtab === "Stats" && <PlayerStats actions={actions} league={league} onPlayerSelect={setSelectedPlayerId} initialFamily={statsInitialFamily} />}
-            {teamSubtab === "Schedule" && <ScheduleTab schedule={league.schedule} teams={league.teams} currentWeek={league.week} userTeamId={league.userTeamId} nextGameStakes={league.nextGameStakes} seasonId={league.seasonId} onGameSelect={(gameId) => openGameDetail(gameId, "Team")} playoffSeeds={league.playoffSeeds} onTeamRoster={setSelectedTeamId} league={league} onPlayerSelect={setSelectedPlayerId} />}
-            {teamSubtab === "History" && <TeamHistoryScreen league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onBack={() => setTeamSubtab("Overview")} teamId={league?.userTeamId} onOpenBoxScore={(gameId) => openGameDetail(gameId, "Team")} />}
+            <TeamHub
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
+              onOpenGameDetail={openGameDetail}
+              rosterInitialState={rosterInitialState}
+              rosterInitialView={rosterInitialView}
+              statsInitialFamily={statsInitialFamily}
+              renderSchedule={(sourceTab = "Team") => (
+                <ScheduleTab
+                  schedule={league.schedule}
+                  teams={league.teams}
+                  currentWeek={league.week}
+                  userTeamId={league.userTeamId}
+                  nextGameStakes={league.nextGameStakes}
+                  seasonId={league.seasonId}
+                  onGameSelect={(gameId) => openGameDetail(gameId, sourceTab)}
+                  playoffSeeds={league.playoffSeeds}
+                  onTeamRoster={setSelectedTeamId}
+                  league={league}
+                  onPlayerSelect={setSelectedPlayerId}
+                />
+              )}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "League" && (
           <TabErrorBoundary label="League">
-            <SectionSubnav items={LEAGUE_SUBNAV} activeItem={leagueSubtab} onChange={setLeagueSubtab} />
-            {leagueSubtab === "Standings" && <StandingsTab teams={league.teams} userTeamId={league.userTeamId} onTeamSelect={setSelectedTeamId} leagueSettings={league.settings} />}
-            {leagueSubtab === "Schedule" && <ScheduleTab schedule={league.schedule} teams={league.teams} currentWeek={league.week} userTeamId={league.userTeamId} nextGameStakes={league.nextGameStakes} seasonId={league.seasonId} onGameSelect={(gameId) => openGameDetail(gameId, "League")} playoffSeeds={league.playoffSeeds} onTeamRoster={setSelectedTeamId} league={league} onPlayerSelect={setSelectedPlayerId} />}
-            {leagueSubtab === "Team Stats" && <AnalyticsHub league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onTeamSelect={setSelectedTeamId} onNavigate={setActiveTab} />}
-            {leagueSubtab === "Player Stats" && <Leaders onPlayerSelect={setSelectedPlayerId} userTeamId={league.userTeamId} actions={actions} onNavigate={setActiveTab} league={league} />}
-            {leagueSubtab === "Records" && <RecordBook league={league} />}
-            {leagueSubtab === "Playoffs" && <PostseasonHub league={league} onOpenBoxScore={(gameId) => openGameDetail(gameId, "League")} />}
+            <LeagueHub
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
+              onOpenGameDetail={openGameDetail}
+              renderSchedule={(sourceTab = "League") => (
+                <ScheduleTab
+                  schedule={league.schedule}
+                  teams={league.teams}
+                  currentWeek={league.week}
+                  userTeamId={league.userTeamId}
+                  nextGameStakes={league.nextGameStakes}
+                  seasonId={league.seasonId}
+                  onGameSelect={(gameId) => openGameDetail(gameId, sourceTab)}
+                  playoffSeeds={league.playoffSeeds}
+                  onTeamRoster={setSelectedTeamId}
+                  league={league}
+                  onPlayerSelect={setSelectedPlayerId}
+                />
+              )}
+              renderStandings={() => (
+                <StandingsTab
+                  teams={league.teams}
+                  userTeamId={league.userTeamId}
+                  onTeamSelect={setSelectedTeamId}
+                  leagueSettings={league.settings}
+                />
+              )}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "News" && (
