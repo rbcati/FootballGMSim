@@ -302,8 +302,15 @@ export function processPlayerProgression(players, options = {}) {
     const ovrAfter         = calculateOvr(player.pos, player.ratings);
     const progressionDelta = ovrAfter - ovrBefore;
 
-    player.ovr              = ovrAfter;
+    player.ovr = ovrAfter;
     player.progressionDelta = progressionDelta;
+    player.developmentContext = {
+      baseAgeCurve: age <= 25 ? 'growth' : age <= 29 ? 'prime' : 'decline',
+      trainingFocus: org?.trainingFocus ?? 'balanced',
+      staffDevelopmentModifier: Math.round((Number(org?.staffDevelopmentModifier ?? 0) || 0) * 1000) / 10,
+      playingTimeModifier: player.depthRole === 'starter' ? '+ starter reps' : player.depthRole === 'bench' ? '- limited reps' : 'neutral reps',
+      varianceTag: breakoutEvent ? 'breakout variance' : bustEvent ? 'bust variance' : wallEvent ? 'wall variance' : 'normal variance',
+    };
 
     // ── Classify for news ──────────────────────────────────────────────────
     if (progressionDelta >= 4) {

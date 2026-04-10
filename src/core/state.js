@@ -449,6 +449,7 @@ export const State = {
         scoutingRegion: 'national',
         ownerCapacity: 10,
         usedCapacity: 4,
+        trainingFocus: 'balanced',
         history: [],
       };
       migratedTeam.rivalTeamId = migratedTeam?.rivalTeamId ?? null;

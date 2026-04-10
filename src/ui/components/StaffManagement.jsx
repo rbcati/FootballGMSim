@@ -1,877 +1,152 @@
-/**
- * StaffManagement.jsx — Unified staff management screen for Coaches, Scouts, and Medical Staff.
- * Extends the existing coaching system with scouting department and physio staff.
- * Generates staff data client-side using a seeded random based on league year.
- *
- * Props:
- *  - league: league view-model from worker
- *  - actions: worker action dispatchers
- */
+import React, { useCallback, useMemo, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
+import FranchiseInvestmentsPanel from './FranchiseInvestmentsPanel.jsx';
 
-import React, { useState, useMemo, useCallback } from "react";
-import { deriveFranchisePressure } from "../utils/pressureModel.js";
-import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
-import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
-import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
-import { ScreenHeader, SectionCard, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
+const ROLE_ORDER = ['headCoach', 'offCoordinator', 'defCoordinator', 'scoutDirector', 'headTrainer'];
+const ROLE_LABELS = {
+  headCoach: 'Head Coach',
+  offCoordinator: 'Offensive Coordinator',
+  defCoordinator: 'Defensive Coordinator',
+  scoutDirector: 'Scout Director',
+  headTrainer: 'Head Trainer',
+};
 
-// ── Seeded RNG ──────────────────────────────────────────────────────────────
-
-function createRng(seed) {
-  let s = seed | 0;
-  return () => {
-    s = (s * 1664525 + 1013904223) | 0;
-    return ((s >>> 0) / 0x100000000);
-  };
+function fmtMoney(value) {
+  return `$${Number(value || 0).toFixed(1)}M`;
 }
 
-function pick(rng, arr) {
-  return arr[Math.floor(rng() * arr.length)];
+function effectSummary(roleKey, member) {
+  const s = member?.specialtyRatings ?? {};
+  if (roleKey === 'headCoach') return `Leadership ${s.leadership ?? 0} · Development ${s.playerDevelopment ?? 0}`;
+  if (roleKey === 'offCoordinator') return `QB dev ${s.qbDevelopment ?? 0} · Skill dev ${s.skillPlayerDevelopment ?? 0}`;
+  if (roleKey === 'defCoordinator') return `Front seven ${s.frontSeven ?? 0} · Coverage ${s.coverage ?? 0}`;
+  if (roleKey === 'scoutDirector') return `College ${s.collegeScouting ?? 0} · Pro ${s.proScouting ?? 0} · Potential ${s.potentialEvaluation ?? 0}`;
+  return `Injury prevention ${s.injuryPrevention ?? 0} · Recovery ${s.recovery ?? 0}`;
 }
 
-function randInt(rng, min, max) {
-  return min + Math.floor(rng() * (max - min + 1));
+function valueScore(candidate) {
+  const specialty = Object.values(candidate?.specialtyRatings ?? {}).reduce((sum, n) => sum + Number(n || 0), 0);
+  return Math.round((specialty / Math.max(1, Object.keys(candidate?.specialtyRatings ?? {}).length)) - (Number(candidate?.annualSalary || 0) * 2));
 }
-
-function randFloat(rng, min, max, decimals = 1) {
-  return +(min + rng() * (max - min)).toFixed(decimals);
-}
-
-// ── Name pools ──────────────────────────────────────────────────────────────
-
-const FIRST_NAMES = [
-  "James", "Mike", "David", "Chris", "Steve", "Mark", "Tom", "Dan",
-  "Rick", "Brian", "Tony", "Bill", "Greg", "Jeff", "Paul", "Scott",
-  "Kevin", "Eric", "Jason", "Ryan", "Matt", "John", "Tim", "Rob",
-  "Pete", "Frank", "Ray", "Ken", "Joe", "Ed", "Ben", "Sam",
-];
-
-const LAST_NAMES = [
-  "Johnson", "Williams", "Brown", "Davis", "Miller", "Wilson", "Moore",
-  "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin",
-  "Thompson", "Robinson", "Clark", "Lewis", "Lee", "Walker", "Hall",
-  "Allen", "Young", "King", "Wright", "Scott", "Green", "Baker",
-  "Adams", "Nelson", "Carter", "Mitchell", "Perez", "Roberts", "Turner",
-  "Phillips", "Campbell", "Parker", "Evans", "Edwards", "Collins", "Stewart",
-];
-
-// ── Trait definitions ───────────────────────────────────────────────────────
-
-const SCOUT_TRAITS = [
-  {
-    id: "eye_for_talent",
-    name: "Eye for Talent",
-    icon: "👁️",
-    color: "#a855f7",
-    bg: "rgba(168,85,247,0.12)",
-    description: "More accurate prospect overall ratings. Draft board grades within ±2 of true value.",
-  },
-  {
-    id: "combine_guru",
-    name: "Combine Guru",
-    icon: "🏋️",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.12)",
-    description: "Better athletic measurables analysis. Identifies combine risers/fallers earlier.",
-  },
-  {
-    id: "interview_expert",
-    name: "Interview Expert",
-    icon: "🗣️",
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.12)",
-    description: "Reveals character and leadership traits before the draft. Avoids bust personalities.",
-  },
-  {
-    id: "film_junkie",
-    name: "Film Junkie",
-    icon: "🎬",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.12)",
-    description: "Uncovers hidden potential through game film. Reveals prospect potential earlier.",
-  },
-  {
-    id: "regional_specialist",
-    name: "Regional Specialist",
-    icon: "🗺️",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.12)",
-    description: "Deep contacts in specific conference. Discovers small-school gems others miss.",
-  },
-];
-
-const PHYSIO_TRAITS = [
-  {
-    id: "injury_prevention",
-    name: "Injury Prevention",
-    icon: "🛡️",
-    color: "#22c55e",
-    bg: "rgba(34,197,94,0.12)",
-    description: "Reduces team injury rate by up to 15%. Proactive load management protocols.",
-  },
-  {
-    id: "fast_recovery",
-    name: "Fast Recovery",
-    icon: "⚡",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.12)",
-    description: "Players return from injury 20% faster. Advanced rehabilitation techniques.",
-  },
-  {
-    id: "conditioning_expert",
-    name: "Conditioning Expert",
-    icon: "💪",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.12)",
-    description: "Improved stamina and durability ratings. Players maintain peak performance longer.",
-  },
-  {
-    id: "sports_science",
-    name: "Sports Science",
-    icon: "🔬",
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.12)",
-    description: "Data-driven training optimization. Slows age-related decline by 1-2 seasons.",
-  },
-  {
-    id: "rehab_specialist",
-    name: "Rehab Specialist",
-    icon: "🏥",
-    color: "#a855f7",
-    bg: "rgba(168,85,247,0.12)",
-    description: "Players return from major injuries at higher capacity. Reduces re-injury risk.",
-  },
-];
-
-const COACH_ROLES = ["Head Coach", "Offensive Coordinator", "Defensive Coordinator"];
-
-const SCOUT_ROLES = [
-  "Director of Scouting", "National Scout", "Area Scout",
-  "Pro Scout", "College Scout",
-];
-
-const PHYSIO_ROLES = [
-  "Head Athletic Trainer", "Physical Therapist", "Strength & Conditioning Coach",
-  "Team Physician", "Recovery Specialist",
-];
-
-// ── Staff generator ─────────────────────────────────────────────────────────
-
-function generateStaffPool(leagueYear, teamId) {
-  const baseSeed = (leagueYear || 2024) * 10000 + (teamId || 0);
-
-  function buildMember(rng, role, traitPool, idx) {
-    const firstName = pick(rng, FIRST_NAMES);
-    const lastName = pick(rng, LAST_NAMES);
-    const numTraits = randInt(rng, 1, 3);
-    const shuffled = [...traitPool].sort(() => rng() - 0.5);
-    const traits = shuffled.slice(0, numTraits);
-    const rating = randInt(rng, 1, 5);
-    const age = randInt(rng, 32, 65);
-    const experience = randInt(rng, 1, Math.min(30, age - 25));
-    const salary = randFloat(rng, 0.5, 3.5 + rating * 0.8, 1);
-    const contractYears = randInt(rng, 1, 4);
-
-    // Performance metrics seeded from rating + random variance
-    const perfBase = rating * 18 + randInt(rng, -8, 8);
-    const performance = Math.max(10, Math.min(99, perfBase));
-
-    return {
-      id: `staff_${role.replace(/\s+/g, "_").toLowerCase()}_${idx}_${baseSeed}`,
-      name: `${firstName} ${lastName}`,
-      role,
-      age,
-      experience,
-      salary,
-      contractYears,
-      traits,
-      rating,
-      performance,
-    };
-  }
-
-  // Current staff (hired)
-  const rngCurrent = createRng(baseSeed);
-  const coaches = COACH_ROLES.map((role, i) => buildMember(rngCurrent, role, [], i));
-  const scouts = SCOUT_ROLES.slice(0, 3).map((role, i) => buildMember(rngCurrent, role, SCOUT_TRAITS, i));
-  const medStaff = PHYSIO_ROLES.slice(0, 2).map((role, i) => buildMember(rngCurrent, role, PHYSIO_TRAITS, i));
-
-  // Candidate pools
-  const rngCand = createRng(baseSeed + 777);
-  const scoutCandidates = SCOUT_ROLES.map((role, i) => buildMember(rngCand, role, SCOUT_TRAITS, i + 100));
-  const physioCandidates = PHYSIO_ROLES.map((role, i) => buildMember(rngCand, role, PHYSIO_TRAITS, i + 200));
-
-  return { coaches, scouts, medStaff, scoutCandidates, physioCandidates };
-}
-
-// ── Budget defaults ─────────────────────────────────────────────────────────
-
-const STAFF_BUDGET_TOTAL = 25.0; // $25M staff budget
-
-// ── Sub-components ──────────────────────────────────────────────────────────
-
-function StarRating({ rating }) {
-  return (
-    <span style={{ display: "inline-flex", gap: 1, fontSize: 14 }} aria-label={`${rating} out of 5 stars`}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <span
-          key={i}
-          style={{ color: i <= rating ? "#f59e0b" : "var(--hairline)", transition: "color 0.2s" }}
-        >
-          ★
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function StaffTraitBadge({ trait }) {
-  return (
-    <span
-      title={`${trait.name}\n${trait.description}`}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 4,
-        padding: "2px 8px",
-        borderRadius: 999,
-        background: trait.bg,
-        color: trait.color,
-        fontSize: "var(--text-xs, 11px)",
-        fontWeight: 600,
-        cursor: "help",
-        whiteSpace: "nowrap",
-        border: `1px solid ${trait.color}33`,
-        transition: "transform 0.15s",
-      }}
-    >
-      <span>{trait.icon}</span>
-      {trait.name}
-    </span>
-  );
-}
-
-function PersonIcon({ name, accentColor }) {
-  const initials = (name || "")
-    .split(" ")
-    .map(n => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  return (
-    <div
-      style={{
-        width: 48,
-        height: 48,
-        borderRadius: "50%",
-        background: `${accentColor}18`,
-        border: `2px solid ${accentColor}`,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontWeight: 900,
-        fontSize: 14,
-        color: accentColor,
-        flexShrink: 0,
-      }}
-    >
-      {initials}
-    </div>
-  );
-}
-
-function PerformanceMeter({ value, label }) {
-  const color = value >= 75 ? "var(--success, #22c55e)" : value >= 50 ? "var(--warning, #f59e0b)" : "var(--danger, #ef4444)";
-  return (
-    <div style={{ flex: 1, minWidth: 80 }}>
-      <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", marginBottom: 3, fontWeight: 600 }}>
-        {label}
-      </div>
-      <div style={{
-        width: "100%",
-        height: 6,
-        borderRadius: 3,
-        background: "var(--hairline, #333)",
-        overflow: "hidden",
-      }}>
-        <div style={{
-          width: `${value}%`,
-          height: "100%",
-          borderRadius: 3,
-          background: color,
-          transition: "width 0.6s ease",
-        }} />
-      </div>
-      <div style={{ fontSize: "var(--text-xs, 11px)", fontWeight: 700, color, marginTop: 2 }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function BudgetBar({ used, total }) {
-  const pct = Math.min(100, (used / total) * 100);
-  const remaining = Math.max(0, total - used);
-  const barColor = pct > 90 ? "var(--danger, #ef4444)" : pct > 70 ? "var(--warning, #f59e0b)" : "var(--success, #22c55e)";
-
-  return (
-    <div
-      className="card fade-in"
-      style={{ padding: "var(--space-4, 16px)", marginBottom: "var(--space-4, 16px)" }}
-    >
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: "var(--space-3, 12px)",
-        flexWrap: "wrap",
-        gap: 8,
-      }}>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: "var(--text-lg, 18px)" }}>Staff Budget</div>
-          <div style={{ fontSize: "var(--text-sm, 13px)", color: "var(--text-muted)" }}>
-            Separate from salary cap
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: "var(--space-4, 16px)", flexWrap: "wrap" }}>
-          <div className="stat-box" style={{
-            background: "var(--surface)",
-            padding: "6px 14px",
-            borderRadius: "var(--radius-sm, 6px)",
-            textAlign: "center",
-          }}>
-            <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>
-              Used
-            </div>
-            <div style={{ fontWeight: 800, color: "var(--text)" }}>
-              ${used.toFixed(1)}M
-            </div>
-          </div>
-          <div className="stat-box" style={{
-            background: "var(--surface)",
-            padding: "6px 14px",
-            borderRadius: "var(--radius-sm, 6px)",
-            textAlign: "center",
-          }}>
-            <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>
-              Remaining
-            </div>
-            <div style={{ fontWeight: 800, color: remaining < 3 ? "var(--danger, #ef4444)" : "var(--success, #22c55e)" }}>
-              ${remaining.toFixed(1)}M
-            </div>
-          </div>
-          <div className="stat-box" style={{
-            background: "var(--surface)",
-            padding: "6px 14px",
-            borderRadius: "var(--radius-sm, 6px)",
-            textAlign: "center",
-          }}>
-            <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", fontWeight: 600, textTransform: "uppercase" }}>
-              Total
-            </div>
-            <div style={{ fontWeight: 800, color: "var(--text)" }}>
-              ${total.toFixed(1)}M
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div style={{
-        width: "100%",
-        height: 10,
-        borderRadius: 5,
-        background: "var(--hairline, #333)",
-        overflow: "hidden",
-      }}>
-        <div style={{
-          width: `${pct}%`,
-          height: "100%",
-          borderRadius: 5,
-          background: barColor,
-          transition: "width 0.6s ease",
-        }} />
-      </div>
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: "var(--text-xs, 11px)",
-        color: "var(--text-muted)",
-        marginTop: 4,
-      }}>
-        <span>{pct.toFixed(0)}% allocated</span>
-        <span>${total.toFixed(1)}M cap</span>
-      </div>
-    </div>
-  );
-}
-
-function StaffCard({ member, accentColor, onFire, type }) {
-  return (
-    <div
-      className="card fade-in"
-      style={{
-        padding: "var(--space-4, 16px)",
-        borderLeft: `3px solid ${accentColor}`,
-        transition: "box-shadow 0.2s",
-      }}
-    >
-      {/* Header row */}
-      <div style={{ display: "flex", gap: "var(--space-3, 12px)", alignItems: "flex-start" }}>
-        <PersonIcon name={member.name} accentColor={accentColor} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 4 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: "var(--text-base, 15px)" }}>
-                {member.name}
-              </div>
-              <div style={{ fontSize: "var(--text-sm, 13px)", color: "var(--text-muted)", marginTop: 1 }}>
-                {member.role} · Age {member.age} · {member.experience}yr exp
-              </div>
-            </div>
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <StarRating rating={member.rating} />
-              <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", marginTop: 1 }}>
-                ${member.salary}M / {member.contractYears}yr
-              </div>
-            </div>
-          </div>
-
-          {/* Traits */}
-          {member.traits && member.traits.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: "var(--space-2, 8px)" }}>
-              {member.traits.map(t => (
-                <StaffTraitBadge key={t.id} trait={t} />
-              ))}
-            </div>
-          )}
-
-          {/* Performance */}
-          <div style={{ display: "flex", gap: "var(--space-3, 12px)", marginTop: "var(--space-3, 12px)", flexWrap: "wrap" }}>
-            <PerformanceMeter value={member.performance} label="Performance" />
-            {type === "scout" && (
-              <>
-                <PerformanceMeter value={Math.min(99, member.performance + randInt(createRng(member.id?.length || 5), -10, 15))} label="Accuracy" />
-                <PerformanceMeter value={Math.min(99, member.performance + randInt(createRng((member.id?.length || 5) + 1), -12, 10))} label="Network" />
-              </>
-            )}
-            {type === "physio" && (
-              <>
-                <PerformanceMeter value={Math.min(99, member.performance + randInt(createRng(member.id?.length || 5), -10, 15))} label="Prevention" />
-                <PerformanceMeter value={Math.min(99, member.performance + randInt(createRng((member.id?.length || 5) + 1), -12, 10))} label="Recovery" />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Fire button */}
-      {onFire && (
-        <div style={{ marginTop: "var(--space-3, 12px)", textAlign: "right" }}>
-          <button
-            className="btn"
-            onClick={() => onFire(member)}
-            style={{
-              background: "transparent",
-              color: "var(--danger, #ef4444)",
-              border: "1px solid var(--danger, #ef4444)",
-              fontSize: "var(--text-xs, 11px)",
-              padding: "4px 12px",
-              borderRadius: "var(--radius-sm, 6px)",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Fire
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CandidateRow({ candidate, accentColor, onHire, budgetRemaining }) {
-  const canAfford = candidate.salary <= budgetRemaining;
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "var(--space-3, 12px)",
-        padding: "var(--space-3, 12px)",
-        borderBottom: "1px solid var(--hairline, #333)",
-        flexWrap: "wrap",
-      }}
-    >
-      <PersonIcon name={candidate.name} accentColor={accentColor} />
-      <div style={{ flex: 1, minWidth: 140 }}>
-        <div style={{ fontWeight: 700, fontSize: "var(--text-sm, 13px)" }}>{candidate.name}</div>
-        <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)" }}>
-          {candidate.role} · Age {candidate.age} · {candidate.experience}yr exp
-        </div>
-        {candidate.traits && candidate.traits.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 4 }}>
-            {candidate.traits.map(t => (
-              <StaffTraitBadge key={t.id} trait={t} />
-            ))}
-          </div>
-        )}
-      </div>
-      <div style={{ textAlign: "center", flexShrink: 0 }}>
-        <StarRating rating={candidate.rating} />
-        <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", marginTop: 2 }}>
-          ${candidate.salary}M / {candidate.contractYears}yr
-        </div>
-      </div>
-      <button
-        className="btn"
-        disabled={!canAfford}
-        onClick={() => onHire(candidate)}
-        style={{
-          background: canAfford ? "var(--accent)" : "var(--hairline, #333)",
-          color: canAfford ? "#fff" : "var(--text-muted)",
-          border: "none",
-          fontSize: "var(--text-xs, 11px)",
-          padding: "6px 14px",
-          borderRadius: "var(--radius-sm, 6px)",
-          cursor: canAfford ? "pointer" : "not-allowed",
-          fontWeight: 700,
-          flexShrink: 0,
-          opacity: canAfford ? 1 : 0.5,
-        }}
-      >
-        Hire
-      </button>
-    </div>
-  );
-}
-
-function CollapsibleSection({ title, subtitle, count, accentColor, defaultOpen, children }) {
-  const [open, setOpen] = useState(defaultOpen ?? true);
-
-  return (
-    <div style={{ marginBottom: "var(--space-4, 16px)" }}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "var(--space-3, 12px) var(--space-4, 16px)",
-          background: "var(--surface)",
-          border: "1px solid var(--hairline, #333)",
-          borderRadius: "var(--radius-sm, 6px)",
-          cursor: "pointer",
-          color: "var(--text)",
-          transition: "background 0.15s",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3, 12px)" }}>
-          <div style={{
-            width: 8,
-            height: 8,
-            borderRadius: "50%",
-            background: accentColor,
-            flexShrink: 0,
-          }} />
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontWeight: 800, fontSize: "var(--text-base, 15px)" }}>{title}</div>
-            {subtitle && (
-              <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", marginTop: 1 }}>
-                {subtitle}
-              </div>
-            )}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2, 8px)" }}>
-          {count !== undefined && (
-            <span className="ovr-pill" style={{
-              background: `${accentColor}22`,
-              color: accentColor,
-              fontWeight: 700,
-              fontSize: "var(--text-xs, 11px)",
-              padding: "2px 8px",
-              borderRadius: 999,
-            }}>
-              {count}
-            </span>
-          )}
-          <span style={{
-            fontSize: 16,
-            transform: open ? "rotate(180deg)" : "rotate(0deg)",
-            transition: "transform 0.2s",
-            lineHeight: 1,
-          }}>
-            ▼
-          </span>
-        </div>
-      </button>
-
-      {open && (
-        <div className="fade-in" style={{ marginTop: "var(--space-3, 12px)" }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ConfirmDialog({ message, onConfirm, onCancel }) {
-  return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9200,
-        background: "rgba(0,0,0,0.7)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "var(--space-4, 16px)",
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="card fade-in"
-        style={{
-          width: "100%",
-          maxWidth: 360,
-          padding: "var(--space-5, 20px)",
-          textAlign: "center",
-        }}
-      >
-        <div style={{ fontSize: 32, marginBottom: "var(--space-3, 12px)" }}>⚠️</div>
-        <div style={{ fontWeight: 700, fontSize: "var(--text-base, 15px)", marginBottom: "var(--space-4, 16px)" }}>
-          {message}
-        </div>
-        <div style={{ display: "flex", gap: "var(--space-3, 12px)", justifyContent: "center" }}>
-          <button
-            className="btn"
-            onClick={onCancel}
-            style={{
-              background: "var(--surface)",
-              color: "var(--text)",
-              border: "1px solid var(--hairline, #333)",
-              padding: "8px 20px",
-              borderRadius: "var(--radius-sm, 6px)",
-              cursor: "pointer",
-              fontWeight: 600,
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            className="btn"
-            onClick={onConfirm}
-            style={{
-              background: "var(--danger, #ef4444)",
-              color: "#fff",
-              border: "none",
-              padding: "8px 20px",
-              borderRadius: "var(--radius-sm, 6px)",
-              cursor: "pointer",
-              fontWeight: 700,
-            }}
-          >
-            Confirm
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HiringPanel({ title, candidates, accentColor, onHire, budgetRemaining, onClose }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9100,
-        background: "rgba(0,0,0,0.7)",
-        backdropFilter: "blur(8px)",
-        WebkitBackdropFilter: "blur(8px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "var(--space-4, 16px)",
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        className="card fade-in"
-        style={{
-          width: "100%",
-          maxWidth: 560,
-          maxHeight: "80vh",
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          borderTop: `3px solid ${accentColor}`,
-        }}
-      >
-        <div style={{
-          padding: "var(--space-4, 16px)",
-          borderBottom: "1px solid var(--hairline, #333)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: "var(--text-lg, 18px)" }}>{title}</div>
-            <div style={{ fontSize: "var(--text-xs, 11px)", color: "var(--text-muted)", marginTop: 2 }}>
-              Budget remaining: ${budgetRemaining.toFixed(1)}M
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              color: "var(--text-muted)",
-              fontSize: 20,
-              cursor: "pointer",
-              lineHeight: 1,
-              padding: 4,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-        <div style={{ overflowY: "auto", flex: 1 }}>
-          {candidates.length === 0 ? (
-            <div style={{ padding: "var(--space-5, 20px)", textAlign: "center", color: "var(--text-muted)" }}>
-              No candidates available.
-            </div>
-          ) : (
-            candidates.map(c => (
-              <CandidateRow
-                key={c.id}
-                candidate={c}
-                accentColor={accentColor}
-                onHire={onHire}
-                budgetRemaining={budgetRemaining}
-              />
-            ))
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Component ──────────────────────────────────────────────────────────
 
 export default function StaffManagement({ league, actions }) {
   const teamId = league?.userTeamId ?? 0;
   const [staffState, setStaffState] = useState(null);
-  const [hiringPanel, setHiringPanel] = useState(null);
+  const [selectedRole, setSelectedRole] = useState('all');
+  const [sortBy, setSortBy] = useState('overall');
 
   const refresh = useCallback(async () => {
-    if (!actions?.getStaffState) return;
-    const res = await actions.getStaffState();
+    const res = await actions?.getStaffState?.();
     if (res?.payload) setStaffState(res.payload);
   }, [actions]);
 
   React.useEffect(() => { refresh(); }, [refresh]);
 
-  const userTeam = useMemo(() => (league?.teams ?? []).find((t) => t.id === teamId) ?? null, [league?.teams, teamId]);
-  const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
-  const direction = teamIntel?.direction ?? "balanced";
-  const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel, direction }), [league, teamIntel, direction]);
-  const coachingIdentity = useMemo(() => deriveTeamCoachingIdentity(userTeam, { pressure, intel: teamIntel, direction }), [userTeam, pressure, teamIntel, direction]);
-
+  const userTeam = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(teamId)) ?? null, [league?.teams, teamId]);
   const staff = staffState?.staff ?? {};
-  const market = staffState?.market ?? [];
-  const draftBoard = staffState?.draftBoard ?? { shortlist: [], avoid: [] };
+  const market = Array.isArray(staffState?.market) ? staffState.market : [];
+  const bonuses = staffState?.bonuses ?? {};
 
-  const roles = {
-    coach: ['headCoach', 'offCoordinator', 'defCoordinator'],
-    scout: ['leadScout', 'proScout'],
-    physio: ['headTrainer', 'capAdvisor'],
-  };
+  const currentStaffRows = ROLE_ORDER.map((roleKey) => ({ roleKey, member: staff?.[roleKey] ?? null }));
+  const staffSalaryTotal = currentStaffRows.reduce((sum, row) => sum + Number(row.member?.annualSalary ?? 0), 0);
 
-  const staffListFor = (keys) => keys.map((key) => ({ ...(staff?.[key] ?? {}), roleKey: key, role: staff?.[key]?.role ?? key })).filter((m) => m?.id);
+  const filteredMarket = useMemo(() => {
+    const base = market.filter((candidate) => selectedRole === 'all' || candidate?.roleKey === selectedRole);
+    return [...base].sort((a, b) => {
+      if (sortBy === 'salary') return Number(a?.annualSalary ?? 0) - Number(b?.annualSalary ?? 0);
+      if (sortBy === 'development') {
+        const aDev = Number(a?.specialtyRatings?.playerDevelopment ?? a?.specialtyRatings?.qbDevelopment ?? a?.specialtyRatings?.defensiveDevelopment ?? 0);
+        const bDev = Number(b?.specialtyRatings?.playerDevelopment ?? b?.specialtyRatings?.qbDevelopment ?? b?.specialtyRatings?.defensiveDevelopment ?? 0);
+        return bDev - aDev;
+      }
+      if (sortBy === 'scouting') {
+        const aScout = Number(a?.specialtyRatings?.collegeScouting ?? 0) + Number(a?.specialtyRatings?.proScouting ?? 0);
+        const bScout = Number(b?.specialtyRatings?.collegeScouting ?? 0) + Number(b?.specialtyRatings?.proScouting ?? 0);
+        return bScout - aScout;
+      }
+      return Number(b?.overall ?? 0) - Number(a?.overall ?? 0);
+    });
+  }, [market, selectedRole, sortBy]);
 
-  const coaches = staffListFor(roles.coach);
-  const scouts = staffListFor(roles.scout);
-  const medStaff = staffListFor(roles.physio);
-
-  const totalUsed = useMemo(() => [...coaches, ...scouts, ...medStaff].reduce((s, c) => s + Number(c?.salary ?? 0), 0), [coaches, scouts, medStaff]);
-  const budgetRemaining = +(STAFF_BUDGET_TOTAL - totalUsed).toFixed(1);
-
-  const handleFire = async (member) => {
-    await actions?.fireStaffMember?.({ teamId, roleKey: member.roleKey });
+  const hire = async (candidate) => {
+    await actions?.hireStaffMember?.({ teamId, roleKey: candidate?.roleKey, candidate });
     await refresh();
   };
 
-  const handleHire = async (candidate) => {
-    await actions?.hireStaffMember?.({ teamId, roleKey: candidate.roleKey, candidate });
-    setHiringPanel(null);
+  const fire = async (roleKey) => {
+    await actions?.fireStaffMember?.({ teamId, roleKey });
     await refresh();
   };
-
-  const enrich = (m) => ({ ...m, performance: m?.rating ?? 60, traits: Object.entries(m?.attrs ?? {}).slice(0, 3).map(([k,v]) => ({ id:k, name:`${k}: ${Math.round(v)}`, icon:'•', color:'#60a5fa', bg:'rgba(96,165,250,0.15)', description:k })) });
 
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }} className="app-screen-stack">
+    <div className="app-screen-stack" style={{ maxWidth: 1000, margin: '0 auto' }}>
       <ScreenHeader
         eyebrow="Operations"
-        title="Staff Management"
-        subtitle="Run coaching, scouting, and support hiring from one workflow."
+        title="Staff & Development"
+        subtitle="Hire coaches and department heads, manage contracts, and see exactly what each role improves."
         metadata={[
-          { label: "Budget Used", value: `$${totalUsed.toFixed(1)}M` },
-          { label: "Remaining", value: `$${budgetRemaining.toFixed(1)}M` },
-          { label: "Direction", value: direction },
+          { label: 'Staff payroll', value: fmtMoney(staffSalaryTotal) },
+          { label: 'Dev impact', value: `${((bonuses.developmentDelta ?? 0) * 100).toFixed(1)}%` },
+          { label: 'Scouting confidence', value: bonuses.summary?.[2] ?? 'Balanced' },
         ]}
       />
-      <StickySubnav title="Quick actions">
-        <button className="btn" onClick={() => setHiringPanel('scout')}>Hire Scout</button>
-        <button className="btn" onClick={() => setHiringPanel('support')}>Hire Support</button>
-      </StickySubnav>
-      <SectionCard title="Budget">
-        <BudgetBar used={totalUsed} total={STAFF_BUDGET_TOTAL} />
+
+      <SectionCard title="Current staff" subtitle="One core role per franchise layer. Replace or fire from here.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
+          {currentStaffRows.map(({ roleKey, member }) => (
+            <div key={roleKey} className="card" style={{ padding: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                <strong>{ROLE_LABELS[roleKey]}</strong>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {member?.overall ?? '--'}</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{member?.name ?? 'Vacant'} · {member?.age ?? '--'} · {member?.reputationTier ?? 'Unproven'}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(roleKey, member)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Contract: {member?.contractYears ?? 0} yrs · {fmtMoney(member?.annualSalary)}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                <Button size="sm" variant="outline" onClick={() => setSelectedRole(roleKey)}>Replace</Button>
+                <Button size="sm" variant="ghost" onClick={() => fire(roleKey)}>Fire</Button>
+              </div>
+            </div>
+          ))}
+        </div>
       </SectionCard>
-      {staffState?.bonuses && <div className="card" style={{ padding: 10, marginBottom: 12, fontSize: 12, color: 'var(--text-muted)' }}>
-        Development {staffState.bonuses.developmentDelta >= 0 ? '+' : ''}{(staffState.bonuses.developmentDelta*100).toFixed(1)}% · Rookie adaptation {staffState.bonuses.rookieAdaptationDelta >= 0 ? '+' : ''}{(staffState.bonuses.rookieAdaptationDelta*100).toFixed(1)}% · Injury volatility {(staffState.bonuses.injuryRateDelta*100).toFixed(1)}%
-      </div>}
 
-      <CollapsibleSection title="Coaching Staff" count={coaches.length} accentColor="#f59e0b" defaultOpen>
-        <div style={{ display: 'grid', gap: 10 }}>{coaches.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#f59e0b" onFire={handleFire} type="coach" />)}</div>
-      </CollapsibleSection>
+      <SectionCard title="Team impact summary" subtitle="How your current staff affects development, scouting, and injury areas.">
+        <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+          {(bonuses.summary ?? []).map((line) => <div key={line}>• {line}</div>)}
+        </div>
+      </SectionCard>
 
-      <CollapsibleSection title="Scouting Department" count={scouts.length} accentColor="#3b82f6" defaultOpen>
-        <div style={{ display: 'grid', gap: 10 }}>{scouts.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#3b82f6" onFire={handleFire} type="scout" />)}</div>
-        <button className="btn" onClick={() => setHiringPanel('scout')}>Hire Scout Staff</button>
-      </CollapsibleSection>
+      <SectionCard title="Candidate market" subtitle="Filter and sort by role, overall, development, scouting, and salary demand.">
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+          <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}><option value="all">All roles</option>{ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="overall">Sort: Overall</option>
+            <option value="development">Sort: Development</option>
+            <option value="scouting">Sort: Scouting</option>
+            <option value="salary">Sort: Salary demand</option>
+          </select>
+        </div>
+        <div style={{ display: 'grid', gap: 8 }}>
+          {filteredMarket.slice(0, 24).map((candidate) => (
+            <div key={candidate.id} className="card" style={{ padding: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <div>
+                  <strong>{candidate.name}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ROLE_LABELS[candidate.roleKey] ?? candidate.role}</div>
+                </div>
+                <div style={{ fontSize: 12, textAlign: 'right' }}>OVR {candidate.overall} · {candidate.reputationTier}<br />Demand {fmtMoney(candidate.annualSalary)} / {candidate.contractYears}y</div>
+              </div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(candidate.roleKey, candidate)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Value score: {valueScore(candidate)} · Tags: {(candidate.styleTags ?? []).join(', ') || 'none'}</div>
+              <div style={{ marginTop: 8 }}><Button size="sm" onClick={() => hire(candidate)}>Hire / Replace</Button></div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
-      <CollapsibleSection title="Medical + Contracts" count={medStaff.length} accentColor="#22c55e" defaultOpen>
-        <div style={{ display: 'grid', gap: 10 }}>{medStaff.map((c) => <StaffCard key={c.id} member={enrich(c)} accentColor="#22c55e" onFire={handleFire} type="physio" />)}</div>
-        <button className="btn" onClick={() => setHiringPanel('support')}>Hire Support Staff</button>
-      </CollapsibleSection>
-
-      <div className="card" style={{ padding: 10, marginTop: 10 }}>
-        <div style={{ fontSize: 12, fontWeight: 700 }}>Draft board watchlist</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Shortlist: {draftBoard.shortlist?.length ?? 0} · Avoid: {draftBoard.avoid?.length ?? 0}</div>
-      </div>
-
-      {hiringPanel && (
-        <HiringPanel
-          title="Staff Market"
-          candidates={market.filter((m) => hiringPanel === 'scout' ? ['leadScout','proScout'].includes(m.roleKey) : ['headTrainer','capAdvisor'].includes(m.roleKey))}
-          accentColor={hiringPanel === 'scout' ? '#3b82f6' : '#22c55e'}
-          onHire={handleHire}
-          budgetRemaining={budgetRemaining}
-          onClose={() => setHiringPanel(null)}
-        />
-      )}
+      <FranchiseInvestmentsPanel team={userTeam} actions={actions} />
       {!staffState && <EmptyState title="No staff state yet" body="Load a save with staff data to unlock hiring and firing actions." />}
     </div>
   );

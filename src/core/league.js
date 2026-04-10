@@ -223,6 +223,7 @@ function makeLeague(teams, options = {}, dependencies = {}) {
                   scoutingRegion: 'national',
                   ownerCapacity: 10,
                   usedCapacity: 4,
+                  trainingFocus: 'balanced',
                   history: [],
                 },
                 rivalTeamId: null

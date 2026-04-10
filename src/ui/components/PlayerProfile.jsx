@@ -578,6 +578,13 @@ export default function PlayerProfile({
                   )}
                 </div>
 
+
+                {player.developmentContext && (
+                  <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                    Dev path: {player.developmentContext.baseAgeCurve} · Focus {String(player.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {player.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{player.developmentContext.staffDevelopmentModifier}% · {player.developmentContext.playingTimeModifier}
+                  </div>
+                )}
+
                 {/* Traits */}
                 {player.traits?.length > 0 && (
                   <div

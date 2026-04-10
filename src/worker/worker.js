@@ -153,6 +153,7 @@ function normalizeFranchiseInvestments(raw = {}) {
     scoutingRegion: 'national',
     ownerCapacity: 10,
     usedCapacity: 4,
+    trainingFocus: 'balanced',
     history: [],
   };
   const merged = { ...base, ...(raw || {}) };
@@ -163,6 +164,7 @@ function normalizeFranchiseInvestments(raw = {}) {
   merged.usedCapacity = Math.max(0, Math.min(merged.ownerCapacity, Math.round(Number(merged.usedCapacity) || 4)));
   if (!['fan_friendly', 'balanced', 'premium'].includes(merged.concessionsStrategy)) merged.concessionsStrategy = 'balanced';
   if (!['national', 'southeast', 'southwest', 'midwest', 'west'].includes(merged.scoutingRegion)) merged.scoutingRegion = 'national';
+  if (!['balanced','youth_development','win_now','rehab_recovery','strength_conditioning'].includes(merged.trainingFocus)) merged.trainingFocus = 'balanced';
   merged.history = Array.isArray(merged.history) ? merged.history.slice(0, 20) : [];
   return merged;
 }
@@ -3909,6 +3911,7 @@ async function handleGetFreeAgents(payload, id) {
 
   const freeAgents = allFreeAgents
     .map(p => {
+        const scoutingView = buildScoutingSnapshot(p, userTeam, { fogStrength: Number(getLeagueSetting('scoutingFogStrength', 50)), commissionerMode: !!meta?.commissionerMode });
         // Summarize offers for UI — bidding war edition
         const offers = p.offers || [];
         const userOffer = offers.find(o => o.teamId === userTeamId);
@@ -4002,6 +4005,9 @@ async function handleGetFreeAgents(payload, id) {
           pos:       p.pos,
           age:       p.age,
           ovr:       p.ovr,
+          scoutOvr: scoutingView?.estimatedOvr ?? p.ovr,
+          scoutUncertaintyBand: scoutingView?.uncertainty ?? 0,
+          scoutConfidenceLabel: scoutingView?.confidenceLabel ?? 'Medium confidence',
           potential: p.potential ?? null,
           contract:  p.contract ?? null,
           traits:    p.traits ?? [],
@@ -6077,15 +6083,17 @@ function runAiStaffCarousel(meta, teams) {
     const staff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
     const winPct = ((team?.wins ?? 0) + 0.5 * (team?.ties ?? 0)) / Math.max(1, (team?.wins ?? 0) + (team?.losses ?? 0) + (team?.ties ?? 0));
     const direction = winPct >= 0.62 ? 'contender' : winPct <= 0.42 ? 'rebuild' : 'balanced';
-    const roles = ['headCoach', 'offCoordinator', 'defCoordinator', 'leadScout', 'proScout', 'headTrainer', 'capAdvisor'];
+    const roles = ['headCoach', 'offCoordinator', 'defCoordinator', 'scoutDirector', 'headTrainer'];
     for (const roleKey of roles) {
       const current = staff?.[roleKey];
-      const stayBias = direction === 'contender' ? 0.78 : direction === 'rebuild' ? 0.58 : 0.66;
-      if (current && Math.random() < stayBias) continue;
-      const pool = market.filter((m) => m.roleKey === roleKey);
+      const currentScore = Number(current?.overall ?? 55);
+      const stayBias = direction === 'contender' ? 0.8 : direction === 'rebuild' ? 0.58 : 0.68;
+      if (current && currentScore >= 75 && Math.random() < stayBias) continue;
+      const pool = market.filter((m) => m.roleKey === roleKey).sort((a, b) => Number(b?.overall ?? 0) - Number(a?.overall ?? 0));
       if (!pool.length) continue;
-      const candidate = pool[Math.floor(Math.random() * Math.min(6, pool.length))];
-      if (!candidate) continue;
+      const shortlist = pool.slice(0, 12);
+      const candidate = shortlist[Math.floor(Math.random() * Math.max(2, shortlist.length / 2))] ?? shortlist[0];
+      if (!candidate || Number(candidate?.overall ?? 0) < currentScore + (direction === 'rebuild' ? -3 : 2)) continue;
       staff[roleKey] = { ...candidate, continuity: { teamId: team.id, sinceYear: Number(meta?.year ?? 2025), tenureYears: 0 } };
     }
     cache.updateTeam(team.id, { staff });
@@ -6138,6 +6146,7 @@ async function handleAdvanceOffseason(payload, id) {
   for (const team of allTeams) {
     const inv = team?.franchiseInvestments ?? {};
     const trainingLevel = Math.max(1, Math.min(5, Math.round(Number(inv?.trainingLevel ?? 1) || 1)));
+    const trainingFocus = String(inv?.trainingFocus ?? 'balanced');
     const roster = Array.isArray(team?.roster) ? team.roster : allPlayers.filter((p) => Number(p?.teamId) === Number(team?.id));
     const moraleAvg = roster.length ? roster.reduce((sum, p) => sum + (Number(p?.morale ?? 70) || 70), 0) / roster.length : 70;
     const stableMorale = moraleAvg >= 74 ? 1 : moraleAvg <= 60 ? -1 : 0;
@@ -6148,10 +6157,13 @@ async function handleAdvanceOffseason(payload, id) {
       .filter(Boolean)
       .reduce((sum, member) => sum + (Number(member?.yearsWithTeam ?? member?.tenure ?? 0) >= 2 ? 1 : 0), 0);
     const continuitySignal = continuityCount >= 2 ? 1 : continuityCount === 0 ? -1 : 0;
-    const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + (staffBonuses.developmentDelta ?? 0)) * envScale;
-    const volatilityDampener = ((continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) + (staffBonuses.moraleStabilityDelta ?? 0)) * staffScale;
-    const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0)) * envScale;
-    teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation };
+    const focusGrowth = trainingFocus === 'youth_development' ? 0.08 : trainingFocus === 'win_now' ? -0.03 : trainingFocus === 'strength_conditioning' ? 0.04 : 0;
+    const focusReadiness = trainingFocus === 'win_now' ? 0.05 : trainingFocus === 'rehab_recovery' ? -0.02 : 0;
+    const focusRecovery = trainingFocus === 'rehab_recovery' ? 0.06 : trainingFocus === 'strength_conditioning' ? 0.03 : 0;
+    const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + focusGrowth + (staffBonuses.developmentDelta ?? 0)) * envScale;
+    const volatilityDampener = ((continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) + (staffBonuses.moraleStabilityDelta ?? 0) + focusReadiness) * staffScale;
+    const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0) + focusRecovery) * envScale;
+    teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
   }
   const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments });
 
@@ -6163,6 +6175,7 @@ async function handleAdvanceOffseason(payload, id) {
       ovr:              player.ovr,
       potential:        player.potential,
       progressionDelta: player.progressionDelta ?? null,
+      developmentContext: player.developmentContext ?? null,
     });
   }
 
