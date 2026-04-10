@@ -105,6 +105,16 @@ import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule } from '../core/gameArchive.js';
+import {
+  buildDriveSummaryFromSimulation,
+  buildGameNarrativeSummary,
+  buildPlayerLeadersFromArchive,
+  buildScoringSummaryFromSimulation,
+  buildTeamStatComparisonFromArchive,
+  buildTurningPointsFromGameEvents,
+  classifyGameScript,
+  summarizeWhyTeamWon,
+} from '../core/gameSummary.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -461,46 +471,6 @@ function getTradeDeadlineSnapshot(metaObj = ensureDynastyMeta(cache.getMeta())) 
     settings: metaObj?.settings,
     commissionerMode: metaObj?.commissionerMode,
   });
-}
-
-function deriveArchivedLeadersFromBoxScore(boxScore = {}) {
-  const rows = [];
-  for (const side of ['home', 'away']) {
-    const sideRows = boxScore?.[side] ?? {};
-    for (const [playerId, row] of Object.entries(sideRows)) {
-      rows.push({ playerId, name: row?.name ?? 'Unknown', pos: row?.pos ?? '—', stats: row?.stats ?? {} });
-    }
-  }
-  const sortBy = (key, min = 1) => rows
-    .filter((r) => Number(r?.stats?.[key] ?? 0) >= min)
-    .sort((a, b) => Number(b?.stats?.[key] ?? 0) - Number(a?.stats?.[key] ?? 0))[0] ?? null;
-  const defense = rows
-    .filter((r) => (Number(r?.stats?.tackles ?? 0) + Number(r?.stats?.sacks ?? 0) * 2 + Number(r?.stats?.interceptions ?? 0) * 2) > 0)
-    .sort((a, b) => ((Number(b?.stats?.tackles ?? 0) + Number(b?.stats?.sacks ?? 0) * 2 + Number(b?.stats?.interceptions ?? 0) * 2)
-      - (Number(a?.stats?.tackles ?? 0) + Number(a?.stats?.sacks ?? 0) * 2 + Number(a?.stats?.interceptions ?? 0) * 2)))[0] ?? null;
-
-  return {
-    passing: sortBy('passYd', 20),
-    rushing: sortBy('rushYd', 10),
-    receiving: sortBy('recYd', 10),
-    defense,
-  };
-}
-
-function deriveArchivedDrives(playLogs = []) {
-  if (!Array.isArray(playLogs) || playLogs.length === 0) return null;
-  const scoringPlays = playLogs
-    .filter((log) => log?.isScore || log?.isTouchdown || /touchdown|field goal|safety/i.test(String(log?.text ?? '')))
-    .map((log, idx) => ({
-      id: `drv_${idx}`,
-      quarter: Number(log?.quarter ?? 1),
-      clock: log?.clock ?? log?.time ?? '',
-      teamId: Number(log?.teamId ?? log?.scoringTeamId ?? log?.team?.id ?? null),
-      result: log?.isTouchdown ? 'Touchdown' : /field goal/i.test(String(log?.text ?? '')) ? 'Field Goal' : /safety/i.test(String(log?.text ?? '')) ? 'Safety' : 'Score',
-      summary: log?.text ?? 'Scoring drive',
-      points: Number(log?.points ?? 0),
-    }));
-  return scoringPlays.length ? scoringPlays : null;
 }
 
 function allPlayersOnTeam(teamId, playerIds = []) {
@@ -2288,10 +2258,53 @@ function applyGameResultToCache(result, week, seasonId) {
 
   const homeWin = scoreHome > scoreAway;
   const tie     = scoreHome === scoreAway;
+  const homeTeamSnapshot = cache.getTeam(hId);
+  const awayTeamSnapshot = cache.getTeam(aId);
+  const playLogs = Array.isArray(result.playLogs) ? result.playLogs : [];
+  const archiveContext = {
+    homeId: hId,
+    awayId: aId,
+    homeAbbr: result.homeTeamAbbr ?? homeTeamSnapshot?.abbr ?? 'HOME',
+    awayAbbr: result.awayTeamAbbr ?? awayTeamSnapshot?.abbr ?? 'AWAY',
+  };
+  const scoringSummary = buildScoringSummaryFromSimulation(playLogs, archiveContext);
+  const driveSummary = buildDriveSummaryFromSimulation(playLogs, archiveContext);
+  const turningPoints = buildTurningPointsFromGameEvents(playLogs, archiveContext);
+  const teamStats = buildTeamStatComparisonFromArchive(result.boxScore ?? {}, archiveContext);
+  const playerLeaders = buildPlayerLeadersFromArchive(result.boxScore ?? {}, archiveContext);
+  const wentOvertime = playLogs.some((log) => Number(log?.quarter) > 4);
+  const rivalryGame = Boolean(homeTeamSnapshot?.conf && awayTeamSnapshot?.conf && homeTeamSnapshot?.conf === awayTeamSnapshot?.conf && homeTeamSnapshot?.div === awayTeamSnapshot?.div);
+  const gameScript = classifyGameScript({
+    homeScore: scoreHome,
+    awayScore: scoreAway,
+    isPlayoff: Boolean(result?.isPlayoff),
+    wentOvertime,
+    wasUpset: false,
+  });
+  const winnerId = scoreHome >= scoreAway ? hId : aId;
+  const whyWon = summarizeWhyTeamWon({
+    winnerAbbr: winnerId === hId ? archiveContext.homeAbbr : archiveContext.awayAbbr,
+    loserAbbr: winnerId === hId ? archiveContext.awayAbbr : archiveContext.homeAbbr,
+    teamStats,
+    homeId: hId,
+    awayId: aId,
+    winnerId,
+  });
+  const storyline = result.storyline ?? buildGameNarrativeSummary({
+    homeTeam: { id: hId, abbr: archiveContext.homeAbbr },
+    awayTeam: { id: aId, abbr: archiveContext.awayAbbr },
+    homeScore: scoreHome,
+    awayScore: scoreAway,
+    gameScript,
+    leaders: playerLeaders,
+    whyWon,
+    isPlayoff: Boolean(result?.isPlayoff),
+    rivalry: rivalryGame,
+  });
 
   // ── 1. Update team win/loss records in cache ─────────────────────────────
-  const homeTeam = cache.getTeam(hId);
-  const awayTeam = cache.getTeam(aId);
+  const homeTeam = homeTeamSnapshot;
+  const awayTeam = awayTeamSnapshot;
 
   if (homeTeam) {
     cache.updateTeam(hId, {
@@ -2380,22 +2393,27 @@ function applyGameResultToCache(result, week, seasonId) {
     stats: result.boxScore
       ? {
         ...result.boxScore,
-        playLogs: Array.isArray(result.playLogs) ? result.playLogs : [],
+        playLogs,
       }
       : null,
     recap: result.recap ?? null,
-    drives: result.drives ?? deriveArchivedDrives(result.playLogs ?? []) ?? null,
+    drives: result.drives ?? driveSummary ?? null,
     quarterScores: result.quarterScores ?? result.linescore ?? null,
     summary: {
-      winnerId: scoreHome >= scoreAway ? hId : aId,
+      winnerId,
       margin,
-      leaders: deriveArchivedLeadersFromBoxScore(result.boxScore ?? {}),
-      storyline: result.storyline ?? (margin <= 3
-        ? 'One-score finish with late-game pressure on every possession.'
-        : margin >= 17
-          ? 'Control game where one side separated early and never gave it back.'
-          : 'Balanced game that swung on a few decisive drives.'),
+      gameScript,
+      whyWon,
+      leaders: playerLeaders?.categories ?? null,
+      playerOfGame: playerLeaders?.playerOfGame ?? null,
+      standoutPerformances: playerLeaders?.standouts ?? [],
+      storyline,
     },
+    teamStats,
+    scoringSummary,
+    driveSummary,
+    turningPoints,
+    notablePerformances: playerLeaders?.standouts ?? [],
     archiveQuality,
   }));
   const archiveValidation = validateArchivedGame(archivedGame);

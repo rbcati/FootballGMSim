@@ -4,6 +4,7 @@ import {
   deriveQuarterScores,
   deriveScoringSummary,
   deriveTeamTotals,
+  getGameDetailSections,
   toPlayerArray,
 } from "../../src/ui/utils/boxScorePresentation.js";
 
@@ -48,5 +49,20 @@ describe("box score presentation helpers", () => {
     const summary = deriveScoringSummary(logs, { 1: { abbr: "HME" }, 2: { abbr: "AWY" } });
     expect(summary).toHaveLength(2);
     expect(summary[0].teamAbbr).toBe("HME");
+  });
+
+  it("hides empty archive sections for partial games", () => {
+    const sections = getGameDetailSections({
+      homeScore: 17,
+      awayScore: 13,
+      summary: { storyline: "Defensive game" },
+      playLog: [],
+      driveSummary: [],
+      turningPoints: [],
+    });
+    expect(sections.recap).toBe(true);
+    expect(sections.driveSummary).toBe(false);
+    expect(sections.playLog).toBe(false);
+    expect(sections.quarterByQuarter).toBe(true);
   });
 });
