@@ -11,7 +11,7 @@ describe('game identity helpers', () => {
     expect(archived.id).toBe('2030_w3_8_2');
     expect(archived.stats).toBe(null);
     expect(archived.homeScore).toBe(24);
-    expect(archived.archiveQuality).toBe('partial');
+    expect(archived.archiveQuality).toBe('missing');
   });
 
   it('marks archives with play logs as full detail payloads', () => {

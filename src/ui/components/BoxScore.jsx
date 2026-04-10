@@ -10,6 +10,7 @@ import {
   toPlayerArray,
 } from "../utils/boxScorePresentation.js";
 import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
+import { normalizeArchivedGamePayload } from "../../core/gameArchive.js";
 
 function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
@@ -88,7 +89,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
     actions?.getBoxScore?.(gameId)
       .then((res) => {
         if (!alive) return;
-        const payload = res?.game ?? getGameDetailPayload(gameId, league);
+        const payload = normalizeArchivedGamePayload(res?.game ?? getGameDetailPayload(gameId, league));
         setGame(payload ?? null);
         if (!payload) setError(res?.error ?? "Box score unavailable for this game.");
       })
@@ -114,18 +115,18 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const awayTeam = teamsById[game?.awayId] ?? { id: game?.awayId, abbr: game?.awayAbbr ?? "AWAY", wins: 0, losses: 0, ties: 0 };
 
   const leaders = useMemo(() => deriveLeaders(game), [game]);
-  const scoring = useMemo(() => deriveScoringSummary(game?.stats?.playLogs ?? [], teamsById), [game, teamsById]);
-  const momentumNotes = useMemo(() => deriveMomentumNotes(game?.stats?.playLogs ?? []), [game]);
-  const quarterScores = useMemo(() => deriveQuarterScores(game, game?.stats?.playLogs ?? []), [game]);
-  const driveSummary = Array.isArray(game?.drives) ? game.drives : [];
-  const playLog = Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : [];
+  const scoring = useMemo(() => (game?.scoringSummary?.length ? game.scoringSummary : deriveScoringSummary(game?.playLog ?? game?.stats?.playLogs ?? [], teamsById)), [game, teamsById]);
+  const momentumNotes = useMemo(() => (Array.isArray(game?.turningPoints) && game.turningPoints.length ? game.turningPoints : deriveMomentumNotes(game?.playLog ?? game?.stats?.playLogs ?? [])), [game]);
+  const quarterScores = useMemo(() => deriveQuarterScores(game, game?.playLog ?? game?.stats?.playLogs ?? []), [game]);
+  const driveSummary = Array.isArray(game?.driveSummary) ? game.driveSummary : (Array.isArray(game?.drives) ? game.drives : []);
+  const playLog = Array.isArray(game?.playLog) ? game.playLog : (Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : []);
 
-  const awayPlayers = useMemo(() => toPlayerArray(game?.stats?.away, game?.awayId), [game]);
-  const homePlayers = useMemo(() => toPlayerArray(game?.stats?.home, game?.homeId), [game]);
+  const awayPlayers = useMemo(() => toPlayerArray(game?.playerStats?.away ?? game?.stats?.away, game?.awayId), [game]);
+  const homePlayers = useMemo(() => toPlayerArray(game?.playerStats?.home ?? game?.stats?.home, game?.homeId), [game]);
   const playerRows = useMemo(() => [...awayPlayers, ...homePlayers], [awayPlayers, homePlayers]);
   const teamTotals = useMemo(() => ({
-    home: deriveTeamTotals(game?.stats?.home),
-    away: deriveTeamTotals(game?.stats?.away),
+    home: game?.teamStats?.home ?? deriveTeamTotals(game?.playerStats?.home ?? game?.stats?.home),
+    away: game?.teamStats?.away ?? deriveTeamTotals(game?.playerStats?.away ?? game?.stats?.away),
   }), [game]);
 
   const topPassers = playerRows.filter((p) => (p.stats?.passAtt ?? 0) > 0).sort((a, b) => (b.stats?.passYd ?? 0) - (a.stats?.passYd ?? 0)).slice(0, 6);
@@ -138,7 +139,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const availability = buildCompletedGamePresentation(game ?? { gameId }, { source: "game_detail_screen" });
   const archiveQuality = availability.archiveQuality;
   const hasAnyPayload = Boolean(game && (
-    game.homeScore != null || game.awayScore != null || game.stats || game.recap || game.quarterScores
+    game.homeScore != null || game.awayScore != null || game.stats || game.playerStats || game.teamStats || game.recap || game.quarterScores
   ));
   const unavailableMessage = "No archived postgame data was found for this matchup.";
 
@@ -200,12 +201,12 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             <section className="bs-section">
               <h4>Team comparison</h4>
               <div className="bs-compare-grid">
-                <StatCompareRow label="Total Yards" awayValue={teamTotals.away.totalYards} homeValue={teamTotals.home.totalYards} />
-                <StatCompareRow label="Pass Yards" awayValue={teamTotals.away.passYards} homeValue={teamTotals.home.passYards} />
-                <StatCompareRow label="Rush Yards" awayValue={teamTotals.away.rushYards} homeValue={teamTotals.home.rushYards} />
-                <StatCompareRow label="Turnovers" awayValue={teamTotals.away.turnovers} homeValue={teamTotals.home.turnovers} />
-                <StatCompareRow label="Sacks" awayValue={teamTotals.away.sacks} homeValue={teamTotals.home.sacks} />
-                <StatCompareRow label="3rd Down" awayValue={`${teamTotals.away.thirdDownMade}/${teamTotals.away.thirdDownAtt}`} homeValue={`${teamTotals.home.thirdDownMade}/${teamTotals.home.thirdDownAtt}`} />
+                <StatCompareRow label="Total Yards" awayValue={teamTotals.away.totalYards ?? "Unavailable"} homeValue={teamTotals.home.totalYards ?? "Unavailable"} />
+                <StatCompareRow label="Pass Yards" awayValue={teamTotals.away.passYards ?? "Unavailable"} homeValue={teamTotals.home.passYards ?? "Unavailable"} />
+                <StatCompareRow label="Rush Yards" awayValue={teamTotals.away.rushYards ?? "Unavailable"} homeValue={teamTotals.home.rushYards ?? "Unavailable"} />
+                <StatCompareRow label="Turnovers" awayValue={teamTotals.away.turnovers ?? "Unavailable"} homeValue={teamTotals.home.turnovers ?? "Unavailable"} />
+                <StatCompareRow label="Sacks" awayValue={teamTotals.away.sacks ?? "Unavailable"} homeValue={teamTotals.home.sacks ?? "Unavailable"} />
+                <StatCompareRow label="3rd Down" awayValue={teamTotals.away.thirdDownAtt != null ? `${teamTotals.away.thirdDownMade ?? 0}/${teamTotals.away.thirdDownAtt}` : "Unavailable"} homeValue={teamTotals.home.thirdDownAtt != null ? `${teamTotals.home.thirdDownMade ?? 0}/${teamTotals.home.thirdDownAtt}` : "Unavailable"} />
               </div>
             </section>
 
