@@ -1,3 +1,5 @@
+import { buildPlayerMotivationProfile } from './mood/playerMood.js';
+
 const SCARCITY_BASELINE = {
   QB: 8,
   WR: 18,
@@ -44,36 +46,19 @@ export function inferTeamDirection(team, week = 1) {
   return 'middling';
 }
 
-export function buildContractProfile(player = {}) {
-  const age = safeNum(player.age, 26);
-  const morale = safeNum(player.morale, 70);
-  const noiseA = seeded(player.id, 41);
-  const noiseB = seeded(player.id, 97);
-  const traits = Array.isArray(player?.traits) ? player.traits.map((t) => String(t).toLowerCase()) : [];
-
-  const isLoyal = traits.includes('loyal') || noiseA > 0.82;
-  const moneyPriority = Math.max(0.2, Math.min(0.95, 0.45 + (age < 27 ? 0.18 : 0) + (noiseA - 0.5) * 0.2));
-  const contenderPriority = Math.max(0.1, Math.min(0.95, 0.4 + (age >= 30 ? 0.28 : 0) + (noiseB - 0.5) * 0.18));
-  const rolePriority = Math.max(0.15, Math.min(0.95, 0.42 + (age <= 27 ? 0.12 : 0) + (morale < 55 ? 0.16 : 0)));
-  const securityPriority = Math.max(0.15, Math.min(0.95, 0.45 + (age <= 25 ? 0.2 : 0) - (age >= 31 ? 0.15 : 0)));
-  const loyaltyPriority = Math.max(0.05, Math.min(0.9, (isLoyal ? 0.55 : 0.18) + (morale >= 75 ? 0.12 : 0)));
-  const schemePriority = Math.max(0.05, Math.min(0.8, 0.22 + (noiseB - 0.5) * 0.2));
-  const negotiationFlex = Math.max(0.05, Math.min(0.9, 0.35 + (isLoyal ? 0.15 : 0) + (morale >= 70 ? 0.1 : -0.08)));
-
+export function buildContractProfile(player = {}, teamContext = {}) {
+  const base = buildPlayerMotivationProfile(player, teamContext);
   let headline = 'Balanced priorities';
-  if (moneyPriority >= Math.max(contenderPriority, rolePriority, loyaltyPriority)) headline = 'Money-focused';
-  else if (contenderPriority >= Math.max(rolePriority, loyaltyPriority)) headline = 'Seeking contender';
-  else if (rolePriority >= loyaltyPriority) headline = 'Wants a bigger role';
+  if (base.moneyPriority >= Math.max(base.contenderPriority, base.rolePriority, base.loyalty)) headline = 'Money-focused';
+  else if (base.contenderPriority >= Math.max(base.rolePriority, base.loyalty)) headline = 'Seeking contender';
+  else if (base.rolePriority >= base.loyalty) headline = 'Wants a bigger role';
   else headline = 'Open to hometown discount';
 
   return {
-    moneyPriority,
-    contenderPriority,
-    rolePriority,
-    securityPriority,
-    loyaltyPriority,
-    schemePriority,
-    negotiationFlex,
+    ...base,
+    loyaltyPriority: base.loyalty,
+    schemePriority: base.schemeFitPreference,
+    negotiationFlex: Math.max(0.05, Math.min(0.9, 0.28 + base.patience * 0.5 + base.loyalty * 0.22 - base.moneyPriority * 0.2)),
     headline,
   };
 }

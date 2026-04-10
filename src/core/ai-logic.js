@@ -12,6 +12,8 @@ import {
     buildDecisionTiming,
 } from './contract-market.js';
 import NewsEngine from './news-engine.js';
+import { getTeamContextForNegotiation } from './teamContext/negotiationContext.js';
+import { evaluateContractOffer } from './contracts/negotiation.js';
 
 class AiLogic {
 
@@ -630,13 +632,24 @@ class AiLogic {
                 : calculateDefensiveSchemeFit(player, team?.staff?.headCoach?.defScheme || '4-3');
             const direction = inferTeamDirection(team, Number(cache.getMeta()?.currentWeek ?? 1));
             const roleOpportunity = (this.calculateTeamNeeds(team.id)?.[player.pos] ?? 1) / 2.2;
-            const score = scoreOffer(player, offer, {
+            const legacyScore = scoreOffer(player, offer, {
                 team,
                 direction,
                 roleOpportunity,
                 fit: fitScore,
                 loyaltyBoost: Number(team.id) === Number(player.teamId) ? 0.35 : 0,
             }, { profile, askTotalValue: askTotal });
+            const teamContext = getTeamContextForNegotiation(player, team, null, {
+                teamDirection: direction,
+                needsAtPosition: this.calculateTeamNeeds(team.id)?.[player.pos] ?? 1,
+                rosterAtPosition: cache.getPlayersByTeam(team.id).filter((p) => p?.pos === player?.pos),
+            });
+            const offerEval = evaluateContractOffer(player, {
+                ...teamContext,
+                schemeFitScore: fitScore,
+                franchiseDirectionScore: direction === 'contender' ? 78 : direction === 'rebuilding' ? 44 : 58,
+            }, offer, { profile, askTotalValue: askTotal, askAnnual: ask.baseAnnual, askYears: ask.yearsTotal });
+            const score = legacyScore * 55 + (offerEval.score / 100) * 45;
 
             if (score > bestScore) {
                 bestScore = score;

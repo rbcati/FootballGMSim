@@ -51,6 +51,10 @@ export function summarizeFreeAgentMarket(player) {
   const urgencyTag = market?.urgencyLabel ?? null;
   const patienceLabel = market?.patienceLabel ?? null;
   const riskLabel = market?.riskLabel ?? null;
+  const motivationSummary = market?.motivationSummary ?? player?.demandProfile?.headline ?? null;
+  const fitScore = safeNum(market?.fitScore ?? player?.demandProfile?.fitScore, 0);
+  const stateChips = Array.isArray(market?.stateChips) ? market.stateChips : [];
+  const negotiationStance = player?.demandProfile?.negotiationStance ?? null;
   const knownBidderLabel = bidderCount > 0 ? `${bidderCount} known bidder${bidderCount > 1 ? "s" : ""}` : "No known bidders";
   const hasVisibleSnapshot = hasTopOffer || bidderCount > 0 || userOffered || !!market?.timingState;
   const reSign = player?.reSign ?? null;
@@ -91,5 +95,9 @@ export function summarizeFreeAgentMarket(player) {
     topOfferLabel,
     topBidTeam: offers?.topBidTeam ?? null,
     reSign,
+    motivationSummary,
+    fitScore,
+    stateChips,
+    negotiationStance,
   };
 }
