@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 4;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -39,7 +39,30 @@ const MIGRATIONS = {
   1: migrateV1ToV2,
   2: migrateV2ToV3,
   3: migrateV3ToV4,
+  4: migrateV4ToV5,
 };
+
+function migrateV4ToV5(meta = {}) {
+  const normalizeResult = (result) => ({
+    ...result,
+    recapText: result?.recapText ?? null,
+    teamDriveStats: result?.teamDriveStats ?? null,
+    simSeed: result?.simSeed ?? null,
+  });
+  const normalizeWeekResults = (weekResults) => (
+    Array.isArray(weekResults) ? weekResults.map(normalizeResult) : weekResults
+  );
+  const normalizedResultsByWeek = Array.isArray(meta?.resultsByWeek)
+    ? meta.resultsByWeek.map(normalizeWeekResults)
+    : Object.fromEntries(
+      Object.entries(meta?.resultsByWeek ?? {}).map(([week, results]) => [week, normalizeWeekResults(results)])
+    );
+  return {
+    ...meta,
+    resultsByWeek: normalizedResultsByWeek,
+    saveVersion: 5,
+  };
+}
 
 export function migrateSaveMetaToCurrent(meta = {}) {
   const startVersion = Number(meta?.saveVersion ?? 0);

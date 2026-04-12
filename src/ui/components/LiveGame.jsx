@@ -641,8 +641,11 @@ export default function LiveGame({
     awayAbbr: userLastResults[0].awayName?.slice(0, 3) ?? "???",
     homeScore: userLastResults[0].homeScore,
     awayScore: userLastResults[0].awayScore,
+    recapText: userLastResults[0].recapText ?? null,
+    teamDriveStats: userLastResults[0].teamDriveStats ?? null,
   } : null);
   const recapText = (() => {
+    if (recapGame?.recapText) return recapGame.recapText;
     if (!recapGame) return null;
     const homeScore = recapGame.homeScore ?? 0;
     const awayScore = recapGame.awayScore ?? 0;
@@ -662,6 +665,22 @@ export default function LiveGame({
     if (margin <= 10) return "Competitive loss. You were in it, but couldn't finish.";
     return "Rough day. Regroup and reset before next week.";
   })();
+  const recapDriveStats = recapGame?.teamDriveStats ?? null;
+  const hasDriveStats = Boolean(recapDriveStats?.home && recapDriveStats?.away);
+  const statValuePair = (key, digits = 1) => {
+    if (!hasDriveStats) return null;
+    const homeVal = recapDriveStats.home?.[key];
+    const awayVal = recapDriveStats.away?.[key];
+    if (homeVal == null || awayVal == null) return null;
+    const fmt = (value) => (typeof value === "number" ? value.toFixed(digits) : value);
+    return `${recapGame.awayAbbr} ${fmt(awayVal)} · ${recapGame.homeAbbr} ${fmt(homeVal)}`;
+  };
+  const statGridRows = hasDriveStats ? [
+    { label: "QB Rtg", value: statValuePair("qbRating", 1) },
+    { label: "YPC", value: statValuePair("rushYPC", 2) },
+    { label: "TO", value: statValuePair("turnovers", 0) },
+    { label: "Sacks", value: statValuePair("sacks", 0) },
+  ] : [];
 
   if (!visible) return null;
 
@@ -962,7 +981,22 @@ export default function LiveGame({
                 <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: ".06em", color: "var(--text-subtle)", marginBottom: 2 }}>
                   Week Recap
                 </div>
-                <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)" }}>{recapText}</div>
+                {hasDriveStats && (
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "var(--space-1) var(--space-2)",
+                    marginBottom: "var(--space-2)",
+                  }}>
+                    {statGridRows.map((row) => (
+                      <div key={row.label} style={{ padding: "4px 6px", border: "1px solid var(--hairline)", borderRadius: "var(--radius-sm)" }}>
+                        <div style={{ fontSize: "10px", color: "var(--text-subtle)", textTransform: "uppercase" }}>{row.label}</div>
+                        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{row.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, color: "var(--text)", fontStyle: "italic" }}>{recapText}</div>
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                   {recapGame.awayAbbr} {recapGame.awayScore} - {recapGame.homeScore} {recapGame.homeAbbr}
                 </div>
