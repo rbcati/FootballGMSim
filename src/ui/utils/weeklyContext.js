@@ -118,10 +118,17 @@ export function evaluateWeeklyContext(league) {
   const direction = classifyDirection(userTeam, week);
   const intel = buildTeamIntelligence(userTeam, { week });
   const contractMarket = league?.contractMarket ?? null;
-  const storylineCards = [
+  const rawStorylineCards = [
     ...buildStorylineCards(league),
     ...(Array.isArray(league?.seasonStorylines) ? league.seasonStorylines : []),
-  ].slice(0, 8);
+  ];
+  const seenStoryHeadlines = new Set();
+  const storylineCards = rawStorylineCards.filter((card) => {
+    const headline = String(card?.title ?? '').trim().toLowerCase();
+    if (!headline || seenStoryHeadlines.has(headline)) return false;
+    seenStoryHeadlines.add(headline);
+    return true;
+  }).slice(0, 8);
   const chemistry = intel?.chemistry;
   const investments = franchiseInvestmentSummary(userTeam);
 

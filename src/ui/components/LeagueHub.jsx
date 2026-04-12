@@ -44,9 +44,15 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
   }, [teams]);
 
   const featuredGames = useMemo(() => {
-    const games = Array.isArray(league?.schedule) ? league.schedule : [];
-    return [...games].reverse().filter((g) => Number(g.homeScore ?? -1) >= 0 && Number(g.awayScore ?? -1) >= 0).slice(0, 3);
-  }, [league?.schedule]);
+    const weeks = Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks : [];
+    const allGames = weeks.flatMap((weekRow) => (
+      (weekRow?.games ?? []).map((g) => ({ ...g, week: Number(weekRow?.week ?? g?.week ?? 0) }))
+    ));
+    return allGames
+      .filter((g) => g?.played || (Number(g.homeScore ?? -1) >= 0 && Number(g.awayScore ?? -1) >= 0))
+      .sort((a, b) => Number(b.week ?? 0) - Number(a.week ?? 0))
+      .slice(0, 3);
+  }, [league?.schedule?.weeks]);
 
   return (
     <div>

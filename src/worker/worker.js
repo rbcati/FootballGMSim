@@ -221,6 +221,103 @@ function getTeamRosterDepth(teamId) {
   return depth;
 }
 
+function resolvePlayerTeamId(player) {
+  const num = Number(player?.teamId);
+  if (Number.isFinite(num)) return num;
+  if (typeof player?.teamId === 'string' && player.teamId.trim()) return player.teamId.trim();
+  return null;
+}
+
+function averageOvr(players = []) {
+  const rows = players.filter((p) => Number.isFinite(Number(p?.ovr)));
+  if (!rows.length) return 0;
+  return Math.round(rows.reduce((sum, p) => sum + Number(p.ovr), 0) / rows.length);
+}
+
+function deriveTeamUnitRatings(teamId) {
+  const roster = cache.getPlayersByTeam(teamId);
+  const posBuckets = {
+    QB: [], RB: [], WR: [], TE: [], OL: [],
+    DL: [], LB: [], DB: [],
+  };
+  for (const p of roster) {
+    const pos = String(p?.pos ?? '').toUpperCase();
+    if (pos === 'QB') posBuckets.QB.push(p);
+    else if (['RB', 'HB', 'FB'].includes(pos)) posBuckets.RB.push(p);
+    else if (['WR', 'FL', 'SE'].includes(pos)) posBuckets.WR.push(p);
+    else if (pos === 'TE') posBuckets.TE.push(p);
+    else if (['OL', 'OT', 'LT', 'RT', 'OG', 'LG', 'RG', 'C', 'T', 'G'].includes(pos)) posBuckets.OL.push(p);
+    else if (['DL', 'DE', 'DT', 'EDGE', 'NT', 'IDL'].includes(pos)) posBuckets.DL.push(p);
+    else if (['LB', 'MLB', 'OLB', 'ILB'].includes(pos)) posBuckets.LB.push(p);
+    else if (['DB', 'CB', 'S', 'SS', 'FS', 'NCB'].includes(pos)) posBuckets.DB.push(p);
+  }
+
+  const pickTop = (rows, count) => [...rows].sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0)).slice(0, count);
+  const offenseStarters = [
+    ...pickTop(posBuckets.QB, 1),
+    ...pickTop(posBuckets.RB, 1),
+    ...pickTop(posBuckets.WR, 3),
+    ...pickTop(posBuckets.TE, 1),
+    ...pickTop(posBuckets.OL, 5),
+  ];
+  const defenseStarters = [
+    ...pickTop(posBuckets.DL, 4),
+    ...pickTop(posBuckets.LB, 3),
+    ...pickTop(posBuckets.DB, 4),
+  ];
+
+  const off = averageOvr(offenseStarters);
+  const def = averageOvr(defenseStarters);
+  return {
+    offenseRating: off,
+    defenseRating: def,
+    offRating: off,
+    defRating: def,
+    offOvr: off,
+    defOvr: def,
+  };
+}
+
+function repairRosterAndTeamLinks({ reason = 'load' } = {}) {
+  let repairedTeams = 0;
+  const teams = cache.getAllTeams();
+  for (const team of teams) {
+    const teamId = Number(team?.id);
+    if (!Number.isFinite(teamId)) continue;
+
+    const rosterFromPool = cache.getPlayersByTeam(teamId);
+    const rosterIds = Array.isArray(team?.rosterIds) ? team.rosterIds : [];
+    if (!rosterFromPool.length && rosterIds.length) {
+      for (const pid of rosterIds) {
+        const player = cache.getPlayer(pid);
+        if (!player) continue;
+        if (resolvePlayerTeamId(player) !== teamId) cache.updatePlayer(player.id, { teamId });
+      }
+    }
+
+    const repairedRoster = cache.getPlayersByTeam(teamId);
+    const shouldRepair = (team?.roster ?? []).length === 0 && (Number(team?.rosterCount ?? 0) >= 53 || repairedRoster.length >= 53);
+    if (shouldRepair || repairedRoster.length !== (team?.roster ?? []).length) {
+      cache.updateTeam(teamId, {
+        roster: repairedRoster,
+        rosterIds: repairedRoster.map((p) => p.id),
+        rosterCount: repairedRoster.length,
+        ...deriveTeamUnitRatings(teamId),
+      });
+      repairedTeams += 1;
+    } else {
+      cache.updateTeam(teamId, deriveTeamUnitRatings(teamId));
+    }
+  }
+
+  if (repairedTeams > 0) {
+    post(toUI.NOTIFICATION, {
+      level: 'info',
+      message: `Repaired roster links for ${repairedTeams} team${repairedTeams === 1 ? '' : 's'} (${reason}).`,
+    });
+  }
+}
+
 function buildTeamContractSnapshot(teamId) {
   const team = cache.getTeam(teamId);
   const roster = cache.getPlayersByTeam(teamId);
@@ -315,7 +412,9 @@ let meta = getSafeMeta();
 function buildViewState() {
   const meta = getSafeMeta();
   const tradeDeadline = getTradeDeadlineSnapshot(meta);
-  const teams = cache.getAllTeams().map(t => ({
+  const teams = cache.getAllTeams().map(t => {
+    const roster = cache.getPlayersByTeam(t.id);
+    return ({
     id:        t.id,
     name:      t.name,
     abbr:      t.abbr,
@@ -330,7 +429,14 @@ function buildViewState() {
     capRoom:   t.capRoom   ?? 0,
     capTotal:  t.capTotal  ?? Constants.SALARY_CAP.HARD_CAP,
     ovr:       t.ovr       ?? 75,
-    rosterCount: cache.getPlayersByTeam(t.id).length,
+    offenseRating: t.offenseRating ?? t.offRating ?? t.offOvr ?? 0,
+    defenseRating: t.defenseRating ?? t.defRating ?? t.defOvr ?? 0,
+    offRating: t.offRating ?? t.offenseRating ?? t.offOvr ?? 0,
+    defRating: t.defRating ?? t.defenseRating ?? t.defOvr ?? 0,
+    offOvr: t.offOvr ?? t.offenseRating ?? t.offRating ?? 0,
+    defOvr: t.defOvr ?? t.defenseRating ?? t.defRating ?? 0,
+    rosterCount: roster.length,
+    roster,
     fanApproval: t?.fanApproval ?? 50,
     franchiseInvestments: normalizeFranchiseInvestments(t?.franchiseInvestments),
     rivalTeamId: t?.rivalTeamId ?? null,
@@ -345,7 +451,8 @@ function buildViewState() {
         compensatoryForName: pk?.compensatoryForName ?? null,
       }))
       : [],
-  }));
+  });
+  });
 
   // Calculate tension/stakes for the user's next game
   let nextGameStakes = 0;
@@ -1120,10 +1227,11 @@ async function handleLoadSave({ leagueId }, id) {
       // Recalculate cap for every team so legacy saves (where players stored
       // salary as flat fields rather than inside a contract object) display
       // the correct Cap Used / Cap Room values immediately on load.
+      repairRosterAndTeamLinks({ reason: 'load-save' });
       for (const team of cache.getAllTeams()) {
         recalculateTeamCap(team.id);
         const normalizedStaff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
-        cache.updateTeam(team.id, { staff: normalizedStaff });
+        cache.updateTeam(team.id, { staff: normalizedStaff, ...deriveTeamUnitRatings(team.id) });
       }
 
       // Migration/defaulting for league customization + commissioner metadata.
@@ -3399,6 +3507,12 @@ async function handleImportSave({ data, saveName }, id) {
       news: await News.latest(200),
       availableCoaches: meta?.availableCoaches ?? [],
     });
+    repairRosterAndTeamLinks({ reason: 'import-save' });
+    for (const team of cache.getAllTeams()) {
+      recalculateTeamCap(team.id);
+      cache.updateTeam(team.id, deriveTeamUnitRatings(team.id));
+    }
+    await flushDirty();
     const userTeam = cache.getTeam(meta?.userTeamId);
     await Saves.save({
       id: leagueId,

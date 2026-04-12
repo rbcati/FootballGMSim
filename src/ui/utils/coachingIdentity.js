@@ -240,9 +240,10 @@ export function buildCoachingNarrativeCards(league, { limit = 4 } = {}) {
     const tenure = toTenureYears(hc);
 
     if (!hc) {
+      const record = `${wins}-${losses}${ties ? `-${ties}` : ''}`;
       cards.push({
         id: `coach-vacant-${team.id}`,
-        title: `${team.abbr ?? team.name} still searching for sideline identity`,
+        title: `${team.abbr ?? team.name} (${record}) still searching for sideline identity`,
         detail: 'Head-coach seat is unsettled and coordinators are operating under interim pressure.',
         priority: 92,
         tone: 'danger',
