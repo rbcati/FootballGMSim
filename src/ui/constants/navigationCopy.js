@@ -2,9 +2,9 @@ export const NAV_LABELS = Object.freeze({
   hq: 'HQ',
   team: 'Team',
   league: 'League',
-  news: 'News',
+  transactions: 'Transactions',
+  history: 'History',
   more: 'More',
-  overflow: 'More',
 });
 
 export const ACTION_LABELS = Object.freeze({

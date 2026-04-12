@@ -52,6 +52,7 @@ import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
+import { buildCanonicalGameId } from '../core/gameIdentity.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -974,6 +975,12 @@ function AppContent() {
                     week: league?.week,
                     phase: league?.phase,
                     logs: userGameLogs || [],
+                    gameId: buildCanonicalGameId({
+                      seasonId: league?.seasonId,
+                      week: league?.week,
+                      homeId: homeTeam?.id,
+                      awayId: awayTeam?.id,
+                    }),
                   });
                   setWatchMode('watch');
                   actions.clearUserGame();
@@ -999,6 +1006,12 @@ function AppContent() {
           week={postGameResult.week}
           phase={postGameResult.phase}
           logs={postGameResult.logs || []}
+          boxScoreGameId={postGameResult.gameId}
+          onOpenBoxScore={(gameId) => {
+            if (!gameId) return;
+            setPostGameResult(null);
+            setExternalBoxScoreId(gameId);
+          }}
           onContinue={() => {
             try {
               setPostGameResult(null);

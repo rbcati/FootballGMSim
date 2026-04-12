@@ -210,12 +210,11 @@ const BASE_TABS = [
 ];
 
 const NAV_GROUPS = [
-  { title: "HQ", tabs: ["HQ"] },
-  { title: "Team", tabs: ["Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
-  { title: "League", tabs: ["Standings", "Schedule", "Stats", "Leaders", "Award Races", "Analytics"] },
-  { title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
-  { title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap"] },
-  { title: "Tools", tabs: ["Saves", "God Mode", "🤖 GM Advisor"] },
+  { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
+  { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
+  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Standings", "Schedule", "Stats", "Leaders", "Award Races", "Analytics", "News"] },
+  { id: SHELL_SECTIONS.transactions, title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
+  { id: SHELL_SECTIONS.history, title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap", "Team History", "Saves"] },
 ];
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
@@ -1567,19 +1566,9 @@ export default function LeagueDashboard({
   const activeSection = getShellSectionForDashboardTab(activeTab);
   const handleSectionChange = (sectionId) => {
     const normalizedSection = normalizeShellSectionId(sectionId);
-    if (normalizedSection === SHELL_SECTIONS.team) {
-      setActiveTab("Team");
-      return;
-    }
-    if (normalizedSection === SHELL_SECTIONS.league) {
-      setActiveTab("League");
-      return;
-    }
-    if (normalizedSection === SHELL_SECTIONS.news) {
-      setActiveTab("News");
-      return;
-    }
-    setActiveTab("HQ");
+    const group = NAV_GROUPS.find((entry) => entry.id === normalizedSection);
+    const targetTab = group?.tabs?.find((tab) => TABS.includes(tab)) ?? "HQ";
+    setActiveTab(targetTab);
   };
 
   return (
@@ -1658,12 +1647,6 @@ export default function LeagueDashboard({
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
-
-      {!isMobile && <div className="franchise-primary-nav">
-        {["HQ","Roster","Schedule","Transactions","Standings"].map((tab) => (
-          <button key={`shell-${tab}`} className={`standings-tab${activeTab === tab ? ' active' : ''}`} onClick={() => setActiveTab(tab)}>{tab}</button>
-        ))}
-      </div>}
 
       {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
       {activeTab !== "Home" && activeTab !== "HQ" && league.phase !== "draft" && <div
@@ -1916,62 +1899,49 @@ export default function LeagueDashboard({
 
       </div>}
 
-      {!isMobile && <div className="standings-tabs" style={{ marginBottom: "var(--space-2)", gap: 6, flexWrap: "nowrap", overflowX: "auto" }}>
-        {getPhasePriorityTabs(league.phase).filter((tab) => TABS.includes(tab)).map((tab) => (
-          <button
-            key={`priority-${tab}`}
-            className={`standings-tab${activeTab === tab ? " active" : ""}`}
-            onClick={() => setActiveTab(tab)}
-            style={{
-              flexShrink: 0,
-              fontSize: "10px",
-              padding: "7px 10px",
-              borderColor: "var(--accent)",
-            }}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>}
-
       {/* ── Grouped Navigation ── */}
       {!isMobile && <div
-        className="standings-tabs dashboard-main-tabs"
+        className="dashboard-main-tabs"
         style={{
           marginBottom: "var(--space-4)",
-          flexWrap: "wrap",
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
+          display: "grid",
+          gap: 8,
           position: "sticky",
-          top: "calc(env(safe-area-inset-top) + 2px)",
+          top: "calc(env(safe-area-inset-top) + 4px)",
           zIndex: 10,
           background: "var(--bg)",
-          paddingTop: "var(--space-2)",
-          paddingBottom: "var(--space-2)",
-          margin: "0 calc(var(--space-4) * -1) var(--space-4)",
-          padding: "6px var(--space-4)",
+          padding: "var(--space-2) var(--space-1) var(--space-3)",
           borderBottom: "1px solid var(--hairline)",
         }}
       >
-        {NAV_GROUPS.map((group) => (
-          <div key={group.title} style={{ display: "flex", alignItems: "center", gap: 6, marginRight: 10 }}>
-            <span style={{ fontSize: "10px", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-subtle)" }}>{group.title}</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {group.tabs.filter((tab) => TABS.includes(tab)).map((tab) => (
-                <button
-                  key={tab}
-                  className={`standings-tab${activeTab === tab ? " active" : ""}`}
-                  onClick={() => setActiveTab(tab)}
-                  style={{ flexShrink: 0, fontSize: "10px", padding: "6px 9px" }}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
+        <div className="standings-tabs" style={{ flexWrap: "nowrap", overflowX: "auto" }}>
+          {NAV_GROUPS.map((group) => (
+            <button
+              key={group.id}
+              className={`standings-tab${activeSection === group.id ? " active" : ""}`}
+              onClick={() => handleSectionChange(group.id)}
+              aria-current={activeSection === group.id ? "page" : undefined}
+              style={{ flexShrink: 0, fontWeight: 700 }}
+            >
+              {group.title}
+            </button>
+          ))}
+        </div>
+        <div className="standings-tabs" style={{ flexWrap: "nowrap", overflowX: "auto", gap: 6 }}>
+          {(NAV_GROUPS.find((group) => group.id === activeSection)?.tabs ?? ["HQ"])
+            .filter((tab) => TABS.includes(tab))
+            .map((tab) => (
+              <button
+                key={tab}
+                className={`standings-tab${activeTab === tab ? " active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+                aria-current={activeTab === tab ? "page" : undefined}
+                style={{ flexShrink: 0, fontSize: "11px", padding: "7px 10px" }}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
-        ))}
       </div>}
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}

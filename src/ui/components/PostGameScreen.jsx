@@ -21,12 +21,7 @@ class PostGameErrorBoundary extends Component {
   componentDidCatch(err) { console.error('[PostGameScreen] render crash:', err); }
   render() {
     if (!this.state.crashed) return this.props.children;
-  
-  const notableMoments = (logs || [])
-    .filter((l) => l?.isTouchdown || l?.turnover || /field goal|sack|interception|fumble/i.test(l?.text ?? ""))
-    .slice(-5)
-    .reverse();
-  return (
+    return (
       <div style={{
         position: "fixed", inset: 0, zIndex: 9700,
         background: "rgba(0,0,0,0.92)", display: "flex",
@@ -209,6 +204,8 @@ function PostGameScreenInner({
   mvpPlayer,          // optional player object (legacy)
   stats = {},         // { totalYards, passYards, rushYards, turnovers }
   logs = [],          // play-by-play logs for deriving leaders
+  boxScoreGameId,
+  onOpenBoxScore,
   onContinue,
   week,
   phase,
@@ -237,6 +234,10 @@ function PostGameScreenInner({
   }, []);
 
   const { qb, receiver, rusher, defender } = useGameLeaders(logs);
+  const notableMoments = (logs || [])
+    .filter((l) => l?.isTouchdown || l?.turnover || /field goal|sack|interception|fumble/i.test(l?.text ?? ""))
+    .slice(-5)
+    .reverse();
 
   // Build leader stat lines
   const qbLine = qb
@@ -381,6 +382,17 @@ function PostGameScreenInner({
                   {homeScore}
                 </div>
               </div>
+            </div>
+            <div style={{ marginTop: 10, display: "flex", justifyContent: "center" }}>
+              <button
+                className="btn-link"
+                type="button"
+                onClick={() => boxScoreGameId && onOpenBoxScore?.(boxScoreGameId)}
+                disabled={!boxScoreGameId}
+                style={{ cursor: boxScoreGameId ? "pointer" : "not-allowed", fontWeight: 700 }}
+              >
+                {boxScoreGameId ? "View Box Score ›" : "Box score unavailable"}
+              </button>
             </div>
           </div>
 
