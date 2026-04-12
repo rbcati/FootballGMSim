@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchFranchise } from './helpers/franchise.js';
+import { launchFranchise, goToTab } from './helpers/franchise.js';
 
 test('fresh franchise setup lands in playable HQ without render boundary', async ({ page }) => {
   const pageErrors = [];
@@ -17,14 +17,14 @@ test('fresh franchise setup lands in playable HQ without render boundary', async
   });
   expect(leagueReady).toBeTruthy();
 
-  await page.click('button:has-text("Transactions")').catch(() => {});
+  await goToTab(page, 'transactions');
   await expect(page.locator('text=Trade Workspace')).toBeVisible({ timeout: 10000 });
   await expect(page.locator('text=No offers right now')).toBeVisible();
 
-  await page.click('button:has-text("Roster")').catch(() => {});
+  await goToTab(page, 'roster');
   await expect(page.locator('text=Roster')).toBeVisible({ timeout: 10000 });
 
-  await page.click('button:has-text("Stats")').catch(() => {});
+  await goToTab(page, 'stats');
   await expect(page.locator('text=Player Stats')).toBeVisible({ timeout: 10000 });
 
   expect(pageErrors.join('\n')).not.toContain('leagueReady is not defined');

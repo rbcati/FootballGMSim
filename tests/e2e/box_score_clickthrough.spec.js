@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { launchFranchise, simulateSingleWeek } from './helpers/franchise.js';
+import { launchFranchise, simulateSingleWeek, goToTab } from './helpers/franchise.js';
 
 test.describe('Shared box score detail', () => {
   test('schedule score row opens Game Detail box score', async ({ page }) => {
     await launchFranchise(page);
     await simulateSingleWeek(page);
 
-    await page.getByRole('button', { name: 'Schedule' }).first().click();
-    await page.waitForTimeout(500);
+    await goToTab(page, 'schedule');
 
     await page.locator('.schedule-game-card.played, .schedule-game-card').first().click();
     await expect(page.getByText('Final Game Book').first()).toBeVisible();
@@ -18,15 +17,13 @@ test.describe('Shared box score detail', () => {
     await launchFranchise(page);
     await simulateSingleWeek(page);
 
-    await page.getByRole('button', { name: 'Schedule' }).first().click();
-    await page.waitForTimeout(400);
+    await goToTab(page, 'schedule');
     await page.locator('.schedule-game-card.played, .schedule-game-card').first().click();
     await expect(page.getByText('Final Game Book').first()).toBeVisible();
 
     await page.reload();
     await launchFranchise(page);
-    await page.getByRole('button', { name: 'Schedule' }).first().click();
-    await page.waitForTimeout(400);
+    await goToTab(page, 'schedule');
     await page.locator('.schedule-game-card.played, .schedule-game-card').first().click();
     await expect(page.getByText('Final Game Book').first()).toBeVisible();
   });

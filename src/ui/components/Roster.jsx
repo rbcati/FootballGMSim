@@ -1636,6 +1636,17 @@ function buildExpiringDecisionSummary(players = [], context = {}) {
   return summarizeExpiring(players, context);
 }
 
+export function normalizeInitialRosterState(initialState, initialViewMode = "table") {
+  const safeState = initialState && typeof initialState === "object" ? initialState : {};
+  const safeView = ["cards", "table", "depth"].includes(safeState.view)
+    ? safeState.view
+    : (["cards", "table", "depth"].includes(initialViewMode) ? initialViewMode : "table");
+  const safeFilter = typeof safeState.filter === "string" && safeState.filter.trim()
+    ? safeState.filter.trim().toUpperCase()
+    : "ALL";
+  return { safeView, safeFilter };
+}
+
 /**
  * Single player card — tappable, opens the PlayerProfile modal via onSelect(id).
  *
@@ -2014,11 +2025,16 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
 
 export default function Roster({ league, actions, onPlayerSelect, initialState = null, initialViewMode = "table" }) {
   const teamId = league?.userTeamId;
+  const initialConfig = useMemo(
+    () => normalizeInitialRosterState(initialState, initialViewMode),
+    [initialState, initialViewMode],
+  );
 
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
-  const [viewMode, setViewMode] = useState(initialViewMode); // 'cards' | 'table' | 'depth'
+  const [viewMode, setViewMode] = useState(initialConfig.safeView); // 'cards' | 'table' | 'depth'
+  const [initialFilter, setInitialFilter] = useState(initialConfig.safeFilter);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -2048,10 +2064,10 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
   }, [fetchRoster]);
 
   useEffect(() => {
-    if (!initialState) return;
-    if (initialState.view) setViewMode(initialState.view);
-    if (initialState.filter) setInitialFilter(initialState.filter);
-  }, [initialState]);
+    const next = normalizeInitialRosterState(initialState, initialViewMode);
+    setInitialFilter(next.safeFilter);
+    if (next.safeView) setViewMode(next.safeView);
+  }, [initialState, initialViewMode]);
 
   useEffect(() => {
     if (["cards", "table", "depth"].includes(initialViewMode)) {

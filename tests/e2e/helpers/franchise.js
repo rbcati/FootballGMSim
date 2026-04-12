@@ -1,32 +1,88 @@
 import { expect } from '@playwright/test';
 
+const APP_READY = '[data-testid="app-shell-ready"]';
+const SAVE_HUB_CTA = '[data-testid="start-new-franchise-cta"]';
+const ONBOARDING_CONTINUE = '[data-testid="onboarding-continue-button"]';
+const START_DYNASTY = '[data-testid="start-dynasty-button"]';
+const TEAM_SELECT = '[data-testid="team-selection-flow"]';
+
+async function detectBootstrapState(page) {
+  if (await page.locator(APP_READY).first().isVisible().catch(() => false)) return 'app_ready';
+  if (await page.locator(SAVE_HUB_CTA).first().isVisible().catch(() => false)) return 'save_hub';
+  if (await page.locator(START_DYNASTY).first().isVisible().catch(() => false)) return 'start_dynasty';
+  if (await page.locator(TEAM_SELECT).first().isVisible().catch(() => false)) return 'team_select';
+  if (await page.locator(ONBOARDING_CONTINUE).first().isVisible().catch(() => false)) return 'onboarding_continue';
+  return 'unknown';
+}
+
+export async function ensureLeagueLoaded(page) {
+  // Deterministic boot gate: wait for one known state, then branch.
+  await page.waitForFunction(() => {
+    const selectors = [
+      '[data-testid="app-shell-ready"]',
+      '[data-testid="start-new-franchise-cta"]',
+      '[data-testid="onboarding-continue-button"]',
+      '[data-testid="start-dynasty-button"]',
+      '[data-testid="team-selection-flow"]',
+    ];
+    return selectors.some((selector) => document.querySelector(selector));
+  }, { timeout: 60000 });
+
+  let state = await detectBootstrapState(page);
+  if (state === 'app_ready') {
+    await expect(page.locator(APP_READY)).toBeVisible();
+    return;
+  }
+
+  if (state === 'save_hub') {
+    await page.locator(SAVE_HUB_CTA).first().click();
+    state = await detectBootstrapState(page);
+  }
+
+  if (state === 'team_select') {
+    await page.locator(`${TEAM_SELECT} .team-card`).first().click();
+    state = await detectBootstrapState(page);
+  }
+
+  while (state === 'onboarding_continue') {
+    await page.locator(ONBOARDING_CONTINUE).first().click();
+    state = await detectBootstrapState(page);
+  }
+
+  if (state === 'start_dynasty') {
+    await page.locator(START_DYNASTY).first().click();
+  }
+
+  await expect(page.locator(APP_READY)).toBeVisible({ timeout: 60000 });
+}
+
 export async function launchFranchise(page) {
   await page.goto('http://localhost:5173');
-  await page.waitForTimeout(1000);
+  await ensureLeagueLoaded(page);
+}
 
-  const hasHeader = await page.locator('.app-header').first().isVisible().catch(() => false);
-  if (hasHeader) return;
-
-  const createVisible = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn').catch(() => false);
-  if (createVisible) {
-    await page.click('.btn-primary:has-text("New Career"), .sm-create-btn');
-  }
-
-  const teamCard = page.locator('.team-select-btn, .team-card').first();
-  if (await teamCard.isVisible().catch(() => false)) {
-    await teamCard.click();
-    const continueBtn = page.locator('button:has-text("Continue")');
-    const continueCount = await continueBtn.count();
-    for (let i = 0; i < Math.min(2, continueCount); i += 1) {
-      await continueBtn.nth(0).click();
-      await page.waitForTimeout(350);
+export async function goToTab(page, name) {
+  const tab = String(name).toLowerCase();
+  const sectionByTab = {
+    hq: 'hq',
+    team: 'team',
+    roster: 'team',
+    'game-plan': 'team',
+    standings: 'league',
+    schedule: 'league',
+    stats: 'league',
+    transactions: 'transactions',
+    'free-agency': 'transactions',
+    'history-hub': 'history',
+  };
+  const primary = sectionByTab[tab];
+  if (primary) {
+    const primaryLocator = page.locator(`[data-testid="primary-nav-${primary}"]`).first();
+    if (await primaryLocator.isVisible().catch(() => false)) {
+      await primaryLocator.click();
     }
-    const startBtn = page.locator('button:has-text("Start Dynasty")').first();
-    if (await startBtn.isVisible().catch(() => false)) await startBtn.click();
   }
-
-  await page.waitForSelector('.app-header', { state: 'visible', timeout: 60000 });
-  await expect(page.locator('.app-header')).toBeVisible();
+  await page.locator(`[data-testid="section-tab-${tab}"]`).first().click();
 }
 
 export async function simulateSingleWeek(page) {
@@ -36,10 +92,13 @@ export async function simulateSingleWeek(page) {
     if (btn) btn.click();
     else if (window.handleGlobalAdvance) window.handleGlobalAdvance();
   });
-  await page.waitForTimeout(900);
-  await page.evaluate(() => {
-    const skip = Array.from(document.querySelectorAll('button')).find((b) => b.innerText?.includes('Simulate (Skip)'));
-    if (skip) skip.click();
-  });
-  await page.waitForFunction((baseline) => (window?.state?.league?.week ?? baseline) > baseline, startWeek, { timeout: 90000 });
+  await page.waitForFunction(
+    (baseline) => {
+      const week = window?.state?.league?.week ?? baseline;
+      const phase = window?.state?.league?.phase;
+      return week > baseline || phase === 'offseason' || phase === 'free_agency' || phase === 'draft';
+    },
+    startWeek,
+    { timeout: 90000 },
+  );
 }
