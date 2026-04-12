@@ -2214,6 +2214,55 @@ function buildLeagueForSim(schedule, week, seasonId) {
   return leagueObj;
 }
 
+function roundStat(value, decimals = 1) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  const p = 10 ** decimals;
+  return Math.round(n * p) / p;
+}
+
+function buildTeamSimOutputs(boxSide = {}, simSide = {}) {
+  const rows = Object.values(boxSide || {});
+  const offenseRows = rows.filter((row) => ['QB', 'RB', 'WR', 'TE'].includes(String(row?.pos ?? '')));
+  const qbs = rows.filter((row) => (row?.pos === 'QB') && Number(row?.stats?.passAtt ?? 0) > 0);
+  const rushers = rows.filter((row) => Number(row?.stats?.rushAtt ?? 0) > 0);
+  const qbAttempts = qbs.reduce((sum, row) => sum + Number(row?.stats?.passAtt ?? 0), 0);
+  const qbCompletions = qbs.reduce((sum, row) => sum + Number(row?.stats?.passComp ?? 0), 0);
+  const qbYards = qbs.reduce((sum, row) => sum + Number(row?.stats?.passYd ?? 0), 0);
+  const qbTds = qbs.reduce((sum, row) => sum + Number(row?.stats?.passTD ?? 0), 0);
+  const qbInts = qbs.reduce((sum, row) => sum + Number(row?.stats?.interceptions ?? 0), 0);
+  const rushAttempts = rushers.reduce((sum, row) => sum + Number(row?.stats?.rushAtt ?? 0), 0);
+  const rushYards = rushers.reduce((sum, row) => sum + Number(row?.stats?.rushYd ?? 0), 0);
+  const turnovers = qbs.reduce((sum, row) => sum + Number(row?.stats?.interceptions ?? 0), 0)
+    + offenseRows.reduce((sum, row) => sum + Number(row?.stats?.fumblesLost ?? 0), 0);
+  const sacks = rows.reduce((sum, row) => sum + Number(row?.stats?.sacks ?? 0), 0);
+
+  const completionPct = qbAttempts > 0 ? qbCompletions / qbAttempts : 0;
+  const yardsPerAttempt = qbAttempts > 0 ? qbYards / qbAttempts : 0;
+  const tdRate = qbAttempts > 0 ? qbTds / qbAttempts : 0;
+  const intRate = qbAttempts > 0 ? qbInts / qbAttempts : 0;
+  const qbRating = qbAttempts > 0
+    ? (((completionPct - 0.3) * 5 + (yardsPerAttempt - 3) * 0.25 + tdRate * 20 + 2.375 - intRate * 25) / 6) * 100
+    : Number(simSide?.qbRating ?? 78);
+
+  return {
+    qbRating: roundStat(qbRating, 1),
+    rushingYpc: roundStat(rushAttempts > 0 ? rushYards / rushAttempts : Number(simSide?.rushYpc ?? 4.0), 2),
+    turnovers: Math.max(0, Math.round(turnovers)),
+    sacks: Math.max(0, roundStat(sacks, 1)),
+  };
+}
+
+function buildThreeSentenceRecap({ winnerAbbr, loserAbbr, winnerMetrics, loserMetrics, scoreHome, scoreAway, homeAbbr }) {
+  const margin = Math.abs(Number(scoreHome) - Number(scoreAway));
+  const winnerScore = winnerAbbr === homeAbbr ? scoreHome : scoreAway;
+  const loserScore = winnerAbbr === homeAbbr ? scoreAway : scoreHome;
+  const pointsLine = `${winnerAbbr} beat ${loserAbbr} ${winnerScore}-${loserScore}${margin <= 7 ? ' in a one-score finish' : ''}.`;
+  const efficiencyLine = `${winnerAbbr} won the efficiency battle with a ${winnerMetrics.qbRating.toFixed(1)} QB rating and ${winnerMetrics.rushingYpc.toFixed(2)} yards per carry.`;
+  const pressureLine = `${winnerAbbr} protected the ball (${winnerMetrics.turnovers} turnovers) while ${loserAbbr} coughed it up ${loserMetrics.turnovers} times and allowed ${winnerMetrics.sacks.toFixed(1)} sacks.`;
+  return `${pointsLine} ${efficiencyLine} ${pressureLine}`;
+}
+
 /**
  * Apply a game result coming from simulateBatch back to the cache.
  * Updates team win/loss records, writes scores into the slim schedule,
@@ -2282,6 +2331,21 @@ function applyGameResultToCache(result, week, seasonId) {
     wasUpset: false,
   });
   const winnerId = scoreHome >= scoreAway ? hId : aId;
+  const simOutputs = {
+    home: buildTeamSimOutputs(result.boxScore?.home ?? {}, result?.simFactors?.home ?? {}),
+    away: buildTeamSimOutputs(result.boxScore?.away ?? {}, result?.simFactors?.away ?? {}),
+  };
+  const winnerMetrics = winnerId === hId ? simOutputs.home : simOutputs.away;
+  const loserMetrics = winnerId === hId ? simOutputs.away : simOutputs.home;
+  const recapThreeSentence = buildThreeSentenceRecap({
+    winnerAbbr: winnerId === hId ? archiveContext.homeAbbr : archiveContext.awayAbbr,
+    loserAbbr: winnerId === hId ? archiveContext.awayAbbr : archiveContext.homeAbbr,
+    winnerMetrics,
+    loserMetrics,
+    scoreHome,
+    scoreAway,
+    homeAbbr: archiveContext.homeAbbr,
+  });
   const whyWon = summarizeWhyTeamWon({
     winnerAbbr: winnerId === hId ? archiveContext.homeAbbr : archiveContext.awayAbbr,
     loserAbbr: winnerId === hId ? archiveContext.awayAbbr : archiveContext.homeAbbr,
@@ -2290,7 +2354,7 @@ function applyGameResultToCache(result, week, seasonId) {
     awayId: aId,
     winnerId,
   });
-  const storyline = result.storyline ?? buildGameNarrativeSummary({
+  const storyline = result.storyline ?? recapThreeSentence ?? buildGameNarrativeSummary({
     homeTeam: { id: hId, abbr: archiveContext.homeAbbr },
     awayTeam: { id: aId, abbr: archiveContext.awayAbbr },
     homeScore: scoreHome,
@@ -2404,6 +2468,8 @@ function applyGameResultToCache(result, week, seasonId) {
       margin,
       gameScript,
       whyWon,
+      simOutputs,
+      recapThreeSentence,
       leaders: playerLeaders?.categories ?? null,
       playerOfGame: playerLeaders?.playerOfGame ?? null,
       standoutPerformances: playerLeaders?.standouts ?? [],
