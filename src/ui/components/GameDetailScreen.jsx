@@ -1,5 +1,5 @@
 import React from 'react';
-import BoxScore from './BoxScore.jsx';
+import BoxScorePanel from './BoxScorePanel.jsx';
 import { ScreenHeader, EmptyState } from './ScreenSystem.jsx';
 
 export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect }) {
@@ -30,11 +30,10 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
         backLabel="Back"
         metadata={[{ label: 'Game ID', value: gameId }]}
       />
-      <BoxScore
+      <BoxScorePanel
         gameId={gameId}
         actions={actions}
         league={league}
-        embedded
         onBack={onBack}
         onPlayerSelect={onPlayerSelect}
         onTeamSelect={onTeamSelect}

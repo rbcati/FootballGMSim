@@ -22,7 +22,7 @@ const MORE_GROUPS = [
     ],
   },
   {
-    title: 'League Office',
+    title: 'League + History',
     items: [
       { id: 'History Hub', label: 'History', icon: HomeIcon },
       { id: 'Analytics', label: 'Analytics', icon: AnalyticsIcon },
@@ -37,7 +37,8 @@ const BOTTOM_TABS = [
   { id: SHELL_SECTIONS.hq, label: NAV_LABELS.hq, icon: HomeIcon },
   { id: SHELL_SECTIONS.team, label: NAV_LABELS.team, icon: RosterIcon },
   { id: SHELL_SECTIONS.league, label: NAV_LABELS.league, icon: StandingsIcon },
-  { id: SHELL_SECTIONS.news, label: NAV_LABELS.news, icon: NewsIcon },
+  { id: SHELL_SECTIONS.transactions, label: NAV_LABELS.transactions, icon: TradesIcon },
+  { id: SHELL_SECTIONS.history, label: NAV_LABELS.history, icon: HistoryIcon },
 ];
 
 export default function MobileNav({ activeSection, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
@@ -104,7 +105,7 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
       </nav>
 
       <div className="mobile-bottom-bar">
-        {BOTTOM_TABS.slice(0, 2).map((tab) => {
+        {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
           return (
@@ -124,17 +125,6 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
           <PlayIcon size={22} />
           <span className="mobile-bottom-label">{advanceLabel || 'Advance'}</span>
         </button>
-
-        {BOTTOM_TABS.slice(2).map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeSection === tab.id;
-          return (
-            <button key={tab.id} className={`mobile-bottom-tab ${isActive ? 'active' : ''}`} onClick={() => handleSectionClick(tab.id)} aria-label={tab.label}>
-              <Icon size={20} />
-              <span className="mobile-bottom-label">{tab.label}</span>
-            </button>
-          );
-        })}
 
         <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open more menu">
           <MoreIcon size={20} />
@@ -163,3 +153,5 @@ function SaveIcon({ size = 24 }) { return <svg width={size} height={size} viewBo
 function GodModeIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2 4 7v10l8 5 8-5V7z" /><path d="M12 22V12" /></svg>; }
 function AnalyticsIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18" /><path d="m7 15 4-4 3 3 5-6" /></svg>; }
 function MoreIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="5" cy="12" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /></svg>; }
+
+function HistoryIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 8v5l3 2" /><path d="M3.05 11a9 9 0 1 1 .5 4" /><path d="M3 5v6h6" /></svg>; }
