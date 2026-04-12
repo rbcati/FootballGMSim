@@ -2013,6 +2013,8 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Roster({ league, actions, onPlayerSelect, initialState = null, initialViewMode = "table" }) {
+  const [initialFilter, setInitialFilter] = useState(initialState?.filter || "ALL");
+
   const teamId = league?.userTeamId;
 
   const [loading, setLoading] = useState(false);

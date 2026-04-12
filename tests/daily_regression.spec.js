@@ -13,33 +13,33 @@ test.describe('Daily Regression Pass', () => {
         await page.waitForTimeout(1000);
 
         // Handle Onboarding / Dashboard
-        const createBtn = await page.isVisible('.btn-primary:has-text("New Career"), .sm-create-btn');
-        if (createBtn) {
-            await page.click('.btn-primary:has-text("New Career"), .sm-create-btn');
-            await page.waitForSelector('.team-select-btn, .team-card', { state: 'visible' });
-            await page.locator('.team-select-btn, .team-card').first().click();
-            await page.click('button:has-text("Continue")');
+        await page.waitForTimeout(2000);
+        const startBtns = await page.locator('button:has-text("Start New Franchise")').all();
+        if(startBtns.length > 0) {
+            console.log('Clicking Start New Franchise');
+            await startBtns[0].click();
+            await page.waitForTimeout(1000);
+
+            console.log('Clicking BUF');
+            await page.locator('text=Buffalo Bills').click();
             await page.waitForTimeout(500);
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Start Dynasty")');
-        } else if (await page.isVisible('button:has-text("Start Dynasty")')) {
-             // Already in setup
-            await page.click('button:has-text("Start Dynasty")');
-        } else if (await page.isVisible('.team-select-btn, .team-card')) {
-             // Already in setup
-            await page.locator('.team-select-btn, .team-card').first().click();
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Continue")');
-            await page.waitForTimeout(500);
-            await page.click('button:has-text("Start Dynasty")');
+
+            console.log('Clicking Continue 1');
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+
+            console.log('Clicking Continue 2');
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+
+            console.log('Clicking Start Dynasty');
+            await page.locator('button:has-text("Start Dynasty")').click();
+            await page.waitForTimeout(2000);
         } else {
-            // Assuming already in game or hub
             console.log('Assuming game already loaded...');
         }
 
-        await page.waitForFunction(() => document.querySelector('.app-header') !== null, null, { timeout: 60000 });
+        await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
         const hubVisible = await page.isVisible('.app-header');
         expect(hubVisible).toBeTruthy();
 
@@ -89,16 +89,25 @@ test.describe('Daily Regression Pass', () => {
 
         // Ensure game loaded
         await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await page.waitForTimeout(2000);
+        const startBtns = await page.locator('button:has-text("Start New Franchise")').all();
+        if(startBtns.length > 0) {
+            await startBtns[0].click();
+            await page.waitForTimeout(1000);
+            await page.locator('text=Buffalo Bills').click();
+            await page.waitForTimeout(500);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Start Dynasty")').click();
+            await page.waitForTimeout(2000);
+        }
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 30000 });
 
         // 1. Test Strategy Persistence
         // Switch to the Strategy tab
-        await page.click('.dashboard-main-tabs button.standings-tab:has-text("Strategy")', { force: true });
+        await page.click('button:has-text("Game Plan")', { force: true });
         await page.waitForTimeout(500); // wait for tab render
 
         // The first <select> on the Strategy panel is typically the Offensive Scheme
@@ -157,11 +166,20 @@ test.describe('Daily Regression Pass', () => {
         // Ensure game is loaded (helper)
         await page.waitForTimeout(1000);
         await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await page.waitForTimeout(2000);
+        const startBtns = await page.locator('button:has-text("Start New Franchise")').all();
+        if(startBtns.length > 0) {
+            await startBtns[0].click();
+            await page.waitForTimeout(1000);
+            await page.locator('text=Buffalo Bills').click();
+            await page.waitForTimeout(500);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Start Dynasty")').click();
+            await page.waitForTimeout(2000);
+        }
         await page.waitForFunction(() => window.state && window.state.league);
         try {
             await page.waitForSelector('.app-header', { state: 'visible', timeout: 60000 });
@@ -173,7 +191,7 @@ test.describe('Daily Regression Pass', () => {
 
         // Check Power Rankings Scroll (Standings Tab)
         await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.dashboard-main-tabs button.standings-tab')).find(b => b.innerText.trim() === 'Standings');
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Standings');
             if (btn) btn.click();
         });
         await page.waitForTimeout(500);
@@ -187,7 +205,7 @@ test.describe('Daily Regression Pass', () => {
 
         // Check League Stats Scroll (Stats Tab)
         await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.dashboard-main-tabs button.standings-tab')).find(b => b.innerText.trim() === 'Stats');
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Stats');
             if (btn) btn.click();
         });
         await page.waitForTimeout(500);
@@ -201,7 +219,7 @@ test.describe('Daily Regression Pass', () => {
 
         // Check Roster Scroll
         await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.dashboard-main-tabs button.standings-tab')).find(b => b.innerText.trim() === 'Roster');
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Roster');
             if (btn) btn.click();
         });
         await page.waitForTimeout(500);
@@ -225,17 +243,26 @@ test.describe('Daily Regression Pass', () => {
         // Force new league to ensure cap space
         await page.waitForTimeout(1000);
         await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await page.waitForTimeout(2000);
+        const startBtns = await page.locator('button:has-text("Start New Franchise")').all();
+        if(startBtns.length > 0) {
+            await startBtns[0].click();
+            await page.waitForTimeout(1000);
+            await page.locator('text=Buffalo Bills').click();
+            await page.waitForTimeout(500);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Start Dynasty")').click();
+            await page.waitForTimeout(2000);
+        }
         await page.waitForFunction(() => window.state && window.state.league);
         await page.waitForSelector('.app-header', { state: 'visible', timeout: 20000 });
 
         // Release a player to ensure roster spot
         await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.dashboard-main-tabs button.standings-tab')).find(b => b.innerText.trim() === 'Roster');
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Roster');
             if (btn) btn.click();
         });
         await page.waitForTimeout(1000);
@@ -288,7 +315,7 @@ test.describe('Daily Regression Pass', () => {
 
         // Go to FA
         await page.evaluate(() => {
-            const btn = Array.from(document.querySelectorAll('.dashboard-main-tabs button.standings-tab')).find(b => b.innerText.trim() === 'Free Agency');
+            const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText.trim() === 'Free Agency');
             if (btn) btn.click();
         });
         await page.waitForTimeout(1000);
@@ -362,11 +389,20 @@ test.describe('Daily Regression Pass', () => {
         // Force state with a finalized game
         await page.waitForTimeout(1000);
         await page.waitForFunction(() => window.gameController !== undefined);
-        await page.evaluate(async () => {
-            if (!window.state?.league) {
-                await window.gameController.startNewLeague();
-            }
-        });
+        await page.waitForTimeout(2000);
+        const startBtns = await page.locator('button:has-text("Start New Franchise")').all();
+        if(startBtns.length > 0) {
+            await startBtns[0].click();
+            await page.waitForTimeout(1000);
+            await page.locator('text=Buffalo Bills').click();
+            await page.waitForTimeout(500);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Continue")').click();
+            await page.waitForTimeout(1000);
+            await page.locator('button:has-text("Start Dynasty")').click();
+            await page.waitForTimeout(2000);
+        }
         await page.waitForFunction(() => window.state && window.state.league);
 
         await page.evaluate(async () => {

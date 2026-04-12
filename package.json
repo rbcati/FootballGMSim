@@ -30,7 +30,7 @@
     "vite": "^7.3.2"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.59.1",
     "@vitejs/plugin-react": "^5.1.4",
     "playwright": "^1.58.2",
     "vitest": "^3.2.4"
