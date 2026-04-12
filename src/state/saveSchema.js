@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.1;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -40,6 +40,7 @@ const MIGRATIONS = {
   2: migrateV2ToV3,
   3: migrateV3ToV4,
   4: migrateV4ToV5,
+  5: migrateV5ToV51,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -61,6 +62,15 @@ function migrateV4ToV5(meta = {}) {
     ...meta,
     resultsByWeek: normalizedResultsByWeek,
     saveVersion: 5,
+  };
+}
+
+function migrateV5ToV51(meta = {}) {
+  return {
+    ...meta,
+    // v5.1 is a non-destructive repair marker. Actual repair work (roster/cap
+    // hydration) runs in the worker at load-time so no user data is wiped.
+    saveVersion: 5.1,
   };
 }
 

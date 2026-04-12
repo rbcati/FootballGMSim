@@ -340,7 +340,7 @@ export function buildStorylineCards(league) {
       category: 'major_result',
       priority: 91,
       tone: 'warning',
-      title: `Statement win from Week ${honors.week}`,
+      title: `Statement win (Week ${honors.week}): ${honors.statementWin.headline}`,
       detail: honors.statementWin.detail,
       tab: 'Schedule',
     });
@@ -393,6 +393,14 @@ export function buildStorylineCards(league) {
 
 export function buildNarrativeNewsItems(league) {
   const stories = buildStorylineCards(league);
+  const seenHeadlinesByWeek = new Set();
+  const keepUniqueHeadline = (item) => {
+    const key = `${Number(item?.week ?? league?.week ?? 0)}::${String(item?.headline ?? '').trim().toLowerCase()}`;
+    if (!item?.headline || seenHeadlinesByWeek.has(key)) return false;
+    seenHeadlinesByWeek.add(key);
+    return true;
+  };
+
   const storyItems = stories.map((s, idx) => ({
     id: `story-${s.id}`,
     headline: s.title,
@@ -406,7 +414,7 @@ export function buildNarrativeNewsItems(league) {
     category: s.category,
     sortWeight: 500 - idx,
     tab: s.tab,
-  }));
+  })).filter(keepUniqueHeadline);
 
   const weekly = deriveWeeklyHonors(league);
   const weeklyItems = [];
@@ -446,5 +454,5 @@ export function buildNarrativeNewsItems(league) {
     });
   }
 
-  return [...weeklyItems, ...storyItems];
+  return [...weeklyItems, ...storyItems].filter(keepUniqueHeadline);
 }

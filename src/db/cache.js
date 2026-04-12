@@ -152,7 +152,16 @@ export const cache = {
 
   getPlayer:    (id)     => (id != null) ? (_players.get(String(id)) ?? null) : null,
   getAllPlayers: ()       => [..._players.values()],
-  getPlayersByTeam: (teamId) => [..._players.values()].filter(p => p.teamId === teamId),
+  getPlayersByTeam: (teamId) => {
+    const targetNum = Number(teamId);
+    const targetStr = String(teamId);
+    return [..._players.values()].filter((p) => {
+      if (p?.teamId == null) return false;
+      if (p.teamId === teamId) return true;
+      if (String(p.teamId) === targetStr) return true;
+      return Number.isFinite(targetNum) && Number(p.teamId) === targetNum;
+    });
+  },
   setPlayer:    (player) => {
     if (!player || player.id == null) return;
     _players.set(String(player.id), player);
