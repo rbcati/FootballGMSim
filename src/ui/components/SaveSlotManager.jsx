@@ -97,7 +97,7 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
               {isEmpty ? (
                 <div className="save-slot-v2__empty">
                   <p>No franchise started yet. Create a new career in this slot.</p>
-                  <Button onClick={() => onNew?.(slot.key)}>Start New Franchise</Button>
+                  <Button data-testid="start-new-franchise-cta" onClick={() => onNew?.(slot.key)}>Start New Franchise</Button>
                 </div>
               ) : (
                 <>

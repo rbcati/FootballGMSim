@@ -273,6 +273,14 @@ function divIdx(val) {
   return map[val] ?? 0;
 }
 
+function toTestId(value = "") {
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 /** Circular team "logo" placeholder with first 3 chars of abbreviation. */
@@ -1073,6 +1081,7 @@ function ScheduleTab({
                 <>
                   <button
                     type="button"
+                    data-testid={idx === 0 ? "recent-game-box-score-trigger" : undefined}
                     className={`score-tap-target ${scoreTapHandler ? "score-tap-target-clickable" : "score-tap-target-static"}`}
                     onClick={scoreTapHandler}
                     aria-label={scoreTapHandler ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined}
@@ -1918,6 +1927,7 @@ export default function LeagueDashboard({
           {NAV_GROUPS.map((group) => (
             <button
               key={group.id}
+              data-testid={`primary-nav-${toTestId(group.title)}`}
               className={`standings-tab${activeSection === group.id ? " active" : ""}`}
               onClick={() => handleSectionChange(group.id)}
               aria-current={activeSection === group.id ? "page" : undefined}
@@ -1933,6 +1943,7 @@ export default function LeagueDashboard({
             .map((tab) => (
               <button
                 key={tab}
+                data-testid={`section-tab-${toTestId(tab)}`}
                 className={`standings-tab${activeTab === tab ? " active" : ""}`}
                 onClick={() => setActiveTab(tab)}
                 aria-current={activeTab === tab ? "page" : undefined}

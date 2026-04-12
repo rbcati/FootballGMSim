@@ -199,7 +199,7 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
           </div>
 
           {/* Team grid */}
-          <div className="team-grid">
+          <div className="team-grid" data-testid="team-selection-flow">
             {filteredTeams.map((team, idx) => {
               const color = teamColor(team.abbr);
               return (
@@ -606,6 +606,7 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
           </Button>
           <Button
             id="start-career-btn"
+            data-testid={step < 2 ? "onboarding-continue-button" : "start-dynasty-button"}
             className="btn-premium btn-primary-premium"
             onClick={() => {
               if (step < 2) setStep(step + 1);

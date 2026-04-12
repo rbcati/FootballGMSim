@@ -504,7 +504,7 @@ function AppContent() {
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
 
   return (
-    <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard">
+    <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" data-testid="app-shell-ready">
 
       {/* Phase-based Theming */}
       <style>{`
@@ -529,7 +529,7 @@ function AppContent() {
       {isPostseason && <div className="postseason-glow" />}
 
       {/* ── Top bar ────────────────────────────────────────────────────── */}
-      <header className="app-header">
+      <header className="app-header" data-testid="app-shell-header">
         <div className="app-header-left">
           <h1 className="app-title">Football GM</h1>
           <div className="app-season-info">
