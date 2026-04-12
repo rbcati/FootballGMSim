@@ -1893,6 +1893,8 @@ if (res.injuries && res.injuries.length > 0) {
           awayAbbr:  res.awayTeamAbbr ?? cache.getTeam(awayId)?.abbr ?? '???',
           homeScore: res.scoreHome ?? res.homeScore ?? 0,
           awayScore: res.scoreAway ?? res.awayScore ?? 0,
+          recapText: res.recapText ?? null,
+          teamDriveStats: res.teamDriveStats ?? null,
         });
       }
     }
@@ -2131,6 +2133,8 @@ if (res.injuries && res.injuries.length > 0) {
       awayName:  r.awayTeamName ?? cache.getTeam(awayId)?.name ?? '?',
       homeScore: r.scoreHome ?? r.homeScore ?? 0,
       awayScore: r.scoreAway ?? r.awayScore ?? 0,
+      recapText: r.recapText ?? null,
+      teamDriveStats: r.teamDriveStats ?? null,
     };
   });
 
@@ -7527,6 +7531,8 @@ async function handleWatchGame(payload, id) {
         awayAbbr:  res.awayTeamAbbr ?? cache.getTeam(awayId)?.abbr ?? '???',
         homeScore: res.scoreHome ?? res.homeScore ?? 0,
         awayScore: res.scoreAway ?? res.awayScore ?? 0,
+        recapText: res.recapText ?? null,
+        teamDriveStats: res.teamDriveStats ?? null,
     });
 
     // Mark the user game as played in the slim schedule so ADVANCE_WEEK

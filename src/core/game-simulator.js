@@ -12,6 +12,106 @@ import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
 import { TRAITS } from './traits.js';
 
+function hashStringToSeed(input = '') {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return () => {
+    t = (t + 0x6D2B79F5) | 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function computePasserRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = {}) {
+  if (att <= 0) return null;
+  const a = U.clamp(((comp / att) - 0.3) * 5, 0, 2.375);
+  const b = U.clamp(((yds / att) - 3) * 0.25, 0, 2.375);
+  const c = U.clamp((td / att) * 20, 0, 2.375);
+  const d = U.clamp(2.375 - ((ints / att) * 25), 0, 2.375);
+  return U.round(((a + b + c + d) / 6) * 100, 1);
+}
+
+function buildDriveBasedSummary({
+  season = 0,
+  week = 1,
+  home,
+  away,
+  homeOff = 75,
+  awayOff = 75,
+  homeDef = 75,
+  awayDef = 75,
+  homeFieldAdv = 0.03,
+}) {
+  const seed = hashStringToSeed(`${season}|${week}|${home?.id}|${away?.id}`);
+  const rng = mulberry32(seed);
+  const randInt = (min, max) => Math.floor(rng() * (max - min + 1)) + min;
+  const chance = (p) => rng() < p;
+
+  const homeDrives = randInt(10, 14);
+  const awayDrives = randInt(10, 14);
+  const homeStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
+  const awayStats = { passYds: 0, passAtt: 0, comp: 0, passTD: 0, INT: 0, rushYds: 0, rushAtt: 0, sacks: 0, turnovers: 0 };
+
+  const simTeam = (offOvr, defOvr, drives, teamStats, isHome) => {
+    let score = 0;
+    const driveSuccessRaw = 0.4 + (offOvr - defOvr) * 0.005 + (isHome ? homeFieldAdv : 0);
+    const driveSuccess = U.clamp(driveSuccessRaw, 0.15, 0.72);
+    for (let i = 0; i < drives; i++) {
+      const passHeavy = chance(0.56);
+      const passAtt = randInt(passHeavy ? 3 : 1, passHeavy ? 7 : 4);
+      const comp = Math.min(passAtt, randInt(Math.max(0, passAtt - 3), passAtt));
+      const passYds = randInt(comp * 4, comp * 13);
+      const rushAtt = randInt(passHeavy ? 1 : 2, passHeavy ? 4 : 6);
+      const rushYds = randInt(Math.max(0, rushAtt * 2), rushAtt * 7);
+      teamStats.passAtt += passAtt;
+      teamStats.comp += comp;
+      teamStats.passYds += passYds;
+      teamStats.rushAtt += rushAtt;
+      teamStats.rushYds += rushYds;
+      if (chance(U.clamp(0.17 + (defOvr - offOvr) * 0.0025, 0.08, 0.34))) {
+        teamStats.sacks += 1;
+      }
+      if (chance(U.clamp(0.08 + (defOvr - offOvr) * 0.002, 0.03, 0.2))) {
+        teamStats.turnovers += 1;
+        if (chance(0.7)) teamStats.INT += 1;
+      }
+      const convertedDrive = chance(driveSuccess);
+      if (convertedDrive) {
+        if (chance(0.67)) {
+          score += 7;
+          if (chance(0.58)) teamStats.passTD += 1;
+        } else {
+          score += 3;
+        }
+      }
+    }
+    return score;
+  };
+
+  const homeScore = simTeam(homeOff, awayDef, homeDrives, homeStats, true);
+  const awayScore = simTeam(awayOff, homeDef, awayDrives, awayStats, false);
+  const homeQbRating = computePasserRating({ comp: homeStats.comp, att: homeStats.passAtt, yds: homeStats.passYds, td: homeStats.passTD, ints: homeStats.INT });
+  const awayQbRating = computePasserRating({ comp: awayStats.comp, att: awayStats.passAtt, yds: awayStats.passYds, td: awayStats.passTD, ints: awayStats.INT });
+  const homeYpc = homeStats.rushAtt > 0 ? U.round(homeStats.rushYds / homeStats.rushAtt, 2) : null;
+  const awayYpc = awayStats.rushAtt > 0 ? U.round(awayStats.rushYds / awayStats.rushAtt, 2) : null;
+  return {
+    seed,
+    homeScore,
+    awayScore,
+    homeStats: { ...homeStats, qbRating: homeQbRating, rushYPC: homeYpc },
+    awayStats: { ...awayStats, qbRating: awayQbRating, rushYPC: awayYpc },
+  };
+}
+
 /**
  * Helper to group players by position and sort by OVR descending.
  * @param {Array} roster - Team roster array
@@ -2157,8 +2257,20 @@ export function simGameStats(home, away, options = {}) {
     const homeRes = fullGameResult.home;
     const awayRes = fullGameResult.away;
 
-    let homeScore = Math.max(0, homeRes.score);
-    let awayScore = Math.max(0, awayRes.score);
+    const driveSummary = buildDriveBasedSummary({
+      season: options?.league?.seasonId ?? options?.league?.year ?? 0,
+      week: options?.league?.week ?? 1,
+      home,
+      away,
+      homeOff: homeStrength,
+      awayOff: awayStrength,
+      homeDef: homeDefenseStrength,
+      awayDef: awayDefenseStrength,
+      homeFieldAdv: 0.03,
+    });
+
+    let homeScore = Math.max(0, driveSummary?.homeScore ?? homeRes.score);
+    let awayScore = Math.max(0, driveSummary?.awayScore ?? awayRes.score);
     let homeTDs = homeRes.touchdowns;
     let awayTDs = awayRes.touchdowns;
     let homeFGs = homeRes.field_goals;
@@ -2609,6 +2721,25 @@ export function simGameStats(home, away, options = {}) {
     generateTeamStats(home, homeScore, homeStrength, awayStrength);
     generateTeamStats(away, awayScore, awayStrength, homeStrength);
 
+    const homeOut = driveSummary?.homeStats ?? null;
+    const awayOut = driveSummary?.awayStats ?? null;
+    const homeTo = homeOut?.turnovers ?? 0;
+    const awayTo = awayOut?.turnovers ?? 0;
+    const homeSacks = homeOut?.sacks ?? 0;
+    const awaySacks = awayOut?.sacks ?? 0;
+    const winnerIsHome = homeScore >= awayScore;
+    const winnerAbbr = winnerIsHome ? home.abbr : away.abbr;
+    const loserAbbr = winnerIsHome ? away.abbr : home.abbr;
+    const winnerScore = winnerIsHome ? homeScore : awayScore;
+    const loserScore = winnerIsHome ? awayScore : homeScore;
+    const reasonLine = (Math.abs(homeTo - awayTo) >= 1)
+      ? `${winnerAbbr} finished +${Math.abs(homeTo - awayTo)} in turnovers.`
+      : (Math.abs((homeOut?.rushYPC ?? 0) - (awayOut?.rushYPC ?? 0)) >= 0.5)
+        ? `${winnerAbbr} owned the ground game at ${(winnerIsHome ? homeOut?.rushYPC : awayOut?.rushYPC) ?? 0} YPC.`
+        : `${winnerAbbr} controlled pressure with ${(winnerIsHome ? homeSacks : awaySacks)} sacks.`;
+    const decisiveLine = `A late fourth-quarter ${winnerAbbr} drive sealed a ${winnerScore}-${loserScore} finish over ${loserAbbr}.`;
+    const recapText = `${winnerAbbr} edges ${loserAbbr} ${winnerScore}-${loserScore}. ${reasonLine} ${decisiveLine}`;
+
     return {
       homeScore, awayScore, schemeNote, injuries: gameInjuries,
       weather: weather.id,
@@ -2628,6 +2759,12 @@ export function simGameStats(home, away, options = {}) {
       },
       playLogs: fullGameResult.playLogs || [],
       liveStats: fullGameResult.liveStats || {},
+      teamDriveStats: {
+        home: homeOut,
+        away: awayOut,
+      },
+      recapText,
+      simSeed: driveSummary?.seed ?? null,
     };
 
   } catch (error) {
@@ -2859,6 +2996,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
             away: gameData.awayDefTDs || 0
         },
         playLogs: gameData.playLogs || [],
+        teamDriveStats: gameData.teamDriveStats || null,
+        recapText: gameData.recapText || null,
+        simSeed: gameData.simSeed ?? null,
     };
 
     if (gameData.preGameContext) {
@@ -3086,6 +3226,9 @@ export function simulateBatch(games, options = {}) {
                 pair._homeDefTDs = gameScores.homeDefTDs || 0;
                 pair._awayDefTDs = gameScores.awayDefTDs || 0;
                 pair._liveStats = gameScores.liveStats || {};
+                pair._teamDriveStats = gameScores.teamDriveStats || null;
+                pair._recapText = gameScores.recapText || null;
+                pair._simSeed = gameScores.simSeed ?? null;
 
                 // Capture stats for box score.
                 // Always key by String(player.id) so numeric and string IDs
@@ -3194,6 +3337,9 @@ export function simulateBatch(games, options = {}) {
                 simFactors,
                 playLogs: gameScores?.playLogs || [],
                 liveStats: pair._liveStats || {},
+                teamDriveStats: pair._teamDriveStats || null,
+                recapText: pair._recapText || null,
+                simSeed: pair._simSeed ?? null,
             };
 
             let resultObj;
@@ -3221,6 +3367,9 @@ export function simulateBatch(games, options = {}) {
                     simFactors,
                     playLogs: gameScores?.playLogs || [],
                     liveStats: pair._liveStats || {},
+                    teamDriveStats: pair._teamDriveStats || null,
+                    recapText: pair._recapText || null,
+                    simSeed: pair._simSeed ?? null,
                 };
             }
             if (resultObj) {
