@@ -192,6 +192,30 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <div className="bs-list-item" style={{ marginBottom: 10 }}>
                 {game?.summary?.storyline ?? game?.recap ?? "A complete box score was archived for this matchup."}
               </div>
+              {game?.summary?.simOutputs && (
+                <div className="bs-compare-grid" style={{ marginBottom: 10 }}>
+                  <StatCompareRow
+                    label="QB Rating"
+                    awayValue={game.summary.simOutputs?.away?.qbRating?.toFixed?.(1) ?? game.summary.simOutputs?.away?.qbRating ?? "—"}
+                    homeValue={game.summary.simOutputs?.home?.qbRating?.toFixed?.(1) ?? game.summary.simOutputs?.home?.qbRating ?? "—"}
+                  />
+                  <StatCompareRow
+                    label="Rush YPC"
+                    awayValue={game.summary.simOutputs?.away?.rushingYpc?.toFixed?.(2) ?? game.summary.simOutputs?.away?.rushingYpc ?? "—"}
+                    homeValue={game.summary.simOutputs?.home?.rushingYpc?.toFixed?.(2) ?? game.summary.simOutputs?.home?.rushingYpc ?? "—"}
+                  />
+                  <StatCompareRow
+                    label="Turnovers"
+                    awayValue={game.summary.simOutputs?.away?.turnovers ?? "—"}
+                    homeValue={game.summary.simOutputs?.home?.turnovers ?? "—"}
+                  />
+                  <StatCompareRow
+                    label="Sacks"
+                    awayValue={game.summary.simOutputs?.away?.sacks ?? "—"}
+                    homeValue={game.summary.simOutputs?.home?.sacks ?? "—"}
+                  />
+                </div>
+              )}
               {game?.summary?.playerOfGame?.name && (
                 <div className="bs-list-item" style={{ marginBottom: 10 }}>
                   <strong>Player of the game:</strong> <PlayerButton player={game.summary.playerOfGame} onSelect={onPlayerSelect} />

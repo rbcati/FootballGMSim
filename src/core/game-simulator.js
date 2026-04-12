@@ -1531,6 +1531,54 @@ export function simGameStats(home, away, options = {}) {
       weather = WEATHER_TYPES[U.weightedChoice(weatherWeights)];
     }
 
+    const computeTeamEfficiencyProfile = (groups = {}) => {
+        const starterQB = (groups['QB'] || [])[0] || null;
+        const leadRB = (groups['RB'] || [])[0] || null;
+        const ol = groups['OL'] || [];
+        const passRush = [...(groups['DL'] || []), ...(groups['LB'] || [])];
+        const dbs = [...(groups['CB'] || []), ...(groups['S'] || [])];
+
+        const qbRating = (() => {
+            if (!starterQB) return 78;
+            const r = starterQB.ratings || {};
+            const awareness = r.awareness || 70;
+            const accuracy = r.throwAccuracy || 70;
+            const power = r.throwPower || 70;
+            return U.clamp(35 + (accuracy * 0.44) + (awareness * 0.33) + (power * 0.2), 55, 125);
+        })();
+
+        const rushYpc = (() => {
+            const rbOvr = leadRB?.ovr || 68;
+            const rbRatings = leadRB?.ratings || {};
+            const runSkill = ((rbRatings.speed || 70) * 0.35) + ((rbRatings.trucking || 70) * 0.3) + ((rbRatings.juking || 70) * 0.35);
+            const olRun = ol.length
+                ? ol.reduce((sum, p) => sum + ((p.ratings?.runBlock || p.ovr || 70)), 0) / ol.length
+                : 70;
+            return U.clamp(2.7 + ((rbOvr - 70) * 0.02) + ((runSkill - 70) * 0.015) + ((olRun - 70) * 0.014), 2.8, 6.5);
+        })();
+
+        const passBlock = ol.length
+            ? ol.reduce((sum, p) => sum + ((p.ratings?.passBlock || p.ovr || 70)), 0) / ol.length
+            : 70;
+        const passRushStrength = passRush.length
+            ? passRush.reduce((sum, p) => sum + (p.ovr || 70), 0) / passRush.length
+            : 70;
+        const coverageStrength = dbs.length
+            ? dbs.reduce((sum, p) => sum + (p.ovr || 70), 0) / dbs.length
+            : 70;
+
+        return {
+            qbRating: U.round(qbRating, 1),
+            rushYpc: U.round(rushYpc, 2),
+            passBlock: U.round(passBlock, 1),
+            passRushStrength: U.round(passRushStrength, 1),
+            coverageStrength: U.round(coverageStrength, 1),
+        };
+    };
+
+    const homeProfile = computeTeamEfficiencyProfile(homeGroups);
+    const awayProfile = computeTeamEfficiencyProfile(awayGroups);
+
     /**
      * Full game simulation with alternating possessions, momentum, and
      * defensive/special teams scoring.
@@ -1681,7 +1729,11 @@ export function simGameStats(home, away, options = {}) {
 
             const offFactor = (offStr - 50) / 40;
             const defFactor = (defStr - 50) / 40;
-            const netQuality = offFactor - defFactor + (advantage / 50);
+            const offProfile = isHome ? homeProfile : awayProfile;
+            const defProfile = isHome ? awayProfile : homeProfile;
+            const qbEfficiencyEdge = (offProfile.qbRating - defProfile.coverageStrength) / 160;
+            const rushEfficiencyEdge = (offProfile.rushYpc - 4.2) * 0.13;
+            const netQuality = offFactor - defFactor + (advantage / 50) + qbEfficiencyEdge + rushEfficiencyEdge;
 
             // Momentum modifier: ±5% scoring probability
             const momentumMod = isHome
@@ -1923,6 +1975,7 @@ export function simGameStats(home, away, options = {}) {
                 // Check for turnover (fumble, INT)
                 const baseTurnoverRate = 0.14 * weather.turnoverMod;
                 let turnoverChance = baseTurnoverRate;
+                turnoverChance *= (1 + U.clamp((defProfile.passRushStrength - offProfile.passBlock) / 220, -0.12, 0.18));
                 if (mods.intChance) turnoverChance *= (mods.intChance - 1) * 0.3 + 1;
                 if (defMods.defIntChance) turnoverChance *= (defMods.defIntChance - 1) * 0.3 + 1;
                 if (defMods.defPressure) turnoverChance *= 1 + (defMods.defPressure - 1) * 0.15;
@@ -2565,6 +2618,14 @@ export function simGameStats(home, away, options = {}) {
       awaySafeties: awayRes.safeties || 0,
       homeTurnoversForced: homeRes.turnoversForced || 0,
       awayTurnoversForced: awayRes.turnoversForced || 0,
+      simFactors: {
+        home: homeProfile,
+        away: awayProfile,
+        matchup: {
+          ovrDelta: U.round(homeStrength - awayStrength, 2),
+          homeFieldAdvantage: HOME_ADVANTAGE,
+        },
+      },
       playLogs: fullGameResult.playLogs || [],
       liveStats: fullGameResult.liveStats || {},
     };
@@ -2792,6 +2853,7 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         year: league.year,
         isPlayoff: isPlayoff,
         weather: gameData.weather || null,
+        simFactors: gameData.simFactors || null,
         defensiveTDs: {
             home: gameData.homeDefTDs || 0,
             away: gameData.awayDefTDs || 0
@@ -2988,6 +3050,7 @@ export function simulateBatch(games, options = {}) {
 
             let schemeNote = null;
             let gameInjuries = [];
+            let simFactors = null;
             // Declared here (not inside else) so it's accessible when building gameData below
             let gameScores = null;
 
@@ -3016,6 +3079,7 @@ export function simulateBatch(games, options = {}) {
                 sA = gameScores.awayScore;
                 schemeNote = gameScores.schemeNote;
                 if (gameScores.injuries) gameInjuries = gameScores.injuries;
+                simFactors = gameScores.simFactors || null;
 
                 // Store weather and defensive scoring data for the result
                 pair._weather = gameScores.weather || null;
@@ -3127,6 +3191,7 @@ export function simulateBatch(games, options = {}) {
                 weather: pair._weather,
                 homeDefTDs: pair._homeDefTDs || 0,
                 awayDefTDs: pair._awayDefTDs || 0,
+                simFactors,
                 playLogs: gameScores?.playLogs || [],
                 liveStats: pair._liveStats || {},
             };
@@ -3153,6 +3218,7 @@ export function simulateBatch(games, options = {}) {
                     week: league.week,
                     year: league.year,
                     isPlayoff: options.isPlayoff || false,
+                    simFactors,
                     playLogs: gameScores?.playLogs || [],
                     liveStats: pair._liveStats || {},
                 };
