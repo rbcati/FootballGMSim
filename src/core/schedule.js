@@ -1,17 +1,22 @@
 import { Utils } from './utils.js';
+import {
+    canUseNfl32Templates,
+    materializeTemplateSchedule,
+    validateMaterializedTemplateSchedule
+} from '../data/nflScheduleTemplates.js';
 
 /**
  * Main function to create the schedule.
  * @param {Array} teams - Array of team objects
  * @returns {Object} Schedule object with weeks array
  */
-function makeAccurateSchedule(teams) {
+function makeAccurateSchedule(teams, season = 0) {
     if (!teams || teams.length !== 32) {
         console.warn('Expected 32 teams, got', teams?.length, '. Using simple schedule as fallback.');
         return createSimpleSchedule(teams || []);
     }
     try {
-        return createNFLStyleSchedule(teams);
+        return createNFLStyleSchedule(teams, season);
     } catch (error) {
         console.error('Error creating NFL schedule, falling back to simple schedule:', error);
         return createSimpleSchedule(teams);
@@ -23,12 +28,22 @@ function makeAccurateSchedule(teams) {
  * @param {Array} teams - Array of team objects
  * @returns {Object} Schedule object
  */
-function createNFLStyleSchedule(teams) {
+function createNFLStyleSchedule(teams, season = 0) {
 
 
     if (!teams || teams.length !== 32) {
         console.error('Invalid teams array for NFL schedule');
         return createSimpleSchedule(teams);
+    }
+
+    if (canUseNfl32Templates(teams)) {
+        try {
+            const templateWeeks = materializeTemplateSchedule(teams, season);
+            validateMaterializedTemplateSchedule(templateWeeks, teams.length);
+            return buildTemplateBackedSchedule(teams, templateWeeks);
+        } catch (error) {
+            console.error('NFL template generation failed, falling back to procedural generator:', error);
+        }
     }
 
     const schedule = {
@@ -80,6 +95,42 @@ function createNFLStyleSchedule(teams) {
 
     logScheduleStats(schedule, teams);
     return schedule;
+}
+
+function buildTemplateBackedSchedule(teams, templateWeeks) {
+    return {
+        weeks: templateWeeks.map((week) => {
+            const teamsInWeek = new Set();
+            const games = week.games.map((game) => {
+                teamsInWeek.add(game.homeTid);
+                teamsInWeek.add(game.awayTid);
+                return {
+                    home: game.homeTid,
+                    away: game.awayTid,
+                    week: week.week
+                };
+            });
+            const teamsWithBye = teams
+                .map((team) => team.id)
+                .filter((teamId) => !teamsInWeek.has(teamId));
+
+            if (teamsWithBye.length > 0) {
+                games.unshift({ bye: teamsWithBye });
+            }
+
+            return {
+                weekNumber: week.week,
+                week: week.week,
+                games,
+                teamsWithBye
+            };
+        }),
+        teams,
+        metadata: {
+            generated: new Date().toISOString(),
+            type: 'nfl-template'
+        }
+    };
 }
 
 /**
