@@ -5,6 +5,7 @@ import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
+import { AWARD_DISPLAY_NAMES } from '../../core/footballMeta';
 
 const RECORD_LABELS = {
   passYd: "Passing Yards",
@@ -260,9 +261,9 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
             <h4 className="text-sm font-bold mb-2">Awards & Leaders</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
               <AwardLine label="MVP" award={selected?.awards?.mvp} onPlayerSelect={onPlayerSelect} />
-              <AwardLine label="OPOY" award={selected?.awards?.opoy} onPlayerSelect={onPlayerSelect} />
-              <AwardLine label="DPOY" award={selected?.awards?.dpoy} onPlayerSelect={onPlayerSelect} />
-              <AwardLine label="ROTY" award={selected?.awards?.roty} onPlayerSelect={onPlayerSelect} />
+              <AwardLine label={AWARD_DISPLAY_NAMES.opoy} award={selected?.awards?.opoy} onPlayerSelect={onPlayerSelect} />
+              <AwardLine label={AWARD_DISPLAY_NAMES.dpoy} award={selected?.awards?.dpoy} onPlayerSelect={onPlayerSelect} />
+              <AwardLine label={AWARD_DISPLAY_NAMES.roty} award={selected?.awards?.roty} onPlayerSelect={onPlayerSelect} />
             </div>
             <div className="text-xs text-[color:var(--text-muted)] mt-2">
               Playoff bracket/path is not currently stored in archived season summaries.
@@ -393,9 +394,9 @@ function AwardsHistory({ seasons, onPlayerSelect }) {
                 <TableHead className="pl-5">Year</TableHead>
                 <TableHead>Champion</TableHead>
                 <TableHead>MVP</TableHead>
-                <TableHead>OPOY</TableHead>
-                <TableHead>DPOY</TableHead>
-                <TableHead>ROTY</TableHead>
+                <TableHead>{AWARD_DISPLAY_NAMES.opoy}</TableHead>
+                <TableHead>{AWARD_DISPLAY_NAMES.dpoy}</TableHead>
+                <TableHead>{AWARD_DISPLAY_NAMES.roty}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

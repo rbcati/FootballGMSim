@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { filterAwardRows } from '../utils/historyDestinations.js';
 import { ScreenHeader, SectionCard, StickySubnav, EmptyState } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
-
-const AWARD_KEYS = ['mvp', 'opoy', 'dpoy', 'roty'];
+import { AWARD_DISPLAY_NAMES, AWARDS_HISTORY_ORDER } from '../../core/footballMeta';
 
 export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, onBack }) {
   const [seasons, setSeasons] = useState([]);
@@ -20,9 +19,9 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
     });
   }, [actions]);
 
-  const awardRows = useMemo(() => (seasons ?? []).flatMap((s) => AWARD_KEYS.map((k) => ({
+  const awardRows = useMemo(() => (seasons ?? []).flatMap((s) => AWARDS_HISTORY_ORDER.map((k) => ({
     season: s.year,
-    award: k.toUpperCase(),
+    award: AWARD_DISPLAY_NAMES[k] ?? k.toUpperCase(),
     ...s?.awards?.[k],
   }))).filter((r) => r?.name), [seasons]);
 
