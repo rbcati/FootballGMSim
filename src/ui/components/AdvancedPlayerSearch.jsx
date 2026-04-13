@@ -30,23 +30,30 @@ const OPERATORS = {
   ],
 };
 
-const firstFieldInCategory = (category) => filtersByCategory[category]?.[0]?.key ?? allFilters[0]?.key ?? 'name';
+const firstFieldInCategory = (category, byCategory = filtersByCategory, fallback = allFilters) => byCategory[category]?.[0]?.key ?? fallback[0]?.key ?? 'name';
 
-export default function AdvancedPlayerSearch({ filters, onChange, title = 'Advanced filters' }) {
+export default function AdvancedPlayerSearch({ filters, onChange, title = 'Advanced filters', allowedFields, presetKeys }) {
+  const availableFields = useMemo(() => (Array.isArray(allowedFields) && allowedFields.length > 0 ? allowedFields : allFilters), [allowedFields]);
+  const availableByCategory = useMemo(() => ({
+    bio: availableFields.filter((f) => f.category === 'bio'),
+    ratings: availableFields.filter((f) => f.category === 'ratings'),
+    stats: availableFields.filter((f) => f.category === 'stats'),
+  }), [availableFields]);
+
   const activeFilters = filters ?? [];
   const hasFilters = activeFilters.length > 0;
 
   const chips = useMemo(() => activeFilters
     .map((filter) => {
-      const field = allFilters.find((entry) => entry.key === filter.fieldKey);
+      const field = availableFields.find((entry) => entry.key === filter.fieldKey);
       if (!field) return null;
       const operatorLabel = (OPERATORS[field.valueType] ?? []).find((op) => op.value === filter.operator)?.label ?? filter.operator;
       return `${field.label} ${operatorLabel} ${filter.value}`;
     })
-    .filter(Boolean), [activeFilters]);
+    .filter(Boolean), [activeFilters, availableFields]);
 
   const addRow = () => {
-    const fieldKey = firstFieldInCategory('bio');
+    const fieldKey = firstFieldInCategory('bio', availableByCategory, availableFields);
     onChange([
       ...activeFilters,
       { id: `f-${Date.now()}-${Math.random()}`, fieldKey, operator: 'contains', value: '' },
@@ -59,28 +66,33 @@ export default function AdvancedPlayerSearch({ filters, onChange, title = 'Advan
 
   const removeRow = (id) => onChange(activeFilters.filter((row) => row.id !== id));
 
+  const visiblePresetKeys = presetKeys ?? ['youngHighPotential', 'cheapStarters', 'expiringContracts', 'draftSteals'];
+
   const applyPreset = (key) => {
     const preset = ADVANCED_FILTER_PRESETS[key] ?? [];
-    onChange(preset.map((row, idx) => ({ ...row, id: `${row.id}-${idx}-${Date.now()}` })));
+    const allowedKeySet = new Set(availableFields.map((f) => f.key));
+    const filteredPreset = preset.filter((row) => allowedKeySet.has(row.fieldKey));
+    onChange(filteredPreset.map((row, idx) => ({ ...row, id: `${row.id}-${idx}-${Date.now()}` })));
   };
+
+  if (!availableFields.length) return null;
 
   return (
     <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 'var(--space-3)', marginBottom: 'var(--space-4)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         <strong style={{ fontSize: 'var(--text-sm)' }}>{title}</strong>
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-          <Button variant="ghost" onClick={() => applyPreset('youngHighPotential')}>Young high-potential</Button>
-          <Button variant="ghost" onClick={() => applyPreset('cheapStarters')}>Cheap starters</Button>
-          <Button variant="ghost" onClick={() => applyPreset('expiringContracts')}>Expiring</Button>
-          <Button variant="ghost" onClick={() => applyPreset('draftSteals')}>Draft steals</Button>
+          {visiblePresetKeys.map((key) => (
+            <Button key={key} variant="ghost" onClick={() => applyPreset(key)}>{key.replace(/([A-Z])/g, ' $1').trim()}</Button>
+          ))}
           <Button variant="ghost" onClick={() => onChange([])} disabled={!hasFilters}>Clear all</Button>
           <Button variant="default" onClick={addRow}>+ Add filter</Button>
         </div>
       </div>
 
       {activeFilters.map((row) => {
-        const selectedField = allFilters.find((entry) => entry.key === row.fieldKey) ?? allFilters[0];
-        const fieldOptions = filtersByCategory[selectedField.category] ?? [];
+        const selectedField = availableFields.find((entry) => entry.key === row.fieldKey) ?? availableFields[0];
+        const fieldOptions = availableByCategory[selectedField?.category] ?? [];
         const operatorOptions = OPERATORS[selectedField.valueType] ?? OPERATORS.string;
 
         return (
@@ -89,8 +101,8 @@ export default function AdvancedPlayerSearch({ filters, onChange, title = 'Advan
               value={selectedField.category}
               onChange={(event) => {
                 const category = event.target.value;
-                const nextField = firstFieldInCategory(category);
-                const nextMeta = allFilters.find((entry) => entry.key === nextField);
+                const nextField = firstFieldInCategory(category, availableByCategory, availableFields);
+                const nextMeta = availableFields.find((entry) => entry.key === nextField);
                 updateRow(row.id, { fieldKey: nextField, operator: nextMeta?.valueType === 'numeric' ? 'gte' : 'contains', value: '' });
               }}
             >

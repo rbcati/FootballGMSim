@@ -27,6 +27,11 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { getProspectRegionTag, getScoutingConfidenceProfile } from "../utils/franchiseInvestments.js";
+import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
+import PlayerComparison from "./PlayerComparison.jsx";
+import PlayerCompareTray from "./PlayerCompareTray.jsx";
+import { applyAdvancedPlayerFilters, allFilters } from "../../core/footballAdvancedFilters";
+import { usePlayerCompare } from "../utils/playerCompare.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -999,6 +1004,13 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
   );
 }
 
+export function filterDraftProspectsForView(prospects, { filterPos, nameFilter, advancedFilters }) {
+  let list = [...(prospects ?? [])];
+  if (filterPos) list = list.filter((p) => p.pos === filterPos);
+  if (nameFilter) list = list.filter((p) => p.name.toLowerCase().includes(nameFilter.toLowerCase()));
+  return applyAdvancedPlayerFilters(list, advancedFilters);
+}
+
 function DraftBoard({
   draftState,
   userTeamId,
@@ -1013,6 +1025,8 @@ function DraftBoard({
   const [sortDir, setSortDir] = useState(-1); // -1 = descending
   const [filterPos, setFilterPos] = useState("");
   const [nameFilter, setNameFilter] = useState("");
+  const [advancedFilters, setAdvancedFilters] = useState([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showTradeUp, setShowTradeUp] = useState(false);
   const [showTradeDown, setShowTradeDown] = useState(false);
   const [tradeDownProcessing, setTradeDownProcessing] = useState(false);
@@ -1035,13 +1049,19 @@ function DraftBoard({
     }
   };
 
+  const draftAdvancedFields = useMemo(() => allFilters.filter((field) => {
+    if (field.category === 'bio') {
+      return !['contractAmount', 'contractExp'].includes(field.key);
+    }
+    if (field.category === 'stats') {
+      return ['passing', 'rushing', 'receiving', 'defense'].includes(field.statGroup ?? '');
+    }
+    return true;
+  }), []);
+
   const sortedProspects = useMemo(() => {
-    let list = [...prospects];
-    if (filterPos) list = list.filter((p) => p.pos === filterPos);
-    if (nameFilter)
-      list = list.filter((p) =>
-        p.name.toLowerCase().includes(nameFilter.toLowerCase()),
-      );
+    const filtered = filterDraftProspectsForView(prospects, { filterPos, nameFilter, advancedFilters });
+    const list = [...filtered];
     list.sort((a, b) => {
       const av = a[sortKey] ?? 0;
       const bv = b[sortKey] ?? 0;
@@ -1049,7 +1069,17 @@ function DraftBoard({
       return sortDir * ((bv ?? 0) - (av ?? 0));
     });
     return list;
-  }, [prospects, filterPos, nameFilter, sortKey, sortDir]);
+  }, [prospects, filterPos, nameFilter, sortKey, sortDir, advancedFilters]);
+
+  const {
+    compareIds,
+    setCompareIds,
+    showComparison,
+    setShowComparison,
+    toggleCompare,
+    comparePlayerA,
+    comparePlayerB,
+  } = usePlayerCompare(sortedProspects, 2);
 
   const posOptions = useMemo(
     () => [...new Set(prospects.map((p) => p.pos))].sort(),
@@ -1610,6 +1640,31 @@ function DraftBoard({
             </span>
           </div>
 
+          <div style={{ marginTop: 8, marginBottom: 8 }}>
+            <Button className="btn" onClick={() => setShowAdvancedFilters((v) => !v)} style={{ fontSize: 'var(--text-xs)' }}>
+              {showAdvancedFilters ? 'Hide advanced filters' : 'Show advanced filters'}
+            </Button>
+          </div>
+          {showAdvancedFilters && (
+            <AdvancedPlayerSearch
+              filters={advancedFilters}
+              onChange={setAdvancedFilters}
+              title="Draft advanced search"
+              allowedFields={draftAdvancedFields}
+              presetKeys={["youngHighPotential", "day1Starters", "developmentalUpside", "bestAthletes", "valuePicks", "qbUpside", "skillUpside"]}
+            />
+          )}
+          {showComparison && comparePlayerA && comparePlayerB && (
+            <PlayerComparison playerA={comparePlayerA} playerB={comparePlayerB} onClose={() => setShowComparison(false)} />
+          )}
+          <PlayerCompareTray
+            compareIds={compareIds}
+            resolvePlayer={(id) => sortedProspects.find((p) => p.id === id)}
+            onRemove={toggleCompare}
+            onOpenCompare={() => setShowComparison(true)}
+            onClear={() => setCompareIds([])}
+          />
+
           {/* Prospects table */}
           <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
             <CardContent style={{ padding: 0 }}>
@@ -1634,6 +1689,7 @@ function DraftBoard({
                       { key: "name", label: "NAME" },
                       { key: "traits", label: "TRAITS" },
                       { key: "age", label: "AGE" },
+                      { key: "compare", label: "CMP" },
                       { key: "ovr", label: isDraftComplete ? "OVR" : "GRADE" },
                       { key: "potential", label: isDraftComplete ? "POT" : "???" },
                       { key: "college", label: "COLLEGE" },
@@ -1667,7 +1723,7 @@ function DraftBoard({
                   {sortedProspects.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={isUserPick ? 8 : 7}
+                        colSpan={isUserPick ? 9 : 8}
                         style={{
                           textAlign: "center",
                           padding: "var(--space-6)",
@@ -1740,6 +1796,7 @@ function DraftBoard({
                         ))}
                       </TableCell>
                       <TableCell style={{ color: "var(--text-muted)" }}>{p.age}</TableCell>
+                      <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(p.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(p)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(p.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(p.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(p.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(p.id) ? "✓" : "⊕"}</Button></TableCell>
                       <TableCell>
                         {/* Fog of War: show scout grade before drafted, true OVR after */}
                         {isDraftComplete

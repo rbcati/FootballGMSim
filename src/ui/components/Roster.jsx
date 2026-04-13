@@ -27,6 +27,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
+import PlayerCompareTray from "./PlayerCompareTray.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
 import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
@@ -50,6 +51,7 @@ import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
+import { usePlayerCompare } from "../utils/playerCompare.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -490,17 +492,15 @@ function RosterTable({
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
   const [advancedFilters, setAdvancedFilters] = useState([]);
-  // Compare mode: up to 2 players selected for side-by-side comparison
-  const [compareIds, setCompareIds] = useState([]);
-  const [showComparison, setShowComparison] = useState(false);
-
-  const toggleCompare = (player) => {
-    setCompareIds(prev => {
-      if (prev.includes(player.id)) return prev.filter(id => id !== player.id);
-      if (prev.length >= 2) return [prev[1], player.id]; // replace oldest
-      return [...prev, player.id];
-    });
-  };
+  const {
+    compareIds,
+    setCompareIds,
+    showComparison,
+    setShowComparison,
+    toggleCompare,
+    comparePlayerA,
+    comparePlayerB,
+  } = usePlayerCompare(players, 2);
 
   const displayed = useMemo(() => {
     const quickFiltered = applyRosterQuickFilter(players, posFilter);
@@ -587,8 +587,6 @@ function RosterTable({
   };
 
 
-  const comparePlayerA = players.find(p => p.id === compareIds[0]);
-  const comparePlayerB = players.find(p => p.id === compareIds[1]);
 
   return (
     <>
@@ -613,54 +611,13 @@ function RosterTable({
           onClose={() => setShowComparison(false)}
         />
       )}
-      {/* Compare bar — shown when 1-2 players are selected for comparison */}
-      {compareIds.length > 0 && (
-        <div style={{
-          padding: "var(--space-3) var(--space-4)",
-          background: "rgba(10,132,255,0.08)",
-          border: "1px solid var(--accent)",
-          borderRadius: "var(--radius-md)",
-          marginBottom: "var(--space-3)",
-          display: "flex", alignItems: "center", gap: "var(--space-3)",
-          flexWrap: "wrap",
-        }}>
-          <span style={{ fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--accent)" }}>
-            Compare ({compareIds.length}/2):
-          </span>
-          {compareIds.map(id => {
-            const p = players.find(pl => pl.id === id);
-            return p ? (
-              <span key={id} style={{
-                padding: "2px 10px", borderRadius: "var(--radius-pill)",
-                background: "var(--accent-muted)", color: "var(--accent)",
-                fontSize: "var(--text-xs)", fontWeight: 600,
-                display: "flex", alignItems: "center", gap: 4,
-              }}>
-                {p.name}
-                <Button
-                  onClick={() => toggleCompare(p)}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "var(--accent)", fontSize: 14, lineHeight: 1, padding: 0 }}
-                >×</Button>
-              </span>
-            ) : null;
-          })}
-          {compareIds.length === 2 && (
-            <Button
-              className="btn"
-              onClick={() => setShowComparison(true)}
-              style={{ marginLeft: "auto", fontSize: "var(--text-xs)", padding: "4px 14px", background: "var(--accent)", color: "#fff", border: "none" }}
-            >
-              Compare →
-            </Button>
-          )}
-          <Button
-            onClick={() => setCompareIds([])}
-            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}
-          >
-            Clear
-          </Button>
-        </div>
-      )}
+      <PlayerCompareTray
+        compareIds={compareIds}
+        resolvePlayer={(id) => players.find((pl) => pl.id === id)}
+        onRemove={toggleCompare}
+        onOpenCompare={() => setShowComparison(true)}
+        onClear={() => setCompareIds([])}
+      />
       {/* Position filter pills */}
       {isResignPhase && (
         <div style={{
