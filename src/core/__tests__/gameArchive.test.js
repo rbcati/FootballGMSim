@@ -60,4 +60,18 @@ describe('gameArchive helpers', () => {
     });
     expect(defects.some((d) => d.includes('full_without_team_stats'))).toBe(true);
   });
+
+  it('keeps backward compatibility with legacy stats.playLogs archives', () => {
+    const game = normalizeArchivedGamePayload({
+      id: 'legacy',
+      homeId: 1,
+      awayId: 2,
+      homeScore: 13,
+      awayScore: 10,
+      stats: { playLogs: [{ quarter: 1, text: 'Legacy touchdown', homeScore: 7, awayScore: 0 }] },
+    });
+    expect(Array.isArray(game.playLog)).toBe(true);
+    expect(game.playLog).toHaveLength(1);
+    expect(game.archiveQuality).toBe('partial');
+  });
 });

@@ -6,6 +6,19 @@ const SCORE_TYPES = {
   two_point: 'two_point',
 };
 
+const PLAY_TYPE_ALIASES = {
+  play: 'play',
+  pass: 'pass',
+  run: 'run',
+  sack: 'sack',
+  punt: 'punt',
+  touchdown: 'touchdown',
+  field_goal: 'field_goal',
+  interception: 'interception',
+  fumble: 'fumble',
+  safety: 'safety',
+};
+
 const toNumber = (value) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
@@ -38,6 +51,22 @@ export function classifyScoringEvent(log = {}) {
   return { type: 'score', label: 'Score', points: toNumber(log?.points) ?? 0 };
 }
 
+export function inferPlayType(log = {}) {
+  const raw = String(log?.playType ?? log?.type ?? '').toLowerCase();
+  if (raw && PLAY_TYPE_ALIASES[raw]) return raw;
+  const text = String(log?.text ?? '').toLowerCase();
+  if (text.includes('field goal')) return 'field_goal';
+  if (text.includes('touchdown')) return 'touchdown';
+  if (text.includes('interception')) return 'interception';
+  if (text.includes('fumble')) return 'fumble';
+  if (text.includes('safety')) return 'safety';
+  if (text.includes('punt')) return 'punt';
+  if (text.includes('sack')) return 'sack';
+  if (text.includes('pass') || text.includes('incomplete')) return 'pass';
+  if (text.includes('rush') || text.includes('runs') || text.includes('carries')) return 'run';
+  return 'play';
+}
+
 export function isScoringLikeLog(log = {}) {
   if (log?.isScore || log?.isTouchdown) return true;
   const text = String(log?.text ?? '').toLowerCase();
@@ -62,4 +91,52 @@ export function describeDriveResult(lastLog = {}) {
   if (text.includes('turnover on downs') || text.includes('downs')) return 'Turnover on Downs';
   if (text.includes('punt')) return 'Punt';
   return 'Drive End';
+}
+
+function toPlayerRef(player) {
+  if (!player || typeof player !== 'object') return null;
+  const id = toNumber(player.id);
+  return {
+    id: id ?? null,
+    name: player.name ?? null,
+    pos: player.pos ?? null,
+  };
+}
+
+export function normalizePlayLogEntry(log = {}, index = 0, context = {}) {
+  const homeAfter = toNumber(log?.scoreHomeAfter ?? log?.homeScore ?? log?.scoreHome);
+  const awayAfter = toNumber(log?.scoreAwayAfter ?? log?.awayScore ?? log?.scoreAway);
+  const teamId = resolveLogTeamId(log, context);
+  const homeId = toNumber(context?.homeId);
+  const awayId = toNumber(context?.awayId);
+  const offenseTeamId = toNumber(log?.offenseTeamId ?? (log?.possession === 'home' ? homeId : (log?.possession === 'away' ? awayId : teamId)));
+  const defenseTeamId = toNumber(log?.defenseTeamId ?? (
+    offenseTeamId === homeId ? awayId : (offenseTeamId === awayId ? homeId : null)
+  ));
+  return {
+    ...log,
+    id: log?.id ?? `play_${index}`,
+    quarter: Number(log?.quarter ?? 1),
+    clock: log?.clock ?? log?.timeLeft ?? log?.time ?? '',
+    offenseTeamId: offenseTeamId ?? null,
+    defenseTeamId: defenseTeamId ?? null,
+    playType: inferPlayType(log),
+    yards: toNumber(log?.yards) ?? 0,
+    result: log?.result ?? log?.text ?? 'Play',
+    scoreHomeAfter: homeAfter,
+    scoreAwayAfter: awayAfter,
+    fieldPosition: toNumber(log?.fieldPosition ?? log?.yardLine),
+    teamId: teamId ?? offenseTeamId ?? null,
+    text: log?.text ?? log?.playText ?? 'Play',
+    passer: toPlayerRef(log?.passer),
+    rusher: toPlayerRef(log?.rusher ?? log?.player),
+    receiver: toPlayerRef(log?.receiver ?? (log?.playType === 'pass' ? log?.player : null)),
+    defender: toPlayerRef(log?.defender ?? log?.tackler ?? log?.forcedFumble),
+    kicker: toPlayerRef(log?.kicker),
+  };
+}
+
+export function normalizePlayLogs(playLogs = [], context = {}) {
+  const logs = Array.isArray(playLogs) ? playLogs : [];
+  return logs.map((log, idx) => normalizePlayLogEntry(log, idx, context));
 }

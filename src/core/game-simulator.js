@@ -11,6 +11,12 @@ import { getStrategyModifiers } from './strategy.js';
 import { getEffectiveRating, canPlayerPlay, generateInjury } from './injury-core.js';
 import { calculateTeamRatingWithSchemeFit } from './scheme-core.js';
 import { TRAITS } from './traits.js';
+import { normalizePlayLogs } from './gameEvents.js';
+import {
+  buildDriveSummaryFromSimulation,
+  buildQuarterScoresFromScoring,
+  buildScoringSummaryFromSimulation,
+} from './gameSummary.js';
 
 function hashStringToSeed(input = '') {
   let hash = 2166136261;
@@ -2740,6 +2746,17 @@ export function simGameStats(home, away, options = {}) {
     const decisiveLine = `A late fourth-quarter ${winnerAbbr} drive sealed a ${winnerScore}-${loserScore} finish over ${loserAbbr}.`;
     const recapText = `${winnerAbbr} edges ${loserAbbr} ${winnerScore}-${loserScore}. ${reasonLine} ${decisiveLine}`;
 
+    const summaryContext = {
+      homeId: home?.id,
+      awayId: away?.id,
+      homeAbbr: home?.abbr,
+      awayAbbr: away?.abbr,
+    };
+    const normalizedPlayLogs = normalizePlayLogs(fullGameResult.playLogs || [], summaryContext);
+    const scoringSummary = buildScoringSummaryFromSimulation(normalizedPlayLogs, summaryContext);
+    const driveSummaryRows = buildDriveSummaryFromSimulation(normalizedPlayLogs, summaryContext);
+    const quarterScores = buildQuarterScoresFromScoring(scoringSummary, summaryContext);
+
     return {
       homeScore, awayScore, schemeNote, injuries: gameInjuries,
       weather: weather.id,
@@ -2757,12 +2774,15 @@ export function simGameStats(home, away, options = {}) {
           homeFieldAdvantage: HOME_ADVANTAGE,
         },
       },
-      playLogs: fullGameResult.playLogs || [],
+      playLogs: normalizedPlayLogs,
       liveStats: fullGameResult.liveStats || {},
       teamDriveStats: {
         home: homeOut,
         away: awayOut,
       },
+      driveSummary: driveSummaryRows,
+      scoringSummary,
+      quarterScores,
       recapText,
       simSeed: driveSummary?.seed ?? null,
     };
@@ -2997,6 +3017,9 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         },
         playLogs: gameData.playLogs || [],
         teamDriveStats: gameData.teamDriveStats || null,
+        driveSummary: gameData.driveSummary || [],
+        scoringSummary: gameData.scoringSummary || [],
+        quarterScores: gameData.quarterScores || null,
         recapText: gameData.recapText || null,
         simSeed: gameData.simSeed ?? null,
     };
@@ -3272,6 +3295,9 @@ export function simulateBatch(games, options = {}) {
                 pair._awayDefTDs = gameScores.awayDefTDs || 0;
                 pair._liveStats = gameScores.liveStats || {};
                 pair._teamDriveStats = gameScores.teamDriveStats || null;
+                pair._driveSummary = gameScores.driveSummary || [];
+                pair._scoringSummary = gameScores.scoringSummary || [];
+                pair._quarterScores = gameScores.quarterScores || null;
                 pair._recapText = gameScores.recapText || null;
                 pair._simSeed = gameScores.simSeed ?? null;
 
@@ -3384,6 +3410,9 @@ export function simulateBatch(games, options = {}) {
                 playLogs: gameScores?.playLogs || [],
                 liveStats: pair._liveStats || {},
                 teamDriveStats: pair._teamDriveStats || null,
+                driveSummary: pair._driveSummary || [],
+                scoringSummary: pair._scoringSummary || [],
+                quarterScores: pair._quarterScores || null,
                 recapText: pair._recapText || null,
                 simSeed: pair._simSeed ?? null,
             };
@@ -3414,6 +3443,9 @@ export function simulateBatch(games, options = {}) {
                     playLogs: gameScores?.playLogs || [],
                     liveStats: pair._liveStats || {},
                     teamDriveStats: pair._teamDriveStats || null,
+                    driveSummary: pair._driveSummary || [],
+                    scoringSummary: pair._scoringSummary || [],
+                    quarterScores: pair._quarterScores || null,
                     recapText: pair._recapText || null,
                     simSeed: pair._simSeed ?? null,
                 };

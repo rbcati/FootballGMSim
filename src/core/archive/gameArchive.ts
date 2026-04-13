@@ -16,6 +16,8 @@ export type ArchivedGame = {
   teamStats: AnyObject | null;
   playerStats: AnyObject | null;
   scoringSummary: AnyObject[];
+  driveSummary?: AnyObject[];
+  quarterScores?: { home?: Array<number | null>; away?: Array<number | null> } | null;
   recapText: string | null;
   logs: AnyObject[];
   timestamp: number;
@@ -81,6 +83,8 @@ export function saveGame(gameId: string | null | undefined, payload: AnyObject) 
     teamStats: payload?.teamStats ?? existing?.teamStats ?? null,
     playerStats: payload?.playerStats ?? existing?.playerStats ?? null,
     scoringSummary: Array.isArray(payload?.scoringSummary) ? payload.scoringSummary : (existing?.scoringSummary ?? []),
+    driveSummary: Array.isArray(payload?.driveSummary) ? payload.driveSummary : (existing?.driveSummary ?? []),
+    quarterScores: payload?.quarterScores ?? existing?.quarterScores ?? null,
     recapText: payload?.recapText ?? payload?.recap ?? existing?.recapText ?? null,
     logs: Array.isArray(payload?.logs) ? payload.logs : (existing?.logs ?? []),
     summary: payload?.summary ?? existing?.summary ?? null,

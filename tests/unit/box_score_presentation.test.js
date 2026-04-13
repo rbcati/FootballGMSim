@@ -65,4 +65,16 @@ describe("box score presentation helpers", () => {
     expect(sections.playLog).toBe(false);
     expect(sections.quarterByQuarter).toBe(true);
   });
+
+  it("prefers stored quarter scores (including OT) over derived logs", () => {
+    const quarter = deriveQuarterScores({
+      homeId: 1,
+      awayId: 2,
+      quarterScores: { home: [3, 3, 7, 7, 3], away: [7, 0, 3, 10, 0] },
+    }, [
+      { quarter: 1, teamId: 1, text: "Touchdown", isTouchdown: true },
+    ]);
+    expect(quarter.home).toEqual([3, 3, 7, 7, 3]);
+    expect(quarter.away).toEqual([7, 0, 3, 10, 0]);
+  });
 });

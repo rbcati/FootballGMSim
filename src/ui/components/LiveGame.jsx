@@ -643,6 +643,9 @@ export default function LiveGame({
     awayScore: userLastResults[0].awayScore,
     recapText: userLastResults[0].recapText ?? null,
     teamDriveStats: userLastResults[0].teamDriveStats ?? null,
+    scoringSummary: userLastResults[0].scoringSummary ?? [],
+    driveSummary: userLastResults[0].driveSummary ?? [],
+    quarterScores: userLastResults[0].quarterScores ?? null,
   } : null);
   const recapText = (() => {
     if (recapGame?.recapText) return recapGame.recapText;
@@ -681,6 +684,8 @@ export default function LiveGame({
     { label: "TO", value: statValuePair("turnovers", 0) },
     { label: "Sacks", value: statValuePair("sacks", 0) },
   ] : [];
+  const recapScoring = Array.isArray(recapGame?.scoringSummary) ? recapGame.scoringSummary.slice(-2) : [];
+  const recapDrives = Array.isArray(recapGame?.driveSummary) ? recapGame.driveSummary.slice(-2) : [];
 
   if (!visible) return null;
 
@@ -1000,6 +1005,16 @@ export default function LiveGame({
                 <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                   {recapGame.awayAbbr} {recapGame.awayScore} - {recapGame.homeScore} {recapGame.homeAbbr}
                 </div>
+                {!!recapScoring.length && (
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 6 }}>
+                    Recent scores: {recapScoring.map((s) => `Q${s.quarter} ${s.teamId === recapGame.homeId ? recapGame.homeAbbr : recapGame.awayAbbr} ${s.type ?? s.scoreType ?? 'Score'}`).join(" · ")}
+                  </div>
+                )}
+                {!!recapDrives.length && (
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginTop: 4 }}>
+                    Key drives: {recapDrives.map((d) => `${d.teamAbbr ?? "Drive"} ${d.result ?? d.summary ?? `${d.plays ?? 0}p/${d.yards ?? 0}y`}`).join(" · ")}
+                  </div>
+                )}
               </div>
             )}
             {overlayEvent && (

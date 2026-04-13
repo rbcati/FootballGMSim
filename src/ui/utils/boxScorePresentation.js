@@ -129,25 +129,24 @@ export function deriveScoringSummary(logs = [], teamsById = {}) {
 }
 
 export function deriveQuarterScores(game, logs = []) {
-  const fallback = {
-    home: [null, null, null, null],
-    away: [null, null, null, null],
-  };
+  const fallback = { home: [null, null, null, null], away: [null, null, null, null] };
 
   const q = game?.quarterScores;
   if (q?.home?.length || q?.away?.length) {
+    const maxLen = Math.max(q?.home?.length ?? 0, q?.away?.length ?? 0, 4);
     return {
-      home: [q.home?.[0] ?? null, q.home?.[1] ?? null, q.home?.[2] ?? null, q.home?.[3] ?? null],
-      away: [q.away?.[0] ?? null, q.away?.[1] ?? null, q.away?.[2] ?? null, q.away?.[3] ?? null],
+      home: Array.from({ length: maxLen }, (_, idx) => q.home?.[idx] ?? null),
+      away: Array.from({ length: maxLen }, (_, idx) => q.away?.[idx] ?? null),
     };
   }
 
   if (!logs.length) return fallback;
 
-  const home = [0, 0, 0, 0];
-  const away = [0, 0, 0, 0];
+  const maxQuarter = Math.max(4, ...logs.map((log) => Number(log?.quarter ?? 1)));
+  const home = Array.from({ length: maxQuarter }, () => 0);
+  const away = Array.from({ length: maxQuarter }, () => 0);
   for (const log of logs) {
-    const qtr = Math.max(1, Math.min(4, Number(log.quarter) || 1));
+    const qtr = Math.max(1, Number(log.quarter) || 1);
     const idx = qtr - 1;
     const points = Number(log.points ?? (String(log.text || "").toLowerCase().includes("field goal") ? 3 : String(log.text || "").toLowerCase().includes("safety") ? 2 : String(log.text || "").toLowerCase().includes("extra point") ? 1 : (log.isTouchdown ? 6 : 0)));
     const teamId = Number(log.teamId ?? log.scoringTeamId ?? log.team?.id);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyResult, groupPlayersByPosition, initializePlayerStats, updateTeamStandings } from '../game-simulator.js';
+import { applyResult, commitGameResult, groupPlayersByPosition, initializePlayerStats, updateTeamStandings } from '../game-simulator.js';
 
 describe('groupPlayersByPosition', () => {
   it('sorts by depthOrder first, then ovr descending', () => {
@@ -71,5 +71,34 @@ describe('applyResult', () => {
     expect(away.losses).toBe(1);
     expect(home.headToHead[11].wins).toBe(1);
     expect(away.headToHead[10].losses).toBe(1);
+  });
+});
+
+describe('commitGameResult archive shape', () => {
+  it('stores structured summaries when provided by simulation output', () => {
+    const league = {
+      week: 1,
+      year: 2030,
+      teams: [
+        { id: 1, name: 'Home', abbr: 'HME', roster: [] },
+        { id: 2, name: 'Away', abbr: 'AWY', roster: [] },
+      ],
+      resultsByWeek: { 0: [] },
+    };
+    const result = commitGameResult(league, {
+      homeTeamId: 1,
+      awayTeamId: 2,
+      homeScore: 24,
+      awayScore: 17,
+      stats: { home: { players: {} }, away: { players: {} } },
+      playLogs: [{ quarter: 1, text: 'play' }],
+      scoringSummary: [{ quarter: 1, teamId: 1, scoreType: 'touchdown', points: 7, text: 'TD' }],
+      driveSummary: [{ teamId: 1, quarter: 1, startClock: '12:00', plays: 6, yards: 75, result: 'TD', points: 7 }],
+      quarterScores: { home: [7, 7, 3, 7], away: [3, 7, 0, 7] },
+    }, { persist: false });
+
+    expect(result.scoringSummary).toHaveLength(1);
+    expect(result.driveSummary).toHaveLength(1);
+    expect(result.quarterScores.home[0]).toBe(7);
   });
 });

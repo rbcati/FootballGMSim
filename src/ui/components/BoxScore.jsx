@@ -121,6 +121,10 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const quarterScores = useMemo(() => deriveQuarterScores(game, game?.playLog ?? game?.stats?.playLogs ?? []), [game]);
   const driveSummary = Array.isArray(game?.driveSummary) ? game.driveSummary : (Array.isArray(game?.drives) ? game.drives : []);
   const playLog = Array.isArray(game?.playLog) ? game.playLog : (Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : []);
+  const quarterHeaders = useMemo(
+    () => Array.from({ length: Math.max(quarterScores.home.length, quarterScores.away.length, 4) }, (_, idx) => (idx < 4 ? `Q${idx + 1}` : `OT${idx - 3}`)),
+    [quarterScores],
+  );
   const sections = useMemo(() => getGameDetailSections(game ?? {}), [game]);
 
   const awayPlayers = useMemo(() => toPlayerArray(game?.playerStats?.away ?? game?.stats?.away, game?.awayId), [game]);
@@ -289,10 +293,10 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <h4>Quarter-by-quarter</h4>
               <div className="bs-table-wrap">
                 <table className="box-score-table">
-                  <thead><tr><th>Team</th><th>Q1</th><th>Q2</th><th>Q3</th><th>Q4</th><th>Final</th></tr></thead>
+                  <thead><tr><th>Team</th>{quarterHeaders.map((label) => <th key={label}>{label}</th>)}<th>Final</th></tr></thead>
                   <tbody>
-                    <tr><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td><td>{quarterScores.away[0] ?? "—"}</td><td>{quarterScores.away[1] ?? "—"}</td><td>{quarterScores.away[2] ?? "—"}</td><td>{quarterScores.away[3] ?? "—"}</td><td>{game.awayScore}</td></tr>
-                    <tr><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td><td>{quarterScores.home[0] ?? "—"}</td><td>{quarterScores.home[1] ?? "—"}</td><td>{quarterScores.home[2] ?? "—"}</td><td>{quarterScores.home[3] ?? "—"}</td><td>{game.homeScore}</td></tr>
+                    <tr><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`away-q-${idx}`}>{quarterScores.away[idx] ?? "—"}</td>)}<td>{game.awayScore}</td></tr>
+                    <tr><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`home-q-${idx}`}>{quarterScores.home[idx] ?? "—"}</td>)}<td>{game.homeScore}</td></tr>
                   </tbody>
                 </table>
               </div>
