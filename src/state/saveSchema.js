@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.1;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.2;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -41,6 +41,7 @@ const MIGRATIONS = {
   3: migrateV3ToV4,
   4: migrateV4ToV5,
   5: migrateV5ToV51,
+  5.1: migrateV51ToV52,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -71,6 +72,23 @@ function migrateV5ToV51(meta = {}) {
     // v5.1 is a non-destructive repair marker. Actual repair work (roster/cap
     // hydration) runs in the worker at load-time so no user data is wiped.
     saveVersion: 5.1,
+  };
+}
+
+function migrateV51ToV52(meta = {}) {
+  const salaryCap = Number(meta?.settings?.salaryCap ?? 301.2);
+  const economy = {
+    baseSalaryCap: salaryCap,
+    currentSalaryCap: salaryCap,
+    annualCapGrowthRate: 0.035,
+    annualSalaryInflationRate: 0.025,
+    economyHistory: Array.isArray(meta?.economy?.economyHistory) ? meta.economy.economyHistory : [],
+    ...(meta?.economy ?? {}),
+  };
+  return {
+    ...meta,
+    economy,
+    saveVersion: 5.2,
   };
 }
 

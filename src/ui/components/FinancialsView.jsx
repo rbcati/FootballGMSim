@@ -329,6 +329,15 @@ export default function FinancialsView({ league, actions }) {
 
   const handleRestructure = async (player) => {
     if (!actions?.restructureContract) return;
+    const currentCapHit = capHitOf(player);
+    const years = Math.max(1, Number(player?.contract?.years ?? player?.contract?.yearsRemaining ?? 1));
+    const convertAmount = Number(player?.contract?.baseAnnual ?? 0) * 0.5;
+    const projectedBonus = Number(player?.contract?.signingBonus ?? 0) + convertAmount;
+    const projectedCapHit = (Number(player?.contract?.baseAnnual ?? 0) - convertAmount) + (projectedBonus / years);
+    const proceed = window.confirm(
+      `Restructure ${player.name}?\nCurrent cap hit: ${fmt(currentCapHit)}\nNew cap hit: ${fmt(projectedCapHit)}\nFuture bonus impact: +${fmt(convertAmount / years)} per remaining year.`
+    );
+    if (!proceed) return;
     setRestructuring(player.id);
     setNotification(null);
     try {
@@ -337,7 +346,7 @@ export default function FinancialsView({ league, actions }) {
         const r = resp.payload.restructureResult;
         setNotification({
           type: "success",
-          message: `Restructured ${r.playerName}: converted $${r.convertAmount?.toFixed(2)}M → saves $${r.capSavingsThisYear?.toFixed(2)}M this year.`,
+          message: `Restructured ${r.playerName}: ${fmt(r.oldCapHit)} → ${fmt(r.newCapHit)} (saves $${r.capSavingsThisYear?.toFixed(2)}M this year, future +$${(r.futureAnnualBonusDelta ?? 0).toFixed(2)}M/yr).`,
         });
       } else {
         setNotification({ type: "success", message: "Contract restructured." });
@@ -404,6 +413,9 @@ export default function FinancialsView({ league, actions }) {
       </div>
     );
 
+  const economy = league?.economy ?? null;
+  const economyHistory = Array.isArray(economy?.economyHistory) ? [...economy.economyHistory].slice(-8).reverse() : [];
+
   return (
     <div style={{ padding: "var(--space-4)", maxWidth: 900, margin: "0 auto" }}>
       {/* ── Header ── */}
@@ -426,6 +438,22 @@ export default function FinancialsView({ league, actions }) {
           Hard Cap: ${hardCap.toFixed(1)}M
         </Badge>
       </div>
+      {economy && (
+        <Card style={{ marginBottom: "var(--space-4)" }}>
+          <CardHeader><CardTitle>League Economy</CardTitle></CardHeader>
+          <CardContent>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
+              Current cap: {fmt(economy.currentSalaryCap)} · Growth: {(Number(economy.annualCapGrowthRate ?? 0) * 100).toFixed(1)}%/yr · Salary inflation: {(Number(economy.annualSalaryInflationRate ?? 0) * 100).toFixed(1)}%/yr
+            </div>
+            {economyHistory.map((row) => (
+              <div key={row.season} style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text-muted)" }}>
+                <span>{row.season}</span>
+                <span>{fmt(row.salaryCap)}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── Notification ── */}
       {notification && (

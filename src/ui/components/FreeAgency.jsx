@@ -122,6 +122,10 @@ const RESIGN_TIER_LABEL = {
   trade_or_tag: "Trade/Tag candidate",
 };
 
+export function formatPlaybookKnowledge(playbookKnowledge) {
+  return `${playbookKnowledge?.label ?? "None"} (${playbookKnowledge?.score ?? 0})`;
+}
+
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
 
 function OvrBadge({ ovr }) {
@@ -502,6 +506,9 @@ function PlayerPreviewSheet({ player, capRoom, onClose, onSubmitBid }) {
         <div style={{ padding: "0 16px" }}>
           {/* PlayerCard hero */}
           <PlayerCard player={player} variant="hero" onClose={onClose} />
+          <div style={{ marginTop: 10, fontSize: "0.8rem", color: "var(--text-muted)" }}>
+            Team playbook knowledge: <strong style={{ color: "var(--text)" }}>{formatPlaybookKnowledge(player?.playbookKnowledge)}</strong>
+          </div>
 
           {/* Bid form or trigger */}
           <div style={{ marginTop: 16 }}>
@@ -1170,6 +1177,9 @@ export default function FreeAgency({
                             <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
                               {market.urgencyLabel}{market.patienceLabel ? ` · ${market.patienceLabel}` : ""}
                             </div>
+                            <div style={{ color: "var(--text-muted)", marginTop: 1 }}>
+                              Playbook knowledge: {formatPlaybookKnowledge(player?.playbookKnowledge)}
+                            </div>
                             {market.motivationSummary && (
                               <div style={{ color: "var(--text-subtle)", marginTop: 1 }}>
                                 {market.motivationSummary}{market.fitScore ? ` · Fit ${market.fitScore}/100` : ""}
@@ -1277,6 +1287,9 @@ export default function FreeAgency({
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
                             {player?.demandProfile?.headline ?? "Balanced priorities"}{market.riskLabel ? ` · ${market.riskLabel}` : ""}
                           </div>
+                          <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
+                            Playbook: {formatPlaybookKnowledge(player?.playbookKnowledge)}
+                          </div>
                           {!canAfford ? (
                             <span style={{ color: "var(--danger)", fontSize: "var(--text-xs)" }}>
                               Cannot Afford
@@ -1305,6 +1318,7 @@ export default function FreeAgency({
                     <div style={{ fontWeight: 700 }}>{idx + 1}. {player.name}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}{player.scoutUncertaintyBand ? ` (Scout ${player.scoutOvr} ±${player.scoutUncertaintyBand})` : ''}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Playbook {formatPlaybookKnowledge(player?.playbookKnowledge)}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player?.demandProfile?.headline ?? 'Balanced motivations'}{player?.demandProfile?.fitScore ? ` · Fit ${player.demandProfile.fitScore}/100` : ''}</div>
                     {Array.isArray(player?.market?.stateChips) && player.market.stateChips.length > 0 ? <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{player.market.stateChips.join(' · ')}</div> : null}
@@ -1348,6 +1362,9 @@ export default function FreeAgency({
                                 </div>
                                 <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
                                    {mMarket.decision} · {mMarket.urgencyLabel}{mMarket.patienceLabel ? ` · ${mMarket.patienceLabel}` : ""}
+                                </div>
+                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
+                                   Playbook: {formatPlaybookKnowledge(player?.playbookKnowledge)}
                                 </div>
                                 {mMarket.decisionReason && (
                                   <div style={{ fontSize: "10px", color: "var(--text-subtle)", marginTop: 2 }}>
