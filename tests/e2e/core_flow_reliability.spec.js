@@ -23,7 +23,7 @@ test.describe('Core flow reliability', () => {
     await goToTab(page, 'free-agency');
     await expect(page.getByText('Free Agency').first()).toBeVisible();
 
-    await page.locator('[data-testid="primary-nav-history"]').first().click();
+    await page.locator('[data-testid="nav-history"], [data-testid="primary-nav-history"]').first().click();
     await page.locator('[data-testid="section-tab-history-hub"]').first().click();
     await expect(page.getByText('History Hub').first()).toBeVisible();
   });
@@ -44,6 +44,15 @@ test.describe('Core flow reliability', () => {
 
     await goToTab(page, 'schedule');
     await page.locator('.matchup-card.clickable-card').first().click();
+    await expect(page.getByText('Final Game Book').first()).toBeVisible();
+  });
+
+  test('recent games card opens archived box score', async ({ page }) => {
+    await launchFranchise(page);
+    await simulateSingleWeek(page);
+
+    await goToTab(page, 'hq');
+    await page.locator('[data-testid="recent-game-card"]').first().click();
     await expect(page.getByText('Final Game Book').first()).toBeVisible();
   });
 

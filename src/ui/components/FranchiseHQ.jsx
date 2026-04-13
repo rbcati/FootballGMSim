@@ -4,9 +4,10 @@ import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { getHQViewModel } from "../../state/selectors.js";
-import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
+import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 import { persistHqCollapsedState, readHqCollapsedState } from "../utils/hqCardState.js";
 import { EmptyState, SectionCard, StatCard, TeamChip } from "./common/UiPrimitives.jsx";
+import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -36,18 +37,6 @@ function getNextGame(league) {
   return null;
 }
 
-function getRecentGames(league, limit = 5) {
-  const weeks = league?.schedule?.weeks ?? [];
-  const list = [];
-  weeks.forEach((week) => {
-    (week?.games ?? []).forEach((game) => {
-      if (!game?.played) return;
-      list.push({ game, week: Number(week?.week ?? game?.week ?? 0) });
-    });
-  });
-  return list.sort((a, b) => b.week - a.week).slice(0, limit);
-}
-
 function CollapsibleCard({ title, collapsed, onToggle, children }) {
   return (
     <SectionCard
@@ -65,7 +54,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
   const latest = useMemo(() => findLatestUserCompletedGame(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
-  const recentGames = useMemo(() => getRecentGames(vm.league), [vm.league]);
+  const recentGames = useMemo(() => getArchivedRecentGames(5), [vm.league?.seasonId, vm.league?.week]);
+  const latestArchived = useMemo(() => getArchivedRecentGames(1)?.[0] ?? null, [vm.league?.seasonId, vm.league?.week]);
   const [collapsed, setCollapsed] = useState(() => readHqCollapsedState());
 
   useEffect(() => {
@@ -163,20 +153,26 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
       <SectionCard title="Latest Finals">
         {recentGames.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No completed games yet.</div> : (
           <div style={{ display: "grid", gap: 8 }}>
-            {recentGames.map(({ game, week }, idx) => {
-              const presentation = buildCompletedGamePresentation(game, { seasonId: vm.league?.seasonId, week, source: "hq_recent_games" });
+            {recentGames.map((game, idx) => {
+              const week = Number(game?.week ?? 0);
+              const presentation = buildCompletedGamePresentation({
+                ...game,
+                homeScore: game?.score?.home,
+                awayScore: game?.score?.away,
+              }, { seasonId: vm.league?.seasonId, week, source: "hq_recent_games" });
               return (
                 <button
-                  key={`${week}-${game.home}-${game.away}-${idx}`}
+                  key={`${week}-${game.homeId}-${game.awayId}-${idx}`}
                   type="button"
                   className="btn"
+                  data-testid="recent-game-card"
                   style={{ textAlign: "left", cursor: presentation.canOpen ? "pointer" : "not-allowed" }}
-                  onClick={() => openResolvedBoxScore(game, { seasonId: vm.league?.seasonId, week, source: "hq_recent_games" }, onOpenBoxScore)}
+                  onClick={() => onOpenBoxScore?.(game?.id)}
                   disabled={!presentation.canOpen}
                   title={presentation.canOpen ? "View Box Score" : presentation.statusLabel}
                 >
-                  <strong>Week {week}: {presentation.displayScoreLine}</strong>
-                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{presentation.canOpen ? "View Box Score ›" : presentation.statusLabel}</div>
+                  <strong>Week {week}: {game?.awayAbbr} {game?.score?.away} - {game?.score?.home} {game?.homeAbbr}</strong>
+                  <div data-testid="archive-status" style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{presentation.canOpen ? "View Box Score ›" : presentation.statusLabel}</div>
                 </button>
               );
             })}
@@ -184,11 +180,15 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         )}
       </SectionCard>
 
-      {latest?.game && (
+      {(latestArchived || latest?.game) && (
         <SectionCard title="Last User Game">
           <Button
             size="sm"
-            onClick={() => openResolvedBoxScore(latest.game, { seasonId: vm.league?.seasonId, week: latest.week, source: "hq_recent_results" }, onOpenBoxScore)}
+            data-testid="box-score-trigger"
+            onClick={() => {
+              const gameId = latestArchived?.id ?? latest?.gameId;
+              if (gameId) onOpenBoxScore?.(gameId);
+            }}
           >
             Open latest box score
           </Button>

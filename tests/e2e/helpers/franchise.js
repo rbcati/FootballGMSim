@@ -77,7 +77,7 @@ export async function goToTab(page, name) {
   };
   const primary = sectionByTab[tab];
   if (primary) {
-    const primaryLocator = page.locator(`[data-testid="primary-nav-${primary}"]`).first();
+    const primaryLocator = page.locator(`[data-testid="nav-${primary}"], [data-testid="primary-nav-${primary}"]`).first();
     if (await primaryLocator.isVisible().catch(() => false)) {
       await primaryLocator.click();
     }

@@ -207,6 +207,7 @@ function PostGameScreenInner({
   boxScoreGameId,
   onOpenBoxScore,
   onContinue,
+  onArchiveReady,
   week,
   phase,
 }) {
@@ -260,6 +261,32 @@ function PostGameScreenInner({
     : null;
 
   const showLeaders = qb || receiver || rusher || defender;
+  const archiveSavedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (archiveSavedRef.current || !boxScoreGameId || typeof onArchiveReady !== "function") return;
+    archiveSavedRef.current = true;
+    const recapText = notableMoments.length
+      ? notableMoments.map((m) => `Q${m.quarter ?? "?"} ${m.clock ?? ""} ${m.text ?? "Momentum swing"}`).join(" ")
+      : `${awayTeam?.abbr ?? "AWY"} ${awayScore} - ${homeScore} ${homeTeam?.abbr ?? "HME"}`;
+    onArchiveReady({
+      gameId: boxScoreGameId,
+      season: null,
+      week,
+      homeId: homeTeam?.id,
+      awayId: awayTeam?.id,
+      homeAbbr: homeTeam?.abbr,
+      awayAbbr: awayTeam?.abbr,
+      homeScore,
+      awayScore,
+      recapText,
+      logs,
+      scoringSummary: notableMoments,
+      summary: {
+        storyline: recapText,
+        simOutputs: null,
+      },
+    });
+  }, [awayScore, awayTeam?.abbr, awayTeam?.id, boxScoreGameId, homeScore, homeTeam?.abbr, homeTeam?.id, logs, notableMoments, onArchiveReady, week]);
 
   return (
     <>
@@ -387,6 +414,7 @@ function PostGameScreenInner({
               <button
                 className="btn-link"
                 type="button"
+                data-testid="box-score-trigger"
                 onClick={() => boxScoreGameId && onOpenBoxScore?.(boxScoreGameId)}
                 disabled={!boxScoreGameId}
                 style={{ cursor: boxScoreGameId ? "pointer" : "not-allowed", fontWeight: 700 }}
