@@ -95,9 +95,25 @@ export function normalizeArchivedGamePayload(rawGame) {
   const id = rawGame?.id ?? rawGame?.gameId ?? buildCanonicalGameId({ seasonId, week, homeId, awayId });
 
   const legacyStats = rawGame?.stats ?? null;
+  const coerceSideStats = (side) => {
+    if (!side) return null;
+    if (Array.isArray(side)) {
+      const mapped = {};
+      side.forEach((row, idx) => {
+        const pid = row?.playerId ?? row?.id ?? `legacy_${idx}`;
+        mapped[String(pid)] = {
+          name: row?.name ?? 'Unknown',
+          pos: row?.pos ?? row?.position ?? '—',
+          stats: row?.stats ?? row,
+        };
+      });
+      return mapped;
+    }
+    return (typeof side === 'object') ? side : null;
+  };
   const playerStats = rawGame?.playerStats ?? (legacyStats ? {
-    home: legacyStats.home ?? null,
-    away: legacyStats.away ?? null,
+    home: coerceSideStats(legacyStats.home),
+    away: coerceSideStats(legacyStats.away),
   } : null);
 
   const playLog = Array.isArray(rawGame?.playLog)
@@ -148,6 +164,92 @@ export function normalizeArchivedGamePayload(rawGame) {
     stats: legacyStats ?? (playerStats ? { ...playerStats, playLogs: playLog } : null),
     drives: Array.isArray(rawGame?.drives) ? rawGame.drives : (Array.isArray(rawGame?.driveSummary) ? rawGame.driveSummary : []),
   };
+
+  normalized.archiveQuality = classifyArchiveQuality(normalized);
+  return normalized;
+}
+
+function firstLogClock(playLog = []) {
+  const first = playLog.find((log) => log?.clock || log?.time);
+  return first?.clock ?? first?.time ?? '15:00';
+}
+
+function buildSyntheticPlayerRows(game) {
+  const categories = game?.summary?.leaders ?? {};
+  const template = {
+    home: {},
+    away: {},
+  };
+  const addLeader = (leader, statKeys = []) => {
+    if (!leader || (!leader.playerId && !leader.name)) return;
+    const side = Number(leader.teamId) === Number(game?.awayId) ? 'away' : 'home';
+    const pid = String(leader.playerId ?? `${side}_leader_${Object.keys(template[side]).length}`);
+    const existing = template[side][pid] ?? {
+      name: leader.name ?? 'Impact Player',
+      pos: leader.pos ?? '—',
+      stats: {},
+    };
+    for (const key of statKeys) {
+      if (leader?.stats?.[key] != null && existing.stats[key] == null) {
+        existing.stats[key] = leader.stats[key];
+      }
+    }
+    template[side][pid] = existing;
+  };
+  addLeader(categories.pass, ['passComp', 'passAtt', 'passYd', 'passTD', 'interceptions']);
+  addLeader(categories.rush, ['rushAtt', 'rushYd', 'rushTD', 'fumblesLost']);
+  addLeader(categories.receive, ['targets', 'receptions', 'recYd', 'recTD']);
+  addLeader(categories.defense, ['tackles', 'sacks', 'interceptions', 'passesDefended', 'forcedFumbles']);
+  return template;
+}
+
+export function enrichArchivedGamePayload(rawGame) {
+  const normalized = normalizeArchivedGamePayload(rawGame);
+  if (!normalized) return null;
+
+  const playLog = Array.isArray(normalized.playLog) ? normalized.playLog : [];
+  if ((!Array.isArray(normalized.scoringSummary) || normalized.scoringSummary.length === 0) && playLog.length) {
+    normalized.scoringSummary = playLog
+      .filter((log) => log?.isScore || log?.isTouchdown || /touchdown|field goal|safety/i.test(log?.text ?? ''))
+      .map((log, idx) => ({
+        id: `score_${idx}`,
+        quarter: Number(log?.quarter ?? 1),
+        clock: log?.clock ?? log?.time ?? null,
+        teamId: Number(log?.teamId ?? log?.scoringTeamId ?? log?.team?.id),
+        text: log?.text ?? 'Scoring play',
+      }));
+  }
+
+  if ((!Array.isArray(normalized.driveSummary) || normalized.driveSummary.length === 0) && playLog.length) {
+    const openingTeamId = Number(playLog[0]?.teamId ?? normalized.awayId);
+    normalized.driveSummary = [
+      {
+        id: 'drv_fallback_0',
+        quarter: 1,
+        teamId: openingTeamId,
+        startClock: firstLogClock(playLog),
+        result: 'Drive details inferred from play log',
+      },
+    ];
+  }
+
+  const hasPlayerStats = hasValues(normalized?.playerStats?.home) && hasValues(normalized?.playerStats?.away);
+  if (!hasPlayerStats && hasValues(normalized?.summary?.leaders)) {
+    normalized.playerStats = buildSyntheticPlayerRows(normalized);
+    normalized.stats = {
+      ...(normalized.stats ?? {}),
+      home: normalized.playerStats.home,
+      away: normalized.playerStats.away,
+      playLogs: playLog,
+    };
+  }
+
+  if ((!hasValues(normalized?.teamStats?.home) || !hasValues(normalized?.teamStats?.away)) && hasValues(normalized?.playerStats)) {
+    normalized.teamStats = {
+      home: deriveTeamStatsFromPlayerRows(normalized.playerStats.home),
+      away: deriveTeamStatsFromPlayerRows(normalized.playerStats.away),
+    };
+  }
 
   normalized.archiveQuality = classifyArchiveQuality(normalized);
   return normalized;
