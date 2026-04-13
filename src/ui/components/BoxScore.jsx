@@ -122,6 +122,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const quarterScores = useMemo(() => deriveQuarterScores(game, game?.playLog ?? game?.stats?.playLogs ?? []), [game]);
   const driveSummary = Array.isArray(game?.driveSummary) ? game.driveSummary : (Array.isArray(game?.drives) ? game.drives : []);
   const playLog = Array.isArray(game?.playLog) ? game.playLog : (Array.isArray(game?.stats?.playLogs) ? game.stats.playLogs : []);
+  const hasQuarterData = quarterScores.home.some((value) => value != null) || quarterScores.away.some((value) => value != null);
+  const canExpandDetails = scoring.length > 6 || driveSummary.length > 8 || playLog.length > 20;
   const quarterHeaders = useMemo(
     () => Array.from({ length: Math.max(quarterScores.home.length, quarterScores.away.length, 4) }, (_, idx) => (idx < 4 ? `Q${idx + 1}` : `OT${idx - 3}`)),
     [quarterScores],
@@ -156,7 +158,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
         <div className="box-score-header bs-header-sticky">
           <div>
             <div className="muted" style={{ fontSize: 12 }}>Week {headerWeek} · {headerSeason}</div>
-            <h2 style={{ margin: "2px 0 8px" }}>Final Game Book</h2>
+            <h2 style={{ margin: "2px 0 8px" }}>Game Book</h2>
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             {onBack && <button className="btn" onClick={onBack}>Back</button>}
@@ -193,7 +195,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             <section className="bs-section">
               <div className="bs-section-header">
                 <h4>Game recap</h4>
-                <button className="btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "Compact" : "Expand details"}</button>
+                {canExpandDetails ? <button className="btn" onClick={() => setExpanded((v) => !v)}>{expanded ? "Compact" : "Expand details"}</button> : null}
               </div>
               <div className="bs-list-item" style={{ marginBottom: 10 }}>
                 {game?.summary?.storyline ?? game?.recap ?? "A complete box score was archived for this matchup."}
@@ -233,6 +235,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 <LeaderCard label="Receiving leader" player={leaders.receive} line={describeStatLine(leaders.receive, ["receptions", "recYd", "recTD"])} onPlayerSelect={onPlayerSelect} />
                 <LeaderCard label="Defensive leader" player={leaders.defense} line={describeStatLine(leaders.defense, ["tackles", "sacks", "interceptions", "forcedFumbles"])} onPlayerSelect={onPlayerSelect} />
               </div>
+              {!leaders.pass && !leaders.rush && !leaders.receive && !leaders.defense ? (
+                <EmptyState title="Player leaders not archived" body="This legacy game has a final score and recap, but player leader rows were not saved." />
+              ) : null}
             </section>
 
             {sections.teamComparison && <section className="bs-section">
@@ -290,15 +295,19 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
 
             {sections.quarterByQuarter && <section className="bs-section">
               <h4>Quarter-by-quarter</h4>
-              <div className="bs-table-wrap">
-                <table className="box-score-table">
-                  <thead><tr><th>Team</th>{quarterHeaders.map((label) => <th key={label}>{label}</th>)}<th>Final</th></tr></thead>
-                  <tbody>
-                    <tr><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`away-q-${idx}`}>{quarterScores.away[idx] ?? "—"}</td>)}<td>{game.awayScore}</td></tr>
-                    <tr><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`home-q-${idx}`}>{quarterScores.home[idx] ?? "—"}</td>)}<td>{game.homeScore}</td></tr>
-                  </tbody>
-                </table>
-              </div>
+              {hasQuarterData ? (
+                <div className="bs-table-wrap">
+                  <table className="box-score-table">
+                    <thead><tr><th>Team</th>{quarterHeaders.map((label) => <th key={label}>{label}</th>)}<th>Final</th></tr></thead>
+                    <tbody>
+                      <tr><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`away-q-${idx}`}>{quarterScores.away[idx] ?? "Not archived"}</td>)}<td>{game.awayScore}</td></tr>
+                      <tr><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`home-q-${idx}`}>{quarterScores.home[idx] ?? "Not archived"}</td>)}<td>{game.homeScore}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <EmptyState title="Quarter scores not archived" body="Only the final score was saved for this game." />
+              )}
             </section>}
             {sections.driveSummary && <section className="bs-section">
               <h4>Drive summary</h4>

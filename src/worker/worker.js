@@ -2478,8 +2478,14 @@ function applyGameResultToCache(result, week, seasonId) {
     homeAbbr: result.homeTeamAbbr ?? homeTeamSnapshot?.abbr ?? 'HOME',
     awayAbbr: result.awayTeamAbbr ?? awayTeamSnapshot?.abbr ?? 'AWAY',
   };
-  const scoringSummary = buildScoringSummaryFromSimulation(playLogs, archiveContext);
-  const driveSummary = buildDriveSummaryFromSimulation(playLogs, archiveContext);
+  const scoringSummary = Array.isArray(result?.scoringSummary) && result.scoringSummary.length
+    ? result.scoringSummary
+    : buildScoringSummaryFromSimulation(playLogs, archiveContext);
+  const driveSummary = Array.isArray(result?.driveSummary) && result.driveSummary.length
+    ? result.driveSummary
+    : (Array.isArray(result?.drives) && result.drives.length
+      ? result.drives
+      : buildDriveSummaryFromSimulation(playLogs, archiveContext));
   const turningPoints = buildTurningPointsFromGameEvents(playLogs, archiveContext);
   const teamStats = buildTeamStatComparisonFromArchive(result.boxScore ?? {}, archiveContext);
   const playerLeaders = buildPlayerLeadersFromArchive(result.boxScore ?? {}, archiveContext);
@@ -2622,9 +2628,18 @@ function applyGameResultToCache(result, week, seasonId) {
         playLogs,
       }
       : null,
-    recap: result.recap ?? null,
-    drives: result.drives ?? driveSummary ?? null,
+    playerStats: result.boxScore
+      ? {
+        home: result.boxScore.home ?? {},
+        away: result.boxScore.away ?? {},
+      }
+      : null,
+    recap: result.recapText ?? result.recap ?? null,
+    drives: result.driveSummary ?? result.drives ?? driveSummary ?? null,
     quarterScores: result.quarterScores ?? result.linescore ?? null,
+    scoringSummary,
+    driveSummary,
+    playLog: playLogs,
     summary: {
       winnerId,
       margin,
@@ -2638,10 +2653,9 @@ function applyGameResultToCache(result, week, seasonId) {
       storyline,
     },
     teamStats,
-    scoringSummary,
-    driveSummary,
     turningPoints,
     notablePerformances: playerLeaders?.standouts ?? [],
+    playerLeaders,
     archiveQuality,
   }));
   const archiveValidation = validateArchivedGame(archivedGame);

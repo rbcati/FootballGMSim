@@ -74,4 +74,32 @@ describe('gameArchive helpers', () => {
     expect(game.playLog).toHaveLength(1);
     expect(game.archiveQuality).toBe('partial');
   });
+
+  it('normalizes newly simulated archives into a canonical rich payload', () => {
+    const game = normalizeArchivedGamePayload({
+      id: '2033_w2_4_9',
+      seasonId: '2033',
+      week: 2,
+      homeId: 4,
+      awayId: 9,
+      homeScore: 31,
+      awayScore: 27,
+      quarterScores: { home: [7, 10, 7, 7], away: [3, 14, 3, 7] },
+      recap: 'Home team survived a late comeback.',
+      teamStats: { home: { totalYards: 401 }, away: { totalYards: 366 } },
+      playerStats: {
+        home: { qb1: { name: 'QB One', pos: 'QB', stats: { passYd: 305 } } },
+        away: { qb2: { name: 'QB Two', pos: 'QB', stats: { passYd: 289 } } },
+      },
+      scoringSummary: [{ quarter: 1, teamId: 4, text: 'Opening TD' }],
+      driveSummary: [{ teamId: 4, quarter: 4, result: 'FG' }],
+      playLog: [{ quarter: 4, teamId: 4, text: 'Clock-killing first down' }],
+    });
+
+    expect(game.archiveQuality).toBe('full');
+    expect(game.scoringSummary).toHaveLength(1);
+    expect(game.driveSummary).toHaveLength(1);
+    expect(game.playLog).toHaveLength(1);
+    expect(game.playerStats?.home?.qb1?.stats?.passYd).toBe(305);
+  });
 });
