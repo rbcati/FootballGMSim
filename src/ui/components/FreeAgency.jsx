@@ -42,6 +42,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
+import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
+import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -124,6 +126,17 @@ const RESIGN_TIER_LABEL = {
 
 export function formatPlaybookKnowledge(playbookKnowledge) {
   return `${playbookKnowledge?.label ?? "None"} (${playbookKnowledge?.score ?? 0})`;
+}
+
+export function filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters }) {
+  const baseFiltered = faPool.filter((p) => {
+    if (signedIds?.has?.(p.id)) return false;
+    if (posFilter !== "ALL" && p.pos !== posFilter) return false;
+    if (minOvr > 0 && p.ovr < minOvr) return false;
+    if (nameFilter && !p.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
+    return true;
+  });
+  return applyAdvancedPlayerFilters(baseFiltered, advancedFilters);
 }
 
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
@@ -593,6 +606,7 @@ export default function FreeAgency({
   const [posFilter, setPosFilter] = useState("ALL");
   const [nameFilter, setNameFilter] = useState("");
   const [minOvr, setMinOvr] = useState(60);
+  const [advancedFilters, setAdvancedFilters] = useState([]);
 
   // Sorting
   const [sortKey, setSortKey] = useState("ovr");
@@ -657,19 +671,8 @@ export default function FreeAgency({
   }, [faState]);
 
   const displayed = useMemo(() => {
-    return faPool.filter((p) => {
-      if (signedIds.has(p.id)) return false; // Hide players we just signed
-      if (posFilter !== "ALL" && p.pos !== posFilter) return false;
-      if (minOvr > 0 && p.ovr < minOvr) return false;
-      if (
-        nameFilter &&
-        !p.name.toLowerCase().includes(nameFilter.toLowerCase())
-      ) {
-        return false;
-      }
-      return true;
-    });
-  }, [faPool, signedIds, posFilter, nameFilter, minOvr]);
+    return filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters });
+  }, [faPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters]);
 
   const sortedAgents = useMemo(() => {
     const arr = [...displayed];
@@ -1012,6 +1015,11 @@ export default function FreeAgency({
           </div>
         </CardContent>
       </Card>
+      <AdvancedPlayerSearch
+        filters={advancedFilters}
+        onChange={setAdvancedFilters}
+        title="Advanced player search (AND)"
+      />
 
       {showCapPreview && (
         <Card className="card-premium" style={{ marginBottom: "var(--space-4)", borderColor: "var(--accent-gold)" }}>
