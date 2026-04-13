@@ -216,4 +216,30 @@ export const ADVANCED_FILTER_PRESETS: Record<string, FootballAdvancedFilter[]> =
     { id: 'preset-draft-round', fieldKey: 'draftRound', operator: 'gte', value: 3 },
     { id: 'preset-draft-ovr', fieldKey: 'ovr', operator: 'gte', value: 70 },
   ],
+  day1Starters: [
+    { id: 'preset-day1-ovr', fieldKey: 'ovr', operator: 'gte', value: 75 },
+    { id: 'preset-day1-pot', fieldKey: 'potential', operator: 'gte', value: 78 },
+  ],
+  developmentalUpside: [
+    { id: 'preset-dev-age', fieldKey: 'age', operator: 'lte', value: 22 },
+    { id: 'preset-dev-pot', fieldKey: 'potential', operator: 'gte', value: 82 },
+  ],
+  bestAthletes: [
+    { id: 'preset-ath-spd', fieldKey: 'spd', operator: 'gte', value: 82 },
+    { id: 'preset-ath-acc', fieldKey: 'acc', operator: 'gte', value: 80 },
+  ],
+  valuePicks: [
+    { id: 'preset-value-ovr', fieldKey: 'ovr', operator: 'gte', value: 68 },
+    { id: 'preset-value-pot', fieldKey: 'potential', operator: 'gte', value: 80 },
+  ],
+  qbUpside: [
+    { id: 'preset-qb-pos', fieldKey: 'pos', operator: 'eq', value: 'QB' },
+    { id: 'preset-qb-tha', fieldKey: 'tha', operator: 'gte', value: 74 },
+    { id: 'preset-qb-thp', fieldKey: 'thp', operator: 'gte', value: 78 },
+  ],
+  skillUpside: [
+    { id: 'preset-skill-pos-wr', fieldKey: 'pos', operator: 'contains', value: 'W' },
+    { id: 'preset-skill-speed', fieldKey: 'spd', operator: 'gte', value: 80 },
+    { id: 'preset-skill-pot', fieldKey: 'potential', operator: 'gte', value: 80 },
+  ],
 };

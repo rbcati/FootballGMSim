@@ -33,6 +33,8 @@ import TraitBadge from "./TraitBadge";
 import PlayerAvatar from "./PlayerAvatar";
 import DonutChart from "./DonutChart";
 import PlayerCard from "./PlayerCard.jsx";
+import PlayerComparison from "./PlayerComparison.jsx";
+import PlayerCompareTray from "./PlayerCompareTray.jsx";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +46,7 @@ import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } 
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
+import { usePlayerCompare } from "../utils/playerCompare.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -690,6 +693,17 @@ export default function FreeAgency({
     return arr;
   }, [displayed, sortKey, sortDir]);
 
+
+  const {
+    compareIds,
+    setCompareIds,
+    showComparison,
+    setShowComparison,
+    toggleCompare,
+    comparePlayerA,
+    comparePlayerB,
+  } = usePlayerCompare(sortedAgents, 2);
+
   const isResignPhase = faState?.phase === "offseason_resign";
   const priorityTargets = useMemo(() => {
     if (isResignPhase) {
@@ -1020,6 +1034,16 @@ export default function FreeAgency({
         onChange={setAdvancedFilters}
         title="Advanced player search (AND)"
       />
+      {showComparison && comparePlayerA && comparePlayerB && (
+        <PlayerComparison playerA={comparePlayerA} playerB={comparePlayerB} onClose={() => setShowComparison(false)} />
+      )}
+      <PlayerCompareTray
+        compareIds={compareIds}
+        resolvePlayer={(id) => sortedAgents.find((p) => p.id === id)}
+        onRemove={toggleCompare}
+        onOpenCompare={() => setShowComparison(true)}
+        onClear={() => setCompareIds([])}
+      />
 
       {showCapPreview && (
         <Card className="card-premium" style={{ marginBottom: "var(--space-4)", borderColor: "var(--accent-gold)" }}>
@@ -1100,6 +1124,9 @@ export default function FreeAgency({
                       dir={sortDir}
                       onSort={handleSort}
                     />
+                    <TableHead style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 600, textAlign: "center" }}>
+                      CMP
+                    </TableHead>
                     <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
@@ -1134,7 +1161,7 @@ export default function FreeAgency({
                   {sortedAgents.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={9}
+                        colSpan={10}
                         style={{
                           textAlign: "center",
                           padding: "var(--space-8)",
@@ -1247,6 +1274,7 @@ export default function FreeAgency({
                             </TableCell>
                             <TableCell><OvrBadge ovr={player.ovr} />{player.scoutUncertaintyBand ? <div style={{fontSize:11,color:'var(--text-muted)'}}>{player.scoutConfidenceLabel} · ±{player.scoutUncertaintyBand}</div> : null}</TableCell>
                             <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                            <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
                             <TableCell style={{ textAlign: "center" }}>
                               <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                             </TableCell>
@@ -1283,6 +1311,7 @@ export default function FreeAgency({
                         </TableCell>
                         <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
                         <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
+                        <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
                         <TableCell style={{ textAlign: "center" }}>
                           <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                         </TableCell>
@@ -1332,6 +1361,7 @@ export default function FreeAgency({
                     {Array.isArray(player?.market?.stateChips) && player.market.stateChips.length > 0 ? <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{player.market.stateChips.join(' · ')}</div> : null}
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
                       <Button className="btn" onClick={() => onPlayerSelect && onPlayerSelect(player.id)}>View profile</Button>
+                      <Button className="btn" onClick={() => toggleCompare(player)}>{compareIds.includes(player.id) ? "Uncompare" : "Compare"}</Button>
                       <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>Negotiate</Button>
                     </div>
                   </Card>
