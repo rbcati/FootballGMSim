@@ -11,6 +11,7 @@ import { getTeamIdentity } from "../../data/team-utils.js";
 import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
+import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
 import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProfile, describeRookieOnboarding } from "../utils/teamIntelligence.js";
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
@@ -249,7 +250,7 @@ function getSeasonProductionSummary(player) {
 function getPlayerSummaryChips(player, ringCount, nonRing) {
   const chips = [];
   const contractYears = toFiniteNumber(player?.contract?.years, null);
-  const contractAnnual = toFiniteNumber(player?.contract?.baseAnnual, null);
+  const contractAnnual = derivePlayerContractFinancials(player).annualSalary;
   if (contractYears != null || contractAnnual != null) {
     chips.push({
       label: "Contract",

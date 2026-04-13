@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useMemo } from "react";
+import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 
 // ── Colour maps ────────────────────────────────────────────────────────────────
 
@@ -140,19 +141,16 @@ function RosterCard({ player, onSelect }) {
   const ovr       = player.ovr ?? player.displayOvr ?? 50;
   const { color: ovrColor, bg: ovrBg, glow: ovrGlow } = ovrStyle(ovr);
 
-  const salary    = player.baseAnnual ?? player.contract?.baseAnnual ?? player.contract?.salary ?? 0;
-  const years     = player.years ?? player.contract?.years ?? 0;
+  const contractFinancials = derivePlayerContractFinancials(player);
+  const salary = contractFinancials.annualSalary ?? 0;
+  const years     = player.years ?? player.contract?.years ?? contractFinancials.yearsTotal ?? 0;
   const isInjured = (player.injuryWeeksRemaining ?? 0) > 0 || !!player.injury;
   const isExpiring = years <= 1 && years > 0;
   const isElitePot = (player.potential ?? 0) >= 88 && (player.potential ?? 0) > ovr + 5;
 
   const attrs = getCardKeyAttrs(pos);
 
-  const salaryStr = salary >= 1
-    ? `$${salary.toFixed(1)}M`
-    : salary > 0
-      ? `$${Math.round(salary * 1000)}K`
-      : "—";
+  const salaryStr = salary > 0 ? formatContractMoney(salary) : "—";
 
   return (
     <div
@@ -281,8 +279,8 @@ export default function PlayerCardGrid({ roster = [], onPlayerSelect }) {
           vb = b.ovr ?? b.displayOvr ?? 0;
           break;
         case "salary":
-          va = a.baseAnnual ?? a.contract?.baseAnnual ?? a.contract?.salary ?? 0;
-          vb = b.baseAnnual ?? b.contract?.baseAnnual ?? b.contract?.salary ?? 0;
+          va = derivePlayerContractFinancials(a).annualSalary ?? 0;
+          vb = derivePlayerContractFinancials(b).annualSalary ?? 0;
           break;
         case "age":
           va = a.age ?? 0;

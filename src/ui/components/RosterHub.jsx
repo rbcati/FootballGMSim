@@ -16,6 +16,7 @@ import PlayerCardGrid from "./PlayerCardGrid.jsx";
 import DragAndDropDepthChart from "./DragAndDropDepthChart.jsx";
 import { ScreenHeader, SectionCard, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import { applyRangeFilter, inTier, cycleSort } from "../utils/managementList.js";
+import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 
 // ── Position color map (matches stadium-theme.css pos-badge classes) ──
 const POS_COLORS = {
@@ -116,7 +117,7 @@ function PlayerRow({ player, isUser, onSelect, schemeName }) {
   const devBadge = getDevTraitBadge(player.devTrait);
   const pos = player.pos || player.position;
   const posColor = POS_COLORS[pos] || "#9ca3af";
-  const salary = player.baseAnnual || player.contract?.baseAnnual || 0;
+  const salary = derivePlayerContractFinancials(player).annualSalary ?? 0;
   const yearsLeft = player.years ?? player.contract?.years ?? 0;
   const isInjured = (player.injuryWeeksRemaining || 0) > 0;
   const isExpiring = yearsLeft <= 1;
@@ -215,7 +216,7 @@ function PlayerRow({ player, isUser, onSelect, schemeName }) {
           color: salary > 15 ? "var(--warning)" : "var(--text)",
           fontVariantNumeric: "tabular-nums",
         }}>
-          ${salary.toFixed(1)}M
+          {formatContractMoney(salary)}
         </div>
         <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
           {yearsLeft}yr
@@ -320,8 +321,8 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
           vb = b.age || 0;
           break;
         case "salary":
-          va = a.baseAnnual || a.contract?.baseAnnual || 0;
-          vb = b.baseAnnual || b.contract?.baseAnnual || 0;
+          va = derivePlayerContractFinancials(a).annualSalary ?? 0;
+          vb = derivePlayerContractFinancials(b).annualSalary ?? 0;
           break;
         case "name":
           va = (a.name || "").toLowerCase();
@@ -349,7 +350,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
   // Roster summary stats
   const rosterSize = roster.length;
   const avgOvr = rosterSize > 0 ? Math.round(roster.reduce((s, p) => s + (p.ovr || 0), 0) / rosterSize) : 0;
-  const totalSalary = roster.reduce((s, p) => s + (p.baseAnnual || p.contract?.baseAnnual || 0), 0);
+  const totalSalary = roster.reduce((s, p) => s + (derivePlayerContractFinancials(p).annualSalary ?? 0), 0);
   const injuredCount = roster.filter(p => (p.injuryWeeksRemaining || 0) > 0).length;
   const schemeName = team?.strategies?.offScheme || team?.strategies?.offPlanId || "";
   const avgFit = rosterSize > 0
@@ -526,7 +527,7 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
               <tbody>
                 {filtered.map((player) => {
                   const fit = computeSchemeFit(player, schemeName);
-                  const salary = player.baseAnnual || player.contract?.baseAnnual || 0;
+                  const salary = derivePlayerContractFinancials(player).annualSalary ?? 0;
                   const yearsLeft = player.years ?? player.contract?.years ?? 0;
                   const injuryWeeks = player.injuryWeeksRemaining || 0;
                   return (
@@ -538,9 +539,9 @@ export default function RosterHub({ league, actions, onPlayerSelect, teamId }) {
                       <td>{player.potential || "—"}</td>
                       <td>{Math.round(player.morale ?? 70)}</td>
                       <td>{injuryWeeks > 0 ? `${injuryWeeks}w` : "—"}</td>
-                      <td>${salary.toFixed(1)}M</td>
+                      <td>{formatContractMoney(salary)}</td>
                       <td>{yearsLeft}</td>
-                      <td>${salary.toFixed(1)}M</td>
+                      <td>{formatContractMoney(salary)}</td>
                       <td style={{ color: schemeFitColor(fit) }}>{fit ?? "—"}</td>
                       <td>{yearsLeft <= 1 ? "EXP " : ""}{injuryWeeks > 0 ? "INJ" : ""}</td>
                       <td><button className="btn" onClick={() => onPlayerSelect?.(player.id)}>View</button></td>

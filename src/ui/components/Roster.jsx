@@ -47,6 +47,7 @@ import {
 import { buildDirectionGuidance, buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { normalizeManagement, TRADE_STATUSES, TRADE_STATUS_LABELS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
+import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
 import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
@@ -233,8 +234,8 @@ function sortPlayers(players, sortKey, sortDir) {
         vb = b.age ?? 0;
         break;
       case "salary":
-        va = a.contract?.baseAnnual ?? 0;
-        vb = b.contract?.baseAnnual ?? 0;
+        va = derivePlayerContractFinancials(a).annualSalary ?? 0;
+        vb = derivePlayerContractFinancials(b).annualSalary ?? 0;
         break;
       case "fit":
         va = a.schemeFit ?? 50;
@@ -982,7 +983,7 @@ function RosterTable({
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {fmtSalary(player.contract?.baseAnnual)}
+                      {fmtSalary(derivePlayerContractFinancials(player).annualSalary)}
                     </TableCell>
                     {/* Years */}
                     <TableCell
@@ -1638,8 +1639,7 @@ function PlayerCard({ player, onSelect, showDecisionContext = false, decisionCon
     ovr >= 70 ? "#0A84FF" :
     ovr >= 60 ? "#FF9F0A" : "#FF453A";
 
-  const salary =
-    player.contract?.baseAnnual ?? player.baseAnnual ?? 0;
+  const salary = derivePlayerContractFinancials(player).annualSalary ?? 0;
   const yearsLeft =
     player.contract?.yearsLeft ??
     player.contract?.yearsRemaining ??
