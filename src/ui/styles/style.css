@@ -7559,6 +7559,10 @@ details[open] .nav-summary::after {
 }
 
 .bs-scoreline { font-size: 1.8rem; font-weight: 900; letter-spacing: -0.02em; }
+.bs-scoreline-wrap { display: grid; gap: 4px; justify-items: center; }
+.bs-final-pill { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--hairline); }
+.bs-team-col { display: grid; gap: 3px; justify-items: center; }
+.bs-team-label { font-size: 10px; text-transform: uppercase; color: var(--text-subtle); }
 .bs-record { color: var(--text-muted); font-size: var(--text-xs); margin-top: 4px; }
 .bs-section { margin-bottom: 12px; background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 12px; }
 .bs-section-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -7569,10 +7573,35 @@ details[open] .nav-summary::after {
 .bs-leader-line { font-size: 12px; color: var(--text-muted); }
 .bs-compare-grid { display: grid; gap: 6px; }
 .bs-compare-row { display: grid; grid-template-columns: 1fr auto 1fr; text-align: center; gap: 8px; padding: 8px; background: var(--surface-strong); border-radius: 8px; }
+.bs-compare-value--winner { font-weight: 700; color: var(--accent, var(--text-primary)); }
 .bs-compare-label { font-size: 11px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .06em; }
 .bs-table-wrap { overflow-x: auto; }
 .bs-list { display: grid; gap: 6px; }
 .bs-list-item { display: grid; gap: 4px; background: var(--surface-strong); border-radius: 8px; padding: 8px; font-size: 12px; }
+.bs-quick-nav { position: sticky; top: 66px; z-index: 1; display: flex; gap: 8px; overflow-x: auto; padding: 4px 0 10px; margin-bottom: 8px; }
+.bs-nav-pill { border: 1px solid var(--hairline); background: var(--surface-strong); color: var(--text-muted); border-radius: 999px; padding: 8px 12px; white-space: nowrap; font-size: 12px; }
+.bs-nav-pill.is-active { color: var(--text-primary); border-color: var(--accent, var(--text-primary)); }
+.bs-facts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.bs-fact-chip { border: 1px solid var(--hairline); border-radius: 10px; padding: 8px; background: var(--surface-strong); display: grid; gap: 3px; }
+.bs-fact-chip span { font-size: 10px; text-transform: uppercase; color: var(--text-subtle); letter-spacing: .08em; }
+.bs-team-groups { display: grid; gap: 10px; }
+.bs-team-group h5 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-subtle); }
+.bs-subsection { margin-top: 10px; }
+.bs-subsection h5 { margin: 0 0 6px; }
+.bs-segmented { display: inline-flex; border: 1px solid var(--hairline); border-radius: 10px; overflow: hidden; }
+.bs-segmented button { border: 0; background: transparent; padding: 6px 10px; font-size: 12px; color: var(--text-muted); }
+.bs-segmented button.is-active { background: var(--surface-strong); color: var(--text-primary); }
+.bs-sort-btn { border: 0; background: transparent; color: inherit; font: inherit; padding: 0; cursor: pointer; }
+.bs-scoring-groups { display: grid; gap: 8px; }
+.bs-scoring-group h5 { margin: 0 0 6px; font-size: 12px; }
+.bs-score-item { border-left: 3px solid var(--hairline); }
+.bs-score-td { border-left-color: #16a34a; }
+.bs-score-fg { border-left-color: #2563eb; }
+.bs-score-safety { border-left-color: #f59e0b; }
+.bs-drive-badge { font-style: normal; font-size: 11px; border: 1px solid var(--hairline); border-radius: 999px; padding: 1px 7px; margin-left: 6px; }
+.bs-play-item, .bs-drive-item { grid-template-columns: minmax(78px, auto) minmax(70px, auto) 1fr; align-items: start; }
+.bs-final-col { font-weight: 800; }
+.bs-winning-row { background: color-mix(in srgb, var(--surface-strong) 80%, #16a34a 20%); }
 
 @media (max-width: 768px) {
   .weekly-hero__actions .btn,
@@ -7606,6 +7635,8 @@ details[open] .nav-summary::after {
     grid-template-columns: 1fr;
     gap: 6px;
   }
+  .bs-quick-nav { top: 58px; }
+  .bs-facts-grid { grid-template-columns: 1fr 1fr; }
 
   .bs-leaders-grid {
     grid-template-columns: 1fr;
@@ -7631,6 +7662,9 @@ details[open] .nav-summary::after {
 @media (max-width: 760px) {
   .bs-section { padding: 10px; }
   .bs-list-item { padding: 10px; font-size: 13px; }
+  .bs-play-item, .bs-drive-item { grid-template-columns: 1fr; }
+  .bs-segmented { width: 100%; }
+  .bs-segmented button { flex: 1; }
   .trade-workspace-nav { top: calc(env(safe-area-inset-top) + 48px) !important; }
   .trade-asset-row__name { min-width: 0; }
 }

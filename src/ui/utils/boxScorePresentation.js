@@ -121,11 +121,22 @@ export function deriveScoringSummary(logs = [], teamsById = {}) {
         teamId,
         teamAbbr: team?.abbr ?? "—",
         type: parseScoreType(log.text),
+        runningScore: log.score ?? (log.awayScore != null && log.homeScore != null ? `${log.awayScore}-${log.homeScore}` : null),
         text: log.text ?? "Scoring play",
       };
     });
 
   return scoring;
+}
+
+export function groupScoringByPeriod(scoring = []) {
+  const groups = new Map();
+  scoring.forEach((row) => {
+    const period = Number(row.quarter) > 4 ? `OT${Number(row.quarter) - 4}` : `Q${row.quarter ?? "—"}`;
+    if (!groups.has(period)) groups.set(period, []);
+    groups.get(period).push(row);
+  });
+  return Array.from(groups.entries()).map(([period, items]) => ({ period, items }));
 }
 
 export function deriveQuarterScores(game, logs = []) {
