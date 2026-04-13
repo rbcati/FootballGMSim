@@ -20,6 +20,9 @@ import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
+const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
+  [toWorker.GET_DRAFT_STATE]: 120000,
+});
 
 // ── State shape ───────────────────────────────────────────────────────────────
 
@@ -99,9 +102,22 @@ function reducer(state, action) {
     case 'SIM_START':
       return { ...state, simulating: true, simProgress: 0, gameEvents: [], promptUserGame: false, userGameLogs: null };
     case 'BATCH_SIM_START':
-      return { ...state, busy: true, batchSim: { currentWeek: 0, phase: '', targetPhase: action.targetPhase } };
+      return { ...state, busy: true, batchSim: { currentWeek: 0, phase: '', targetPhase: action.targetPhase, status: 'running' } };
     case 'BATCH_SIM_PROGRESS':
       return { ...state, batchSim: { ...state.batchSim, currentWeek: action.currentWeek, phase: action.phase } };
+    case 'BATCH_SIM_STATUS':
+      return {
+        ...state,
+        busy: action.status === 'running' || action.status === 'cancelling',
+        batchSim: action.status === 'idle'
+          ? null
+          : {
+              ...(state.batchSim ?? {}),
+              targetPhase: action.targetPhase ?? state.batchSim?.targetPhase ?? null,
+              phase: action.stage ?? state.batchSim?.phase ?? '',
+              status: action.status,
+            },
+      };
     case 'BATCH_SIM_DONE':
       return { ...state, busy: false, batchSim: null };
     case 'SIM_PROGRESS':
@@ -271,6 +287,9 @@ export function useWorker() {
         case toUI.SIM_BATCH_PROGRESS:
           dispatch({ type: 'BATCH_SIM_PROGRESS', currentWeek: payload.currentWeek, phase: payload.phase });
           break;
+        case toUI.SIM_BATCH_STATUS:
+          dispatch({ type: 'BATCH_SIM_STATUS', status: payload.status, targetPhase: payload.targetPhase, stage: payload.stage });
+          break;
         case toUI.GAME_EVENT:
           dispatch({ type: 'GAME_EVENT', event: payload });
           break;
@@ -346,19 +365,20 @@ export function useWorker() {
   // ── request (returns a Promise resolved on worker reply) ──────────────────
   // Pass { silent: true } for read-only fetches (getRoster, getFreeAgents,
   // history queries) so they do NOT set busy=true and lock the Advance button.
-  const request = useCallback((type, payload = {}, { silent = false } = {}) => {
+  const request = useCallback((type, payload = {}, { silent = false, timeoutMs } = {}) => {
     return new Promise((resolve, reject) => {
       if (!workerRef.current) {
         reject(new Error('Worker not ready'));
         return;
       }
       const msg = buildMsg(type, payload);
+      const effectiveTimeout = Number(timeoutMs) || WORKER_TIMEOUT_BY_TYPE[type] || WORKER_REQUEST_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         if (!pendingRef.current.has(msg.id)) return;
         pendingRef.current.delete(msg.id);
         reject(new Error(`Worker timeout while handling ${type}`));
         dispatch({ type: 'ERROR', message: `Request timed out: ${type}. Please retry.` });
-      }, WORKER_REQUEST_TIMEOUT_MS);
+      }, effectiveTimeout);
       pendingRef.current.set(msg.id, { resolve, reject, silent, timeoutId });
       if (!silent) dispatch({ type: 'BUSY' });
       workerRef.current.postMessage(msg);
@@ -418,6 +438,11 @@ export function useWorker() {
 
     /** Batch sim to a target phase (playoffs, offseason, preseason/regular). */
     simToPhase: (targetPhase)  => {
+      dispatch({ type: 'BATCH_SIM_START', targetPhase });
+      send(toWorker.SIM_TO_PHASE, { targetPhase });
+    },
+    cancelSimToPhase: ()       => send(toWorker.CANCEL_SIM_TO_PHASE),
+    retrySimToPhase: (targetPhase) => {
       dispatch({ type: 'BATCH_SIM_START', targetPhase });
       send(toWorker.SIM_TO_PHASE, { targetPhase });
     },

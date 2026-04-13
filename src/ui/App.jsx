@@ -267,6 +267,8 @@ function AppContent() {
     }
   }, [league]);
 
+  const isBatchSimBlocking = !!batchSim && !['cancelled', 'completed', 'idle'].includes(batchSim?.status);
+
   const handleAdvanceWeek = useCallback(() => {
     if (busy || simulating || advancingRef.current) return;
     if (!league?.phase) return;
@@ -288,10 +290,20 @@ function AppContent() {
   }, [busy, simulating, actions, league]);
 
   const handleSimToPhase = useCallback((targetPhase) => {
-    if (busy || simulating || advancingRef.current || batchSim) return;
+    if (busy || simulating || advancingRef.current || isBatchSimBlocking) return;
     advancingRef.current = true;
     actions.simToPhase(targetPhase);
-  }, [busy, simulating, batchSim, actions]);
+  }, [busy, simulating, isBatchSimBlocking, actions]);
+
+  const handleCancelBatchSim = useCallback(() => {
+    actions.cancelSimToPhase();
+  }, [actions]);
+
+  const handleRetryBatchSim = useCallback(() => {
+    const target = batchSim?.targetPhase;
+    if (!target) return;
+    actions.retrySimToPhase(target);
+  }, [actions, batchSim]);
 
   const handleReset = useCallback(() => {
     if (window.confirm('Reset/Delete your active save? This cannot be undone.')) {
@@ -405,7 +417,7 @@ function AppContent() {
   };
 
   const safePhase = league?.phase ?? null;
-  const canUseTopActions = !!safePhase && !(busy || simulating || !!batchSim);
+  const canUseTopActions = !!safePhase && !(busy || simulating || isBatchSimBlocking);
 
   const topSecondaryAction = useMemo(() => {
     if (!safePhase) return null;
@@ -457,13 +469,13 @@ function AppContent() {
     }
 
     items.push(
-      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || !!batchSim },
-      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || !!batchSim },
-      { label: 'Reset Franchise', onClick: handleReset, disabled: busy || !!batchSim, danger: true },
+      { label: 'Save Game', onClick: () => activeSlot && actions.saveSlot(activeSlot), disabled: !activeSlot || busy || isBatchSimBlocking },
+      { label: 'Save Slots', onClick: () => setActiveSlot(null), disabled: busy || isBatchSimBlocking },
+      { label: 'Reset Franchise', onClick: handleReset, disabled: busy || isBatchSimBlocking, danger: true },
     );
 
     return items;
-  }, [safePhase, canUseTopActions, activeSlot, actions, busy, batchSim, handleReset, handleSimToPhase]);
+  }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleSimToPhase]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -621,12 +633,12 @@ function AppContent() {
           <button
             className="btn btn-primary app-advance-btn app-action-primary"
             onClick={handleAdvanceWeek}
-            disabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
+            disabled={busy || simulating || isCutdownRequired || isBatchSimBlocking || !!promptUserGame}
             title={isCutdownRequired ? "You must cut your roster to 53 players before advancing." : ""}
           >
             {getAdvanceLabel()}
           </button>
-          {topSecondaryAction && !batchSim && (
+          {topSecondaryAction && !isBatchSimBlocking && (
             <button
               className="btn app-sim-btn app-action-secondary"
               onClick={topSecondaryAction.onClick}
@@ -678,8 +690,27 @@ function AppContent() {
              batchSim.phase === 'playoffs' ? `Playoffs Week ${batchSim.currentWeek}` :
              batchSim.phase || 'Initializing...'}
           </div>
+          <div className="app-batch-detail" style={{ opacity: 0.85, fontSize: 12 }}>
+            Status: {batchSim.status || 'running'}
+          </div>
           <div className="app-batch-bar">
             <div className="app-batch-bar-fill" />
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+            <button
+              className="btn"
+              onClick={handleRetryBatchSim}
+              disabled={!['cancelled', 'completed'].includes(batchSim.status)}
+            >
+              Retry
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={handleCancelBatchSim}
+              disabled={batchSim.status === 'cancelled' || batchSim.status === 'completed'}
+            >
+              Cancel
+            </button>
           </div>
           <style>{`
             @keyframes batchSimPulse {
@@ -848,7 +879,7 @@ function AppContent() {
           externalBoxScoreId={externalBoxScoreId}
           onConsumeExternalBoxScore={() => setExternalBoxScoreId(null)}
           advanceLabel={getAdvanceLabel()}
-          advanceDisabled={busy || simulating || isCutdownRequired || !!batchSim || !!promptUserGame}
+          advanceDisabled={busy || simulating || isCutdownRequired || isBatchSimBlocking || !!promptUserGame}
         />
       </ErrorBoundary>
 
@@ -858,7 +889,7 @@ function AppContent() {
       )}
 
       {/* ── Simulation Progress Spinner (CSS-only, prevents frozen-UI appearance) ── */}
-      {(simulating || busy) && !promptUserGame && !userGameLogs && !batchSim && (
+      {(simulating || busy) && !promptUserGame && !userGameLogs && !isBatchSimBlocking && (
         <div className="app-sim-spinner-overlay">
           <div className="app-sim-spinner" />
           <p className="app-sim-spinner-text">

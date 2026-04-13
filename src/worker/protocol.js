@@ -33,6 +33,7 @@ export const toWorker = Object.freeze({
 
   /** Batch simulation to a target phase */
   SIM_TO_PHASE:       'SIM_TO_PHASE',      // { targetPhase: 'playoffs'|'offseason'|'preseason' }
+  CANCEL_SIM_TO_PHASE:'CANCEL_SIM_TO_PHASE', // { }
 
   /** Playoffs */
   ADVANCE_PLAYOFFS:   'ADVANCE_PLAYOFFS',  // simulate the next playoff round
@@ -160,6 +161,7 @@ export const toUI = Object.freeze({
 
   /** Batch sim progress (Sim to... operations) */
   SIM_BATCH_PROGRESS: 'SIM_BATCH_PROGRESS',   // { currentWeek, targetPhase, phase }
+  SIM_BATCH_STATUS:   'SIM_BATCH_STATUS',     // { status: 'running'|'cancelled'|'completed', targetPhase, stage }
 
   /** A single game result (live ticker feed) */
   GAME_EVENT:         'GAME_EVENT',           // { gameId, event }

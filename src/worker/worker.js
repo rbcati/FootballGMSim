@@ -2740,57 +2740,95 @@ async function handleSimToPhase({ targetPhase }, id) {
   // Safety: max iterations to prevent infinite loops
   const MAX_ITERATIONS = 200;
   let iterations = 0;
+  batchSimControl = {
+    running: true,
+    cancelRequested: false,
+    targetPhase,
+    stage: meta.phase,
+  };
+  post(toUI.SIM_BATCH_STATUS, { status: 'running', targetPhase, stage: meta.phase });
 
-  while (iterations < MAX_ITERATIONS) {
-    const currentMeta = cache.getMeta();
+  try {
+    while (iterations < MAX_ITERATIONS) {
+      const currentMeta = cache.getMeta();
+      batchSimControl.stage = currentMeta?.phase ?? null;
 
-    // Check if we've reached the target
-    if (isTarget(currentMeta)) break;
-
-    // Send progress to UI
-    post(toUI.SIM_BATCH_PROGRESS, {
-      currentWeek: currentMeta.currentWeek ?? 0,
-      phase: currentMeta.phase,
-      targetPhase,
-    });
-
-    // Advance based on current phase
-    // Pass skipUserGame:true during batch sim to avoid prompting the user
-    if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
-      await handleAdvanceWeek({ skipUserGame: true }, null);
-    } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
-      await handleAdvanceOffseason({}, null);
-    } else if (currentMeta.phase === 'free_agency') {
-      await handleAdvanceFreeAgencyDay({}, null);
-    } else if (currentMeta.phase === 'draft') {
-      // Auto-sim all draft picks. The draft pipeline itself is responsible
-      // for transitioning into the next season (handleSimDraftPick and
-      // handleMakeDraftPick both call handleStartNewSeason once all picks
-      // are made), so we deliberately do NOT call handleAdvanceOffseason here.
-      await handleStartDraft({}, null);
-      let draftDone = false;
-      let draftGuard = 0;
-      while (!draftDone && draftGuard < 500) {
-        const draftMeta = cache.getMeta();
-        const ds = draftMeta.draftState;
-        if (!ds || ds.currentPickIndex >= (ds.picks?.length ?? 0)) {
-          draftDone = true;
-        } else {
-          await handleSimDraftPick({}, null);
-        }
-        draftGuard++;
+      // Check if we've reached the target
+      if (isTarget(currentMeta)) break;
+      if (batchSimControl.cancelRequested) {
+        post(toUI.SIM_BATCH_STATUS, {
+          status: 'cancelled',
+          targetPhase,
+          stage: currentMeta.phase,
+        });
+        post(toUI.FULL_STATE, buildViewState(), id);
+        return;
       }
-    } else {
-      // Unknown phase — break to prevent infinite loop
-      break;
+
+      // Send progress to UI
+      post(toUI.SIM_BATCH_PROGRESS, {
+        currentWeek: currentMeta.currentWeek ?? 0,
+        phase: currentMeta.phase,
+        targetPhase,
+      });
+
+      // Advance based on current phase
+      // Pass skipUserGame:true during batch sim to avoid prompting the user
+      if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
+        await handleAdvanceWeek({ skipUserGame: true }, null);
+      } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
+        await handleAdvanceOffseason({}, null);
+      } else if (currentMeta.phase === 'free_agency') {
+        await handleAdvanceFreeAgencyDay({}, null);
+      } else if (currentMeta.phase === 'draft') {
+        // Auto-sim all draft picks. The draft pipeline itself is responsible
+        // for transitioning into the next season (handleSimDraftPick and
+        // handleMakeDraftPick both call handleStartNewSeason once all picks
+        // are made), so we deliberately do NOT call handleAdvanceOffseason here.
+        await handleStartDraft({}, null);
+        let draftDone = false;
+        let draftGuard = 0;
+        while (!draftDone && draftGuard < 500) {
+          if (batchSimControl.cancelRequested) break;
+          const draftMeta = cache.getMeta();
+          const ds = draftMeta.draftState;
+          if (!ds || ds.currentPickIndex >= (ds.picks?.length ?? 0)) {
+            draftDone = true;
+          } else {
+            await handleSimDraftPick({}, null);
+          }
+          draftGuard++;
+          await yieldFrame();
+        }
+        if (batchSimControl.cancelRequested) {
+          post(toUI.SIM_BATCH_STATUS, {
+            status: 'cancelled',
+            targetPhase,
+            stage: 'draft',
+          });
+          post(toUI.FULL_STATE, buildViewState(), id);
+          return;
+        }
+      } else {
+        // Unknown phase — break to prevent infinite loop
+        break;
+      }
+
+      iterations++;
+      await yieldFrame();
     }
 
-    iterations++;
-    await yieldFrame();
+    // Final state broadcast
+    post(toUI.SIM_BATCH_STATUS, { status: 'completed', targetPhase, stage: cache.getMeta()?.phase ?? null });
+    post(toUI.FULL_STATE, buildViewState(), id);
+  } finally {
+    batchSimControl = {
+      running: false,
+      cancelRequested: false,
+      targetPhase: null,
+      stage: null,
+    };
   }
-
-  // Final state broadcast
-  post(toUI.FULL_STATE, buildViewState(), id);
 }
 
 // ── Handler: GET_SEASON_HISTORY ───────────────────────────────────────────────
@@ -7586,8 +7624,29 @@ async function handleGetAwardRaces(_payload, id) {
  */
 let messageQueue = Promise.resolve();
 let _queueProcessing = false;
+let batchSimControl = {
+  running: false,
+  cancelRequested: false,
+  targetPhase: null,
+  stage: null,
+};
 
 self.onmessage = (event) => {
+  const { type } = event?.data ?? {};
+  // High-priority cancellation path: do not queue behind long-running sim loops.
+  if (type === toWorker.CANCEL_SIM_TO_PHASE) {
+    if (batchSimControl.running) {
+      batchSimControl.cancelRequested = true;
+      post(toUI.SIM_BATCH_STATUS, {
+        status: 'cancelling',
+        targetPhase: batchSimControl.targetPhase,
+        stage: batchSimControl.stage,
+      });
+    } else {
+      post(toUI.SIM_BATCH_STATUS, { status: 'idle', targetPhase: null, stage: null });
+    }
+    return;
+  }
   // v2: Chain with guaranteed recovery — catch inside the .then so the
   // resolved chain is never broken by an unhandled rejection.
   messageQueue = messageQueue.then(async () => {
