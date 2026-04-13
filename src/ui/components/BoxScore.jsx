@@ -12,6 +12,7 @@ import {
 } from "../utils/boxScorePresentation.js";
 import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
 import { normalizeArchivedGamePayload } from "../../core/gameArchive.js";
+import { buildTeamComparisonRows, PLAYER_STATS_TABLES } from "../../core/footballMeta";
 
 function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
@@ -139,6 +140,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const topRushers = playerRows.filter((p) => (p.stats?.rushAtt ?? 0) > 0).sort((a, b) => (b.stats?.rushYd ?? 0) - (a.stats?.rushYd ?? 0)).slice(0, 6);
   const topReceivers = playerRows.filter((p) => (p.stats?.receptions ?? 0) > 0).sort((a, b) => (b.stats?.recYd ?? 0) - (a.stats?.recYd ?? 0)).slice(0, 6);
   const topDefenders = playerRows.filter((p) => (p.stats?.tackles ?? 0) + (p.stats?.sacks ?? 0) + (p.stats?.interceptions ?? 0) > 0).sort((a, b) => ((b.stats?.tackles ?? 0) + (b.stats?.sacks ?? 0) * 2 + (b.stats?.interceptions ?? 0) * 2) - ((a.stats?.tackles ?? 0) + (a.stats?.sacks ?? 0) * 2 + (a.stats?.interceptions ?? 0) * 2)).slice(0, 8);
+  const teamComparisonRows = buildTeamComparisonRows(teamTotals);
 
   const headerWeek = game?.week ?? gameId?.match(/_w(\d+)_/)?.[1] ?? "—";
   const headerSeason = game?.seasonId ?? gameId?.split('_w')?.[0] ?? "";
@@ -236,41 +238,38 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             {sections.teamComparison && <section className="bs-section">
               <h4>Team comparison</h4>
               <div className="bs-compare-grid">
-                <StatCompareRow label="Total Yards" awayValue={teamTotals.away.totalYards ?? "Unavailable"} homeValue={teamTotals.home.totalYards ?? "Unavailable"} />
-                <StatCompareRow label="Pass Yards" awayValue={teamTotals.away.passYards ?? "Unavailable"} homeValue={teamTotals.home.passYards ?? "Unavailable"} />
-                <StatCompareRow label="Rush Yards" awayValue={teamTotals.away.rushYards ?? "Unavailable"} homeValue={teamTotals.home.rushYards ?? "Unavailable"} />
-                <StatCompareRow label="Turnovers" awayValue={teamTotals.away.turnovers ?? "Unavailable"} homeValue={teamTotals.home.turnovers ?? "Unavailable"} />
-                <StatCompareRow label="Sacks" awayValue={teamTotals.away.sacks ?? "Unavailable"} homeValue={teamTotals.home.sacks ?? "Unavailable"} />
-                <StatCompareRow label="3rd Down" awayValue={teamTotals.away.thirdDownAtt != null ? `${teamTotals.away.thirdDownMade ?? 0}/${teamTotals.away.thirdDownAtt}` : "Unavailable"} homeValue={teamTotals.home.thirdDownAtt != null ? `${teamTotals.home.thirdDownMade ?? 0}/${teamTotals.home.thirdDownAtt}` : "Unavailable"} />
+                {teamComparisonRows.map((row) => (
+                  <StatCompareRow key={row.label} label={row.label} awayValue={row.awayValue} homeValue={row.homeValue} />
+                ))}
               </div>
             </section>}
 
             <PlayerTable
-              title="Passing leaders"
+              title={PLAYER_STATS_TABLES.passing.title}
               players={topPassers}
-              cols={[{ key: "passComp", label: "Comp" }, { key: "passAtt", label: "Att" }, { key: "passYd", label: "Yds" }, { key: "passTD", label: "TD" }, { key: "interceptions", label: "INT" }]}
+              cols={PLAYER_STATS_TABLES.passing.columns}
               onPlayerSelect={onPlayerSelect}
-              emptyText="No passing stats archived for this game."
+              emptyText={PLAYER_STATS_TABLES.passing.emptyText}
             />
             <PlayerTable
-              title="Rushing leaders"
+              title={PLAYER_STATS_TABLES.rushing.title}
               players={topRushers}
-              cols={[{ key: "rushAtt", label: "Att" }, { key: "rushYd", label: "Yds" }, { key: "rushTD", label: "TD" }, { key: "fumblesLost", label: "FUM" }]}
+              cols={PLAYER_STATS_TABLES.rushing.columns}
               onPlayerSelect={onPlayerSelect}
-              emptyText="No rushing stats archived for this game."
+              emptyText={PLAYER_STATS_TABLES.rushing.emptyText}
             />
             <PlayerTable
-              title="Receiving leaders"
+              title={PLAYER_STATS_TABLES.receiving.title}
               players={topReceivers}
-              cols={[{ key: "targets", label: "Tgt" }, { key: "receptions", label: "Rec" }, { key: "recYd", label: "Yds" }, { key: "recTD", label: "TD" }]}
+              cols={PLAYER_STATS_TABLES.receiving.columns}
               onPlayerSelect={onPlayerSelect}
-              emptyText="No receiving stats archived for this game."
+              emptyText={PLAYER_STATS_TABLES.receiving.emptyText}
             />
             {topDefenders.length > 0 ? (
               <PlayerTable
-                title="Defensive leaders"
+                title={PLAYER_STATS_TABLES.defense.title}
                 players={topDefenders}
-                cols={[{ key: "tackles", label: "Tkl" }, { key: "sacks", label: "Sacks" }, { key: "interceptions", label: "INT" }, { key: "passesDefended", label: "PD" }, { key: "forcedFumbles", label: "FF" }]}
+                cols={PLAYER_STATS_TABLES.defense.columns}
                 onPlayerSelect={onPlayerSelect}
               />
             ) : null}
