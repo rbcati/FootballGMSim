@@ -48,6 +48,8 @@ import { normalizeManagement, TRADE_STATUSES, TRADE_STATUS_LABELS, CONTRACT_PLAN
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
+import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
+import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -267,6 +269,32 @@ function isStarterPlayer(player) {
   return Number.isFinite(depthOrder) && depthOrder === 1;
 }
 
+function applyRosterQuickFilter(players, posFilter) {
+  if (posFilter === "EXPIRING") {
+    return players.filter((p) => getContractYearsLeft(p) <= 1);
+  }
+  if (posFilter === "STARTERS") {
+    return players.filter((p) => isStarterPlayer(p));
+  }
+  if (posFilter === "DEPTH") {
+    return players.filter((p) => !isStarterPlayer(p));
+  }
+  if (posFilter === "INJURED") {
+    return players.filter((p) => isInjuredPlayer(p));
+  }
+  if (posFilter === "DEVELOPMENT") {
+    return players.filter((p) => Number(p?.age ?? 40) <= 24 || Number(p?.potential ?? 0) >= 80);
+  }
+  if (posFilter !== "ALL") {
+    return players.filter(
+      (p) =>
+        p.pos === posFilter ||
+        DEPTH_ROWS.find((r) => r.key === posFilter)?.match.includes(p.pos),
+    );
+  }
+  return players;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function CapBar({ capUsed, capTotal, deadCap = 0 }) {
@@ -461,6 +489,7 @@ function RosterTable({
   const [sortDir, setSortDir] = useState("desc");
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
+  const [advancedFilters, setAdvancedFilters] = useState([]);
   // Compare mode: up to 2 players selected for side-by-side comparison
   const [compareIds, setCompareIds] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
@@ -474,26 +503,10 @@ function RosterTable({
   };
 
   const displayed = useMemo(() => {
-    let filtered = players;
-    if (posFilter === "EXPIRING") {
-      filtered = players.filter((p) => getContractYearsLeft(p) <= 1);
-    } else if (posFilter === "STARTERS") {
-      filtered = players.filter((p) => isStarterPlayer(p));
-    } else if (posFilter === "DEPTH") {
-      filtered = players.filter((p) => !isStarterPlayer(p));
-    } else if (posFilter === "INJURED") {
-      filtered = players.filter((p) => isInjuredPlayer(p));
-    } else if (posFilter === "DEVELOPMENT") {
-      filtered = players.filter((p) => Number(p?.age ?? 40) <= 24 || Number(p?.potential ?? 0) >= 80);
-    } else if (posFilter !== "ALL") {
-      filtered = players.filter(
-        (p) =>
-          p.pos === posFilter ||
-          DEPTH_ROWS.find((r) => r.key === posFilter)?.match.includes(p.pos),
-      );
-    }
+    const quickFiltered = applyRosterQuickFilter(players, posFilter);
+    const filtered = applyAdvancedPlayerFilters(quickFiltered, advancedFilters);
     return sortPlayers(filtered, sortKey, sortDir);
-  }, [players, posFilter, sortKey, sortDir]);
+  }, [players, posFilter, sortKey, sortDir, advancedFilters]);
   const teamDirection = useMemo(() => classifyTeamDirection(team, week), [team, week]);
   const decisionSummary = useMemo(
     () => buildExpiringDecisionSummary(players, { team, roster: players, direction: teamDirection }),
@@ -691,6 +704,11 @@ function RosterTable({
           </Button>
         ))}
       </div>
+      <AdvancedPlayerSearch
+        filters={advancedFilters}
+        onChange={setAdvancedFilters}
+        title="Advanced player search (AND)"
+      />
 
       {/* Table */}
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}><CardContent style={{ padding: 0 }}>
@@ -1835,31 +1853,15 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
   const [posFilter, setPosFilter] = useState(initialFilter || (isResignPhase ? "EXPIRING" : "ALL"));
   const [sortKey, setSortKey] = useState("ovr");
   const [sortDir, setSortDir] = useState("desc");
+  const [advancedFilters, setAdvancedFilters] = useState([]);
 
   const activeFilters = isResignPhase ? ["EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT", ...POSITIONS] : ["STARTERS", "DEPTH", "INJURED", "EXPIRING", "DEVELOPMENT", ...POSITIONS];
 
   const displayed = useMemo(() => {
-    let filtered = players;
-    if (posFilter === "EXPIRING") {
-      filtered = players.filter(
-        (p) => getContractYearsLeft(p) <= 1,
-      );
-    } else if (posFilter === "STARTERS") {
-      filtered = players.filter((p) => isStarterPlayer(p));
-    } else if (posFilter === "DEPTH") {
-      filtered = players.filter((p) => !isStarterPlayer(p));
-    } else if (posFilter === "INJURED") {
-      filtered = players.filter((p) => isInjuredPlayer(p));
-    } else if (posFilter === "DEVELOPMENT") {
-      filtered = players.filter((p) => Number(p?.age ?? 40) <= 24 || Number(p?.potential ?? 0) >= 80);
-    } else if (posFilter !== "ALL") {
-      filtered = players.filter(
-        (p) => p.pos === posFilter ||
-          DEPTH_ROWS.find((r) => r.key === posFilter)?.match.includes(p.pos),
-      );
-    }
+    const quickFiltered = applyRosterQuickFilter(players, posFilter);
+    const filtered = applyAdvancedPlayerFilters(quickFiltered, advancedFilters);
     return sortPlayers(filtered, sortKey, sortDir);
-  }, [players, posFilter, sortKey, sortDir]);
+  }, [players, posFilter, sortKey, sortDir, advancedFilters]);
   const direction = useMemo(() => classifyTeamDirection(team, week), [team, week]);
   const decisionSummary = useMemo(
     () => buildExpiringDecisionSummary(players, { team, roster: players, direction }),
@@ -1895,6 +1897,11 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
         flexDirection: "column",
         gap: "var(--space-3)",
       }}>
+        <AdvancedPlayerSearch
+          filters={advancedFilters}
+          onChange={setAdvancedFilters}
+          title="Advanced player search (AND)"
+        />
         {isResignPhase && (
           <div style={{
             display: "flex",
