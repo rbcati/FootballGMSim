@@ -4,6 +4,8 @@ import ContractCenter from './ContractCenter.jsx';
 import CapManager from './CapManager.jsx';
 import FinancialsView from './FinancialsView.jsx';
 import PlayerStats from './PlayerStats.jsx';
+import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
+import { deriveTeamCapSnapshot } from '../utils/numberFormatting.js';
 import TeamHistoryScreen from './TeamHistoryScreen.jsx';
 import FranchiseSummaryPanel from './FranchiseSummaryPanel.jsx';
 import SectionHeader from './SectionHeader.jsx';
@@ -100,12 +102,13 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const [subtab, setSubtab] = useState('Overview');
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
-  const capTotal = Number(team?.salaryCap ?? 255);
-  const capUsed = roster.reduce((sum, p) => sum + Number(p?.contract?.salary ?? p?.capHit ?? 0), 0);
-  const deadCap = Number(team?.deadCap ?? 0);
-  const capRoom = capTotal - capUsed - deadCap;
+  const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const capTotal = capSnapshot.capTotal;
+  const capUsed = capSnapshot.capUsed;
+  const deadCap = capSnapshot.deadCap;
+  const capRoom = capSnapshot.capRoom;
 
-  const expiringCount = roster.filter((p) => Number(p?.contract?.years ?? 0) <= 1).length;
+  const expiringCount = roster.filter((p) => Number(derivePlayerContractFinancials(p).yearsRemaining ?? 0) <= 1).length;
   const injuredCount = roster.filter((p) => Number(p?.injury?.gamesRemaining ?? 0) > 0).length;
 
   const depthConcerns = useMemo(() => {

@@ -1985,6 +1985,19 @@ export default function Draft({ league, actions }) {
   const [profilePlayerId, setProfilePlayerId] = useState(null);
   const [pickGrade, setPickGrade] = useState(null); // { pick, grade }
 
+  const loadDraftState = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await actions.getDraftState();
+      if (res?.payload) setDraftState(res.payload.notStarted ? null : res.payload);
+    } catch (err) {
+      setError(err?.message ?? 'Unable to load draft state');
+    } finally {
+      setLoading(false);
+    }
+  }, [actions]);
+
   // Enrich each pick with isUser flag for the completed-picks panel
   const enrichedDraftState = useMemo(() => {
     if (!draftState) return null;
@@ -1999,24 +2012,15 @@ export default function Draft({ league, actions }) {
 
   // Load draft state on mount
   useEffect(() => {
-    let cancelled = false;
     (async () => {
-      setLoading(true);
       try {
-        const res = await actions.getDraftState();
-        if (!cancelled && res?.payload) {
-          setDraftState(res.payload.notStarted ? null : res.payload);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err.message);
-      } finally {
-        if (!cancelled) setLoading(false);
+        await loadDraftState();
+      } catch {
+        // handled in loadDraftState
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [actions]);
+    return undefined;
+  }, [loadDraftState]);
 
   const handleDraftStarted = useCallback((state) => {
     setDraftState(state);
@@ -2137,6 +2141,13 @@ export default function Draft({ league, actions }) {
           }}
         >
           <span>{error}</span>
+          <Button
+            className="btn"
+            style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
+            onClick={loadDraftState}
+          >
+            Retry
+          </Button>
           <Button
             className="btn"
             style={{ padding: "2px 10px", fontSize: "var(--text-xs)" }}
