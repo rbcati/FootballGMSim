@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLeaders, deriveQuarterScores, deriveScoringSummary } from './boxScorePresentation.js';
+import { deriveLeaders, deriveQuarterScores, deriveScoringSummary, getGameDetailSections, groupScoringByPeriod } from './boxScorePresentation.js';
 
 describe('box score presentation fallback', () => {
   it('builds quarter scores from logs when quarterScores missing', () => {
@@ -22,6 +22,17 @@ describe('box score presentation fallback', () => {
     expect(rows[0].type).toBe('TD');
   });
 
+  it('groups scoring rows by quarter for section rendering', () => {
+    const groups = groupScoringByPeriod([
+      { id: '1', quarter: 1, text: 'TD' },
+      { id: '2', quarter: 1, text: 'FG' },
+      { id: '3', quarter: 5, text: 'OT FG' },
+    ]);
+    expect(groups[0].period).toBe('Q1');
+    expect(groups[0].items).toHaveLength(2);
+    expect(groups[1].period).toBe('OT1');
+  });
+
   it('uses archived summary leaders when detailed box stats are missing', () => {
     const leaders = deriveLeaders({
       summary: {
@@ -32,5 +43,10 @@ describe('box score presentation fallback', () => {
     });
     expect(leaders.pass?.name).toBe('A. QB');
     expect(leaders.pass?.stats?.passYd).toBe(278);
+  });
+
+  it('handles missing optional archive fields without crashing', () => {
+    expect(getGameDetailSections({ homeScore: 10, awayScore: 7 }).quarterByQuarter).toBe(true);
+    expect(getGameDetailSections({}).playLog).toBe(false);
   });
 });
