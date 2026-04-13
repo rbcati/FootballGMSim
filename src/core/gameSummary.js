@@ -2,6 +2,7 @@ import {
   classifyScoringEvent,
   describeDriveResult,
   isScoringLikeLog,
+  normalizePlayLogEntry,
   parseClock,
   resolveLogTeamId,
 } from './gameEvents.js';
@@ -33,26 +34,38 @@ function toRows(boxScore = {}, context = {}) {
 export function buildScoringSummaryFromSimulation(playLogs = [], context = {}) {
   const logs = Array.isArray(playLogs) ? playLogs : [];
   const scoring = [];
+  let prevHome = 0;
+  let prevAway = 0;
   for (let i = 0; i < logs.length; i++) {
-    const log = logs[i];
+    const log = normalizePlayLogEntry(logs[i], i, context);
     if (!isScoringLikeLog(log)) continue;
     const teamId = resolveLogTeamId(log, context);
     const event = classifyScoringEvent(log);
-    const homeAfter = Number(log?.homeScore);
-    const awayAfter = Number(log?.awayScore);
+    const homeAfter = Number(log?.scoreHomeAfter ?? log?.homeScore);
+    const awayAfter = Number(log?.scoreAwayAfter ?? log?.awayScore);
+    const pointsFromDelta = Number.isFinite(homeAfter) && Number.isFinite(awayAfter)
+      ? Math.max(0, (homeAfter - prevHome) + (awayAfter - prevAway))
+      : null;
+    prevHome = Number.isFinite(homeAfter) ? homeAfter : prevHome;
+    prevAway = Number.isFinite(awayAfter) ? awayAfter : prevAway;
     scoring.push({
       id: `score_${i}`,
       quarter: Number(log?.quarter ?? 1),
       clock: log?.clock ?? log?.timeLeft ?? log?.time ?? '',
       teamId,
-      eventType: event.type,
+      scoreType: event.type,
       type: event.label,
-      points: event.points,
+      points: pointsFromDelta ?? event.points,
       text: log?.text ?? 'Scoring play',
       scoreAfter: Number.isFinite(homeAfter) && Number.isFinite(awayAfter)
         ? { home: homeAfter, away: awayAfter }
         : null,
       teamAbbr: teamId === Number(context?.homeId) ? context?.homeAbbr : (teamId === Number(context?.awayId) ? context?.awayAbbr : null),
+      passerId: log?.passer?.id ?? null,
+      rusherId: log?.rusher?.id ?? null,
+      receiverId: log?.receiver?.id ?? null,
+      defenderId: log?.defender?.id ?? null,
+      kickerId: log?.kicker?.id ?? null,
     });
   }
   return scoring;
@@ -77,21 +90,24 @@ export function buildDriveSummaryFromSimulation(playLogs = [], context = {}) {
       quarter: current.quarter,
       startClock: current.startClock,
       endClock: current.endClock,
-      startFieldPosition: current.startFieldPosition,
+      startFieldPos: current.startFieldPos,
       plays: current.plays,
       yards: current.yards,
+      points: current.points,
       timeConsumed: consumedSeconds,
       result: describeDriveResult(current.lastLog),
       endState: describeDriveResult(current.lastLog),
+      keyPlay: current.lastLog?.text ?? null,
       summary: current.lastLog?.text ?? `${current.plays} plays`,
     });
     current = null;
   };
 
   for (const log of logs) {
-    const teamId = resolveLogTeamId(log, context);
-    const quarter = Number(log?.quarter ?? 1);
-    const clock = log?.clock ?? log?.timeLeft ?? '';
+    const normalized = normalizePlayLogEntry(log, 0, context);
+    const teamId = resolveLogTeamId(normalized, context);
+    const quarter = Number(normalized?.quarter ?? 1);
+    const clock = normalized?.clock ?? '';
     const changed = !current || current.teamId !== teamId || quarter !== current.quarter || /punt|touchdown|field goal|interception|fumble|safety/i.test(String(current.lastLog?.text ?? ''));
     if (changed) {
       closeDrive();
@@ -100,19 +116,40 @@ export function buildDriveSummaryFromSimulation(playLogs = [], context = {}) {
         quarter,
         startClock: clock,
         endClock: clock,
-        startFieldPosition: Number(log?.yardLine ?? log?.fieldPosition ?? null),
+        startFieldPos: Number(normalized?.fieldPosition ?? null),
         plays: 0,
         yards: 0,
-        lastLog: log,
+        points: 0,
+        lastLog: normalized,
       };
     }
     current.plays += 1;
-    current.yards += asNum(log?.yards);
+    current.yards += asNum(normalized?.yards);
     current.endClock = clock || current.endClock;
-    current.lastLog = log;
+    if (isScoringLikeLog(normalized)) current.points += asNum(classifyScoringEvent(normalized)?.points);
+    current.lastLog = normalized;
   }
   closeDrive();
   return drives;
+}
+
+export function buildQuarterScoresFromScoring(scoringSummary = [], context = {}) {
+  const scoring = Array.isArray(scoringSummary) ? scoringSummary : [];
+  const homeId = Number(context?.homeId);
+  const awayId = Number(context?.awayId);
+  let maxQuarter = 4;
+  scoring.forEach((event) => {
+    maxQuarter = Math.max(maxQuarter, Number(event?.quarter ?? 1));
+  });
+  const home = Array.from({ length: maxQuarter }, () => 0);
+  const away = Array.from({ length: maxQuarter }, () => 0);
+  scoring.forEach((event) => {
+    const idx = Math.max(0, Number(event?.quarter ?? 1) - 1);
+    const points = asNum(event?.points);
+    if (Number(event?.teamId) === homeId) home[idx] += points;
+    if (Number(event?.teamId) === awayId) away[idx] += points;
+  });
+  return { home, away };
 }
 
 export function buildTurningPointsFromGameEvents(playLogs = [], context = {}) {

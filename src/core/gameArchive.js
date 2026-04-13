@@ -18,7 +18,8 @@ function normalizeQuarterScores(input) {
   const home = Array.isArray(input.home) ? input.home : Array.isArray(input.h) ? input.h : null;
   const away = Array.isArray(input.away) ? input.away : Array.isArray(input.a) ? input.a : null;
   if (!home && !away) return null;
-  const normalizeSide = (rows) => [0, 1, 2, 3].map((idx) => {
+  const maxLen = Math.max(home?.length ?? 0, away?.length ?? 0, 4);
+  const normalizeSide = (rows) => Array.from({ length: maxLen }, (_, idx) => {
     if (!rows) return null;
     const val = asNumberOrNull(rows[idx]);
     return val == null ? null : val;
@@ -132,7 +133,11 @@ export function normalizeArchivedGamePayload(rawGame) {
     teamStats,
     playerStats,
     scoringSummary,
-    driveSummary: Array.isArray(rawGame?.driveSummary) ? rawGame.driveSummary : (Array.isArray(rawGame?.drives) ? rawGame.drives : []),
+    driveSummary: Array.isArray(rawGame?.driveSummary)
+      ? rawGame.driveSummary
+      : (Array.isArray(rawGame?.drives)
+        ? rawGame.drives
+        : (Array.isArray(rawGame?.teamDriveStats?.drives) ? rawGame.teamDriveStats.drives : [])),
     turningPoints: Array.isArray(rawGame?.turningPoints) ? rawGame.turningPoints : [],
     playLog,
     eventLog: Array.isArray(rawGame?.eventLog) ? rawGame.eventLog : playLog,

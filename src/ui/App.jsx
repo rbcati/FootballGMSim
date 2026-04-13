@@ -254,6 +254,8 @@ function AppContent() {
           teamStats: game?.teamStats ?? null,
           playerStats: game?.playerStats ?? null,
           scoringSummary: game?.scoringSummary ?? [],
+          driveSummary: game?.driveSummary ?? [],
+          quarterScores: game?.quarterScores ?? null,
           recapText: game?.recap ?? game?.summary?.storyline ?? null,
           logs: game?.playLog ?? [],
           summary: game?.summary ?? null,
