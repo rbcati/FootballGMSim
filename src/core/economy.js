@@ -65,7 +65,10 @@ export function projectNextSeasonEconomy(economy = {}, nextSeason) {
 
 export function getSalaryInflationMultiplier(economy = {}) {
   const normalized = normalizeLeagueEconomy(economy);
-  return Math.max(0.85, normalized.currentSalaryCap / Math.max(1, normalized.baseSalaryCap));
+  const capMultiplier = normalized.currentSalaryCap / Math.max(1, normalized.baseSalaryCap);
+  const seasonsTracked = Math.max(0, (normalized.economyHistory?.length ?? 1) - 1);
+  const inflationMultiplier = Math.pow(1 + normalized.annualSalaryInflationRate, seasonsTracked);
+  return Math.max(0.85, Math.min(3, Math.max(capMultiplier, inflationMultiplier)));
 }
 
 export function inflateContract(contract = {}, multiplier = 1) {

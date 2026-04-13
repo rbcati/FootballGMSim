@@ -15,4 +15,14 @@ describe('league economy progression', () => {
     expect(contract.baseAnnual).toBe(22);
     expect(contract.signingBonus).toBe(11);
   });
+
+  it('uses tracked season inflation so long saves increase asks even with modest cap drift', () => {
+    const mult = getSalaryInflationMultiplier({
+      baseSalaryCap: 300,
+      currentSalaryCap: 320,
+      annualSalaryInflationRate: 0.03,
+      economyHistory: [{ season: 2026, salaryCap: 300 }, { season: 2027, salaryCap: 309 }, { season: 2028, salaryCap: 318 }],
+    });
+    expect(mult).toBeCloseTo(1.0667, 4);
+  });
 });

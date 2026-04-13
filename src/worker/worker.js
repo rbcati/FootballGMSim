@@ -81,7 +81,7 @@ import {
 } from '../core/contract-market.js';
 import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
 import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
-import { computeRestructureOutcome, shouldPreserveChemistryOnReturn } from '../core/contracts/restructure.js';
+import { computeRestructureOutcome, shouldPreserveChemistryOnReturn, isContractRestructureEligible } from '../core/contracts/restructure.js';
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
@@ -5548,17 +5548,12 @@ async function handleRestructureContract({ playerId, teamId }, id) {
     guaranteedPct:player.guaranteedPct ?? 0.5,
   };
 
-  const yearsRemaining = contract.years ?? 1;
-  if (yearsRemaining < 2) {
-    post(toUI.ERROR, { message: 'Cannot restructure: player must have at least 2 years remaining.' }, id);
+  const eligible = isContractRestructureEligible({ ...player, contract }, { currentSeason: meta?.year });
+  if (!eligible) {
+    post(toUI.ERROR, { message: 'Cannot restructure: requires veteran player, 2+ years remaining, and unused restructure slots.' }, id);
     return;
   }
   const restructureCount = Number(contract?.restructureCount ?? 0);
-  const sameSeason = Number(contract?.lastRestructureSeason ?? 0) === Number(meta?.year ?? 0);
-  if (sameSeason || restructureCount >= 2) {
-    post(toUI.ERROR, { message: 'Cannot restructure: limit reached for this contract this offseason.' }, id);
-    return;
-  }
 
   const maxConvertPct = Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT;
   const outcome = computeRestructureOutcome(contract, maxConvertPct);

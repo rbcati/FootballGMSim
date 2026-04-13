@@ -24,6 +24,23 @@ export function computeRestructureOutcome(contract = {}, maxConvertPct = 0.5) {
   };
 }
 
+export function isContractRestructureEligible(player = {}, { currentSeason = null } = {}) {
+  const contract = player?.contract ?? player ?? {};
+  const yearsRemaining = Math.max(0, n(contract?.years ?? contract?.yearsRemaining ?? 0));
+  const baseAnnual = n(contract?.baseAnnual ?? player?.baseAnnual, 0);
+  const restructureCount = n(contract?.restructureCount, 0);
+  const lastRestructureSeason = n(contract?.lastRestructureSeason, -1);
+  const age = n(player?.age, 0);
+  const accruedSeasons = n(player?.accruedSeasons ?? player?.serviceYears, 0);
+  const veteranEligible = age >= 27 || accruedSeasons >= 4;
+  const alreadyRestructuredThisSeason = currentSeason != null && lastRestructureSeason === Number(currentSeason);
+  return yearsRemaining >= 2
+    && baseAnnual > 0
+    && veteranEligible
+    && !alreadyRestructuredThisSeason
+    && restructureCount < 2;
+}
+
 export function shouldPreserveChemistryOnReturn({ releaseRecord, signingTeamId, currentSeason }) {
   if (!releaseRecord) return false;
   if (Number(releaseRecord.teamId) !== Number(signingTeamId)) return false;
