@@ -84,6 +84,8 @@ import {
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
 import { getClickableCardProps } from "../utils/clickableCard.js";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
+import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
+import { getGame as getArchivedGame } from "../../core/archive/gameArchive.ts";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
 import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
 import { safeGetLeagueState, getScheduleViewModel } from "../../state/selectors.js";
@@ -216,6 +218,14 @@ const NAV_GROUPS = [
   { id: SHELL_SECTIONS.transactions, title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
   { id: SHELL_SECTIONS.history, title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap", "Team History", "Saves"] },
 ];
+
+const NAV_TEST_IDS = {
+  [SHELL_SECTIONS.hq]: "nav-hq",
+  [SHELL_SECTIONS.team]: "nav-team",
+  [SHELL_SECTIONS.league]: "nav-league",
+  [SHELL_SECTIONS.transactions]: "nav-transactions",
+  [SHELL_SECTIONS.history]: "nav-history",
+};
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
 const TAB_ALIASES = {
@@ -794,21 +804,49 @@ function ScheduleTab({
         return homeId === Number(selectedTeamId) || awayId === Number(selectedTeamId);
       })
       : scheduleModel.games;
-  const visibleGames = filteredGames.filter((game) => {
-    if (statusFilter === 'completed') return Boolean(game?.played);
-    if (statusFilter === 'upcoming') return !Boolean(game?.played);
-    return true;
+  const mergedVisibleGames = filteredGames.map((game) => {
+    const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+    const archived = game?.played ? getArchivedGame(gameId) : null;
+    if (!archived) return game;
+    return {
+      ...game,
+      gameId,
+      homeScore: archived?.score?.home ?? game?.homeScore,
+      awayScore: archived?.score?.away ?? game?.awayScore,
+      homeAbbr: archived?.homeAbbr,
+      awayAbbr: archived?.awayAbbr,
+      teamStats: archived?.teamStats ?? game?.teamStats,
+      playerStats: archived?.playerStats ?? game?.playerStats,
+      scoringSummary: archived?.scoringSummary ?? game?.scoringSummary,
+      recap: archived?.recapText ?? game?.recap,
+      playLog: archived?.logs ?? game?.playLog,
+      summary: archived?.summary ?? game?.summary,
+    };
   });
   const weeklyHonors = useMemo(() => deriveWeeklyHonors(league), [league]);
   const weekRecapItems = useMemo(() => (
     games
       .filter((game) => game?.played)
       .map((game) => {
+        const gameId = resolveCompletedGameId(game, { seasonId, week: selectedWeek });
+        const archived = getArchivedGame(gameId);
+        const gameWithArchive = archived ? {
+          ...game,
+          gameId,
+          homeScore: archived?.score?.home ?? game?.homeScore,
+          awayScore: archived?.score?.away ?? game?.awayScore,
+          recap: archived?.recapText ?? game?.recap,
+          teamStats: archived?.teamStats ?? game?.teamStats,
+          playerStats: archived?.playerStats ?? game?.playerStats,
+          scoringSummary: archived?.scoringSummary ?? game?.scoringSummary,
+          playLog: archived?.logs ?? game?.playLog,
+          summary: archived?.summary ?? game?.summary,
+        } : game;
         const home = teamById[game.home] ?? { abbr: "HOME" };
         const away = teamById[game.away] ?? { abbr: "AWAY" };
-        const presentation = buildCompletedGamePresentation(game, { seasonId, week: selectedWeek, teamById, source: "schedule_recap" });
-        const story = derivePostgameStory({ league, game, week: selectedWeek });
-        return { game, home, away, presentation, story };
+        const presentation = buildCompletedGamePresentation(gameWithArchive, { seasonId, week: selectedWeek, teamById, source: "schedule_recap" });
+        const story = derivePostgameStory({ league, game: gameWithArchive, week: selectedWeek });
+        return { game: gameWithArchive, home, away, presentation, story };
       })
       .slice(0, 8)
   ), [games, league, seasonId, selectedWeek, teamById]);
@@ -943,7 +981,11 @@ function ScheduleTab({
             </div>
           </div>
         )}
-        {visibleGames.map((game, idx) => {
+        {mergedVisibleGames.filter((game) => {
+          if (statusFilter === 'completed') return Boolean(game?.played);
+          if (statusFilter === 'upcoming') return !Boolean(game?.played);
+          return true;
+        }).map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
             abbr: "???",
@@ -1927,7 +1969,7 @@ export default function LeagueDashboard({
           {NAV_GROUPS.map((group) => (
             <button
               key={group.id}
-              data-testid={`primary-nav-${toTestId(group.title)}`}
+              data-testid={NAV_TEST_IDS[group.id] ?? `primary-nav-${toTestId(group.title)}`}
               className={`standings-tab${activeSection === group.id ? " active" : ""}`}
               onClick={() => handleSectionChange(group.id)}
               aria-current={activeSection === group.id ? "page" : undefined}

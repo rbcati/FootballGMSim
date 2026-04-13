@@ -2034,7 +2034,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
   const [viewMode, setViewMode] = useState(initialConfig.safeView); // 'cards' | 'table' | 'depth'
-  const [initialFilter, setInitialFilter] = useState(initialConfig.safeFilter);
+  const [initialFilter, setInitialFilter] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
 
   const fetchRoster = useCallback(async () => {
@@ -2065,7 +2065,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
 
   useEffect(() => {
     const next = normalizeInitialRosterState(initialState, initialViewMode);
-    setInitialFilter(next.safeFilter);
+    setInitialFilter(next?.safeFilter ?? null);
     if (next.safeView) setViewMode(next.safeView);
   }, [initialState, initialViewMode]);
 

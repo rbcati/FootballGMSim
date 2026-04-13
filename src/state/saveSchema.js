@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.2;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.3;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -42,6 +42,7 @@ const MIGRATIONS = {
   4: migrateV4ToV5,
   5: migrateV5ToV51,
   5.1: migrateV51ToV52,
+  5.2: migrateV52ToV53,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -89,6 +90,18 @@ function migrateV51ToV52(meta = {}) {
     ...meta,
     economy,
     saveVersion: 5.2,
+  };
+}
+
+function migrateV52ToV53(meta = {}) {
+  return {
+    ...meta,
+    archiveMigration: {
+      ...(meta?.archiveMigration ?? {}),
+      v53: true,
+      upgradedAt: Date.now(),
+    },
+    saveVersion: 5.3,
   };
 }
 

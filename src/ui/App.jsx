@@ -53,6 +53,7 @@ import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
+import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -132,6 +133,7 @@ function AppContent() {
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
   const [initFlow, setInitFlow] = useState(null);
+  const archiveMigrationRef = useRef(null);
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
   const advancingRef = useRef(false);
@@ -211,6 +213,57 @@ function AppContent() {
   }, [league, activeSlot, actions]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!league?.seasonId || !league?.schedule?.weeks?.length) return;
+    const migrationKey = `footballgm_archive_v53_migrated_${league.seasonId}`;
+    if (archiveMigrationRef.current === migrationKey) return;
+    archiveMigrationRef.current = migrationKey;
+    try {
+      const alreadyMigrated = localStorage.getItem(migrationKey) === '1';
+      if (alreadyMigrated) return;
+      const hasArchive = getRecentGames(1).length > 0;
+      if (hasArchive) {
+        localStorage.setItem(migrationKey, '1');
+        return;
+      }
+      const completed = [];
+      league.schedule.weeks.forEach((weekRow) => {
+        (weekRow?.games ?? []).forEach((game) => {
+          if (!game?.played) return;
+          completed.push({
+            seasonId: league.seasonId,
+            week: Number(weekRow?.week ?? game?.week ?? 0),
+            game,
+          });
+        });
+      });
+      completed.slice(-32).forEach(({ seasonId, week, game }) => {
+        const homeTeam = league?.teams?.find((team) => Number(team?.id) === Number(game?.home));
+        const awayTeam = league?.teams?.find((team) => Number(team?.id) === Number(game?.away));
+        const gameId = buildCanonicalGameId({ seasonId, week, homeId: game?.home, awayId: game?.away });
+        saveGame(gameId, {
+          season: seasonId,
+          week,
+          homeId: game?.home,
+          awayId: game?.away,
+          homeAbbr: homeTeam?.abbr ?? 'HME',
+          awayAbbr: awayTeam?.abbr ?? 'AWY',
+          homeScore: game?.homeScore,
+          awayScore: game?.awayScore,
+          teamStats: game?.teamStats ?? null,
+          playerStats: game?.playerStats ?? null,
+          scoringSummary: game?.scoringSummary ?? [],
+          recapText: game?.recap ?? game?.summary?.storyline ?? null,
+          logs: game?.playLog ?? [],
+          summary: game?.summary ?? null,
+        });
+      });
+      localStorage.setItem(migrationKey, '1');
+    } catch {
+      // non-fatal
+    }
+  }, [league]);
 
   const handleAdvanceWeek = useCallback(() => {
     if (busy || simulating || advancingRef.current) return;
@@ -975,6 +1028,8 @@ function AppContent() {
                     week: league?.week,
                     phase: league?.phase,
                     logs: userGameLogs || [],
+                    liveStats: userGameLiveStats || null,
+                    seasonId: league?.seasonId,
                     gameId: buildCanonicalGameId({
                       seasonId: league?.seasonId,
                       week: league?.week,
@@ -1026,6 +1081,10 @@ function AppContent() {
               console.error('[PostGame] onContinue failed:', err);
               setPostGameResult(null);
             }
+          }}
+          onArchiveReady={(archivePayload) => {
+            if (!archivePayload?.gameId) return;
+            saveGame(archivePayload.gameId, archivePayload);
           }}
         />
       )}

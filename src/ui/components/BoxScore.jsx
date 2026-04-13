@@ -143,7 +143,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const hasAnyPayload = Boolean(game && (
     game.homeScore != null || game.awayScore != null || game.stats || game.playerStats || game.teamStats || game.recap || game.quarterScores
   ));
-  const unavailableMessage = "No archived postgame data was found for this matchup.";
+  const unavailableMessage = "No data saved for this game.";
 
   const shell = (
       <div className={`${embedded ? "card" : "modal-content modal-large box-score-modal"}`} onClick={(e) => !embedded && e.stopPropagation()}>
@@ -175,7 +175,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               </div>
             </section>
             {archiveQuality !== "full" && (
-              <section className="bs-section" style={{ marginTop: 4 }}>
+              <section className="bs-section" style={{ marginTop: 4 }} data-testid="archive-status">
                 <div className="bs-list-item" style={{ borderColor: "var(--warning)", color: "var(--text-muted)" }}>
                   {archiveQuality === "partial"
                     ? "Partial archive: final score and key summary data are available, but full drive/play detail was not stored."
