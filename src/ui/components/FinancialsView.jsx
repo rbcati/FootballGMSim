@@ -24,6 +24,7 @@ import FranchiseInvestmentsPanel from "./FranchiseInvestmentsPanel.jsx";
 import { classifyTeamDirection, evaluateResignRecommendation } from "../utils/contractInsights.js";
 import { CONTRACT_PLAN_LABELS, normalizeManagement } from "../utils/playerManagement.js";
 import InfoTip from "./InfoTip.jsx";
+import { computeRestructureOutcome, isContractRestructureEligible } from "../../core/contracts/restructure.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -210,11 +211,9 @@ export default function FinancialsView({ league, actions }) {
         baseAnnual: p.contract?.baseAnnual ?? p.baseAnnual ?? 0,
         signingBonus: p.contract?.signingBonus ?? 0,
         yearsTotal: p.contract?.yearsTotal ?? 1,
-        canRestructure:
-          (p.contract?.years ?? 1) >= 2 &&
-          (p.contract?.baseAnnual ?? p.baseAnnual ?? 0) > 0,
+        canRestructure: isContractRestructureEligible(p, { currentSeason: league?.year }),
       })),
-    [players],
+    [players, league?.year],
   );
 
   // Sorted player list
@@ -329,13 +328,9 @@ export default function FinancialsView({ league, actions }) {
 
   const handleRestructure = async (player) => {
     if (!actions?.restructureContract) return;
-    const currentCapHit = capHitOf(player);
-    const years = Math.max(1, Number(player?.contract?.years ?? player?.contract?.yearsRemaining ?? 1));
-    const convertAmount = Number(player?.contract?.baseAnnual ?? 0) * 0.5;
-    const projectedBonus = Number(player?.contract?.signingBonus ?? 0) + convertAmount;
-    const projectedCapHit = (Number(player?.contract?.baseAnnual ?? 0) - convertAmount) + (projectedBonus / years);
+    const outcome = computeRestructureOutcome(player?.contract ?? {}, 0.5);
     const proceed = window.confirm(
-      `Restructure ${player.name}?\nCurrent cap hit: ${fmt(currentCapHit)}\nNew cap hit: ${fmt(projectedCapHit)}\nFuture bonus impact: +${fmt(convertAmount / years)} per remaining year.`
+      `Restructure ${player.name}?\nCurrent cap hit: ${fmt(outcome.oldCapHit)}\nNew cap hit: ${fmt(outcome.newCapHit)}\nCap savings this year: ${fmt(outcome.capSavingsThisYear)}\nFuture dead-cap exposure: +${fmt(outcome.futureAnnualBonusDelta)} per remaining season if released.`
     );
     if (!proceed) return;
     setRestructuring(player.id);
