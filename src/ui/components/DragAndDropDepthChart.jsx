@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef } from "react";
+import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 
 // Position groups definition
 const POSITION_GROUPS = [
@@ -70,6 +71,7 @@ function PlayerRow({
   const inj = player.injury || (player.injuredWeeks > 0 ? {} : null);
   const pc = posColor(player.pos);
   const oc = ovrColor(player.ovr ?? 70);
+  const contract = derivePlayerContractFinancials(player);
 
   return (
     <div
@@ -170,9 +172,9 @@ function PlayerRow({
       )}
 
       {/* Salary */}
-      {player.contract?.salary != null && (
+      {contract.annualSalary != null && (
         <span style={{ fontSize: "0.65rem", color: "var(--text-subtle)", flexShrink: 0 }}>
-          ${(player.contract.salary / 1e6).toFixed(1)}M
+          {formatContractMoney(contract.annualSalary)}
         </span>
       )}
     </div>

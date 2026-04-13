@@ -28,6 +28,20 @@ function rowForPosition(pos, preferredRowKey = null) {
   return DEPTH_CHART_ROWS.find((r) => r.match.includes(pos));
 }
 
+function getPlayerFallbackPositions(player = {}) {
+  if (Array.isArray(player?.secondaryPositions)) return player.secondaryPositions;
+  if (Array.isArray(player?.positions)) return player.positions.slice(1);
+  return [];
+}
+
+function playerMatchTier(player, row) {
+  const primary = String(player?.pos ?? '');
+  if (row.match.includes(primary)) return 0;
+  const secondary = getPlayerFallbackPositions(player).map((p) => String(p));
+  if (secondary.some((pos) => row.match.includes(pos))) return 1;
+  return 2;
+}
+
 function scorePlayerForRow(player, rowKey, scheme = {}) {
   const injuryPenalty = (player?.injuryWeeksRemaining ?? 0) > 0 ? 18 : 0;
   const fatiguePenalty = Math.max(0, Math.min(12, Math.round((player?.fatigue ?? 0) / 9)));
@@ -39,28 +53,30 @@ function scorePlayerForRow(player, rowKey, scheme = {}) {
   if ((rowKey === 'EDGE') && /rush|power/.test(archetype)) archetypeBonus = 5;
   if ((rowKey === 'IDL') && /run|anchor/.test(archetype)) archetypeBonus = 5;
 
-  return (player?.ovr ?? 0) + schemeFitBonus + archetypeBonus - injuryPenalty - fatiguePenalty;
+  const roleFit = Number(player?.roleFit?.[rowKey] ?? player?.roleFitScore ?? 0);
+  const row = DEPTH_CHART_ROWS.find((entry) => entry.key === rowKey);
+  const tier = row ? playerMatchTier(player, row) : 2;
+  const tierPenalty = tier === 0 ? 0 : tier === 1 ? 7 : 24;
+
+  return (player?.ovr ?? 0) + schemeFitBonus + archetypeBonus + Math.round(roleFit / 12) - injuryPenalty - fatiguePenalty - tierPenalty;
 }
 
 export function autoBuildDepthChart(players = [], existingAssignments = {}) {
-  const byRow = {};
-  for (const row of DEPTH_CHART_ROWS) byRow[row.key] = [];
-
-  for (const player of players) {
-    if (!player || player.teamId == null || player.status === 'free_agent') continue;
-    const preferred = player?.depthChart?.rowKey;
-    const row = rowForPosition(player.pos, preferred);
-    if (!row) continue;
-    byRow[row.key].push(player);
-  }
-
   const assignments = {};
+  const availablePlayers = players.filter((player) => player && player.teamId != null && player.status !== 'free_agent');
+  const assignedPlayerIds = new Set();
+
   for (const row of DEPTH_CHART_ROWS) {
     const currentIds = Array.isArray(existingAssignments?.[row.key])
       ? existingAssignments[row.key].map((x) => Number(x)).filter(Number.isFinite)
       : [];
 
-    const pool = byRow[row.key] ?? [];
+    const pool = availablePlayers.filter((player) => {
+      if (assignedPlayerIds.has(Number(player.id))) return false;
+      const tier = playerMatchTier(player, row);
+      return tier <= 1;
+    });
+
     const ranked = [...pool].sort((a, b) => {
       const idxA = currentIds.indexOf(Number(a.id));
       const idxB = currentIds.indexOf(Number(b.id));
@@ -70,7 +86,21 @@ export function autoBuildDepthChart(players = [], existingAssignments = {}) {
       return scorePlayerForRow(b, row.key) - scorePlayerForRow(a, row.key);
     });
 
-    assignments[row.key] = ranked.map((p) => Number(p.id));
+    const chosen = ranked.slice(0, row.slots).map((p) => Number(p.id));
+    assignments[row.key] = chosen;
+    chosen.forEach((id) => assignedPlayerIds.add(id));
+  }
+
+  // Fill any still-empty rows with best available fallback player to keep chart complete.
+  for (const row of DEPTH_CHART_ROWS) {
+    if ((assignments[row.key] ?? []).length > 0) continue;
+    const fallback = availablePlayers
+      .filter((player) => !assignedPlayerIds.has(Number(player.id)))
+      .sort((a, b) => scorePlayerForRow(b, row.key) - scorePlayerForRow(a, row.key))[0];
+    if (fallback) {
+      assignments[row.key] = [Number(fallback.id)];
+      assignedPlayerIds.add(Number(fallback.id));
+    }
   }
 
   return assignments;

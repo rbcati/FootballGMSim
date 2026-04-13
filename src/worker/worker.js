@@ -101,6 +101,7 @@ import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHisto
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
+import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } from '../core/teamValidation.js';
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
@@ -1274,6 +1275,7 @@ async function handleLoadSave({ leagueId }, id) {
         const normalizedStaff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
         cache.updateTeam(team.id, { staff: normalizedStaff, ...deriveTeamUnitRatings(team.id) });
       }
+      runLegalityValidation({ stage: 'load-save', notify: true });
 
       // Migration/defaulting for league customization + commissioner metadata.
       const normalizedEconomy = normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year });
@@ -1820,6 +1822,11 @@ async function handleAdvanceWeek(payload, id) {
   if (!['regular', 'playoffs', 'preseason'].includes(meta.phase)) {
       post(toUI.ERROR, { message: `Cannot advance week in phase "${meta.phase}". Use the correct action.` }, id);
       return;
+  }
+  const legality = runLegalityValidation({ stage: 'pre-advance' }).issues.filter((issue) => issue.severity === 'error');
+  if (legality.length > 0) {
+    post(toUI.ERROR, { message: legality[0].message }, id);
+    return;
   }
 
   // Ensure depth chart integrity before every simulation step.
@@ -3677,9 +3684,7 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   if (!teamCtx.ok) { post(toUI.ERROR, { message: teamCtx.message }, id); return; }
   const { meta, teamId: resolvedTeamId, team } = teamCtx;
 
-  const limit = (['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'].includes(meta.phase))
-      ? Constants.ROSTER_LIMITS.OFFSEASON
-      : Constants.ROSTER_LIMITS.REGULAR_SEASON;
+  const limit = getRosterLimitForPhase(meta.phase);
 
   const roster = cache.getPlayersByTeam(resolvedTeamId);
   if (roster.length >= limit) {
@@ -3690,6 +3695,12 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   // Normalize the incoming playerId.
   let player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
+
+  const preIssues = runLegalityValidation({ stage: 'pre-sign', teamIds: [resolvedTeamId] }).issues.filter((issue) => issue.severity === 'error');
+  if (preIssues.length > 0) {
+    post(toUI.ERROR, { message: preIssues[0].message }, id);
+    return;
+  }
 
   // ── Hard Cap Check ($301.2M) ────────────────────────────────────────────────
   if (team && contract) {
@@ -3730,6 +3741,11 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   // Update cap
   recalculateTeamCap(resolvedTeamId);
   if (oldTeamId != null && oldTeamId !== resolvedTeamId) recalculateTeamCap(oldTeamId);
+  const postIssues = runLegalityValidation({ stage: 'post-sign', teamIds: [resolvedTeamId, oldTeamId].filter((x) => x != null) }).issues.filter((issue) => issue.severity === 'error');
+  if (postIssues.length > 0) {
+    post(toUI.ERROR, { message: postIssues[0].message }, id);
+    return;
+  }
 
   const txDetails = { playerId, contract };
   await Transactions.add({
@@ -3826,6 +3842,11 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
   if (!signingTeam) return null;
 
   const capHit = (offer?.contract?.baseAnnual ?? 0) + ((offer?.contract?.signingBonus ?? 0) / (offer?.contract?.yearsTotal || 1));
+  const rosterLimit = getRosterLimitForPhase(liveMeta?.phase);
+  const rosterCount = cache.getPlayersByTeam(signingTeamId).length;
+  if (rosterCount >= rosterLimit) {
+    return null;
+  }
   if ((signingTeam.capRoom ?? 0) < capHit) {
     const nextOffers = (player.offers ?? []).filter((o) => Number(o?.teamId) !== signingTeamId);
     cache.updatePlayer(player.id, { offers: nextOffers });
@@ -4953,6 +4974,31 @@ function tradePackagePositions(playerIds = []) {
   return [...positions];
 }
 
+function evaluateTradeLegality({ fromTeamId, toTeamId, offering = {}, receiving = {}, phase }) {
+  const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const rosterLimit = getRosterLimitForPhase(phase);
+  const fromTeam = cache.getTeam(Number(fromTeamId));
+  const toTeam = cache.getTeam(Number(toTeamId));
+  if (!fromTeam || !toTeam) return { ok: false, reason: 'Trade blocked: invalid team context.' };
+
+  const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
+    const p = cache.getPlayer(Number(pid));
+    return sum + (p ? getPlayerCapHit(p) : 0);
+  }, 0);
+
+  const fromProjectedCap = (fromTeam?.capUsed ?? 0) - capHitOf(offering.playerIds) + capHitOf(receiving.playerIds);
+  const toProjectedCap = (toTeam?.capUsed ?? 0) - capHitOf(receiving.playerIds) + capHitOf(offering.playerIds);
+  if (fromProjectedCap > hardCap) return { ok: false, reason: `Trade blocked: ${fromTeam.name} would exceed the $${hardCap}M hard cap.` };
+  if (toProjectedCap > hardCap) return { ok: false, reason: `Trade blocked: ${toTeam.name} would exceed the $${hardCap}M hard cap.` };
+
+  const fromCount = cache.getPlayersByTeam(Number(fromTeamId)).length - (offering?.playerIds?.length ?? 0) + (receiving?.playerIds?.length ?? 0);
+  const toCount = cache.getPlayersByTeam(Number(toTeamId)).length - (receiving?.playerIds?.length ?? 0) + (offering?.playerIds?.length ?? 0);
+  if (fromCount > rosterLimit) return { ok: false, reason: `Trade blocked: ${fromTeam.name} would exceed roster limit (${fromCount}/${rosterLimit}).` };
+  if (toCount > rosterLimit) return { ok: false, reason: `Trade blocked: ${toTeam.name} would exceed roster limit (${toCount}/${rosterLimit}).` };
+
+  return { ok: true };
+}
+
 async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, id) {
   // offering  = { playerIds: [], pickIds: [] }  (what fromTeam gives)
   // receiving = { playerIds: [], pickIds: [] }  (what fromTeam gets back)
@@ -5067,59 +5113,27 @@ async function handleTradeOffer({ fromTeamId, toTeamId, offering, receiving }, i
   }
   const accepted = offerVal >= threshold;
 
-  // ── Hard Cap Trade Validation ────────────────────────────────────────────────
-  // Before executing an accepted trade, verify neither team would breach the
-  // $301.2M hard cap after swapping players.
   if (accepted) {
-    const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
-
-    // Helper: sum cap hit for a list of player IDs
-    const capHitOf = (pids = []) => pids.reduce((sum, pid) => {
-      const p = cache.getPlayer(Number(pid));
-      if (!p) return sum;
-      const base  = p.contract?.baseAnnual  ?? p.baseAnnual  ?? 0;
-      const bonus = p.contract?.signingBonus ?? p.signingBonus ?? 0;
-      const yrs   = p.contract?.yearsTotal   ?? p.yearsTotal  ?? 1;
-      return sum + base + bonus / (yrs || 1);
-    }, 0);
-
-    const fromTeamObj = cache.getTeam(Number(fromTeamId));
-    const toTeamObj   = cache.getTeam(Number(toTeamId));
-
-    // fromTeam loses offering players, gains receiving players
-    const fromProjected = (fromTeamObj?.capUsed ?? 0)
-      - capHitOf(offering.playerIds)
-      + capHitOf(receiving.playerIds);
-
-    // toTeam loses receiving players, gains offering players
-    const toProjected = (toTeamObj?.capUsed ?? 0)
-      - capHitOf(receiving.playerIds)
-      + capHitOf(offering.playerIds);
-
-    if (fromProjected > hardCap) {
+    const tradeLegality = evaluateTradeLegality({ fromTeamId, toTeamId, offering, receiving, phase: meta?.phase });
+    if (!tradeLegality.ok) {
       post(toUI.TRADE_RESPONSE, {
         accepted: false,
         offerValue: Math.round(offerVal),
         receiveValue: Math.round(receiveVal),
         rejectionType: 'cap',
-        reason: `Trade blocked: ${from.name} would exceed the $${hardCap}M hard cap ($${fromProjected.toFixed(1)}M projected).`,
-      }, id);
-      return;
-    }
-    if (toProjected > hardCap) {
-      post(toUI.TRADE_RESPONSE, {
-        accepted: false,
-        offerValue: Math.round(offerVal),
-        receiveValue: Math.round(receiveVal),
-        rejectionType: 'cap',
-        reason: `Trade blocked: ${to.name} would exceed the $${hardCap}M hard cap ($${toProjected.toFixed(1)}M projected).`,
+        reason: tradeLegality.reason,
       }, id);
       return;
     }
   }
 
   if (accepted) {
-    await executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving });
+    try {
+      await executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving });
+    } catch (tradeErr) {
+      post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'validation', reason: tradeErr?.message ?? 'Trade blocked by validation.' }, id);
+      return;
+    }
   }
 
   const rejectionType = accepted ? null : (
@@ -5188,6 +5202,10 @@ async function executeAcceptedTrade({ fromTeamId, toTeamId, offering, receiving 
 
   recalculateTeamCap(Number(fromTeamId));
   recalculateTeamCap(Number(toTeamId));
+  const tradeIssues = runLegalityValidation({ stage: 'post-trade', teamIds: [Number(fromTeamId), Number(toTeamId)] }).issues.filter((issue) => issue.severity === 'error');
+  if (tradeIssues.length > 0) {
+    throw new Error(tradeIssues[0].message);
+  }
 
   const latestMeta = ensureDynastyMeta(cache.getMeta());
   const tradeRecord = {
@@ -5216,12 +5234,29 @@ async function handleAcceptIncomingTrade({ offerId }, id) {
     return;
   }
 
-  await executeAcceptedTrade({
+  const legality = evaluateTradeLegality({
     fromTeamId: Number(latestMeta?.userTeamId),
     toTeamId: Number(offer.offeringTeamId),
     offering: offer.receiving ?? { playerIds: [offer.receivingPlayerId], pickIds: [] },
     receiving: offer.offering ?? { playerIds: [offer.offeringPlayerId], pickIds: [] },
+    phase: latestMeta?.phase,
   });
+  if (!legality.ok) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'cap', reason: legality.reason }, id);
+    return;
+  }
+
+  try {
+    await executeAcceptedTrade({
+      fromTeamId: Number(latestMeta?.userTeamId),
+      toTeamId: Number(offer.offeringTeamId),
+      offering: offer.receiving ?? { playerIds: [offer.receivingPlayerId], pickIds: [] },
+      receiving: offer.offering ?? { playerIds: [offer.offeringPlayerId], pickIds: [] },
+    });
+  } catch (tradeErr) {
+    post(toUI.TRADE_RESPONSE, { accepted: false, rejectionType: 'validation', reason: tradeErr?.message ?? 'Trade blocked by validation.' }, id);
+    return;
+  }
 
   const remaining = offers.filter((o) => o?.id !== offerId);
   cache.setMeta({ incomingTradeOffers: remaining, lastTradeActivityWeek: Number(latestMeta?.currentWeek ?? 1) });
@@ -5571,6 +5606,25 @@ function recalculateTeamCap(teamId) {
 // Alias for backward compatibility if needed, but we should replace calls.
 const _updateTeamCap = recalculateTeamCap;
 
+function runLegalityValidation({ stage = 'action', teamIds = null, notify = false } = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const allTeams = cache.getAllTeams();
+  const scopedTeams = Array.isArray(teamIds) && teamIds.length > 0
+    ? allTeams.filter((team) => teamIds.includes(Number(team?.id)))
+    : allTeams;
+  const result = validateLeagueTeamLegality({
+    teams: scopedTeams,
+    players: cache.getAllPlayers(),
+    phase: meta?.phase,
+    hardCap: Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP)),
+  });
+  if (notify && result.issues.length > 0) {
+    const first = result.issues[0];
+    post(toUI.NOTIFICATION, { level: first?.severity === 'error' ? 'warn' : 'info', message: `[${stage}] ${first?.message}` });
+  }
+  return result;
+}
+
 // ── Handler: RESTRUCTURE_CONTRACT ────────────────────────────────────────────
 //
 // Converts a portion of a player's base salary into a prorated signing bonus,
@@ -5779,6 +5833,8 @@ function _executeDraftPick(pickIndex, playerId, teamId) {
   // Normalize the ID.
   let player = cache.getPlayer(playerId);
   if (!player) return;
+  const rosterLimit = getRosterLimitForPhase(meta?.phase);
+  if (cache.getPlayersByTeam(teamId).length >= rosterLimit) return;
 
   const pk = draftState.picks[pickIndex];
   pk.playerId   = playerId;
@@ -6094,6 +6150,7 @@ async function handleMakeDraftPick({ playerId }, id) {
     postPickMeta.draftState &&
     postPickMeta.draftState.currentPickIndex >= postPickMeta.draftState.picks.length
   ) {
+    runLegalityValidation({ stage: 'post-draft', notify: true });
     return await handleStartNewSeason({}, id);
   }
 
@@ -6168,6 +6225,7 @@ async function handleSimDraftPick(payload, id) {
     postSimMeta.draftState &&
     postSimMeta.draftState.currentPickIndex >= postSimMeta.draftState.picks.length
   ) {
+    runLegalityValidation({ stage: 'post-draft', notify: true });
     return await handleStartNewSeason({}, id);
   }
 
