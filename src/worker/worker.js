@@ -81,6 +81,7 @@ import {
 } from '../core/contract-market.js';
 import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
 import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
+import { computeRestructureOutcome, shouldPreserveChemistryOnReturn } from '../core/contracts/restructure.js';
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
@@ -105,6 +106,13 @@ import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule } from '../core/gameArchive.js';
+import {
+  DEFAULT_LEAGUE_ECONOMY,
+  normalizeLeagueEconomy,
+  projectNextSeasonEconomy,
+  getSalaryInflationMultiplier,
+  inflateContract,
+} from '../core/economy.js';
 import {
   buildDriveSummaryFromSimulation,
   buildGameNarrativeSummary,
@@ -144,9 +152,15 @@ function yieldFrame() {
  */
 function getSafeMeta() {
   const safe = ensureDynastyMeta(cache.getMeta() ?? {});
+  const economy = normalizeLeagueEconomy(safe?.economy ?? {}, { year: safe?.year });
+  const settings = normalizeLeagueSettings({
+    ...(safe?.settings ?? {}),
+    salaryCap: economy.currentSalaryCap,
+  });
   return {
     ...safe,
-    settings: normalizeLeagueSettings(safe?.settings ?? {}),
+    settings,
+    economy,
     commissionerMode: !!safe?.commissionerMode,
     commissionerEverEnabled: !!safe?.commissionerEverEnabled,
     commissionerLog: Array.isArray(safe?.commissionerLog) ? safe.commissionerLog : [],
@@ -537,6 +551,7 @@ function buildViewState() {
     seasonStorylines: Array.isArray(meta?.seasonStorylines) ? meta.seasonStorylines : [],
     hallOfFameClasses: Array.isArray(meta?.hallOfFame?.classes) ? meta.hallOfFame.classes.slice(0, 20) : [],
     settings: normalizeLeagueSettings(meta?.settings ?? {}),
+    economy: normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year }),
     tradeDeadline,
     godMode: !!meta?.commissionerMode,
     commissionerMode: !!meta?.commissionerMode,
@@ -660,6 +675,32 @@ function ensureCompMeta(metaObj = ensureDynastyMeta(cache.getMeta())) {
     compPicksGeneratedForSeason: Array.isArray(metaObj?.compPicksGeneratedForSeason) ? metaObj.compPicksGeneratedForSeason : [],
     compPickAwardsHistory: Array.isArray(metaObj?.compPickAwardsHistory) ? metaObj.compPickAwardsHistory : [],
   };
+}
+
+function markOffseasonRelease(player, teamId, metaObj = ensureDynastyMeta(cache.getMeta())) {
+  if (!player || teamId == null) return;
+  if (!['offseason_resign', 'free_agency', 'draft', 'offseason', 'preseason'].includes(metaObj?.phase)) return;
+  const key = `${metaObj?.year ?? 0}:${player.id}`;
+  const history = {
+    ...(metaObj?.offseasonReleaseMap ?? {}),
+    [key]: {
+      playerId: Number(player.id),
+      teamId: Number(teamId),
+      season: Number(metaObj?.year ?? 0),
+      schemeFit: Number(player?.schemeFit ?? 65),
+      morale: Number(player?.morale ?? 70),
+      releasedAtWeek: Number(metaObj?.currentWeek ?? 1),
+    },
+  };
+  cache.setMeta({ offseasonReleaseMap: history });
+}
+
+function getOffseasonReturnSnapshot(playerId, teamId, metaObj = ensureDynastyMeta(cache.getMeta())) {
+  const key = `${metaObj?.year ?? 0}:${playerId}`;
+  const snapshot = metaObj?.offseasonReleaseMap?.[key];
+  if (!snapshot) return null;
+  if (!shouldPreserveChemistryOnReturn({ releaseRecord: snapshot, signingTeamId: teamId, currentSeason: metaObj?.year })) return null;
+  return snapshot;
 }
 
 function getContractAav(contract = {}) {
@@ -1235,8 +1276,10 @@ async function handleLoadSave({ leagueId }, id) {
       }
 
       // Migration/defaulting for league customization + commissioner metadata.
+      const normalizedEconomy = normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year });
       cache.setMeta({
-        settings: normalizeLeagueSettings(meta?.settings ?? {}),
+        settings: normalizeLeagueSettings({ ...(meta?.settings ?? {}), salaryCap: normalizedEconomy.currentSalaryCap }),
+        economy: normalizedEconomy,
         commissionerMode: !!meta?.commissionerMode,
         commissionerEverEnabled: !!meta?.commissionerEverEnabled,
         commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
@@ -1445,6 +1488,11 @@ async function handleNewLeague(payload, id) {
     }
 
     const seasonId = `s${league.season ?? 1}`;
+    const economy = normalizeLeagueEconomy({
+      ...DEFAULT_LEAGUE_ECONOMY,
+      baseSalaryCap: resolvedSettings.salaryCap,
+      currentSalaryCap: resolvedSettings.salaryCap,
+    }, { year: league.year });
     const meta = ensureLeagueMemoryMeta({
       id:              'league',
       name:            String(options.name || resolvedSettings.leagueName || `League ${leagueId}`).slice(0, 80),
@@ -1457,10 +1505,12 @@ async function handleNewLeague(payload, id) {
       difficulty:      options.difficulty ?? 'Normal',
       settings:        normalizeLeagueSettings({
         ...resolvedSettings,
+        salaryCap: economy.currentSalaryCap,
         conferenceNames,
         divisionNames,
         leagueSize: configuredTeams.length,
       }),
+      economy,
       commissionerMode: !!options.godMode,
       commissionerEverEnabled: !!options.godMode,
       commissionerLog: [],
@@ -1485,9 +1535,9 @@ async function handleNewLeague(payload, id) {
         ...teamWithoutRoster,
         staff: normalizedStaff,
         draftBoard: teamWithoutRoster?.draftBoard ?? { ranks: {}, notes: {}, tags: {}, shortlist: [], avoid: [] },
-        capTotal: resolvedSettings.salaryCap,
-        capRoom: resolvedSettings.salaryCap,
-        capSpace: resolvedSettings.salaryCap,
+        capTotal: economy.currentSalaryCap,
+        capRoom: economy.currentSalaryCap,
+        capSpace: economy.currentSalaryCap,
         wins:       0,
         losses:     0,
         ties:       0,
@@ -3512,6 +3562,11 @@ async function handleImportSave({ data, saveName }, id) {
       recalculateTeamCap(team.id);
       cache.updateTeam(team.id, deriveTeamUnitRatings(team.id));
     }
+    const importedEconomy = normalizeLeagueEconomy(meta?.economy ?? {}, { year: meta?.year });
+    cache.setMeta({
+      economy: importedEconomy,
+      settings: normalizeLeagueSettings({ ...(meta?.settings ?? {}), salaryCap: importedEconomy.currentSalaryCap }),
+    });
     await flushDirty();
     const userTeam = cache.getTeam(meta?.userTeamId);
     await Saves.save({
@@ -3598,7 +3653,20 @@ async function handleSignPlayer({ playerId, teamId, contract }, id) {
   }
 
   const oldTeamId = player.teamId;
-  cache.updatePlayer(player.id, { teamId: resolvedTeamId, contract, status: 'active', offers: [] });
+  const continuity = getOffseasonReturnSnapshot(player.id, resolvedTeamId, meta);
+  cache.updatePlayer(player.id, {
+    teamId: resolvedTeamId,
+    contract,
+    status: 'active',
+    offers: [],
+    schemeFit: continuity ? Math.max(Number(player?.schemeFit ?? 65), Number(continuity?.schemeFit ?? 65)) : player?.schemeFit,
+    morale: continuity ? Math.max(Number(player?.morale ?? 70), Number(continuity?.morale ?? 70) - 3) : player?.morale,
+    chemistryContinuity: continuity ? {
+      preserved: true,
+      teamId: Number(resolvedTeamId),
+      season: Number(meta?.year ?? 0),
+    } : player?.chemistryContinuity,
+  });
   recordOffseasonFaMovement({
     player,
     oldTeamId,
@@ -3719,11 +3787,15 @@ async function finalizeFreeAgencySigning(player, offer, liveMeta) {
   }
 
   const oldTeamId = player.teamId;
+  const continuity = getOffseasonReturnSnapshot(player.id, signingTeamId, liveMeta);
   cache.updatePlayer(player.id, {
     teamId: signingTeamId,
     status: 'active',
     contract: offer.contract,
     offers: [],
+    schemeFit: continuity ? Math.max(Number(player?.schemeFit ?? 65), Number(continuity?.schemeFit ?? 65)) : player?.schemeFit,
+    morale: continuity ? Math.max(Number(player?.morale ?? 70), Number(continuity?.morale ?? 70) - 3) : player?.morale,
+    chemistryContinuity: continuity ? { preserved: true, teamId: signingTeamId, season: Number(liveMeta?.year ?? 0) } : player?.chemistryContinuity,
   });
   recordOffseasonFaMovement({
     player,
@@ -4029,6 +4101,7 @@ async function handleReleasePlayer({ playerId, teamId }, id) {
   }
 
   // Use player.id (the canonical key from the cache) for all subsequent writes.
+  markOffseasonRelease(player, teamId, meta);
   cache.updatePlayer(player.id, { teamId: null, status: 'free_agent', offers: [] });
   recalculateTeamCap(teamId);
 
@@ -4111,6 +4184,7 @@ async function handleGetRoster({ teamId }, id) {
 
 async function handleGetFreeAgents(payload, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
+  const inflationMult = getSalaryInflationMultiplier(meta?.economy ?? {});
   const userTeamId = meta.userTeamId;
   const allFreeAgents = cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent');
   const userTeam = cache.getTeam(userTeamId);
@@ -4125,18 +4199,27 @@ async function handleGetFreeAgents(payload, id) {
 
   const freeAgents = allFreeAgents
     .map(p => {
+        const continuity = getOffseasonReturnSnapshot(p.id, userTeamId, meta);
+        const playbookKnowledgeScore = Math.max(0, Math.min(100, continuity ? Number(continuity?.schemeFit ?? p?.schemeFit ?? 50) : Number(p?.schemeFit ?? 50)));
+        const playbookKnowledgeLabel = playbookKnowledgeScore >= 80
+          ? 'High'
+          : playbookKnowledgeScore >= 60
+            ? 'Moderate'
+            : playbookKnowledgeScore >= 35
+              ? 'Low'
+              : 'None';
         const scoutingView = buildScoutingSnapshot(p, userTeam, { fogStrength: Number(getLeagueSetting('scoutingFogStrength', 50)), commissionerMode: !!meta?.commissionerMode });
         // Summarize offers for UI — bidding war edition
         const offers = p.offers || [];
         const userOffer = offers.find(o => o.teamId === userTeamId);
         const profile = buildContractProfile(p);
         const heat = computeMarketHeat(p.pos, allFreeAgents);
-        const ask = buildDemandFromProfile(p, profile, {
+        const ask = inflateContract(buildDemandFromProfile(p, profile, {
           marketHeat: heat,
           morale: p.morale ?? 68,
           fit: Number(p?.schemeFit ?? 65),
           teamSuccess: userWinPct,
-        });
+        }), inflationMult);
         const reSignInsight = evaluateReSignPriority(p, {
           marketHeat: heat,
           teamDirection: userDirection,
@@ -4273,6 +4356,10 @@ async function handleGetFreeAgents(payload, id) {
             negotiationStance: userOfferEval.negotiationStance,
             fitScore: userOfferEval.score,
             explanationSummary: userOfferEval.explanationSummary,
+          },
+          playbookKnowledge: {
+            score: Math.round(playbookKnowledgeScore),
+            label: playbookKnowledgeLabel,
           },
           reSign: reSignInsight,
           offers: {
@@ -4557,18 +4644,19 @@ async function handleUpdateFranchiseInvestments({ teamId, updates }, id) {
 
 async function handleGetExtensionAsk({ playerId }, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
+  const inflationMult = getSalaryInflationMultiplier(meta?.economy ?? {});
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
   const team = cache.getTeam(player.teamId ?? meta.userTeamId);
   const profile = buildContractProfile(player);
   const marketHeat = computeMarketHeat(player.pos, cache.getAllPlayers().filter((p) => !p.teamId || p.status === 'free_agent'));
-  const demandFromProfile = buildDemandFromProfile(player, profile, {
+  const demandFromProfile = inflateContract(buildDemandFromProfile(player, profile, {
     marketHeat,
     morale: calculateMorale(player, team, true),
     fit: player.schemeFit ?? 65,
     teamSuccess: ((team?.wins ?? 0) + (team?.ties ?? 0) * 0.5) / Math.max(1, (team?.wins ?? 0) + (team?.losses ?? 0) + (team?.ties ?? 0)),
-  });
-  const baselineAsk = calculateExtensionDemand(player, meta?.difficulty ?? 'Normal');
+  }), inflationMult);
+  const baselineAsk = inflateContract(calculateExtensionDemand(player, meta?.difficulty ?? 'Normal') ?? {}, inflationMult);
   const ask = {
     ...baselineAsk,
     baseAnnual: Math.max(baselineAsk?.baseAnnual ?? 0, demandFromProfile.baseAnnual),
@@ -4592,7 +4680,9 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   const player = cache.getPlayer(playerId);
   if (!player) { post(toUI.ERROR, { message: 'Player not found' }, id); return; }
 
-  const requested = calculateExtensionDemand(player, ensureDynastyMeta(cache.getMeta())?.difficulty ?? 'Normal');
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const inflationMult = getSalaryInflationMultiplier(meta?.economy ?? {});
+  const requested = inflateContract(calculateExtensionDemand(player, meta?.difficulty ?? 'Normal') ?? {}, inflationMult);
   const offeredAnnual = Number(contract?.baseAnnual ?? 0);
   const offeredYears = Number(contract?.yearsTotal ?? contract?.years ?? 0);
   const offeredGuarantee = Number(contract?.guaranteedPct ?? 0);
@@ -4622,7 +4712,6 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
 
     cache.updatePlayer(playerId, { contract, negotiationStatus: 'SIGNED' });
     recalculateTeamCap(resolvedTeamId);
-    const meta = ensureDynastyMeta(cache.getMeta());
     await Transactions.add({
       type: 'EXTEND',
       seasonId: meta.currentSeasonId,
@@ -5416,7 +5505,8 @@ function recalculateTeamCap(teamId) {
 
   const deadCap          = team.deadCap         || 0;
   const deadMoneyNextYear = team.deadMoneyNextYear || 0;
-  const capTotal          = team.capTotal         ?? Constants.SALARY_CAP.HARD_CAP;
+  const leagueCap = Number(getSafeMeta()?.economy?.currentSalaryCap ?? getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const capTotal          = team.capTotal         ?? leagueCap;
   const totalCapUsed      = activeCap + deadCap;
 
   cache.updateTeam(teamId, {
@@ -5463,10 +5553,16 @@ async function handleRestructureContract({ playerId, teamId }, id) {
     post(toUI.ERROR, { message: 'Cannot restructure: player must have at least 2 years remaining.' }, id);
     return;
   }
+  const restructureCount = Number(contract?.restructureCount ?? 0);
+  const sameSeason = Number(contract?.lastRestructureSeason ?? 0) === Number(meta?.year ?? 0);
+  if (sameSeason || restructureCount >= 2) {
+    post(toUI.ERROR, { message: 'Cannot restructure: limit reached for this contract this offseason.' }, id);
+    return;
+  }
 
   const maxConvertPct = Constants.SALARY_CAP.RESTRUCTURE_MAX_CONVERT_PCT;
-  const baseAnnual    = contract.baseAnnual ?? 0;
-  const convertAmount = Math.round(baseAnnual * maxConvertPct * 100) / 100;
+  const outcome = computeRestructureOutcome(contract, maxConvertPct);
+  const convertAmount = outcome.convertAmount;
 
   if (convertAmount <= 0) {
     post(toUI.ERROR, { message: 'Cannot restructure: no base salary to convert.' }, id);
@@ -5474,15 +5570,15 @@ async function handleRestructureContract({ playerId, teamId }, id) {
   }
 
   // New contract values after restructure
-  const newBase         = Math.round((baseAnnual - convertAmount) * 100) / 100;
-  const addedBonusTotal = convertAmount * yearsRemaining; // spread over remaining years
-  const existingBonus   = contract.signingBonus ?? 0;
-  const newSigningBonus = Math.round((existingBonus + addedBonusTotal) * 100) / 100;
+  const newBase = outcome.newBase;
+  const newSigningBonus = outcome.newSigningBonus;
 
   const newContract = {
     ...contract,
     baseAnnual:   newBase,
     signingBonus: newSigningBonus,
+    restructureCount: restructureCount + 1,
+    lastRestructureSeason: Number(meta?.year ?? 0),
   };
 
   cache.updatePlayer(player.id, { contract: newContract });
@@ -5505,7 +5601,11 @@ async function handleRestructureContract({ playerId, teamId }, id) {
       convertAmount,
       newBase,
       newSigningBonus,
-      capSavingsThisYear: Math.round((convertAmount - convertAmount / yearsRemaining) * 100) / 100,
+      oldCapHit: outcome.oldCapHit,
+      newCapHit: outcome.newCapHit,
+      capSavingsThisYear: outcome.capSavingsThisYear,
+      futureAnnualBonusDelta: outcome.futureAnnualBonusDelta,
+      restructureCount: restructureCount + 1,
     },
   }, id);
 }
@@ -6839,6 +6939,7 @@ async function handleStartNewSeason(payload, id) {
   const newYear     = (meta.year   ?? 2025) + 1;
   const newSeason   = (meta.season ?? 1)    + 1;
   const newSeasonId = `s${newSeason}`;
+  const nextEconomy = projectNextSeasonEconomy(meta?.economy ?? {}, newYear);
 
   // Reset team records and roll dead money forward
   for (const team of cache.getAllTeams()) {
@@ -6849,7 +6950,7 @@ async function handleStartNewSeason(payload, id) {
       wins: 0, losses: 0, ties: 0, ptsFor: 0, ptsAgainst: 0,
       deadCap:          rolledDeadCap,
       deadMoneyNextYear: 0,
-      capTotal:          Constants.SALARY_CAP.HARD_CAP,
+      capTotal:          nextEconomy.currentSalaryCap,
       fanApproval:        team?.fanApproval ?? 50,
       fanApprovalWinBoostUsed: 0,
       lossStreak: 0,
@@ -6879,6 +6980,12 @@ async function handleStartNewSeason(payload, id) {
     championTeamId:          null,
     offseasonProgressionDone:false,
     ownerGoals: generateOwnerGoals(),
+    offseasonReleaseMap: {},
+    economy: nextEconomy,
+    settings: normalizeLeagueSettings({
+      ...(meta?.settings ?? {}),
+      salaryCap: nextEconomy.currentSalaryCap,
+    }),
   });
 
   await flushDirty(); // AUTO-SAVE: phase transition — new season initialized to preseason.
