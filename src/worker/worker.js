@@ -132,6 +132,7 @@ import {
 setReloadRequiredCallback((reason) => {
   self.postMessage({ type: toUI.RELOAD_REQUIRED, payload: { reason } });
 });
+const isDev = !!import.meta?.env?.DEV;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,107 @@ function getLeagueSetting(key, fallback = null) {
   const meta = getSafeMeta();
   const settings = normalizeLeagueSettings(meta?.settings ?? {});
   return settings?.[key] ?? fallback;
+}
+
+const SIM_SESSION_STAGES = Object.freeze([
+  'regular_season',
+  'playoffs',
+  'retirements_resignings',
+  'free_agency',
+  'draft_setup',
+  'draft_execution',
+  'preseason_transition',
+]);
+
+function buildSimSessionPatch({
+  status = 'running',
+  targetPhase = null,
+  stage = null,
+  checkpoint = null,
+  lastError = null,
+} = {}) {
+  return {
+    simSession: {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      status,
+      targetPhase,
+      stage,
+      checkpoint,
+      lastError,
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+async function persistSimSession(update = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  cache.setMeta({
+    simSession: {
+      ...(meta?.simSession ?? {}),
+      ...update,
+      updatedAt: Date.now(),
+    },
+  });
+  await flushDirty();
+}
+
+function validateLeagueFlowState({ stage = 'runtime', requireDraftState = false } = {}) {
+  const meta = ensureDynastyMeta(cache.getMeta());
+  const players = cache.getAllPlayers();
+  const teams = cache.getAllTeams();
+  const issues = [];
+
+  for (const p of players) {
+    const hasTeam = Number.isFinite(Number(p?.teamId));
+    const status = String(p?.status ?? '');
+    if (status !== 'free_agent' && status !== 'retired' && status !== 'draft_eligible' && !hasTeam) {
+      issues.push(`[${stage}] player ${p?.id} has invalid status/team linkage`);
+      break;
+    }
+    const c = normalizeContract(p);
+    if (![c.baseAnnual, c.signingBonus, c.yearsTotal].every(Number.isFinite)) {
+      issues.push(`[${stage}] player ${p?.id} has invalid contract numbers`);
+      break;
+    }
+  }
+
+  const legality = validateLeagueTeamLegality({
+    teams,
+    players,
+    phase: meta?.phase,
+    hardCap: Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP)),
+  });
+  for (const issue of legality.issues.slice(0, 6)) issues.push(`[${stage}] ${issue.message}`);
+
+  for (const team of teams) {
+    const capUsed = Number(team?.capUsed ?? 0);
+    const capRoom = Number(team?.capRoom ?? 0);
+    if (!Number.isFinite(capUsed) || !Number.isFinite(capRoom)) {
+      issues.push(`[${stage}] team ${team?.abbr ?? team?.id} has invalid cap math`);
+      break;
+    }
+  }
+
+  if (requireDraftState || meta?.phase === 'draft') {
+    const ds = meta?.draftState;
+    if (!ds || !Array.isArray(ds.picks) || ds.picks.length === 0) {
+      issues.push(`[${stage}] draft state missing picks`);
+    }
+    const draftEligible = players.filter((p) => p?.status === 'draft_eligible');
+    if (draftEligible.length === 0 && (!ds || Number(ds?.currentPickIndex ?? 0) < Number(ds?.picks?.length ?? 0))) {
+      issues.push(`[${stage}] draft pool missing before draft completion`);
+    }
+  }
+
+  if (issues.length > 0) {
+    if (isDev) {
+      console.groupCollapsed(`[Validation] ${stage} (${issues.length} issues)`);
+      issues.forEach((m) => console.warn(m));
+      console.groupEnd();
+    }
+    return { ok: false, issues };
+  }
+  return { ok: true, issues: [] };
 }
 
 function normalizeFranchiseInvestments(raw = {}) {
@@ -1287,6 +1389,18 @@ async function handleLoadSave({ leagueId }, id) {
         commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog : [],
       });
 
+      if (meta?.simSession?.status === 'running') {
+        cache.setMeta({
+          simSession: {
+            ...(meta.simSession ?? {}),
+            status: 'interrupted',
+            lastError: meta?.simSession?.lastError ?? 'Simulation interrupted by reload. You can safely retry.',
+            updatedAt: Date.now(),
+          },
+        });
+        post(toUI.NOTIFICATION, { level: 'warn', message: 'Recovered interrupted simulation session. Retry sim to continue safely.' });
+      }
+
       if (meta?.schedule?.weeks?.length) {
         for (const weekRow of meta.schedule.weeks) {
           const resolvedWeek = Number(weekRow?.week ?? 0);
@@ -1308,6 +1422,8 @@ async function handleLoadSave({ leagueId }, id) {
         }
         cache.setMeta({ schedule: meta.schedule });
       }
+
+      validateLeagueFlowState({ stage: 'post-load', requireDraftState: meta?.phase === 'draft' });
 
       // Auto-generate draft class if save is in draft phase but prospects are missing.
       // This guards against iOS saves where the worker restarted mid-draft.
@@ -2721,6 +2837,16 @@ async function handleSimToWeek({ targetWeek }, id) {
 // ── Handler: SIM_TO_PHASE ────────────────────────────────────────────────────
 
 async function handleSimToPhase({ targetPhase }, id) {
+  if (batchSimControl.running) {
+    post(toUI.SIM_BATCH_STATUS, {
+      status: 'running',
+      targetPhase: batchSimControl.targetPhase,
+      stage: batchSimControl.stage,
+    });
+    post(toUI.NOTIFICATION, { level: 'info', message: 'Simulation already in progress.' });
+    post(toUI.FULL_STATE, buildViewState(), id);
+    return;
+  }
   const meta = ensureDynastyMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
 
@@ -2754,6 +2880,9 @@ async function handleSimToPhase({ targetPhase }, id) {
     stage: meta.phase,
   };
   post(toUI.SIM_BATCH_STATUS, { status: 'running', targetPhase, stage: meta.phase });
+  await persistSimSession({
+    ...(buildSimSessionPatch({ targetPhase, stage: meta.phase, checkpoint: 'start' }).simSession),
+  });
 
   try {
     while (iterations < MAX_ITERATIONS) {
@@ -2778,21 +2907,33 @@ async function handleSimToPhase({ targetPhase }, id) {
         phase: currentMeta.phase,
         targetPhase,
       });
+      await persistSimSession({
+        status: 'running',
+        targetPhase,
+        stage: currentMeta.phase,
+        checkpoint: `iter_${iterations}`,
+      });
 
       // Advance based on current phase
       // Pass skipUserGame:true during batch sim to avoid prompting the user
       if (['regular', 'playoffs', 'preseason'].includes(currentMeta.phase)) {
+        validateLeagueFlowState({ stage: currentMeta.phase });
         await handleAdvanceWeek({ skipUserGame: true }, null);
       } else if (['offseason_resign', 'offseason'].includes(currentMeta.phase)) {
+        validateLeagueFlowState({ stage: 'retirements_resignings' });
         await handleAdvanceOffseason({}, null);
       } else if (currentMeta.phase === 'free_agency') {
+        validateLeagueFlowState({ stage: 'free_agency' });
         await handleAdvanceFreeAgencyDay({}, null);
       } else if (currentMeta.phase === 'draft') {
         // Auto-sim all draft picks. The draft pipeline itself is responsible
         // for transitioning into the next season (handleSimDraftPick and
         // handleMakeDraftPick both call handleStartNewSeason once all picks
         // are made), so we deliberately do NOT call handleAdvanceOffseason here.
+        await persistSimSession({ status: 'running', targetPhase, stage: 'draft_setup', checkpoint: 'ensure_draft_state' });
         await handleStartDraft({}, null);
+        validateLeagueFlowState({ stage: 'draft_setup', requireDraftState: true });
+        await persistSimSession({ status: 'running', targetPhase, stage: 'draft_execution', checkpoint: 'start' });
         let draftDone = false;
         let draftGuard = 0;
         while (!draftDone && draftGuard < 500) {
@@ -2816,6 +2957,7 @@ async function handleSimToPhase({ targetPhase }, id) {
           post(toUI.FULL_STATE, buildViewState(), id);
           return;
         }
+        validateLeagueFlowState({ stage: 'draft_execution', requireDraftState: false });
       } else {
         // Unknown phase — break to prevent infinite loop
         break;
@@ -2827,6 +2969,24 @@ async function handleSimToPhase({ targetPhase }, id) {
 
     // Final state broadcast
     post(toUI.SIM_BATCH_STATUS, { status: 'completed', targetPhase, stage: cache.getMeta()?.phase ?? null });
+    await persistSimSession({
+      status: 'completed',
+      targetPhase,
+      stage: cache.getMeta()?.phase ?? null,
+      checkpoint: 'complete',
+      lastError: null,
+    });
+    post(toUI.FULL_STATE, buildViewState(), id);
+  } catch (error) {
+    await persistSimSession({
+      status: 'failed',
+      targetPhase,
+      stage: cache.getMeta()?.phase ?? null,
+      checkpoint: 'error',
+      lastError: error?.message ?? 'Unknown simulation error',
+    });
+    post(toUI.SIM_BATCH_STATUS, { status: 'failed', targetPhase, stage: cache.getMeta()?.phase ?? null });
+    post(toUI.NOTIFICATION, { level: 'warn', message: `Simulation paused: ${error?.message ?? 'unknown error'}. You can retry or cancel.` });
     post(toUI.FULL_STATE, buildViewState(), id);
   } finally {
     batchSimControl = {
@@ -5919,7 +6079,15 @@ async function handleConductPrivateWorkout({ playerId }, id) {
 
 
 async function handleGetDraftState(payload, id) {
-  post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  try {
+    const meta = ensureDynastyMeta(cache.getMeta());
+    if (meta?.phase === 'draft' && !meta?.draftState) {
+      await handleStartDraft({}, null);
+    }
+    post(toUI.DRAFT_STATE, buildDraftStateView(), id);
+  } catch (error) {
+    post(toUI.ERROR, { message: `Draft state unavailable. Retry or cancel sim. (${error?.message ?? 'unknown error'})` }, id);
+  }
 }
 
 

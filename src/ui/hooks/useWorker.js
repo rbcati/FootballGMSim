@@ -377,6 +377,11 @@ export function useWorker() {
         if (!pendingRef.current.has(msg.id)) return;
         pendingRef.current.delete(msg.id);
         reject(new Error(`Worker timeout while handling ${type}`));
+        if (type === toWorker.GET_DRAFT_STATE) {
+          dispatch({ type: 'NOTIFY', level: 'warn', message: 'Draft state request timed out. Retry, cancel sim, or return to league screen.' });
+          dispatch({ type: 'CLEAR_BUSY' });
+          return;
+        }
         dispatch({ type: 'ERROR', message: `Request timed out: ${type}. Please retry.` });
       }, effectiveTimeout);
       pendingRef.current.set(msg.id, { resolve, reject, silent, timeoutId });

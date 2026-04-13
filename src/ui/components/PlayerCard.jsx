@@ -19,6 +19,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
+import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
 
 // ── OVR tier system ────────────────────────────────────────────────────────────
 
@@ -281,7 +282,7 @@ function InjuryBadge({ player }) {
 
 function CompactCard({ player, onClick, isSelected }) {
   const tier = ovrTier(player.ovr ?? 70);
-  const contract = player.contract || {};
+  const contract = derivePlayerContractFinancials(player);
   return (
     <div
       role={onClick ? "button" : undefined}
@@ -321,7 +322,7 @@ function CompactCard({ player, onClick, isSelected }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <PosBadge pos={player.pos} />
           <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Age {player.age ?? "?"}</span>
-          {contract.salary && <span style={{ fontSize: "0.7rem", color: "var(--text-subtle)" }}>{fmt$(contract.salary)}/yr</span>}
+          {contract.annualSalary != null && <span style={{ fontSize: "0.7rem", color: "var(--text-subtle)" }}>{formatContractMoney(contract.annualSalary)}/yr</span>}
         </div>
       </div>
 
@@ -337,7 +338,7 @@ function StandardCard({ player, onClick, isSelected, leagueLeaders = null }) {
   const tier    = ovrTier(player.ovr ?? 70);
   const attrKeys = (POS_ATTRS[player.pos] || POS_ATTRS.QB).slice(0, 4);
   const attrs    = getAttrs(player, attrKeys);
-  const contract = player.contract || {};
+  const contract = derivePlayerContractFinancials(player);
   const traits   = (player.traits || []).slice(0, 3);
   const pColor   = posColor(player.pos);
 
@@ -420,18 +421,18 @@ function StandardCard({ player, onClick, isSelected, leagueLeaders = null }) {
       )}
 
       {/* Contract footer */}
-      {(contract.salary || contract.years) && (
+      {(contract.annualSalary != null || contract.yearsRemaining != null) && (
         <div style={{
           marginTop: 10, paddingTop: 8,
           borderTop: "1px solid var(--hairline)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
           <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-            {fmt$(contract.salary)}/yr
+            {formatContractMoney(contract.annualSalary)}/yr
           </span>
-          {contract.years != null && (
+          {contract.yearsRemaining != null && (
             <span style={{ fontSize: "0.7rem", color: "var(--text-subtle)" }}>
-              {contract.years} yr{contract.years !== 1 ? "s" : ""}
+              {contract.yearsRemaining} yr{contract.yearsRemaining !== 1 ? "s" : ""}
             </span>
           )}
         </div>
@@ -446,7 +447,7 @@ function HeroCard({ player, onClick, onClose, isSelected, leagueLeaders = null }
   const tier     = ovrTier(player.ovr ?? 70);
   const attrKeys = POS_ATTRS[player.pos] || POS_ATTRS.QB;
   const attrs    = getAttrs(player, attrKeys);
-  const contract = player.contract || {};
+  const contract = derivePlayerContractFinancials(player);
   const traits   = player.traits || [];
   const pColor   = posColor(player.pos);
 
@@ -549,8 +550,8 @@ function HeroCard({ player, onClick, onClose, isSelected, leagueLeaders = null }
         gap: 8,
       }}>
         {[
-          { label: "Contract", value: fmt$(contract.salary) + "/yr" },
-          { label: "Years Left", value: contract.years != null ? `${contract.years} yr${contract.years !== 1 ? "s" : ""}` : "—" },
+          { label: "Contract", value: `${formatContractMoney(contract.annualSalary)}/yr` },
+          { label: "Years Left", value: contract.yearsRemaining != null ? `${contract.yearsRemaining} yr${contract.yearsRemaining !== 1 ? "s" : ""}` : "—" },
           { label: "Potential", value: player.potential != null ? `${player.potential} POT` : "—" },
         ].map(({ label, value }) => (
           <div key={label} style={{ textAlign: "center" }}>
