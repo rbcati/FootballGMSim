@@ -105,7 +105,7 @@ import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } fro
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
-import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule } from '../core/gameArchive.js';
+import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload } from '../core/gameArchive.js';
 import {
   DEFAULT_LEAGUE_ECONOMY,
   normalizeLeagueEconomy,
@@ -3261,7 +3261,7 @@ async function handleGetBoxScore({ gameId }, id) {
 
     if (!game) game = buildScheduleFallback();
 
-    game = normalizeArchivedGamePayload(game);
+    game = enrichArchivedGamePayload(game);
 
     if (!game) {
       post(toUI.BOX_SCORE, { gameId, game: null, error: 'Game not found' }, id);

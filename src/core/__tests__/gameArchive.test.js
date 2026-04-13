@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyArchiveQuality,
+  enrichArchivedGamePayload,
   normalizeArchivedGamePayload,
   recoverArchivedGameFromSchedule,
   summarizeArchiveDefects,
@@ -101,5 +102,31 @@ describe('gameArchive helpers', () => {
     expect(game.driveSummary).toHaveLength(1);
     expect(game.playLog).toHaveLength(1);
     expect(game.playerStats?.home?.qb1?.stats?.passYd).toBe(305);
+  });
+
+  it('enriches legacy leader-only archives with playable fallback stats', () => {
+    const game = enrichArchivedGamePayload({
+      id: '2034_w9_10_11',
+      seasonId: '2034',
+      week: 9,
+      homeId: 10,
+      awayId: 11,
+      homeScore: 24,
+      awayScore: 20,
+      summary: {
+        leaders: {
+          pass: { playerId: 'qb10', teamId: 10, name: 'A. Passer', pos: 'QB', stats: { passComp: 22, passAtt: 31, passYd: 278, passTD: 2 } },
+          rush: { playerId: 'rb11', teamId: 11, name: 'B. Runner', pos: 'RB', stats: { rushAtt: 19, rushYd: 94, rushTD: 1 } },
+        },
+      },
+      playLog: [{ quarter: 4, teamId: 10, text: 'Game-winning touchdown pass', isTouchdown: true, clock: '1:12' }],
+    });
+
+    expect(game.playerStats?.home?.qb10?.stats?.passYd).toBe(278);
+    expect(game.playerStats?.away?.rb11?.stats?.rushYd).toBe(94);
+    expect(game.teamStats?.home?.totalYards).toBeGreaterThan(0);
+    expect(game.scoringSummary?.length).toBeGreaterThan(0);
+    expect(game.driveSummary?.length).toBeGreaterThan(0);
+    expect(game.archiveQuality).toBe('full');
   });
 });
