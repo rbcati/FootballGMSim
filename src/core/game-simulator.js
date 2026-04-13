@@ -3072,14 +3072,59 @@ function transformStatsForBoxScore(playerStatsMap, roster) {
         }
 
         if (p) {
+            const normalizedStats = normalizeGameStatsForBoxScore(playerStatsMap[pid]);
             box[pid] = {
                 name: p.name,
                 pos: p.pos,
-                stats: playerStatsMap[pid]
+                stats: normalizedStats
             };
         }
     }
     return box;
+}
+
+function normalizeGameStatsForBoxScore(rawStats = {}) {
+    const stats = { ...(rawStats || {}) };
+
+    const alias = (canonicalKey, ...keys) => {
+        if (stats[canonicalKey] == null) {
+            for (const key of keys) {
+                if (stats[key] != null) {
+                    stats[canonicalKey] = stats[key];
+                    break;
+                }
+            }
+        }
+    };
+
+    alias('passYd', 'passYds');
+    alias('passTD', 'passTDs');
+    alias('rushYd', 'rushYds');
+    alias('rushTD', 'rushTDs');
+    alias('recYd', 'recYds');
+    alias('recTD', 'recTDs');
+    alias('interceptions', 'INT', 'ints');
+    alias('fumblesLost', 'fumbles');
+
+    if (stats.completionPct == null) {
+        const att = Number(stats.passAtt ?? 0);
+        const comp = Number(stats.passComp ?? 0);
+        stats.completionPct = att > 0 ? Math.round((comp / att) * 1000) / 10 : 0;
+    }
+
+    if (stats.ypc == null) {
+        const rushAtt = Number(stats.rushAtt ?? 0);
+        const rushYd = Number(stats.rushYd ?? 0);
+        stats.ypc = rushAtt > 0 ? Math.round((rushYd / rushAtt) * 100) / 100 : 0;
+    }
+
+    if (stats.ypr == null) {
+        const rec = Number(stats.receptions ?? 0);
+        const recYd = Number(stats.recYd ?? 0);
+        stats.ypr = rec > 0 ? Math.round((recYd / rec) * 100) / 100 : 0;
+    }
+
+    return stats;
 }
 
 /**
@@ -3238,10 +3283,11 @@ export function simulateBatch(games, options = {}) {
                     for (let i = 0; i < roster.length; i++) {
                         const player = roster[i];
                         if (player && player.stats && player.stats.game) {
+                            const normalizedStats = normalizeGameStatsForBoxScore(player.stats.game);
                             playerStats[String(player.id)] = {
                                 name: player.name,
                                 pos: player.pos,
-                                ...player.stats.game
+                                ...normalizedStats
                             };
                         }
                     }
