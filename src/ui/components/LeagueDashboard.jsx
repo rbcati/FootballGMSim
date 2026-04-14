@@ -1042,12 +1042,17 @@ function ScheduleTab({
                 padding: "10px 12px",
                 border: "1px solid var(--hairline)",
                 borderColor: isUserGame ? "var(--accent)" : "var(--hairline)",
+                borderLeft: `3px solid ${game.played ? "color-mix(in oklab, var(--text-muted) 70%, transparent)" : "color-mix(in oklab, var(--accent) 65%, transparent)"}`,
+                background: "color-mix(in oklab, var(--surface) 90%, black 10%)",
                 ...(isClickable ? { cursor: "pointer" } : {}),
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
-                  Week {selectedWeek} · {away.abbr} @ {home.abbr}
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 700, color: "var(--text-subtle)" }}>W{selectedWeek}</span>
+                  <span style={{ border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 7px", fontSize: "var(--text-xs)" }}>AWAY {away.abbr}</span>
+                  <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>@</span>
+                  <span style={{ border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 7px", fontSize: "var(--text-xs)" }}>HOME {home.abbr}</span>
                 </div>
                 <span className="badge">{game.played ? "Final" : "Upcoming"}</span>
               </div>
@@ -1128,7 +1133,7 @@ function ScheduleTab({
               )}
               {!game.played && (
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>{away.abbr} at {home.abbr}</div>
+                  <div style={{ fontWeight: 700 }}>{away.abbr} @ {home.abbr}</div>
                   <Button size="sm" variant="outline" onClick={() => canOpenGameDetail && onGameSelect?.(upcomingGameId)} disabled={!canOpenGameDetail}>
                     {canOpenGameDetail ? "Game Details" : "Scheduled"}
                   </Button>
@@ -1153,8 +1158,8 @@ function ScheduleTab({
                 </div>
               )}
               <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(away.id); }}>{away.abbr}</button>
-                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(home.id); }}>{home.abbr}</button>
+                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(away.id); }}>Away roster</button>
+                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(home.id); }}>Home roster</button>
                 {showStakes ? <span className="badge">{nextGameStakes > 80 ? "Rivalry" : "Stakes"}</span> : null}
                 {isTopWeekTeam ? <span className="badge">Team of Week</span> : null}
               </div>
