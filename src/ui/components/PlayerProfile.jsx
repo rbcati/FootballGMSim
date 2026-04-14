@@ -16,6 +16,7 @@ import { buildTeamIntelligence, classifyNeedFitForProspect, describeProspectProf
 import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils/teamChemistry.js";
 import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 import { evaluateReSigningPriority, summarizeRetentionPlan } from "../../core/retention/reSigning.js";
+import FaceAvatar from './FaceAvatar.jsx';
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -508,23 +509,12 @@ export default function PlayerProfile({
               }}
             >
               {/* Avatar */}
-              <div
-                style={{
-                  width: 54,
-                  height: 54,
-                  borderRadius: "14px",
-                  background: "var(--surface-sunken)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "1.3rem",
-                  fontWeight: 700,
-                  color: "var(--text-muted)",
-                  flexShrink: 0,
-                }}
-              >
-                {player.pos}
-              </div>
+              <FaceAvatar
+                face={player.face}
+                seed={player.id ?? player.name}
+                size={54}
+                style={{ flexShrink: 0 }}
+              />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <h2
                   style={{

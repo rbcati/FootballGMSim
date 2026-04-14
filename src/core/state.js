@@ -3,6 +3,7 @@
 
 // Import dependencies
 import { Constants } from './constants.js';
+import { ensureFaceConfig } from './face.js';
 
 export let state = null;
 
@@ -453,6 +454,13 @@ export const State = {
         history: [],
       };
       migratedTeam.rivalTeamId = migratedTeam?.rivalTeamId ?? null;
+      if (migratedTeam.staff && typeof migratedTeam.staff === 'object') {
+        Object.keys(migratedTeam.staff).forEach((key) => {
+          if (migratedTeam.staff[key] && typeof migratedTeam.staff[key] === 'object') {
+            migratedTeam.staff[key] = ensureFaceConfig(migratedTeam.staff[key], 'staff');
+          }
+        });
+      }
 
       // Ensure team stats are initialized
       if (!migratedTeam.stats) {
@@ -486,7 +494,7 @@ export const State = {
           else if (Object.keys(migratedPlayer.stats.career).length === 0) migratedPlayer.stats.career = getZeroStats();
         }
         
-        return migratedPlayer;
+        return ensureFaceConfig(migratedPlayer, 'player');
       }).filter(p => p !== null);
       
       return migratedTeam;

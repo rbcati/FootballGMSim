@@ -1,4 +1,5 @@
 import { Utils } from '../utils.js';
+import { generateFaceConfig } from '../face.js';
 
 export const CORE_STAFF_ROLES = Object.freeze({
   headCoach: { key: 'headCoach', title: 'Head Coach', domain: 'leadership' },
@@ -41,7 +42,9 @@ export function generateStaffCandidate(roleKey, { year = 2025, teamId = -1 } = {
   const overall = clamp(48 + Utils.rand(0, 45), 35, 97);
   const specialties = buildSpecialties(role.key, overall);
   const repIndex = overall >= 89 ? 3 : overall >= 77 ? 2 : overall >= 64 ? 1 : 0;
-  return { id: Utils.id(), name: `${Utils.choice(FIRST)} ${Utils.choice(LAST)}`, age: Utils.rand(34, 67), role: role.title, roleKey: role.key, overall, specialtyRatings: specialties, contractYears: overall >= 85 ? Utils.rand(3, 5) : Utils.rand(2, 4), annualSalary: Math.round((1.1 + (overall - 50) * 0.08 + (roleKey === 'headCoach' ? 1.5 : 0)) * 10) / 10, reputationTier: TIERS[repIndex], styleTags: buildStyleTags(role.key, specialties), modifiers: buildModifiers(role.key, specialties), continuity: { teamId, sinceYear: year, tenureYears: 0 } };
+  const id = Utils.id();
+  const name = `${Utils.choice(FIRST)} ${Utils.choice(LAST)}`;
+  return { id, name, age: Utils.rand(34, 67), role: role.title, roleKey: role.key, overall, specialtyRatings: specialties, contractYears: overall >= 85 ? Utils.rand(3, 5) : Utils.rand(2, 4), annualSalary: Math.round((1.1 + (overall - 50) * 0.08 + (roleKey === 'headCoach' ? 1.5 : 0)) * 10) / 10, reputationTier: TIERS[repIndex], styleTags: buildStyleTags(role.key, specialties), modifiers: buildModifiers(role.key, specialties), continuity: { teamId, sinceYear: year, tenureYears: 0 }, face: generateFaceConfig(`staff-${id}-${name}`, 'staff') };
 }
 
 export function evaluateStaffImpact(staff = {}) {

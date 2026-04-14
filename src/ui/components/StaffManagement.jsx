@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 import FranchiseInvestmentsPanel from './FranchiseInvestmentsPanel.jsx';
+import FaceAvatar from './FaceAvatar.jsx';
 
 const ROLE_ORDER = ['headCoach', 'offCoordinator', 'defCoordinator', 'scoutDirector', 'headTrainer'];
 const ROLE_LABELS = {
@@ -105,7 +106,7 @@ export default function StaffManagement({ league, actions, compact = false }) {
           {currentStaffRows.map(({ roleKey, member }) => (
             <div key={roleKey} className="card" style={{ padding: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <strong>{ROLE_LABELS[roleKey]}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FaceAvatar face={member?.face} seed={member?.id ?? member?.name} size={30} /><strong>{ROLE_LABELS[roleKey]}</strong></div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {member?.overall ?? '--'}</span>
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{member?.name ?? 'Vacant'} · {member?.age ?? '--'} · {member?.reputationTier ?? 'Unproven'}</div>
@@ -140,9 +141,9 @@ export default function StaffManagement({ league, actions, compact = false }) {
           {filteredMarket.slice(0, 24).map((candidate) => (
             <div key={candidate.id} className="card" style={{ padding: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-                <div>
-                  <strong>{candidate.name}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ROLE_LABELS[candidate.roleKey] ?? candidate.role}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FaceAvatar face={candidate?.face} seed={candidate?.id ?? candidate?.name} size={32} />
+                  <div><strong>{candidate.name}</strong><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ROLE_LABELS[candidate.roleKey] ?? candidate.role}</div></div>
                 </div>
                 <div style={{ fontSize: 12, textAlign: 'right' }}>OVR {candidate.overall} · {candidate.reputationTier}<br />Demand {fmtMoney(candidate.annualSalary)} / {candidate.contractYears}y</div>
               </div>
