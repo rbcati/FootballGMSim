@@ -135,6 +135,7 @@ export const toWorker = Object.freeze({
   GET_LEAGUE_LEADERS: 'GET_LEAGUE_LEADERS',   // { mode: 'season'|'alltime' }
   GET_DASHBOARD_LEADERS: 'GET_DASHBOARD_LEADERS', // { }
   GET_ALL_PLAYER_STATS: 'GET_ALL_PLAYER_STATS', // {}
+  GET_ANALYTICS_DASHBOARD: 'GET_ANALYTICS_DASHBOARD', // {}
 
   /** Mid-season award races & All-Pro projections */
   GET_AWARD_RACES:    'GET_AWARD_RACES',      // {}
@@ -215,6 +216,7 @@ export const toUI = Object.freeze({
   LEAGUE_LEADERS:     'LEAGUE_LEADERS',       // { mode, categories }
   DASHBOARD_LEADERS:  'DASHBOARD_LEADERS',    // { league, team }
   ALL_PLAYER_STATS:   'ALL_PLAYER_STATS',     // { stats[] }
+  ANALYTICS_DASHBOARD: 'ANALYTICS_DASHBOARD', // { analytics }
   AWARD_RACES:        'AWARD_RACES',          // { week, year, awards, allPro }
 
   /** Record Book & Hall of Fame */

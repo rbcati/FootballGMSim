@@ -583,6 +583,10 @@ export function useWorker() {
     getAllPlayerStats: (payload) =>
       request(toWorker.GET_ALL_PLAYER_STATS, payload, { silent: true }),
 
+    /** Fetch analytics dashboard payload (returns a Promise). */
+    getAnalyticsDashboard: () =>
+      request(toWorker.GET_ANALYTICS_DASHBOARD, {}, { silent: true }),
+
     /** Fetch mid-season award races & All-Pro projections (returns a Promise). */
     getAwardRaces: () =>
       request(toWorker.GET_AWARD_RACES, {}, { silent: true }),

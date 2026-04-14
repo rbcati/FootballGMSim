@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import ExtensionNegotiationModal from './ExtensionNegotiationModal.jsx';
+import FaceAvatar from './FaceAvatar.jsx';
 import {
   buildRetentionBoard,
   summarizeRetentionRecommendation,
@@ -42,9 +43,12 @@ function PlayerRow({ row, onOpenTalks, onTag }) {
   return (
     <div style={{ borderBottom: '1px solid var(--hairline)', padding: '8px 0' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 13 }}>{player.name} · {player.pos}</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age {player.age} · OVR {player.ovr} · {money(contract.annualSalary)} · {contract.yearsRemaining ?? 0}y left</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FaceAvatar face={player?.face} seed={player?.id ?? player?.name} size={28} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 13 }}>{player.name} · {player.pos}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age {player.age} · OVR <abbr title="Overall rating">OVR</abbr> {player.ovr} · {money(contract.annualSalary)} · {contract.yearsRemaining ?? 0}y left</div>
+          </div>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Recommendation</div>
@@ -65,7 +69,7 @@ function PlayerRow({ row, onOpenTalks, onTag }) {
   );
 }
 
-export default function ContractCenter({ league, actions, compact = false }) {
+export default function ContractCenter({ league, actions, compact = false, onNavigate = null }) {
   const [extensionPlayer, setExtensionPlayer] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
 
@@ -97,7 +101,10 @@ export default function ContractCenter({ league, actions, compact = false }) {
   return (
     <div className="app-screen-stack" style={{ display: 'grid', gap: compact ? 'var(--space-2)' : 'var(--space-3)' }}>
       <section className="card" style={{ padding: compact ? '10px' : 'var(--space-3)' }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Contract Center</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: 16 }}>Contract Center</h2>
+          <Button size="sm" variant="outline" onClick={() => onNavigate?.('Team')} aria-label="Back to team hub">Back to Team Hub</Button>
+        </div>
         <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, fontSize: 12 }}>
           <div><strong>Cap total:</strong> {money(capSnapshot.capTotal)}</div>
           <div><strong>Cap used:</strong> {money(capSnapshot.capUsed)}</div>
