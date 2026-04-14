@@ -480,6 +480,10 @@ export function useWorker() {
     importSave: (data, saveName) => request(toWorker.IMPORT_SAVE, { data, saveName }),
     exportLeagueConfig: ()       => request(toWorker.EXPORT_LEAGUE_CONFIG, {}, { silent: true }),
     importLeagueConfig: (config) => request(toWorker.IMPORT_LEAGUE_CONFIG, { config }),
+    exportLeagueFile: ()         => request(toWorker.EXPORT_LEAGUE_FILE, {}, { silent: true }),
+    importLeagueFile: (data, saveName) => request(toWorker.IMPORT_LEAGUE_FILE, { data, saveName }),
+    importCustomRoster: (roster) => request(toWorker.IMPORT_CUSTOM_ROSTER, { roster }),
+    importDraftClass: (draftClass) => request(toWorker.IMPORT_DRAFT_CLASS, { draftClass }),
     deleteSlot: (slotKey)        => request(toWorker.DELETE_SLOT, { slotKey }, { silent: true }),
 
     /** Wipe the save and restart. */

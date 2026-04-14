@@ -75,7 +75,7 @@ export function createEventEntry(type, payload, context = {}) {
   };
 }
 
-export function generateDynamicEvents({ players = [], teams = [], userTeamId = null, week = 1, year = null, phase = 'regular', rng = Math.random } = {}) {
+export function generateDynamicEvents({ players = [], teams = [], userTeamId = null, week = 1, year = null, phase = 'regular', suspensionFrequency = 50, rng = Math.random } = {}) {
   const teamById = Object.fromEntries((teams || []).map((t) => [Number(t.id), t]));
   const candidates = players
     .filter((p) => Number(p?.teamId) >= 0 && p?.status !== 'retired' && p?.status !== 'draft_eligible')
@@ -113,7 +113,8 @@ export function generateDynamicEvents({ players = [], teams = [], userTeamId = n
       }, { week, year, phase }));
     }
 
-    if (rng() < clamp((Number(profile?.offFieldRisk ?? 20) - discipline) / 4000, 0, 0.04)) {
+    const suspensionChance = clamp((Number(profile?.offFieldRisk ?? 20) - discipline) / 4000, 0, 0.04) * clamp(Number(suspensionFrequency) / 50, 0, 2);
+    if (rng() < suspensionChance) {
       events.push(createEventEntry(EVENT_TYPES.SUSPENSION, {
         headline: `${player.name} suspended by league office`,
         body: `League discipline will sideline ${player.name} for conduct policy violations.`,
