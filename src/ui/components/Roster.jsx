@@ -25,6 +25,9 @@
  */
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
 import PlayerCompareTray from "./PlayerCompareTray.jsx";
@@ -1184,12 +1187,10 @@ function RosterTable({
 // ── Depth Chart View ──────────────────────────────────────────────────────────
 
 /** Single player card inside a depth chart slot. */
-function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeName }) {
+function DepthCard({ player, isStarter, schemeName, style = {}, dragHandleProps = {}, onSelect }) {
   if (!player) {
     return (
       <div
-        onDragOver={onDragOver}
-        onDrop={onDrop}
         style={{
           minWidth: 130,
           padding: "6px 10px",
@@ -1201,7 +1202,7 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeN
           textAlign: "center",
         }}
       >
-        —
+        Empty
       </div>
     );
   }
@@ -1218,10 +1219,7 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeN
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
+      onClick={() => onSelect?.(player.id)}
       style={{
         minWidth: 130,
         maxWidth: 160,
@@ -1231,7 +1229,9 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeN
         background: isStarter ? "var(--accent-muted)" : "var(--surface)",
         border: borderStyle,
         cursor: "grab",
+        ...style,
       }}
+      {...dragHandleProps}
     >
       {/* Name + OVR */}
       <div
@@ -1284,17 +1284,16 @@ function DepthCard({ player, isStarter, onDragStart, onDragOver, onDrop, schemeN
 }
 
 function DepthChartView({ players, onReorder, schemeName }) {
-  const handleDragStart = (e, player, posKey) => {
-      e.dataTransfer.setData("text/plain", JSON.stringify({ playerId: player.id, posKey }));
-  };
-  const handleDrop = (e, targetPlayerId, targetPosKey, slotIdx) => {
-      e.preventDefault();
-      try {
-          const data = JSON.parse(e.dataTransfer.getData("text/plain"));
-          if (data.posKey !== targetPosKey) return; // Only allow reordering within same group
-          onReorder(targetPosKey, data.playerId, slotIdx);
-      } catch (err) {}
-  };
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const [recentlyMoved, setRecentlyMoved] = useState(null);
+
+  const sortableSlotId = useCallback((rowKey, slotIdx) => `${rowKey}::${slotIdx}`, []);
+  const parseSortableSlotId = useCallback((id) => {
+    const [rowKey, slotRaw] = String(id).split("::");
+    const slotIdx = Number(slotRaw);
+    return { rowKey, slotIdx: Number.isFinite(slotIdx) ? slotIdx : -1 };
+  }, []);
+
   // Build a map: posKey → sorted player array (best OVR first)
   const depthMap = useMemo(() => {
     const map = {};
@@ -1329,144 +1328,183 @@ function DepthChartView({ players, onReorder, schemeName }) {
   // Group rows by section for the group headers
   const groups = ["OFFENSE", "DEFENSE", "SPECIAL"];
 
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (!active?.id || !over?.id) return;
+    const from = parseSortableSlotId(active.id);
+    const to = parseSortableSlotId(over.id);
+    if (from.rowKey !== to.rowKey || from.slotIdx === to.slotIdx) return;
+    const depth = depthMap[from.rowKey] ?? [];
+    const moved = depth[from.slotIdx];
+    if (!moved || to.slotIdx < 0) return;
+    onReorder?.(from.rowKey, moved.id, to.slotIdx);
+    setRecentlyMoved(`${from.rowKey}::${moved.id}`);
+    window.setTimeout(() => setRecentlyMoved(null), 550);
+  }, [depthMap, onReorder, parseSortableSlotId]);
+
+  const SortableDepthSlot = useCallback(function SortableDepthSlot({ rowKey, slotIdx, player }) {
+    const sortableId = sortableSlotId(rowKey, slotIdx);
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: sortableId });
+    const movedKey = player ? `${rowKey}::${player.id}` : null;
+    const highlight = movedKey && recentlyMoved === movedKey;
+    return (
+      <TableCell
+        ref={setNodeRef}
+        style={{
+          padding: "6px",
+          transform: CSS.Transform.toString(transform),
+          transition,
+          opacity: isDragging ? 0.5 : 1,
+        }}
+      >
+        <DepthCard
+          player={player}
+          isStarter={slotIdx === 0}
+          schemeName={schemeName}
+          dragHandleProps={{ ...attributes, ...listeners }}
+          style={{
+            boxShadow: highlight ? "0 0 0 2px rgba(52,199,89,0.55) inset" : "none",
+            animation: highlight ? "depth-row-flash 480ms ease-out" : "none",
+          }}
+        />
+      </TableCell>
+    );
+  }, [recentlyMoved, schemeName, sortableSlotId]);
+
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        gap: "var(--space-6)",
-      }}
-    >
-      {groups.map((group) => {
-        const rows = DEPTH_ROWS.filter((r) => r.group === group);
-        const maxSlots = Math.max(...rows.map((r) => r.slots));
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "var(--space-6)",
+        }}
+      >
+        <style>{`@keyframes depth-row-flash { 0% { background: rgba(52,199,89,0.24);} 100% { background: transparent; } }`}</style>
+        {groups.map((group) => {
+          const rows = DEPTH_ROWS.filter((r) => r.group === group);
+          const maxSlots = Math.max(...rows.map((r) => r.slots));
 
-        return (
-          <div key={group}>
-            {/* Group header */}
-            <div
-              style={{
-                fontSize: "var(--text-xs)",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                color: "var(--text-muted)",
-                padding: "var(--space-2) 0",
-                marginBottom: "var(--space-2)",
-                borderBottom: "1px solid var(--hairline)",
-              }}
-            >
-              {group}
-            </div>
+          return (
+            <div key={group}>
+              <div
+                style={{
+                  fontSize: "var(--text-xs)",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "1.5px",
+                  color: "var(--text-muted)",
+                  padding: "var(--space-2) 0",
+                  marginBottom: "var(--space-2)",
+                  borderBottom: "1px solid var(--hairline)",
+                }}
+              >
+                {group}
+              </div>
 
-            {/* Slot column headers */}
-            <div className="table-wrapper">
-              <Table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead
-                      style={{
-                        textAlign: "left",
-                        padding: "4px 12px 4px 0",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-subtle)",
-                        fontWeight: 700,
-                        textTransform: "uppercase",
-                        letterSpacing: "0.5px",
-                        width: 140,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Position
-                    </TableHead>
-                    {Array.from({ length: maxSlots }, (_, i) => (
+              <div className="table-wrapper">
+                <Table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <TableHeader>
+                    <TableRow>
                       <TableHead
-                        key={i}
                         style={{
-                          padding: "4px 6px",
+                          textAlign: "left",
+                          padding: "4px 12px 4px 0",
                           fontSize: "var(--text-xs)",
                           color: "var(--text-subtle)",
                           fontWeight: 700,
                           textTransform: "uppercase",
                           letterSpacing: "0.5px",
-                          textAlign: "left",
+                          width: 140,
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {SLOT_LABELS[i] ?? `${i + 1}th`}
+                        Position
                       </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((row, rowIdx) => {
-                    const depth = depthMap[row.key] ?? [];
-                    return (
-                      <TableRow
-                        key={row.key}
-                        style={{
-                          borderTop:
-                            rowIdx > 0
-                              ? "1px solid var(--hairline)"
-                              : undefined,
-                          verticalAlign: "top",
-                        }}
-                      >
-                        {/* Position label */}
-                        <TableCell
+                      {Array.from({ length: maxSlots }, (_, i) => (
+                        <TableHead
+                          key={i}
                           style={{
-                            padding: "8px 12px 8px 0",
+                            padding: "4px 6px",
+                            fontSize: "var(--text-xs)",
+                            color: "var(--text-subtle)",
+                            fontWeight: 700,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.5px",
+                            textAlign: "left",
                             whiteSpace: "nowrap",
                           }}
                         >
-                          <div
+                          {SLOT_LABELS[i] ?? `${i + 1}th`}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row, rowIdx) => {
+                      const depth = depthMap[row.key] ?? [];
+                      return (
+                        <TableRow
+                          key={row.key}
+                          style={{
+                            borderTop: rowIdx > 0 ? "1px solid var(--hairline)" : undefined,
+                            verticalAlign: "top",
+                          }}
+                        >
+                          <TableCell
                             style={{
-                              fontWeight: 700,
-                              fontSize: "var(--text-sm)",
-                              color: "var(--text)",
+                              padding: "8px 12px 8px 0",
+                              whiteSpace: "nowrap",
                             }}
                           >
-                            {row.label}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 10,
-                              color: "var(--text-subtle)",
-                              marginTop: 2,
-                            }}
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                fontSize: "var(--text-sm)",
+                                color: "var(--text)",
+                              }}
+                            >
+                              {row.label}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "var(--text-subtle)",
+                                marginTop: 2,
+                              }}
+                            >
+                              {depth.length} on roster
+                            </div>
+                          </TableCell>
+                          <SortableContext
+                            items={Array.from({ length: row.slots }, (_, i) => sortableSlotId(row.key, i))}
+                            strategy={horizontalListSortingStrategy}
                           >
-                            {depth.length} on roster
-                          </div>
-                        </TableCell>
-                        {/* Depth slots */}
-                        {Array.from({ length: maxSlots }, (_, slotIdx) => {
-                          // Only render up to this row's designated slots; hide extras
-                          if (slotIdx >= row.slots) {
-                            return <TableCell key={slotIdx} />;
-                          }
-                          return (
-                            <TableCell key={slotIdx} style={{ padding: "6px" }}>
-                              <DepthCard
-                                player={depth[slotIdx] ?? null}
-                                isStarter={slotIdx === 0}
-                                schemeName={schemeName}
-                                onDragStart={(e) => depth[slotIdx] && handleDragStart(e, depth[slotIdx], row.key)}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => handleDrop(e, depth[slotIdx]?.id, row.key, slotIdx)}
-                              />
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                            {Array.from({ length: maxSlots }, (_, slotIdx) => {
+                              if (slotIdx >= row.slots) {
+                                return <TableCell key={slotIdx} />;
+                              }
+                              return (
+                                <SortableDepthSlot
+                                  key={slotIdx}
+                                  rowKey={row.key}
+                                  slotIdx={slotIdx}
+                                  player={depth[slotIdx] ?? null}
+                                />
+                              );
+                            })}
+                          </SortableContext>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-          </div>
-        );
-      })}
-    </div>
+          );
+        })}
+      </div>
+    </DndContext>
   );
 }
 
@@ -2070,9 +2108,11 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       }));
 
       if (actions.updateDepthChart) {
-          actions.updateDepthChart(updates);
+          actions.updateDepthChart(updates).then(() => {
+            fetchRoster?.();
+          }).catch(() => {});
       }
-  }, [players, actions]);
+  }, [players, actions, fetchRoster]);
 
   if (teamId == null) {
     return (
