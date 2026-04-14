@@ -1,6 +1,7 @@
 import { CORE_STAFF_ROLES, evaluateStaffImpact, generateStaffCandidate, getStaffMarketViewModel, summarizeStaffEffects } from './staff/staffFoundation.js';
 import { ensureFaceConfig } from './face.js';
 import { getScoutingConfidence } from './scouting/scoutingSystem.js';
+import { negotiateStaffContract } from './staff/staffModel.ts';
 
 const LEGACY_ROLE_ALIASES = Object.freeze({
   offCoord: 'offCoordinator',
@@ -8,6 +9,8 @@ const LEGACY_ROLE_ALIASES = Object.freeze({
   leadScout: 'scoutDirector',
   proScout: 'scoutDirector',
   capAdvisor: 'headTrainer',
+  scout: 'scoutDirector',
+  physio: 'headTrainer',
 });
 
 export const STAFF_ROLE_DEFS = CORE_STAFF_ROLES;
@@ -22,12 +25,33 @@ export function ensureTeamStaff(team, { year = 2025 } = {}) {
   for (const [legacyKey, mapped] of Object.entries(LEGACY_ROLE_ALIASES)) {
     if (!existing[mapped] && existing[legacyKey]) existing[mapped] = { ...existing[legacyKey], roleKey: mapped };
   }
-  for (const key of Object.keys(CORE_STAFF_ROLES)) {
-    if (!existing[key]) existing[key] = createStaffMember(key, { year, teamId: team?.id ?? 0 });
-    existing[key] = ensureFaceConfig(existing[key], 'staff');
+
+  const hadAnyStaff = Object.values(existing).some((v) => v && typeof v === 'object' && v.roleKey);
+  if (!hadAnyStaff) {
+    existing.headCoach = createStaffMember('headCoach', { year, teamId: team?.id ?? 0 });
+    existing.scoutDirector = createStaffMember('scoutDirector', { year, teamId: team?.id ?? 0 });
   }
 
-  // Backward-compatible mirror keys for older systems/tests.
+  for (const key of Object.keys(CORE_STAFF_ROLES)) {
+    if (!existing[key] && (key === 'headCoach' || key === 'scoutDirector')) {
+      existing[key] = createStaffMember(key, { year, teamId: team?.id ?? 0 });
+    }
+    if (existing[key]) {
+      existing[key] = ensureFaceConfig(existing[key], 'staff');
+      if (!existing[key].contract && (existing[key].annualSalary || existing[key].contractYears)) {
+        existing[key].contract = {
+          annualSalary: Number(existing[key].annualSalary ?? 1),
+          years: Number(existing[key].contractYears ?? 2),
+          signedYear: year,
+        };
+      }
+      existing[key].annualSalary = Number(existing[key]?.contract?.annualSalary ?? existing[key].annualSalary ?? 1);
+      existing[key].contractYears = Number(existing[key]?.contract?.years ?? existing[key].contractYears ?? 2);
+    } else {
+      existing[key] = null;
+    }
+  }
+
   existing.leadScout = existing.scoutDirector;
   existing.proScout = existing.scoutDirector;
   existing.capAdvisor = existing.headTrainer;
@@ -46,8 +70,10 @@ export function computeStaffTeamBonuses(team, leagueSettings = {}) {
     developmentDelta: clamp((impact.developmentDelta || 0) * scale, -0.2, 0.24),
     offensiveDevelopmentDelta: clamp((impact.offensiveDevDelta || 0) * scale, -0.18, 0.24),
     defensiveDevelopmentDelta: clamp((impact.defensiveDevDelta || 0) * scale, -0.18, 0.24),
+    mentorDelta: clamp((staff?.mentor?.modifiers?.mentor ?? 0) * scale, -0.1, 0.16),
     rookieAdaptationDelta: clamp(((impact.cultureDelta || 0) + (impact.readinessDelta || 0)) * scale * 0.75, -0.15, 0.15),
     readinessDelta: clamp((impact.readinessDelta || 0) * scale, -0.12, 0.16),
+    tacticalEdgeDelta: clamp((impact.tacticalEdge || 0) * scale, -0.2, 0.25),
     injuryRateDelta: clamp((impact.injuryRiskDelta || 0) * scale, -0.16, 0.1),
     recoveryDelta: clamp((impact.recoveryDelta || 0) * scale, -0.12, 0.14),
     collegeScoutAccuracy: clamp(0.5 + ((impact.scoutingAccuracy || 0.6) - 0.56) * 0.95, 0.45, 0.93),
@@ -59,6 +85,28 @@ export function computeStaffTeamBonuses(team, leagueSettings = {}) {
 
 export function buildStaffMarket(teams = [], { year = 2025, size = 40 } = {}) {
   return getStaffMarketViewModel(teams, { year, size });
+}
+
+export function negotiateContract(args = {}) {
+  return negotiateStaffContract(args);
+}
+
+export function hireStaffForTeam(team, { roleKey, candidate, year = 2025 } = {}) {
+  const staff = ensureTeamStaff(team, { year });
+  if (!roleKey || !candidate || !(roleKey in staff)) return staff;
+  const next = { ...candidate, roleKey, continuity: { teamId: Number(team?.id ?? 0), sinceYear: year, tenureYears: 0 } };
+  next.contract = next.contract ?? { years: Number(next.contractYears ?? 2), annualSalary: Number(next.annualSalary ?? 1), signedYear: year };
+  next.contractYears = Number(next.contract.years ?? 2);
+  next.annualSalary = Number(next.contract.annualSalary ?? 1);
+  staff[roleKey] = ensureFaceConfig(next, 'staff');
+  return staff;
+}
+
+export function fireStaffForTeam(team, { roleKey, year = 2025 } = {}) {
+  const staff = ensureTeamStaff(team, { year });
+  if (!roleKey || !staff[roleKey]) return staff;
+  staff[roleKey] = null;
+  return staff;
 }
 
 export function buildScoutingSnapshot(player, team, { fogStrength = 50, commissionerMode = false } = {}) {

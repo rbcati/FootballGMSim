@@ -1,67 +1,90 @@
 import { Utils } from '../utils.js';
-import { generateFaceConfig } from '../face.js';
+import {
+  HeadCoach,
+  OffensiveCoordinator,
+  DefensiveCoordinator,
+  SpecialTeamsCoach,
+  Scout,
+  Physio,
+  Mentor,
+  AnalyticsDirector,
+} from './staffModel.ts';
 
 export const CORE_STAFF_ROLES = Object.freeze({
   headCoach: { key: 'headCoach', title: 'Head Coach', domain: 'leadership' },
   offCoordinator: { key: 'offCoordinator', title: 'Offensive Coordinator', domain: 'offense' },
   defCoordinator: { key: 'defCoordinator', title: 'Defensive Coordinator', domain: 'defense' },
-  scoutDirector: { key: 'scoutDirector', title: 'Scout Director', domain: 'scouting' },
-  headTrainer: { key: 'headTrainer', title: 'Head Trainer', domain: 'medical' },
+  specialTeamsCoach: { key: 'specialTeamsCoach', title: 'Special Teams Coach', domain: 'specialTeams' },
+  scoutDirector: { key: 'scoutDirector', title: 'Scout', domain: 'scouting' },
+  headTrainer: { key: 'headTrainer', title: 'Physio', domain: 'medical' },
+  mentor: { key: 'mentor', title: 'Mentor', domain: 'leadership' },
+  analyticsDirector: { key: 'analyticsDirector', title: 'Analytics Director', domain: 'analytics' },
 });
-const TIERS = ['Local', 'Regional', 'National', 'Elite'];
-const FIRST = ['Alex', 'Jordan', 'Taylor', 'Riley', 'Sam', 'Morgan', 'Casey', 'Drew', 'Avery', 'Parker'];
-const LAST = ['Reed', 'Mason', 'Shaw', 'Harper', 'Quinn', 'Pryor', 'Bennett', 'Hayes', 'Vaughn', 'Collins'];
-const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Math.round(Number(v) || 0)));
 
-function buildSpecialties(roleKey, base) {
-  if (roleKey === 'headCoach') return { leadership: clamp(base + Utils.rand(-8, 10), 25, 99), gameManagement: clamp(base + Utils.rand(-10, 8), 25, 99), culture: clamp(base + Utils.rand(-12, 10), 25, 99), playerDevelopment: clamp(base + Utils.rand(-10, 12), 25, 99) };
-  if (roleKey === 'offCoordinator') return { passScheme: clamp(base + Utils.rand(-10, 12), 25, 99), runScheme: clamp(base + Utils.rand(-10, 12), 25, 99), qbDevelopment: clamp(base + Utils.rand(-8, 12), 25, 99), skillPlayerDevelopment: clamp(base + Utils.rand(-8, 12), 25, 99) };
-  if (roleKey === 'defCoordinator') return { frontSeven: clamp(base + Utils.rand(-10, 12), 25, 99), coverage: clamp(base + Utils.rand(-10, 12), 25, 99), passRush: clamp(base + Utils.rand(-10, 12), 25, 99), defensiveDevelopment: clamp(base + Utils.rand(-8, 12), 25, 99) };
-  if (roleKey === 'scoutDirector') return { collegeScouting: clamp(base + Utils.rand(-8, 14), 25, 99), proScouting: clamp(base + Utils.rand(-8, 14), 25, 99), potentialEvaluation: clamp(base + Utils.rand(-10, 12), 25, 99), positionalAccuracy: clamp(base + Utils.rand(-10, 12), 25, 99) };
-  return { injuryPrevention: clamp(base + Utils.rand(-8, 12), 25, 99), recovery: clamp(base + Utils.rand(-8, 12), 25, 99), conditioning: clamp(base + Utils.rand(-8, 12), 25, 99) };
+function buildByRole(roleKey, opts) {
+  if (roleKey === 'headCoach') return new HeadCoach(opts.year, opts.teamId).toObject();
+  if (roleKey === 'offCoordinator') return new OffensiveCoordinator(opts.year, opts.teamId).toObject();
+  if (roleKey === 'defCoordinator') return new DefensiveCoordinator(opts.year, opts.teamId).toObject();
+  if (roleKey === 'specialTeamsCoach') return new SpecialTeamsCoach(opts.year, opts.teamId).toObject();
+  if (roleKey === 'scoutDirector') return new Scout(opts.year, opts.teamId).toObject();
+  if (roleKey === 'headTrainer') return new Physio(opts.year, opts.teamId).toObject();
+  if (roleKey === 'mentor') return new Mentor(opts.year, opts.teamId).toObject();
+  return new AnalyticsDirector(opts.year, opts.teamId).toObject();
 }
 
-function buildStyleTags(roleKey, sp) {
-  if (roleKey === 'offCoordinator') return [sp.passScheme >= sp.runScheme ? 'pass-first' : 'run-first', sp.qbDevelopment >= 75 ? 'qb-whisperer' : 'balanced-dev'];
-  if (roleKey === 'defCoordinator') return [sp.coverage >= sp.frontSeven ? 'coverage-shell' : 'front-pressure', sp.passRush >= 75 ? 'pressure-heavy' : 'contain-first'];
-  if (roleKey === 'headCoach') return [sp.culture >= 75 ? 'culture-builder' : 'results-first'];
-  if (roleKey === 'scoutDirector') return [sp.collegeScouting >= sp.proScouting ? 'college-focus' : 'pro-focus'];
-  return [sp.conditioning >= 75 ? 'conditioning-first' : 'recovery-first'];
+function legacySpecialtyRatings(roleKey, attributes = {}) {
+  const a = attributes;
+  if (roleKey === 'headCoach') return { leadership: a.motivation ?? 60, gameManagement: a.tacticalSkill ?? 60, culture: a.motivation ?? 60, playerDevelopment: a.playerDevelopment ?? 60 };
+  if (roleKey === 'offCoordinator') return { passScheme: a.tacticalSkill ?? 60, runScheme: a.tacticalSkill ?? 60, qbDevelopment: a.playerDevelopment ?? 60, skillPlayerDevelopment: a.playerDevelopment ?? 60 };
+  if (roleKey === 'defCoordinator') return { frontSeven: a.tacticalSkill ?? 60, coverage: a.tacticalSkill ?? 60, passRush: a.tacticalSkill ?? 60, defensiveDevelopment: a.playerDevelopment ?? 60 };
+  if (roleKey === 'scoutDirector') return { collegeScouting: a.scoutingAccuracy ?? 60, proScouting: a.scoutingAccuracy ?? 60, potentialEvaluation: a.scoutingAccuracy ?? 60, positionalAccuracy: a.scoutingAccuracy ?? 60 };
+  return { injuryPrevention: a.injuryPrevention ?? 60, recovery: a.injuryPrevention ?? 60, conditioning: a.motivation ?? 60 };
 }
 
-function buildModifiers(roleKey, sp) {
-  if (roleKey === 'headCoach') return { dev: (sp.playerDevelopment - 60) / 300, readiness: (sp.gameManagement - 60) / 360, culture: (sp.culture - 60) / 260 };
-  if (roleKey === 'offCoordinator') return { offDev: (sp.qbDevelopment + sp.skillPlayerDevelopment - 120) / 420 };
-  if (roleKey === 'defCoordinator') return { defDev: (sp.defensiveDevelopment + sp.frontSeven - 120) / 420 };
-  if (roleKey === 'scoutDirector') return { scout: (sp.collegeScouting + sp.proScouting + sp.potentialEvaluation - 180) / 420 };
-  return { injuryPrevention: (sp.injuryPrevention - 60) / 360, recovery: (sp.recovery - 60) / 320 };
+function buildModifiers(roleKey, a = {}) {
+  if (roleKey === 'headCoach') return { dev: (a.playerDevelopment - 60) / 300, readiness: (a.tacticalSkill - 60) / 360, culture: (a.motivation - 60) / 260 };
+  if (roleKey === 'offCoordinator') return { offDev: (a.playerDevelopment - 60) / 220, tactical: (a.tacticalSkill - 60) / 240 };
+  if (roleKey === 'defCoordinator') return { defDev: (a.playerDevelopment - 60) / 220, tactical: (a.tacticalSkill - 60) / 240 };
+  if (roleKey === 'specialTeamsCoach') return { specialTeams: (a.tacticalSkill - 60) / 220 };
+  if (roleKey === 'scoutDirector') return { scout: (a.scoutingAccuracy - 60) / 220 };
+  if (roleKey === 'mentor') return { mentor: (a.playerDevelopment + a.motivation - 120) / 260 };
+  if (roleKey === 'analyticsDirector') return { analytics: (a.tacticalSkill + a.scoutingAccuracy - 120) / 260 };
+  return { injuryPrevention: (a.injuryPrevention - 60) / 300, recovery: (a.injuryPrevention - 60) / 320 };
 }
 
 export function generateStaffCandidate(roleKey, { year = 2025, teamId = -1 } = {}) {
-  const role = CORE_STAFF_ROLES[roleKey] ?? CORE_STAFF_ROLES.headCoach;
-  const overall = clamp(48 + Utils.rand(0, 45), 35, 97);
-  const specialties = buildSpecialties(role.key, overall);
-  const repIndex = overall >= 89 ? 3 : overall >= 77 ? 2 : overall >= 64 ? 1 : 0;
-  const id = Utils.id();
-  const name = `${Utils.choice(FIRST)} ${Utils.choice(LAST)}`;
-  return { id, name, age: Utils.rand(34, 67), role: role.title, roleKey: role.key, overall, specialtyRatings: specialties, contractYears: overall >= 85 ? Utils.rand(3, 5) : Utils.rand(2, 4), annualSalary: Math.round((1.1 + (overall - 50) * 0.08 + (roleKey === 'headCoach' ? 1.5 : 0)) * 10) / 10, reputationTier: TIERS[repIndex], styleTags: buildStyleTags(role.key, specialties), modifiers: buildModifiers(role.key, specialties), continuity: { teamId, sinceYear: year, tenureYears: 0 }, face: generateFaceConfig(`staff-${id}-${name}`, 'staff') };
+  const base = buildByRole(CORE_STAFF_ROLES[roleKey] ? roleKey : 'headCoach', { year, teamId });
+  const specialtyRatings = legacySpecialtyRatings(base.roleKey, base.attributes);
+  return {
+    ...base,
+    annualSalary: base.contract.annualSalary,
+    contractYears: base.contract.years,
+    specialtyRatings,
+    modifiers: buildModifiers(base.roleKey, base.attributes),
+    reputationTier: base.overall >= 89 ? 'Elite' : base.overall >= 77 ? 'National' : base.overall >= 64 ? 'Regional' : 'Local',
+    styleTags: [String(base.schemePreference || 'Multiple').toLowerCase().replace(/\s+/g, '-'), base.attributes?.motivation >= 78 ? 'motivator' : 'balanced'],
+  };
 }
 
 export function evaluateStaffImpact(staff = {}) {
   const hc = staff.headCoach;
   const oc = staff.offCoordinator;
   const dc = staff.defCoordinator;
+  const st = staff.specialTeamsCoach;
   const scout = staff.scoutDirector;
   const trainer = staff.headTrainer;
+  const mentor = staff.mentor;
+  const analytics = staff.analyticsDirector;
   return {
-    developmentDelta: (hc?.modifiers?.dev ?? 0) + (oc?.modifiers?.offDev ?? 0) * 0.7 + (dc?.modifiers?.defDev ?? 0) * 0.7,
-    offensiveDevDelta: (hc?.modifiers?.dev ?? 0) * 0.35 + (oc?.modifiers?.offDev ?? 0),
-    defensiveDevDelta: (hc?.modifiers?.dev ?? 0) * 0.35 + (dc?.modifiers?.defDev ?? 0),
-    readinessDelta: hc?.modifiers?.readiness ?? 0,
-    cultureDelta: hc?.modifiers?.culture ?? 0,
-    scoutingAccuracy: 0.56 + (scout?.modifiers?.scout ?? 0),
-    injuryRiskDelta: -((trainer?.modifiers?.injuryPrevention ?? 0) * 0.85),
-    recoveryDelta: trainer?.modifiers?.recovery ?? 0,
+    developmentDelta: (hc?.modifiers?.dev ?? 0) + (oc?.modifiers?.offDev ?? 0) * 0.7 + (dc?.modifiers?.defDev ?? 0) * 0.7 + (mentor?.modifiers?.mentor ?? 0) * 0.8,
+    offensiveDevDelta: (hc?.modifiers?.dev ?? 0) * 0.25 + (oc?.modifiers?.offDev ?? 0),
+    defensiveDevDelta: (hc?.modifiers?.dev ?? 0) * 0.25 + (dc?.modifiers?.defDev ?? 0),
+    readinessDelta: (hc?.modifiers?.readiness ?? 0) + (st?.modifiers?.specialTeams ?? 0) * 0.25,
+    cultureDelta: (hc?.modifiers?.culture ?? 0) + (mentor?.modifiers?.mentor ?? 0) * 0.45,
+    scoutingAccuracy: 0.56 + (scout?.modifiers?.scout ?? 0) + (analytics?.modifiers?.analytics ?? 0) * 0.3,
+    injuryRiskDelta: -((trainer?.modifiers?.injuryPrevention ?? 0) * 0.9),
+    recoveryDelta: (trainer?.modifiers?.recovery ?? 0),
+    tacticalEdge: (oc?.modifiers?.tactical ?? 0) + (dc?.modifiers?.tactical ?? 0) + (hc?.modifiers?.readiness ?? 0) * 0.6 + (analytics?.modifiers?.analytics ?? 0) * 0.55,
   };
 }
 
@@ -76,8 +99,9 @@ export function summarizeStaffEffects(staff = {}) {
 }
 
 export function getStaffMarketViewModel(teams = [], { year = 2025, size = 55 } = {}) {
+  const roleKeys = Object.keys(CORE_STAFF_ROLES);
   const market = [];
-  for (let i = 0; i < size; i += 1) market.push(generateStaffCandidate(Utils.choice(Object.keys(CORE_STAFF_ROLES)), { year, teamId: -1 }));
+  for (let i = 0; i < size; i += 1) market.push(generateStaffCandidate(Utils.choice(roleKeys), { year, teamId: -1 }));
   const incumbents = teams.flatMap((team) => Object.values(team?.staff ?? {}).filter((m) => m?.roleKey));
   return [...market, ...incumbents.slice(0, 20)].sort((a, b) => (b.overall ?? 0) - (a.overall ?? 0));
 }
