@@ -7,13 +7,16 @@ describe('leagueSettings', () => {
     expect(normalized.salaryCap).toBe(DEFAULT_LEAGUE_SETTINGS.salaryCap);
     expect(normalized.scoutingFogStrength).toBe(DEFAULT_LEAGUE_SETTINGS.scoutingFogStrength);
     expect(normalized.staffImpactStrength).toBe(DEFAULT_LEAGUE_SETTINGS.staffImpactStrength);
+    expect(normalized.overtimeFormat).toBe('nfl');
+    expect(normalized.leagueUniverse).toBe('fictional');
   });
 
   it('clamps invalid rule values', () => {
-    const normalized = normalizeLeagueSettings({ salaryCap: 10, capFloor: 9999, playoffTeams: 100 });
+    const normalized = normalizeLeagueSettings({ salaryCap: 10, capFloor: 9999, playoffTeams: 100, suspensionFrequency: 999 });
     expect(normalized.salaryCap).toBe(50);
     expect(normalized.capFloor).toBeLessThanOrEqual(normalized.salaryCap);
     expect(normalized.playoffTeams).toBeLessThanOrEqual(normalized.leagueSize);
+    expect(normalized.suspensionFrequency).toBe(100);
   });
 
   it('categorizes edit safety by rule type', () => {

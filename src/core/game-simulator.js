@@ -2369,7 +2369,8 @@ export function simGameStats(home, away, options = {}) {
     if (homeScore === awayScore) {
         if (false) console.log(`[SIM-DEBUG] Regulation tied at ${homeScore}. Entering OT...`);
         const isPlayoff = options.isPlayoff === true;
-        const allowTies = !isPlayoff && (options.allowTies !== false);
+        const overtimeFormat = String(options?.overtimeFormat ?? 'nfl');
+        const allowTies = overtimeFormat === 'college' ? false : (!isPlayoff && (options.allowTies !== false));
 
         // Calculate clutch bonuses from QB traits and personality
         const getClutchBonus = (groups) => {
@@ -2437,23 +2438,23 @@ export function simGameStats(home, away, options = {}) {
                 }
             }
 
-            // Apply NFL OT Rules (2024+):
-            //   Pair 1 (possessions 1-2): Both teams guaranteed a drive. End if unequal after pair.
-            //   Pairs 2+ (possessions 3+): Sudden death — evaluate only after complete pairs (even count).
-            //   Regular season: allow tie after 2 complete pairs (4 possessions).
-            //   Playoffs: continue indefinitely until winner after complete pair.
-            const isCompletePair = (possessions % 2 === 0); // both teams had equal drives
-            const pairsCompleted = Math.floor(possessions / 2);
-
-            if (isCompletePair) {
-                if (homeScore !== awayScore) {
-                    gameOver = true;
-                } else if (allowTies && pairsCompleted >= 2) {
-                    // Regular season: tie after 2 complete pairs (4 total drives)
-                    gameOver = true;
+            if (overtimeFormat === 'college') {
+                // College-inspired alternating possessions. No ties.
+                const isCompletePair = (possessions % 2 === 0);
+                if (isCompletePair && homeScore !== awayScore) gameOver = true;
+            } else {
+                // NFL OT Rules (2024+):
+                // Pair 1: both teams guaranteed one drive; later pairs sudden death by pair.
+                const isCompletePair = (possessions % 2 === 0);
+                const pairsCompleted = Math.floor(possessions / 2);
+                if (isCompletePair) {
+                    if (homeScore !== awayScore) {
+                        gameOver = true;
+                    } else if (allowTies && pairsCompleted >= 2) {
+                        gameOver = true;
+                    }
                 }
             }
-            // Odd possessions: no game-over check — other team must get their drive
 
             possession = possession === 'home' ? 'away' : 'home';
         }
@@ -3353,7 +3354,7 @@ export function simulateBatch(games, options = {}) {
                 do {
                     // Use simulateMatchup (unified function)
                     // Pass league for scheme fit calculations
-                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr });
+                    gameScores = simulateMatchup(home, away, { verbose, stakes, league, isPlayoff: options.isPlayoff, generateLogs: options.generateLogs, homeAbbr: home.abbr, awayAbbr: away.abbr, overtimeFormat: options.overtimeFormat });
                     attempts++;
                 } while ((!gameScores || (gameScores.homeScore === 0 && gameScores.awayScore === 0)) && attempts < 3);
 

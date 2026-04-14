@@ -5,18 +5,21 @@ export const DEFAULT_LEAGUE_SETTINGS = Object.freeze({
   seasonLength: 17,
   playoffTeams: 14,
   playoffSeeding: 'standard',
+  overtimeFormat: 'nfl',
   salaryCap: 301.2,
   capFloor: 210,
   rookieContractYears: 4,
   freeAgencyAggressiveness: 50,
   tradeDifficulty: 50,
   injuryFrequency: 50,
+  suspensionFrequency: 50,
   progressionVolatility: 50,
   regressionSeverity: 50,
   scoutingFogStrength: 55,
   ownerPatienceStrictness: 50,
   playerMoodVolatility: 50,
   draftOrderLogic: 'reverse_standings',
+  leagueUniverse: 'fictional',
   scheduleBalancePreset: 'balanced',
   difficultyPreset: 'Normal',
   customDifficultyEnabled: false,
@@ -53,6 +56,7 @@ const CLAMP_RULES = {
   freeAgencyAggressiveness: [0, 100],
   tradeDifficulty: [0, 100],
   injuryFrequency: [0, 100],
+  suspensionFrequency: [0, 100],
   progressionVolatility: [0, 100],
   regressionSeverity: [0, 100],
   scoutingFogStrength: [0, 100],
@@ -88,6 +92,10 @@ export function normalizeLeagueSettings(partial = {}) {
   if (out.playoffTeams > out.leagueSize) out.playoffTeams = out.leagueSize;
   if (out.capFloor > out.salaryCap) out.capFloor = out.salaryCap;
   if (out.minSalary > out.maxSalary) out.minSalary = out.maxSalary;
+  if (!['nfl', 'college'].includes(String(out.overtimeFormat))) out.overtimeFormat = 'nfl';
+  if (!['reverse_standings', 'lottery', 'random'].includes(String(out.draftOrderLogic))) out.draftOrderLogic = 'reverse_standings';
+  if (!['fictional', 'historical'].includes(String(out.leagueUniverse))) out.leagueUniverse = 'fictional';
+
   if (!Array.isArray(out.conferenceNames) || out.conferenceNames.length === 0) {
     out.conferenceNames = [...DEFAULT_LEAGUE_SETTINGS.conferenceNames];
   }
@@ -99,7 +107,7 @@ export function normalizeLeagueSettings(partial = {}) {
 }
 
 export function getRuleEditType(key) {
-  const offseasonOnly = new Set(['seasonLength', 'playoffTeams', 'playoffSeeding', 'draftRounds', 'draftOrderLogic']);
+  const offseasonOnly = new Set(['seasonLength', 'playoffTeams', 'playoffSeeding', 'draftRounds', 'draftOrderLogic', 'overtimeFormat']);
   const newLeagueOnly = new Set(['leagueSize', 'conferenceCount', 'divisionCountPerConference']);
   if (newLeagueOnly.has(key)) return 'new-league-only';
   if (offseasonOnly.has(key)) return 'offseason-only';

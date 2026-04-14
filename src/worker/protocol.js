@@ -99,6 +99,10 @@ export const toWorker = Object.freeze({
   IMPORT_SAVE:        'IMPORT_SAVE',          // { data, saveName? }
   EXPORT_LEAGUE_CONFIG: 'EXPORT_LEAGUE_CONFIG', // {}
   IMPORT_LEAGUE_CONFIG: 'IMPORT_LEAGUE_CONFIG', // { config }
+  EXPORT_LEAGUE_FILE: 'EXPORT_LEAGUE_FILE', // {}
+  IMPORT_LEAGUE_FILE: 'IMPORT_LEAGUE_FILE', // { data, saveName? }
+  IMPORT_CUSTOM_ROSTER: 'IMPORT_CUSTOM_ROSTER', // { roster }
+  IMPORT_DRAFT_CLASS: 'IMPORT_DRAFT_CLASS', // { draftClass }
 
   /** Settings */
   SET_USER_TEAM:      'SET_USER_TEAM',        // { teamId }
@@ -241,6 +245,8 @@ export const toUI = Object.freeze({
   SAVE_EXPORT:        'SAVE_EXPORT',          // { data }
   SAVE_IMPORT_RESULT: 'SAVE_IMPORT_RESULT',   // { ok, leagueId }
   LEAGUE_CONFIG_EXPORT: 'LEAGUE_CONFIG_EXPORT', // { data }
+  LEAGUE_FILE_EXPORT: 'LEAGUE_FILE_EXPORT', // { data }
+  MOD_IMPORT_RESULT: 'MOD_IMPORT_RESULT', // { ok, kind, message }
 
   /**
    * IndexedDB version conflict / blocked event — the UI must reload the page

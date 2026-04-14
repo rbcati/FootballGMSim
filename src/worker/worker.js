@@ -128,6 +128,8 @@ import {
 } from '../core/gameSummary.js';
 import { getScoutingRangeFromProfile, scoreDraftBoardEntry } from '../core/draft/draftScouting.js';
 import { generateDynamicEvents, calculateSeasonAwards } from '../core/events/eventSystem.js';
+import { validateCustomRoster, validateDraftClass, validateLeagueFile, validateLeagueSettingsPayload, summarizeValidationErrors } from './modding/schemaValidation.js';
+import { buildDraftOrder } from './modding/ruleEngine.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2150,6 +2152,7 @@ async function handleAdvanceWeek(payload, id) {
         league,
         isPlayoff: meta.phase === 'playoffs',
         injuryFactor,
+        overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
       });
     } catch (simErr) {
       console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
@@ -2327,6 +2330,7 @@ if (res.injuries && res.injuries.length > 0) {
       week,
       year: meta?.year,
       phase: meta?.phase,
+      suspensionFrequency: Number(getLeagueSetting('suspensionFrequency', 50)),
     });
     applyDynamicEventEffects(dynamicEvents);
     let currentMeta = cache.getMeta();
@@ -3788,6 +3792,110 @@ async function handleImportLeagueConfig({ config }, id) {
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
+
+async function handleExportLeagueFile(payload, id) {
+  try {
+    const leagueId = getActiveLeagueId();
+    if (!leagueId) return post(toUI.ERROR, { message: 'No active league loaded.' }, id);
+    await flushDirty();
+    const meta = getSafeMeta();
+    const data = {
+      version: 2,
+      kind: 'league_file',
+      exportedAt: new Date().toISOString(),
+      leagueId,
+      meta: {
+        name: meta?.name,
+        year: meta?.year,
+        phase: meta?.phase,
+        currentWeek: meta?.currentWeek,
+      },
+      settings: normalizeLeagueSettings(meta?.settings ?? {}),
+      snapshot: await snapshotActiveLeagueDB(),
+      modData: {
+        roster: {
+          players: cache.getAllPlayers().filter((p) => Number(p?.teamId) >= 0).map((p) => ({
+            id: p.id,
+            name: p.name,
+            age: p.age,
+            pos: p.pos,
+            ovr: p.ovr,
+            potential: p.potential ?? p.pot,
+            teamId: p.teamId,
+          })),
+        },
+      },
+    };
+    post(toUI.LEAGUE_FILE_EXPORT, { data }, id);
+  } catch (err) {
+    post(toUI.ERROR, { message: err?.message ?? 'League export failed.' }, id);
+  }
+}
+
+function applyImportedRoster(roster = {}) {
+  const byId = new Map((Array.isArray(roster?.players) ? roster.players : []).map((p) => [Number(p.id), p]));
+  let changed = 0;
+  for (const player of cache.getAllPlayers()) {
+    const next = byId.get(Number(player.id));
+    if (!next) continue;
+    cache.updatePlayer(player.id, {
+      name: typeof next.name === 'string' ? next.name.slice(0, 48) : player.name,
+      age: Number.isFinite(Number(next.age)) ? Number(next.age) : player.age,
+      pos: typeof next.pos === 'string' ? next.pos : player.pos,
+      ovr: Number.isFinite(Number(next.ovr)) ? Number(next.ovr) : player.ovr,
+      potential: Number.isFinite(Number(next.potential ?? next.pot)) ? Number(next.potential ?? next.pot) : player.potential,
+      teamId: Number.isFinite(Number(next.teamId)) ? Number(next.teamId) : player.teamId,
+      status: Number.isFinite(Number(next.teamId)) ? 'active' : player.status,
+    });
+    changed++;
+  }
+  return changed;
+}
+
+async function handleImportCustomRoster({ roster }, id) {
+  const validation = validateCustomRoster(roster);
+  if (!validation.ok) {
+    post(toUI.ERROR, { message: `Roster validation failed: ${summarizeValidationErrors(validation.errors)}` }, id);
+    post(toUI.MOD_IMPORT_RESULT, { ok: false, kind: 'roster', message: 'Validation failed', errors: validation.errors }, id);
+    return;
+  }
+  const changed = applyImportedRoster(roster);
+  await flushDirty();
+  post(toUI.MOD_IMPORT_RESULT, { ok: true, kind: 'roster', message: `Imported ${changed} player records.` }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+async function handleImportDraftClass({ draftClass }, id) {
+  const validation = validateDraftClass(draftClass);
+  if (!validation.ok) {
+    post(toUI.ERROR, { message: `Draft class validation failed: ${summarizeValidationErrors(validation.errors)}` }, id);
+    post(toUI.MOD_IMPORT_RESULT, { ok: false, kind: 'draftClass', message: 'Validation failed', errors: validation.errors }, id);
+    return;
+  }
+  const prospects = Array.isArray(draftClass?.prospects) ? draftClass.prospects : [];
+  for (const p of prospects) {
+    cache.setPlayer({
+      ...p,
+      id: p.id ?? Utils.id(),
+      teamId: null,
+      status: 'draft_eligible',
+      potential: Number(p.potential ?? p.pot ?? p.ovr ?? 60),
+    });
+  }
+  await flushDirty();
+  post(toUI.MOD_IMPORT_RESULT, { ok: true, kind: 'draftClass', message: `Imported ${prospects.length} draft prospects.` }, id);
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
+async function handleImportLeagueFile({ data, saveName }, id) {
+  const validation = validateLeagueFile(data);
+  if (!validation.ok) {
+    post(toUI.ERROR, { message: `League file validation failed: ${summarizeValidationErrors(validation.errors)}` }, id);
+    return;
+  }
+  await handleImportSave({ data, saveName: saveName || data?.meta?.name || 'Imported League File' }, id);
+}
+
 
 async function handleImportSave({ data, saveName }, id) {
   try {
@@ -5665,7 +5773,8 @@ async function handleUpdateSettings({ settings }, id) {
     if (type === 'offseason-only' && phase !== 'offseason' && phase !== 'preseason') return false;
     return true;
   }));
-  const nextSettings = normalizeLeagueSettings({ ...(current?.settings ?? {}), ...allowedEntries });
+  const settingsValidation = validateLeagueSettingsPayload({ ...(current?.settings ?? {}), ...allowedEntries });
+  const nextSettings = settingsValidation.normalized;
   cache.setMeta({
     settings: nextSettings,
     ...(nextSettings?.leagueName ? { name: String(nextSettings.leagueName).slice(0, 80) } : {}),
@@ -6425,7 +6534,8 @@ async function handleStartDraft(payload, id) {
     return;
   }
 
-  const ROUNDS    = 7;
+  const settings = normalizeLeagueSettings(meta?.settings ?? {});
+  const ROUNDS    = Math.max(1, Math.min(12, Number(settings?.draftRounds ?? 7)));
   const teams     = cache.getAllTeams();
   awardCompensatoryPicksForUpcomingDraft(meta);
   const classSize = ROUNDS * teams.length;
@@ -6450,20 +6560,8 @@ async function handleStartDraft(payload, id) {
     cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
   });
 
-  // Draft order: worst regular-season record first, champion always last
   const champId  = meta.championTeamId ?? null;
-  const sorted   = [...teams].sort((a, b) => {
-    const wDiff = (a.wins ?? 0) - (b.wins ?? 0);
-    if (wDiff !== 0) return wDiff;                              // worst first
-    const diffA = (a.ptsFor ?? 0) - (a.ptsAgainst ?? 0);
-    const diffB = (b.ptsFor ?? 0) - (b.ptsAgainst ?? 0);
-    return diffA - diffB;                                       // worse pt-diff first
-  });
-  let draftOrder = sorted.map(t => t.id);
-  if (champId !== null) {
-    draftOrder = draftOrder.filter(id => id !== champId);
-    draftOrder.push(champId);                                   // champ picks last
-  }
+  const draftOrder = buildDraftOrder(teams, settings, champId);
 
   // Build full pick table
   const compPicksByRound = {};
@@ -7198,6 +7296,7 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
       week: meta?.currentWeek ?? 1,
       year: meta?.year,
       phase: 'free_agency',
+      suspensionFrequency: Number(getLeagueSetting('suspensionFrequency', 50)),
     });
     applyDynamicEventEffects(faEvents);
     let faMeta = cache.getMeta();
@@ -8330,6 +8429,10 @@ async function handleMessage(event) {
       case toWorker.IMPORT_SAVE:        return await handleImportSave(payload, id);
       case toWorker.EXPORT_LEAGUE_CONFIG: return await handleExportLeagueConfig(payload, id);
       case toWorker.IMPORT_LEAGUE_CONFIG: return await handleImportLeagueConfig(payload, id);
+      case toWorker.EXPORT_LEAGUE_FILE: return await handleExportLeagueFile(payload, id);
+      case toWorker.IMPORT_LEAGUE_FILE: return await handleImportLeagueFile(payload, id);
+      case toWorker.IMPORT_CUSTOM_ROSTER: return await handleImportCustomRoster(payload, id);
+      case toWorker.IMPORT_DRAFT_CLASS: return await handleImportDraftClass(payload, id);
       case toWorker.SET_USER_TEAM:      return await handleSetUserTeam(payload, id);
       case toWorker.SIGN_PLAYER:        return await handleSignPlayer(payload, id);
       case toWorker.SUBMIT_OFFER:       return await handleSubmitOffer(payload, id);
@@ -8439,6 +8542,7 @@ async function handleWatchGame(payload, id) {
     isPlayoff: meta.phase === 'playoffs',
     generateLogs: true,
     injuryFactor: Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50),
+    overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
   });
 
   const res = batchResults[0];
