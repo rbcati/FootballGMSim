@@ -127,6 +127,7 @@ import {
   summarizeWhyTeamWon,
 } from '../core/gameSummary.js';
 import { getScoutingRangeFromProfile, scoreDraftBoardEntry } from '../core/draft/draftScouting.js';
+import { generateDynamicEvents, calculateSeasonAwards } from '../core/events/eventSystem.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -176,6 +177,26 @@ function getLeagueSetting(key, fallback = null) {
   const meta = getSafeMeta();
   const settings = normalizeLeagueSettings(meta?.settings ?? {});
   return settings?.[key] ?? fallback;
+}
+
+function applyDynamicEventEffects(events = []) {
+  for (const evt of events) {
+    const playerId = evt?.playerId;
+    if (playerId == null) continue;
+    const player = cache.getPlayer(playerId);
+    if (!player) continue;
+    const effects = evt?.effects ?? {};
+    const moraleDelta = Number(effects?.morale ?? 0);
+    const popularityDelta = Number(effects?.popularity ?? 0);
+    const negotiationDelta = Number(effects?.negotiationLeverage ?? 0);
+    cache.updatePlayer(playerId, {
+      morale: Math.max(0, Math.min(100, Number(player?.morale ?? 50) + moraleDelta)),
+      popularity: Math.max(0, Math.min(100, Number(player?.popularity ?? 50) + popularityDelta)),
+      contractMoodModifier: Number(player?.contractMoodModifier ?? 0) + negotiationDelta,
+      holdoutStatus: evt?.type === 'holdout' ? 'active' : player?.holdoutStatus ?? null,
+      tradeRequestActive: evt?.type === 'trade_demand' ? true : player?.tradeRequestActive ?? false,
+    });
+  }
 }
 
 const SIM_SESSION_STAGES = Object.freeze([
@@ -2297,32 +2318,22 @@ if (res.injuries && res.injuries.length > 0) {
     cache.setMeta({ currentWeek: nextWeekNum });
   }
 
-  // Phase 4 Opus: Narrative Events
-  if (meta.phase === 'regular' || meta.phase === 'preseason') {
-      const userRoster = cache.getPlayersByTeam(meta.userTeamId);
-      const team = cache.getTeam(meta.userTeamId);
-      for (const p of userRoster) {
-          const isDivisive = p.personality?.traits?.includes('Divisive');
-          const holdoutProb = isDivisive ? 0.03 : 0.01;
-          const conductProb = isDivisive ? 0.02 : 0.005;
-          const holdout = estimateHoldoutRisk(p, { wins: team?.wins ?? 0 });
-
-          // chance per week for low morale / underpaid stars to holdout
-          if ((holdout.shouldHoldout || (p.morale < 30 && p.ovr > 80)) && Math.random() < Math.max(holdoutProb, holdout.score / 4000)) {
-              await NewsEngine.logNarrative(p, 'HOLDOUT', team?.abbr || 'FA');
-              cache.updatePlayer(p.id, {
-                morale: Math.max(0, Number(p?.morale ?? 50) - 6),
-                holdoutRisk: holdout.score,
-                holdoutStatus: 'active',
-              });
-          }
-          // chance per week for any player to get a conduct fine
-          if (Math.random() < conductProb) {
-              await NewsEngine.logNarrative(p, 'CONDUCT', team?.abbr || 'FA');
-              // Apply morale hit
-              cache.updatePlayer(p.id, { morale: Math.max(0, p.morale - 10) });
-          }
-      }
+  // Dynamic event engine: contextual stories and contract friction.
+  if (meta.phase === 'regular' || meta.phase === 'preseason' || meta.phase === 'draft') {
+    const dynamicEvents = generateDynamicEvents({
+      players: cache.getAllPlayers(),
+      teams: cache.getAllTeams(),
+      userTeamId: meta?.userTeamId,
+      week,
+      year: meta?.year,
+      phase: meta?.phase,
+    });
+    applyDynamicEventEffects(dynamicEvents);
+    let currentMeta = cache.getMeta();
+    for (const event of dynamicEvents) {
+      currentMeta = addNewsItem(currentMeta, event);
+    }
+    cache.setMeta({ newsItems: currentMeta.newsItems });
   }
 
   // --- AI-to-AI Trades (regular season only) ---
@@ -7180,6 +7191,20 @@ async function handleAdvanceFreeAgencyDay(payload, id) {
 
     // Process Day
     await AiLogic.processFreeAgencyDay(day);
+    const faEvents = generateDynamicEvents({
+      players: cache.getAllPlayers(),
+      teams: cache.getAllTeams(),
+      userTeamId: meta?.userTeamId,
+      week: meta?.currentWeek ?? 1,
+      year: meta?.year,
+      phase: 'free_agency',
+    });
+    applyDynamicEventEffects(faEvents);
+    let faMeta = cache.getMeta();
+    for (const event of faEvents) {
+      faMeta = addNewsItem(faMeta, event);
+    }
+    cache.setMeta({ newsItems: faMeta.newsItems });
 
     // Increment Day
     const nextDay = day + 1;
@@ -7323,7 +7348,15 @@ async function archiveSeason(seasonId) {
     const leaders = calculateLeaders(populatedStats);
 
     // 7. Awards
-    const awards = calculateAwards(populatedStats, teams);
+    const legacyAwards = calculateAwards(populatedStats, teams);
+    const staffRows = teams.map((t) => ({ teamId: t.id, name: t?.staff?.headCoach?.name ?? `${t?.abbr ?? 'Team'} HC` }));
+    const seasonAwards = calculateSeasonAwards({ stats: populatedStats, teams, year, coaches: staffRows });
+    const awards = {
+      ...legacyAwards,
+      ...seasonAwards,
+      roty: seasonAwards?.roty ?? legacyAwards?.roty ?? null,
+      allPro: seasonAwards?.allPro ?? { firstTeamOffense: [], firstTeamDefense: [] },
+    };
 
     // 8. Write accolades to player objects
     const year = meta.year;
@@ -7341,6 +7374,15 @@ async function archiveSeason(seasonId) {
     }
     if (awards.roty?.playerId != null) {
       await grantAccolade(awards.roty.playerId, { type: 'ROTY', year, seasonId });
+    }
+    if (awards.coachOfTheYear?.teamId != null) {
+      const coachTeam = cache.getTeam(awards.coachOfTheYear.teamId);
+      await NewsEngine.logNews(
+        'AWARD',
+        `${awards.coachOfTheYear.coachName} wins Coach of the Year after leading ${coachTeam?.abbr ?? 'their team'} to ${coachTeam?.wins ?? 0} wins.`,
+        awards.coachOfTheYear.teamId,
+        { category: 'award', awardType: 'coach_of_the_year' },
+      );
     }
 
     // SB Rings: all players on champion team
