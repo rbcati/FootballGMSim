@@ -208,7 +208,8 @@ function TeamBadge({ abbr, size = 36, isUser = false }) {
 
 function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
   const { homeId, awayId, homeAbbr, awayAbbr, homeScore, awayScore } = event;
-  const isUser = homeId === userTeamId || awayId === userTeamId;
+  const numericUserTeamId = Number(userTeamId);
+  const isUser = Number(homeId) === numericUserTeamId || Number(awayId) === numericUserTeamId;
   const finished = !pending;
   const presentation = buildCompletedGamePresentation(event, { source: "live_game_matchup" });
   const handleClick = () => openResolvedBoxScore(event, { source: "live_game_matchup" }, onOpenBoxScore);
@@ -239,14 +240,14 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
       {...interactiveProps}
     >
       {/* Away team */}
-      <TeamBadge abbr={awayAbbr} size={32} isUser={awayId === userTeamId} />
+      <TeamBadge abbr={awayAbbr} size={32} isUser={Number(awayId) === numericUserTeamId} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: "var(--text-xs)",
             fontWeight: 700,
             color:
-              awayId === userTeamId ? "var(--accent)" : "var(--text-muted)",
+              Number(awayId) === numericUserTeamId ? "var(--accent)" : "var(--text-muted)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -300,7 +301,7 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
             fontSize: "var(--text-xs)",
             fontWeight: 700,
             color:
-              homeId === userTeamId ? "var(--accent)" : "var(--text-muted)",
+              Number(homeId) === numericUserTeamId ? "var(--accent)" : "var(--text-muted)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -322,7 +323,7 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
           {homeScore}
         </div>
       </div>
-      <TeamBadge abbr={homeAbbr} size={32} isUser={homeId === userTeamId} />
+      <TeamBadge abbr={homeAbbr} size={32} isUser={Number(homeId) === numericUserTeamId} />
       {interactive ? <span className="clickable-card__chevron" aria-hidden="true">›</span> : null}
     </div>
   );
@@ -333,7 +334,8 @@ function MatchupCard({ event, userTeamId, pending, onOpenBoxScore }) {
 function PendingCard({ game, teamById, userTeamId }) {
   const home = teamById[game.home] ?? { abbr: "???", id: game.home };
   const away = teamById[game.away] ?? { abbr: "???", id: game.away };
-  const isUser = home.id === userTeamId || away.id === userTeamId;
+  const numericUserTeamId = Number(userTeamId);
+  const isUser = Number(home.id) === numericUserTeamId || Number(away.id) === numericUserTeamId;
   return (
     <div
       className={`matchup-card pending ${isUser ? "user-game" : ""}`}
@@ -346,7 +348,7 @@ function PendingCard({ game, teamById, userTeamId }) {
         ...(isUser ? { borderColor: "var(--accent)" } : {}),
       }}
     >
-      <TeamBadge abbr={away.abbr} size={32} isUser={away.id === userTeamId} />
+      <TeamBadge abbr={away.abbr} size={32} isUser={Number(away.id) === numericUserTeamId} />
       <div
         style={{
           flex: 1,
@@ -357,7 +359,7 @@ function PendingCard({ game, teamById, userTeamId }) {
       >
         {away.abbr} @ {home.abbr}
       </div>
-      <TeamBadge abbr={home.abbr} size={32} isUser={home.id === userTeamId} />
+      <TeamBadge abbr={home.abbr} size={32} isUser={Number(home.id) === numericUserTeamId} />
     </div>
   );
 }
@@ -612,11 +614,12 @@ export default function LiveGame({
   // ── Build scoreboard data ────────────────────────────────────────────────
 
   const userTeamId = league?.userTeamId;
+  const numericUserTeamId = Number(userTeamId);
 
   // All resolved game events — then filtered to user's game only for the scoreboard.
   const resolvedEvents = gameEvents ?? [];
   const userResolvedEvents = resolvedEvents.filter(
-    (e) => e.homeId === userTeamId || e.awayId === userTeamId,
+    (e) => Number(e.homeId) === numericUserTeamId || Number(e.awayId) === numericUserTeamId,
   );
 
   // Games still pending (not yet in gameEvents) — show only user's game.
@@ -656,7 +659,7 @@ export default function LiveGame({
       return "Dead even at the final whistle. Tough one to split.";
     }
     const homeWin = (recapGame.homeScore ?? 0) > (recapGame.awayScore ?? 0);
-    const userIsHome = recapGame.homeId === userTeamId;
+    const userIsHome = Number(recapGame.homeId) === numericUserTeamId;
     const userWon = userIsHome ? homeWin : !homeWin;
     const margin = Math.abs(homeScore - awayScore);
     if (userWon) {
