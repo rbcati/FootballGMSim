@@ -214,17 +214,15 @@ const BASE_TABS = [
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
-  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Standings", "Schedule", "Stats", "Leaders", "Award Races", "Analytics", "News"] },
-  { id: SHELL_SECTIONS.transactions, title: "Transactions", tabs: ["Transactions", "Free Agency", "Draft", "Draft Room", "Mock Draft"] },
-  { id: SHELL_SECTIONS.history, title: "History", tabs: ["History Hub", "History", "Hall of Fame", "Awards & Records", "Season Recap", "Team History", "Saves"] },
+  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Schedule", "Standings", "Stats", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
 ];
 
 const NAV_TEST_IDS = {
   [SHELL_SECTIONS.hq]: "nav-hq",
   [SHELL_SECTIONS.team]: "nav-team",
   [SHELL_SECTIONS.league]: "nav-league",
-  [SHELL_SECTIONS.transactions]: "nav-transactions",
-  [SHELL_SECTIONS.history]: "nav-history",
+  [SHELL_SECTIONS.news]: "nav-news",
 };
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
@@ -909,15 +907,13 @@ function ScheduleTab({
         </div>
         <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ minHeight: 34 }}>
           <option value="my_team">My team schedule</option>
-          <option value="selected_team">Selected team</option>
+          <option value="selected_team">Team filter</option>
           <option value="all_week">League view (week slate)</option>
         </select>
         <span className="badge">{viewMode === 'my_team' ? 'My Team View' : viewMode === 'selected_team' ? 'Selected Team View' : 'League View'}</span>
-        {viewMode === "selected_team" && (
-          <select value={selectedTeamId ?? ""} onChange={(e) => setSelectedTeamId(Number(e.target.value))} style={{ minHeight: 34 }}>
-            {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-          </select>
-        )}
+        <select value={selectedTeamId ?? ""} onChange={(e) => setSelectedTeamId(Number(e.target.value))} style={{ minHeight: 34 }}>
+          {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+        </select>
       </div>
 
       {weekRecapItems.length > 0 && (
@@ -948,16 +944,8 @@ function ScheduleTab({
         </div>
       )}
 
-      {/* Game cards grid */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-          gap: "var(--space-4)",
-        }}
-      >
-        {weeklyHonors?.week === selectedWeek && (
-          <div className="matchup-card" style={{ gridColumn: "1 / -1", borderColor: "rgba(245,158,11,0.45)" }}>
+      {weeklyHonors?.week === selectedWeek && (
+        <div className="matchup-card" style={{ marginBottom: "var(--space-3)", borderColor: "rgba(245,158,11,0.45)" }}>
             <div className="matchup-header">
               <span>Week {selectedWeek} honors</span>
               <span style={{ color: "var(--warning)", fontWeight: 700 }}>Broadcast desk</span>
@@ -980,12 +968,17 @@ function ScheduleTab({
               {weeklyHonors?.statementWin && <div><strong style={{ color: "var(--text)" }}>Statement win:</strong> {weeklyHonors.statementWin.headline}</div>}
             </div>
           </div>
-        )}
-        {mergedVisibleGames.filter((game) => {
+      )}
+
+      {(() => {
+        const visibleGames = mergedVisibleGames.filter((game) => {
           if (statusFilter === 'completed') return Boolean(game?.played);
           if (statusFilter === 'upcoming') return !Boolean(game?.played);
           return true;
-        }).map((game, idx) => {
+        });
+        return (
+          <div style={{ display: "grid", gap: 8 }}>
+            {visibleGames.map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
             abbr: "???",
@@ -1037,88 +1030,28 @@ function ScheduleTab({
             ariaLabel: isClickable ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined,
           });
 
+          const upcomingGameId = game?.id ?? game?.gameId ?? null;
+          const canOpenGameDetail = !game.played && Boolean(upcomingGameId && onGameSelect);
+
           return (
             <div
               key={idx}
-              className={`matchup-card ${isClickable ? "clickable-card" : ""}`}
+              className={`card ${isClickable ? "clickable-card" : ""}`}
               {...clickableCardProps}
               style={{
-                ...(isUserGame
-                  ? {
-                      borderColor: "var(--accent)",
-                      boxShadow: "0 0 0 1px var(--accent), var(--shadow-lg)",
-                    }
-                  : {}),
+                padding: "10px 12px",
+                border: "1px solid var(--hairline)",
+                borderColor: isUserGame ? "var(--accent)" : "var(--hairline)",
                 ...(isClickable ? { cursor: "pointer" } : {}),
               }}
             >
-              {/* Card header */}
-              <div className="matchup-header">
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "var(--space-2)",
-                  }}
-                >
-                  <span>Week {selectedWeek}</span>
-                  {showStakes && (
-                    <span
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: "var(--radius-pill)",
-                        background:
-                          nextGameStakes > 80
-                            ? "var(--danger)"
-                            : "var(--warning)",
-                        color: "#fff",
-                        fontWeight: 700,
-                        fontSize: "var(--text-xs)",
-                        letterSpacing: "0.5px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}
-                    >
-                      {nextGameStakes > 80 ? "🔥 RIVALRY" : "⚠️ STAKES"}
-                    </span>
-                  )}
-                  {isTopWeekTeam && (
-                    <span style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "rgba(245,158,11,0.18)", color: "var(--warning)", fontWeight: 700, fontSize: "var(--text-xs)" }}>
-                      Team of the Week
-                    </span>
-                  )}
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 6 }}>
+                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
+                  Week {selectedWeek} · {away.abbr} @ {home.abbr}
                 </div>
-                <span
-                  style={{
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius-pill)",
-                    background: game.played
-                      ? "var(--success)22"
-                      : "var(--accent)22",
-                    color: game.played ? "var(--success)" : "var(--accent)",
-                    fontWeight: 700,
-                  }}
-                >
-                  {game.played ? "Final" : "Scheduled"}
-                </span>
-                {game.played && (
-                  <span style={{
-                    padding: "2px 8px",
-                    borderRadius: "var(--radius-pill)",
-                    background: archiveQuality === "full" ? "var(--success)22" : archiveQuality === "partial" ? "var(--warning)22" : "var(--surface-strong)",
-                    color: archiveQuality === "full" ? "var(--success)" : archiveQuality === "partial" ? "var(--warning)" : "var(--text-muted)",
-                    fontWeight: 700,
-                  }}>
-                    {archiveQuality === "full" ? "Full box score" : archiveQuality === "partial" ? "Partial archive" : "Archive unavailable"}
-                  </span>
-                )}
+                <span className="badge">{game.played ? "Final" : "Upcoming"}</span>
               </div>
-              {game.played && !resolvedGameId && (
-                <div style={{ fontSize: 12, color: "var(--warning)" }}>Final score available; archive ID missing in this save.</div>
-              )}
 
-              {/* Final score display */}
               {game.played && game.homeScore !== undefined && (
                 <>
                   <button
@@ -1131,12 +1064,7 @@ function ScheduleTab({
                     title={scoreTapHandler ? presentation?.ctaLabel ?? "View box score" : presentation?.statusLabel}
                   >
                     <span
-                      style={{
-                        color:
-                          game.awayScore > game.homeScore
-                            ? "var(--text)"
-                            : "var(--text-muted)",
-                      }}
+                      style={{ color: game.awayScore > game.homeScore ? "var(--text)" : "var(--text-muted)" }}
                     >
                       {isPlayoffs && seedByTeam[away.id]
                         ? `(${seedByTeam[away.id]}) `
@@ -1168,12 +1096,7 @@ function ScheduleTab({
                   </button>
                   {isClickable && (
                     <div
-                      style={{
-                        textAlign: "center",
-                        fontSize: "var(--text-xs)",
-                        color: "var(--accent)",
-                        marginBottom: "var(--space-1)",
-                      }}
+                      style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--accent)", marginBottom: "var(--space-1)" }}
                     >
                       {presentation?.ctaLabel ?? "View Box Score"} →
                     </div>
@@ -1203,6 +1126,14 @@ function ScheduleTab({
                   )}
                 </>
               )}
+              {!game.played && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                  <div style={{ fontWeight: 700 }}>{away.abbr} at {home.abbr}</div>
+                  <Button size="sm" variant="outline" onClick={() => canOpenGameDetail && onGameSelect?.(upcomingGameId)} disabled={!canOpenGameDetail}>
+                    {canOpenGameDetail ? "Game Details" : "Scheduled"}
+                  </Button>
+                </div>
+              )}
               {!game.played && pregameAngles.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: "var(--space-2)" }}>
                   {pregameAngles.map((angle) => (
@@ -1221,114 +1152,24 @@ function ScheduleTab({
                   ))}
                 </div>
               )}
-
-              {/* Teams */}
-              <div className="matchup-content">
-                <div className="matchup-team away">
-                  <TeamLogo
-                    abbr={away.abbr}
-                    size={64}
-                    isUser={away.id === userTeamId}
-                  />
-                  <div
-                    className="team-name-matchup"
-                    onClick={
-                      onTeamRoster
-                        ? (e) => {
-                            e.stopPropagation();
-                            onTeamRoster(away.id);
-                          }
-                        : undefined
-                    }
-                    style={{ cursor: onTeamRoster ? "pointer" : "default" }}
-                    title={
-                      onTeamRoster
-                        ? `View ${away.name ?? away.abbr} roster`
-                        : undefined
-                    }
-                  >
-                    {isPlayoffs && seedByTeam[away.id] ? (
-                      <span
-                        style={{
-                          fontSize: "var(--text-xs)",
-                          color: "var(--accent)",
-                          marginRight: 3,
-                        }}
-                      >
-                        ({seedByTeam[away.id]})
-                      </span>
-                    ) : null}
-                    {away.abbr}
-                  </div>
-                  <div className="team-record-matchup">
-                    {away.wins}-{away.losses}
-                    {away.ties > 0 ? `-${away.ties}` : ""}
-                  </div>
-                </div>
-                <div className="matchup-vs">
-                  <span className="vs-badge">VS</span>
-                  <span className="at-badge">at</span>
-                </div>
-                <div className="matchup-team home">
-                  <TeamLogo
-                    abbr={home.abbr}
-                    size={64}
-                    isUser={home.id === userTeamId}
-                  />
-                  <div
-                    className="team-name-matchup"
-                    onClick={
-                      onTeamRoster
-                        ? (e) => {
-                            e.stopPropagation();
-                            onTeamRoster(home.id);
-                          }
-                        : undefined
-                    }
-                    style={{ cursor: onTeamRoster ? "pointer" : "default" }}
-                    title={
-                      onTeamRoster
-                        ? `View ${home.name ?? home.abbr} roster`
-                        : undefined
-                    }
-                  >
-                    {isPlayoffs && seedByTeam[home.id] ? (
-                      <span
-                        style={{
-                          fontSize: "var(--text-xs)",
-                          color: "var(--accent)",
-                          marginRight: 3,
-                        }}
-                      >
-                        ({seedByTeam[home.id]})
-                      </span>
-                    ) : null}
-                    {home.abbr}
-                  </div>
-                  <div className="team-record-matchup">
-                    {home.wins}-{home.losses}
-                    {home.ties > 0 ? `-${home.ties}` : ""}
-                  </div>
-                </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(away.id); }}>{away.abbr}</button>
+                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(home.id); }}>{home.abbr}</button>
+                {showStakes ? <span className="badge">{nextGameStakes > 80 ? "Rivalry" : "Stakes"}</span> : null}
+                {isTopWeekTeam ? <span className="badge">Team of Week</span> : null}
               </div>
-              {isClickable ? <span className="clickable-card__chevron" aria-hidden="true">›</span> : null}
             </div>
           );
         })}
 
-        {visibleGames.length === 0 && (
-          <p
-            style={{
-              color: "var(--text-muted)",
-              gridColumn: "1/-1",
-              textAlign: "center",
-              padding: "var(--space-8)",
-            }}
-          >
-            No games found for week {selectedWeek}.
-          </p>
-        )}
-      </div>
+            {visibleGames.length === 0 && (
+              <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "var(--space-8)" }}>
+                No games found for week {selectedWeek}.
+              </p>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1698,257 +1539,6 @@ export default function LeagueDashboard({
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
       )}
-
-      {/* ── Status Grid — hidden during Draft to create a cleaner "War Room" view ── */}
-      {activeTab !== "Home" && activeTab !== "HQ" && league.phase !== "draft" && <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-          gap: "var(--space-4)",
-          marginBottom: "var(--space-4)",
-        }}
-      >
-        {/* Cap Space widget — consolidated financials */}
-        <div className="stat-box">
-          <div className="stat-label">Cap Space</div>
-          <div
-            className="stat-value-large"
-            style={{
-              color:
-                capRoom > 10
-                  ? "var(--success)"
-                  : capRoom > 0
-                    ? "var(--warning)"
-                    : "var(--danger)",
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            {formatMoneyM(capRoom)}
-          </div>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
-              <DonutChart data={[
-                  { value: Math.max(0, capUsed - deadCap), color: "var(--accent)" },
-                  { value: deadCap, color: "var(--danger)" },
-                  { value: Math.max(0, capRoom), color: "var(--surface-strong)" }
-              ]} size={36} strokeWidth={6} />
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: "var(--text-xs)", color: "var(--text-muted)", fontVariantNumeric: "tabular-nums" }}>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                      <span style={{ color: "var(--accent)" }}>Act: {formatMoneyM(Math.max(0, capUsed - deadCap))}</span>
-                      {deadCap > 0 && <span style={{ color: "var(--danger)" }}>Ded: {formatMoneyM(deadCap)}</span>}
-                  </div>
-                  <div>Tot: {formatMoneyM(capTotal, "—", { digits: 0 })}</div>
-              </div>
-          </div>
-        </div>
-
-        {/* Standings snapshot */}
-        <div className="stat-box">
-          <div className="stat-label">Standings</div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "baseline",
-              gap: 8,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "var(--text-xl)",
-                fontWeight: 800,
-                color: "var(--text)",
-              }}
-            >
-              {userRecord}
-            </span>
-            <span
-              style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}
-            >
-              {userTeam
-                ? `${typeof userTeam.conf === "number" ? CONFS[userTeam.conf] : userTeam.conf} ${typeof userTeam.div === "number" ? DIVS.find((d) => d.idx === userTeam.div)?.name : userTeam.div}`
-                : ""}
-            </span>
-          </div>
-          <div
-            style={{
-              fontSize: "var(--text-xs)",
-              color: "var(--text-muted)",
-              marginTop: 2,
-              fontVariantNumeric: "tabular-nums",
-            }}
-          >
-            Avg PPG: {avgScore} · Lg OVR: {avgOvr}
-          </div>
-        </div>
-
-        {/* Last Game + compact league scores */}
-        <div className="stat-box">
-          {(() => {
-            const toId = (value) =>
-              Number(typeof value === "object" ? value?.id : value);
-            const prevWeek = Number(lastSimWeek ?? ((league.week || 1) - 1));
-
-            const teamById = {};
-            safeTeams?.forEach((t) => {
-              teamById[t.id] = t;
-            });
-
-            const authoritativeResults = Array.isArray(lastResults) ? lastResults : [];
-            const userResult = authoritativeResults.find(
-              (r) =>
-                Number(r.homeId) === Number(league.userTeamId) ||
-                Number(r.awayId) === Number(league.userTeamId),
-            );
-
-            if (userResult) {
-              const homeId = Number(userResult.homeId);
-              const awayId = Number(userResult.awayId);
-              const isHome = homeId === league.userTeamId;
-              const userScore = isHome
-                ? userResult.homeScore
-                : userResult.awayScore;
-              const oppScore = isHome ? userResult.awayScore : userResult.homeScore;
-              const oppId = isHome ? awayId : homeId;
-              const oppAbbr = teamById[oppId]?.abbr ?? "???";
-              const win = userScore > oppScore;
-              const resultChar = win ? "W" : userScore === oppScore ? "T" : "L";
-              const resultColor = win
-                ? "var(--success)"
-                : userScore === oppScore
-                  ? "var(--text-muted)"
-                  : "var(--danger)";
-
-              return (
-                <>
-                  <div className="stat-label">Last Game</div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "var(--text-lg)",
-                        fontWeight: 800,
-                        color: resultColor,
-                      }}
-                    >
-                      {resultChar}
-                    </span>
-                    <span
-                      style={{ fontSize: "var(--text-base)", fontWeight: 700 }}
-                    >
-                      {userScore}-{oppScore}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "var(--text-xs)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      vs {oppAbbr}
-                    </span>
-                  </div>
-                  {/* Compact other league scores — click to open BoxScore */}
-                  {authoritativeResults.length > 1 && (
-                    <div
-                      style={{
-                        marginTop: 4,
-                        fontSize: 10,
-                        color: "var(--text-subtle)",
-                        lineHeight: 1.5,
-                        fontVariantNumeric: "tabular-nums",
-                        maxHeight: 48,
-                        overflow: "hidden",
-                      }}
-                    >
-                      {authoritativeResults
-                        .filter((g) => g !== userResult)
-                        .slice(0, 6)
-                        .map((g, i, arr) => {
-                        const hId = toId(g.homeId);
-                        const aId = toId(g.awayId);
-                        const hA = teamById[hId]?.abbr ?? "?";
-                        const aA = teamById[aId]?.abbr ?? "?";
-                        const compactPresentation = buildCompletedGamePresentation(g, { seasonId: league.seasonId, week: prevWeek, source: "weekly_hub_compact_scores" });
-                        const gId = compactPresentation.resolvedGameId;
-                        const compactScoreTapHandler = createBoxScoreTapHandler({
-                          gameId: gId,
-                          onOpenBoxScore: () => openResolvedBoxScore(g, { seasonId: league.seasonId, week: prevWeek, source: "weekly_hub_compact_scores" }, (id) => openGameDetail(id, "Weekly Hub")),
-                        });
-                        return (
-                          <React.Fragment key={i}>
-                            {compactPresentation.canOpen ? (
-                              <button
-                                type="button"
-                                className="compact-score-link"
-                                onClick={compactScoreTapHandler}
-                                aria-label={`Open box score for ${aA} at ${hA}`}
-                                title={compactPresentation.ctaLabel}
-                              >
-                                {aA} {g.awayScore}-{g.homeScore} {hA}
-                              </button>
-                            ) : (
-                              <span title={compactPresentation.statusLabel}>{aA} {g.awayScore}-{g.homeScore} {hA}</span>
-                            )}
-                            {i < arr.length - 1 ? " · " : ""}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  )}
-                </>
-              );
-            }
-
-            if (authoritativeResults.length > 0) {
-              const featured = buildLatestResultsSummary({ results: authoritativeResults, teamById });
-              return (
-                <>
-                  <div className="stat-label">Last Game</div>
-                  <div
-                    style={{
-                      fontSize: "var(--text-sm)",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    Week {prevWeek} complete. No user matchup in latest results.
-                  </div>
-                  <div
-                    style={{
-                      marginTop: 4,
-                      fontSize: 10,
-                      color: "var(--text-subtle)",
-                      lineHeight: 1.5,
-                      fontVariantNumeric: "tabular-nums",
-                    }}
-                  >
-                    {featured.join(" · ")}
-                  </div>
-                </>
-              );
-            }
-
-            return (
-              <>
-                <div className="stat-label">Last Game</div>
-                <div
-                  style={{
-                    fontSize: "var(--text-sm)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  No latest simulated results
-                </div>
-              </>
-            );
-          })()}
-        </div>
-
-      </div>}
 
       {/* ── Grouped Navigation ── */}
       {!isMobile && <div

@@ -6,8 +6,7 @@ describe("navigation copy", () => {
     expect(NAV_LABELS.hq).toBe("HQ");
     expect(NAV_LABELS.team).toBe("Team");
     expect(NAV_LABELS.league).toBe("League");
-    expect(NAV_LABELS.transactions).toBe("Transactions");
-    expect(NAV_LABELS.history).toBe("History");
+    expect(NAV_LABELS.news).toBe("News");
   });
 
   it("uses one shared wording for top-level overflow actions", () => {

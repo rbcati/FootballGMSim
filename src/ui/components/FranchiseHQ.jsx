@@ -1,11 +1,9 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
-import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
 import { getHQViewModel } from "../../state/selectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
-import { persistHqCollapsedState, readHqCollapsedState } from "../utils/hqCardState.js";
 import { EmptyState, SectionCard, StatCard, TeamChip } from "./common/UiPrimitives.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
 
@@ -37,30 +35,11 @@ function getNextGame(league) {
   return null;
 }
 
-function CollapsibleCard({ title, collapsed, onToggle, children }) {
-  return (
-    <SectionCard
-      title={title}
-      actions={<Button size="sm" variant="outline" onClick={onToggle}>{collapsed ? "Expand" : "Collapse"}</Button>}
-    >
-      {!collapsed && children}
-      {collapsed && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Collapsed</div>}
-    </SectionCard>
-  );
-}
-
-export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeamSelect }) {
+export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeamSelect, onAdvanceWeek, busy, simulating }) {
   const vm = useMemo(() => getHQViewModel(league), [league]);
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
-  const latest = useMemo(() => findLatestUserCompletedGame(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
-  const recentGames = useMemo(() => getArchivedRecentGames(5), [vm.league?.seasonId, vm.league?.week]);
   const latestArchived = useMemo(() => getArchivedRecentGames(1)?.[0] ?? null, [vm.league?.seasonId, vm.league?.week]);
-  const [collapsed, setCollapsed] = useState(() => readHqCollapsedState());
-
-  useEffect(() => {
-    persistHqCollapsedState(collapsed);
-  }, [collapsed]);
 
   if (!vm.userTeam) {
     return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
@@ -69,7 +48,18 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const team = vm.userTeam;
   const cap = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
   const record = formatRecord(team);
-  const urgentItems = (weekly?.urgentItems ?? []).slice(0, 4);
+  const urgentItems = (weekly?.urgentItems ?? []).slice(0, 5);
+  const pressureSummary = `Owner ${weekly?.pressure?.owner?.state ?? "Stable"} · Fans ${weekly?.pressure?.fans?.state ?? "Steady"} · Media ${weekly?.pressure?.media?.state ?? "Steady"}`;
+  const teamDevelopments = (vm.league?.newsItems ?? [])
+    .filter((item) => item?.teamId == null || Number(item?.teamId) === Number(vm.league?.userTeamId))
+    .slice(0, 3);
+  const latestGamePresentation = latestArchived
+    ? buildCompletedGamePresentation({
+      ...latestArchived,
+      homeScore: latestArchived?.score?.home,
+      awayScore: latestArchived?.score?.away,
+    }, { seasonId: vm.league?.seasonId, week: Number(latestArchived?.week ?? vm.league?.week ?? 1), source: "hq_last_game" })
+    : null;
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-3)" }}>
@@ -77,13 +67,11 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{vm.league?.year} · Week {vm.league?.week ?? 1} · {vm.league?.phase ?? "regular"}</div>
           <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{record} · {team?.conf ?? ""} {team?.div ?? ""}</div>
-          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>
-            Owner {weekly?.pressure?.owner?.state ?? "Stable"} · Fans {weekly?.pressure?.fans?.state ?? "Steady"} · Media {weekly?.pressure?.media?.state ?? "Steady"}
-          </div>
+          <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{pressureSummary}</div>
+          <Button size="sm" onClick={onAdvanceWeek} disabled={busy || simulating}>Advance Week</Button>
         </div>
       </SectionCard>
 
-      <h3 style={{ margin: 0 }}>Team</h3>
       <SectionCard title="Next Game">
         {nextGame ? (
           <div style={{ display: "grid", gap: 8 }}>
@@ -94,6 +82,26 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
             </div>
           </div>
         ) : <div style={{ color: "var(--text-muted)" }}>No upcoming game found.</div>}
+      </SectionCard>
+
+      <SectionCard title="Last Game">
+        {!latestArchived ? <div style={{ color: "var(--text-muted)" }}>No completed game yet.</div> : (
+          <button
+            type="button"
+            className="btn"
+            style={{ textAlign: "left" }}
+            onClick={() => onOpenBoxScore?.(latestArchived?.id)}
+            disabled={!latestGamePresentation?.canOpen}
+            title={latestGamePresentation?.canOpen ? "Open box score" : latestGamePresentation?.statusLabel}
+          >
+            <strong>
+              Week {latestArchived?.week ?? vm.league?.week}: {latestArchived?.awayAbbr} {latestArchived?.score?.away} - {latestArchived?.score?.home} {latestArchived?.homeAbbr}
+            </strong>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+              {latestGamePresentation?.canOpen ? "Tap score to open box score ›" : latestGamePresentation?.statusLabel}
+            </div>
+          </button>
+        )}
       </SectionCard>
 
       <SectionCard title="Urgent Actions" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Team Hub</Button>}>
@@ -118,17 +126,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         </div>
       </SectionCard>
 
-      <h3 style={{ margin: 0 }}>League</h3>
-      <SectionCard title="League Pulse" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("League")}>League Hub</Button>}>
-        <div style={{ display: "grid", gap: 6 }}>
-          <div><strong>Race note:</strong> {weekly?.storylineCards?.[0]?.title ?? "Playoff race snapshots populate as season advances."}</div>
-          <div><strong>Major move:</strong> {(vm.league?.newsItems ?? []).find((n) => /trade|signed|contract|free agency/i.test(`${n?.headline} ${n?.body}`))?.headline ?? "No major transaction note."}</div>
-        </div>
-      </SectionCard>
-
-      <CollapsibleCard title="News Preview" collapsed={collapsed.leagueNews} onToggle={() => setCollapsed((prev) => ({ ...prev, leagueNews: !prev.leagueNews }))}>
+      <SectionCard title="Team Developments" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("News")}>Open News</Button>}>
         <div style={{ display: "grid", gap: 8 }}>
-          {(vm.league?.newsItems ?? []).slice(0, 3).map((item, idx) => (
+          {teamDevelopments.map((item, idx) => (
             <button
               key={item?.id ?? `preview-${idx}`}
               className="btn"
@@ -141,59 +141,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
               <div style={{ fontWeight: 700 }}>{item?.headline ?? "League update"}</div>
             </button>
           ))}
+          {teamDevelopments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No major updates this week.</div> : null}
         </div>
-      </CollapsibleCard>
-
-      <CollapsibleCard title="Stat Leaders" collapsed={collapsed.statLeaders} onToggle={() => setCollapsed((prev) => ({ ...prev, statLeaders: !prev.statLeaders }))}>
-        <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>Open League → Leaders for full table details.</div>
-        <Button size="sm" variant="outline" onClick={() => onNavigate?.("Leaders")}>Open Leaders</Button>
-      </CollapsibleCard>
-
-      <h3 style={{ margin: 0 }}>Recent Games</h3>
-      <SectionCard title="Latest Finals">
-        {recentGames.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No completed games yet.</div> : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {recentGames.map((game, idx) => {
-              const week = Number(game?.week ?? 0);
-              const presentation = buildCompletedGamePresentation({
-                ...game,
-                homeScore: game?.score?.home,
-                awayScore: game?.score?.away,
-              }, { seasonId: vm.league?.seasonId, week, source: "hq_recent_games" });
-              return (
-                <button
-                  key={`${week}-${game.homeId}-${game.awayId}-${idx}`}
-                  type="button"
-                  className="btn"
-                  data-testid="recent-game-card"
-                  style={{ textAlign: "left", cursor: presentation.canOpen ? "pointer" : "not-allowed" }}
-                  onClick={() => onOpenBoxScore?.(game?.id)}
-                  disabled={!presentation.canOpen}
-                  title={presentation.canOpen ? "View Box Score" : presentation.statusLabel}
-                >
-                  <strong>Week {week}: {game?.awayAbbr} {game?.score?.away} - {game?.score?.home} {game?.homeAbbr}</strong>
-                  <div data-testid="archive-status" style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{presentation.canOpen ? "View Box Score ›" : presentation.statusLabel}</div>
-                </button>
-              );
-            })}
-          </div>
-        )}
       </SectionCard>
-
-      {(latestArchived || latest?.game) && (
-        <SectionCard title="Last User Game">
-          <Button
-            size="sm"
-            data-testid="box-score-trigger"
-            onClick={() => {
-              const gameId = latestArchived?.id ?? latest?.gameId;
-              if (gameId) onOpenBoxScore?.(gameId);
-            }}
-          >
-            Open latest box score
-          </Button>
-        </SectionCard>
-      )}
     </div>
   );
 }
