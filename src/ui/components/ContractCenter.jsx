@@ -7,6 +7,7 @@ import {
 } from '../../core/retention/reSigning.js';
 import { summarizeNegotiationStance } from '../../core/contracts/negotiation.js';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
+import { deriveTeamCapSnapshot } from '../utils/numberFormatting.js';
 
 function money(v) {
   const n = Number(v);
@@ -64,12 +65,13 @@ function PlayerRow({ row, onOpenTalks, onTag }) {
   );
 }
 
-export default function ContractCenter({ league, actions }) {
+export default function ContractCenter({ league, actions, compact = false }) {
   const [extensionPlayer, setExtensionPlayer] = useState(null);
   const [statusMessage, setStatusMessage] = useState('');
 
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const { board, capOutlook } = useMemo(() => buildRetentionBoard(team ?? {}, league ?? {}), [team, league]);
+  const capSnapshot = useMemo(() => deriveTeamCapSnapshot(team ?? {}, { fallbackCapTotal: 255 }), [team]);
   const grouped = useMemo(() => groupRows(board), [board]);
 
   const recentActivity = useMemo(() => {
@@ -93,13 +95,15 @@ export default function ContractCenter({ league, actions }) {
   };
 
   return (
-    <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <section className="card" style={{ padding: 'var(--space-3)' }}>
+    <div className="app-screen-stack" style={{ display: 'grid', gap: compact ? 'var(--space-2)' : 'var(--space-3)' }}>
+      <section className="card" style={{ padding: compact ? '10px' : 'var(--space-3)' }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>Contract Center</h2>
         <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, fontSize: 12 }}>
-          <div><strong>Cap room:</strong> {money(capOutlook.capRoom)}</div>
+          <div><strong>Cap total:</strong> {money(capSnapshot.capTotal)}</div>
+          <div><strong>Cap used:</strong> {money(capSnapshot.capUsed)}</div>
+          <div><strong>Cap room:</strong> {money(capSnapshot.capRoom)}</div>
+          <div><strong>Dead money:</strong> {money(capSnapshot.deadCap)}</div>
           <div><strong>Next year:</strong> {money(capOutlook.projectedCapRoomNextYear)}</div>
-          <div><strong>Priority cost:</strong> {money(capOutlook.projectedPriorityCost)}</div>
           <div><strong>Likely keeps:</strong> {capOutlook.likelyRetentionCount}</div>
         </div>
         <div style={{ marginTop: 6, color: 'var(--text-subtle)', fontSize: 12 }}>{capOutlook.summary}</div>
@@ -107,7 +111,7 @@ export default function ContractCenter({ league, actions }) {
       </section>
 
       {Object.entries(grouped).map(([title, rows]) => (
-        <section key={title} className="card" style={{ padding: 'var(--space-3)' }}>
+        <section key={title} className="card" style={{ padding: compact ? '10px' : 'var(--space-3)' }}>
           <h3 style={{ margin: 0, fontSize: 14 }}>{title} ({rows.length})</h3>
           <div style={{ marginTop: 6 }}>
             {rows.slice(0, 10).map((row) => (
@@ -123,7 +127,7 @@ export default function ContractCenter({ league, actions }) {
         </section>
       ))}
 
-      <section className="card" style={{ padding: 'var(--space-3)' }}>
+      <section className="card" style={{ padding: compact ? '10px' : 'var(--space-3)' }}>
         <h3 style={{ margin: 0, fontSize: 14 }}>Recent negotiation activity</h3>
         <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: 'var(--text-subtle)', fontSize: 12 }}>
           {recentActivity.map((line, idx) => <li key={`${line}-${idx}`}>{line}</li>)}
