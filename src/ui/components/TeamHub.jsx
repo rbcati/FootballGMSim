@@ -4,6 +4,7 @@ import ContractCenter from './ContractCenter.jsx';
 import StaffManagement from './StaffManagement.jsx';
 import SectionHeader from './SectionHeader.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
+import SocialFeed from './SocialFeed.jsx';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
 
@@ -225,6 +226,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
       {subtab === 'Overview' && (
         <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+          <SocialFeed league={league} defaultFilter="team" maxItems={6} onPlayerSelect={onPlayerSelect} />
           <div className="card" style={{ padding: '10px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>TEAM SNAPSHOT</div>

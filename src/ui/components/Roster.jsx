@@ -53,6 +53,7 @@ import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/dep
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
+import SocialFeed from "./SocialFeed.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2296,6 +2297,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
           </span>
         </div>
       </CardContent></Card>
+      <SocialFeed league={league} defaultFilter="team" maxItems={5} onPlayerSelect={onPlayerSelect} />
 
       {/* ── Loading state ── */}
       {loading && (

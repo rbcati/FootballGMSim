@@ -5,6 +5,7 @@ import PlayerStats from './PlayerStats.jsx';
 import SectionHeader from './SectionHeader.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 import { buildNewsDeskModel } from '../utils/newsDesk.js';
+import SocialFeed from './SocialFeed.jsx';
 
 const LEAGUE_SUBNAV = ['Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
 
@@ -71,6 +72,7 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
     <div>
       <SectionHeader title="League" subtitle="League command center" />
       <SectionSubnav items={LEAGUE_SUBNAV} activeItem={subtab} onChange={setSubtab} />
+      <SocialFeed league={league} defaultFilter="league" maxItems={8} onPlayerSelect={onPlayerSelect} />
 
       {subtab === 'Standings' && renderStandings?.()}
       {subtab === 'Schedule' && renderSchedule?.('League')}

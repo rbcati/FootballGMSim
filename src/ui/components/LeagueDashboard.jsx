@@ -364,11 +364,7 @@ function getConferenceRankings(teams, confVal) {
   const ci = typeof confVal === "string" ? (confVal === "AFC" ? 0 : 1) : confVal;
   const confTeams = teams
     .filter(t => confIdx(t.conf) === ci)
-    .sort((a, b) => {
-      const pa = parseFloat(winPct(a.wins, a.losses, a.ties));
-      const pb = parseFloat(winPct(b.wins, b.losses, b.ties));
-      return pb - pa || b.wins - a.wins;
-    });
+    .sort(compareStandingRows);
 
   // 7 teams make playoffs: 4 division winners (seeds 1-4) + 3 wild cards (seeds 5-7)
   // For simplicity: top team from each division gets a div seed, rest sorted for WC
@@ -384,6 +380,19 @@ function getConferenceRankings(teams, confVal) {
   const wildcards = confTeams.filter(t => !divWinners.has(t.id));
 
   return { divWinnerList, wildcards, divWinners, confTeams };
+}
+
+function compareStandingRows(a, b) {
+  const pa = parseFloat(winPct(a.wins, a.losses, a.ties));
+  const pb = parseFloat(winPct(b.wins, b.losses, b.ties));
+  if (pb !== pa) return pb - pa;
+  const h2hA = Number(a?.tiebreakers?.headToHeadWinPct ?? a?.headToHeadWinPct ?? 0);
+  const h2hB = Number(b?.tiebreakers?.headToHeadWinPct ?? b?.headToHeadWinPct ?? 0);
+  if (h2hB !== h2hA) return h2hB - h2hA;
+  const divA = Number(a?.tiebreakers?.divisionWinPct ?? a?.divisionWinPct ?? 0);
+  const divB = Number(b?.tiebreakers?.divisionWinPct ?? b?.divisionWinPct ?? 0);
+  if (divB !== divA) return divB - divA;
+  return Number(b?.wins ?? 0) - Number(a?.wins ?? 0);
 }
 
 function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
@@ -497,9 +506,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect, leagueSettings }) {
       teams: confTeams
         .filter((t) => divIdx(t.div) === idx)
         .sort((a, b) => {
-          const pa = winPct(a.wins, a.losses, a.ties);
-          const pb = winPct(b.wins, b.losses, b.ties);
-          return pb - pa || b.wins - a.wins;
+          return compareStandingRows(a, b);
         }),
     })).filter((g) => g.teams.length > 0);
 
@@ -704,7 +711,7 @@ function StandingsTab({ teams, userTeamId, onTeamSelect, leagueSettings }) {
       </div>
       )} {/* end playoff/division ternary */}
       <div style={{ marginTop: "var(--space-2)", fontSize: "0.66rem", color: "var(--text-subtle)" }}>
-        PF/PA values are season aggregates and may appear compressed early in the season.
+        Tiebreakers: head-to-head, then division record, then total wins. PF/PA values are season aggregates and may appear compressed early.
       </div>
     </div>
   );

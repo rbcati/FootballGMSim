@@ -11,6 +11,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import NewsFeed from './NewsFeed.jsx';
+import SocialFeed from './SocialFeed.jsx';
 import OwnerGoalsPanel from './OwnerGoalsPanel.jsx';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -1488,6 +1489,7 @@ export default function HomeDashboard({ league, onTeamSelect, onPlayerSelect, on
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       <NewsFeed league={league} mode="ticker" />
+      <SocialFeed league={league} maxItems={8} onPlayerSelect={(playerId) => onTabChange?.("Roster", { playerId })} />
 
       {/* ── NEW SAVE: Full welcome hero replaces phase banner for first load ── */}
       {isNewSave ? (

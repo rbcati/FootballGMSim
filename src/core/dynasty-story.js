@@ -3,6 +3,7 @@ import { ensureLeagueMemoryMeta } from './league-memory.js';
 export const ensureDynastyMeta = (meta) => ensureLeagueMemoryMeta({
   ...meta,
   newsItems: Array.isArray(meta?.newsItems) ? meta.newsItems : [],
+  socialFeedEntries: Array.isArray(meta?.socialFeedEntries) ? meta.socialFeedEntries : [],
   ownerGoals: Array.isArray(meta?.ownerGoals) ? meta.ownerGoals : [],
   retiredPlayers: Array.isArray(meta?.retiredPlayers) ? meta.retiredPlayers : [],
   records: meta?.records ?? {
