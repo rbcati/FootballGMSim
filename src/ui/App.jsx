@@ -40,7 +40,7 @@ import React, { useEffect, useCallback, useRef, useState, Component, useMemo } f
 import { useWorker }       from './hooks/useWorker.js';
 import LeagueDashboard     from './components/LeagueDashboard.jsx';
 import LiveGame            from './components/LiveGame.jsx';
-import LiveGameViewer      from './components/LiveGameViewer.jsx';
+import LiveGameView        from './components/LiveGameView.jsx';
 import PostGameScreen      from './components/PostGameScreen.jsx';
 import SaveSlotManager     from './components/SaveSlotManager.jsx';
 import NewLeagueSetup      from './components/NewLeagueSetup.jsx';
@@ -1042,7 +1042,7 @@ function AppContent() {
             actions.clearUserGame();
             setTimeout(() => actions.advanceWeek({ skipUserGame: true }), 200);
           }}>
-            <LiveGameViewer
+            <LiveGameView
               logs={userGameLogs}
               homeTeam={homeTeam}
               awayTeam={awayTeam}
