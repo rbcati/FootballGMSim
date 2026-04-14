@@ -6,6 +6,7 @@ import {
   summarizeRetentionRecommendation,
 } from '../../core/retention/reSigning.js';
 import { summarizeNegotiationStance } from '../../core/contracts/negotiation.js';
+import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 
 function money(v) {
   const n = Number(v);
@@ -25,48 +26,40 @@ function prettify(v = '') {
 
 function groupRows(board = []) {
   return {
-    PriorityReSignings: board.filter((r) => ['cornerstone_priority', 'strong_keep'].includes(r.priority.recommendation) && r.priority.expiring),
-    ExtensionCandidates: board.filter((r) => r.section === 'extension_candidate'),
-    ExpiringStarters: board.filter((r) => r.priority.expiring && (r.player?.ovr ?? 0) >= 75),
-    LetWalkCandidates: board.filter((r) => r.section === 'let_walk_candidate'),
-    DepthLowUrgencyDeals: board.filter((r) => r.section === 'depth_low_urgency'),
+    'Expiring soon': board.filter((r) => r.priority.expiring),
+    'Expensive contracts': board
+      .filter((r) => Number(derivePlayerContractFinancials(r.player).annualSalary ?? 0) >= 18)
+      .sort((a, b) => Number(derivePlayerContractFinancials(b.player).annualSalary ?? 0) - Number(derivePlayerContractFinancials(a.player).annualSalary ?? 0)),
+    'Extension candidates': board.filter((r) => ['extension_candidate', 'strong_keep', 'cornerstone_priority'].includes(r.section) || ['cornerstone_priority', 'strong_keep'].includes(r.priority.recommendation)),
+    'Cut / restructure candidates': board.filter((r) => ['let_walk_candidate', 'depth_low_urgency'].includes(r.section) || ['let_walk', 'move_on'].includes(r.priority.recommendation)),
   };
 }
 
 function PlayerRow({ row, onOpenTalks, onTag }) {
   const { player, priority, plan, negotiation } = row;
+  const contract = derivePlayerContractFinancials(player);
   return (
-    <div style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10, background: 'var(--surface-strong)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+    <div style={{ borderBottom: '1px solid var(--hairline)', padding: '8px 0' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
         <div>
-          <div style={{ fontWeight: 800 }}>{player.name} · {player.pos}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Age {player.age} · OVR {player.ovr} · {priority.expiring ? 'Expiring' : `${priority.yearsLeft}y left`}</div>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>{player.name} · {player.pos}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age {player.age} · OVR {player.ovr} · {money(contract.annualSalary)} · {contract.yearsRemaining ?? 0}y left</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Recommendation</div>
-          <div style={{ fontWeight: 700, color: toneForRecommendation(priority.recommendation) }}>{prettify(priority.recommendation)}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Recommendation</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: toneForRecommendation(priority.recommendation) }}>{prettify(priority.recommendation)}</div>
         </div>
       </div>
-      <div style={{ marginTop: 8, display: 'grid', gap: 4, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', fontSize: 12 }}>
-        <div><strong>Motivation:</strong> {priority.profile.headline}</div>
-        <div><strong>Stance:</strong> {prettify(negotiation.negotiationStance)}</div>
-        <div><strong>Team fit:</strong> {Math.round(negotiation.scoreBreakdown.schemeFit)}/100</div>
-        <div><strong>Market difficulty:</strong> {priority.expectedMarketDifficulty}</div>
-        <div><strong>Extension readiness:</strong> {prettify(priority.extensionReadiness)}</div>
-        <div><strong>Likely ask:</strong> {money(priority.demand.baseAnnual)} / yr</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4, fontSize: 11, color: 'var(--text-subtle)' }}>
+        <span>{summarizeRetentionRecommendation(priority.recommendation)}</span>
+        <span>·</span>
+        <span>{summarizeNegotiationStance({ negotiationStance: negotiation.negotiationStance })}</span>
       </div>
-      <div style={{ fontSize: 12, marginTop: 6, color: 'var(--text-subtle)' }}>
-        {summarizeRetentionRecommendation(priority.recommendation)}
-      </div>
-      <div style={{ fontSize: 12, marginTop: 4, color: 'var(--text-subtle)' }}>
-        {summarizeNegotiationStance({ negotiationStance: negotiation.negotiationStance })}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
         <Button size="sm" variant="outline" onClick={() => onOpenTalks(player)}>Open talks</Button>
         {priority.expiring ? <Button size="sm" variant="outline" onClick={() => onTag(player)}>Franchise tag</Button> : null}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>Offer closeness: {negotiation.score}/100</span>
+        {plan?.risk?.summary ? <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)' }}>{plan.risk.summary}</span> : null}
       </div>
-      {plan?.risk?.summary ? <div style={{ marginTop: 5, fontSize: 11, color: 'var(--text-muted)' }}>{plan.risk.summary}</div> : null}
     </div>
   );
 }
@@ -82,7 +75,7 @@ export default function ContractCenter({ league, actions }) {
   const recentActivity = useMemo(() => {
     return board
       .filter((r) => ['counter', 'reject'].includes(r.negotiation.tendency) || r.priority.expiring)
-      .slice(0, 6)
+      .slice(0, 4)
       .map((r) => `${r.player.name}: ${summarizeNegotiationStance({ negotiationStance: r.negotiation.negotiationStance })}`);
   }, [board]);
 
@@ -100,24 +93,24 @@ export default function ContractCenter({ league, actions }) {
   };
 
   return (
-    <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-4)' }}>
-      <section className="card" style={{ padding: 'var(--space-4)' }}>
-        <h2 style={{ marginTop: 0 }}>Contract Center</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, fontSize: 13 }}>
-          <div><strong>Cap room now:</strong> {money(capOutlook.capRoom)}</div>
-          <div><strong>Projected next year:</strong> {money(capOutlook.projectedCapRoomNextYear)}</div>
-          <div><strong>Top-priority cost:</strong> {money(capOutlook.projectedPriorityCost)}</div>
+    <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-3)' }}>
+      <section className="card" style={{ padding: 'var(--space-3)' }}>
+        <h2 style={{ margin: 0, fontSize: 16 }}>Contract Center</h2>
+        <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, fontSize: 12 }}>
+          <div><strong>Cap room:</strong> {money(capOutlook.capRoom)}</div>
+          <div><strong>Next year:</strong> {money(capOutlook.projectedCapRoomNextYear)}</div>
+          <div><strong>Priority cost:</strong> {money(capOutlook.projectedPriorityCost)}</div>
           <div><strong>Likely keeps:</strong> {capOutlook.likelyRetentionCount}</div>
         </div>
-        <div style={{ marginTop: 8, color: 'var(--text-subtle)', fontSize: 13 }}>{capOutlook.summary}</div>
-        {statusMessage ? <div style={{ marginTop: 6, fontSize: 12, color: 'var(--accent)' }}>{statusMessage}</div> : null}
+        <div style={{ marginTop: 6, color: 'var(--text-subtle)', fontSize: 12 }}>{capOutlook.summary}</div>
+        {statusMessage ? <div style={{ marginTop: 4, fontSize: 11, color: 'var(--accent)' }}>{statusMessage}</div> : null}
       </section>
 
       {Object.entries(grouped).map(([title, rows]) => (
-        <section key={title} className="card" style={{ padding: 'var(--space-4)' }}>
-          <h3 style={{ marginTop: 0 }}>{title.replace(/([A-Z])/g, ' $1').trim()} ({rows.length})</h3>
-          <div style={{ display: 'grid', gap: 8 }}>
-            {rows.slice(0, 8).map((row) => (
+        <section key={title} className="card" style={{ padding: 'var(--space-3)' }}>
+          <h3 style={{ margin: 0, fontSize: 14 }}>{title} ({rows.length})</h3>
+          <div style={{ marginTop: 6 }}>
+            {rows.slice(0, 10).map((row) => (
               <PlayerRow
                 key={row.player.id}
                 row={row}
@@ -125,21 +118,14 @@ export default function ContractCenter({ league, actions }) {
                 onTag={handleTag}
               />
             ))}
-            {rows.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No players in this bucket.</div> : null}
+            {rows.length === 0 ? <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 6 }}>No players in this bucket.</div> : null}
           </div>
         </section>
       ))}
 
-      <section className="card" style={{ padding: 'var(--space-4)' }}>
-        <h3 style={{ marginTop: 0 }}>Offseason Retention Board</h3>
-        <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-subtle)' }}>
-          {board.slice(0, 5).map((row) => <li key={row.player.id}>{row.player.name} · {prettify(row.priority.recommendation)} · {row.priority.expectedMarketDifficulty} market</li>)}
-        </ul>
-      </section>
-
-      <section className="card" style={{ padding: 'var(--space-4)' }}>
-        <h3 style={{ marginTop: 0 }}>Recent Negotiation Activity</h3>
-        <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-subtle)' }}>
+      <section className="card" style={{ padding: 'var(--space-3)' }}>
+        <h3 style={{ margin: 0, fontSize: 14 }}>Recent negotiation activity</h3>
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: 'var(--text-subtle)', fontSize: 12 }}>
           {recentActivity.map((line, idx) => <li key={`${line}-${idx}`}>{line}</li>)}
           {recentActivity.length === 0 ? <li>No active internal negotiation signals this week.</li> : null}
         </ul>
