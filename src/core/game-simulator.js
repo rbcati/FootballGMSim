@@ -1470,6 +1470,21 @@ export function simGameStats(home, away, options = {}) {
     applyStrategy(home, homeMods);
     applyStrategy(away, awayMods);
 
+    const applyStaffTacticalEdge = (team, mods) => {
+      const tactical = Number(team?.staffBonuses?.tacticalEdgeDelta ?? 0);
+      const hcScheme = String(team?.staff?.headCoach?.schemePreference ?? '').toLowerCase();
+      const ocScheme = String(team?.staff?.offCoordinator?.schemePreference ?? '').toLowerCase();
+      const dcScheme = String(team?.staff?.defCoordinator?.schemePreference ?? '').toLowerCase();
+      const blendedScheme = `${hcScheme} ${ocScheme} ${dcScheme}`;
+      if (blendedScheme.includes('west coast')) mods.passAccuracy = (mods.passAccuracy ?? 1) * (1 + Math.max(-0.08, tactical * 0.25));
+      if (blendedScheme.includes('spread') || blendedScheme.includes('vertical')) mods.passVolume = (mods.passVolume ?? 1) * (1 + Math.max(-0.08, tactical * 0.32));
+      if (blendedScheme.includes('smashmouth')) mods.runVolume = (mods.runVolume ?? 1) * (1 + Math.max(-0.08, tactical * 0.3));
+      if (blendedScheme.includes('3-4') || blendedScheme.includes('blitz')) mods.sackChance = (mods.sackChance ?? 1) * (1 + Math.max(-0.1, tactical * 0.35));
+      if (blendedScheme.includes('4-3') || blendedScheme.includes('nickel')) mods.intChance = (mods.intChance ?? 1) * (1 + Math.max(-0.08, tactical * 0.26));
+    };
+    applyStaffTacticalEdge(home, homeMods);
+    applyStaffTacticalEdge(away, awayMods);
+
     if (false) console.log(`[SIM-DEBUG] Mods Applied: Home=${JSON.stringify(homeMods)}, Away=${JSON.stringify(awayMods)}`);
     // --- SCHEME FIT IMPACT ---
     let schemeNote = null;

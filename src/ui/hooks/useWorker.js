@@ -518,6 +518,7 @@ export function useWorker() {
     getStaffState: () => request(toWorker.GET_STAFF_STATE, {}, { silent: true }),
     hireStaffMember: (payload) => request(toWorker.HIRE_STAFF_MEMBER, payload, { silent: true }),
     fireStaffMember: (payload) => request(toWorker.FIRE_STAFF_MEMBER, payload, { silent: true }),
+    negotiateStaffContract: (payload) => request(toWorker.NEGOTIATE_STAFF_CONTRACT, payload, { silent: true }),
     updateDraftBoard: (payload) => send(toWorker.UPDATE_DRAFT_BOARD, payload),
 
     /** Hire a coach (replaces existing). */

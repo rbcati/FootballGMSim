@@ -68,7 +68,7 @@ import { Utils }          from '../core/utils.js';
 import { makeAccurateSchedule, Scheduler } from '../core/schedule.js';
 import { makePlayer, generateDraftClass, calculateMorale, calculateExtensionDemand }  from '../core/player.js';
 import { makeCoach, generateInitialStaff } from '../core/coach-system.js';
-import { ensureTeamStaff, computeStaffTeamBonuses, buildStaffMarket, buildScoutingSnapshot } from '../core/staff-system.js';
+import { ensureTeamStaff, computeStaffTeamBonuses, buildStaffMarket, buildScoutingSnapshot, negotiateContract } from '../core/staff-system.js';
 import {
   inferTeamDirection,
   buildContractProfile,
@@ -2036,7 +2036,12 @@ async function handleAdvanceWeek(payload, id) {
       const allPlayers = cache.getAllPlayers();
       for (const p of allPlayers) {
           if (p.injuryWeeksRemaining && p.injuryWeeksRemaining > 0) {
-              p.injuryWeeksRemaining--;
+              const team = cache.getTeam(p.teamId);
+              const teamStaff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
+              const staffBonuses = computeStaffTeamBonuses({ ...team, staff: teamStaff }, { staffImpactStrength: getLeagueSetting('staffImpactStrength', 50), year: Number(meta?.year ?? 2025) });
+              const recoveryBoost = Number(staffBonuses?.recoveryDelta ?? 0);
+              const extraRecovery = recoveryBoost >= 0.09 ? 1 : Math.random() < Math.max(0, recoveryBoost) * 2.5 ? 1 : 0;
+              p.injuryWeeksRemaining -= 1 + extraRecovery;
               if (p.injuryWeeksRemaining <= 0) {
                   // Healed
                   p.injuryWeeksRemaining = 0;
@@ -4684,7 +4689,20 @@ async function handleGetStaffState(payload, id) {
   });
   const market = buildStaffMarket(cache.getAllTeams(), { year: Number(meta?.year ?? 2025), size: 42 });
   const bonuses = computeStaffTeamBonuses({ ...team, staff }, { staffImpactStrength: getLeagueSetting('staffImpactStrength', 50), year: Number(meta?.year ?? 2025) });
-  post(toUI.STAFF_STATE, { teamId: team.id, staff, market, bonuses, draftBoard: team?.draftBoard ?? { ranks: {}, notes: {}, tags: {}, shortlist: [], avoid: [] } }, id);
+  const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const staffPayroll = Object.keys(staff).reduce((sum, key) => {
+    const member = staff?.[key];
+    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
+    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
+  }, 0);
+  post(toUI.STAFF_STATE, {
+    teamId: team.id,
+    staff,
+    market,
+    bonuses,
+    draftBoard: team?.draftBoard ?? { ranks: {}, notes: {}, tags: {}, shortlist: [], avoid: [] },
+    cap: { hardCap, teamCapRoom: Number(team?.capRoom ?? hardCap), staffPayroll: Math.round(staffPayroll * 100) / 100 },
+  }, id);
 }
 
 async function handleHireStaffMember({ teamId, roleKey, candidate }, id) {
@@ -4692,12 +4710,29 @@ async function handleHireStaffMember({ teamId, roleKey, candidate }, id) {
   const team = cache.getTeam(Number.isFinite(numId) ? numId : Number(getSafeMeta()?.userTeamId));
   if (!team) return post(toUI.ERROR, { message: 'Team not found for staff hire' }, id);
   const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
-  if (!roleKey || !staff[roleKey]) return post(toUI.ERROR, { message: 'Invalid staff role' }, id);
+  if (!roleKey || !(roleKey in staff)) return post(toUI.ERROR, { message: 'Invalid staff role' }, id);
   const nextMember = candidate ? { ...candidate, roleKey, continuity: { teamId: team.id, sinceYear: Number(getSafeMeta()?.year ?? 2025), tenureYears: 0 } } : null;
   if (!nextMember) return post(toUI.ERROR, { message: 'Missing staff candidate' }, id);
+  const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const outgoingSalary = Number(staff?.[roleKey]?.contract?.annualSalary ?? staff?.[roleKey]?.annualSalary ?? 0);
+  const incomingSalary = Number(nextMember?.contract?.annualSalary ?? nextMember?.annualSalary ?? 0);
+  const projectedCapUsed = Number(team?.capUsed ?? 0) - outgoingSalary + incomingSalary;
+  if (projectedCapUsed > hardCap) {
+    return post(toUI.ERROR, { message: `Staff hire blocked: projected cap used $${projectedCapUsed.toFixed(1)}M exceeds hard cap $${hardCap}M.` }, id);
+  }
+  if (!nextMember.contract) {
+    nextMember.contract = {
+      years: Number(nextMember.contractYears ?? 2),
+      annualSalary: incomingSalary,
+      signedYear: Number(getSafeMeta()?.year ?? 2025),
+    };
+  }
+  nextMember.annualSalary = Number(nextMember.contract.annualSalary ?? incomingSalary);
+  nextMember.contractYears = Number(nextMember.contract.years ?? nextMember.contractYears ?? 2);
   staff.marketHistory = [{ week: Number(getSafeMeta()?.currentWeek ?? 1), year: Number(getSafeMeta()?.year ?? 2025), action: 'hire', roleKey, name: nextMember.name }, ...(staff.marketHistory ?? [])].slice(0, 30);
   staff[roleKey] = nextMember;
   cache.updateTeam(team.id, { staff });
+  recalculateTeamCap(team.id);
   await flushDirty();
   return handleGetStaffState({}, id);
 }
@@ -4707,12 +4742,40 @@ async function handleFireStaffMember({ teamId, roleKey }, id) {
   const team = cache.getTeam(Number.isFinite(numId) ? numId : Number(getSafeMeta()?.userTeamId));
   if (!team) return post(toUI.ERROR, { message: 'Team not found for staff fire' }, id);
   const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
-  if (!roleKey || !staff[roleKey]) return post(toUI.ERROR, { message: 'Invalid staff role' }, id);
+  if (!roleKey || !(roleKey in staff)) return post(toUI.ERROR, { message: 'Invalid staff role' }, id);
   const firedName = staff?.[roleKey]?.name ?? 'Staff member';
   staff[roleKey] = null;
   staff.marketHistory = [{ week: Number(getSafeMeta()?.currentWeek ?? 1), year: Number(getSafeMeta()?.year ?? 2025), action: 'fire', roleKey, name: firedName }, ...(staff.marketHistory ?? [])].slice(0, 30);
   cache.updateTeam(team.id, { staff: ensureTeamStaff({ ...team, staff }, { year: Number(getSafeMeta()?.year ?? 2025) }) });
+  recalculateTeamCap(team.id);
   await flushDirty();
+  return handleGetStaffState({}, id);
+}
+
+async function handleNegotiateStaffContract({ teamId, roleKey, ask }, id) {
+  const numId = Number(teamId);
+  const team = cache.getTeam(Number.isFinite(numId) ? numId : Number(getSafeMeta()?.userTeamId));
+  if (!team) return post(toUI.ERROR, { message: 'Team not found for staff negotiation' }, id);
+  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
+  const member = staff?.[roleKey];
+  if (!member) return post(toUI.ERROR, { message: 'No staff member in selected role.' }, id);
+  const hardCap = Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
+  const result = negotiateContract({
+    member,
+    ask,
+    teamCapRoom: Number(team?.capRoom ?? hardCap),
+    hardCap,
+  });
+  if (result?.accepted && result?.counter) {
+    member.contract = { ...member.contract, ...result.counter, signedYear: Number(getSafeMeta()?.year ?? 2025) };
+    member.annualSalary = Number(member.contract.annualSalary ?? member.annualSalary ?? 1);
+    member.contractYears = Number(member.contract.years ?? member.contractYears ?? 2);
+    staff[roleKey] = member;
+    cache.updateTeam(team.id, { staff });
+    recalculateTeamCap(team.id);
+    await flushDirty();
+  }
+  post(toUI.NOTIFICATION, { level: result.accepted ? 'success' : 'info', message: result.reason }, id);
   return handleGetStaffState({}, id);
 }
 
@@ -5749,12 +5812,18 @@ function recalculateTeamCap(teamId) {
 
   const team = cache.getTeam(teamId);
   if (!team) return;
+  const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
+  const staffCap = Object.keys(staff).reduce((sum, key) => {
+    const member = staff?.[key];
+    if (!member || typeof member !== 'object' || !member.roleKey) return sum;
+    return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
+  }, 0);
 
   const deadCap          = team.deadCap         || 0;
   const deadMoneyNextYear = team.deadMoneyNextYear || 0;
   const leagueCap = Number(getSafeMeta()?.economy?.currentSalaryCap ?? getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
   const capTotal          = team.capTotal         ?? leagueCap;
-  const totalCapUsed      = activeCap + deadCap;
+  const totalCapUsed      = activeCap + deadCap + staffCap;
 
   cache.updateTeam(teamId, {
     capUsed:         Math.round(totalCapUsed * 100)        / 100,
@@ -6770,7 +6839,7 @@ async function handleAdvanceOffseason(payload, id) {
     const focusGrowth = trainingFocus === 'youth_development' ? 0.08 : trainingFocus === 'win_now' ? -0.03 : trainingFocus === 'strength_conditioning' ? 0.04 : 0;
     const focusReadiness = trainingFocus === 'win_now' ? 0.05 : trainingFocus === 'rehab_recovery' ? -0.02 : 0;
     const focusRecovery = trainingFocus === 'rehab_recovery' ? 0.06 : trainingFocus === 'strength_conditioning' ? 0.03 : 0;
-    const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + focusGrowth + (staffBonuses.developmentDelta ?? 0)) * envScale;
+    const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + focusGrowth + (staffBonuses.developmentDelta ?? 0) + (staffBonuses.mentorDelta ?? 0)) * envScale;
     const volatilityDampener = ((continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) + (staffBonuses.moraleStabilityDelta ?? 0) + focusReadiness) * staffScale;
     const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0) + focusRecovery) * envScale;
     teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
@@ -7933,6 +8002,7 @@ async function handleMessage(event) {
       case toWorker.GET_STAFF_STATE:    return await handleGetStaffState(payload, id);
       case toWorker.HIRE_STAFF_MEMBER:  return await handleHireStaffMember(payload, id);
       case toWorker.FIRE_STAFF_MEMBER:  return await handleFireStaffMember(payload, id);
+      case toWorker.NEGOTIATE_STAFF_CONTRACT: return await handleNegotiateStaffContract(payload, id);
       case toWorker.UPDATE_DRAFT_BOARD: return await handleUpdateDraftBoard(payload, id);
       case toWorker.HIRE_COACH:         return await handleHireCoach(payload, id);
       case toWorker.FIRE_COACH:         return await handleFireCoach(payload, id);

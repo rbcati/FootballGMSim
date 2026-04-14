@@ -4,31 +4,39 @@ import { ScreenHeader, SectionCard, EmptyState } from './ScreenSystem.jsx';
 import FranchiseInvestmentsPanel from './FranchiseInvestmentsPanel.jsx';
 import FaceAvatar from './FaceAvatar.jsx';
 
-const ROLE_ORDER = ['headCoach', 'offCoordinator', 'defCoordinator', 'scoutDirector', 'headTrainer'];
+const ROLE_ORDER = ['headCoach', 'offCoordinator', 'defCoordinator', 'specialTeamsCoach', 'scoutDirector', 'headTrainer', 'mentor', 'analyticsDirector'];
 const ROLE_LABELS = {
   headCoach: 'Head Coach',
   offCoordinator: 'Offensive Coordinator',
   defCoordinator: 'Defensive Coordinator',
-  scoutDirector: 'Scout Director',
-  headTrainer: 'Head Trainer',
+  specialTeamsCoach: 'Special Teams Coach',
+  scoutDirector: 'Scout',
+  headTrainer: 'Physio',
+  mentor: 'Mentor',
+  analyticsDirector: 'Analytics Director',
+};
+
+const ATTRIBUTE_TOOLTIP = {
+  tacticalSkill: 'Affects in-game decisions, situational calls, and tactical edge.',
+  playerDevelopment: 'Improves growth curves and ceiling outcomes during progression.',
+  injuryPrevention: 'Lowers injury frequency and speeds weekly recovery.',
+  scoutingAccuracy: 'Improves certainty in draft and talent evaluations.',
+  motivation: 'Stabilizes morale, readiness, and culture outcomes.',
 };
 
 function fmtMoney(value) {
   return `$${Number(value || 0).toFixed(1)}M`;
 }
 
-function effectSummary(roleKey, member) {
-  const s = member?.specialtyRatings ?? {};
-  if (roleKey === 'headCoach') return `Leadership ${s.leadership ?? 0} · Development ${s.playerDevelopment ?? 0}`;
-  if (roleKey === 'offCoordinator') return `QB dev ${s.qbDevelopment ?? 0} · Skill dev ${s.skillPlayerDevelopment ?? 0}`;
-  if (roleKey === 'defCoordinator') return `Front seven ${s.frontSeven ?? 0} · Coverage ${s.coverage ?? 0}`;
-  if (roleKey === 'scoutDirector') return `College ${s.collegeScouting ?? 0} · Pro ${s.proScouting ?? 0} · Potential ${s.potentialEvaluation ?? 0}`;
-  return `Injury prevention ${s.injuryPrevention ?? 0} · Recovery ${s.recovery ?? 0}`;
+function effectSummary(member) {
+  const a = member?.attributes ?? {};
+  return `Tac ${a.tacticalSkill ?? 0} · Dev ${a.playerDevelopment ?? 0} · Health ${a.injuryPrevention ?? 0} · Scout ${a.scoutingAccuracy ?? 0} · Mot ${a.motivation ?? 0}`;
 }
 
 function valueScore(candidate) {
-  const specialty = Object.values(candidate?.specialtyRatings ?? {}).reduce((sum, n) => sum + Number(n || 0), 0);
-  return Math.round((specialty / Math.max(1, Object.keys(candidate?.specialtyRatings ?? {}).length)) - (Number(candidate?.annualSalary || 0) * 2));
+  const attrs = Object.values(candidate?.attributes ?? {});
+  const avg = attrs.length ? attrs.reduce((sum, n) => sum + Number(n || 0), 0) / attrs.length : 0;
+  return Math.round(avg - (Number(candidate?.annualSalary || candidate?.contract?.annualSalary || 0) * 2));
 }
 
 export default function StaffManagement({ league, actions, compact = false }) {
@@ -50,28 +58,30 @@ export default function StaffManagement({ league, actions, compact = false }) {
   const bonuses = staffState?.bonuses ?? {};
 
   const currentStaffRows = ROLE_ORDER.map((roleKey) => ({ roleKey, member: staff?.[roleKey] ?? null }));
-  const staffSalaryTotal = currentStaffRows.reduce((sum, row) => sum + Number(row.member?.annualSalary ?? 0), 0);
+  const staffSalaryTotal = currentStaffRows.reduce((sum, row) => sum + Number(row.member?.contract?.annualSalary ?? row.member?.annualSalary ?? 0), 0);
 
   const filteredMarket = useMemo(() => {
     const base = market.filter((candidate) => selectedRole === 'all' || candidate?.roleKey === selectedRole);
     return [...base].sort((a, b) => {
-      if (sortBy === 'salary') return Number(a?.annualSalary ?? 0) - Number(b?.annualSalary ?? 0);
-      if (sortBy === 'development') {
-        const aDev = Number(a?.specialtyRatings?.playerDevelopment ?? a?.specialtyRatings?.qbDevelopment ?? a?.specialtyRatings?.defensiveDevelopment ?? 0);
-        const bDev = Number(b?.specialtyRatings?.playerDevelopment ?? b?.specialtyRatings?.qbDevelopment ?? b?.specialtyRatings?.defensiveDevelopment ?? 0);
-        return bDev - aDev;
-      }
-      if (sortBy === 'scouting') {
-        const aScout = Number(a?.specialtyRatings?.collegeScouting ?? 0) + Number(a?.specialtyRatings?.proScouting ?? 0);
-        const bScout = Number(b?.specialtyRatings?.collegeScouting ?? 0) + Number(b?.specialtyRatings?.proScouting ?? 0);
-        return bScout - aScout;
-      }
+      if (sortBy === 'salary') return Number(a?.contract?.annualSalary ?? a?.annualSalary ?? 0) - Number(b?.contract?.annualSalary ?? b?.annualSalary ?? 0);
+      if (sortBy === 'development') return Number(b?.attributes?.playerDevelopment ?? 0) - Number(a?.attributes?.playerDevelopment ?? 0);
+      if (sortBy === 'scouting') return Number(b?.attributes?.scoutingAccuracy ?? 0) - Number(a?.attributes?.scoutingAccuracy ?? 0);
       return Number(b?.overall ?? 0) - Number(a?.overall ?? 0);
     });
   }, [market, selectedRole, sortBy]);
 
   const hire = async (candidate) => {
     await actions?.hireStaffMember?.({ teamId, roleKey: candidate?.roleKey, candidate });
+    await refresh();
+  };
+
+  const negotiate = async (roleKey, member) => {
+    const baseSalary = Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 1);
+    const askSalary = Number(window.prompt(`Negotiate ${member.name} salary ($M/year)`, String(baseSalary.toFixed(1))));
+    if (!Number.isFinite(askSalary) || askSalary <= 0) return;
+    const baseYears = Number(member?.contract?.years ?? member?.contractYears ?? 2);
+    const askYears = Number(window.prompt('Contract years', String(baseYears)));
+    await actions?.negotiateStaffContract?.({ teamId, roleKey, ask: { annualSalary: askSalary, years: askYears } });
     await refresh();
   };
 
@@ -85,35 +95,31 @@ export default function StaffManagement({ league, actions, compact = false }) {
       <ScreenHeader
         eyebrow="Operations"
         title="Staff & Development"
-        subtitle={compact ? "Front office console for coaching, scouting, facilities, and long-term investment controls." : "Hire coaches and department heads, manage contracts, and see exactly what each role improves."}
+        subtitle={compact ? 'Front office console for coaching, scouting, and player support staff.' : 'Hire, fire, and negotiate contracts for your football operations staff.'}
         metadata={[
           { label: 'Staff payroll', value: fmtMoney(staffSalaryTotal) },
+          { label: 'Cap room', value: fmtMoney(staffState?.cap?.teamCapRoom ?? userTeam?.capRoom ?? 0) },
           { label: 'Dev impact', value: `${((bonuses.developmentDelta ?? 0) * 100).toFixed(1)}%` },
           { label: 'Scouting confidence', value: bonuses.summary?.[2] ?? 'Balanced' },
         ]}
       />
-      <SectionCard title="Staff console summary" subtitle="Summary first, controls second.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, fontSize: 12 }}>
-          <div><strong>Coaching group:</strong> {staff?.headCoach?.name ?? 'Vacant'} + coordinators</div>
-          <div><strong>Scouting lead:</strong> {staff?.scoutDirector?.name ?? 'Vacant'}</div>
-          <div><strong>Facilities / trainer:</strong> {staff?.headTrainer?.name ?? 'Vacant'}</div>
-          <div><strong>Investment status:</strong> {userTeam?.ownershipSpendLevel ?? userTeam?.investmentTier ?? 'Balanced'}</div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Current staff" subtitle="One core role per franchise layer. Replace or fire from here.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
+      <SectionCard title="Current staff" subtitle="Each role now contributes directly to development, injuries, scouting, and playcalling.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))', gap: 10 }}>
           {currentStaffRows.map(({ roleKey, member }) => (
             <div key={roleKey} className="card" style={{ padding: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><FaceAvatar face={member?.face} seed={member?.id ?? member?.name} size={30} /><strong>{ROLE_LABELS[roleKey]}</strong></div>
                 <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {member?.overall ?? '--'}</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{member?.name ?? 'Vacant'} · {member?.age ?? '--'} · {member?.reputationTier ?? 'Unproven'}</div>
-              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(roleKey, member)}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Contract: {member?.contractYears ?? 0} yrs · {fmtMoney(member?.annualSalary)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{member?.name ?? 'Vacant'} · {member?.age ?? '--'} · {member?.schemePreference ?? 'Multiple'}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(member)}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', fontSize: 11, marginTop: 4, color: 'var(--text-muted)' }}>
+                {Object.entries(ATTRIBUTE_TOOLTIP).map(([key, copy]) => <span key={key} title={copy}>{key}</span>)}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Contract: {member?.contract?.years ?? member?.contractYears ?? 0} yrs · {fmtMoney(member?.contract?.annualSalary ?? member?.annualSalary)}</div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <Button size="sm" variant="outline" onClick={() => setSelectedRole(roleKey)}>Replace</Button>
+                {member ? <Button size="sm" variant="outline" onClick={() => negotiate(roleKey, member)}>Negotiate</Button> : null}
                 <Button size="sm" variant="ghost" onClick={() => fire(roleKey)}>Fire</Button>
               </div>
             </div>
@@ -121,13 +127,13 @@ export default function StaffManagement({ league, actions, compact = false }) {
         </div>
       </SectionCard>
 
-      <SectionCard title="Team impact summary" subtitle="How your current staff affects development, scouting, and injury areas.">
+      <SectionCard title="Team impact summary" subtitle="How current staff affects development, scouting, and injuries.">
         <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
           {(bonuses.summary ?? []).map((line) => <div key={line}>• {line}</div>)}
         </div>
       </SectionCard>
 
-      <SectionCard title="Candidate market" subtitle="Filter and sort by role, overall, development, scouting, and salary demand.">
+      <SectionCard title="Candidate market" subtitle="Filter/sort candidates and hire directly into a role.">
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
           <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)}><option value="all">All roles</option>{ROLE_ORDER.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}</select>
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
@@ -143,11 +149,11 @@ export default function StaffManagement({ league, actions, compact = false }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FaceAvatar face={candidate?.face} seed={candidate?.id ?? candidate?.name} size={32} />
-                  <div><strong>{candidate.name}</strong><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ROLE_LABELS[candidate.roleKey] ?? candidate.role}</div></div>
+                  <div><strong>{candidate.name}</strong><div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{ROLE_LABELS[candidate.roleKey] ?? candidate.role} · {candidate.schemePreference}</div></div>
                 </div>
-                <div style={{ fontSize: 12, textAlign: 'right' }}>OVR {candidate.overall} · {candidate.reputationTier}<br />Demand {fmtMoney(candidate.annualSalary)} / {candidate.contractYears}y</div>
+                <div style={{ fontSize: 12, textAlign: 'right' }}>OVR {candidate.overall}<br />Demand {fmtMoney(candidate?.contract?.annualSalary ?? candidate?.annualSalary)} / {candidate?.contract?.years ?? candidate?.contractYears}y</div>
               </div>
-              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(candidate.roleKey, candidate)}</div>
+              <div style={{ fontSize: 12, marginTop: 4 }}>{effectSummary(candidate)}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Value score: {valueScore(candidate)} · Tags: {(candidate.styleTags ?? []).join(', ') || 'none'}</div>
               <div style={{ marginTop: 8 }}><Button size="sm" onClick={() => hire(candidate)}>Hire / Replace</Button></div>
             </div>

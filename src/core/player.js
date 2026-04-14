@@ -521,6 +521,12 @@ function generateDraftClass(year, options = {}) {
 // EXPORTS
 // ============================================================================
 
+function applyStaffDevelopmentInfluence(baseDelta, staffBonuses = {}) {
+    const dev = Number(staffBonuses?.developmentDelta ?? 0);
+    const mentor = Number(staffBonuses?.mentorDelta ?? 0);
+    return Number(baseDelta || 0) + (dev * 2.4) + (mentor * 1.8);
+}
+
 export {
     SKILL_TREES,
     initProgressionStats,
@@ -541,7 +547,8 @@ export {
     tagAbilities,
     calculateMorale,
     calculateExtensionDemand,
-    generateUniqueName
+    generateUniqueName,
+    applyStaffDevelopmentInfluence,
 };
 
 /**
