@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { applyResult, commitGameResult, groupPlayersByPosition, initializePlayerStats, updateTeamStandings } from '../game-simulator.js';
+import {
+  applyResult,
+  calculateMomentumSwing,
+  commitGameResult,
+  decideLateGameSequence,
+  getSimulationSpeedDelay,
+  groupPlayersByPosition,
+  initializePlayerStats,
+  updateTeamStandings,
+} from '../game-simulator.js';
 
 describe('groupPlayersByPosition', () => {
   it('sorts by depthOrder first, then ovr descending', () => {
@@ -100,5 +109,50 @@ describe('commitGameResult archive shape', () => {
     expect(result.scoringSummary).toHaveLength(1);
     expect(result.driveSummary).toHaveLength(1);
     expect(result.quarterScores.home[0]).toBe(7);
+  });
+});
+
+describe('immersive play helpers', () => {
+  it('maps simulation speed options to expected delay values', () => {
+    expect(getSimulationSpeedDelay('slow')).toBe(1400);
+    expect(getSimulationSpeedDelay('medium')).toBe(800);
+    expect(getSimulationSpeedDelay('instant')).toBe(0);
+    expect(getSimulationSpeedDelay('unknown')).toBe(800);
+  });
+
+  it('calculates momentum swings with turnover and scoring context', () => {
+    const tdSwing = calculateMomentumSwing({ yards: 18, isScoringPlay: true, offenseIsHome: true });
+    const turnoverSwing = calculateMomentumSwing({ yards: 4, turnover: true, offenseIsHome: true });
+    const awayExplosive = calculateMomentumSwing({ yards: 24, isExplosive: true, offenseIsHome: false });
+
+    expect(tdSwing).toBeGreaterThan(10);
+    expect(turnoverSwing).toBeLessThan(0);
+    expect(awayExplosive).toBeLessThan(0);
+  });
+
+  it('returns realistic late-game decision hints', () => {
+    const trailingFourthDown = decideLateGameSequence({
+      quarter: 4,
+      clockSeconds: 95,
+      scoreDiff: -6,
+      down: 4,
+      distance: 1,
+      yardLine: 63,
+      timeouts: 1,
+    });
+    expect(trailingFourthDown.fourthDownChoice).toBe('go');
+    expect(trailingFourthDown.useTimeout).toBe(true);
+    expect(trailingFourthDown.goForTwo).toBe(false);
+
+    const tieBreaker = decideLateGameSequence({
+      quarter: 4,
+      clockSeconds: 105,
+      scoreDiff: -1,
+      down: 3,
+      distance: 5,
+      yardLine: 70,
+      timeouts: 2,
+    });
+    expect(tieBreaker.goForTwo).toBe(true);
   });
 });

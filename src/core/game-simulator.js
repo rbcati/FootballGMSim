@@ -46,6 +46,66 @@ function computePasserRating({ comp = 0, att = 0, yds = 0, td = 0, ints = 0 } = 
   return U.round(((a + b + c + d) / 6) * 100, 1);
 }
 
+const SIM_SPEED_TO_MS = {
+  slow: 1400,
+  medium: 800,
+  instant: 0,
+};
+
+export function getSimulationSpeedDelay(speed = 'medium') {
+  return SIM_SPEED_TO_MS[speed] ?? SIM_SPEED_TO_MS.medium;
+}
+
+export function calculateMomentumSwing({
+  yards = 0,
+  isScoringPlay = false,
+  turnover = false,
+  isExplosive = false,
+  offenseIsHome = true,
+}) {
+  let swing = Math.max(-12, Math.min(12, yards * 0.45));
+  if (isExplosive) swing += 6;
+  if (isScoringPlay) swing += 10;
+  if (turnover) swing -= 16;
+  if (!offenseIsHome) swing *= -1;
+  return U.clamp(Math.round(swing), -24, 24);
+}
+
+export function decideLateGameSequence({
+  quarter = 1,
+  clockSeconds = 900,
+  scoreDiff = 0, // offense score - defense score
+  down = 1,
+  distance = 10,
+  yardLine = 50,
+  timeouts = 3,
+}) {
+  const inLateGame = quarter >= 4;
+  const insideTwoMinutes = quarter >= 4 && clockSeconds <= 120;
+  const trailing = scoreDiff < 0;
+  const leading = scoreDiff > 0;
+
+  const goForTwo = inLateGame && ((scoreDiff === -2 && clockSeconds < 600) || (insideTwoMinutes && Math.abs(scoreDiff) === 1));
+  const conservativeTimeout = timeouts > 0 && leading && quarter >= 4 && clockSeconds < 80;
+  const aggressiveTimeout = timeouts > 0 && trailing && quarter >= 4 && clockSeconds < 180;
+
+  let fourthDownChoice = 'normal';
+  if (down === 4) {
+    const short = distance <= 2;
+    const inFgRange = yardLine >= 65;
+    if (trailing && (insideTwoMinutes || scoreDiff <= -9) && (short || yardLine >= 55)) fourthDownChoice = 'go';
+    else if (leading && inFgRange && clockSeconds < 240) fourthDownChoice = 'field_goal';
+    else if (!inFgRange && yardLine < 60) fourthDownChoice = 'punt';
+    else fourthDownChoice = short ? 'go' : 'field_goal';
+  }
+
+  return {
+    goForTwo,
+    useTimeout: conservativeTimeout || aggressiveTimeout,
+    fourthDownChoice,
+  };
+}
+
 function buildDriveBasedSummary({
   season = 0,
   week = 1,

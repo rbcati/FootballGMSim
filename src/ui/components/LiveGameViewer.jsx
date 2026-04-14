@@ -11,7 +11,7 @@ const SPEED_STEPS = [
   { key: 'veryFast', label: 'Very Fast', ms: 140 },
 ];
 
-export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch' }) {
+export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComplete, initialMode = 'watch', onPlaycallOverride }) {
   const events = useMemo(() => mapArchiveEventsToLiveFeed(logs, {
     gameId: `${homeTeam?.id || 'h'}-${awayTeam?.id || 'a'}`,
     homeTeamId: homeTeam?.id,
@@ -88,6 +88,9 @@ export default function LiveGameViewer({ logs = [], homeTeam, awayTeam, onComple
             {SPEED_STEPS.map((step) => (
               <button key={step.key} className={speed === step.key ? 'active' : ''} onClick={() => { setSpeed(step.key); setPaused(false); }}>{step.label}</button>
             ))}
+            <button title="Lean run on next drive." onClick={() => onPlaycallOverride?.({ type: 'run_heavy' })}>Run Heavy</button>
+            <button title="Lean pass on next drive." onClick={() => onPlaycallOverride?.({ type: 'pass_heavy' })}>Pass Heavy</button>
+            <button title="Request a timeout for your team." onClick={() => onPlaycallOverride?.({ type: 'timeout' })}>Timeout</button>
             <button onClick={() => setIndex(getNextImportantEvent(events, index, 'score'))}>Skip to Next Score</button>
             <button onClick={() => setIndex(getNextImportantEvent(events, index, 'keyPlay'))}>Skip to Key Play</button>
             <button onClick={() => setIndex(events.length - 1)}>Sim to End</button>
