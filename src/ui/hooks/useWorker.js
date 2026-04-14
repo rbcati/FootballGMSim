@@ -540,6 +540,8 @@ export function useWorker() {
       request(toWorker.TOGGLE_TRADE_BLOCK, { playerId, teamId }),
     updatePlayerManagement: (playerId, teamId, updates) =>
       request(toWorker.UPDATE_PLAYER_MANAGEMENT, { playerId, teamId, updates }),
+    assignMentor: (mentorId, menteeId, teamId) =>
+      request(toWorker.ASSIGN_MENTOR, { mentorId, menteeId, teamId }, { silent: true }),
 
     /** Get contract extension demand from AI (returns Promise). */
     getExtensionAsk: (playerId) =>

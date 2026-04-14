@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.3;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.4;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -43,6 +43,7 @@ const MIGRATIONS = {
   5: migrateV5ToV51,
   5.1: migrateV51ToV52,
   5.2: migrateV52ToV53,
+  5.3: migrateV53ToV54,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -105,6 +106,18 @@ function migrateV52ToV53(meta = {}) {
   };
 }
 
+
+function migrateV53ToV54(meta = {}) {
+  return {
+    ...meta,
+    developmentSystem: {
+      ...(meta?.developmentSystem ?? {}),
+      personalityMentorshipV1: true,
+      upgradedAt: Date.now(),
+    },
+    saveVersion: 5.4,
+  };
+}
 export function migrateSaveMetaToCurrent(meta = {}) {
   const startVersion = Number(meta?.saveVersion ?? 0);
   if (!Number.isFinite(startVersion) || startVersion < 0) {

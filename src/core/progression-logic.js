@@ -23,6 +23,7 @@
 import { Utils } from './utils.js';
 import { calculateOvr } from './player.js';
 import { Constants } from './constants.js';
+import { ensurePersonalityProfile, mentorshipBonusForPlayer } from './development/personalitySystem.js';
 
 // ── Progression probability constants (Task 10) ───────────────────────────────
 // Defined here so they can be tuned without hunting for magic numbers inline.
@@ -155,6 +156,7 @@ function applyCliffCognitiveDrop(player, secondaryDrop) {
  */
 export function processPlayerProgression(players, options = {}) {
   const teamEnvironments = options?.teamEnvironments ?? {};
+  const teamRosters = options?.teamRosters ?? {};
   const gainers    = []; // players with progressionDelta >= +4
   const regressors = []; // players with progressionDelta <= -3
   const breakouts  = []; // explicit Breakout Season events (for news)
@@ -172,6 +174,9 @@ export function processPlayerProgression(players, options = {}) {
     let bustEvent   = false;
     let breakoutEvent = false;
     const org = teamEnvironments?.[player.teamId] ?? null;
+    const roster = teamRosters?.[player.teamId] ?? [];
+    const personalityProfile = ensurePersonalityProfile(player);
+    player.personalityProfile = personalityProfile;
     const growthMod = Number.isFinite(Number(org?.youngGrowthBonus)) ? Number(org.youngGrowthBonus) : 0;
     const volatilityMod = Number.isFinite(Number(org?.volatilityDampener)) ? Number(org.volatilityDampener) : 0;
     const rookieMod = Number.isFinite(Number(org?.rookieAdaptation)) ? Number(org.rookieAdaptation) : 0;
@@ -179,8 +184,8 @@ export function processPlayerProgression(players, options = {}) {
     // ── Resolve dev trait multipliers (Task 3) ────────────────────────────
     const devTrait = player.devTrait ?? 'Normal';
     const traitMods = DEV_TRAIT_MULTIPLIERS[devTrait] ?? DEV_TRAIT_MULTIPLIERS.Normal;
-    let effectiveBreakoutProb = GROWTH_BREAKOUT_PROB + traitMods.breakoutBonus;
-    let effectiveBustProb     = GROWTH_BREAKOUT_PROB + GROWTH_BUST_PROB; // bust range end
+    let effectiveBreakoutProb = GROWTH_BREAKOUT_PROB + traitMods.breakoutBonus + ((personalityProfile.workEthic - 55) * 0.0015);
+    let effectiveBustProb     = GROWTH_BREAKOUT_PROB + GROWTH_BUST_PROB + ((personalityProfile.diva - personalityProfile.discipline) * 0.0009); // bust range end
 
     // Personality Trait Modifiers
     if (player.personality?.traits) {
@@ -265,6 +270,11 @@ export function processPlayerProgression(players, options = {}) {
       }
     }
 
+    const mentorship = mentorshipBonusForPlayer(player, roster);
+    if (mentorship.applied && age <= 25 && ovrDelta > 0) {
+      ovrDelta += Math.max(1, Math.round(ovrDelta * mentorship.development));
+    }
+
     // ── Apply non-cliff, non-wall deltas via position-specific rating nudges (Task 6)
     if (!cliffEvent && !wallEvent && ovrDelta !== 0) {
       if (age <= 24 && rookieMod !== 0) {
@@ -310,7 +320,26 @@ export function processPlayerProgression(players, options = {}) {
       staffDevelopmentModifier: Math.round((Number(org?.staffDevelopmentModifier ?? 0) || 0) * 1000) / 10,
       playingTimeModifier: player.depthRole === 'starter' ? '+ starter reps' : player.depthRole === 'bench' ? '- limited reps' : 'neutral reps',
       varianceTag: breakoutEvent ? 'breakout variance' : bustEvent ? 'bust variance' : wallEvent ? 'wall variance' : 'normal variance',
+      mentorship: mentorship.applied ? `${mentorship.mentorName} mentorship (+${Math.round(mentorship.development * 100)}% dev)` : 'none',
+      personalityImpact: personalityProfile.workEthic >= 75 ? 'high work ethic lift' : personalityProfile.diva >= 70 ? 'diva volatility' : 'balanced',
     };
+
+    const history = Array.isArray(player.developmentHistory) ? player.developmentHistory : [];
+    history.push({
+      season: player?.season ?? null,
+      age,
+      ovrBefore,
+      ovrAfter,
+      delta: progressionDelta,
+      physical: Math.round((((player.ratings.speed ?? player.ratings.kickPower ?? 0) + (player.ratings.acceleration ?? 0)) / 2)),
+      passing: Math.round(((player.ratings.throwPower ?? 0) + (player.ratings.throwAccuracy ?? 0)) / 2),
+      rushingReceiving: Math.round(((player.ratings.speed ?? 0) + (player.ratings.catching ?? 0) + (player.ratings.trucking ?? 0)) / 3),
+      blocking: Math.round(((player.ratings.runBlock ?? 0) + (player.ratings.passBlock ?? 0)) / 2),
+      defense: Math.round(((player.ratings.coverage ?? 0) + (player.ratings.runStop ?? 0) + (player.ratings.passRushPower ?? 0)) / 3),
+      kicking: Math.round(((player.ratings.kickPower ?? 0) + (player.ratings.kickAccuracy ?? 0)) / 2),
+    });
+    player.developmentHistory = history.slice(-12);
+
 
     // ── Classify for news ──────────────────────────────────────────────────
     if (progressionDelta >= 4) {
