@@ -28,7 +28,13 @@ function buildTeamPlayerMap(players = []) {
   return byTeam;
 }
 
-export function validateLeagueTeamLegality({ teams = [], players = [], phase = 'regular', hardCap = Constants.SALARY_CAP.HARD_CAP } = {}) {
+export function validateLeagueTeamLegality({
+  teams = [],
+  players = [],
+  phase = 'regular',
+  hardCap = Constants.SALARY_CAP.HARD_CAP,
+  capViolationSeverity = 'error',
+} = {}) {
   const byTeam = buildTeamPlayerMap(players);
   const rosterLimit = getRosterLimitForPhase(phase);
   const issues = [];
@@ -45,7 +51,12 @@ export function validateLeagueTeamLegality({ teams = [], players = [], phase = '
 
     const projectedCap = roster.reduce((sum, p) => sum + getPlayerCapHit(p), 0) + Number(team?.deadCap ?? 0);
     if (projectedCap > Number(hardCap)) {
-      issues.push({ severity: 'error', teamId, code: 'cap_limit', message: `${team?.abbr ?? team?.name ?? `Team ${teamId}`} is over cap (${projectedCap.toFixed(1)}M / ${Number(hardCap).toFixed(1)}M).` });
+      issues.push({
+        severity: capViolationSeverity === 'warn' ? 'warn' : 'error',
+        teamId,
+        code: 'cap_limit',
+        message: `${team?.abbr ?? team?.name ?? `Team ${teamId}`} is over cap (${projectedCap.toFixed(1)}M / ${Number(hardCap).toFixed(1)}M).`,
+      });
     }
 
     if (uniqueIds.size !== rosterIds.length) {

@@ -61,6 +61,11 @@ function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
 }
 
+function hasFinite(v) {
+  return Number.isFinite(Number(v));
+}
+
+
 function normalizeIncentives(incentives = []) {
   if (!Array.isArray(incentives)) return [];
   return incentives
@@ -102,6 +107,78 @@ export function normalizeContractDetails(contract = {}, player = {}) {
     fifthYearOptionExercised: !!contract?.fifthYearOptionExercised,
     restrictedFreeAgent: !!contract?.restrictedFreeAgent,
     incentives: normalizeIncentives(contract?.incentives),
+  };
+}
+
+function scoreContractSource(source = {}) {
+  let score = 0;
+  if (hasFinite(source?.baseAnnual)) score += 4;
+  if (hasFinite(source?.signingBonus)) score += 2;
+  if (hasFinite(source?.yearsTotal ?? source?.years)) score += 2;
+  if (hasFinite(source?.yearsRemaining)) score += 1;
+  if (Array.isArray(source?.incentives) && source.incentives.length > 0) score += 1;
+  return score;
+}
+
+function deriveAnnualFromLegacy(rawAnnual, yearsTotal) {
+  const annual = Math.max(0, n(rawAnnual, 0));
+  if (annual <= 80) return annual;
+  if (yearsTotal > 1) {
+    // Older saves sometimes persisted total value into "salary/amount".
+    // If the value is implausibly large for one year, conservatively treat
+    // it as a total deal value and convert to annual.
+    return annual / yearsTotal;
+  }
+  return annual;
+}
+
+export function repairLegacyPlayerContract(player = {}) {
+  const nested = (player?.contract && typeof player.contract === 'object') ? player.contract : {};
+  const inferredYearsTotal = Math.max(1, Math.round(n(
+    nested?.yearsTotal ?? nested?.years ?? player?.yearsTotal ?? player?.years ?? 1,
+    1,
+  )));
+
+  const nestedAnnualCandidate = nested?.baseAnnual ?? nested?.salary ?? nested?.amount ?? nested?.capHit;
+  const flatAnnualCandidate = player?.baseAnnual ?? player?.salary ?? player?.amount ?? player?.capHit;
+
+  const flat = {
+    yearsTotal: player?.yearsTotal ?? player?.years ?? inferredYearsTotal,
+    yearsRemaining: player?.yearsRemaining ?? player?.years,
+    baseAnnual: deriveAnnualFromLegacy(flatAnnualCandidate, inferredYearsTotal),
+    signingBonus: player?.signingBonus ?? player?.bonus ?? 0,
+    guaranteedPct: player?.guaranteedPct,
+  };
+
+  const nestedForScore = {
+    ...nested,
+    baseAnnual: deriveAnnualFromLegacy(nestedAnnualCandidate, inferredYearsTotal),
+  };
+
+  const nestedScore = scoreContractSource(nestedForScore);
+  const flatScore = scoreContractSource(flat);
+  const nestedHasCore = hasFinite(nestedForScore?.baseAnnual) || hasFinite(nestedForScore?.salary) || hasFinite(nestedForScore?.amount);
+  const useNested = nestedHasCore ? nestedScore >= (flatScore - 1) : nestedScore >= flatScore;
+  const source = useNested ? nestedForScore : flat;
+  const normalized = normalizeContractDetails(source, player);
+
+  return {
+    ...player,
+    contract: normalized,
+    // Keep legacy flat fields in sync for backward compatibility with old paths.
+    baseAnnual: normalized.baseAnnual,
+    signingBonus: normalized.signingBonus,
+    years: normalized.yearsRemaining,
+    yearsTotal: normalized.yearsTotal,
+    guaranteedPct: normalized.guaranteedPct,
+  };
+}
+
+export function normalizeLoadedLeagueContracts(league = {}) {
+  const players = Array.isArray(league?.players) ? league.players : [];
+  return {
+    ...league,
+    players: players.map((player) => repairLegacyPlayerContract(player)),
   };
 }
 
