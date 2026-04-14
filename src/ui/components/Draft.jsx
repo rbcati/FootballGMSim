@@ -1030,6 +1030,8 @@ function DraftBoard({
   const [showTradeUp, setShowTradeUp] = useState(false);
   const [showTradeDown, setShowTradeDown] = useState(false);
   const [tradeDownProcessing, setTradeDownProcessing] = useState(false);
+  const [manualBoard, setManualBoard] = useState([]);
+  const [pickClock, setPickClock] = useState(90);
 
   const {
     currentPick,
@@ -1039,7 +1041,21 @@ function DraftBoard({
     completedPicks = [],
     upcomingPicks = [],
     pendingTradeProposal = null,
+    recommendedPick = null,
+    userBigBoard = [],
   } = draftState;
+
+  useEffect(() => {
+    setManualBoard((userBigBoard ?? []).map((entry) => String(entry.playerId)));
+  }, [userBigBoard]);
+  useEffect(() => {
+    setPickClock(90);
+  }, [currentPick?.overall]);
+  useEffect(() => {
+    if (isDraftComplete) return undefined;
+    const timer = setInterval(() => setPickClock((prev) => (prev <= 0 ? 90 : prev - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [isDraftComplete]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => -d);
@@ -1068,8 +1084,12 @@ function DraftBoard({
       if (typeof av === "string") return sortDir * av.localeCompare(bv);
       return sortDir * ((bv ?? 0) - (av ?? 0));
     });
+    if (sortKey === 'boardRank' && manualBoard.length) {
+      const orderMap = new Map(manualBoard.map((id, idx) => [String(id), idx + 1]));
+      list.sort((a, b) => ((orderMap.get(String(a.id)) ?? 999) - (orderMap.get(String(b.id)) ?? 999)) * (sortDir === -1 ? 1 : -1));
+    }
     return list;
-  }, [prospects, filterPos, nameFilter, sortKey, sortDir, advancedFilters]);
+  }, [prospects, filterPos, nameFilter, sortKey, sortDir, advancedFilters, manualBoard]);
 
   const {
     compareIds,
@@ -1280,6 +1300,9 @@ function DraftBoard({
                     Overall #{currentPick?.overall}
                   </span>
                 </div>
+                <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
+                  Clock: {pickClock}s
+                </div>
                 {currentPick?.isCompensatory && (
                   <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
                     Compensatory pick · {currentPick?.compensatoryForName ? `for loss of ${currentPick.compensatoryForName}` : "NFL comp selection"}
@@ -1474,6 +1497,15 @@ function DraftBoard({
                   Trade Down / View Offers
                 </Button>
               )}
+            </div>
+          )}
+          {recommendedPick && !isDraftComplete && (
+            <div style={{ padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "rgba(52,199,89,0.12)", border: "1px solid rgba(52,199,89,0.45)", color: "var(--text)" }}>
+              <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", letterSpacing: 1, color: "var(--success)" }}>Recommended pick</div>
+              <div style={{ fontWeight: 700 }}>
+                #{recommendedPick.rank ?? 1} on your board · {sortedProspects.find((p) => String(p.id) === String(recommendedPick.playerId))?.name ?? "Top option"}
+              </div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{recommendedPick.reason}</div>
             </div>
           )}
 
@@ -1685,6 +1717,7 @@ function DraftBoard({
                       #
                     </TableHead>
                     {[
+                      { key: "boardRank", label: "BOARD" },
                       { key: "pos", label: "POS" },
                       { key: "name", label: "NAME" },
                       { key: "traits", label: "TRAITS" },
@@ -1692,6 +1725,8 @@ function DraftBoard({
                       { key: "compare", label: "CMP" },
                       { key: "ovr", label: isDraftComplete ? "OVR" : "GRADE" },
                       { key: "potential", label: isDraftComplete ? "POT" : "???" },
+                      { key: "fortyTime", label: "40Y" },
+                      { key: "benchPress", label: "BENCH" },
                       { key: "college", label: "COLLEGE" },
                     ].map((col) => (
                       <TableHead
@@ -1723,7 +1758,7 @@ function DraftBoard({
                   {sortedProspects.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={isUserPick ? 9 : 8}
+                        colSpan={isUserPick ? 12 : 11}
                         style={{
                           textAlign: "center",
                           padding: "var(--space-6)",
@@ -1737,7 +1772,10 @@ function DraftBoard({
                     </TableRow>
                   )}
                   {sortedProspects.map((p, i) => (
-                    <TableRow key={p.id}>
+                    <TableRow key={p.id} style={String(p.id) === String(recommendedPick?.playerId ?? '') ? { background: "rgba(52,199,89,0.1)" } : undefined}>
+                      <TableCell style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                        {Math.max(1, manualBoard.indexOf(String(p.id)) + 1)}
+                      </TableCell>
                       <TableCell
                         style={{
                           textAlign: "center",
@@ -1813,6 +1851,12 @@ function DraftBoard({
                         {/* Hide potential until draft is complete */}
                         {isDraftComplete ? (p.potential ?? "—") : "??"}
                       </TableCell>
+                      <TableCell style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }} title="40-yard dash (seconds). Lower is better.">
+                        {p?.combineResults?.fortyTime ?? "—"}
+                      </TableCell>
+                      <TableCell style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }} title="Bench press reps at 225 lbs. Higher is better.">
+                        {p?.combineResults?.benchPress ?? "—"}
+                      </TableCell>
                       <TableCell
                         style={{
                           color: "var(--text-muted)",
@@ -1842,6 +1886,20 @@ function DraftBoard({
                           >
                             Draft
                           </Button>
+                          <div style={{ display: "inline-flex", marginLeft: 8, gap: 4 }}>
+                            <Button className="btn" title="Move up board" onClick={() => setManualBoard((prev) => {
+                              const next = [...prev];
+                              const idx = next.indexOf(String(p.id));
+                              if (idx > 0) [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              return next;
+                            })} style={{ padding: "2px 6px", fontSize: 10 }}>↑</Button>
+                            <Button className="btn" title="Move down board" onClick={() => setManualBoard((prev) => {
+                              const next = [...prev];
+                              const idx = next.indexOf(String(p.id));
+                              if (idx > -1 && idx < next.length - 1) [next[idx + 1], next[idx]] = [next[idx], next[idx + 1]];
+                              return next;
+                            })} style={{ padding: "2px 6px", fontSize: 10 }}>↓</Button>
+                          </div>
                         </TableCell>
                       )}
                     </TableRow>
