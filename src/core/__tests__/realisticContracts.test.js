@@ -6,6 +6,7 @@ import {
   estimateHoldoutRisk,
   calculateTeamPayroll,
   projectTeamFinancials,
+  normalizeLoadedLeagueContracts,
 } from '../contracts/realisticContracts.js';
 
 describe('realistic contract normalization', () => {
@@ -56,6 +57,19 @@ describe('realistic contract normalization', () => {
     expect(repaired.contract.yearsRemaining).toBe(1);
     expect(repaired.contract.baseAnnual).toBe(0);
     expect(repaired.contract.signingBonus).toBe(0);
+  });
+
+  it('normalizes a mixed league payload without double counting', () => {
+    const league = normalizeLoadedLeagueContracts({
+      players: [
+        { id: 10, years: 3, salary: 96, signingBonus: 6 }, // legacy flat total salary
+        { id: 11, contract: { yearsTotal: 2, baseAnnual: 15, signingBonus: 4 }, salary: 40, signingBonus: 10 }, // mixed
+      ],
+    });
+    expect(league.players[0].contract.baseAnnual).toBe(32);
+    expect(calculateContractCapHit(league.players[0].contract)).toBe(34);
+    expect(league.players[1].contract.baseAnnual).toBe(15);
+    expect(calculateContractCapHit(league.players[1].contract)).toBe(17);
   });
 });
 

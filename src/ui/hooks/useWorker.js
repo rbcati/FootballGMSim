@@ -213,7 +213,11 @@ export function useWorker() {
         const { resolve, reject, silent, timeoutId } = pendingRef.current.get(id);
         pendingRef.current.delete(id);
         if (timeoutId) clearTimeout(timeoutId);
-        if (type === toUI.ERROR) reject(new Error(payload.message || 'Worker request failed'));
+        if (type === toUI.ERROR) {
+          const err = new Error(payload.message || 'Worker request failed');
+          err.loadResult = payload?.loadResult ?? null;
+          reject(err);
+        }
         else resolve({ type, payload });
         dispatch({ type: silent ? 'CLEAR_BUSY' : 'IDLE' });
       }

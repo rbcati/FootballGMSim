@@ -85,6 +85,7 @@ import { computeRestructureOutcome, shouldPreserveChemistryOnReturn, isContractR
 import {
   normalizeContractDetails,
   repairLegacyPlayerContract,
+  normalizeLoadedLeagueContracts,
   calculateContractCapHit,
   calculateTeamPayroll,
   estimateHoldoutRisk,
@@ -260,12 +261,12 @@ function validateLeagueFlowState({ stage = 'runtime', requireDraftState = false 
     const hasTeam = Number.isFinite(Number(p?.teamId));
     const status = String(p?.status ?? '');
     if (status !== 'free_agent' && status !== 'retired' && status !== 'draft_eligible' && !hasTeam) {
-      issues.push(`[${stage}] player ${p?.id} has invalid status/team linkage`);
+      issues.push({ severity: 'error', code: 'invalid_player_team_link', message: `[${stage}] player ${p?.id} has invalid status/team linkage` });
       break;
     }
     const c = normalizeContractDetails(p?.contract ?? {}, p);
     if (![c.baseAnnual, c.signingBonus, c.yearsTotal].every(Number.isFinite)) {
-      issues.push(`[${stage}] player ${p?.id} has invalid contract numbers`);
+      issues.push({ severity: 'error', code: 'invalid_contract_numbers', message: `[${stage}] player ${p?.id} has invalid contract numbers` });
       break;
     }
   }
@@ -277,13 +278,19 @@ function validateLeagueFlowState({ stage = 'runtime', requireDraftState = false 
     hardCap: Number(getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP)),
     capViolationSeverity: stage === 'load-save' || stage === 'post-load' ? 'warn' : 'error',
   });
-  for (const issue of legality.issues.slice(0, 6)) issues.push(`[${stage}] ${issue.message}`);
+  for (const issue of legality.issues.slice(0, 6)) {
+    issues.push({
+      severity: issue?.severity ?? 'error',
+      code: issue?.code ?? 'unknown',
+      message: `[${stage}] ${issue?.message ?? 'Unknown validation issue.'}`,
+    });
+  }
 
   for (const team of teams) {
     const capUsed = Number(team?.capUsed ?? 0);
     const capRoom = Number(team?.capRoom ?? 0);
     if (!Number.isFinite(capUsed) || !Number.isFinite(capRoom)) {
-      issues.push(`[${stage}] team ${team?.abbr ?? team?.id} has invalid cap math`);
+      issues.push({ severity: 'error', code: 'invalid_cap_math', message: `[${stage}] team ${team?.abbr ?? team?.id} has invalid cap math` });
       break;
     }
   }
@@ -291,23 +298,32 @@ function validateLeagueFlowState({ stage = 'runtime', requireDraftState = false 
   if (requireDraftState || meta?.phase === 'draft') {
     const ds = meta?.draftState;
     if (!ds || !Array.isArray(ds.picks) || ds.picks.length === 0) {
-      issues.push(`[${stage}] draft state missing picks`);
+      issues.push({ severity: 'error', code: 'missing_draft_picks', message: `[${stage}] draft state missing picks` });
     }
     const draftEligible = players.filter((p) => p?.status === 'draft_eligible');
     if (draftEligible.length === 0 && (!ds || Number(ds?.currentPickIndex ?? 0) < Number(ds?.picks?.length ?? 0))) {
-      issues.push(`[${stage}] draft pool missing before draft completion`);
+      issues.push({ severity: 'error', code: 'missing_draft_pool', message: `[${stage}] draft pool missing before draft completion` });
     }
   }
 
   if (issues.length > 0) {
     if (isDev) {
       console.groupCollapsed(`[Validation] ${stage} (${issues.length} issues)`);
-      issues.forEach((m) => console.warn(m));
+      issues.forEach((m) => console.warn(m?.message ?? m));
       console.groupEnd();
     }
     return { ok: false, issues };
   }
   return { ok: true, issues: [] };
+}
+
+function buildLoadResult(status, details = {}) {
+  return {
+    status,
+    repairedContracts: Number(details?.repairedContracts ?? 0),
+    warnings: Array.isArray(details?.warnings) ? details.warnings : [],
+    message: String(details?.message ?? ''),
+  };
 }
 
 function normalizeFranchiseInvestments(raw = {}) {
@@ -510,6 +526,26 @@ function repairLegacyPlayerContractsOnLoad({ userTeamId = null } = {}) {
       console.info('[load-save] user team contract sample (after)', userTeamExampleAfter);
     }
   }
+}
+
+function normalizeLeagueContractsInCache() {
+  const normalizedLeague = normalizeLoadedLeagueContracts({
+    players: cache.getAllPlayers(),
+  });
+  let repairedCount = 0;
+  for (const player of normalizedLeague?.players ?? []) {
+    const existing = cache.getPlayer(player?.id);
+    if (!existing) continue;
+    const changed = JSON.stringify(existing?.contract ?? null) !== JSON.stringify(player?.contract ?? null)
+      || Number(existing?.baseAnnual) !== Number(player?.baseAnnual)
+      || Number(existing?.signingBonus) !== Number(player?.signingBonus)
+      || Number(existing?.years) !== Number(player?.years)
+      || Number(existing?.yearsTotal) !== Number(player?.yearsTotal);
+    if (!changed) continue;
+    repairedCount += 1;
+    cache.updatePlayer(player.id, player);
+  }
+  return repairedCount;
 }
 
 function buildTeamContractSnapshot(teamId) {
@@ -1462,6 +1498,7 @@ async function handleLoadSave({ leagueId }, id) {
       // salary as flat fields rather than inside a contract object) display
       // the correct Cap Used / Cap Room values immediately on load.
       repairRosterAndTeamLinks({ reason: 'load-save' });
+      const normalizedContractCount = normalizeLeagueContractsInCache();
       repairLegacyPlayerContractsOnLoad({ userTeamId: meta?.userTeamId });
       for (const team of cache.getAllTeams()) {
         recalculateTeamCap(team.id, { debugReason: 'load-save' });
@@ -1518,10 +1555,7 @@ async function handleLoadSave({ leagueId }, id) {
       const blockingIssues = [
         ...(loadLegality?.issues ?? []),
         ...(flowValidation?.issues ?? []),
-      ].filter((issue) => {
-        if (typeof issue === 'string') return true;
-        return issue?.severity === 'error' && issue?.code !== 'cap_limit';
-      });
+      ].filter((issue) => issue?.severity === 'error' && issue?.code !== 'cap_limit');
       if (blockingIssues.length > 0) {
         throw new Error(`Save load aborted: ${String(blockingIssues[0]?.message ?? blockingIssues[0])}`);
       }
@@ -1558,12 +1592,35 @@ async function handleLoadSave({ leagueId }, id) {
         throw new Error('Save load aborted: playable league state is incomplete after validation.');
       }
 
-      post(toUI.FULL_STATE, viewState, id);
+      const warningMessages = (loadLegality?.issues ?? [])
+        .filter((issue) => issue?.severity === 'warn')
+        .map((issue) => issue?.message)
+        .slice(0, 4);
+      const loadResult = warningMessages.length > 0
+        ? buildLoadResult('repaired_with_warning', {
+            repairedContracts: normalizedContractCount,
+            warnings: warningMessages,
+            message: warningMessages[0],
+          })
+        : buildLoadResult('success', {
+            repairedContracts: normalizedContractCount,
+          });
+
+      post(toUI.FULL_STATE, { ...viewState, loadResult }, id);
+      if (loadResult.status === 'repaired_with_warning') {
+        post(toUI.NOTIFICATION, {
+          level: 'warn',
+          message: `[load-save] ${loadResult.message}`,
+        });
+      }
     } else {
       post(toUI.ERROR, { message: "Save not found" }, id);
     }
   } catch (e) {
-    post(toUI.ERROR, { message: e.message, stack: e.stack }, id);
+    const message = String(e?.message ?? 'Save load failed.');
+    const recoverable = /Save load aborted|validation|incomplete|migrate/i.test(message);
+    const loadResult = buildLoadResult(recoverable ? 'recoverable_error' : 'fatal_error', { message });
+    post(toUI.ERROR, { message, stack: e?.stack, loadResult }, id);
   }
 }
 

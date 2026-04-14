@@ -75,7 +75,14 @@ export default function SaveManager({ actions, onCreate }) {
     setLoadingSaveId(saveId);
     setSaveErrors((prev) => ({ ...prev, [saveId]: null }));
     try {
-      await actions.loadSave(saveId);
+      const result = await actions.loadSave(saveId);
+      const loadStatus = result?.payload?.loadResult?.status;
+      if (loadStatus === 'repaired_with_warning') {
+        setSaveErrors((prev) => ({
+          ...prev,
+          [saveId]: result?.payload?.loadResult?.message || 'Save repaired with warnings. Review team finances after loading.',
+        }));
+      }
       setTimeout(() => {
         setLoadingSaveId((current) => {
           if (current === saveId) {
@@ -89,9 +96,13 @@ export default function SaveManager({ actions, onCreate }) {
         });
       }, 8000);
     } catch (err) {
+      const status = err?.loadResult?.status;
+      const maybeRecoverable = status === 'recoverable_error';
       setSaveErrors((prev) => ({
         ...prev,
-        [saveId]: err.message || "Failed to load save",
+        [saveId]: maybeRecoverable
+          ? `${err.message || "Failed to load save"} (Recoverable error: retry or attempt repair.)`
+          : (err.message || "Failed to load save"),
       }));
       setLoadingSaveId(null);
     }
@@ -296,12 +307,21 @@ export default function SaveManager({ actions, onCreate }) {
                           {isLoading ? (
                             <div className="sm-save-spinner" />
                           ) : saveError ? (
-                            <button
-                              className="sm-btn sm-btn-retry"
-                              onClick={() => setSaveErrors((prev) => ({ ...prev, [save.id]: null }))}
-                            >
-                              Retry
-                            </button>
+                            <>
+                              <button
+                                className="sm-btn sm-btn-retry"
+                                onClick={() => handleLoad(save.id)}
+                              >
+                                Retry
+                              </button>
+                              <button
+                                className="sm-btn sm-btn-load"
+                                onClick={() => handleLoad(save.id)}
+                                title="Attempt repair and load"
+                              >
+                                Attempt Repair
+                              </button>
+                            </>
                           ) : (
                             <button
                               className="sm-btn sm-btn-load"
