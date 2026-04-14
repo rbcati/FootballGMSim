@@ -36,12 +36,50 @@ function StoryCard({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
   );
 }
 
-function SectionBlock({ title, stories, ...handlers }) {
+function CompactStoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
+  if (!item) return null;
+  return (
+    <div
+      style={{
+        border: '1px solid var(--hairline)',
+        borderRadius: 10,
+        padding: '10px 12px',
+        background: 'color-mix(in oklab, var(--surface) 88%, black 12%)',
+        display: 'grid',
+        gap: 6,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>{item?.headline}</div>
+        <span style={{ fontSize: 10, color: 'var(--text-subtle)', border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px' }}>
+          {item?._categoryLabel}
+        </span>
+      </div>
+      {item?.body ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.body}</div> : null}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>
+          W{item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Team' : ''}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Box</button> : null}
+          {item?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(item.teamId)}>Team</button> : null}
+          {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionBlock({ title, stories, compact = false, ...handlers }) {
   if (!stories?.length) return null;
   return (
     <section style={{ display: 'grid', gap: 8 }}>
       <h3 style={{ margin: 0, fontSize: 'var(--text-sm)', textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-subtle)' }}>{title}</h3>
-      {stories.map((item, idx) => <StoryCard key={item?.id ?? `${title}-${idx}`} item={item} {...handlers} />)}
+      {stories.map((item, idx) => (
+        compact
+          ? <CompactStoryRow key={item?.id ?? `${title}-${idx}`} item={item} {...handlers} />
+          : <StoryCard key={item?.id ?? `${title}-${idx}`} item={item} {...handlers} />
+      ))}
     </section>
   );
 }
@@ -94,7 +132,16 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
           ['league', 'LEAGUE'],
           ['transactions', 'TRANSACTIONS'],
         ].map(([value, label]) => (
-          <button key={value} className="btn" onClick={() => setFilter(value)} style={{ opacity: filter === value ? 1 : 0.7 }}>
+          <button
+            key={value}
+            className="btn"
+            onClick={() => setFilter(value)}
+            style={{
+              opacity: filter === value ? 1 : 0.72,
+              fontWeight: filter === value ? 700 : 500,
+              borderColor: filter === value ? 'var(--accent)' : undefined,
+            }}
+          >
             {label}
           </button>
         ))}
@@ -107,18 +154,28 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
         </section>
       ) : <div style={{ color: 'var(--text-subtle)' }}>No news yet.</div>}
 
-      <SectionBlock title="Top Stories" stories={desk.topStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-      <SectionBlock title="Your Team Desk" stories={desk.teamStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-      <SectionBlock title="League Wide" stories={desk.leagueStories} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-      <SectionBlock title="Transactions Wire" stories={desk.transactions} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
-      <SectionBlock title="This Week in the League" stories={desk.recap} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+      <SectionBlock
+        title={`News Feed (${desk.filtered.length})`}
+        stories={desk.filtered.slice(1, 13)}
+        compact
+        onTeamSelect={onTeamSelect}
+        onOpenBoxScore={onOpenBoxScore}
+        onPlayerSelect={onPlayerSelect}
+      />
+      {filter === 'all' ? (
+        <>
+          <SectionBlock title="Team Desk" stories={desk.teamStories.slice(0, 2)} compact onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+          <SectionBlock title="League Pulse" stories={desk.recap.slice(0, 2)} compact onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
+        </>
+      ) : null}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn" onClick={() => onNavigate?.('Team')}>Team</button>
-        <button className="btn" onClick={() => onNavigate?.('League')}>League</button>
-        <button className="btn" onClick={() => onNavigate?.('Schedule')}>Schedule</button>
-        <button className="btn" onClick={() => onNavigate?.('Contract Center')}>Contracts</button>
-        <button className="btn" onClick={() => onNavigate?.('💰 Cap')}>Cap</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-subtle)' }}>Use filters to keep this desk focused by context.</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-sm" onClick={() => onNavigate?.('Team')}>Team</button>
+          <button className="btn btn-sm" onClick={() => onNavigate?.('League')}>League</button>
+          <button className="btn btn-sm" onClick={() => onNavigate?.('Schedule')}>Schedule</button>
+        </div>
       </div>
     </div>
   );

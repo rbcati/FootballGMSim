@@ -35,6 +35,12 @@ function getNextGame(league) {
   return null;
 }
 
+function toneAccent(tone) {
+  if (tone === "danger") return "var(--danger)";
+  if (tone === "warning") return "var(--warning)";
+  return "var(--accent)";
+}
+
 export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeamSelect, onAdvanceWeek, busy, simulating }) {
   const vm = useMemo(() => getHQViewModel(league), [league]);
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
@@ -48,11 +54,40 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const team = vm.userTeam;
   const cap = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
   const record = formatRecord(team);
-  const urgentItems = (weekly?.urgentItems ?? []).slice(0, 5);
+  const urgentItems = (weekly?.urgentItems ?? []).slice(0, 6);
   const pressureSummary = `Owner ${weekly?.pressure?.owner?.state ?? "Stable"} · Fans ${weekly?.pressure?.fans?.state ?? "Steady"} · Media ${weekly?.pressure?.media?.state ?? "Steady"}`;
   const teamDevelopments = (vm.league?.newsItems ?? [])
     .filter((item) => item?.teamId == null || Number(item?.teamId) === Number(vm.league?.userTeamId))
-    .slice(0, 3);
+    .slice(0, 2);
+  const scheduleWeeks = vm.league?.schedule?.weeks ?? [];
+  const remainingRegularSeasonGames = scheduleWeeks
+    .flatMap((w) => w?.games ?? [])
+    .filter((game) => {
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      const involvesUser = homeId === Number(vm.league?.userTeamId) || awayId === Number(vm.league?.userTeamId);
+      return involvesUser && !game?.played;
+    }).length;
+  const phasePriorityQueue = useMemo(() => {
+    const queue = [...urgentItems];
+    if (vm.league?.phase === "preseason" && (team?.roster?.length ?? 0) > 53) {
+      queue.unshift({
+        label: "Roster cutdown required",
+        detail: `${team.roster.length} players on roster — trim to regular-season limits.`,
+        tab: "Roster",
+        tone: "danger",
+      });
+    }
+    if (vm.league?.phase === "regular" && remainingRegularSeasonGames <= 3) {
+      queue.unshift({
+        label: "Trade window is closing",
+        detail: `${remainingRegularSeasonGames} regular-season game${remainingRegularSeasonGames === 1 ? "" : "s"} left. Resolve pending market moves now.`,
+        tab: "Transactions",
+        tone: "warning",
+      });
+    }
+    return queue.slice(0, 5);
+  }, [urgentItems, vm.league?.phase, team?.roster?.length, remainingRegularSeasonGames]);
   const latestGamePresentation = latestArchived
     ? buildCompletedGamePresentation({
       ...latestArchived,
@@ -70,6 +105,24 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{pressureSummary}</div>
           <Button size="sm" onClick={onAdvanceWeek} disabled={busy || simulating}>Advance Week</Button>
         </div>
+      </SectionCard>
+
+      <SectionCard title="Priority Queue" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Team</Button>}>
+        {phasePriorityQueue.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No immediate blockers.</div> : (
+          <div style={{ display: "grid", gap: 8 }}>
+            {phasePriorityQueue.map((item) => (
+              <button
+                key={`${item.label}-${item.tab}`}
+                className="btn"
+                style={{ textAlign: "left", borderLeft: `3px solid ${toneAccent(item.tone)}` }}
+                onClick={() => onNavigate?.(item?.tab ?? "Team")}
+              >
+                <div style={{ fontWeight: 700 }}>{item.label}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{item.detail}</div>
+              </button>
+            ))}
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="Next Game">
@@ -104,19 +157,6 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         )}
       </SectionCard>
 
-      <SectionCard title="Urgent Actions" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Team Hub</Button>}>
-        {urgentItems.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No immediate blockers.</div> : (
-          <div style={{ display: "grid", gap: 8 }}>
-            {urgentItems.map((item) => (
-              <button key={`${item.label}-${item.tab}`} className="btn" style={{ textAlign: "left" }} onClick={() => onNavigate?.(item?.tab ?? "Team")}>
-                <div style={{ fontWeight: 700 }}>{item.label}</div>
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{item.detail}</div>
-              </button>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
       <SectionCard title="Team Snapshot">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           <StatCard label="OVR / OFF / DEF" value={`${safeNum(team?.ovr, 0)} / ${safeNum(team?.offenseRating, team?.offRating)} / ${safeNum(team?.defenseRating, team?.defRating)}`} />
@@ -126,7 +166,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         </div>
       </SectionCard>
 
-      <SectionCard title="Team Developments" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("News")}>Open News</Button>}>
+      <SectionCard title="News Desk Preview" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("News")}>Open News</Button>}>
         <div style={{ display: "grid", gap: 8 }}>
           {teamDevelopments.map((item, idx) => (
             <button
@@ -139,6 +179,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
               }}
             >
               <div style={{ fontWeight: 700 }}>{item?.headline ?? "League update"}</div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Read full context in News</div>
             </button>
           ))}
           {teamDevelopments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No major updates this week.</div> : null}
