@@ -14,6 +14,29 @@ function getGameId(game) {
   return game?.id ?? game?.gameId ?? game?.gid ?? null;
 }
 
+function getWinPct(team) {
+  const wins = Number(team?.wins ?? 0);
+  const losses = Number(team?.losses ?? 0);
+  const ties = Number(team?.ties ?? 0);
+  const games = wins + losses + ties;
+  if (!games) return 0;
+  return (wins + (0.5 * ties)) / games;
+}
+
+function getConferenceRank(league, team) {
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+  if (!team || !teams.length) return null;
+  const confTeams = teams
+    .filter((t) => Number(t?.conf) === Number(team?.conf))
+    .sort((a, b) => getWinPct(b) - getWinPct(a));
+  const confIndex = confTeams.findIndex((t) => Number(t?.id) === Number(team?.id));
+  const cutoff = confTeams[6];
+  return {
+    rank: confIndex >= 0 ? confIndex + 1 : null,
+    playoffLine: cutoff ? `${cutoff.wins ?? 0}-${cutoff.losses ?? 0}${cutoff.ties ? `-${cutoff.ties}` : ''}` : '—',
+  };
+}
+
 function makeMatchupLabel(game, team) {
   if (!game || !team) return '—';
   const homeId = Number(game.homeId ?? game.home);
@@ -21,6 +44,16 @@ function makeMatchupLabel(game, team) {
   const isHome = homeId === Number(team.id);
   const oppAbbr = isHome ? (game.awayAbbr ?? `Team ${awayId}`) : (game.homeAbbr ?? `Team ${homeId}`);
   return `${isHome ? 'vs' : '@'} ${oppAbbr} · Week ${game.week ?? '—'}`;
+}
+
+function CompactMetric({ label, value, subtext }) {
+  return (
+    <div style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: '8px 9px', minHeight: 62 }}>
+      <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.35 }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 2, lineHeight: 1.2 }}>{value}</div>
+      {subtext ? <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 2 }}>{subtext}</div> : null}
+    </div>
+  );
 }
 
 function CompactRosterWorkspace({ team, onPlayerSelect }) {
@@ -54,21 +87,21 @@ function CompactRosterWorkspace({ team, onPlayerSelect }) {
   }, [roster, posFilter, sortKey]);
 
   return (
-    <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
           {ROSTER_POSITIONS.map((pos) => (
             <button
               key={pos}
               className={`standings-tab${posFilter === pos ? ' active' : ''}`}
               onClick={() => setPosFilter(pos)}
-              style={{ padding: '5px 10px', fontSize: 11, flexShrink: 0 }}
+              style={{ padding: '4px 9px', fontSize: 11, flexShrink: 0 }}
             >
               {pos}
             </button>
           ))}
         </div>
-        <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ fontSize: 12 }}>
+        <select value={sortKey} onChange={(e) => setSortKey(e.target.value)} style={{ fontSize: 12, marginLeft: 'auto' }}>
           <option value="ovr">Sort: OVR</option>
           <option value="age">Sort: Age</option>
           <option value="salary">Sort: Salary</option>
@@ -77,9 +110,28 @@ function CompactRosterWorkspace({ team, onPlayerSelect }) {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0,1.4fr) 34px 30px 72px minmax(62px,0.9fr) 58px',
+          gap: 6,
+          padding: '6px 10px',
+          fontSize: 10,
+          color: 'var(--text-muted)',
+          borderBottom: '1px solid var(--hairline)',
+          textTransform: 'uppercase',
+          letterSpacing: 0.25,
+        }}>
+          <div>Player</div>
+          <div>Pos</div>
+          <div>Age</div>
+          <div>OVR/POT</div>
+          <div>Injury</div>
+          <div>Deal</div>
+        </div>
         {rows.map((player) => {
           const contract = derivePlayerContractFinancials(player);
           const injuryWeeks = Number(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining ?? 0);
+          const injuryLabel = injuryWeeks > 0 ? `${injuryWeeks}w` : 'Healthy';
           return (
             <button
               key={player.id}
@@ -89,23 +141,23 @@ function CompactRosterWorkspace({ team, onPlayerSelect }) {
                 background: 'transparent',
                 border: 'none',
                 borderBottom: '1px solid var(--hairline)',
-                padding: '9px 10px',
+                padding: '7px 10px',
                 display: 'grid',
-                gap: 2,
+                gridTemplateColumns: 'minmax(0,1.4fr) 34px 30px 72px minmax(62px,0.9fr) 58px',
+                gap: 6,
                 textAlign: 'left',
+                alignItems: 'center',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{player.name} <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{player.pos}</span></div>
-                <div style={{ fontSize: 12, fontWeight: 700 }}>OVR {player.ovr ?? '—'} / POT {player.pot ?? '—'}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{player.name}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{formatMoneyM(contract.annualSalary)}</div>
               </div>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 11, color: 'var(--text-muted)' }}>
-                <span>Age {player.age ?? '—'}</span>
-                <span>{formatMoneyM(contract.annualSalary)}</span>
-                <span>{contract.yearsRemaining ?? 0}y left</span>
-                {injuryWeeks > 0 ? <span style={{ color: 'var(--danger)' }}>Injured ({injuryWeeks}w)</span> : null}
-                {player.schemeFit != null ? <span>Fit {Math.round(player.schemeFit)}</span> : null}
-              </div>
+              <div style={{ fontSize: 11, fontWeight: 600 }}>{player.pos ?? '—'}</div>
+              <div style={{ fontSize: 11 }}>{player.age ?? '—'}</div>
+              <div style={{ fontSize: 11, fontWeight: 700 }}>{player.ovr ?? '—'}/{player.pot ?? '—'}</div>
+              <div style={{ fontSize: 10, color: injuryWeeks > 0 ? 'var(--danger)' : 'var(--text-subtle)' }}>{injuryLabel}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{contract.yearsRemaining ?? 0}y</div>
             </button>
           );
         })}
@@ -120,6 +172,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const standing = useMemo(() => getConferenceRank(league, team), [league, team]);
 
   const expiringPlayers = useMemo(
     () => roster.filter((p) => Number(derivePlayerContractFinancials(p).yearsRemaining ?? 0) <= 1),
@@ -142,10 +195,10 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
   const needsAttention = useMemo(() => {
     const items = [];
-    if (capSnapshot.capRoom < 10) items.push(`Cap room low (${formatMoneyM(capSnapshot.capRoom)})`);
-    if (expiringPlayers.length > 8) items.push(`${expiringPlayers.length} contracts expiring soon`);
-    if (injuredPlayers.length > 0) items.push(`${injuredPlayers.length} active injuries`);
-    if (roster.length > 53 && league?.phase === 'preseason') items.push(`Roster cutdown required (${roster.length}/53)`);
+    if (capSnapshot.capRoom < 10) items.push({ tone: 'danger', label: `Cap room low (${formatMoneyM(capSnapshot.capRoom)})`, tab: 'Contracts' });
+    if (expiringPlayers.length > 8) items.push({ tone: 'warning', label: `${expiringPlayers.length} contracts expiring soon`, tab: 'Contracts' });
+    if (injuredPlayers.length > 0) items.push({ tone: 'warning', label: `${injuredPlayers.length} active injuries`, tab: 'Roster' });
+    if (roster.length > 53 && league?.phase === 'preseason') items.push({ tone: 'danger', label: `Roster cutdown required (${roster.length}/53)`, tab: 'Roster' });
     return items;
   }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, roster.length, league?.phase]);
 
@@ -158,57 +211,85 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     ].filter(Boolean).slice(0, 4);
   }, [latestGame, expiringPlayers, injuredPlayers, team?.scheme]);
 
+  const quickActions = [
+    { label: 'Open roster', tab: 'Roster' },
+    { label: 'Set depth chart', tab: 'Depth Chart' },
+    { label: 'Manage contracts', tab: 'Contracts' },
+    { label: 'Staff console', tab: 'Staff' },
+  ];
+
   return (
     <div>
       <SectionHeader title="Team" subtitle="Front-office workspace" />
       <SectionSubnav items={TEAM_SUBNAV} activeItem={subtab} onChange={setSubtab} sticky />
 
       {subtab === 'Overview' && (
-        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>TEAM SNAPSHOT</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, marginTop: 8 }}>
-              <div><strong>{team?.wins ?? 0}-{team?.losses ?? 0}{team?.ties ? `-${team.ties}` : ''}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Record</div></div>
-              <div><strong>{team?.ovr ?? '—'} OVR</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>OFF {team?.off ?? '—'} · DEF {team?.def ?? '—'}</div></div>
-              <div><strong>{formatMoneyM(capSnapshot.capRoom)}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Cap room</div></div>
-              <div><strong>{roster.length}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Roster count</div></div>
-              <div><strong>{injuredPlayers.length}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Injuries</div></div>
-              <div><strong>{expiringPlayers.length}</strong><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Expiring deals</div></div>
+        <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+          <div className="card" style={{ padding: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>TEAM SNAPSHOT</div>
+              <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>Week {league?.week ?? '—'} · {league?.phase ?? 'regular'}</div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 7, marginTop: 8 }}>
+              <CompactMetric label="Record" value={`${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}`} subtext={standing?.rank ? `Conf #${standing.rank} · line ${standing.playoffLine}` : 'Conference context unavailable'} />
+              <CompactMetric label="Ratings" value={`${team?.ovr ?? '—'} OVR`} subtext={`OFF ${team?.off ?? '—'} · DEF ${team?.def ?? '—'}`} />
+              <CompactMetric label="Cap room" value={formatMoneyM(capSnapshot.capRoom)} subtext={`${formatMoneyM(capSnapshot.capUsed)} used`} />
+              <CompactMetric label="Roster" value={`${roster.length}/53`} subtext={`${injuredPlayers.length} injured · ${expiringPlayers.length} expiring`} />
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
-            <button className="card" style={{ padding: 'var(--space-3)', textAlign: 'left' }} onClick={() => {
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 7 }}>
+            <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
               const gameId = getGameId(latestGame);
               if (gameId != null) onOpenGameDetail?.(gameId, 'Team');
             }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>LAST GAME</div>
-              <div style={{ fontWeight: 700 }}>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>LAST GAME</div>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</div>
             </button>
-            <button className="card" style={{ padding: 'var(--space-3)', textAlign: 'left' }} onClick={() => {
+            <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
               const gameId = getGameId(upcomingGame);
               if (gameId != null) onOpenGameDetail?.(gameId, 'Team');
             }}>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>NEXT GAME</div>
-              <div style={{ fontWeight: 700 }}>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup found'}</div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>NEXT GAME</div>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup found'}</div>
             </button>
           </div>
 
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Needs attention</div>
-            {needsAttention.length > 0 ? needsAttention.map((item) => <div key={item} style={{ fontSize: 12, marginBottom: 3 }}>• {item}</div>) : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No urgent flags right now.</div>}
+          <div className="card" style={{ padding: '10px' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Needs attention</div>
+            {needsAttention.length > 0 ? needsAttention.map((item) => (
+              <button
+                key={item.label}
+                onClick={() => setSubtab(item.tab)}
+                style={{
+                  width: '100%',
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'left',
+                  padding: '6px 0',
+                  borderBottom: '1px solid var(--hairline)',
+                  fontSize: 12,
+                  color: item.tone === 'danger' ? 'var(--danger)' : 'var(--warning)',
+                }}
+              >
+                {item.label}
+              </button>
+            )) : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No urgent flags right now.</div>}
           </div>
 
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>Recent team news / decisions</div>
-            {recentSignals.map((line) => <div key={line} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 3 }}>• {line}</div>)}
+          <div className="card" style={{ padding: '10px' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Team alerts & news</div>
+            {recentSignals.map((line) => <div key={line} style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>• {line}</div>)}
             {recentSignals.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No recent team updates.</div> : null}
           </div>
 
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {TEAM_SUBNAV.filter((tab) => tab !== 'Overview').map((tab) => (
-              <button key={tab} className="btn" onClick={() => setSubtab(tab)}>{tab}</button>
-            ))}
+          <div className="card" style={{ padding: '10px' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Quick actions</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {quickActions.map((item) => (
+                <button key={item.tab} className="btn" onClick={() => setSubtab(item.tab)}>{item.label}</button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -223,8 +304,8 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           initialViewMode="depth"
         />
       )}
-      {subtab === 'Contracts' && <ContractCenter league={league} actions={actions} />}
-      {subtab === 'Staff' && <StaffManagement league={league} actions={actions} />}
+      {subtab === 'Contracts' && <ContractCenter league={league} actions={actions} compact />}
+      {subtab === 'Staff' && <StaffManagement league={league} actions={actions} compact />}
     </div>
   );
 }

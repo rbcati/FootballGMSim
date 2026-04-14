@@ -30,7 +30,7 @@ function valueScore(candidate) {
   return Math.round((specialty / Math.max(1, Object.keys(candidate?.specialtyRatings ?? {}).length)) - (Number(candidate?.annualSalary || 0) * 2));
 }
 
-export default function StaffManagement({ league, actions }) {
+export default function StaffManagement({ league, actions, compact = false }) {
   const teamId = league?.userTeamId ?? 0;
   const [staffState, setStaffState] = useState(null);
   const [selectedRole, setSelectedRole] = useState('all');
@@ -80,17 +80,25 @@ export default function StaffManagement({ league, actions }) {
   };
 
   return (
-    <div className="app-screen-stack" style={{ maxWidth: 1000, margin: '0 auto' }}>
+    <div className="app-screen-stack" style={{ maxWidth: 1000, margin: '0 auto', gap: compact ? 'var(--space-2)' : undefined }}>
       <ScreenHeader
         eyebrow="Operations"
         title="Staff & Development"
-        subtitle="Hire coaches and department heads, manage contracts, and see exactly what each role improves."
+        subtitle={compact ? "Front office console for coaching, scouting, facilities, and long-term investment controls." : "Hire coaches and department heads, manage contracts, and see exactly what each role improves."}
         metadata={[
           { label: 'Staff payroll', value: fmtMoney(staffSalaryTotal) },
           { label: 'Dev impact', value: `${((bonuses.developmentDelta ?? 0) * 100).toFixed(1)}%` },
           { label: 'Scouting confidence', value: bonuses.summary?.[2] ?? 'Balanced' },
         ]}
       />
+      <SectionCard title="Staff console summary" subtitle="Summary first, controls second.">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 8, fontSize: 12 }}>
+          <div><strong>Coaching group:</strong> {staff?.headCoach?.name ?? 'Vacant'} + coordinators</div>
+          <div><strong>Scouting lead:</strong> {staff?.scoutDirector?.name ?? 'Vacant'}</div>
+          <div><strong>Facilities / trainer:</strong> {staff?.headTrainer?.name ?? 'Vacant'}</div>
+          <div><strong>Investment status:</strong> {userTeam?.ownershipSpendLevel ?? userTeam?.investmentTier ?? 'Balanced'}</div>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Current staff" subtitle="One core role per franchise layer. Replace or fire from here.">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 10 }}>
@@ -146,7 +154,9 @@ export default function StaffManagement({ league, actions }) {
         </div>
       </SectionCard>
 
-      <FranchiseInvestmentsPanel team={userTeam} actions={actions} />
+      <SectionCard title="Facilities, schemes, and investment" subtitle="Use this panel to allocate franchise resources and long-term infrastructure spend.">
+        <FranchiseInvestmentsPanel team={userTeam} actions={actions} />
+      </SectionCard>
       {!staffState && <EmptyState title="No staff state yet" body="Load a save with staff data to unlock hiring and firing actions." />}
     </div>
   );
