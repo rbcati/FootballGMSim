@@ -105,6 +105,7 @@ import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } f
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
+import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload } from '../core/gameArchive.js';
 import {
@@ -1071,6 +1072,25 @@ function buildRosterView(teamId) {
   });
 }
 
+
+function hydratePlayerDevelopmentFields(player = {}) {
+  const profile = ensurePersonalityProfile(player);
+  const mentorship = {
+    mentorId: player?.mentorship?.mentorId ?? null,
+    menteeIds: Array.isArray(player?.mentorship?.menteeIds) ? player.mentorship.menteeIds : [],
+    maxMentees: Math.max(1, Math.min(2, Number(player?.mentorship?.maxMentees ?? 2))),
+  };
+  const developmentHistory = Array.isArray(player?.developmentHistory) ? player.developmentHistory : [];
+  const injuryHistory = Array.isArray(player?.injuryHistory) ? player.injuryHistory : [];
+  return { personalityProfile: profile, mentorship, developmentHistory, injuryHistory };
+}
+
+function hydrateAllPlayersForDevelopment() {
+  for (const p of cache.getAllPlayers()) {
+    cache.updatePlayer(p.id, hydratePlayerDevelopmentFields(p));
+  }
+}
+
 // ── iOS PWA save-wipe guard ───────────────────────────────────────────────────
 //
 // On iOS Safari PWA, the worker can restart after the app is backgrounded.
@@ -1301,6 +1321,7 @@ async function loadSave() {
   ]);
 
   cache.hydrate({ meta, teams, players, draftPicks });
+  hydrateAllPlayersForDevelopment();
   return true;
 }
 
@@ -1685,6 +1706,7 @@ async function handleNewLeague(payload, id) {
 
     // Hydrate cache
     cache.hydrate({ meta, teams, players, draftPicks });
+    hydrateAllPlayersForDevelopment();
 
     // Compute Cap Used / Cap Room for every team now that players are in cache.
     // makePlayer() writes salary as flat fields (p.baseAnnual, p.signingBonus);
@@ -3334,10 +3356,12 @@ async function handleGetPlayerCareer({ playerId }, id) {
     const motivationProfile = buildContractProfile(player ?? {}, { tenureYears: Number(player?.tenureYears ?? 0) });
     const motivationSummary = summarizePlayerMood(motivationProfile, getTeamContextForNegotiation(player ?? {}, playerTeam ?? {}, null, {}));
 
+    const teammates = player?.teamId != null ? cache.getPlayersByTeam(player.teamId).map((p) => ({ id: p.id, name: p.name, age: p.age, pos: p.pos, ovr: p.ovr, mentorship: p.mentorship ?? null, personalityProfile: p.personalityProfile ?? ensurePersonalityProfile(p) })) : [];
     post(toUI.PLAYER_CAREER, {
       playerId: strId,
       player:   player ? { ...player, motivationProfile, motivationSummary } : null,
       stats:    allStats,
+      teammates,
     }, id);
 
   } catch (err) {
@@ -4992,7 +5016,8 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
   if ((player.schemeFit ?? 60) < 55) reasons.push('scheme uncertainty');
 
   const inSeason = ['regular', 'preseason', 'playoffs'].includes(ensureDynastyMeta(cache.getMeta())?.phase);
-  if (inSeason && (player.personality?.moneyPriority ?? 0.6) > 0.75) {
+  const contractPersonality = contractPersonalityModifier(player.personalityProfile ?? ensurePersonalityProfile(player));
+  if (inSeason && ((player.personality?.moneyPriority ?? 0.6) > 0.75 || contractPersonality.inSeasonNegotiationPenalty > 0)) {
     post(toUI.EXTENSION_RESPONSE, { status: 'declined', reason: 'Won’t negotiate in-season', reasons }, id);
     return;
   }
@@ -6246,6 +6271,34 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
   await flushDirty();
   post(toUI.STATE_UPDATE, buildViewState(), id);
 }
+
+
+async function handleAssignMentor({ mentorId, menteeId, teamId }, id) {
+  const team = cache.getTeam(teamId);
+  if (!team) return post(toUI.ERROR, { message: 'Team not found for mentorship assignment' }, id);
+  const mentor = cache.getPlayer(String(mentorId)) ?? cache.getPlayer(mentorId);
+  const mentee = cache.getPlayer(String(menteeId)) ?? cache.getPlayer(menteeId);
+  if (!mentor || !mentee) return post(toUI.ERROR, { message: 'Mentor or mentee not found' }, id);
+  if (Number(mentor.teamId) !== Number(teamId) || Number(mentee.teamId) !== Number(teamId)) {
+    return post(toUI.ERROR, { message: 'Mentor and mentee must be on the same roster.' }, id);
+  }
+  const mentorProfile = ensurePersonalityProfile(mentor);
+  if ((mentor.age ?? 0) < 28 || Number(mentorProfile.leadership ?? 0) < 65) {
+    return post(toUI.ERROR, { message: 'Mentor does not meet veteran leadership requirement.' }, id);
+  }
+  const roster = cache.getPlayersByTeam(teamId);
+  const assigned = roster.filter((p) => String(p?.mentorship?.mentorId ?? '') === String(mentor.id));
+  const limit = Math.max(1, Math.min(2, Number(mentor?.mentorship?.maxMentees ?? 2)));
+  if (assigned.length >= limit && !assigned.some((p) => String(p.id) === String(mentee.id))) {
+    return post(toUI.ERROR, { message: `Mentor already has max ${limit} mentees.` }, id);
+  }
+  cache.updatePlayer(mentee.id, { mentorship: { ...(mentee.mentorship ?? {}), mentorId: mentor.id } });
+  const menteeIds = Array.from(new Set([...assigned.map((p) => p.id), mentee.id])).slice(0, limit);
+  cache.updatePlayer(mentor.id, { mentorship: { ...(mentor.mentorship ?? {}), menteeIds, maxMentees: limit } });
+  await flushDirty();
+  post(toUI.STATE_UPDATE, buildViewState(), id);
+}
+
 async function handleStartDraft(payload, id) {
   const meta = ensureCompMeta(cache.getMeta());
   if (!meta) { post(toUI.ERROR, { message: 'No league loaded' }, id); return; }
@@ -6844,7 +6897,10 @@ async function handleAdvanceOffseason(payload, id) {
     const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0) + focusRecovery) * envScale;
     teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
   }
-  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments });
+  const teamRosters = {};
+  for (const team of allTeams) teamRosters[team.id] = allPlayers.filter((p) => Number(p?.teamId) === Number(team.id));
+  for (const player of allPlayers) player.season = Number(meta?.year ?? 2025);
+  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments, teamRosters });
 
   // Flush progression mutations (ratings, ovr, progressionDelta, potential)
   for (const player of allPlayers) {
@@ -6855,6 +6911,8 @@ async function handleAdvanceOffseason(payload, id) {
       potential:        player.potential,
       progressionDelta: player.progressionDelta ?? null,
       developmentContext: player.developmentContext ?? null,
+      personalityProfile: player.personalityProfile ?? ensurePersonalityProfile(player),
+      developmentHistory: player.developmentHistory ?? [],
     });
   }
 
@@ -8015,6 +8073,7 @@ async function handleMessage(event) {
       case toWorker.COUNTER_INCOMING_TRADE: return await handleCounterIncomingTrade(payload, id);
       case toWorker.TOGGLE_TRADE_BLOCK: return await handleToggleTradeBlock(payload, id);
       case toWorker.UPDATE_PLAYER_MANAGEMENT: return await handleUpdatePlayerManagement(payload, id);
+      case toWorker.ASSIGN_MENTOR: return await handleAssignMentor(payload, id);
       case toWorker.GET_EXTENSION_ASK:  return await handleGetExtensionAsk(payload, id);
       case toWorker.EXTEND_CONTRACT:      return await handleExtendContract(payload, id);
       case toWorker.RESTRUCTURE_CONTRACT: return await handleRestructureContract(payload, id);

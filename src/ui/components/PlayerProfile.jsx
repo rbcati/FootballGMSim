@@ -17,6 +17,11 @@ import { buildTeamChemistrySummary, describePlayerMoraleContext } from "../utils
 import { normalizeManagement, TRADE_STATUS_LABELS, TRADE_STATUS_TOOLTIPS, TRADE_STATUSES, CONTRACT_PLAN_FLAGS, CONTRACT_PLAN_LABELS, toggleContractPlan } from "../utils/playerManagement.js";
 import { evaluateReSigningPriority, summarizeRetentionPlan } from "../../core/retention/reSigning.js";
 import FaceAvatar from './FaceAvatar.jsx';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from 'chart.js';
+import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.js';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
 // ── Accolade badge config ─────────────────────────────────────────────────────
 
@@ -310,6 +315,7 @@ export default function PlayerProfile({
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [extending, setExtending] = useState(false);
+  const [showProjections, setShowProjections] = useState(false);
 
   const fetchProfile = React.useCallback(() => {
     if (!playerId) return;
@@ -413,6 +419,24 @@ export default function PlayerProfile({
     const bPrimary = b?.totals?.[keyColumns[0]?.key] ?? 0;
     return bPrimary - aPrimary;
   })[0];
+
+
+  const teammates = data?.teammates ?? [];
+  const devHistory = Array.isArray(player?.developmentHistory) ? player.developmentHistory : [];
+  const isGodMode = !!data?.meta?.commissionerMode;
+  const canShowProjectionToggle = isGodMode || String(data?.meta?.difficulty ?? '').toLowerCase() === 'easy';
+  const mentorCandidates = teammates.filter((p) => Number(p.age ?? 0) >= 28 && Number(p?.personalityProfile?.leadership ?? 0) >= 65 && String(p.id) !== String(player?.id));
+  const devChartData = useMemo(() => ({
+    labels: devHistory.map((d) => String(d.season ?? d.age ?? '—')),
+    datasets: [
+      { label: 'Physical', data: devHistory.map((d) => d.physical ?? null), borderColor: '#60a5fa', backgroundColor: 'transparent' },
+      { label: 'Passing', data: devHistory.map((d) => d.passing ?? null), borderColor: '#22c55e', backgroundColor: 'transparent' },
+      { label: 'Rush/Rec', data: devHistory.map((d) => d.rushingReceiving ?? null), borderColor: '#f59e0b', backgroundColor: 'transparent' },
+      { label: 'Blocking', data: devHistory.map((d) => d.blocking ?? null), borderColor: '#a78bfa', backgroundColor: 'transparent' },
+      { label: 'Defense', data: devHistory.map((d) => d.defense ?? null), borderColor: '#f43f5e', backgroundColor: 'transparent' },
+      { label: 'Kicking', data: devHistory.map((d) => d.kicking ?? null), borderColor: '#14b8a6', backgroundColor: 'transparent' },
+    ],
+  }), [devHistory]);
 
   return (
     <div
@@ -705,6 +729,35 @@ export default function PlayerProfile({
 
         {/* ── Body ── */}
         <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Development Tab</h3>
+              <div style={{ display: 'grid', gap: 10 }}>
+                {devHistory.length > 0 ? <Line data={devChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: 'var(--text-muted)' } } } }} height={220} /> : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No preseason development snapshots yet.</div>}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {canShowProjectionToggle && <Button size="sm" variant="outline" onClick={() => setShowProjections((v) => !v)}>{showProjections ? 'Hide' : 'Show'} projections</Button>}
+                  <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>Updates after each preseason progression run.</span>
+                </div>
+                {showProjections && <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>Projection: {(player?.potential ?? player?.ovr ?? 70)} potential ceiling • {player?.developmentContext?.mentorship ?? 'No mentorship bonus'}</div>}
+                {player?.personalityProfile && <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))' }}>
+                  {Object.entries(player.personalityProfile).filter(([k]) => PERSONALITY_TOOLTIPS[k]).map(([k, v]) => (
+                    <div key={k} title={PERSONALITY_TOOLTIPS[k]} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, fontSize: 12 }}>
+                      <strong style={{ textTransform: 'capitalize' }}>{k}</strong>: {Math.round(Number(v ?? 0))}
+                    </div>
+                  ))}
+                </div>}
+                {player?.teamId != null && mentorCandidates.length > 0 && actions?.assignMentor && Number(player?.age ?? 0) <= 25 && (
+                  <div style={{ display: 'grid', gap: 6, maxWidth: 360 }}>
+                    <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>Assign mentor</label>
+                    <select value={player?.mentorship?.mentorId ?? ''} onChange={(e) => actions.assignMentor(e.target.value, player.id, player.teamId).then(fetchProfile)} style={{ fontSize: 12, borderRadius: 8, border: '1px solid var(--hairline)', padding: '5px 8px', background: 'var(--surface)' }}>
+                      <option value="">No mentor</option>
+                      {mentorCandidates.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.pos})</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
           {!loading && player && summaryChips.length > 0 && (
             <section>
               <h3 style={sectionLabelStyle}>Quick Read</h3>

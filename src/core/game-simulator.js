@@ -772,20 +772,24 @@ export function generatePostGameCallbacks(context, stats, homeScore, awayScore) 
 function rollPerformanceVariance(player, U) {
   const roll = U.random();
   const ovr = player.ovr || 70;
+  const consistency = Number(player?.personalityProfile?.consistency ?? 65);
+  const riskTaker = Number(player?.personalityProfile?.riskTaker ?? 40);
 
   // Elite players have slightly lower dud chance, slightly higher career game chance
   const eliteBonus = Math.max(0, (ovr - 80) * 0.003); // up to +0.06 for 100 OVR
+  const consistencyBonus = (consistency - 60) * 0.0015;
+  const volatility = Math.max(-0.02, Math.min(0.03, (riskTaker - 50) * 0.001));
 
-  if (roll < 0.04 + eliteBonus) {
+  if (roll < 0.04 + eliteBonus + volatility) {
     // CAREER GAME: player is on fire
     return { multiplier: U.randFloat(1.25, 1.55), type: 'career_game' };
-  } else if (roll < 0.08 + eliteBonus) {
+  } else if (roll < 0.08 + eliteBonus + volatility) {
     // HOT GAME: noticeable uptick
     return { multiplier: U.randFloat(1.10, 1.25), type: 'hot' };
-  } else if (roll > 0.96 - eliteBonus * 0.5) {
+  } else if (roll > 0.96 - eliteBonus * 0.5 + Math.max(0, -consistencyBonus)) {
     // DUD GAME: off day
     return { multiplier: U.randFloat(0.55, 0.78), type: 'dud' };
-  } else if (roll > 0.92 - eliteBonus * 0.5) {
+  } else if (roll > 0.92 - eliteBonus * 0.5 + Math.max(0, -consistencyBonus)) {
     // COLD GAME: slightly below average
     return { multiplier: U.randFloat(0.80, 0.92), type: 'cold' };
   }

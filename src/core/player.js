@@ -6,6 +6,7 @@ import { Constants as C } from './constants.js';
 import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 import { generateTraits } from './traits.js';
 import { generateFaceConfig } from './face.js';
+import { generatePersonalityProfile, ensurePersonalityProfile, contractPersonalityModifier } from './development/personalitySystem.js';
 
 const CONTRACT_DEFAULT = {
   salary: 2,
@@ -378,6 +379,8 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     const contractDetails = generateContract(playerOvr, pos);
 
     const playerPotential = Math.min(99, playerOvr + U.rand(0, 30));
+    const college = generateCollege();
+    const personalityProfile = generatePersonalityProfile({ college, age: playerAge });
     const player = {
         id: U.id(),
         name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
@@ -417,6 +420,8 @@ traits: generateTraits(pos, playerOvr),
         onTradeBlock: false,
         awards: [],
         personality: generatePersonality(),
+        personalityProfile,
+        mentorship: { mentorId: null, menteeIds: [], maxMentees: 2 },
         face: generateFaceConfig(`player-${pos}-${playerAge}-${Date.now()}-${Math.random()}`),
         stats: {
           game: getZeroStats(),
@@ -430,7 +435,7 @@ traits: generateTraits(pos, playerOvr),
         //          tackles, sacks, ffum, ovr }
         careerStats: [],
         history: [],
-        college: generateCollege(),
+        college,
         trueOvr: playerOvr,
         scoutedOvr: U.clamp(playerOvr + U.rand(-15, 15), 40, 99)
     };
@@ -626,8 +631,10 @@ function calculateExtensionDemand(player, difficulty = 'Normal') {
     if (difficulty === 'Hard') diffMult = 1.1;
     if (difficulty === 'Legendary') diffMult = 1.25;
 
-    const premiumMult = 1.15 * diffMult;
-    const baseAnnual = Math.round(baseline.baseAnnual * premiumMult * 10) / 10;
+    const personalityProfile = ensurePersonalityProfile(player);
+    const personality = contractPersonalityModifier(personalityProfile);
+    const premiumMult = 1.15 * diffMult * (personality.annualDemandMultiplier || 1);
+    const baseAnnual = Math.round((baseline.baseAnnual || baseline.salary || 1) * premiumMult * 10) / 10;
 
     // Recalculate signing bonus based on new annual
     // Maintain similar bonus ratio as baseline
@@ -643,7 +650,8 @@ function calculateExtensionDemand(player, difficulty = 'Normal') {
         yearsTotal: years,
         baseAnnual,
         signingBonus,
-        guaranteedPct: baseline.guaranteedPct || 0.5
+        guaranteedPct: baseline.guaranteedPct || 0.5,
+        holdoutRisk: personality.holdoutRisk,
     };
 }
 
