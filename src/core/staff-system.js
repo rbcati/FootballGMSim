@@ -1,4 +1,5 @@
 import { CORE_STAFF_ROLES, evaluateStaffImpact, generateStaffCandidate, getStaffMarketViewModel, summarizeStaffEffects } from './staff/staffFoundation.js';
+import { ensureFaceConfig } from './face.js';
 import { getScoutingConfidence } from './scouting/scoutingSystem.js';
 
 const LEGACY_ROLE_ALIASES = Object.freeze({
@@ -23,6 +24,7 @@ export function ensureTeamStaff(team, { year = 2025 } = {}) {
   }
   for (const key of Object.keys(CORE_STAFF_ROLES)) {
     if (!existing[key]) existing[key] = createStaffMember(key, { year, teamId: team?.id ?? 0 });
+    existing[key] = ensureFaceConfig(existing[key], 'staff');
   }
 
   // Backward-compatible mirror keys for older systems/tests.

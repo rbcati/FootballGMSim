@@ -5,6 +5,7 @@ import { Utils as U } from './utils.js';
 import { Constants as C } from './constants.js';
 import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 import { generateTraits } from './traits.js';
+import { generateFaceConfig } from './face.js';
 
 const CONTRACT_DEFAULT = {
   salary: 2,
@@ -416,6 +417,7 @@ traits: generateTraits(pos, playerOvr),
         onTradeBlock: false,
         awards: [],
         personality: generatePersonality(),
+        face: generateFaceConfig(`player-${pos}-${playerAge}-${Date.now()}-${Math.random()}`),
         stats: {
           game: getZeroStats(),
           season: getZeroStats(),

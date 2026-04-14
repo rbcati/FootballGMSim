@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo } from "react";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
+import FaceAvatar from "./FaceAvatar.jsx";
 
 // ── Colour maps ────────────────────────────────────────────────────────────────
 
@@ -211,14 +212,13 @@ function RosterCard({ player, onSelect }) {
 
       {/* ── OVR badge + name / contract ── */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-        <div style={{
-          width: 46, height: 46, borderRadius: "50%", flexShrink: 0,
-          background: ovrBg, border: `2px solid ${ovrColor}`,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "1rem", fontWeight: 900, color: ovrColor,
-          boxShadow: ovr >= 88 ? `0 0 12px ${ovrGlow}` : "none",
-        }}>
-          {ovr}
+        <div style={{ position: "relative", width: 46, height: 46, flexShrink: 0 }}>
+          <FaceAvatar face={player.face} seed={player.id ?? player.name} size={46} style={{ borderRadius: "50%", border: `2px solid ${ovrColor}`, boxShadow: ovr >= 88 ? `0 0 12px ${ovrGlow}` : "none" }} />
+          <div style={{
+            position: "absolute", right: -3, bottom: -3, minWidth: 20, height: 20, borderRadius: 10,
+            background: ovrBg, border: `1px solid ${ovrColor}`, display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: "0.62rem", fontWeight: 900, color: ovrColor, padding: "0 4px"
+          }}>{ovr}</div>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
