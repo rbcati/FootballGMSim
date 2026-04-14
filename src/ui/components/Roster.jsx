@@ -1988,7 +1988,7 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Roster({ league, actions, onPlayerSelect, initialState = null, initialViewMode = "table" }) {
+export default function Roster({ league, actions, onPlayerSelect, onNavigate = null, initialState = null, initialViewMode = "table" }) {
   const teamId = league?.userTeamId;
   const initialConfig = useMemo(
     () => normalizeInitialRosterState(initialState, initialViewMode),
@@ -2162,7 +2162,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
               }}
             >
               {players.length} players{" "}
-              {isOverLimit ? "/ 53 (Cut Required)" : ""} · Avg OVR {avgOvr}
+              {isOverLimit ? "/ 53 (Cut Required)" : ""} · Avg <abbr title="Overall rating">OVR</abbr> {avgOvr}
             </span>
           </div>
 
@@ -2174,6 +2174,7 @@ export default function Roster({ league, actions, onPlayerSelect, initialState =
               gap: "var(--space-4)",
             }}
           >
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")} aria-label="Back to team hub">Back</Button>
             <div style={{ textAlign: "right" }}>
               <div
                 style={{

@@ -2035,7 +2035,7 @@ function DraftCompletePanel({ actions, draftState }) {
 
 // ── Main Export ────────────────────────────────────────────────────────────────
 
-export default function Draft({ league, actions }) {
+export default function Draft({ league, actions, onNavigate = null }) {
   const [draftState, setDraftState] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2160,9 +2160,10 @@ export default function Draft({ league, actions }) {
               marginTop: 2,
             }}
           >
-            {league?.year ?? ""} Season · Offseason
+            {league?.year ?? ""} Season · Offseason · Evaluate <abbr title="Overall rating">OVR</abbr>/<abbr title="Potential rating">POT</abbr> with scouting context
           </div>
         </div>
+        <button className="btn btn-secondary" onClick={() => onNavigate?.("League")} aria-label="Back to league hub">Back to League</button>
         {draftState &&
           !draftState.notStarted &&
           !draftState.isDraftComplete && (

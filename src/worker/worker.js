@@ -8065,6 +8065,125 @@ async function handleGetAllPlayerStats(_payload, id) {
   post(toUI.ALL_PLAYER_STATS, { stats }, id);
 }
 
+// ── Handler: GET_ANALYTICS_DASHBOARD ─────────────────────────────────────────
+
+function safeNum(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+async function handleGetAnalyticsDashboard(_payload, id) {
+  const safeMeta = getSafeMeta();
+  const teams = cache.getAllTeams();
+  const userTeamId = Number(safeMeta?.userTeamId);
+  const userTeam = teams.find((team) => Number(team?.id) === userTeamId) ?? null;
+  const scheduleWeeks = Array.isArray(safeMeta?.schedule?.weeks) ? safeMeta.schedule.weeks : [];
+  const currentWeek = Math.max(1, Number(safeMeta?.currentWeek ?? 1));
+  const capTotal = safeNum(userTeam?.capTotal, Constants.SALARY_CAP.HARD_CAP);
+  const capUsed = safeNum(userTeam?.capUsed);
+  const teamPlayers = userTeam ? cache.getPlayersByTeam(userTeam.id) : [];
+  const allSeasonStats = cache.getAllSeasonStats();
+  const teamSeasonStats = allSeasonStats.filter((line) => Number(line?.teamId) === userTeamId);
+
+  const winProbability = [];
+  const epaTrend = [];
+  const financialTrend = [];
+  let wins = 0;
+  let losses = 0;
+  let ties = 0;
+
+  for (let weekIndex = 1; weekIndex <= currentWeek; weekIndex += 1) {
+    const weekData = scheduleWeeks.find((week) => Number(week?.week) === weekIndex);
+    const userGame = (weekData?.games ?? []).find((game) => Number(game?.home) === userTeamId || Number(game?.away) === userTeamId);
+    if (!userGame || !userGame.played) continue;
+    const userIsHome = Number(userGame.home) === userTeamId;
+    const userScore = safeNum(userIsHome ? userGame.homeScore : userGame.awayScore);
+    const oppScore = safeNum(userIsHome ? userGame.awayScore : userGame.homeScore);
+    if (userScore > oppScore) wins += 1;
+    else if (userScore < oppScore) losses += 1;
+    else ties += 1;
+    const gamesPlayed = Math.max(1, wins + losses + ties);
+    const winPct = (wins + (ties * 0.5)) / gamesPlayed;
+    const scoreDiff = userScore - oppScore;
+    const epa = Number((((scoreDiff * 0.12) + ((winPct - 0.5) * 4))).toFixed(2));
+    winProbability.push({ week: weekIndex, value: Number(winPct.toFixed(3)) });
+    epaTrend.push({ week: weekIndex, value: epa });
+  }
+
+  const usageByPlayer = teamPlayers
+    .map((player) => {
+      const stat = teamSeasonStats.find((line) => String(line?.playerId) === String(player?.id));
+      const totals = stat?.totals ?? {};
+      const touches = safeNum(totals.rushAtt) + safeNum(totals.receptions) + safeNum(totals.targets) + safeNum(totals.passAtt);
+      return {
+        playerId: player.id,
+        name: player.name,
+        pos: player.pos,
+        usageRate: touches,
+      };
+    })
+    .sort((a, b) => b.usageRate - a.usageRate)
+    .slice(0, 8);
+  const usageTotal = usageByPlayer.reduce((sum, player) => sum + safeNum(player.usageRate), 0);
+  const normalizedUsage = usageByPlayer.map((player) => ({
+    ...player,
+    usageRate: usageTotal > 0 ? Number(((player.usageRate / usageTotal) * 100).toFixed(2)) : 0,
+  }));
+
+  const runningBackTouches = normalizedUsage
+    .filter((entry) => ['RB', 'QB', 'WR'].includes(String(entry.pos ?? '').toUpperCase()))
+    .reduce((sum, entry) => sum + safeNum(entry.usageRate), 0);
+  const passRate = Math.max(30, Math.min(75, 55 + ((safeNum(userTeam?.ptsFor) - safeNum(userTeam?.ptsAgainst)) * 0.08)));
+  const runRate = Math.max(20, Math.min(60, 100 - passRate + (runningBackTouches * 0.04)));
+  const neutralRate = Math.max(5, 100 - passRate - runRate);
+  const playcallingHeatmap = [
+    { label: 'Early Downs', passPct: Number((passRate - 6).toFixed(1)), runPct: Number((runRate + 4).toFixed(1)), neutralPct: Number((neutralRate + 2).toFixed(1)) },
+    { label: 'Red Zone', passPct: Number((passRate - 12).toFixed(1)), runPct: Number((runRate + 10).toFixed(1)), neutralPct: Number((neutralRate + 2).toFixed(1)) },
+    { label: '3rd/4th Down', passPct: Number((passRate + 14).toFixed(1)), runPct: Number((runRate - 10).toFixed(1)), neutralPct: Number((neutralRate - 4).toFixed(1)) },
+  ];
+
+  const capAllocation = { offense: 0, defense: 0, specialTeams: 0 };
+  for (const player of teamPlayers) {
+    const hit = safeNum(player?.contract?.salary, 0);
+    const pos = String(player?.pos ?? '').toUpperCase();
+    if (['K', 'P', 'LS'].includes(pos)) capAllocation.specialTeams += hit;
+    else if (['CB', 'S', 'SS', 'FS', 'LB', 'OLB', 'ILB', 'MLB', 'DL', 'DE', 'DT', 'NT', 'EDGE'].includes(pos)) capAllocation.defense += hit;
+    else capAllocation.offense += hit;
+  }
+
+  for (let i = 0; i < 4; i += 1) {
+    const year = Number(safeMeta?.year ?? 2025) + i;
+    const inflation = 1 + (i * 0.04);
+    const projectedCap = Number((capTotal * inflation).toFixed(2));
+    const projectedUsed = Number((capUsed * inflation * (0.96 + (i * 0.02))).toFixed(2));
+    financialTrend.push({
+      year,
+      capTotal: projectedCap,
+      capUsed: projectedUsed,
+      capRoom: Number((projectedCap - projectedUsed).toFixed(2)),
+    });
+  }
+
+  post(toUI.ANALYTICS_DASHBOARD, {
+    analytics: {
+      generatedAt: Date.now(),
+      teamId: userTeamId,
+      season: Number(safeMeta?.year ?? 2025),
+      week: currentWeek,
+      epaTrend,
+      winProbability,
+      usageRates: normalizedUsage,
+      playcallingHeatmap,
+      capAllocation: {
+        offense: Number(capAllocation.offense.toFixed(2)),
+        defense: Number(capAllocation.defense.toFixed(2)),
+        specialTeams: Number(capAllocation.specialTeams.toFixed(2)),
+      },
+      financialTrend,
+    },
+  }, id);
+}
+
 // ── Handler: GET_AWARD_RACES ──────────────────────────────────────────────────
 
 async function handleGetAwardRaces(_payload, id) {
@@ -8264,6 +8383,7 @@ async function handleMessage(event) {
       case toWorker.GET_LEAGUE_LEADERS: return await handleGetLeagueLeaders(payload, id);
       case toWorker.GET_DASHBOARD_LEADERS: return await handleGetDashboardLeaders(payload, id);
       case toWorker.GET_ALL_PLAYER_STATS: return await handleGetAllPlayerStats(payload, id);
+      case toWorker.GET_ANALYTICS_DASHBOARD: return await handleGetAnalyticsDashboard(payload, id);
       case toWorker.GET_AWARD_RACES:    return await handleGetAwardRaces(payload, id);
       case toWorker.GET_RECORDS:        return await handleGetRecords(payload, id);
       case toWorker.GET_HALL_OF_FAME:   return await handleGetHallOfFame(payload, id);

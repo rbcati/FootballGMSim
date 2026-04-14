@@ -168,7 +168,7 @@ function CompactRosterWorkspace({ team, onPlayerSelect }) {
   );
 }
 
-export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect }) {
+export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null }) {
   const [subtab, setSubtab] = useState('Overview');
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
@@ -217,6 +217,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     { label: 'Set depth chart', tab: 'Depth Chart' },
     { label: 'Manage contracts', tab: 'Contracts' },
     { label: 'Staff console', tab: 'Staff' },
+    { label: 'Analytics dashboard', tab: 'Analytics' },
   ];
 
   return (
@@ -291,7 +292,14 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Quick actions</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {quickActions.map((item) => (
-                <button key={item.tab} className="btn" onClick={() => setSubtab(item.tab)}>{item.label}</button>
+                <button
+                  key={item.tab}
+                  className="btn"
+                  onClick={() => (item.tab === 'Analytics' ? onNavigate?.('Analytics') : setSubtab(item.tab))}
+                  aria-label={item.label}
+                >
+                  {item.label}
+                </button>
               ))}
             </div>
           </div>

@@ -1642,6 +1642,7 @@ export default function LeagueDashboard({
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
               onOpenGameDetail={openGameDetail}
+              onNavigate={setActiveTab}
               rosterInitialState={rosterInitialState}
               rosterInitialView={rosterInitialView}
               statsInitialFamily={statsInitialFamily}
@@ -1795,6 +1796,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
               initialState={rosterInitialState}
               initialViewMode={rosterInitialView}
             />
@@ -1825,7 +1827,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Contract Center" && (
           <TabErrorBoundary label="Contract Center">
-            <ContractCenter league={league} actions={actions} />
+            <ContractCenter league={league} actions={actions} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft" && (
@@ -1833,6 +1835,7 @@ export default function LeagueDashboard({
             <Draft
               league={league}
               actions={actions}
+              onNavigate={setActiveTab}
               onPlayerSelect={setSelectedPlayerId}
             />
           </TabErrorBoundary>
