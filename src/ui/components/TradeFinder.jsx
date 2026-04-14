@@ -32,6 +32,15 @@ function PlayerAssetRow({ p, selected, onToggle }) {
   );
 }
 
+function classifyContractType(player) {
+  const years = Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 0);
+  const annual = Number(player?.contract?.baseAnnual ?? 0);
+  if (years <= 1) return 'expiring';
+  if (annual >= 16) return 'premium';
+  if (annual <= 4) return 'cheap';
+  return 'mid';
+}
+
 export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTradeCenter, workspace, onWorkspaceChange }) {
   const teams = league?.teams ?? [];
   const userTeam = teams.find((t) => Number(t.id) === Number(league?.userTeamId));
@@ -43,6 +52,12 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
   const [incomingPlayers, setIncomingPlayers] = useState(workspace?.incomingPlayerIds ?? []);
   const [helperReason, setHelperReason] = useState(workspace?.helperReason ?? '');
   const [helperContext, setHelperContext] = useState(workspace?.helperContext ?? null);
+  const [targetPosFilter, setTargetPosFilter] = useState('ALL');
+  const [targetTeamFilter, setTargetTeamFilter] = useState('ALL');
+  const [targetContractFilter, setTargetContractFilter] = useState('ALL');
+  const [targetAvailabilityFilter, setTargetAvailabilityFilter] = useState('ALL');
+  const [targetAgeMin, setTargetAgeMin] = useState(21);
+  const [targetAgeMax, setTargetAgeMax] = useState(35);
 
   useEffect(() => {
     if (workspace?.partnerTeamId !== undefined && Number(workspace?.partnerTeamId) !== Number(selectedPartnerId)) {
@@ -100,6 +115,64 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
 
   const outgoingValue = selectedOutgoingPlayers.reduce((sum, p) => sum + playerAssetValue(p, { direction: 'balanced' }), 0)
     + selectedOutgoingPicks.reduce((sum, p) => sum + pickAssetValue(p, { week, direction: 'balanced' }), 0);
+  const marketSignals = useMemo(() => {
+    const needs = {};
+    const buyers = [];
+    const sellers = [];
+    for (const team of teamsWithIntel) {
+      const intel = team?.teamIntel ?? {};
+      const topNeed = intel?.needsNow?.[0]?.pos;
+      if (topNeed) needs[topNeed] = (needs[topNeed] ?? 0) + 1;
+      if (intel?.direction === 'contender' && Number(team?.capRoom ?? 0) >= 6) buyers.push(team);
+      if (intel?.direction === 'rebuilding' || Number(team?.capRoom ?? 0) < 0) sellers.push(team);
+    }
+    const hotNeeds = Object.entries(needs).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    return { hotNeeds, buyers: buyers.slice(0, 8), sellers: sellers.slice(0, 8) };
+  }, [teamsWithIntel]);
+
+  const tradeTargets = useMemo(() => {
+    const rows = [];
+    for (const team of teamsWithIntel) {
+      if (Number(team.id) === Number(league?.userTeamId)) continue;
+      const intel = team?.teamIntel ?? {};
+      const needText = (intel?.needsNow ?? []).slice(0, 2).map((n) => n.pos).join(', ') || 'No urgent needs';
+      for (const player of (team?.roster ?? [])) {
+        const management = normalizeManagement(player);
+        const availability = management.tradeStatus === 'actively_shopping'
+          ? 'block'
+          : management.tradeStatus === 'available'
+            ? 'available'
+            : (management.contractPlan ?? []).includes('trade_candidate')
+              ? 'expendable'
+              : 'normal';
+        rows.push({
+          id: `${team.id}-${player.id}`,
+          teamId: team.id,
+          teamAbbr: team.abbr,
+          teamName: team.name,
+          name: player.name,
+          pos: player.pos,
+          age: player.age ?? 0,
+          ovr: player.ovr ?? 0,
+          pot: player.potential ?? player.ovr ?? 0,
+          annual: Number(player?.contract?.baseAnnual ?? 0),
+          years: Number(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 0),
+          contractType: classifyContractType(player),
+          availability,
+          fitHint: `${intel.direction ?? 'balanced'} · Need: ${needText}`,
+          playerId: player.id,
+        });
+      }
+    }
+    return rows.sort((a, b) => (b.ovr - a.ovr) || (a.age - b.age));
+  }, [teamsWithIntel, league?.userTeamId]);
+
+  const filteredTargets = useMemo(() => tradeTargets
+    .filter((row) => targetPosFilter === 'ALL' ? true : row.pos === targetPosFilter)
+    .filter((row) => targetTeamFilter === 'ALL' ? true : String(row.teamId) === targetTeamFilter)
+    .filter((row) => targetContractFilter === 'ALL' ? true : row.contractType === targetContractFilter)
+    .filter((row) => targetAvailabilityFilter === 'ALL' ? true : row.availability === targetAvailabilityFilter)
+    .filter((row) => row.age >= targetAgeMin && row.age <= targetAgeMax), [tradeTargets, targetPosFilter, targetTeamFilter, targetContractFilter, targetAvailabilityFilter, targetAgeMin, targetAgeMax]);
 
   const askWhatTheyOffer = useCallback((partnerId = selectedPartnerId) => {
     const partner = teams.find((t) => Number(t.id) === Number(partnerId));
@@ -185,6 +258,81 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
               </div>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Market Signals</CardTitle></CardHeader>
+        <CardContent style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {marketSignals.hotNeeds.map(([pos, count]) => <Badge key={pos} variant="outline">{pos} need: {count} teams</Badge>)}
+            {!marketSignals.hotNeeds.length ? <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No strong need cluster yet.</span> : null}
+          </div>
+          <div style={{ fontSize: 12 }}>
+            <strong>Buyers:</strong> {marketSignals.buyers.map((t) => t.abbr).join(', ') || 'none flagged'} · <strong>Sellers:</strong> {marketSignals.sellers.map((t) => t.abbr).join(', ') || 'none flagged'}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="card-premium">
+        <CardHeader><CardTitle>Trade Targets Browser</CardTitle></CardHeader>
+        <CardContent style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 6 }}>
+            <select value={targetPosFilter} onChange={(e) => setTargetPosFilter(e.target.value)}>
+              <option value="ALL">All positions</option>
+              {Array.from(new Set(tradeTargets.map((r) => r.pos))).sort().map((pos) => <option key={pos} value={pos}>{pos}</option>)}
+            </select>
+            <select value={targetTeamFilter} onChange={(e) => setTargetTeamFilter(e.target.value)}>
+              <option value="ALL">All teams</option>
+              {Array.from(new Set(tradeTargets.map((r) => `${r.teamId}|${r.teamAbbr}`))).map((key) => {
+                const [teamId, abbr] = key.split('|');
+                return <option key={key} value={teamId}>{abbr}</option>;
+              })}
+            </select>
+            <select value={targetContractFilter} onChange={(e) => setTargetContractFilter(e.target.value)}>
+              <option value="ALL">All contracts</option>
+              <option value="expiring">Expiring</option>
+              <option value="cheap">Cheap</option>
+              <option value="mid">Mid</option>
+              <option value="premium">Premium</option>
+            </select>
+            <select value={targetAvailabilityFilter} onChange={(e) => setTargetAvailabilityFilter(e.target.value)}>
+              <option value="ALL">All availability</option>
+              <option value="block">Trade block</option>
+              <option value="available">Available</option>
+              <option value="expendable">Expendable</option>
+              <option value="normal">Normal</option>
+            </select>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age min
+              <input type="number" min={20} max={38} value={targetAgeMin} onChange={(e) => setTargetAgeMin(Number(e.target.value || 20))} style={{ width: '100%' }} />
+            </label>
+            <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Age max
+              <input type="number" min={20} max={40} value={targetAgeMax} onChange={(e) => setTargetAgeMax(Number(e.target.value || 40))} style={{ width: '100%' }} />
+            </label>
+          </div>
+          <div style={{ maxHeight: 320, overflow: 'auto', display: 'grid', gap: 6 }}>
+            {filteredTargets.slice(0, 80).map((row) => (
+              <div key={row.id} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: '7px 8px', display: 'grid', gap: 3 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center' }}>
+                  <strong style={{ fontSize: 13 }}>{row.pos} {row.name}</strong>
+                  <Badge variant="outline">{row.teamAbbr}</Badge>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  Age {row.age} · OVR {row.ovr} / POT {row.pot} · ${row.annual.toFixed(1)}M · {row.years}y · {row.availability}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{row.fitHint}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <Button className="btn" onClick={() => {
+                    setSelectedPartnerId(row.teamId);
+                    setIncomingPlayers((prev) => prev.includes(row.playerId) ? prev : [...prev, row.playerId]);
+                    onOpenTradeCenter?.();
+                  }}>Prefill in Builder</Button>
+                  <Button className="btn" onClick={() => onPlayerSelect?.(row.playerId)}>Player</Button>
+                </div>
+              </div>
+            ))}
+            {!filteredTargets.length ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No targets match these filters.</div> : null}
+          </div>
         </CardContent>
       </Card>
 

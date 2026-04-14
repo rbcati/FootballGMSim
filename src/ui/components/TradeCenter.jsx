@@ -164,7 +164,15 @@ function PickSelector({ side, picks, onChange, availablePicks = [] }) {
 function TradeResult({ result, onDismiss }) {
   if (!result) return null;
   const valueDiff = (result.receiveValue ?? 0) - (result.offerValue ?? 0);
-  const reasonType = result?.rejectionType ?? (String(result?.reason ?? "").toLowerCase().includes("cap") ? "cap" : "value");
+  const reasonText = String(result?.reason ?? "").toLowerCase();
+  const reasonType = result?.rejectionType
+    ?? (reasonText.includes("cap")
+      ? "cap"
+      : reasonText.includes("need") || reasonText.includes("position")
+        ? "fit"
+        : reasonText.includes("timeline") || reasonText.includes("rebuild") || reasonText.includes("contend")
+          ? "direction"
+          : "value");
   const askHint = result?.askHint;
   const reasonDetail = result?.reasonDetail ?? null;
   const counterHint = !result.accepted
@@ -245,6 +253,34 @@ function TradeBlockSummary({ myRosterMap, theirRosterMap, offering, receiving, m
             {theirPicks.map(pk => <span key={pk.id} style={{ padding: "2px 8px", borderRadius: "var(--radius-pill)", background: "var(--accent)11", color: "var(--accent)" }}>{pickLabel(pk)}</span>)}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function TradeSubmissionSummary({
+  liveMyTeam,
+  liveTheirTeam,
+  outgoingCount,
+  incomingCount,
+  myPicksCount,
+  theirPicksCount,
+  myCapAfter,
+  theirCapAfter,
+  tradeImpact,
+}) {
+  return (
+    <div className="card" style={{ padding: "var(--space-3)", display: "grid", gap: 6 }}>
+      <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--text-subtle)", fontWeight: 700 }}>Trade Summary Before Submit</div>
+      <div style={{ fontSize: "var(--text-xs)" }}>
+        <strong>{liveMyTeam?.abbr ?? "You"} send:</strong> {outgoingCount} player(s), {myPicksCount} pick(s) ·
+        <strong> receive:</strong> {incomingCount} player(s), {theirPicksCount} pick(s)
+      </div>
+      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        Cap after trade: {liveMyTeam?.abbr ?? "You"} ${myCapAfter.toFixed(1)}M · {liveTheirTeam?.abbr ?? "Them"} ${theirCapAfter.toFixed(1)}M
+      </div>
+      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        Roster/fit: {tradeImpact.needHits.length ? `addresses ${tradeImpact.needHits.join(", ")}` : "no top-need hit yet"} · {tradeImpact.timeline}
       </div>
     </div>
   );
@@ -385,6 +421,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   };
 
   const hasSelection = offering.size > 0 || receiving.size > 0 || myPicks.length > 0 || theirPicks.length > 0;
+  const outgoingCount = offering.size;
+  const incomingCount = receiving.size;
   const tradeDeadline = getTradeWindowSnapshot({
     week: league?.week,
     phase: league?.phase,
@@ -397,6 +435,16 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     settings: league?.settings,
     commissionerMode: league?.commissionerMode,
   });
+  const lockReason = getTradeLockReason({ tradeLocked, tradeDeadline, phase: league?.phase });
+  const tradeBlockers = useMemo(() => {
+    const blockers = [];
+    if (targetId == null) blockers.push("Choose a trade partner.");
+    if (!hasSelection) blockers.push("Add at least one asset on either side.");
+    if (tradeLocked) blockers.push(lockReason || "Trading is locked for this phase.");
+    if (myCapAfter < 0) blockers.push("Your team would be over the cap after this package.");
+    if (theirCapAfter < 0) blockers.push("Their team would be over the cap after this package.");
+    return blockers;
+  }, [targetId, hasSelection, tradeLocked, lockReason, myCapAfter, theirCapAfter]);
 
 
   useEffect(() => {
@@ -417,8 +465,6 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       setMyPicks(initialTradeContext.outgoingPickIds.map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
     }
   }, [initialTradeContext, myAvailablePicks]);
-
-  const lockReason = getTradeLockReason({ tradeLocked, tradeDeadline, phase: league?.phase });
 
   useEffect(() => {
     onTradeContextChange?.({
@@ -633,6 +679,14 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
 
       {/* Trade result (original) */}
       {tradeResult && <TradeResult result={tradeResult} onDismiss={() => setTradeResult(null)} />}
+      {tradeBlockers.length > 0 && (
+        <div className="card" style={{ padding: "var(--space-3)", borderColor: "rgba(255,159,10,.45)", background: "rgba(255,159,10,.08)", display: "grid", gap: 4 }}>
+          <strong style={{ fontSize: "var(--text-xs)" }}>Before you submit</strong>
+          <ul style={{ margin: 0, paddingLeft: 16, fontSize: "var(--text-xs)", color: "var(--text-muted)", display: "grid", gap: 3 }}>
+            {tradeBlockers.slice(0, 4).map((reason) => <li key={reason}>{reason}</li>)}
+          </ul>
+        </div>
+      )}
 
       {targetId == null ? (
         <EmptyState title="Select a trade partner" body="Choose another team to load available assets and package controls." />
@@ -655,6 +709,19 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                 <div>{tradeImpact.timeline}</div>
               </div>
             </div>
+          )}
+          {hasSelection && (
+            <TradeSubmissionSummary
+              liveMyTeam={liveMyTeam}
+              liveTheirTeam={liveTheirTeam}
+              outgoingCount={outgoingCount}
+              incomingCount={incomingCount}
+              myPicksCount={myPicks.length}
+              theirPicksCount={theirPicks.length}
+              myCapAfter={myCapAfter}
+              theirCapAfter={theirCapAfter}
+              tradeImpact={tradeImpact}
+            />
           )}
 
           {/* Drag-and-drop panels */}

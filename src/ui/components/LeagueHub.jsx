@@ -31,7 +31,7 @@ function TeamComparison({ teams = [] }) {
   );
 }
 
-export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, renderStandings, renderSchedule }) {
+export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigateTrade, renderStandings, renderSchedule }) {
   const [subtab, setSubtab] = useState('Schedule');
   const teams = Array.isArray(league?.teams) ? league.teams : [];
 
@@ -112,6 +112,7 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
                     <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>W{item?.week ?? '-'} · {item?.phase ?? 'season'}</span>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+                      {item?._txType === 'Trade' ? <button className="btn btn-sm" onClick={() => onNavigateTrade?.(item?.teamId ?? null)}>Scout Market</button> : null}
                       {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Box</button> : null}
                     </div>
                   </div>

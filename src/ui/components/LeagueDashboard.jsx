@@ -1337,6 +1337,7 @@ export default function LeagueDashboard({
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
+  const [tradeSeedPartnerId, setTradeSeedPartnerId] = useState(null);
   const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
@@ -1662,6 +1663,11 @@ export default function LeagueDashboard({
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
+              onNavigateTrade={(teamId = null) => {
+                setTradeInitialView("Finder");
+                setTradeSeedPartnerId(teamId != null ? Number(teamId) : null);
+                setActiveTab("Transactions");
+              }}
               onOpenGameDetail={openGameDetail}
               renderSchedule={(sourceTab = "League") => (
                 <ScheduleTab
@@ -1864,9 +1870,15 @@ export default function LeagueDashboard({
             />
           </TabErrorBoundary>
         )}
-                {(activeTab === "Transactions" || activeTab === "Trades") && (
+        {(activeTab === "Transactions" || activeTab === "Trades") && (
           <TabErrorBoundary label="Transactions">
-            <TradeWorkspace league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} initialView={tradeInitialView} />
+            <TradeWorkspace
+              league={league}
+              actions={actions}
+              onPlayerSelect={setSelectedPlayerId}
+              initialView={tradeInitialView}
+              initialPartnerTeamId={tradeSeedPartnerId}
+            />
           </TabErrorBoundary>
         )}
                 {isInitialized && activeTab === "📰 News" && (

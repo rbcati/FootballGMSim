@@ -9,10 +9,11 @@ import { ScreenHeader, SectionCard, StickySubnav } from './ScreenSystem.jsx';
 import { getStickyTopOffset } from '../utils/screenSystem.js';
 import { Badge } from '@/components/ui/badge';
 import { buildIncomingOfferPresentation } from '../utils/tradeOfferPresentation.js';
+import { buildNewsDeskModel } from '../utils/newsDesk.js';
 
 const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
-export default function TradeWorkspace({ league, actions, onPlayerSelect, initialView = 'Finder' }) {
+export default function TradeWorkspace({ league, actions, onPlayerSelect, initialView = 'Finder', initialPartnerTeamId = null }) {
   const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
     ? (initialView.split(':')[1] || 'Finder')
     : initialView;
@@ -42,11 +43,20 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
     () => incomingOffers.map((offer) => ({ offer, summary: buildIncomingOfferPresentation({ offer, league, userTeamId: league?.userTeamId }) })),
     [incomingOffers, league],
   );
+  const marketTransactions = useMemo(() => {
+    const desk = buildNewsDeskModel(league, { segment: 'transactions', limit: 80 });
+    return (desk.transactions ?? []).slice(0, 6);
+  }, [league]);
 
   useEffect(() => {
     if (!safeInitialView) return;
     setView(safeInitialView);
   }, [safeInitialView]);
+
+  useEffect(() => {
+    if (initialPartnerTeamId == null) return;
+    setWorkspace((prev) => mergeTradeWorkspaceState(prev, { partnerTeamId: Number(initialPartnerTeamId) }));
+  }, [initialPartnerTeamId]);
 
   return (
     <div className="trade-workspace app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('default') }}>
@@ -76,14 +86,30 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       </SectionCard>
 
       {view === 'Finder' && (
-        <TradeFinder
-          league={league}
-          actions={actions}
-          onPlayerSelect={onPlayerSelect}
-          workspace={workspace}
-          onWorkspaceChange={(patch) => setWorkspace((prev) => mergeTradeWorkspaceState(prev, patch))}
-          onOpenTradeCenter={() => setView('Builder')}
-        />
+        <>
+          <TradeFinder
+            league={league}
+            actions={actions}
+            onPlayerSelect={onPlayerSelect}
+            workspace={workspace}
+            onWorkspaceChange={(patch) => setWorkspace((prev) => mergeTradeWorkspaceState(prev, patch))}
+            onOpenTradeCenter={() => setView('Builder')}
+          />
+          <SectionCard title="Recent Market Activity" subtitle="Use live league deals to pick your next call list.">
+            <div style={{ display: 'grid', gap: 7 }}>
+              {marketTransactions.map((item, idx) => (
+                <div key={item?.id ?? idx} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: '8px 10px', display: 'grid', gap: 4 }}>
+                  <strong style={{ fontSize: 13 }}>{item?.headline ?? 'League move'}</strong>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item?.body ?? 'No detail available.'}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-sm" onClick={() => setView('Builder')}>Open Builder</button>
+                  </div>
+                </div>
+              ))}
+              {!marketTransactions.length ? <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>No recent transaction signals yet.</div> : null}
+            </div>
+          </SectionCard>
+        </>
       )}
 
       {view === 'Builder' && (
@@ -166,8 +192,8 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
                 {partnerTeam.wins ?? 0}-{partnerTeam.losses ?? 0}{partnerTeam.ties ? `-${partnerTeam.ties}` : ''} · {partnerIntel?.direction ?? 'balanced'} · cap ${Number(partnerTeam.capRoom ?? 0).toFixed(1)}M
               </div>
-              <div style={{ fontSize: 'var(--text-xs)' }}>Needs now: {(partnerNeeds?.needNow?.slice(0, 3) ?? []).map((n) => n.pos).join(', ') || 'No urgent needs flagged'}.</div>
-              <div style={{ fontSize: 'var(--text-xs)' }}>Future needs: {(partnerNeeds?.needSoon?.slice(0, 3) ?? []).map((n) => n.pos).join(', ') || 'No future needs flagged'}.</div>
+              <div style={{ fontSize: 'var(--text-xs)' }}>Needs now: {(partnerIntel?.needsNow?.slice(0, 3) ?? []).map((n) => n.pos).join(', ') || 'No urgent needs flagged'}.</div>
+              <div style={{ fontSize: 'var(--text-xs)' }}>Surplus groups: {(partnerNeeds?.surplus?.slice(0, 3) ?? []).join(', ') || 'No surplus flagged'}.</div>
             </div>
           )}
         </SectionCard>
