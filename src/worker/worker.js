@@ -82,6 +82,7 @@ import {
 import { getTeamContextForNegotiation } from '../core/teamContext/negotiationContext.js';
 import { evaluateContractOffer, summarizeNegotiationStance } from '../core/contracts/negotiation.js';
 import { computeRestructureOutcome, shouldPreserveChemistryOnReturn, isContractRestructureEligible } from '../core/contracts/restructure.js';
+import { normalizeContractDetails, calculateContractCapHit, calculateTeamPayroll, estimateHoldoutRisk, projectTeamFinancials } from '../core/contracts/realisticContracts.js';
 import { summarizePlayerMood } from '../core/mood/playerMood.js';
 import { getFreeAgencyDecisionState } from '../core/freeAgency/decisionState.js';
 import {
@@ -1041,16 +1042,9 @@ function buildRosterView(teamId) {
     // inside p.contract, but makePlayer() during league init writes those fields
     // directly on the player object (legacy flat format).  Merge both so the UI
     // always receives a properly-shaped contract object.
-    const contract = p.contract ?? (
-      p.baseAnnual != null ? {
-        years:        p.years        ?? 1,
-        yearsTotal:   p.yearsTotal   ?? p.years ?? 1,
-        yearsRemaining: p.years      ?? 1,
-        baseAnnual:   p.baseAnnual,
-        signingBonus: p.signingBonus ?? 0,
-        guaranteedPct:p.guaranteedPct ?? 0.5,
-      } : null
-    );
+    const contract = p.contract || p.baseAnnual != null
+      ? normalizeContractDetails(p.contract ?? {}, p)
+      : null;
 
     return {
         id:       p.id,
@@ -2311,11 +2305,16 @@ if (res.injuries && res.injuries.length > 0) {
           const isDivisive = p.personality?.traits?.includes('Divisive');
           const holdoutProb = isDivisive ? 0.03 : 0.01;
           const conductProb = isDivisive ? 0.02 : 0.005;
+          const holdout = estimateHoldoutRisk(p, { wins: team?.wins ?? 0 });
 
-          // chance per week for low morale players to holdout
-          if (p.morale < 30 && p.ovr > 80 && Math.random() < holdoutProb) {
+          // chance per week for low morale / underpaid stars to holdout
+          if ((holdout.shouldHoldout || (p.morale < 30 && p.ovr > 80)) && Math.random() < Math.max(holdoutProb, holdout.score / 4000)) {
               await NewsEngine.logNarrative(p, 'HOLDOUT', team?.abbr || 'FA');
-              // Could also apply a temporary OVR penalty or status change here
+              cache.updatePlayer(p.id, {
+                morale: Math.max(0, Number(p?.morale ?? 50) - 6),
+                holdoutRisk: holdout.score,
+                holdoutStatus: 'active',
+              });
           }
           // chance per week for any player to get a conduct fine
           if (Math.random() < conductProb) {
@@ -5825,19 +5824,9 @@ async function handleUpdateStrategy({ offPlanId, defPlanId, riskId, starTargetId
 
 function recalculateTeamCap(teamId) {
   const players = cache.getPlayersByTeam(teamId);
-  const activeCap = players.reduce((sum, p) => {
-    // Support both nested contract object (p.contract.baseAnnual) produced by
-    // worker transactions (signPlayer, draftPick, etc.) AND legacy flat fields
-    // (p.baseAnnual, p.signingBonus) written by makePlayer() during league init.
-    const baseAnnual   = p.contract?.baseAnnual   ?? p.baseAnnual   ?? 0;
-    const signingBonus = p.contract?.signingBonus  ?? p.signingBonus ?? 0;
-    const yearsTotal   = p.contract?.yearsTotal    ?? p.yearsTotal   ?? 1;
-    // Cap hit = Base + Prorated Bonus
-    return sum + baseAnnual + (signingBonus / (yearsTotal || 1));
-  }, 0);
-
   const team = cache.getTeam(teamId);
   if (!team) return;
+
   const staff = ensureTeamStaff(team, { year: Number(getSafeMeta()?.year ?? 2025) });
   const staffCap = Object.keys(staff).reduce((sum, key) => {
     const member = staff?.[key];
@@ -5845,19 +5834,50 @@ function recalculateTeamCap(teamId) {
     return sum + Number(member?.contract?.annualSalary ?? member?.annualSalary ?? 0);
   }, 0);
 
-  const deadCap          = team.deadCap         || 0;
-  const deadMoneyNextYear = team.deadMoneyNextYear || 0;
+  const deadCap = Number(team.deadCap || 0);
+  const deadMoneyNextYear = Number(team.deadMoneyNextYear || 0);
   const leagueCap = Number(getSafeMeta()?.economy?.currentSalaryCap ?? getLeagueSetting('salaryCap', Constants.SALARY_CAP.HARD_CAP));
-  const capTotal          = team.capTotal         ?? leagueCap;
-  const totalCapUsed      = activeCap + deadCap + staffCap;
+  const capTotal = Number(team.capTotal ?? leagueCap);
+  const capFloor = Number(getLeagueSetting('capFloor', 210));
+
+  const payroll = calculateTeamPayroll({
+    roster: players.map((p) => ({
+      ...p,
+      contract: normalizeContractDetails(p?.contract ?? {}, p),
+    })),
+    staffPayroll: staffCap,
+    deadCap,
+    capFloor,
+    capLimit: capTotal,
+  });
+
+  const marketSize = Number(team?.marketSize ?? team?.market?.score ?? 1);
+  const financials = projectTeamFinancials({
+    marketSize,
+    wins: Number(team?.wins ?? 0),
+    fanApproval: Number(team?.fanApproval ?? 50),
+    payroll: payroll.totalPayroll,
+    facilityLevels: {
+      trainingLevel: Number(team?.franchiseInvestments?.trainingLevel ?? 1),
+      scoutingLevel: Number(team?.franchiseInvestments?.scoutingLevel ?? 1),
+      medicalLevel: Number(team?.franchiseInvestments?.trainingLevel ?? 1),
+    },
+  });
 
   cache.updateTeam(teamId, {
-    capUsed:         Math.round(totalCapUsed * 100)        / 100,
-    capRoom:         Math.round((capTotal - totalCapUsed) * 100) / 100,
-    deadCap:         Math.round(deadCap * 100)             / 100,
+    capUsed: payroll.totalPayroll,
+    capRoom: payroll.capSpace,
+    capFloor,
+    capTotal,
+    capStatus: payroll.overCap ? 'over' : payroll.belowFloor ? 'below_floor' : 'healthy',
+    playerPayroll: payroll.playerPayroll,
+    staffPayroll: payroll.staffPayroll,
+    deadCap: Math.round(deadCap * 100) / 100,
     deadMoneyNextYear: Math.round(deadMoneyNextYear * 100) / 100,
+    financials,
   });
 }
+
 // Alias for backward compatibility if needed, but we should replace calls.
 const _updateTeamCap = recalculateTeamCap;
 

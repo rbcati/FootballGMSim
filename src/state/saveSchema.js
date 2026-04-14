@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.4;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.5;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -44,6 +44,7 @@ const MIGRATIONS = {
   5.1: migrateV51ToV52,
   5.2: migrateV52ToV53,
   5.3: migrateV53ToV54,
+  5.4: migrateV54ToV55,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -118,6 +119,37 @@ function migrateV53ToV54(meta = {}) {
     saveVersion: 5.4,
   };
 }
+
+
+function migrateV54ToV55(meta = {}) {
+  const financialSystem = {
+    salaryCapModel: 'hard_cap',
+    capFloorEnforced: true,
+    rookieWageScaleEnabled: true,
+    fifthYearOptionEnabled: true,
+    restrictedFreeAgencyEnabled: true,
+    ownerGoalStyle: meta?.financialSystem?.ownerGoalStyle ?? 'balanced',
+    upgradedAt: Date.now(),
+    ...(meta?.financialSystem ?? {}),
+  };
+
+  const baselineRevenue = {
+    ticketSales: 86,
+    merchandise: 34,
+    broadcasting: 120,
+    sponsorships: 39,
+    facilityCost: 12,
+    ...(meta?.baselineRevenue ?? {}),
+  };
+
+  return {
+    ...meta,
+    financialSystem,
+    baselineRevenue,
+    saveVersion: 5.5,
+  };
+}
+
 export function migrateSaveMetaToCurrent(meta = {}) {
   const startVersion = Number(meta?.saveVersion ?? 0);
   if (!Number.isFinite(startVersion) || startVersion < 0) {

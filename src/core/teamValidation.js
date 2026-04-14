@@ -1,23 +1,13 @@
 import { Constants } from './constants.js';
 import { DEPTH_CHART_ROWS } from './depthChart.js';
+import { normalizeContractDetails, calculateContractCapHit } from './contracts/realisticContracts.js';
 
 export function normalizeContract(player = {}) {
-  const contract = player?.contract ?? {};
-  const yearsTotal = Number(contract?.yearsTotal ?? contract?.years ?? player?.yearsTotal ?? player?.years ?? 1) || 1;
-  const baseAnnual = Number(contract?.baseAnnual ?? player?.baseAnnual ?? contract?.salary ?? player?.salary ?? 0) || 0;
-  const signingBonus = Number(contract?.signingBonus ?? player?.signingBonus ?? 0) || 0;
-  const guaranteedPct = Number(contract?.guaranteedPct ?? player?.guaranteedPct ?? 0) || 0;
-  return {
-    yearsTotal: Math.max(1, yearsTotal),
-    baseAnnual: Math.max(0, baseAnnual),
-    signingBonus: Math.max(0, signingBonus),
-    guaranteedPct: Math.max(0, guaranteedPct),
-  };
+  return normalizeContractDetails(player?.contract ?? {}, player);
 }
 
 export function getPlayerCapHit(player = {}) {
-  const c = normalizeContract(player);
-  return c.baseAnnual + (c.signingBonus / c.yearsTotal);
+  return calculateContractCapHit(player?.contract ?? player);
 }
 
 export function getRosterLimitForPhase(phase) {
