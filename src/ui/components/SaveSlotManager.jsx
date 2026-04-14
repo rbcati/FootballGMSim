@@ -40,6 +40,13 @@ function readSlotOrder() {
   return SLOT_KEYS;
 }
 
+export function createSlotActionHandlers({ onLoad, onSave }, slotKey) {
+  return {
+    onEnterFranchise: () => onLoad?.(slotKey),
+    onSaveChanges: () => onSave?.(slotKey),
+  };
+}
+
 export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, onNew }) {
   const [editing, setEditing] = useState(null);
   const [value, setValue] = useState('');
@@ -69,6 +76,7 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
         const isEmpty = !slot.meta?.lastSaved;
         const slotName = slot.meta?.name ?? `Franchise ${slot.slotNum}`;
         const accent = teamAccent(slot.meta);
+        const slotActions = createSlotActionHandlers({ onLoad, onSave }, slot.key);
 
         return (
           <Card key={slot.key} variant={isActive ? 'primary' : 'secondary'} className="save-slot-v2" role="listitem">
@@ -110,8 +118,8 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
                   </div>
 
                   <div className="save-slot-v2__actions">
-                    <Button onClick={() => onLoad?.(slot.key)}>Enter</Button>
-                    <Button variant="secondary" onClick={() => onSave?.(slot.key)}>Save</Button>
+                    <Button onClick={slotActions.onEnterFranchise}>Enter Franchise</Button>
+                    <Button variant="secondary" onClick={slotActions.onSaveChanges}>Save Changes</Button>
                     <Button variant="destructive" onClick={() => {
                       if (!window.confirm('Delete this slot? This clears all franchise data in this slot.')) return;
                       localStorage.removeItem(`footballgm_slot_${slot.slotNum}_meta`);
