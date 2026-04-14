@@ -200,6 +200,9 @@ export default function FinancialsView({ league, actions }) {
   const capRoom = Math.round((hardCap - capUsedTotal) * 100) / 100;
   const isOverCap = capUsedTotal > hardCap;
   const june1 = june1Label(phase);
+  const capFloor = Number(team?.capFloor ?? league?.settings?.capFloor ?? 210);
+  const capStatus = team?.capStatus ?? (capUsedTotal > hardCap ? 'over' : capUsedTotal < capFloor ? 'below_floor' : 'healthy');
+  const financials = team?.financials ?? null;
 
   // Enrich players with computed cap hit
   const enriched = useMemo(
@@ -547,7 +550,38 @@ export default function FinancialsView({ league, actions }) {
           sub={`vs. $${hardCap}M hard cap`}
           danger={isOverCap}
         />
+        <StatBox
+          label="Cap Floor"
+          value={fmt(capFloor)}
+          sub={capStatus === 'below_floor' ? 'Below floor: spend required' : 'Floor target healthy'}
+          danger={capStatus === 'below_floor'}
+        />
+        <StatBox
+          label="Net Cash Flow"
+          value={financials ? fmt(financials.netCashFlow) : '—'}
+          sub={financials ? 'Revenue - payroll - facilities' : 'Projection pending'}
+          danger={Number(financials?.netCashFlow ?? 0) < 0}
+        />
       </div>
+
+
+      <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
+        <CardHeader><CardTitle>Revenue & Expense Projection</CardTitle></CardHeader>
+        <CardContent style={{ display: 'grid', gap: 10 }}>
+          {!financials ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No financial projection yet for this team.</div> : (
+            <>
+              <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                <StatBox label="Ticket sales" value={fmt(financials.ticketSales)} />
+                <StatBox label="Merchandise" value={fmt(financials.merchandise)} />
+                <StatBox label="Broadcasting" value={fmt(financials.broadcasting)} />
+                <StatBox label="Sponsorships" value={fmt(financials.sponsorships)} />
+                <StatBox label="Facilities cost" value={fmt(financials.facilities)} danger />
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-subtle)' }}>Facility upgrades directly affect long-term development, injury recovery and scouting confidence.</div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="card-premium" style={{ marginBottom: "var(--space-5)" }}>
         <CardHeader><CardTitle>Cap Commitments & Allocation</CardTitle></CardHeader>

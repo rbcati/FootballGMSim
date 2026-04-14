@@ -82,6 +82,10 @@ export default function ContractNegotiation({
   const [annual, setAnnual] = useState(Math.max(0.8, Math.round((player.baseAnnual || 4) * 10) / 10));
   const [guaranteePct, setGuaranteePct] = useState(50);
   const [bonus, setBonus] = useState(0);
+  const [hasNoTradeClause, setHasNoTradeClause] = useState(false);
+  const [optionYear, setOptionYear] = useState(0);
+  const [tagType, setTagType] = useState("none");
+  const [incentives, setIncentives] = useState({ mvp: false, allPro: false, yards: false });
 
   const totalValue = useMemo(() => annual * years, [annual, years]);
   const capHitThisYear = useMemo(() => {
@@ -207,6 +211,33 @@ export default function ContractNegotiation({
           </div>
         </div>
 
+
+          {/* Clauses */}
+          <div style={{ borderTop: '1px solid var(--hairline)', paddingTop: 'var(--space-3)' }}>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 8, fontWeight: 700 }}>Clauses & Options</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <input type="checkbox" checked={hasNoTradeClause} onChange={(e) => setHasNoTradeClause(e.target.checked)} />
+              <span style={{ fontSize: 'var(--text-xs)' }}>No-trade clause</span>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <input type="checkbox" checked={optionYear > 0} onChange={(e) => setOptionYear(e.target.checked ? years : 0)} />
+              <span style={{ fontSize: 'var(--text-xs)' }}>Option year ({optionYear > 0 ? `Year ${optionYear}` : 'Off'})</span>
+            </label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Tag</span>
+              <select value={tagType} onChange={(e) => setTagType(e.target.value)} style={{ fontSize: 'var(--text-xs)' }}>
+                <option value="none">None</option>
+                <option value="franchise">Franchise</option>
+                <option value="transition">Transition</option>
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+              <label style={{ fontSize: 'var(--text-xs)' }}><input type="checkbox" checked={incentives.mvp} onChange={(e) => setIncentives((v) => ({ ...v, mvp: e.target.checked }))} /> MVP bonus</label>
+              <label style={{ fontSize: 'var(--text-xs)' }}><input type="checkbox" checked={incentives.allPro} onChange={(e) => setIncentives((v) => ({ ...v, allPro: e.target.checked }))} /> All-Pro bonus</label>
+              <label style={{ fontSize: 'var(--text-xs)' }}><input type="checkbox" checked={incentives.yards} onChange={(e) => setIncentives((v) => ({ ...v, yards: e.target.checked }))} /> Yardage bonus</label>
+            </div>
+          </div>
+
         {/* Live preview */}
         <div style={{ background: "var(--glass-bg)", border: "1px solid var(--glass-border)", borderRadius: "var(--radius-md)", padding: "var(--space-3)", marginTop: "var(--space-5)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--text-xs)", marginBottom: 6 }}>
@@ -242,7 +273,7 @@ export default function ContractNegotiation({
           </button>
           <button
             className="btn-premium btn-primary-premium"
-            onClick={() => onOffer({ years, annual, guaranteePct, bonus })}
+            onClick={() => onOffer({ years, annual, guaranteePct, bonus, hasNoTradeClause, optionYear, tagType, incentives })}
             style={{ flex: 2 }}
           >
             Submit Offer
