@@ -125,6 +125,7 @@ import {
   classifyGameScript,
   summarizeWhyTeamWon,
 } from '../core/gameSummary.js';
+import { getScoutingRangeFromProfile, scoreDraftBoardEntry } from '../core/draft/draftScouting.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -5967,6 +5968,52 @@ async function handleRestructureContract({ playerId, teamId }, id) {
 
 // ── Draft helpers ─────────────────────────────────────────────────────────────
 
+function getTeamDraftBoard(teamId, prospects = []) {
+  const team = cache.getTeam(teamId);
+  if (!team) return [];
+  const needs = AiLogic.calculateTeamNeeds(teamId);
+  const ranked = prospects
+    .map((prospect) => {
+      const scored = scoreDraftBoardEntry(prospect, team, { teamNeeds: needs });
+      return {
+        ...scored,
+        pos: prospect?.pos,
+        name: prospect?.name,
+        confidence: prospect?.scoutingReport?.confidence ?? prospect?.scoutingConfidence ?? 0.55,
+      };
+    })
+    .sort((a, b) => Number(b?.score ?? 0) - Number(a?.score ?? 0))
+    .slice(0, 80)
+    .map((entry, index) => ({ ...entry, rank: index + 1 }));
+  return ranked;
+}
+
+async function runPostDraftMinicamp(meta) {
+  const rookies = cache.getAllPlayers().filter((p) => Number(p?.year ?? 0) === Number(meta?.year ?? 0) && Number(p?.yearsWithTeam ?? 0) <= 0 && p?.status !== 'draft_eligible');
+  if (!rookies.length) return [];
+  const surprises = [];
+  for (const rookie of rookies) {
+    const ovrDelta = Utils.rand(-2, 3);
+    const potentialDelta = Utils.rand(-3, 4);
+    const newOvr = Utils.clamp(Number(rookie?.ovr ?? 60) + ovrDelta, 40, 99);
+    const newPotential = Utils.clamp(Number(rookie?.potential ?? newOvr) + potentialDelta, 45, 99);
+    cache.updatePlayer(rookie.id, {
+      ovr: newOvr,
+      trueOvr: newOvr,
+      potential: newPotential,
+      minicampAdjustment: { season: Number(meta?.year ?? 0), ovrDelta, potentialDelta },
+    });
+    if (Math.abs(ovrDelta) >= 2 || Math.abs(potentialDelta) >= 3) {
+      surprises.push({ playerId: rookie.id, name: rookie.name, ovrDelta, potentialDelta });
+    }
+  }
+  if (surprises.length) {
+    const detail = surprises.slice(0, 4).map((s) => `${s.name} (${s.ovrDelta >= 0 ? '+' : ''}${s.ovrDelta} OVR)`).join(', ');
+    await NewsEngine.logNews('LEAGUE', `Minicamp surprise report: ${detail}.`, null, { type: 'minicamp_reveal', count: surprises.length });
+  }
+  return surprises;
+}
+
 /**
  * Build the draft state view-model slice the UI needs.
  * Prospects are all players with status 'draft_eligible', sorted OVR desc.
@@ -6039,6 +6086,9 @@ function buildDraftStateView() {
   const userTeam = cache.getTeam(userTeamId);
   const fogStrength = Number(getLeagueSetting('scoutingFogStrength', 50));
   const commissionerMode = !!meta?.commissionerMode;
+  const userScoutSkill = Number(userTeam?.staff?.scoutDirector?.attributes?.scoutingAccuracy ?? userTeam?.staff?.scoutDirector?.scoutingAccuracy ?? 65);
+  const scoutingLevel = Number(userTeam?.franchiseInvestments?.scoutingLevel ?? 1);
+  const scoutingBudget = 0.75 + (scoutingLevel * 0.2);
 
   // Available prospects sorted by true OVR but displayed with scout estimate/fog where enabled
   const prospects = cache.getAllPlayers()
@@ -6046,21 +6096,42 @@ function buildDraftStateView() {
     .sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0))
     .map(p => {
       const scouting = buildScoutingSnapshot(p, userTeam, { fogStrength, commissionerMode });
+      const fogReport = getScoutingRangeFromProfile({
+        trueRating: p?.ovr ?? 60,
+        scoutSkill: userScoutSkill,
+        scoutingLevel,
+        scoutingBudget,
+        fogStrength,
+        scoutProgress: Number(p?.scoutProgress ?? 0),
+      });
       return {
         id:        p.id,
         name:      p.name,
         pos:       p.pos,
         age:       p.age,
-        ovr:       scouting?.estimatedOvr ?? p.ovr,
+        ovr:       scouting?.estimatedOvr ?? fogReport.estimated ?? p.ovr,
         trueOvr:   p.ovr,
         potential: scouting?.estimatedPotential ?? (p.potential ?? null),
         truePotential: p.potential ?? null,
-        scoutingConfidence: scouting?.confidence ?? 0.75,
-        uncertaintyBand: scouting?.uncertainty ?? 0,
+        scoutingConfidence: fogReport.confidence ?? scouting?.confidence ?? 0.75,
+        uncertaintyBand: fogReport.spread ?? scouting?.uncertainty ?? 0,
+        scoutingReport: fogReport,
         college:   p.college   ?? null,
+        collegeStats: p.collegeStats ?? null,
+        interviewReport: p.interviewReport ?? null,
+        combineResults: p.combineResults ?? null,
+        collegeProductionScore: p.collegeProductionScore ?? 0,
+        schemeFit: p.schemeFit ?? 65,
         traits:    p.traits    ?? [],
       };
     });
+
+  const userBigBoard = getTeamDraftBoard(userTeamId, prospects);
+  const recommended = userBigBoard[0] ?? null;
+  const aiBigBoards = {};
+  for (const tm of cache.getAllTeams()) {
+    aiBigBoards[tm.id] = getTeamDraftBoard(tm.id, prospects).slice(0, 20);
+  }
 
   return {
     notStarted:       false,
@@ -6072,6 +6143,14 @@ function buildDraftStateView() {
     isDraftComplete:  currentPickIndex >= picks.length,
     totalPicks:       picks.length,
     currentPickIndex,
+    userBigBoard,
+    aiBigBoards,
+    recommendedPick: recommended ? {
+      playerId: recommended.playerId,
+      score: recommended.score,
+      reason: recommended.reason,
+      rank: recommended.rank,
+    } : null,
     pendingTradeProposal: meta.pendingDraftTradeProposal ?? null,
   };
 }
@@ -6324,7 +6403,18 @@ async function handleStartDraft(payload, id) {
   const eliteNames = new Set(cache.getAllPlayers().filter(p => p.ovr > 80).map(p => p.name));
 
   // Generate draft class and add to player pool as draft_eligible
-  const prospects = generateDraftClass(meta.year, { classSize, eliteNames });
+  const userTeam = cache.getTeam(meta.userTeamId);
+  const scoutSkill = Number(userTeam?.staff?.scoutDirector?.attributes?.scoutingAccuracy ?? userTeam?.staff?.scoutDirector?.scoutingAccuracy ?? 65);
+  const scoutingLevel = Number(userTeam?.franchiseInvestments?.scoutingLevel ?? 1);
+  const scoutingBudget = 0.75 + (scoutingLevel * 0.2);
+  const prospects = generateDraftClass(meta.year, {
+    classSize,
+    eliteNames,
+    scoutSkill,
+    scoutingLevel,
+    scoutingBudget,
+    fogStrength: Number(getLeagueSetting('scoutingFogStrength', 50)),
+  });
   prospects.forEach(p => {
     cache.setPlayer({ ...p, teamId: null, status: 'draft_eligible' });
   });
@@ -6440,6 +6530,7 @@ async function handleMakeDraftPick({ playerId }, id) {
     postPickMeta.draftState &&
     postPickMeta.draftState.currentPickIndex >= postPickMeta.draftState.picks.length
   ) {
+    await runPostDraftMinicamp(postPickMeta);
     runLegalityValidation({ stage: 'post-draft', notify: true });
     return await handleStartNewSeason({}, id);
   }
@@ -6470,16 +6561,26 @@ async function handleSimDraftPick(payload, id) {
     // Pause at user's pick
     if (pick.teamId === userTeamId) break;
 
-    // AI selects best available prospect by Value (Need * OVR)
+    // AI selects by weighted board value (need, scheme fit, upside, combine/interview risk).
     const needs = AiLogic.calculateTeamNeeds(pick.teamId);
+    const team = cache.getTeam(pick.teamId);
     let bestProspect = null;
     let bestValue = -1;
     let bestIdx = -1;
 
     for (let i = 0; i < draftPool.length; i++) {
         const p = draftPool[i];
-        const mult = needs[p.pos] || 1.0;
-        const val = (p.ovr ?? 0) * mult;
+        const boardScore = scoreDraftBoardEntry({
+          ...p,
+          ovr: p?.ovr ?? p?.scoutedOvr ?? 60,
+          potential: p?.potential ?? p?.truePotential ?? p?.ovr ?? 60,
+          combineResults: p?.combineResults,
+          interviewReport: p?.interviewReport,
+          collegeProductionScore: p?.collegeProductionScore ?? 0,
+          schemeFit: p?.schemeFit ?? 65,
+          archetypeTag: p?.archetypeTag ?? p?.pos,
+        }, team, { teamNeeds: needs });
+        const val = Number(boardScore?.score ?? 0);
 
         if (val > bestValue) {
             bestValue = val;
@@ -6515,6 +6616,7 @@ async function handleSimDraftPick(payload, id) {
     postSimMeta.draftState &&
     postSimMeta.draftState.currentPickIndex >= postSimMeta.draftState.picks.length
   ) {
+    await runPostDraftMinicamp(postSimMeta);
     runLegalityValidation({ stage: 'post-draft', notify: true });
     return await handleStartNewSeason({}, id);
   }

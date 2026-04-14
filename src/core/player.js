@@ -7,6 +7,7 @@ import { calculateWAR as calculateWARImpl } from './war-calculator.js';
 import { generateTraits } from './traits.js';
 import { generateFaceConfig } from './face.js';
 import { generatePersonalityProfile, ensurePersonalityProfile, contractPersonalityModifier } from './development/personalitySystem.js';
+import { generateCollegeStats, generateInterviewReport, getScoutingRangeFromProfile, simulateCombineResults } from './draft/draftScouting.js';
 
 const CONTRACT_DEFAULT = {
   salary: 2,
@@ -381,6 +382,8 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
     const playerPotential = Math.min(99, playerOvr + U.rand(0, 30));
     const college = generateCollege();
     const personalityProfile = generatePersonalityProfile({ college, age: playerAge });
+    const combineResults = simulateCombineResults(pos, ratings);
+    const collegeStats = generateCollegeStats(pos, playerOvr, playerPotential);
     const player = {
         id: U.id(),
         name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
@@ -414,6 +417,8 @@ function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
                 depthOrder: 0,
         scoutStatus: { grade: calculateScoutGrade(playerOvr, playerPotential), fullyScouted: false },
         combineStats: generateCombineStats(ratings, pos),
+        combineResults,
+        collegeStats,
 traits: generateTraits(pos, playerOvr),
         abilities: [],
         offers: [], // FA offers
@@ -437,7 +442,10 @@ traits: generateTraits(pos, playerOvr),
         history: [],
         college,
         trueOvr: playerOvr,
-        scoutedOvr: U.clamp(playerOvr + U.rand(-15, 15), 40, 99)
+        scoutedOvr: U.clamp(playerOvr + U.rand(-15, 15), 40, 99),
+        interviewReport: generateInterviewReport({ ratings, personalityProfile }),
+        trueRatings: { ...ratings },
+        visibleRatings: { ...ratings },
     };
 
     initProgressionStats(player);
@@ -505,14 +513,29 @@ function generateDraftClass(year, options = {}) {
         rookie.draftId = i + 1;
         rookie.age = U.choice([21, 22, 23]);
         rookie.trueOvr = rookie.trueOvr ?? rookie.ovr;
-        rookie.scoutedOvr = U.clamp(rookie.trueOvr + U.rand(-15, 15), 40, 99);
+        const scoutingRange = getScoutingRangeFromProfile({
+          trueRating: rookie.trueOvr,
+          scoutSkill: options?.scoutSkill ?? 68,
+          scoutingLevel: options?.scoutingLevel ?? 1,
+          scoutingBudget: options?.scoutingBudget ?? 1,
+          fogStrength: options?.fogStrength ?? 55,
+        });
+        rookie.scoutedOvr = scoutingRange.estimated;
+        rookie.scoutingReport = scoutingRange;
         rookie.devTrait = U.choice(DEV_TRAITS);
         rookie.projectedRound = U.clamp(Math.ceil((100 - rookie.scoutedOvr) / 10), 1, 7);
-        rookie.combineResults = {
-          fortyTime: Number((U.rand(420, 495) / 100).toFixed(2)),
-          bench: U.rand(10, 40),
-          vertical: U.rand(24, 45),
-        };
+        rookie.combineResults = simulateCombineResults(rookie.pos, rookie.ratings);
+        rookie.collegeStats = generateCollegeStats(rookie.pos, rookie.trueOvr, rookie.potential);
+        rookie.interviewReport = generateInterviewReport(rookie);
+        rookie.trueRatings = { ...(rookie.ratings ?? {}) };
+        rookie.visibleRatings = Object.fromEntries(
+          Object.entries(rookie.trueRatings).map(([key, value]) => {
+            if (typeof value !== 'number') return [key, value];
+            const spread = Math.max(1, Math.round((scoutingRange.spread ?? 8) / 2));
+            return [key, U.clamp(value + U.rand(-spread, spread), 35, 99)];
+          })
+        );
+        rookie.collegeProductionScore = Math.round((((rookie.collegeStats?.games ?? 12) * 1.3) + (rookie.collegeStats?.passTD ?? rookie.collegeStats?.rushTD ?? rookie.collegeStats?.receivingTD ?? rookie.collegeStats?.sacks ?? 0)));
         draftClass.push(rookie);
         // If this rookie is elite, add them to the set too
         if (rookie.ovr > 80) eliteNames.add(rookie.name);
@@ -664,22 +687,6 @@ function calculateScoutGrade(ovr, pot) {
 }
 
 function generateCombineStats(ratings, pos) {
-    // 40-Yard Dash: inversely correlated to speed & acceleration (4.20 - 5.50s)
-    const speedFactor = (ratings.speed + ratings.acceleration) / 2;
-    const fortyTime = (5.50 - ((speedFactor - 40) / 60) * 1.30).toFixed(2);
-
-    // Bench Press: correlated to strength/power attributes (10 - 45 reps)
-    let powerFactor = 50;
-    if (['OL', 'DL', 'DT', 'DE'].includes(pos)) {
-        powerFactor = ratings.runBlock || ratings.passRushPower || 70;
-    } else if (['RB', 'FB', 'TE', 'LB'].includes(pos)) {
-        powerFactor = ratings.trucking || ratings.runStop || 60;
-    }
-    const benchReps = Math.max(0, Math.round(((powerFactor - 40) / 60) * 35 + 10));
-
-    // 3-Cone: inversely correlated to agility (6.50 - 7.50s)
-    const agilityFactor = ratings.agility || 50;
-    const threeCone = (7.50 - ((agilityFactor - 40) / 60) * 1.00).toFixed(2);
-
-    return `40-Yd: ${fortyTime}s | Bench: ${benchReps} | 3-Cone: ${threeCone}s`;
+    const combine = simulateCombineResults(pos, ratings);
+    return `40-Yd: ${combine.fortyTime}s | Bench: ${combine.benchPress} | Vertical: ${combine.verticalLeap}"`;
 }
