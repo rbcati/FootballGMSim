@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normalizeContractDetails,
+  repairLegacyPlayerContract,
   calculateContractCapHit,
   estimateHoldoutRisk,
   calculateTeamPayroll,
@@ -18,6 +19,43 @@ describe('realistic contract normalization', () => {
   it('includes likely incentives in cap hit', () => {
     const capHit = calculateContractCapHit({ yearsTotal: 4, baseAnnual: 24, signingBonus: 8, incentives: [{ amount: 2, capTreatment: 'likely' }, { amount: 3, capTreatment: 'unlikely' }] });
     expect(capHit).toBe(28);
+  });
+
+  it('repairs legacy flat-contract players without inflating annual salary', () => {
+    const repaired = repairLegacyPlayerContract({
+      id: 1,
+      years: 4,
+      yearsTotal: 4,
+      salary: 88, // legacy total-deal value
+      signingBonus: 8,
+    });
+    expect(repaired.contract.baseAnnual).toBe(22);
+    expect(calculateContractCapHit(repaired.contract)).toBe(24);
+  });
+
+  it('prefers canonical nested contract and avoids double counting signing bonus', () => {
+    const repaired = repairLegacyPlayerContract({
+      id: 2,
+      years: 4,
+      yearsTotal: 4,
+      baseAnnual: 18,
+      signingBonus: 12,
+      contract: { yearsTotal: 4, baseAnnual: 26, signingBonus: 8 },
+    });
+    expect(repaired.contract.baseAnnual).toBe(26);
+    expect(repaired.contract.signingBonus).toBe(8);
+    expect(calculateContractCapHit(repaired.contract)).toBe(28);
+  });
+
+  it('repairs corrupted contract values with conservative defaults', () => {
+    const repaired = repairLegacyPlayerContract({
+      id: 3,
+      contract: { yearsTotal: -9, yearsRemaining: 99, baseAnnual: 'bad', signingBonus: -20 },
+    });
+    expect(repaired.contract.yearsTotal).toBe(1);
+    expect(repaired.contract.yearsRemaining).toBe(1);
+    expect(repaired.contract.baseAnnual).toBe(0);
+    expect(repaired.contract.signingBonus).toBe(0);
   });
 });
 
@@ -43,6 +81,21 @@ describe('holdout and payroll rules', () => {
     });
     expect(payroll.overCap).toBe(true);
     expect(payroll.belowFloor).toBe(false);
+  });
+
+  it('includes staff payroll and dead cap exactly once', () => {
+    const payroll = calculateTeamPayroll({
+      roster: [
+        { contract: { yearsTotal: 4, baseAnnual: 20, signingBonus: 8 } }, // 22
+        { contract: { yearsTotal: 2, baseAnnual: 10, signingBonus: 0 } }, // 10
+      ],
+      staffPayroll: 15,
+      deadCap: 5,
+      capLimit: 80,
+    });
+    expect(payroll.playerPayroll).toBe(32);
+    expect(payroll.totalPayroll).toBe(52);
+    expect(payroll.capSpace).toBe(28);
   });
 });
 
