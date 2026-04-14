@@ -2,8 +2,7 @@ export const NAV_LABELS = Object.freeze({
   hq: 'HQ',
   team: 'Team',
   league: 'League',
-  transactions: 'Transactions',
-  history: 'History',
+  news: 'News',
   more: 'More',
 });
 

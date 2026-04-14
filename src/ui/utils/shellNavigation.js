@@ -2,16 +2,14 @@ export const SHELL_SECTIONS = Object.freeze({
   hq: 'hq',
   team: 'team',
   league: 'league',
-  transactions: 'transactions',
-  history: 'history',
+  news: 'news',
 });
 
 export const SECTION_DEFAULT_TAB = Object.freeze({
   [SHELL_SECTIONS.hq]: 'HQ',
   [SHELL_SECTIONS.team]: 'Team',
   [SHELL_SECTIONS.league]: 'League',
-  [SHELL_SECTIONS.transactions]: 'Transactions',
-  [SHELL_SECTIONS.history]: 'History Hub',
+  [SHELL_SECTIONS.news]: 'News',
 });
 
 const DASHBOARD_TAB_ALIASES = Object.freeze({
@@ -48,24 +46,24 @@ const TAB_TO_SECTION = Object.freeze({
   'Award Races': SHELL_SECTIONS.league,
   'League Leaders': SHELL_SECTIONS.league,
   Postseason: SHELL_SECTIONS.league,
-  News: SHELL_SECTIONS.league,
+  News: SHELL_SECTIONS.news,
 
-  Transactions: SHELL_SECTIONS.transactions,
-  Trades: SHELL_SECTIONS.transactions,
-  'Free Agency': SHELL_SECTIONS.transactions,
-  Draft: SHELL_SECTIONS.transactions,
-  'Draft Room': SHELL_SECTIONS.transactions,
-  'Mock Draft': SHELL_SECTIONS.transactions,
+  Transactions: SHELL_SECTIONS.league,
+  Trades: SHELL_SECTIONS.league,
+  'Free Agency': SHELL_SECTIONS.league,
+  Draft: SHELL_SECTIONS.league,
+  'Draft Room': SHELL_SECTIONS.league,
+  'Mock Draft': SHELL_SECTIONS.league,
 
-  'History Hub': SHELL_SECTIONS.history,
-  History: SHELL_SECTIONS.history,
-  'Team History': SHELL_SECTIONS.history,
-  'Hall of Fame': SHELL_SECTIONS.history,
-  'Awards & Records': SHELL_SECTIONS.history,
-  'Season Recap': SHELL_SECTIONS.history,
-  Saves: SHELL_SECTIONS.history,
-  'God Mode': SHELL_SECTIONS.history,
-  '🤖 GM Advisor': SHELL_SECTIONS.history,
+  'History Hub': SHELL_SECTIONS.league,
+  History: SHELL_SECTIONS.league,
+  'Team History': SHELL_SECTIONS.league,
+  'Hall of Fame': SHELL_SECTIONS.league,
+  'Awards & Records': SHELL_SECTIONS.league,
+  'Season Recap': SHELL_SECTIONS.league,
+  Saves: SHELL_SECTIONS.league,
+  'God Mode': SHELL_SECTIONS.league,
+  '🤖 GM Advisor': SHELL_SECTIONS.league,
 });
 
 const LEGACY_MOBILE_ID_TO_SECTION = Object.freeze({
@@ -75,10 +73,10 @@ const LEGACY_MOBILE_ID_TO_SECTION = Object.freeze({
   standings: SHELL_SECTIONS.league,
   schedule: SHELL_SECTIONS.league,
   leaders: SHELL_SECTIONS.league,
-  trade: SHELL_SECTIONS.transactions,
-  freeagency: SHELL_SECTIONS.transactions,
-  history: SHELL_SECTIONS.history,
-  news: SHELL_SECTIONS.league,
+  trade: SHELL_SECTIONS.league,
+  freeagency: SHELL_SECTIONS.league,
+  history: SHELL_SECTIONS.league,
+  news: SHELL_SECTIONS.news,
 });
 
 export function normalizeDashboardTab(tab) {

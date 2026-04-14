@@ -245,6 +245,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>LAST GAME</div>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</div>
+              {latestGame ? <div style={{ marginTop: 4, fontWeight: 800, fontSize: 14, color: 'var(--accent)' }}>{latestGame.awayAbbr ?? 'AWY'} {latestGame.awayScore} - {latestGame.homeScore} {latestGame.homeAbbr ?? 'HME'} · View box score →</div> : null}
             </button>
             <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
               const gameId = getGameId(upcomingGame);
@@ -252,6 +253,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             }}>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>NEXT GAME</div>
               <div style={{ fontWeight: 700, fontSize: 13 }}>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup found'}</div>
+              {upcomingGame ? <div style={{ marginTop: 4, fontSize: 12, color: 'var(--text-muted)' }}>Tap to open game details →</div> : null}
             </button>
           </div>
 

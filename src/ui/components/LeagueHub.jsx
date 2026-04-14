@@ -2,10 +2,11 @@ import React, { useMemo, useState } from 'react';
 import RecordBook from './RecordBook.jsx';
 import PostseasonHub from './PostseasonHub.jsx';
 import PlayerStats from './PlayerStats.jsx';
+import NewsFeed from './NewsFeed.jsx';
 import SectionHeader from './SectionHeader.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 
-const LEAGUE_SUBNAV = ['Overview', 'Standings', 'Schedule', 'Team Stats', 'Player Stats', 'Records', 'Playoffs'];
+const LEAGUE_SUBNAV = ['Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
 
 function TeamComparison({ teams = [] }) {
   const rows = [...teams]
@@ -31,7 +32,7 @@ function TeamComparison({ teams = [] }) {
 }
 
 export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, renderStandings, renderSchedule }) {
-  const [subtab, setSubtab] = useState('Overview');
+  const [subtab, setSubtab] = useState('Schedule');
   const teams = Array.isArray(league?.teams) ? league.teams : [];
 
   const leaders = useMemo(() => {
@@ -59,28 +60,23 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
       <SectionHeader title="League" subtitle="League command center" />
       <SectionSubnav items={LEAGUE_SUBNAV} activeItem={subtab} onChange={setSubtab} />
 
-      {subtab === 'Overview' && (
+      {subtab === 'Standings' && renderStandings?.()}
+      {subtab === 'Schedule' && renderSchedule?.('League')}
+      {subtab === 'Stats' && (
         <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 'var(--space-3)' }}>
-            <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ fontWeight: 700 }}>Conference snapshot</div>
-              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 13 }}>AFC teams: {teams.filter((t) => String(t.conf).toUpperCase().includes('A') || Number(t.conf) === 0).length}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>NFC teams: {teams.filter((t) => String(t.conf).toUpperCase().includes('N') || Number(t.conf) === 1).length}</div>
-            </div>
-            <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ fontWeight: 700 }}>{league?.phase === 'playoffs' ? 'Postseason snapshot' : 'Playoff race snapshot'}</div>
-              <div style={{ marginTop: 6, color: 'var(--text-muted)', fontSize: 13 }}>Week {league?.week ?? '—'} · {league?.phase ?? 'regular'}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Quick link into standings and playoffs below.</div>
-            </div>
-            <div className="card" style={{ padding: 'var(--space-3)' }}>
-              <div style={{ fontWeight: 700 }}>League leaders snapshot</div>
-              {leaders.map((item) => <div key={item.label} style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{item.label}: <strong style={{ color: 'var(--text)' }}>{item.team?.abbr ?? item.team?.name ?? '—'}</strong></div>)}
-            </div>
-          </div>
-
           <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700 }}>Latest featured games</div>
-            <div style={{ marginTop: 8, display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>League leaders snapshot</div>
+            {leaders.map((item) => <div key={item.label} style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{item.label}: <strong style={{ color: 'var(--text)' }}>{item.team?.abbr ?? item.team?.name ?? '—'}</strong></div>)}
+          </div>
+          <TeamComparison teams={teams} />
+          <PlayerStats actions={actions} league={league} onPlayerSelect={onPlayerSelect} initialFamily="passing" />
+        </div>
+      )}
+      {subtab === 'Transactions' && (
+        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          <div className="card" style={{ padding: 'var(--space-3)' }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Latest featured games</div>
+            <div style={{ display: 'grid', gap: 6 }}>
               {featuredGames.map((game, idx) => (
                 <button key={`${game.week}-${idx}`} className="btn" onClick={() => onOpenGameDetail?.(game.id ?? game.gameId, 'League')}>
                   W{game.week ?? '—'} · {game.awayAbbr ?? game.away} {game.awayScore} - {game.homeScore} {game.homeAbbr ?? game.home}
@@ -88,19 +84,22 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
               ))}
               {featuredGames.length === 0 ? <div style={{ color: 'var(--text-muted)' }}>No recent results yet.</div> : null}
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-              {['Standings', 'Schedule', 'Playoffs', 'Records'].map((item) => <button key={item} className="btn" onClick={() => setSubtab(item)}>{item}</button>)}
-            </div>
           </div>
+          <NewsFeed
+            league={league}
+            mode="full"
+            segment="transactions"
+            onPlayerSelect={onPlayerSelect}
+            onOpenBoxScore={(gameId) => onOpenGameDetail?.(gameId, 'League')}
+          />
         </div>
       )}
-
-      {subtab === 'Standings' && renderStandings?.()}
-      {subtab === 'Schedule' && renderSchedule?.('League')}
-      {subtab === 'Team Stats' && <TeamComparison teams={teams} />}
-      {subtab === 'Player Stats' && <PlayerStats actions={actions} league={league} onPlayerSelect={onPlayerSelect} initialFamily="passing" />}
-      {subtab === 'Records' && <RecordBook league={league} />}
-      {subtab === 'Playoffs' && <PostseasonHub league={league} onOpenBoxScore={(gameId) => onOpenGameDetail?.(gameId, 'League')} />}
+      {subtab === 'History' && (
+        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+          <PostseasonHub league={league} onOpenBoxScore={(gameId) => onOpenGameDetail?.(gameId, 'League')} />
+          <RecordBook league={league} />
+        </div>
+      )}
     </div>
   );
 }
