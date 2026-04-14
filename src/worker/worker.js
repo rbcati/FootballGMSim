@@ -2179,10 +2179,11 @@ async function handleAdvanceWeek(payload, id) {
   // ── 0. Check for User Game to Prompt ────────────────────────────────────
   const userTeamId = meta.userTeamId;
   if (userTeamId != null && !payload.skipUserGame && ['regular', 'playoffs'].includes(meta.phase)) {
+      const numericUserTeamId = Number(userTeamId);
       const scheduleWeeks = meta.schedule?.weeks || [];
       const currentWeekData = scheduleWeeks.find(w => w.week === meta.currentWeek);
       if (currentWeekData) {
-          const userGame = currentWeekData.games.find(g => (Number(g.home) === userTeamId || Number(g.away) === userTeamId) && !g.played);
+          const userGame = currentWeekData.games.find(g => (Number(g.home) === numericUserTeamId || Number(g.away) === numericUserTeamId) && !g.played);
           if (userGame) {
               // Pause simulation and prompt the UI
               post(toUI.PROMPT_USER_GAME, {}, id);
@@ -8659,7 +8660,10 @@ async function handleWatchGame(payload, id) {
   const userTeamId = meta.userTeamId;
 
   const league = buildLeagueForSim(schedule, week, seasonId);
-  const userGameIndex = league._weekGames.findIndex(g => g.home.id === userTeamId || g.away.id === userTeamId);
+  const numericUserTeamId = Number(userTeamId);
+  const userGameIndex = league._weekGames.findIndex(
+    g => Number(g.home.id) === numericUserTeamId || Number(g.away.id) === numericUserTeamId,
+  );
 
   if (userGameIndex === -1) {
       post(toUI.ERROR, { message: 'No user game found this week' }, id);

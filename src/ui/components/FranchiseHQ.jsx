@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
@@ -6,6 +6,7 @@ import { getHQViewModel } from "../../state/selectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 import { EmptyState, SectionCard, StatCard, TeamChip } from "./common/UiPrimitives.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
+import { autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -43,6 +44,7 @@ function toneAccent(tone) {
 
 export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeamSelect, onAdvanceWeek, busy, simulating }) {
   const vm = useMemo(() => getHQViewModel(league), [league]);
+  const [lineupToast, setLineupToast] = useState(null);
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
   const latestArchived = useMemo(() => getArchivedRecentGames(1)?.[0] ?? null, [vm.league?.seasonId, vm.league?.week]);
@@ -95,6 +97,24 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
       awayScore: latestArchived?.score?.away,
     }, { seasonId: vm.league?.seasonId, week: Number(latestArchived?.week ?? vm.league?.week ?? 1), source: "hq_last_game" })
     : null;
+  const handleSetLineup = () => {
+    const roster = Array.isArray(team?.roster) ? team.roster : [];
+    const existingAssignments = {};
+    for (const player of roster) {
+      const rowKey = player?.depthChart?.rowKey;
+      if (!rowKey) continue;
+      if (!existingAssignments[rowKey]) existingAssignments[rowKey] = [];
+      existingAssignments[rowKey].push(player.id);
+    }
+    const assignments = autoBuildDepthChart(roster, existingAssignments);
+    const warnings = depthWarnings(assignments, roster);
+    const hasBlockingLineupIssue = warnings.some((warning) => warning.level === "error");
+    setLineupToast(hasBlockingLineupIssue
+      ? "Depth chart still has missing starters. Fix red-warning rows to finalize lineup."
+      : "Lineup is valid. Opening depth chart.");
+    window.setTimeout(() => setLineupToast(null), 2200);
+    onNavigate?.("Roster:depth|ALL");
+  };
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-3)" }}>
@@ -130,9 +150,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>Week {nextGame.week} · {nextGame.isHome ? "vs" : "@"} <TeamChip team={nextGame.opp} /></div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button size="sm" onClick={() => onNavigate?.("Team")}>Set lineup</Button>
+              <Button size="sm" onClick={handleSetLineup}>Set lineup</Button>
               <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Game plan</Button>
             </div>
+            {lineupToast ? <div style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>{lineupToast}</div> : null}
           </div>
         ) : <div style={{ color: "var(--text-muted)" }}>No upcoming game found.</div>}
       </SectionCard>

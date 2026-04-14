@@ -193,6 +193,11 @@ export function useWorker() {
    * Map<id, { resolve, reject }>
    */
   const pendingRef = useRef(new Map());
+  const depthChartSaveRef = useRef({
+    timerId: null,
+    latestUpdates: null,
+    waiters: [],
+  });
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -350,6 +355,8 @@ export function useWorker() {
     worker.postMessage(buildMsg(toWorker.INIT));
 
     return () => {
+      const depthSave = depthChartSaveRef.current;
+      if (depthSave?.timerId) clearTimeout(depthSave.timerId);
       for (const pending of pendingRef.current.values()) {
         if (pending?.timeoutId) clearTimeout(pending.timeoutId);
       }
@@ -645,7 +652,27 @@ export function useWorker() {
 
     /** Update depth chart order for the user's team. */
     updateDepthChart: (updates) =>
-      request(toWorker.UPDATE_DEPTH_CHART, { updates }),
+      new Promise((resolve, reject) => {
+        if (!updates) {
+          resolve(null);
+          return;
+        }
+        const depthSave = depthChartSaveRef.current;
+        depthSave.latestUpdates = updates;
+        depthSave.waiters.push({ resolve, reject });
+
+        if (depthSave.timerId) clearTimeout(depthSave.timerId);
+        depthSave.timerId = setTimeout(() => {
+          const payloadToSend = depthSave.latestUpdates;
+          const waiters = depthSave.waiters.splice(0);
+          depthSave.latestUpdates = null;
+          depthSave.timerId = null;
+
+          request(toWorker.UPDATE_DEPTH_CHART, { updates: payloadToSend })
+            .then((result) => waiters.forEach(({ resolve: done }) => done(result)))
+            .catch((err) => waiters.forEach(({ reject: fail }) => fail(err)));
+        }, 120);
+      }),
 
     /** Update team strategy / GM decisions (fire-and-forget, non-blocking). */
     updateStrategy: (payload) =>
