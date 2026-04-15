@@ -1798,7 +1798,7 @@ export default function LeagueDashboard({
         )}
         {isInitialized && activeTab === "🎓 Draft" && (
           <TabErrorBoundary label="Draft Big Board">
-            <DraftBigBoard league={league} actions={actions} />
+            <DraftBigBoard league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft Room" && (
@@ -1807,6 +1807,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}

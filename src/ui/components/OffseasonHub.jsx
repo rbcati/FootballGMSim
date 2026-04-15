@@ -67,7 +67,7 @@ const PHASES = [
     actions: [
       { label: "Draft Room", tab: "Draft Room" },
       { label: "Mock Draft", tab: "Mock Draft" },
-      { label: "Big Board", tab: "Mock Draft" },
+      { label: "Big Board", tab: "🎓 Draft" },
     ],
   },
   {
