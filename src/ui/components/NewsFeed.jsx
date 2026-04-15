@@ -65,7 +65,7 @@ function CompactStoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect })
           W{item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Team' : ''}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box</button> : null}
+          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box score</button> : null}
           {item?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(item.teamId)}>Open team</button> : null}
           {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Open player</button> : null}
         </div>

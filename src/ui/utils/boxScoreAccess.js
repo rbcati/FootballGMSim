@@ -73,8 +73,8 @@ export function buildCompletedGamePresentation(game, context = {}) {
   return {
     ...availability,
     ctaLabel: availability.canOpen
-      ? (availability.archiveQuality === "partial" ? "View Partial Archive" : "View Box Score")
-      : "Archive Unavailable",
+      ? (availability.archiveQuality === "partial" ? "Open box score (partial archive)" : "Open box score")
+      : "View result",
     statusLabel: getArchiveQualityLabel(availability.archiveQuality),
     displayScoreLine,
     away,

@@ -857,6 +857,16 @@ function ScheduleTab({
   ), [games, league, seasonId, selectedWeek, teamById]);
   const completedVisibleGames = mergedVisibleGames.filter((game) => Boolean(game?.played));
   const upcomingVisibleGames = mergedVisibleGames.filter((game) => !Boolean(game?.played));
+  const scheduleSummary = {
+    total: mergedVisibleGames.length,
+    completed: completedVisibleGames.length,
+    upcoming: upcomingVisibleGames.length,
+    myGames: mergedVisibleGames.filter((game) => {
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      return homeId === Number(userTeamId) || awayId === Number(userTeamId);
+    }).length,
+  };
 
   return (
     <div>
@@ -923,6 +933,12 @@ function ScheduleTab({
         <select value={selectedTeamId ?? ""} onChange={(e) => setSelectedTeamId(Number(e.target.value))} style={{ minHeight: 34 }}>
           {(teams ?? []).map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
         </select>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          <span className="badge">Week slate: {scheduleSummary.total}</span>
+          <span className="badge">My games: {scheduleSummary.myGames}</span>
+          <span className="badge">Upcoming: {scheduleSummary.upcoming}</span>
+          <span className="badge">Completed: {scheduleSummary.completed}</span>
+        </div>
       </div>
 
       {weekRecapItems.length > 0 && (
@@ -932,13 +948,22 @@ function ScheduleTab({
             <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Scores + storylines at a glance</span>
           </div>
           <div style={{ display: "grid", gap: 6 }}>
-            {weekRecapItems.map(({ game, away, home, presentation, story }, idx) => (
+            {weekRecapItems.map(({ game, away, home, presentation, story }, idx) => {
+              const canViewResult = Boolean(presentation.resolvedGameId && onGameSelect);
+              const recapActionLabel = presentation.canOpen ? "Open box score" : (canViewResult ? "View result" : "Unavailable");
+              return (
               <button
                 key={`${game.home}-${game.away}-${idx}`}
-                className={`btn-link ${presentation.canOpen ? "" : "disabled"}`}
-                onClick={() => openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_recap" }, onGameSelect)}
+                className={`btn-link ${presentation.canOpen || canViewResult ? "" : "disabled"}`}
+                onClick={() => {
+                  if (presentation.canOpen) {
+                    openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_recap" }, onGameSelect);
+                  } else if (canViewResult) {
+                    onGameSelect?.(String(presentation.resolvedGameId));
+                  }
+                }}
                 style={{ textAlign: "left", fontSize: "var(--text-sm)", color: "var(--text-muted)" }}
-                title={presentation.canOpen ? presentation.ctaLabel : presentation.statusLabel}
+                title={presentation.canOpen ? "Open box score" : recapActionLabel}
               >
                 <strong style={{ color: "var(--text)" }}>{away.abbr} {game.awayScore} @ {home.abbr} {game.homeScore}</strong>
                 {" · "}
@@ -948,7 +973,7 @@ function ScheduleTab({
                   {presentation.statusLabel}
                 </span>
               </button>
-            ))}
+            )})}
           </div>
         </div>
       )}
@@ -1020,7 +1045,9 @@ function ScheduleTab({
           const presentation = game.played ? buildCompletedGamePresentation(game, { seasonId, week: selectedWeek, teamById, source: "schedule_card" }) : null;
           const resolvedGameId = presentation?.resolvedGameId ?? null;
           const archiveQuality = presentation?.archiveQuality ?? "missing";
-          const isClickable = Boolean(presentation?.canOpen && onGameSelect);
+          const canOpenBoxScore = Boolean(presentation?.canOpen && onGameSelect);
+          const canOpenResultOnly = Boolean(game.played && !presentation?.canOpen && presentation?.resolvedGameId && onGameSelect);
+          const isClickable = canOpenBoxScore || canOpenResultOnly;
           const pregameAngles = !game.played ? derivePregameAngles({ league, game, week: selectedWeek }) : [];
           const postgame = game.played ? derivePostgameStory({ league, game, week: selectedWeek }) : null;
           const immersion = game.played ? deriveBoxScoreImmersion({ league, game, week: selectedWeek }) : null;
@@ -1036,7 +1063,13 @@ function ScheduleTab({
             return null;
           })();
           const handleCardClick = isClickable
-            ? () => openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_card" }, onGameSelect)
+            ? () => {
+              if (canOpenBoxScore) {
+                openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_card" }, onGameSelect);
+              } else if (canOpenResultOnly) {
+                onGameSelect?.(String(presentation?.resolvedGameId));
+              }
+            }
             : undefined;
           const scoreTapHandler = createBoxScoreTapHandler({
             gameId: resolvedGameId,
@@ -1072,8 +1105,12 @@ function ScheduleTab({
                   <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>@</span>
                   <span style={{ border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 7px", fontSize: "var(--text-xs)" }}>HOME {home.abbr}</span>
                 </div>
-                <span className="badge">{game.played ? "Final" : "Upcoming"}</span>
-              </div>
+                  <span className="badge">
+                    {game.played
+                      ? (isUserGame ? "Final · User game" : "Final · League game")
+                      : (isUserGame ? "Upcoming · User game" : "Upcoming · League game")}
+                  </span>
+                </div>
 
               {game.played && game.homeScore !== undefined && (
                 <>
@@ -1117,16 +1154,24 @@ function ScheduleTab({
                         : ""}
                     </span>
                   </button>
-                  {isClickable && (
+                  {canOpenBoxScore && (
                     <div
                       style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--accent)", marginBottom: "var(--space-1)" }}
                     >
-                      {presentation?.ctaLabel ?? "View Box Score"} →
+                      Open box score →
                     </div>
                   )}
-                  {!isClickable && (
-                    <div style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginBottom: "var(--space-1)" }}>
-                      {presentation?.statusLabel ?? "Archive unavailable for this game."}
+                  {canOpenResultOnly && (
+                    <div
+                      style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--accent)", marginBottom: "var(--space-1)" }}
+                    >
+                      View result →
+                    </div>
+                  )}
+                  {!canOpenBoxScore && !canOpenResultOnly && (
+                    <div style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--warning)", marginBottom: "var(--space-1)", border: "1px solid color-mix(in oklab, var(--warning) 50%, transparent)", borderRadius: "var(--radius-sm)", padding: "6px 8px", background: "color-mix(in oklab, var(--warning) 9%, transparent)" }}>
+                      Result recorded. Detailed box score archive unavailable.
+                      {postgame?.headline ? <div style={{ marginTop: 4, color: "var(--text-muted)" }}>{postgame.headline}</div> : null}
                     </div>
                   )}
                   {postgame && (
@@ -1158,7 +1203,7 @@ function ScheduleTab({
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                   <div style={{ fontWeight: 700 }}>{away.abbr} @ {home.abbr}</div>
                   <Button size="sm" variant="outline" onClick={() => canOpenGameDetail && onGameSelect?.(upcomingGameId)} disabled={!canOpenGameDetail}>
-                    {canOpenGameDetail ? "Game Details" : "Scheduled"}
+                    {canOpenGameDetail ? "Open game" : "Scheduled"}
                   </Button>
                 </div>
               )}
