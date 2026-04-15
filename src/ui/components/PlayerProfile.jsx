@@ -20,6 +20,7 @@ import FaceAvatar from './FaceAvatar.jsx';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from 'chart.js';
 import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.js';
+import { buildDevelopmentNotes, classifyDevelopmentTrend, getPlayerReadiness, getSchemeFitSignal } from '../utils/playerDevelopmentSignals.js';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -364,6 +365,10 @@ export default function PlayerProfile({
   const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
   const moraleContext = useMemo(() => describePlayerMoraleContext(player, { team: userTeam, chemistry, week: data?.meta?.week ?? 1 }), [player, userTeam, chemistry, data?.meta?.week]);
   const onboardingContext = useMemo(() => ((isProspect || Number(player?.age ?? 30) <= 24) ? describeRookieOnboarding(player, teamIntel) : null), [isProspect, player, teamIntel]);
+  const developmentSignal = useMemo(() => classifyDevelopmentTrend(player), [player]);
+  const readinessSignal = useMemo(() => getPlayerReadiness(player), [player]);
+  const fitSignal = useMemo(() => getSchemeFitSignal(player), [player]);
+  const developmentNotes = useMemo(() => buildDevelopmentNotes(player, moraleContext), [player, moraleContext]);
 
   const management = useMemo(() => normalizeManagement(player), [player]);
   const updateManagement = async (updates) => {
@@ -627,6 +632,9 @@ export default function PlayerProfile({
                     Dev path: {player.developmentContext.baseAgeCurve} · Focus {String(player.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {player.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{player.developmentContext.staffDevelopmentModifier}% · {player.developmentContext.playingTimeModifier}
                   </div>
                 )}
+                <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+                  Trend: {developmentSignal.label} · Readiness: {readinessSignal.label} · Scheme: {fitSignal.label}
+                </div>
 
                 {/* Traits */}
                 {player.traits?.length > 0 && (
@@ -835,6 +843,46 @@ export default function PlayerProfile({
             </section>
           )}
 
+
+          {!loading && player && (
+            <section>
+              <h3 style={sectionLabelStyle}>Development Intelligence</h3>
+              <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Trajectory</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{developmentSignal.label}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>OVR change: {player.progressionDelta > 0 ? "+" : ""}{player.progressionDelta ?? 0}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Short-term readiness</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{readinessSignal.label}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{readinessSignal.detail}</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Scheme fit context</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>{fitSignal.label} · {player?.schemeFit ?? 50}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Best role is tied to current scheme and depth usage.</div>
+                </div>
+                <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>Age curve</div>
+                  <div style={{ fontSize: "var(--text-sm)", fontWeight: 700, marginTop: 2 }}>
+                    {Number(player?.age ?? 30) <= 24 ? "Early growth window" : Number(player?.age ?? 30) >= 30 ? "Late-career window" : "Prime window"}
+                  </div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Age {player?.age ?? "—"} · Potential {player?.potential ?? "—"}.</div>
+                </div>
+              </div>
+              <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                {developmentNotes.notes.slice(0, 4).map((note, idx) => (
+                  <div key={`dev-note-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>• {note}</div>
+                ))}
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Roster")}>Review depth role</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Contract Center")}>Review extension decision</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Trade Center")}>Check trade value</Button>
+              </div>
+            </section>
+          )}
 
           {!loading && player && (
             <section>
