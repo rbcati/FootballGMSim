@@ -7668,3 +7668,85 @@ details[open] .nav-summary::after {
   .trade-workspace-nav { top: calc(env(safe-area-inset-top) + 48px) !important; }
   .trade-asset-row__name { min-width: 0; }
 }
+
+/* Game card presentation system */
+.premium-game-card {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in oklab, var(--surface) 92%, black 8%);
+  display: grid;
+  gap: 8px;
+}
+.premium-game-card.is-user-game { border-color: color-mix(in oklab, var(--accent) 56%, var(--hairline)); }
+.premium-game-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.premium-game-card__week { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); font-weight: 700; }
+.premium-game-card__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.game-card-pill { border: 1px solid var(--hairline); border-radius: 999px; padding: 2px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+.game-card-pill--user { border-color: color-mix(in oklab, var(--accent) 50%, transparent); color: var(--accent); }
+.game-card-pill--result { color: var(--success); }
+.game-card-pill--upcoming { color: var(--accent); }
+.game-card-pill--league { color: var(--text-subtle); }
+.premium-game-card__scoreblock,
+.premium-game-card__matchup {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 8px 10px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 8px;
+}
+.premium-game-card__scoreblock { cursor: pointer; }
+.premium-game-card__scoreblock:disabled { cursor: default; opacity: .74; }
+.premium-game-card__at { color: var(--text-subtle); font-size: 11px; font-weight: 700; }
+.game-team-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--text-muted); }
+.game-team-line.is-winner { color: var(--text); font-weight: 800; }
+.game-team-line--home { text-align: right; }
+.game-team-line__abbr { font-size: 13px; font-weight: 700; }
+.game-team-line__score { font-size: 20px; line-height: 1; font-weight: 900; }
+.premium-game-card__statusline { display: grid; gap: 2px; font-size: 12px; color: var(--text-muted); }
+.premium-game-card__statusline strong { color: var(--text); }
+.premium-game-card__story { border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 8px; display: grid; gap: 2px; font-size: 12px; color: var(--text-muted); }
+.premium-game-card__fallback { border-radius: 8px; padding: 8px; font-size: 12px; display: grid; gap: 4px; }
+.premium-game-card__fallback.is-missing { border: 1px solid color-mix(in oklab, var(--warning) 50%, transparent); background: color-mix(in oklab, var(--warning) 12%, transparent); }
+.premium-game-card__fallback.is-partial { border: 1px solid color-mix(in oklab, var(--accent) 48%, transparent); background: color-mix(in oklab, var(--accent) 8%, transparent); }
+.premium-game-card__fallback p { margin: 0; color: var(--text-muted); }
+.premium-game-card__actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.premium-game-card__angles { display: flex; flex-wrap: wrap; gap: 6px; }
+.premium-game-card__angle { border: 1px solid var(--hairline); border-radius: 999px; padding: 2px 8px; font-size: 11px; color: var(--text-muted); }
+.premium-game-card__angle.tone-warning { color: var(--warning); }
+.premium-game-card__angle.tone-danger { color: var(--danger); }
+.compact-game-row {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 8px;
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+.compact-game-row.is-clickable { cursor: pointer; }
+.compact-game-row__main { display: flex; align-items: center; gap: 8px; }
+.compact-game-row__week { font-size: 11px; color: var(--text-subtle); font-weight: 700; min-width: 34px; }
+.compact-game-row__at { color: var(--text-subtle); font-size: 11px; }
+.compact-game-row__meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11px; color: var(--text-muted); }
+.linked-game-summary {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-strong);
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+}
+.linked-game-summary.is-clickable { cursor: pointer; }
+.linked-game-summary__eyebrow { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-subtle); }
+.linked-game-summary__title { font-size: 14px; font-weight: 800; color: var(--text); }
+.linked-game-summary__subtitle { font-size: 12px; color: var(--text-muted); }
+.linked-game-summary__cta { font-size: 11px; color: var(--accent); }
+.bs-final-context { font-size: 11px; color: var(--text-muted); }

@@ -375,6 +375,12 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
 
   const headerWeek = game?.week ?? gameId?.match(/_w(\d+)_/)?.[1] ?? "—";
   const headerSeason = game?.seasonId ?? gameId?.split('_w')?.[0] ?? "";
+  const winningTeamAbbr = Number(game?.awayScore) > Number(game?.homeScore)
+    ? awayTeam.abbr
+    : Number(game?.homeScore) > Number(game?.awayScore)
+      ? homeTeam.abbr
+      : null;
+  const matchupLabel = `${awayTeam.abbr} @ ${homeTeam.abbr}`;
   const availability = buildCompletedGamePresentation(game ?? { gameId }, { source: "game_detail_screen" });
   const archiveQuality = availability.archiveQuality;
   const hasAnyPayload = Boolean(game && (
@@ -387,7 +393,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
       <div className="box-score-header bs-header-sticky">
         <div>
           <div className="muted" style={{ fontSize: 12 }}>Week {headerWeek} · {headerSeason}</div>
-          <h2 style={{ margin: "2px 0 8px" }}>Game Book</h2>
+          <h2 style={{ margin: "2px 0 4px" }}>Game Book</h2>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{matchupLabel}</div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {onBack && <button className="btn" onClick={onBack}>Back</button>}
@@ -400,7 +407,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
         <div className="box-score-container">
           <EmptyState
             title="Result recorded · detailed archive unavailable"
-            body={`The final result is saved, but this game's full box score data is not available in the archive. ${unavailableMessage} (${availability.statusLabel ?? "Archive unavailable"})`}
+            body={`The final result is saved for standings/history, but this game's full box score archive is unavailable. ${unavailableMessage} (${availability.statusLabel ?? "Archive unavailable"})`}
           />
         </div>
       )}
@@ -416,6 +423,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             <div className="bs-scoreline-wrap">
               <div className="bs-final-pill">Final</div>
               <div className="bs-scoreline">{game.awayScore} - {game.homeScore}</div>
+              <div className="bs-final-context">{winningTeamAbbr ? `${winningTeamAbbr} won` : "Game tied"}</div>
             </div>
             <div className="bs-team-col">
               <div className="bs-team-label">Home</div>
