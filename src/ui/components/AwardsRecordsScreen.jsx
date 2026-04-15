@@ -8,6 +8,7 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
   const [seasons, setSeasons] = useState([]);
   const [records, setRecords] = useState(null);
   const [scope, setScope] = useState('all');
+  const [recordScope, setRecordScope] = useState('singleSeason');
 
   useEffect(() => {
     Promise.all([
@@ -26,7 +27,10 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
   }))).filter((r) => r?.name), [seasons]);
 
   const filteredAwardRows = filterAwardRows(awardRows.slice().reverse(), scope);
-  const recordRows = useMemo(() => Object.entries(records?.singleSeason ?? {}).map(([k, rec]) => ({ key: k, ...rec })), [records]);
+  const recordRows = useMemo(() => {
+    const source = recordScope === 'singleSeason' ? (records?.singleSeason ?? {}) : (records?.allTime ?? {});
+    return Object.entries(source).map(([k, rec]) => ({ key: k, ...rec }));
+  }, [records, recordScope]);
 
   return (
     <div className="app-screen-stack" style={{ '--screen-sticky-top': getStickyTopOffset('compact') }}>
@@ -40,6 +44,7 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
       <StickySubnav title="Filter">
         <button className={`standings-tab ${scope === 'all' ? 'active' : ''}`} onClick={() => setScope('all')}>All awards</button>
         <button className={`standings-tab ${scope === 'recent' ? 'active' : ''}`} onClick={() => setScope('recent')}>Recent awards</button>
+        <button className={`standings-tab ${scope === 'mvp' ? 'active' : ''}`} onClick={() => setScope('mvp')}>MVP history</button>
       </StickySubnav>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
@@ -56,6 +61,10 @@ export default function AwardsRecordsScreen({ actions, league, onPlayerSelect, o
         </SectionCard>
 
         <SectionCard title="League records">
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <button className={`standings-tab ${recordScope === 'singleSeason' ? 'active' : ''}`} onClick={() => setRecordScope('singleSeason')}>Single-season</button>
+            <button className={`standings-tab ${recordScope === 'career' ? 'active' : ''}`} onClick={() => setRecordScope('career')}>Career</button>
+          </div>
           <div style={{ display: 'grid', gap: 8, maxHeight: 420, overflow: 'auto' }}>
             {recordRows.length === 0 ? <EmptyState title="No records yet." body="Record tables appear once this save archives statistical leaders." /> : recordRows.map((rec) => (
               <div key={rec.key} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8 }}>

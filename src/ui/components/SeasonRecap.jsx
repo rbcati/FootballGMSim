@@ -221,6 +221,15 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
   const seasonReview = archivedReview?.seasonReview ?? null;
   const playerCards = Array.isArray(archivedReview?.playerReportCards) ? archivedReview.playerReportCards : [];
   const offseasonPlan = archivedReview?.offseasonPlan ?? null;
+  const seasonMemory = useMemo(() => {
+    if (!archivedReview) return [];
+    const rows = [];
+    if (champion?.name) rows.push({ label: "Champion", value: champion.name, action: () => onNavigate?.("History") });
+    if (archivedReview?.awards?.mvp?.name) rows.push({ label: "MVP", value: archivedReview.awards.mvp.name, playerId: archivedReview.awards.mvp.playerId });
+    if (archivedReview?.runnerUp?.name) rows.push({ label: "Runner-up", value: archivedReview.runnerUp.name, action: () => onNavigate?.("History") });
+    if (archivedReview?.storylineSnapshots?.[0]?.headline) rows.push({ label: "Headline", value: archivedReview.storylineSnapshots[0].headline, action: () => onNavigate?.("📰 News") });
+    return rows.slice(0, 4);
+  }, [archivedReview, champion?.name, onNavigate]);
 
   return (
     <div style={{ maxWidth: 700, margin: "0 auto", position: "relative" }}>
@@ -348,6 +357,25 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
                 </div>
               ))}
             </div>
+          </div>
+        </AnimatedSection>
+      )}
+
+      {seasonMemory.length > 0 && (
+        <AnimatedSection delay={590} title="Season memory capsule" icon="🕰️">
+          <div style={{ display: "grid", gap: 8 }}>
+            {seasonMemory.map((row) => (
+              <button
+                key={row.label}
+                onClick={() => {
+                  if (row.playerId != null) onPlayerSelect?.(row.playerId);
+                  else row.action?.();
+                }}
+                style={{ textAlign: "left", border: "1px solid var(--hairline)", borderRadius: 8, padding: "8px 10px", background: "var(--surface-strong, #1a1a2e)", color: "var(--text)", cursor: "pointer" }}
+              >
+                <strong>{row.label}:</strong> <span style={{ color: "var(--text-muted)" }}>{row.value}</span>
+              </button>
+            ))}
           </div>
         </AnimatedSection>
       )}
@@ -633,7 +661,9 @@ export default function SeasonRecap({ league, onPlayerSelect, onTeamSelect, onNa
             📋 Copy Season Summary
           </button>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => onNavigate?.("History")} style={secondaryBtnStyle}>Open season archive</button>
+            <button onClick={() => onNavigate?.("History")} style={secondaryBtnStyle}>Open league archive</button>
+            <button onClick={() => onNavigate?.("Team History")} style={secondaryBtnStyle}>Open franchise timeline</button>
+            <button onClick={() => onNavigate?.("Awards & Records")} style={secondaryBtnStyle}>Open awards & records</button>
             <button onClick={() => onNavigate?.("Hall of Fame")} style={secondaryBtnStyle}>View Hall of Fame</button>
             <button onClick={() => onNavigate?.("Leaders")} style={secondaryBtnStyle}>See league leaders</button>
           </div>

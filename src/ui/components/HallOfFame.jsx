@@ -15,6 +15,7 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
   const [positionFilter, setPositionFilter] = useState("ALL");
   const [search, setSearch] = useState("");
   const [sortKey, setSortKey] = useState("legacy");
+  const [classFilter, setClassFilter] = useState("ALL");
 
   useEffect(() => {
     let mounted = true;
@@ -46,6 +47,7 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
   const filteredPlayers = useMemo(() => {
     const list = (players ?? []).filter((p) => {
       if (positionFilter !== "ALL" && p.pos !== positionFilter) return false;
+      if (classFilter !== "ALL" && String(p.inductionYear ?? "Unknown") !== classFilter) return false;
       const q = search.trim().toLowerCase();
       if (!q) return true;
       return [p.name, p.pos, p.primaryTeam]
@@ -53,7 +55,15 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
         .some((value) => String(value).toLowerCase().includes(q));
     });
     return [...list].sort((a, b) => sortHallPlayers(a, b, sortKey));
-  }, [players, positionFilter, search, sortKey]);
+  }, [players, positionFilter, classFilter, search, sortKey]);
+  const classOptions = useMemo(() => {
+    const years = [...new Set((players ?? []).map((p) => String(p.inductionYear ?? "Unknown")))];
+    return ["ALL", ...years.sort((a, b) => Number(b) - Number(a))];
+  }, [players]);
+  const latestClass = useMemo(() => {
+    const yr = classOptions.find((value) => value !== "ALL" && value !== "Unknown");
+    return yr ? filteredPlayers.filter((p) => String(p.inductionYear) === yr).slice(0, 3) : filteredPlayers.slice(0, 3);
+  }, [classOptions, filteredPlayers]);
 
   if (loading) {
     return (
@@ -79,6 +89,21 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
         subtitle="Explore inductions, teams, awards, and peak greatness."
         metadata={[{ label: "Legends", value: `${filteredPlayers.length}/${players.length}` }]}
       />
+      {latestClass.length > 0 && (
+        <Card className="card-premium">
+          <CardContent className="p-4 space-y-2">
+            <div className="text-xs uppercase tracking-wide text-[color:var(--text-muted)]">Class spotlight</div>
+            <div className="text-sm font-semibold">Latest class standouts</div>
+            <div className="flex flex-wrap gap-2">
+              {latestClass.map((p) => (
+                <button key={`spot-${p.id}`} className="rounded-full border border-[color:var(--hairline)] px-3 py-1 text-xs" onClick={() => onPlayerSelect?.(p.id)}>
+                  {p.inductionYear ?? "—"} · {p.name}
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="card-premium">
         <CardContent className="p-3 sm:p-4">
@@ -97,6 +122,15 @@ export default function HallOfFame({ onPlayerSelect, actions }) {
             >
               {positions.map((pos) => (
                 <option key={pos} value={pos}>{pos === "ALL" ? "All positions" : pos}</option>
+              ))}
+            </select>
+            <select
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value)}
+              className="h-9 rounded-md border border-[color:var(--hairline)] bg-[color:var(--surface)] px-3 text-sm"
+            >
+              {classOptions.map((option) => (
+                <option key={option} value={option}>{option === "ALL" ? "All classes" : `Class of ${option}`}</option>
               ))}
             </select>
             <select
