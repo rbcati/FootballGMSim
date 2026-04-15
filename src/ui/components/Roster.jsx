@@ -57,6 +57,7 @@ import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import SocialFeed from "./SocialFeed.jsx";
+import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2164,114 +2165,46 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
 
   return (
     <div>
-      {/* ── Team cap header ── */}
+      <TeamWorkspaceHeader
+        title="Roster Operations"
+        subtitle="Evaluate starters, depth, contract pressure, and next actions from one screen."
+        eyebrow={team?.name ?? 'Roster'}
+        metadata={[
+          { label: 'Players', value: `${players.length}/53` },
+          { label: 'Avg OVR', value: avgOvr },
+          { label: 'Cap Room', value: formatMoneyM(capRoom) },
+        ]}
+        actions={[
+          { label: 'Back to Team Hub', onClick: () => onNavigate?.('Team') },
+          { label: 'Depth focus', onClick: () => { setViewMode('depth'); setInitialFilter('DEPTH'); } },
+          { label: 'Contract queue', onClick: () => onNavigate?.('Contract Center') },
+          { label: 'Financials', onClick: () => onNavigate?.('Financials') },
+          { label: 'Free Agency', onClick: () => onNavigate?.('Free Agency') },
+          { label: 'Transactions', onClick: () => onNavigate?.('Transactions') },
+        ]}
+        quickContext={[
+          { label: `${starterCount} starters`, tone: 'team' },
+          { label: `${depthCount} depth pieces`, tone: 'league' },
+          { label: `${expiringCount} expiring`, tone: expiringCount >= 8 ? 'warning' : 'league' },
+          { label: `${injuredCount} injured`, tone: injuredCount > 0 ? 'warning' : 'ok' },
+          { label: unassignedDepthCount > 0 ? `${unassignedDepthCount} depth slots unset` : 'Depth chart ready', tone: unassignedDepthCount > 0 ? 'warning' : 'ok' },
+        ]}
+      />
+
+      <TeamCapSummaryStrip
+        capSnapshot={capSnapshot}
+        rosterCount={players.length}
+        starterHealth={`${Math.max(0, starterCount - injuredCount)}/${starterCount || 0} available`}
+        expiringCount={expiringCount}
+      />
+
       <Card
         className="card-premium"
         style={{
-          marginBottom: "var(--space-4)",
-          padding: "var(--space-4) var(--space-5)",
+          marginBottom: "var(--space-2)",
+          padding: "var(--space-3) var(--space-4)",
         }}
       ><CardContent>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            marginBottom: "var(--space-3)",
-            gap: "var(--space-4)",
-            flexWrap: "wrap",
-          }}
-        >
-          {/* Left: name + player count */}
-          <div>
-            <span
-              style={{
-                fontWeight: 800,
-                fontSize: "var(--text-lg)",
-                color: team?.abbr ? teamColor(team.abbr) : "var(--text)",
-              }}
-            >
-              {team?.name ?? "Roster"}
-            </span>
-            <span
-              style={{
-                marginLeft: "var(--space-3)",
-                fontSize: "var(--text-sm)",
-                color: isOverLimit ? "var(--danger)" : "var(--text-muted)",
-                fontWeight: isOverLimit ? 700 : 400,
-              }}
-            >
-              {players.length} players{" "}
-              {isOverLimit ? "/ 53 (Cut Required)" : ""} · Avg <abbr title="Overall rating">OVR</abbr> {avgOvr}
-            </span>
-          </div>
-
-          {/* Right: cap room + view toggle */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "var(--space-4)",
-            }}
-          >
-            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")} aria-label="Back to team hub">Back</Button>
-            <div style={{ textAlign: "right" }}>
-              <div
-                style={{
-                  fontSize: "var(--text-xs)",
-                  color: "var(--text-muted)",
-                  marginBottom: 2,
-                }}
-              >
-                CAP ROOM
-              </div>
-              <div
-                style={{
-                  fontSize: "var(--text-xl)",
-                  fontWeight: 800,
-                  color:
-                    capRoom < 5
-                      ? "var(--danger)"
-                      : capRoom < 15
-                        ? "var(--warning)"
-                        : "var(--success)",
-                }}
-              >
-                {formatMoneyM(capRoom)}
-              </div>
-            </div>
-
-            {/* View toggle pills */}
-            <div className="standings-tabs">
-              <Button
-                variant={viewMode === "cards" ? "default" : "ghost"}
-                className={`standings-tab${viewMode === "cards" ? " active" : ""}`}
-                onClick={() => setViewMode("cards")}
-                style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
-              >
-                Cards
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                className={`standings-tab${viewMode === "table" ? " active" : ""}`}
-                onClick={() => setViewMode("table")}
-                style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
-              >
-                Table
-              </Button>
-              <Button
-                variant={viewMode === "depth" ? "default" : "ghost"}
-                className={`standings-tab${viewMode === "depth" ? " active" : ""}`}
-                onClick={() => setViewMode("depth")}
-                style={{ padding: "4px 14px", fontSize: "var(--text-xs)" }}
-              >
-                Depth
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Cap bar */}
         <CapBar capUsed={capUsed} capTotal={capTotal} deadCap={team?.deadCap} />
 
         <div
@@ -2305,37 +2238,20 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
             </div>
           )}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("STARTERS"); }}>Starters {starterCount}</Button>
-            <Button variant="outline" size="sm" onClick={() => { setViewMode("depth"); setInitialFilter("DEPTH"); }}>Depth {depthCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("STARTERS"); }}>Starter tier {starterCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEPTH"); }}>Primary backups {depthCount}</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEVELOPMENT"); }}>Fringe + development {youngDevCount}</Button>
             <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("EXPIRING"); }}>Expiring {expiringCount}</Button>
             <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("INJURED"); }}>Injured {injuredCount}</Button>
-            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEVELOPMENT"); }}>Dev pieces {youngDevCount}</Button>
             <Badge variant={unassignedDepthCount > 0 ? "destructive" : "secondary"}>
               Depth setup {unassignedDepthCount > 0 ? `${unassignedDepthCount} unset` : "ready"}
             </Badge>
           </div>
           {unassignedDepthCount > 0 && (
             <div style={{ fontSize: "var(--text-xs)", color: "var(--warning)" }}>
-              Depth chart still needs setup. Open the Depth view to lock starter/depth roles before kickoff.
+              Depth chart still needs setup. Open Depth view to assign required starters before advancing.
             </div>
           )}
-        </div>
-
-        {/* Legend for indicators */}
-        <div
-          style={{
-            marginTop: "var(--space-3)",
-            display: "flex",
-            gap: "var(--space-5)",
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: 10, color: "var(--text-subtle)" }}>
-            <span style={{ color: "#34C759", fontWeight: 700 }}>◆</span> Scheme
-            Fit &nbsp;
-            <span style={{ color: "var(--text-subtle)" }}>|</span>&nbsp;
-            <span style={{ color: "#0A84FF", fontWeight: 700 }}>●</span> Morale
-          </span>
         </div>
       </CardContent></Card>
       <SocialFeed league={league} defaultFilter="team" maxItems={5} onPlayerSelect={onPlayerSelect} />
@@ -2406,15 +2322,16 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
             </div>
           ) : (
             <>
-              {depthAlerts.length > 0 && (
-                <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>
-                  {depthAlerts.slice(0, 6).map((warning, idx) => (
-                    <div key={`${warning.rowKey}-${idx}`} style={{ fontSize: 12, color: warning.severity === "error" ? "var(--danger)" : "var(--warning)" }}>
-                      {warning.message}
-                    </div>
-                  ))}
+              <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  Drag players within each position row to set starter order. Auto-sort prioritizes scheme-adjusted OVR and preserves position grouping.
                 </div>
-              )}
+                {depthAlerts.length > 0 ? depthAlerts.slice(0, 6).map((warning, idx) => (
+                  <div key={`${warning.rowKey}-${idx}`} style={{ fontSize: 12, color: warning.severity === "error" ? "var(--danger)" : "var(--warning)", border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 8px' }}>
+                    {warning.severity === 'error' ? 'Missing starter: ' : 'Warning: '}{warning.message}
+                  </div>
+                )) : <div style={{ fontSize: 12, color: 'var(--success)' }}>Starter requirements currently covered.</div>}
+              </div>
               <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={(() => {
                 const ut = league?.teams?.find(t => t.id === league.userTeamId);
                 const offId = ut?.strategies?.offSchemeId;

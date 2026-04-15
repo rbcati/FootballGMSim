@@ -21,6 +21,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { derivePlayerContractFinancials, formatContractMoney } from "../utils/contractFormatting.js";
+import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
+import { deriveTeamCapSnapshot } from "../utils/numberFormatting.js";
 
 const POSITION_GROUPS = [
   { key: "QB", label: "QB Room", positions: ["QB"] },
@@ -216,7 +218,7 @@ function PositionGroup({ group, players, onPlayerSelect, recentlyMovedId }) {
   );
 }
 
-export default function DragAndDropDepthChart({ league, actions, onPlayerSelect }) {
+export default function DragAndDropDepthChart({ league, actions, onPlayerSelect, onNavigate = null }) {
   const userTeam = league?.teams?.find((t) => t.id === league.userTeamId);
   const roster = userTeam?.roster ?? [];
 
@@ -296,11 +298,48 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect 
     return Math.round(fits.reduce((s, f) => s + f, 0) / fits.length);
   }, [roster]);
 
+  const capSnapshot = deriveTeamCapSnapshot(userTeam ?? {}, { fallbackCapTotal: 255 });
+  const missingStarterGroups = POSITION_GROUPS
+    .map((g) => ({ key: g.key, missing: Math.max(0, (STARTERS[g.key] ?? 1) - ((groupedPlayers[g.key] ?? []).length)) }))
+    .filter((g) => g.missing > 0);
+
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 40 }}>
+    <div style={{ maxWidth: 760, margin: "0 auto", paddingBottom: 40 }} className="app-screen-stack">
       <style>{`@keyframes depth-row-flash { 0% { background: rgba(52,199,89,0.24);} 100% { background: transparent; } }`}</style>
 
+      <TeamWorkspaceHeader
+        title="Depth Chart Operations"
+        subtitle="Set starting roles, protect coverage at every position group, and align scheme fit."
+        eyebrow={userTeam?.name ?? 'Depth Chart'}
+        metadata={[
+          { label: 'Roster', value: `${roster.length}/53` },
+          { label: 'Missing starter groups', value: missingStarterGroups.length },
+          { label: 'Avg fit', value: avgSchemeFit != null ? `${avgSchemeFit}%` : '—' },
+        ]}
+        actions={[
+          { label: 'Roster', onClick: () => onNavigate?.('Roster') },
+          { label: 'Contracts', onClick: () => onNavigate?.('Contract Center') },
+          { label: 'Free Agency', onClick: () => onNavigate?.('Free Agency') },
+        ]}
+        quickContext={[
+          { label: 'Auto-sort uses scheme adjusted OVR', tone: 'league' },
+          { label: missingStarterGroups.length ? `${missingStarterGroups.length} groups missing starters` : 'Starter groups covered', tone: missingStarterGroups.length ? 'warning' : 'ok' },
+        ]}
+      />
+
+      <TeamCapSummaryStrip capSnapshot={capSnapshot} rosterCount={roster.length} />
+
+      {missingStarterGroups.length > 0 ? (
+        <div className="card" style={{ padding: '10px', borderColor: 'rgba(255,159,10,.4)' }}>
+          <div style={{ fontSize: 12, color: 'var(--warning)', fontWeight: 700, marginBottom: 4 }}>Lineup warning</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            Missing starter coverage in: {missingStarterGroups.map((g) => `${g.key} (${g.missing})`).join(', ')}.
+          </div>
+        </div>
+      ) : null}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
+
         <button
           onClick={handleAutoSort}
           style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid var(--accent)", background: "var(--accent-muted, rgba(10,132,255,0.12))", color: "var(--accent)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
@@ -325,7 +364,7 @@ export default function DragAndDropDepthChart({ league, actions, onPlayerSelect 
 
       <div style={{ fontSize: "0.68rem", color: "var(--text-subtle)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
         <span>⠿</span>
-        <span>Drag players to reorder depth chart inside each position group</span>
+        <span>Drag to reorder depth inside each position group. Auto-Sort by Fit ranks players using scheme-adjusted OVR within each group</span>
       </div>
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
