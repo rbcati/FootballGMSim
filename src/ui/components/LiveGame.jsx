@@ -409,6 +409,8 @@ export default function LiveGame({
   simulatedWeek,
   gameEvents,
   onOpenBoxScore,
+  error,
+  busy,
 }) {
   const [visible, setVisible] = useState(false);
   const [plays, setPlays] = useState([]);
@@ -621,6 +623,18 @@ export default function LiveGame({
   const userResolvedEvents = resolvedEvents.filter(
     (e) => Number(e.homeId) === numericUserTeamId || Number(e.awayId) === numericUserTeamId,
   );
+  const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
+  const totalWeekGames = weekGames.length;
+  const resolvedCount = resolvedEvents.length;
+  const simStatusLabel = simulating
+    ? skipping
+      ? 'Fast forwarding to final results…'
+      : `Simulating week ${simContextWeek ?? ''} · ${simProgress}%`
+    : isFinished
+      ? `Week ${simContextWeek ?? ''} complete`
+      : busy
+        ? 'Processing game state…'
+        : 'Awaiting next simulation';
 
   // Games still pending (not yet in gameEvents) — show only user's game.
   const resolvedGameIds = new Set(resolvedEvents.map((e) => e.gameId));
@@ -633,7 +647,6 @@ export default function LiveGame({
   );
 
   // Final results to show when sim is done — user's game only.
-  const isFinished = !simulating && (lastResults?.length ?? 0) > 0;
   const userLastResults = (lastResults ?? []).filter(
     (r) => Number(r.homeId) === Number(userTeamId) || Number(r.awayId) === Number(userTeamId),
   );
@@ -721,9 +734,10 @@ export default function LiveGame({
             color: "var(--text)",
           }}
         >
-          {simulating
-            ? `Week ${simContextWeek ?? ""} · Simulating…`
-            : `Week ${simContextWeek ?? ""} · Final Results`}
+          {simulating ? `Week ${simContextWeek ?? ""} · Live Simulation` : `Week ${simContextWeek ?? ""} · Final Results`}
+        </span>
+        <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+          {simStatusLabel}
         </span>
 
         {simulating && !skipping && (
@@ -789,6 +803,25 @@ export default function LiveGame({
             ×
           </button>
         )}
+      </div>
+      <div style={{
+        borderBottom: "1px solid var(--hairline)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), transparent)",
+        padding: "6px var(--space-5)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        flexWrap: "wrap",
+      }}>
+        <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+          Games resolved: <strong style={{ color: "var(--text)" }}>{resolvedCount}</strong> / {totalWeekGames || "—"}
+        </div>
+        {error ? (
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--danger)" }}>
+            Sim warning: {error}
+          </div>
+        ) : null}
       </div>
 
       {/* ── Progress bar ── */}
@@ -1083,10 +1116,11 @@ export default function LiveGame({
                   key={p.id}
                   style={{
                     fontSize: "var(--text-xs)",
-                    color: "var(--text-muted)",
+                    color: /touchdown|interception|fumble|sack|field goal/i.test(p.text) ? "var(--text)" : "var(--text-muted)",
                     lineHeight: 1.45,
                     borderBottom: "1px solid var(--hairline)",
                     paddingBottom: "var(--space-1)",
+                    fontWeight: /touchdown|interception|fumble|field goal/i.test(p.text) ? 700 : 500,
                     animation:
                       p.id === plays[plays.length - 1]?.id
                         ? "lgFadeIn 0.22s ease"
