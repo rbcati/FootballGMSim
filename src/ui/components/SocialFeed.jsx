@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { EVENT_TOOLTIPS } from '../../core/events/eventSystem.js';
+import { StatusChip } from './ScreenSystem.jsx';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -47,17 +48,22 @@ export default function SocialFeed({ league, onPlayerSelect, onTeamSelect, defau
 
       {entries.map((entry, idx) => {
         const tooltip = entry?.tooltip ?? EVENT_TOOLTIPS[entry?.type] ?? 'League update.';
+        const isTeamStory = Number(entry?.teamId) === userTeamId;
         return (
           <div key={entry?.id ?? `${entry?.headline ?? 'entry'}-${idx}`} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', display: 'grid', gap: 4 }} title={tooltip}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' }}>
               <strong style={{ fontSize: 13 }}>{entry?.headline ?? entry?.text ?? 'Update'}</strong>
-              <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{formatDate(entry)}</span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <StatusChip label={isTeamStory ? 'Team' : 'League'} tone={isTeamStory ? 'team' : 'league'} />
+                <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>{formatDate(entry)}</span>
+              </div>
             </div>
             {entry?.body || entry?.description ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{entry?.body ?? entry?.description}</div> : null}
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {entry?.actionLabel && entry?.actionTarget ? <span className="badge" title={`Suggested action: ${entry.actionTarget}`}>{entry.actionLabel}</span> : null}
               {entry?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(entry.playerId)}>View Profile</button> : null}
-              {entry?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(entry.teamId)}>Team</button> : null}
+              {entry?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(entry.teamId)}>Open team</button> : null}
+              {entry?.gameId != null ? <span className="badge">Game linked</span> : null}
             </div>
           </div>
         );

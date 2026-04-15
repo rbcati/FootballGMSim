@@ -2,10 +2,10 @@ import React, { useMemo, useState } from 'react';
 import RecordBook from './RecordBook.jsx';
 import PostseasonHub from './PostseasonHub.jsx';
 import PlayerStats from './PlayerStats.jsx';
-import SectionHeader from './SectionHeader.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 import { buildNewsDeskModel } from '../utils/newsDesk.js';
 import SocialFeed from './SocialFeed.jsx';
+import { CompactListRow, ScreenHeader, StatusChip } from './ScreenSystem.jsx';
 
 const LEAGUE_SUBNAV = ['Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
 
@@ -69,8 +69,12 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
   const recentWinners = champions.slice(-3).reverse();
 
   return (
-    <div>
-      <SectionHeader title="League" subtitle="League command center" />
+    <div className="app-screen-stack">
+      <ScreenHeader
+        title="League Hub"
+        subtitle="Schedule, standings, stats, transactions, and history."
+        eyebrow={`${league?.year ?? "Season"} · Week ${league?.week ?? 1}`}
+      />
       <SectionSubnav items={LEAGUE_SUBNAV} activeItem={subtab} onChange={setSubtab} />
       <SocialFeed league={league} defaultFilter="league" maxItems={8} onPlayerSelect={onPlayerSelect} />
 
@@ -104,21 +108,16 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
             <div style={{ fontWeight: 700, marginBottom: 8 }}>Recent transactions</div>
             <div style={{ display: 'grid', gap: 7 }}>
               {transactionRows.map((item, idx) => (
-                <div key={item?.id ?? `tx-${idx}`} style={{ border: '1px solid var(--hairline)', borderRadius: 9, padding: '8px 10px', display: 'grid', gap: 4 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-                    <strong style={{ fontSize: 13 }}>{item?.headline ?? 'League transaction'}</strong>
-                    <span className="badge">{item?._txType}</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item?.body ?? 'No detail available.'}</div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 11, color: 'var(--text-subtle)' }}>W{item?.week ?? '-'} · {item?.phase ?? 'season'}</span>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
-                      {item?._txType === 'Trade' ? <button className="btn btn-sm" onClick={() => onNavigateTrade?.(item?.teamId ?? null)}>Scout Market</button> : null}
-                      {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Box</button> : null}
-                    </div>
-                  </div>
-                </div>
+                <CompactListRow
+                  key={item?.id ?? `tx-${idx}`}
+                  title={item?.headline ?? 'League transaction'}
+                  subtitle={item?.body ?? 'No detail available.'}
+                  meta={<><StatusChip label={item?._txType} tone="league" /> <span style={{ marginLeft: 6 }}>W{item?.week ?? '-'} · {item?.phase ?? 'season'}</span></>}
+                >
+                  {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+                  {item?._txType === 'Trade' ? <button className="btn btn-sm" onClick={() => onNavigateTrade?.(item?.teamId ?? null)}>Scout market</button> : null}
+                  {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Open box</button> : null}
+                </CompactListRow>
               ))}
               {transactionRows.length === 0 ? <div style={{ color: 'var(--text-muted)' }}>No transaction activity yet.</div> : null}
             </div>

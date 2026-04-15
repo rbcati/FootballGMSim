@@ -3,7 +3,7 @@ import React from 'react';
 export default function SectionSubnav({ items, activeItem, onChange, sticky = false }) {
   return (
     <div
-      className="standings-tabs"
+      className={`standings-tabs app-section-subnav ${sticky ? 'is-sticky' : ''}`}
       style={{
         marginBottom: 'var(--space-3)',
         gap: 6,
@@ -19,8 +19,9 @@ export default function SectionSubnav({ items, activeItem, onChange, sticky = fa
       {items.map((item) => (
         <button
           key={item}
-          className={`standings-tab${activeItem === item ? ' active' : ''}`}
+          className={`standings-tab app-section-subnav__tab${activeItem === item ? ' active' : ''}`}
           onClick={() => onChange(item)}
+          aria-current={activeItem === item ? 'page' : undefined}
           style={{ flexShrink: 0 }}
         >
           {item}
