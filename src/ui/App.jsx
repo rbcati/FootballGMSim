@@ -477,6 +477,20 @@ function AppContent() {
     return items;
   }, [safePhase, canUseTopActions, activeSlot, actions, busy, isBatchSimBlocking, handleReset, handleSimToPhase]);
 
+  const simPhaseLabel = useMemo(() => {
+    if (!league?.phase) return 'Initializing';
+    const labels = {
+      preseason: 'Preseason',
+      regular: 'Regular Season',
+      playoffs: 'Playoffs',
+      offseason_resign: 'Re-signing',
+      offseason: 'Offseason',
+      free_agency: 'Free Agency',
+      draft: 'Draft',
+    };
+    return labels[league.phase] ?? league.phase;
+  }, [league?.phase]);
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (!workerReady) {
@@ -678,6 +692,15 @@ function AppContent() {
           />
         </div>
       )}
+      {(simulating || busy) && !isBatchSimBlocking && (
+        <div role="status" className="app-banner app-banner-info" style={{ marginTop: 8 }}>
+          <span className="app-banner-text">
+            {simulating
+              ? `Simulating ${simPhaseLabel} · ${simProgress}% complete.`
+              : `Processing ${simPhaseLabel} updates…`}
+          </span>
+        </div>
+      )}
 
       {/* ── Batch Sim Overlay ──────────────────────────────────────────── */}
       {batchSim && (
@@ -743,7 +766,10 @@ function AppContent() {
       {/* ── Error banner ───────────────────────────────────────────────── */}
       {error && (
         <div role="alert" className="app-banner app-banner-error">
-          {error}
+          <span>{error}</span>
+          <button className="btn app-banner-btn" onClick={handleAdvanceWeek} disabled={busy || simulating}>
+            Retry
+          </button>
         </div>
       )}
       {initFlow?.timedOut && (
@@ -815,6 +841,8 @@ function AppContent() {
             lastResults={authoritativeResults}
             simulatedWeek={lastSimWeek}
             gameEvents={gameEvents}
+            busy={busy}
+            error={error}
             onOpenBoxScore={(gameId) => {
               if (!gameId) return;
               setExternalBoxScoreId(gameId);
@@ -956,6 +984,9 @@ function AppContent() {
                 Week {league.week} {league.phase === 'playoffs' ? '· Playoffs' : '· Regular Season'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)', marginBottom: 2 }}>
+                  Choose presentation mode for this game.
+                </div>
                 <button
                   className="btn btn-primary"
                   onClick={() => {
@@ -970,7 +1001,7 @@ function AppContent() {
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  {busy ? 'Loading...' : '🏈 Watch Game'}
+                  {busy ? 'Loading...' : '🏈 Watch (Broadcast Pace)'}
                 </button>
                 <button
                   className="btn"
@@ -986,7 +1017,7 @@ function AppContent() {
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  ⚡ Fast Watch
+                  ⚡ Fast Watch (Condensed)
                 </button>
                 <button
                   className="btn"
@@ -1002,7 +1033,7 @@ function AppContent() {
                     borderRadius: 'var(--radius-md)',
                   }}
                 >
-                  ⏭️ Sim to End
+                  ⏭️ Sim to End (Instant)
                 </button>
                 <button
                   className="btn"
