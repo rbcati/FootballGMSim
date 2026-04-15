@@ -52,6 +52,7 @@ import { normalizeManagement, TRADE_STATUSES, TRADE_STATUS_LABELS, CONTRACT_PLAN
 import { deriveTeamCapSnapshot, formatMoneyM, toFiniteNumber } from "../utils/numberFormatting.js";
 import { derivePlayerContractFinancials } from "../utils/contractFormatting.js";
 import { describePlayerMoraleContext } from "../utils/teamChemistry.js";
+import { buildDevelopmentNotes, summarizeRosterDevelopment } from "../utils/playerDevelopmentSignals.js";
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
@@ -428,6 +429,32 @@ function StatusBadge({ injuryWeeks }) {
       }}
     >
       {isIR ? "IR" : "OUT"}
+    </span>
+  );
+}
+
+function DevelopmentTag({ label, tone = "neutral" }) {
+  const tones = {
+    good: { color: "var(--success)", bg: "rgba(52,199,89,0.14)" },
+    warn: { color: "var(--warning)", bg: "rgba(255,159,10,0.14)" },
+    bad: { color: "var(--danger)", bg: "rgba(255,69,58,0.14)" },
+    neutral: { color: "var(--text-subtle)", bg: "var(--surface-strong)" },
+  };
+  const cfg = tones[tone] ?? tones.neutral;
+  return (
+    <span
+      style={{
+        fontSize: 9,
+        fontWeight: 800,
+        borderRadius: "var(--radius-pill)",
+        padding: "1px 6px",
+        color: cfg.color,
+        background: cfg.bg,
+        letterSpacing: ".03em",
+        textTransform: "uppercase",
+      }}
+    >
+      {label}
     </span>
   );
 }
@@ -848,6 +875,7 @@ function RosterTable({
                 const fitCol = indicatorColor(fit);
                 const moraleCol = indicatorColor(morale);
                 const moraleContext = describePlayerMoraleContext(player, { team, chemistry, week });
+                const devContext = buildDevelopmentNotes(player, moraleContext);
                 const expiringDecision = isResignPhase && isExpiring
                   ? classifyExpiringDecision(player, { team, roster: players, direction: teamDirection })
                   : null;
@@ -898,6 +926,10 @@ function RosterTable({
                       >
                         {player.name}
                         <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>{TRADE_STATUS_LABELS[normalizeManagement(player).tradeStatus]}{normalizeManagement(player).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(player).contractPlan[0]]}` : ""}</div>
+                        <div style={{ marginTop: 2, display: "flex", gap: 4, flexWrap: "wrap" }}>
+                          <DevelopmentTag label={devContext.trend.label} tone={devContext.trend.tone} />
+                          <DevelopmentTag label={devContext.readiness.label} tone={devContext.readiness.tone} />
+                        </div>
                       </button>
                       {isResignPhase && isZeroYears && (
                         <span
@@ -2162,6 +2194,14 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
   );
   const directionGuidance = useMemo(() => buildDirectionGuidance(teamIntel), [teamIntel]);
   const chemistry = teamIntel?.chemistry;
+  const moraleById = useMemo(() => {
+    const map = new Map();
+    players.forEach((p) => {
+      map.set(p.id, describePlayerMoraleContext(p, { team, chemistry, week: league?.week }));
+    });
+    return map;
+  }, [players, team, chemistry, league?.week]);
+  const developmentSummary = useMemo(() => summarizeRosterDevelopment(players, moraleById), [players, moraleById]);
 
   return (
     <div>
@@ -2197,6 +2237,31 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
         starterHealth={`${Math.max(0, starterCount - injuredCount)}/${starterCount || 0} available`}
         expiringCount={expiringCount}
       />
+      <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
+        <CardContent style={{ display: "grid", gap: 8 }}>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Development intelligence
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Badge variant="outline">📈 Rising: {developmentSummary.rising.length}</Badge>
+            <Badge variant={developmentSummary.slipping.length > 0 ? "destructive" : "outline"}>📉 Slipping: {developmentSummary.slipping.length}</Badge>
+            <Badge variant={developmentSummary.moraleRisk.length > 0 ? "destructive" : "outline"}>😕 Morale risk: {developmentSummary.moraleRisk.length}</Badge>
+            <Badge variant={developmentSummary.mismatch.length > 0 ? "destructive" : "secondary"}>🧩 Scheme mismatch: {developmentSummary.mismatch.length}</Badge>
+            <Badge variant="secondary">🌱 Rookie watch: {developmentSummary.rookieWatch.length}</Badge>
+          </div>
+          <div style={{ display: "grid", gap: 4, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+            {developmentSummary.rising[0] ? <div>Best current development bet: <strong style={{ color: "var(--text)" }}>{developmentSummary.rising[0].name}</strong> ({developmentSummary.rising[0].progressionDelta > 0 ? "+" : ""}{developmentSummary.rising[0].progressionDelta ?? 0} OVR).</div> : null}
+            {developmentSummary.slipping[0] ? <div>Regression watch: <strong style={{ color: "var(--text)" }}>{developmentSummary.slipping[0].name}</strong> ({developmentSummary.slipping[0].progressionDelta ?? 0} OVR) — review role, usage, and contract timeline.</div> : null}
+            {developmentSummary.mismatch[0] ? <div>Top scheme mismatch: <strong style={{ color: "var(--text)" }}>{developmentSummary.mismatch[0].name}</strong> (fit {developmentSummary.mismatch[0].schemeFit ?? 50}) — consider package changes or depth-chart adjustment.</div> : null}
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEVELOPMENT"); }}>Open young/development group</Button>
+            <Button variant="outline" size="sm" onClick={() => { setViewMode("depth"); setInitialFilter("DEPTH"); }}>Adjust depth chart</Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.("Contract Center")}>Review contract calls</Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.("Trade Center")}>Check trade market</Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card
         className="card-premium"
