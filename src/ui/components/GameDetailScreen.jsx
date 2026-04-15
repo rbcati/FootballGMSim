@@ -25,10 +25,10 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
     <div className="app-screen-stack">
       <ScreenHeader
         title="Game Book"
-        subtitle="Final score hierarchy, recap context, and archived game details."
+        subtitle="Final score, recap narrative, team comparison, and player box score in one place."
         onBack={onBack}
         backLabel="Back"
-        metadata={[{ label: 'Game ID', value: gameId }]}
+        metadata={[{ label: 'Game ID', value: gameId }, { label: 'Season', value: league?.seasonId ?? '—' }]}
       />
       <BoxScorePanel
         gameId={gameId}

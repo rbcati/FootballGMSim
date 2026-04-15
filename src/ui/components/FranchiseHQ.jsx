@@ -4,7 +4,8 @@ import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
 import { getHQViewModel } from "../../state/selectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
-import { EmptyState, SectionCard, StatCard, TeamChip } from "./common/UiPrimitives.jsx";
+import { EmptyState, SectionCard, StatCard } from "./common/UiPrimitives.jsx";
+import { LinkedGameSummaryCard } from "./common/GameResultCards.jsx";
 import { CtaRow, CompactListRow, StatusChip } from "./ScreenSystem.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
 import { autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
@@ -154,7 +155,12 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
       <SectionCard title="Next Game" actions={nextGame ? <StatusChip label={`Week ${nextGame.week}`} tone="team" /> : null}>
         {nextGame ? (
           <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>Week {nextGame.week} · {nextGame.isHome ? "vs" : "@"} <TeamChip team={nextGame.opp} /></div>
+            <LinkedGameSummaryCard
+              label="Upcoming"
+              title={`Week ${nextGame.week} · ${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.abbr ?? "TBD"}`}
+              subtitle="Open game"
+              disabled
+            />
             {lineupToast ? <div style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>{lineupToast}</div> : null}
           </div>
         ) : <div style={{ color: "var(--text-muted)" }}>No upcoming game found.</div>}
@@ -162,21 +168,13 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
 
       <SectionCard title="Last Game">
         {!latestArchived ? <div style={{ color: "var(--text-muted)" }}>No completed game yet.</div> : (
-          <button
-            type="button"
-            className="btn"
-            style={{ textAlign: "left" }}
-            onClick={() => onOpenBoxScore?.(latestArchived?.id)}
+          <LinkedGameSummaryCard
+            label={`Week ${latestArchived?.week ?? vm.league?.week} final`}
+            title={`${latestArchived?.awayAbbr} ${latestArchived?.score?.away} @ ${latestArchived?.homeAbbr} ${latestArchived?.score?.home}`}
+            subtitle={latestGamePresentation?.canOpen ? "Open box score" : "View result unavailable"}
+            onOpen={() => onOpenBoxScore?.(latestArchived?.id)}
             disabled={!latestGamePresentation?.canOpen}
-            title={latestGamePresentation?.canOpen ? "Open box score" : latestGamePresentation?.statusLabel}
-          >
-            <strong>
-              Week {latestArchived?.week ?? vm.league?.week}: {latestArchived?.awayAbbr} {latestArchived?.score?.away} - {latestArchived?.score?.home} {latestArchived?.homeAbbr}
-            </strong>
-            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
-              {latestGamePresentation?.canOpen ? "Open box score" : "View result unavailable"}
-            </div>
-          </button>
+          />
         )}
       </SectionCard>
 

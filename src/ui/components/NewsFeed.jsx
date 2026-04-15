@@ -32,7 +32,7 @@ function StoryCard({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
         Week {item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Your team' : ''}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-        {item?.gameId ? <button className="btn" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box score</button> : null}
+        {item?.gameId ? <button className="btn" onClick={() => onOpenBoxScore?.(item.gameId)}>Open game</button> : null}
         {item?.teamId != null ? <button className="btn" onClick={() => onTeamSelect?.(item.teamId)}>Open team</button> : null}
         {item?.playerId != null ? <button className="btn" onClick={() => onPlayerSelect?.(item.playerId)}>Open player</button> : null}
       </div>
@@ -65,7 +65,7 @@ function CompactStoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect })
           W{item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Team' : ''}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box score</button> : null}
+          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Open game</button> : null}
           {item?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(item.teamId)}>Open team</button> : null}
           {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Open player</button> : null}
         </div>

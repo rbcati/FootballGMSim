@@ -116,7 +116,7 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
                 >
                   {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
                   {item?._txType === 'Trade' ? <button className="btn btn-sm" onClick={() => onNavigateTrade?.(item?.teamId ?? null)}>Scout market</button> : null}
-                  {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Open box</button> : null}
+                  {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Open game</button> : null}
                 </CompactListRow>
               ))}
               {transactionRows.length === 0 ? <div style={{ color: 'var(--text-muted)' }}>No transaction activity yet.</div> : null}

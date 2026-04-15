@@ -65,6 +65,7 @@ import CoachingScreen from "./CoachingScreen.jsx";
 import TeamHub from "./TeamHub.jsx";
 import LeagueHub from "./LeagueHub.jsx";
 import SectionSubnav from "./SectionSubnav.jsx";
+import { CompactGameResultRow, CompletedGameCard, UpcomingGameCard } from "./common/GameResultCards.jsx";
 import { buildLatestResultsSummary } from "../utils/lastResultSummary.js";
 import { getAppShellContext } from "../utils/appShellContext.js";
 import { getScheduleFiltersState, persistScheduleFiltersState } from "../utils/scheduleFiltersState.js";
@@ -82,12 +83,10 @@ import {
   deriveWeeklyHonors,
 } from "../utils/gamePresentation.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
-import { getClickableCardProps } from "../utils/clickableCard.js";
 import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import { getGame as getArchivedGame } from "../../core/archive/gameArchive.ts";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
-import { createBoxScoreTapHandler } from "../utils/scoreTapTarget.js";
 import { safeGetLeagueState, getScheduleViewModel } from "../../state/selectors.js";
 import {
   SHELL_SECTIONS,
@@ -952,27 +951,23 @@ function ScheduleTab({
               const canViewResult = Boolean(presentation.resolvedGameId && onGameSelect);
               const recapActionLabel = presentation.canOpen ? "Open box score" : (canViewResult ? "View result" : "Unavailable");
               return (
-              <button
-                key={`${game.home}-${game.away}-${idx}`}
-                className={`btn-link ${presentation.canOpen || canViewResult ? "" : "disabled"}`}
-                onClick={() => {
-                  if (presentation.canOpen) {
-                    openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_recap" }, onGameSelect);
-                  } else if (canViewResult) {
-                    onGameSelect?.(String(presentation.resolvedGameId));
-                  }
-                }}
-                style={{ textAlign: "left", fontSize: "var(--text-sm)", color: "var(--text-muted)" }}
-                title={presentation.canOpen ? "Open box score" : recapActionLabel}
-              >
-                <strong style={{ color: "var(--text)" }}>{away.abbr} {game.awayScore} @ {home.abbr} {game.homeScore}</strong>
-                {" · "}
-                {story?.headline ?? "Final"}
-                {" · "}
-                <span style={{ color: presentation.archiveQuality === "full" ? "var(--success)" : presentation.archiveQuality === "partial" ? "var(--warning)" : "var(--text-subtle)" }}>
-                  {presentation.statusLabel}
-                </span>
-              </button>
+                <CompactGameResultRow
+                  key={`${game.home}-${game.away}-${idx}`}
+                  week={selectedWeek}
+                  away={away}
+                  home={home}
+                  game={game}
+                  actionLabel={recapActionLabel}
+                  note={`${story?.headline ?? "Final"} · ${presentation.statusLabel}`}
+                  disabled={!presentation.canOpen && !canViewResult}
+                  onOpen={() => {
+                    if (presentation.canOpen) {
+                      openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_recap" }, onGameSelect);
+                    } else if (canViewResult) {
+                      onGameSelect?.(String(presentation.resolvedGameId));
+                    }
+                  }}
+                />
             )})}
           </div>
         </div>
@@ -1062,176 +1057,68 @@ function ScheduleTab({
             if (selectedWeek >= 17 && postgame.tag === "Upset") return "Playoff race shakeup";
             return null;
           })();
-          const handleCardClick = isClickable
-            ? () => {
-              if (canOpenBoxScore) {
-                openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_card" }, onGameSelect);
-              } else if (canOpenResultOnly) {
-                onGameSelect?.(String(presentation?.resolvedGameId));
-              }
+          const handleCardClick = () => {
+            if (canOpenBoxScore) {
+              openResolvedBoxScore(game, { seasonId, week: selectedWeek, source: "schedule_card" }, onGameSelect);
+            } else if (canOpenResultOnly) {
+              onGameSelect?.(String(presentation?.resolvedGameId));
             }
-            : undefined;
-          const scoreTapHandler = createBoxScoreTapHandler({
-            gameId: resolvedGameId,
-            onOpenBoxScore: onGameSelect,
-          });
-          const clickableCardProps = getClickableCardProps({
-            onOpen: handleCardClick,
-            disabled: !isClickable,
-            ariaLabel: isClickable ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined,
-          });
+          };
 
           const upcomingGameId = game?.id ?? game?.gameId ?? null;
           const canOpenGameDetail = !game.played && Boolean(upcomingGameId && onGameSelect);
 
-          return (
-            <div
-              key={idx}
-              className={`card ${isClickable ? "clickable-card" : ""}`}
-              {...clickableCardProps}
-              style={{
-                padding: "10px 12px",
-                border: "1px solid var(--hairline)",
-                borderColor: isUserGame ? "var(--accent)" : "var(--hairline)",
-                borderLeft: `3px solid ${game.played ? "color-mix(in oklab, var(--text-muted) 70%, transparent)" : "color-mix(in oklab, var(--accent) 65%, transparent)"}`,
-                background: "color-mix(in oklab, var(--surface) 90%, black 10%)",
-                ...(isClickable ? { cursor: "pointer" } : {}),
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <span style={{ fontWeight: 700, color: "var(--text-subtle)" }}>W{selectedWeek}</span>
-                  <span style={{ border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 7px", fontSize: "var(--text-xs)" }}>AWAY {away.abbr}</span>
-                  <span style={{ color: "var(--text-subtle)", fontSize: "var(--text-xs)" }}>@</span>
-                  <span style={{ border: "1px solid var(--hairline)", borderRadius: 999, padding: "1px 7px", fontSize: "var(--text-xs)" }}>HOME {home.abbr}</span>
-                </div>
-                  <span className="badge">
-                    {game.played
-                      ? (isUserGame ? "Final · User game" : "Final · League game")
-                      : (isUserGame ? "Upcoming · User game" : "Upcoming · League game")}
-                  </span>
-                </div>
+          const sharedActions = (
+            <>
+              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(away.id); }}>Away roster</button>
+              <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(home.id); }}>Home roster</button>
+              {showStakes ? <span className="badge">{nextGameStakes > 80 ? "Rivalry" : "Stakes"}</span> : null}
+              {isTopWeekTeam ? <span className="badge">Team of Week</span> : null}
+            </>
+          );
 
-              {game.played && game.homeScore !== undefined && (
+          return game.played ? (
+            <CompletedGameCard
+              key={idx}
+              week={selectedWeek}
+              away={{ ...away, abbr: `${isPlayoffs && seedByTeam[away.id] ? `(${seedByTeam[away.id]}) ` : ""}${away.abbr}` }}
+              home={{ ...home, abbr: `${home.abbr}${isPlayoffs && seedByTeam[home.id] ? ` (${seedByTeam[home.id]})` : ""}` }}
+              game={game}
+              isUserGame={isUserGame}
+              canOpenBoxScore={canOpenBoxScore}
+              canOpenResult={canOpenResultOnly}
+              statusLabel={presentation?.statusLabel}
+              archiveQuality={archiveQuality}
+              summary={postgame?.headline}
+              recap={postgame?.detail}
+              onOpen={isClickable ? handleCardClick : undefined}
+              secondaryActions={
                 <>
-                  <button
-                    type="button"
-                    data-testid={idx === 0 ? "recent-game-box-score-trigger" : undefined}
-                    className={`score-tap-target ${scoreTapHandler ? "score-tap-target-clickable" : "score-tap-target-static"}`}
-                    onClick={scoreTapHandler}
-                    aria-label={scoreTapHandler ? `Open box score for ${away.abbr} at ${home.abbr}` : undefined}
-                    aria-disabled={!scoreTapHandler}
-                    title={scoreTapHandler ? presentation?.ctaLabel ?? "View box score" : presentation?.statusLabel}
-                  >
-                    <span
-                      style={{ color: game.awayScore > game.homeScore ? "var(--text)" : "var(--text-muted)" }}
-                    >
-                      {isPlayoffs && seedByTeam[away.id]
-                        ? `(${seedByTeam[away.id]}) `
-                        : ""}
-                      {away.abbr} {game.awayScore}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: "var(--text-sm)",
-                        color: "var(--text-subtle)",
-                        fontWeight: 400,
-                      }}
-                    >
-                      –
-                    </span>
-                    <span
-                      style={{
-                        color:
-                          game.homeScore > game.awayScore
-                            ? "var(--text)"
-                            : "var(--text-muted)",
-                      }}
-                    >
-                      {game.homeScore} {home.abbr}
-                      {isPlayoffs && seedByTeam[home.id]
-                        ? ` (${seedByTeam[home.id]})`
-                        : ""}
-                    </span>
-                  </button>
-                  {canOpenBoxScore && (
-                    <div
-                      style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--accent)", marginBottom: "var(--space-1)" }}
-                    >
-                      Open box score →
-                    </div>
-                  )}
-                  {canOpenResultOnly && (
-                    <div
-                      style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--accent)", marginBottom: "var(--space-1)" }}
-                    >
-                      View result →
-                    </div>
-                  )}
-                  {!canOpenBoxScore && !canOpenResultOnly && (
-                    <div style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--warning)", marginBottom: "var(--space-1)", border: "1px solid color-mix(in oklab, var(--warning) 50%, transparent)", borderRadius: "var(--radius-sm)", padding: "6px 8px", background: "color-mix(in oklab, var(--warning) 9%, transparent)" }}>
-                      Result recorded. Detailed box score archive unavailable.
-                      {postgame?.headline ? <div style={{ marginTop: 4, color: "var(--text-muted)" }}>{postgame.headline}</div> : null}
-                    </div>
-                  )}
-                  {postgame && (
-                    <div style={{ marginBottom: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
-                      <strong style={{ color: "var(--text)" }}>{postgame.headline}</strong>
-                      <div>{postgame.detail}</div>
-                      {majorResultTag && (
-                        <div style={{ marginTop: 4 }}>
-                          <span style={{ border: "1px solid rgba(245,158,11,0.5)", color: "var(--warning)", borderRadius: 999, padding: "1px 8px", fontWeight: 700 }}>
-                            {majorResultTag}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {immersion?.playerOfGame && (
-                    <div style={{ marginBottom: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
-                      Player of the game:{" "}
+                  {majorResultTag ? <span className="badge">{majorResultTag}</span> : null}
+                  {immersion?.playerOfGame ? (
+                    <span className="badge">
+                      POG:{" "}
                       <button className="btn-link" style={{ fontSize: "inherit" }} onClick={(e) => { e.stopPropagation(); onPlayerSelect?.(immersion.playerOfGame.playerId); }}>
                         {immersion.playerOfGame.name}
                       </button>
-                      {immersion.playerOfGame.line ? ` · ${immersion.playerOfGame.line}` : ""}
-                      {immersion.streakImpact ? <div>{immersion.streakImpact}</div> : null}
-                    </div>
-                  )}
-                </>
-              )}
-              {!game.played && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <div style={{ fontWeight: 700 }}>{away.abbr} @ {home.abbr}</div>
-                  <Button size="sm" variant="outline" onClick={() => canOpenGameDetail && onGameSelect?.(upcomingGameId)} disabled={!canOpenGameDetail}>
-                    {canOpenGameDetail ? "Open game" : "Scheduled"}
-                  </Button>
-                </div>
-              )}
-              {!game.played && pregameAngles.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", marginBottom: "var(--space-2)" }}>
-                  {pregameAngles.map((angle) => (
-                    <span
-                      key={`${idx}-${angle.key}`}
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: "var(--radius-pill)",
-                        border: "1px solid var(--hairline)",
-                        fontSize: "var(--text-xs)",
-                        color: angle.tone === "danger" ? "var(--danger)" : angle.tone === "warning" ? "var(--warning)" : "var(--text-muted)",
-                      }}
-                    >
-                      {angle.label}
                     </span>
-                  ))}
-                </div>
-              )}
-              <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(away.id); }}>Away roster</button>
-                <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onTeamRoster?.(home.id); }}>Home roster</button>
-                {showStakes ? <span className="badge">{nextGameStakes > 80 ? "Rivalry" : "Stakes"}</span> : null}
-                {isTopWeekTeam ? <span className="badge">Team of Week</span> : null}
-              </div>
-            </div>
+                  ) : null}
+                  {sharedActions}
+                </>
+              }
+            />
+          ) : (
+            <UpcomingGameCard
+              key={idx}
+              week={selectedWeek}
+              away={away}
+              home={home}
+              isUserGame={isUserGame}
+              canOpenGame={canOpenGameDetail}
+              onOpenGame={() => canOpenGameDetail && onGameSelect?.(upcomingGameId)}
+              angles={pregameAngles}
+              secondaryActions={sharedActions}
+            />
           );
         })}
               </section>
