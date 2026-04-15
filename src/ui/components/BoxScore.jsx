@@ -396,7 +396,14 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
       </div>
 
       {loading && <div className="box-score-container"><EmptyState title="Loading box score…" body="Pulling archived game detail and postgame context." /></div>}
-      {!loading && error && !hasAnyPayload && <div className="box-score-container"><EmptyState title="Game archive unavailable" body={`${unavailableMessage} (${availability.statusLabel ?? "Archive unavailable"})`} /></div>}
+      {!loading && error && !hasAnyPayload && (
+        <div className="box-score-container">
+          <EmptyState
+            title="Result recorded · detailed archive unavailable"
+            body={`The final result is saved, but this game's full box score data is not available in the archive. ${unavailableMessage} (${availability.statusLabel ?? "Archive unavailable"})`}
+          />
+        </div>
+      )}
 
       {!loading && hasAnyPayload && game && (
         <div className="box-score-container">
@@ -421,8 +428,8 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             <section className="bs-section" style={{ marginTop: 4 }} data-testid="archive-status">
               <div className="bs-list-item" style={{ borderColor: "var(--warning)", color: "var(--text-muted)" }}>
                 {archiveQuality === "partial"
-                  ? "Partial archive: final score and key summary data are available, but full drive/play detail was not stored."
-                  : "Legacy archive: only limited matchup context could be recovered for this game."}
+                  ? "Result recorded. Partial archive: final score and summary are available, but complete drive/play detail was not stored."
+                  : "Result recorded. Detailed box score is unavailable for this game, but any recap and context below are still shown."}
               </div>
             </section>
           )}

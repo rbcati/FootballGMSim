@@ -174,7 +174,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
               Week {latestArchived?.week ?? vm.league?.week}: {latestArchived?.awayAbbr} {latestArchived?.score?.away} - {latestArchived?.score?.home} {latestArchived?.homeAbbr}
             </strong>
             <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
-              {latestGamePresentation?.canOpen ? "Tap score to open box score ›" : latestGamePresentation?.statusLabel}
+              {latestGamePresentation?.canOpen ? "Open box score" : "View result unavailable"}
             </div>
           </button>
         )}
