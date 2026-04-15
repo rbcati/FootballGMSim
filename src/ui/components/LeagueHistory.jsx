@@ -47,6 +47,42 @@ const STAT_LABELS = {
   passesDefended: "PD",
 };
 const NOOP_ACTIONS = {};
+const AWARD_KEYS = ["mvp", "opoy", "dpoy", "roty", "sbMvp"];
+
+function pct(row) {
+  const wins = Number(row?.wins ?? 0);
+  const losses = Number(row?.losses ?? 0);
+  const ties = Number(row?.ties ?? 0);
+  const games = wins + losses + ties;
+  if (!games) return 0;
+  return (wins + ties * 0.5) / games;
+}
+
+function buildChampionMap(seasons = []) {
+  const map = new Map();
+  for (const season of seasons) {
+    const abbr = season?.champion?.abbr;
+    if (!abbr) continue;
+    map.set(abbr, (map.get(abbr) ?? 0) + 1);
+  }
+  return [...map.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function summarizeSeasonStoryline(season, userTeamId) {
+  if (!season) return "Season summary is not yet archived.";
+  const champion = season?.champion?.name ?? season?.champion?.abbr ?? "Unknown champion";
+  const runnerUp = season?.runnerUp?.name ?? season?.runnerUp?.abbr;
+  const userRow = (season?.standings ?? []).find((row) => Number(row?.id) === Number(userTeamId));
+  const mvp = season?.awards?.mvp?.name;
+  const lines = [
+    `${season.year}: ${champion}${runnerUp ? ` defeated ${runnerUp}` : ""}.`,
+    mvp ? `${mvp} defined the regular season as MVP.` : "Award winners were recorded for this season archive.",
+  ];
+  if (userRow) {
+    lines.push(`Your franchise finished ${userRow.wins}-${userRow.losses}${userRow.ties ? `-${userRow.ties}` : ""}.`);
+  }
+  return lines.join(" ");
+}
 
 export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenBoxScore }) {
   const api = actions ?? NOOP_ACTIONS;
@@ -93,6 +129,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant="secondary">{seasons.length} archived seasons</Badge>
+        <Badge variant="outline">{buildChampionMap(seasons)[0] ? `${buildChampionMap(seasons)[0][0]} leads titles (${buildChampionMap(seasons)[0][1]})` : "No champions yet"}</Badge>
         <Badge variant="outline">{allPlayers.length.toLocaleString()} active player rows available for compare</Badge>
       </div>
 
@@ -107,7 +144,7 @@ export default function LeagueHistory({ onPlayerSelect, actions, league, onOpenB
         </TabsList>
 
         <TabsContent value="seasons">
-          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} />
+          <SeasonExplorer seasons={seasons} onPlayerSelect={onPlayerSelect} onOpenBoxScore={onOpenBoxScore} league={league} />
         </TabsContent>
 
         <TabsContent value="records">
@@ -198,7 +235,7 @@ function DraftHistoryExplorer({ seasons, league, onPlayerSelect }) {
   );
 }
 
-function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
+function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
   const [selectedSeasonId, setSelectedSeasonId] = useState(seasons?.[0]?.id ?? null);
 
   useEffect(() => {
@@ -206,11 +243,25 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
   }, [seasons, selectedSeasonId]);
 
   if (!seasons?.length) {
-    return <div className="py-8 text-center text-[color:var(--text-muted)]">No archived seasons yet.</div>;
+    return (
+      <Card className="card-premium">
+        <CardContent className="py-10 text-center text-[color:var(--text-muted)]">
+          <div className="font-semibold text-[color:var(--text)]">No archived seasons yet.</div>
+          <div className="mt-2 text-sm">Finish your first season to start a living archive with champions, awards, and records.</div>
+        </CardContent>
+      </Card>
+    );
   }
 
   const selected = seasons.find((s) => s.id === selectedSeasonId) ?? seasons[0];
-  const sortedStandings = [...(selected?.standings ?? [])].sort((a, b) => b.pct - a.pct).slice(0, 8);
+  const sortedStandings = [...(selected?.standings ?? [])].sort((a, b) => pct(b) - pct(a)).slice(0, 8);
+  const championBoard = buildChampionMap(seasons).slice(0, 5);
+  const playoffMentions = (selected?.standings ?? []).filter((row) => Number(row?.wins ?? 0) >= 10).slice(0, 6);
+  const seasonStoryline = summarizeSeasonStoryline(selected, league?.userTeamId);
+  const awardLeaders = AWARD_KEYS
+    .map((key) => ({ key, label: AWARD_DISPLAY_NAMES[key] ?? key.toUpperCase(), award: selected?.awards?.[key] }))
+    .filter((entry) => entry.award?.name);
+  const selectedSeasonIndex = seasons.findIndex((s) => s.id === selected?.id);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-4">
@@ -239,11 +290,30 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
           <CardTitle>{selected?.year} League Snapshot</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn" onClick={() => selectedSeasonIndex > 0 && setSelectedSeasonId(seasons[selectedSeasonIndex - 1].id)} disabled={selectedSeasonIndex <= 0}>Previous season</button>
+            <button className="btn" onClick={() => selectedSeasonIndex < seasons.length - 1 && setSelectedSeasonId(seasons[selectedSeasonIndex + 1].id)} disabled={selectedSeasonIndex >= seasons.length - 1}>Next season</button>
+          </div>
+          <div className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-sm text-[color:var(--text-muted)]">{seasonStoryline}</div>
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <SummaryBox label="Champion" value={selected?.champion?.name ?? "TBD"} />
             <SummaryBox label="Runner-up" value={selected?.runnerUp?.name ?? "—"} muted={!selected?.runnerUp} />
             <SummaryBox label="MVP" value={selected?.awards?.mvp?.name ?? "—"} onClick={selected?.awards?.mvp?.playerId != null ? () => onPlayerSelect?.(selected.awards.mvp.playerId) : undefined} />
           </div>
+
+          <section>
+            <h4 className="text-sm font-bold mb-2">League memory board</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {championBoard.map(([abbr, count]) => (
+                <div key={abbr} className="rounded-md border border-[color:var(--hairline)] px-3 py-2 flex justify-between">
+                  <span>{abbr} championships</span>
+                  <span className="font-semibold">{count}</span>
+                </div>
+              ))}
+              {championBoard.length === 0 && <div className="text-[color:var(--text-muted)]">Champion leaderboard will appear after completed seasons.</div>}
+            </div>
+          </section>
 
           <section>
             <h4 className="text-sm font-bold mb-2">Standings Snapshot</h4>
@@ -255,6 +325,9 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
                 </div>
               ))}
             </div>
+            <div className="text-xs text-[color:var(--text-muted)] mt-2">
+              Playoff-caliber clubs (10+ wins): {playoffMentions.length ? playoffMentions.map((team) => `${team.abbr ?? team.name} ${team.wins}-${team.losses}`).join(" · ") : "none archived"}
+            </div>
           </section>
 
           <section>
@@ -264,6 +337,13 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore }) {
               <AwardLine label={AWARD_DISPLAY_NAMES.opoy} award={selected?.awards?.opoy} onPlayerSelect={onPlayerSelect} />
               <AwardLine label={AWARD_DISPLAY_NAMES.dpoy} award={selected?.awards?.dpoy} onPlayerSelect={onPlayerSelect} />
               <AwardLine label={AWARD_DISPLAY_NAMES.roty} award={selected?.awards?.roty} onPlayerSelect={onPlayerSelect} />
+            </div>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {awardLeaders.map((entry) => (
+                <button key={entry.key} className="rounded-full border border-[color:var(--hairline)] px-2 py-1 text-xs" onClick={() => entry.award?.playerId != null ? onPlayerSelect?.(entry.award.playerId) : null}>
+                  {entry.label}: {entry.award?.name}
+                </button>
+              ))}
             </div>
             <div className="text-xs text-[color:var(--text-muted)] mt-2">
               Playoff bracket/path is not currently stored in archived season summaries.
@@ -304,7 +384,11 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
 
   if (!records) return <div className="py-8 text-center text-[color:var(--text-muted)]">No records tracked yet.</div>;
 
-  const source = scope === "singleSeason" ? (recordBook?.singleSeason ?? records.singleSeason) : (recordBook?.career ?? records.allTime);
+  const source = scope === "singleSeason"
+    ? (recordBook?.singleSeason ?? records.singleSeason)
+    : scope === "game"
+      ? (recordBook?.singleGame ?? records.singleGame)
+      : (recordBook?.career ?? records.allTime);
 
   const teamSeasonRecords = useMemo(() => {
     const bestWins = { year: null, team: null, value: -1 };
@@ -328,13 +412,18 @@ function RecordsExplorer({ records, recordBook, seasons, onPlayerSelect }) {
     <div className="space-y-4">
       <Tabs value={scope} onValueChange={setScope}>
         <TabsList>
+          <TabsTrigger value="game">Single-game</TabsTrigger>
           <TabsTrigger value="singleSeason">Single-season</TabsTrigger>
           <TabsTrigger value="allTime">Career</TabsTrigger>
         </TabsList>
       </Tabs>
 
+      <div className="text-xs text-[color:var(--text-muted)]">
+        {scope === "game" ? "Highest one-game outputs in archive." : scope === "singleSeason" ? "Best one-season marks and team highs." : "All-time career records and long-run leaders."}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(recordBook?.singleSeason ?? RECORD_LABELS).map(([key, raw]) => {
+        {Object.entries(scope === "singleSeason" ? (recordBook?.singleSeason ?? RECORD_LABELS) : (source ?? {})).map(([key, raw]) => {
           const label = typeof raw === "string" ? raw : RECORD_LABELS[key] ?? key;
           const rec = source?.[key];
           if (!rec?.playerId) return null;

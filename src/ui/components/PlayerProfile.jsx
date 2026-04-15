@@ -386,6 +386,22 @@ export default function PlayerProfile({
   const summaryChips = getPlayerSummaryChips(player, ringCount, nonRing);
   const accoladesByYear = [...accolades].sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
   const teamJourney = [...new Set((player?.careerStats ?? []).map((line) => line.team).filter(Boolean))];
+  const careerArcRows = useMemo(() => {
+    const seasonRows = (player?.careerStats ?? []).map((line) => ({
+      year: Number(line?.season ?? 0),
+      label: `Season ${line?.season ?? "—"}`,
+      detail: `${line?.team ?? "FA"} · OVR ${line?.ovr ?? "—"}`,
+    }));
+    const awardRows = accoladesByYear.map((acc) => ({
+      year: Number(acc?.year ?? 0),
+      label: String(acc?.type ?? "Award").replaceAll("_", " "),
+      detail: acc?.type === "SB_RING" ? "Championship ring earned" : "Career accolade",
+    }));
+    return [...seasonRows, ...awardRows]
+      .filter((row) => Number.isFinite(row.year) && row.year > 0)
+      .sort((a, b) => b.year - a.year)
+      .slice(0, 12);
+  }, [player?.careerStats, accoladesByYear]);
   const keyColumns = columns.filter((c) => !c.fmt && c.key !== "gamesPlayed").slice(0, 4);
   const careerHighs = keyColumns
     .map((col) => {
@@ -973,6 +989,20 @@ export default function PlayerProfile({
                 {accoladesByYear.slice(-12).map((acc, idx) => (
                   <div key={`${acc.type}-${acc.year}-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                     <strong style={{ color: "var(--text)" }}>{acc.year ?? "—"}</strong> · {acc.type}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {careerArcRows.length > 0 && (
+            <section>
+              <h3 style={sectionLabelStyle}>Career Arc</h3>
+              <div style={{ display: "grid", gap: 4 }}>
+                {careerArcRows.map((row, idx) => (
+                  <div key={`${row.year}-${row.label}-${idx}`} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span><strong style={{ color: "var(--text)" }}>{row.year}</strong> · {row.label}</span>
+                    <span>{row.detail}</span>
                   </div>
                 ))}
               </div>

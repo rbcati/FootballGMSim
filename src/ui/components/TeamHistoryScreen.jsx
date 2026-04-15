@@ -47,6 +47,12 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
   const best = [...timeline].sort((a, b) => b.wins - a.wins)[0];
   const worst = [...timeline].sort((a, b) => a.wins - b.wins)[0];
   const drought = [...timeline].reverse().findIndex((t) => t.champion);
+  const recentFive = timeline.slice(-5);
+  const recentTrend = recentFive.length ? (recentFive.reduce((sum, row) => sum + Number(row.wins ?? 0), 0) / recentFive.length).toFixed(1) : "0.0";
+  const avgDiff = timeline.length ? (timeline.reduce((sum, row) => sum + (Number(row.pf ?? 0) - Number(row.pa ?? 0)), 0) / timeline.length).toFixed(1) : "0.0";
+  const timelineStory = timeline.length
+    ? `${activeTeam?.abbr ?? activeTeam?.name ?? "Team"} posted ${titles} title${titles === 1 ? "" : "s"} and ${playoffYears} playoff-caliber seasons across ${timeline.length} archived years.`
+    : "Franchise history starts once completed seasons are archived.";
   const completedGameRows = useMemo(() => {
     const rows = [];
     const targetTeamId = Number(activeTeam?.id);
@@ -93,7 +99,15 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
         <div className="stat-box"><div className="stat-label">Titles</div><div className="stat-value-large">{titles}</div></div>
         <div className="stat-box"><div className="stat-label">Playoff-caliber years</div><div className="stat-value-large">{playoffYears}</div></div>
         <div className="stat-box"><div className="stat-label">Current drought</div><div className="stat-value-large">{drought < 0 ? 'No title yet' : `${drought} seasons`}</div></div>
+        <div className="stat-box"><div className="stat-label">Recent avg wins (5y)</div><div className="stat-value-large">{recentTrend}</div></div>
       </div>
+
+      <SectionCard title="Franchise memory capsule">
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>{timelineStory}</div>
+        <div style={{ marginTop: 8, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+          Average point differential across archived seasons: <strong style={{ color: 'var(--text)' }}>{avgDiff}</strong>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Best and worst seasons">
         <div style={{ fontSize: 'var(--text-sm)' }}>Best: {best ? `${best.year} (${best.wins}-${best.losses}${best.ties ? `-${best.ties}` : ''})` : '—'}</div>
@@ -126,6 +140,11 @@ export default function TeamHistoryScreen({ league, actions, teamId, onPlayerSel
                 <span>{s.wins}-{s.losses}{s.ties ? `-${s.ties}` : ''}{s.champion ? ' · 🏆 Champion' : ''}</span>
               </div>
               <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>PF {s.pf} · PA {s.pa}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+                {s.champion ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Title season</span> : null}
+                {s.wins >= 12 ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Elite year</span> : null}
+                {s.wins <= 4 ? <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 8px' }}>Rebuild low</span> : null}
+              </div>
               {s.mvp?.playerId != null ? <button className="btn-link" onClick={() => onPlayerSelect?.(s.mvp.playerId)}>League MVP: {s.mvp.name}</button> : null}
             </div>
           ))}
