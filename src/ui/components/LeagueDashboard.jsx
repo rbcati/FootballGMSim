@@ -855,6 +855,8 @@ function ScheduleTab({
       })
       .slice(0, 8)
   ), [games, league, seasonId, selectedWeek, teamById]);
+  const completedVisibleGames = mergedVisibleGames.filter((game) => Boolean(game?.played));
+  const upcomingVisibleGames = mergedVisibleGames.filter((game) => !Boolean(game?.played));
 
   return (
     <div>
@@ -983,9 +985,18 @@ function ScheduleTab({
           if (statusFilter === 'upcoming') return !Boolean(game?.played);
           return true;
         });
+        const sectionedVisibleGames = statusFilter === 'all'
+          ? [
+            { key: 'upcoming', title: 'Upcoming games', games: upcomingVisibleGames },
+            { key: 'completed', title: 'Completed games', games: completedVisibleGames },
+          ]
+          : [{ key: statusFilter, title: statusFilter === 'completed' ? 'Completed games' : 'Upcoming games', games: visibleGames }];
         return (
           <div style={{ display: "grid", gap: 8 }}>
-            {visibleGames.map((game, idx) => {
+            {sectionedVisibleGames.map((bucket) => (
+              <section key={bucket.key} style={{ display: "grid", gap: 8 }}>
+                <div style={{ fontSize: "var(--text-xs)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--text-subtle)" }}>{bucket.title}</div>
+                {bucket.games.map((game, idx) => {
           const home = teamById[game.home] ?? {
             name: `Team ${game.home}`,
             abbr: "???",
@@ -1113,6 +1124,11 @@ function ScheduleTab({
                       {presentation?.ctaLabel ?? "View Box Score"} →
                     </div>
                   )}
+                  {!isClickable && (
+                    <div style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--text-subtle)", marginBottom: "var(--space-1)" }}>
+                      {presentation?.statusLabel ?? "Archive unavailable for this game."}
+                    </div>
+                  )}
                   {postgame && (
                     <div style={{ marginBottom: "var(--space-2)", fontSize: "var(--text-xs)", color: "var(--text-muted)", textAlign: "center" }}>
                       <strong style={{ color: "var(--text)" }}>{postgame.headline}</strong>
@@ -1173,6 +1189,8 @@ function ScheduleTab({
             </div>
           );
         })}
+              </section>
+            ))}
 
             {visibleGames.length === 0 && (
               <p style={{ color: "var(--text-muted)", textAlign: "center", padding: "var(--space-8)" }}>

@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react';
 import Roster from './Roster.jsx';
 import ContractCenter from './ContractCenter.jsx';
 import StaffManagement from './StaffManagement.jsx';
-import SectionHeader from './SectionHeader.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 import SocialFeed from './SocialFeed.jsx';
+import { CardActionFooter, CtaRow, ScreenHeader, StatusChip } from './ScreenSystem.jsx';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
 
@@ -221,8 +221,17 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   ];
 
   return (
-    <div>
-      <SectionHeader title="Team" subtitle="Front-office workspace" />
+    <div className="app-screen-stack">
+      <ScreenHeader
+        title="Team Hub"
+        subtitle="Roster, depth chart, contracts, and staff in one operations workspace."
+        eyebrow={team?.name ?? 'Team'}
+        metadata={[
+          { label: 'Record', value: `${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}` },
+          { label: 'Cap Room', value: formatMoneyM(capSnapshot.capRoom) },
+          { label: 'Roster', value: `${roster.length}/53` },
+        ]}
+      />
       <SectionSubnav items={TEAM_SUBNAV} activeItem={subtab} onChange={setSubtab} sticky />
 
       {subtab === 'Overview' && (
@@ -290,18 +299,14 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
           <div className="card" style={{ padding: '10px' }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Quick actions</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {quickActions.map((item) => (
-                <button
-                  key={item.tab}
-                  className="btn"
-                  onClick={() => (item.tab === 'Analytics' ? onNavigate?.('Analytics') : setSubtab(item.tab))}
-                  aria-label={item.label}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+            <CtaRow actions={quickActions.map((item) => ({
+              label: item.label,
+              compact: true,
+              onClick: () => (item.tab === 'Analytics' ? onNavigate?.('Analytics') : setSubtab(item.tab)),
+            }))} />
+            <CardActionFooter>
+              <StatusChip label="Team workspace" tone="team" />
+            </CardActionFooter>
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { deriveFranchisePressure } from '../utils/pressureModel.js';
 import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { buildNewsDeskModel } from '../utils/newsDesk.js';
+import { StatusChip } from './ScreenSystem.jsx';
 
 const tickerColor = {
   high: '#f59e0b',
@@ -21,16 +22,19 @@ function StoryCard({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect }) {
     <div style={{ borderLeft: `4px solid ${priorityColor[item?.priority] ?? '#334155'}`, padding: '10px 12px', background: 'var(--surface)', borderRadius: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
         <div style={{ fontWeight: 700 }}>{item?.headline}</div>
-        <span style={{ fontSize: 11, color: 'var(--text-subtle)', border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px' }}>{item?._categoryLabel}</span>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <StatusChip label={item?._teamRelevant ? 'Team' : 'League'} tone={item?._teamRelevant ? 'team' : 'league'} />
+          <span style={{ fontSize: 11, color: 'var(--text-subtle)', border: '1px solid var(--hairline)', borderRadius: 999, padding: '1px 6px' }}>{item?._categoryLabel}</span>
+        </div>
       </div>
       <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{item?.body}</div>
       <div style={{ fontSize: 11, color: 'var(--text-subtle)', marginTop: 4 }}>
         Week {item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Your team' : ''}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-        {item?.gameId ? <button className="btn" onClick={() => onOpenBoxScore?.(item.gameId)}>Box Score</button> : null}
-        {item?.teamId != null ? <button className="btn" onClick={() => onTeamSelect?.(item.teamId)}>Team Profile</button> : null}
-        {item?.playerId != null ? <button className="btn" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+        {item?.gameId ? <button className="btn" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box score</button> : null}
+        {item?.teamId != null ? <button className="btn" onClick={() => onTeamSelect?.(item.teamId)}>Open team</button> : null}
+        {item?.playerId != null ? <button className="btn" onClick={() => onPlayerSelect?.(item.playerId)}>Open player</button> : null}
       </div>
     </div>
   );
@@ -61,9 +65,9 @@ function CompactStoryRow({ item, onTeamSelect, onOpenBoxScore, onPlayerSelect })
           W{item?.week ?? '-'} · {item?.phase ?? 'season'}{item?._teamRelevant ? ' · Team' : ''}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Box</button> : null}
-          {item?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(item.teamId)}>Team</button> : null}
-          {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
+          {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenBoxScore?.(item.gameId)}>Open box</button> : null}
+          {item?.teamId != null ? <button className="btn btn-sm" onClick={() => onTeamSelect?.(item.teamId)}>Open team</button> : null}
+          {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Open player</button> : null}
         </div>
       </div>
     </div>

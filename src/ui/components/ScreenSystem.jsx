@@ -62,6 +62,47 @@ export function EmptyState({ title, body }) {
   );
 }
 
+export function StatusChip({ label, tone = "neutral" }) {
+  return <span className={`app-status-chip tone-${tone}`}>{label}</span>;
+}
+
+export function CtaRow({ actions = [] }) {
+  if (!actions.length) return null;
+  return (
+    <div className="app-cta-row">
+      {actions.map((action) => (
+        <button
+          key={`${action.label}-${action.href ?? action.variant ?? "default"}`}
+          type="button"
+          className={`btn ${action.compact ? "btn-sm" : ""}`}
+          onClick={action.onClick}
+          disabled={action.disabled}
+        >
+          {action.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function CardActionFooter({ children }) {
+  if (!children) return null;
+  return <div className="app-card-action-footer">{children}</div>;
+}
+
+export function CompactListRow({ title, subtitle, meta, children }) {
+  return (
+    <div className="app-compact-list-row">
+      <div className="app-compact-list-row__main">
+        <strong>{title}</strong>
+        {subtitle ? <span>{subtitle}</span> : null}
+      </div>
+      {meta ? <div className="app-compact-list-row__meta">{meta}</div> : null}
+      {children ? <div className="app-compact-list-row__actions">{children}</div> : null}
+    </div>
+  );
+}
+
 export function StickySubnav({ title, children }) {
   return (
     <div className="app-sticky-subnav card">

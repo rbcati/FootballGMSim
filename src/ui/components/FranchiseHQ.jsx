@@ -5,6 +5,7 @@ import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.j
 import { getHQViewModel } from "../../state/selectors.js";
 import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 import { EmptyState, SectionCard, StatCard, TeamChip } from "./common/UiPrimitives.jsx";
+import { CtaRow, CompactListRow, StatusChip } from "./ScreenSystem.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
 import { autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 
@@ -118,41 +119,42 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-3)" }}>
-      <SectionCard title="This Week" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Schedule</Button>}>
+      <SectionCard title="This Week" actions={<StatusChip label={vm.league?.phase ?? "season"} tone="league" />}>
         <div style={{ display: "grid", gap: 6 }}>
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{vm.league?.year} · Week {vm.league?.week ?? 1} · {vm.league?.phase ?? "regular"}</div>
           <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>{record} · {team?.conf ?? ""} {team?.div ?? ""}</div>
           <div style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>{pressureSummary}</div>
-          <Button size="sm" onClick={onAdvanceWeek} disabled={busy || simulating}>Advance Week</Button>
+          <CtaRow actions={[
+            { label: busy || simulating ? "Working…" : "Advance Week", onClick: onAdvanceWeek, disabled: busy || simulating },
+            { label: "Set lineup", onClick: handleSetLineup, compact: true },
+            { label: "Game plan", onClick: () => onNavigate?.("Game Plan"), compact: true },
+            { label: "Schedule", onClick: () => onNavigate?.("Schedule"), compact: true },
+            { label: "Open news", onClick: () => onNavigate?.("News"), compact: true },
+          ]} />
         </div>
       </SectionCard>
 
-      <SectionCard title="Priority Queue" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Team</Button>}>
+      <SectionCard title="Priority Queue" subtitle="Only the highest-impact franchise actions for this week." actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Open Team</Button>}>
         {phasePriorityQueue.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No immediate blockers.</div> : (
           <div style={{ display: "grid", gap: 8 }}>
             {phasePriorityQueue.map((item) => (
-              <button
+              <CompactListRow
                 key={`${item.label}-${item.tab}`}
-                className="btn"
-                style={{ textAlign: "left", borderLeft: `3px solid ${toneAccent(item.tone)}` }}
-                onClick={() => onNavigate?.(item?.tab ?? "Team")}
+                title={item.label}
+                subtitle={item.detail}
+                meta={<StatusChip label={item.tone ?? "info"} tone={item.tone === "danger" ? "warning" : "league"} />}
               >
-                <div style={{ fontWeight: 700 }}>{item.label}</div>
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{item.detail}</div>
-              </button>
+                <button className="btn btn-sm" onClick={() => onNavigate?.(item?.tab ?? "Team")}>Open</button>
+              </CompactListRow>
             ))}
           </div>
         )}
       </SectionCard>
 
-      <SectionCard title="Next Game">
+      <SectionCard title="Next Game" actions={nextGame ? <StatusChip label={`Week ${nextGame.week}`} tone="team" /> : null}>
         {nextGame ? (
           <div style={{ display: "grid", gap: 8 }}>
             <div style={{ fontSize: "var(--text-lg)", fontWeight: 800 }}>Week {nextGame.week} · {nextGame.isHome ? "vs" : "@"} <TeamChip team={nextGame.opp} /></div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Button size="sm" onClick={handleSetLineup}>Set lineup</Button>
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Game plan</Button>
-            </div>
             {lineupToast ? <div style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>{lineupToast}</div> : null}
           </div>
         ) : <div style={{ color: "var(--text-muted)" }}>No upcoming game found.</div>}
@@ -178,7 +180,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         )}
       </SectionCard>
 
-      <SectionCard title="Team Snapshot">
+      <SectionCard title="Team Snapshot" subtitle="Quick health and cap context. Open Team for full management tools.">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
           <StatCard label="OVR / OFF / DEF" value={`${safeNum(team?.ovr, 0)} / ${safeNum(team?.offenseRating, team?.offRating)} / ${safeNum(team?.defenseRating, team?.defRating)}`} />
           <StatCard label="Cap Room" value={formatMoneyM(cap.capRoom)} note={`Used ${formatMoneyM(cap.capUsed)}`} />
@@ -187,21 +189,25 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         </div>
       </SectionCard>
 
-      <SectionCard title="News Desk Preview" actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("News")}>Open News</Button>}>
+      <SectionCard title="News Desk Preview" subtitle="Recent stories tied to your team and league context." actions={<Button size="sm" variant="outline" onClick={() => onNavigate?.("News")}>Open News</Button>}>
         <div style={{ display: "grid", gap: 8 }}>
           {teamDevelopments.map((item, idx) => (
-            <button
+            <CompactListRow
               key={item?.id ?? `preview-${idx}`}
-              className="btn"
-              style={{ textAlign: "left" }}
-              onClick={() => {
-                if (item?.teamId != null) onTeamSelect?.(item.teamId);
-                onNavigate?.(item?.teamId != null ? "Team" : "News");
-              }}
+              title={item?.headline ?? "League update"}
+              subtitle={item?.body ?? "Read full context in News"}
+              meta={<StatusChip label={item?.teamId != null ? "Team story" : "League story"} tone={item?.teamId != null ? "team" : "league"} />}
             >
-              <div style={{ fontWeight: 700 }}>{item?.headline ?? "League update"}</div>
-              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>Read full context in News</div>
-            </button>
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  if (item?.teamId != null) onTeamSelect?.(item.teamId);
+                  onNavigate?.(item?.teamId != null ? "Team" : "News");
+                }}
+              >
+                Open
+              </button>
+            </CompactListRow>
           ))}
           {teamDevelopments.length === 0 ? <div style={{ color: "var(--text-muted)" }}>No major updates this week.</div> : null}
         </div>
