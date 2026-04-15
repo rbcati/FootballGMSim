@@ -88,3 +88,32 @@
   .app-screen-stack { gap: var(--space-2); }
   .app-section-card { padding: var(--space-3); }
 }
+
+.app-status-chip.tone-danger { border-color: rgba(255,69,58,.45); color: var(--danger); background: rgba(255,69,58,.12); }
+.app-status-chip.tone-ok { border-color: rgba(52,199,89,.45); color: var(--success); background: rgba(52,199,89,.1); }
+
+.team-cap-summary-strip {
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.team-cap-summary-strip__item {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  padding: 8px;
+  display: grid;
+  gap: 3px;
+}
+.team-cap-summary-strip__item span {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.team-cap-summary-strip__item strong {
+  font-size: var(--text-sm);
+}
+.team-cap-summary-strip__item strong.tone-danger { color: var(--danger); }
+.team-cap-summary-strip__item strong.tone-warning { color: var(--warning); }
+.team-cap-summary-strip__item strong.tone-ok { color: var(--success); }
