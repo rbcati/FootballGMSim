@@ -19,6 +19,7 @@ import { isTradeWindowOpen, getTradeWindowSnapshot } from "../../core/tradeWindo
 import { DeadlineBanner } from "./common/UiPrimitives.jsx";
 import { buildTradeAssetDisplay } from "../utils/tradeAssetDisplay.js";
 import { getTradeLockReason } from "../utils/tradeLockReason.js";
+import { getBudgetLabel, toneToCssColor } from "../utils/transactionMarket.js";
 
 // ── Original helpers (kept exactly as you had) ─────────────────────────────────
 
@@ -281,6 +282,24 @@ function TradeSubmissionSummary({
       </div>
       <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
         Roster/fit: {tradeImpact.needHits.length ? `addresses ${tradeImpact.needHits.join(", ")}` : "no top-need hit yet"} · {tradeImpact.timeline}
+      </div>
+    </div>
+  );
+}
+
+function TradeConsequenceStrip({ myTeam, offeringCount, receivingCount, myCapAfter, tradeImpact }) {
+  const rosterBefore = Array.isArray(myTeam?.roster) ? myTeam.roster.length : 0;
+  const rosterAfter = rosterBefore - offeringCount + receivingCount;
+  const budget = getBudgetLabel({ askAnnual: Math.max(0, (myTeam?.capRoom ?? 0) - myCapAfter), capRoom: myTeam?.capRoom ?? 0 });
+  return (
+    <div className="card" style={{ marginBottom: "var(--space-3)", padding: "10px 12px", display: "grid", gap: 5 }}>
+      <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: ".08em", color: "var(--text-subtle)", fontWeight: 700 }}>Roster impact preview</div>
+      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+        Cap room: <strong style={{ color: myCapAfter < 0 ? "var(--danger)" : "var(--text)" }}>${Number(myTeam?.capRoom ?? 0).toFixed(1)}M → ${Number(myCapAfter).toFixed(1)}M</strong> ·
+        Roster spots: <strong style={{ color: rosterAfter > 53 ? "var(--warning)" : "var(--text)" }}> {rosterBefore}/53 → {rosterAfter}/53</strong>
+      </div>
+      <div style={{ fontSize: "var(--text-xs)", color: toneToCssColor(budget.tone) }}>
+        {budget.label} cap movement · {tradeImpact.needHits.length ? `Need coverage: ${tradeImpact.needHits.join(", ")}` : "No top need addressed yet"}
       </div>
     </div>
   );
@@ -645,14 +664,17 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
       <div className="card trade-header-card" style={{ marginBottom: "var(--space-4)", padding: "var(--space-4) var(--space-5)" }}>
         <div style={{ display: "flex", alignItems: "flex-end", gap: "var(--space-4)", flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Trade Partner</div>
+          <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 4 }}>Trade Partner</div>
             <select value={targetId ?? ""} onChange={e => {
               setTargetId(e.target.value ? Number(e.target.value) : null);
               setCounterOfferId(null);
               setOffering(new Set()); setReceiving(new Set()); setMyPicks([]); setTheirPicks([]); setTradeResult(null);
             }} style={{ background: "var(--surface)", border: "1px solid var(--hairline)", color: "var(--text)", borderRadius: "var(--radius-md)", padding: "var(--space-2) var(--space-3)", minWidth: 220, width: "100%" }}>
               <option value="">Select a team…</option>
-              {otherTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses})</option>)}
+              {otherTeams.map(t => {
+                const intel = buildTeamIntelligence(t, { week: league?.week ?? 1 });
+                return <option key={t.id} value={t.id}>{t.name} ({t.wins}–{t.losses}) · {intel.direction}</option>;
+              })}
             </select>
           </div>
           {targetId && liveTheirTeam && (
@@ -668,6 +690,11 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveMyTeam?.abbr ?? "You"} · {formatNeedsLine(myNeedsSummary)}</div>
           {liveTheirTeam && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{liveTheirTeam?.abbr ?? "Them"} · {formatNeedsLine(theirNeedsSummary)}</div>}
           {liveTheirTeam && <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Direction: {buildTeamIntelligence(liveTheirTeam, { week: league?.week ?? 1 }).direction} · Preferred package based on needs/age curve.</div>}
+          {!incomingOffers.length && (
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
+              No offers yet. Tip: start with teams showing a complementary need/surplus profile.
+            </div>
+          )}
         </div>
       </div>
       {counterOfferId && (
@@ -709,6 +736,15 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
                 <div>{tradeImpact.timeline}</div>
               </div>
             </div>
+          )}
+          {hasSelection && (
+            <TradeConsequenceStrip
+              myTeam={liveMyTeam}
+              offeringCount={offering.size}
+              receivingCount={receiving.size}
+              myCapAfter={myCapAfter}
+              tradeImpact={tradeImpact}
+            />
           )}
           {hasSelection && (
             <TradeSubmissionSummary

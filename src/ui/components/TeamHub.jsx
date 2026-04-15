@@ -73,12 +73,12 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           { label: 'Phase', value: league?.phase ?? 'regular' },
         ]}
         actions={[
-          { label: 'Roster', primary: true, onClick: () => setSubtab('Roster') },
+          { label: 'View roster details', primary: true, onClick: () => setSubtab('Roster') },
           { label: 'Depth Chart', onClick: () => setSubtab('Depth Chart') },
-          { label: 'Contracts', onClick: () => setSubtab('Contracts') },
+          { label: 'Review contracts', onClick: () => setSubtab('Contracts') },
           { label: 'Financials', onClick: () => setSubtab('Financials') },
-          { label: 'Free Agency', onClick: () => onNavigate?.('Free Agency') },
-          { label: 'Transactions', onClick: () => onNavigate?.('Transactions') },
+          { label: 'Explore free agents', onClick: () => onNavigate?.('Free Agency') },
+          { label: 'Shop trade market', onClick: () => onNavigate?.('Transactions') },
         ]}
         quickContext={[
           { label: `Cap ${formatMoneyM(capSnapshot.capRoom)} room`, tone: capSnapshot.capRoom <= 10 ? 'warning' : 'ok' },
@@ -140,12 +140,12 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
           <SectionCard title="Team workflow" subtitle="Move through the full roster management loop.">
             <CtaRow actions={[
-              { label: 'Review roster', compact: true, onClick: () => setSubtab('Roster') },
+              { label: 'View player details', compact: true, onClick: () => setSubtab('Roster') },
               { label: 'Set depth', compact: true, onClick: () => setSubtab('Depth Chart') },
-              { label: 'Handle contracts', compact: true, onClick: () => setSubtab('Contracts') },
+              { label: 'Review contracts', compact: true, onClick: () => setSubtab('Contracts') },
               { label: 'Cap outlook', compact: true, onClick: () => setSubtab('Financials') },
-              { label: 'Enter free agency', compact: true, onClick: () => onNavigate?.('Free Agency') },
-              { label: 'Open trade desk', compact: true, onClick: () => onNavigate?.('Transactions') },
+              { label: 'Explore free agents', compact: true, onClick: () => onNavigate?.('Free Agency') },
+              { label: 'Shop trade market', compact: true, onClick: () => onNavigate?.('Transactions') },
             ]} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <StatusChip label="Connected team workspace" tone="team" />

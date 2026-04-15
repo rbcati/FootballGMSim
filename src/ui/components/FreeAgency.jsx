@@ -43,6 +43,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { computeTeamNeedsSummary, formatNeedsLine, summarizeFreeAgentMarket } from "../utils/marketSignals.js";
 import { buildDirectionGuidance, buildTeamIntelligence, scoreFreeAgentForTeam } from "../utils/teamIntelligence.js";
+import { getBudgetLabel, getMarketPlayerTags, toneToCssColor } from "../utils/transactionMarket.js";
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
@@ -322,7 +323,7 @@ function CapBanner({ userTeam }) {
 // Renders as a full-width <td colSpan=7> in its own table row, appearing
 // directly below the highlighted player row (two-row pattern from Roster.jsx).
 
-function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
+function SignInlineForm({ player, capRoom, rosterCount = 53, rosterLimit = 53, onSubmit, onCancel, asDiv }) {
   const defaultSalary = suggestedSalary(player.ovr, player.pos, player.age);
   const defaultYears = suggestedYears(player.age);
   const [annual, setAnnual] = useState(defaultSalary);
@@ -349,6 +350,8 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
 
   const Wrapper = asDiv ? 'div' : 'td';
   const props = asDiv ? {} : { colSpan: 9 };
+  const postMoveCap = Number(capRoom) - Number(annual || 0);
+  const postMoveRoster = Number(rosterCount) + 1;
 
   return (
     <Wrapper
@@ -386,6 +389,14 @@ function SignInlineForm({ player, capRoom, onSubmit, onCancel, asDiv }) {
           >
             ${(player._ask ?? 0).toFixed(1)}M / yr · {suggestedYears(player.age)}{" "}
             years
+          </div>
+        </div>
+        <div style={{ display: "grid", gap: 2, marginLeft: "auto", minWidth: 170 }}>
+          <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+            Cap after bid: <strong style={{ color: postMoveCap < 0 ? "var(--danger)" : "var(--text)" }}>${postMoveCap.toFixed(1)}M</strong>
+          </div>
+          <div style={{ fontSize: "10px", color: "var(--text-muted)" }}>
+            Roster after signing: <strong style={{ color: postMoveRoster > rosterLimit ? "var(--warning)" : "var(--text)" }}>{postMoveRoster}/{rosterLimit}</strong>
           </div>
         </div>
 
@@ -662,6 +673,8 @@ export default function FreeAgency({
   const capUsed = userTeam?.capUsed ?? 0;
   const deadCap = userTeam?.deadCap ?? 0;
   const capRoom = userTeam?.capRoom ?? (capTotal - capUsed - deadCap);
+  const rosterCount = Array.isArray(userTeam?.roster) ? userTeam.roster.length : 0;
+  const rosterLimit = 53;
   const needsSummary = useMemo(() => computeTeamNeedsSummary(userTeam), [userTeam]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: league?.week ?? 1 }), [userTeam, league?.week]);
 
@@ -1289,6 +1302,8 @@ export default function FreeAgency({
                             <SignInlineForm
                               player={player}
                               capRoom={capRoom}
+                              rosterCount={rosterCount}
+                              rosterLimit={rosterLimit}
                               onCancel={() => setSigningPlayerId(null)}
                               onSubmit={(c) => handleSign(player.id, c)}
                             />
@@ -1324,6 +1339,12 @@ export default function FreeAgency({
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
                             {player?.demandProfile?.headline ?? "Balanced priorities"}{market.riskLabel ? ` · ${market.riskLabel}` : ""}
                           </div>
+                          <div style={{ marginBottom: 4 }}>
+                            {(() => {
+                              const budget = getBudgetLabel({ askAnnual: player?.demandProfile?.askAnnual ?? player._ask ?? 0, capRoom });
+                              return <span style={{ fontSize: "10px", color: toneToCssColor(budget.tone), fontWeight: 700 }}>{budget.label}</span>;
+                            })()}
+                          </div>
                           <div style={{ fontSize: "10px", color: "var(--text-muted)", marginBottom: 4 }}>
                             Playbook: {formatPlaybookKnowledge(player?.playbookKnowledge)}
                           </div>
@@ -1350,6 +1371,14 @@ export default function FreeAgency({
 
             {viewMode === "cards" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "var(--space-3)", padding: "var(--space-3)" }}>
+                {sortedAgents.length === 0 ? (
+                  <EmptyState
+                    title={faState?.phase === "offseason_resign" ? "No re-sign targets in this filter" : "No free agents match"}
+                    body={faState?.phase === "offseason_resign"
+                      ? "Try broadening position filters or lower minimum OVR to find affordable retention options."
+                      : "Adjust filters or open FA Hub to scout position pressure before returning here."}
+                  />
+                ) : null}
                 {sortedAgents.slice(0, 80).map((player, idx) => (
                   <Card key={player.id} className="card-premium" style={{ padding: "var(--space-3)" }}>
                     <div style={{ fontWeight: 700 }}>{idx + 1}. {player.name}</div>
@@ -1357,6 +1386,11 @@ export default function FreeAgency({
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Playbook {formatPlaybookKnowledge(player?.playbookKnowledge)}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                      {getMarketPlayerTags(player, { capRoom, needs: needsSummary?.needs ?? [], surplus: needsSummary?.surplus ?? [] }).map((tag) => (
+                        <span key={`${player.id}-${tag.label}`} style={{ fontSize: 10, border: "1px solid var(--hairline)", padding: "1px 6px", borderRadius: 999, color: toneToCssColor(tag.tone) }}>{tag.label}</span>
+                      ))}
+                    </div>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player?.demandProfile?.headline ?? 'Balanced motivations'}{player?.demandProfile?.fitScore ? ` · Fit ${player.demandProfile.fitScore}/100` : ''}</div>
                     {Array.isArray(player?.market?.stateChips) && player.market.stateChips.length > 0 ? <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{player.market.stateChips.join(' · ')}</div> : null}
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -1372,7 +1406,12 @@ export default function FreeAgency({
             {/* Mobile Card Layout */}
             <div className="mobile-only" style={{ display: "none", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-3)" }}>
                {sortedAgents.length === 0 && (
-                  <EmptyState title="No free agents match" body="Adjust filters, minimum OVR, or search criteria." />
+                  <EmptyState
+                    title={faState?.phase === "offseason_resign" ? "No re-sign targets in this filter" : "No free agents match"}
+                    body={faState?.phase === "offseason_resign"
+                      ? "Try broadening position filters or lower minimum OVR to find affordable retention options."
+                      : "Adjust filters, minimum OVR, or search criteria."}
+                  />
                )}
                {sortedAgents.slice(0, 100).map((player, idx) => {
                   const isSigningThis = signingPlayerId === player.id;
@@ -1435,12 +1474,17 @@ export default function FreeAgency({
                                <div style={{ marginTop: "var(--space-2)" }}>
                                   {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
                                </div>
+                               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+                                 {getMarketPlayerTags(player, { capRoom, needs: needsSummary?.needs ?? [], surplus: needsSummary?.surplus ?? [] }).map((tag) => (
+                                   <span key={`${player.id}-m-${tag.label}`} style={{ fontSize: 10, border: "1px solid var(--hairline)", padding: "1px 6px", borderRadius: 999, color: toneToCssColor(tag.tone) }}>{tag.label}</span>
+                                 ))}
+                               </div>
                            </div>
                         </div>
 
                         {isSigningThis ? (
                             <div style={{ borderTop: "1px solid var(--hairline)", paddingTop: "var(--space-3)", marginTop: "var(--space-2)" }}>
-                               <SignInlineForm player={player} capRoom={capRoom} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
+                               <SignInlineForm player={player} capRoom={capRoom} rosterCount={rosterCount} rosterLimit={rosterLimit} asDiv onCancel={() => setSigningPlayerId(null)} onSubmit={(c) => handleSign(player.id, c)} />
                             </div>
                         ) : (
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
