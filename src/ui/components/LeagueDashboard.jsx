@@ -498,7 +498,7 @@ function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
   );
 }
 
-function StandingsTab({ teams, userTeamId, onTeamSelect, leagueSettings }) {
+function StandingsTab({ teams = [], userTeamId, onTeamSelect, leagueSettings }) {
   const confNames = Array.isArray(leagueSettings?.conferenceNames) && leagueSettings.conferenceNames.length
     ? leagueSettings.conferenceNames
     : CONFS;
@@ -508,11 +508,17 @@ function StandingsTab({ teams, userTeamId, onTeamSelect, leagueSettings }) {
   const [activeConf, setActiveConf] = useState(confNames[0] || "AFC");
   const [viewMode, setViewMode] = useState("division"); // "division" | "playoff"
 
+  useEffect(() => {
+    if (!confNames.includes(activeConf)) {
+      setActiveConf(confNames[0] || "AFC");
+    }
+  }, [confNames, activeConf]);
+
   // Normalise activeConf label → numeric index for comparison
   const activeConfIdx = Math.max(0, confNames.indexOf(activeConf));
 
   const grouped = useMemo(() => {
-    const confTeams = teams.filter((t) => confIdx(t.conf) === activeConfIdx);
+    const confTeams = (Array.isArray(teams) ? teams : []).filter((t) => confIdx(t.conf) === activeConfIdx);
     const groups = divNames.map((name, idx) => ({
       div: name,
       teams: confTeams
@@ -1734,6 +1740,7 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="League Leaders">
             <LeagueLeaders
               league={league}
+              actions={actions}
               onPlayerSelect={(player) => setSelectedPlayerId(player?.id ?? player)}
               onNavigate={setActiveTab}
             />
@@ -1855,6 +1862,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
               initialView={tradeInitialView}
               initialPartnerTeamId={tradeSeedPartnerId}
             />

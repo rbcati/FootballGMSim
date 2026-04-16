@@ -1033,6 +1033,17 @@ export function filterDraftProspectsForView(prospects, { filterPos, nameFilter, 
   return applyAdvancedPlayerFilters(list, advancedFilters);
 }
 
+export function normalizeIncomingDraftState(incoming) {
+  if (!incoming || typeof incoming !== "object" || incoming.notStarted) return null;
+  return {
+    ...incoming,
+    prospects: Array.isArray(incoming.prospects) ? incoming.prospects : [],
+    completedPicks: Array.isArray(incoming.completedPicks) ? incoming.completedPicks : [],
+    upcomingPicks: Array.isArray(incoming.upcomingPicks) ? incoming.upcomingPicks : [],
+    totalPicks: Number(incoming.totalPicks ?? 0),
+  };
+}
+
 function DraftBoard({
   draftState,
   userTeamId,
@@ -2216,18 +2227,20 @@ export default function Draft({ league, actions, onNavigate = null }) {
   const [profilePlayerId, setProfilePlayerId] = useState(null);
   const [pickGrade, setPickGrade] = useState(null); // { pick, grade }
 
+  const normalizeDraftState = useCallback((incoming) => normalizeIncomingDraftState(incoming), []);
+
   const loadDraftState = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await actions.getDraftState();
-      if (res?.payload) setDraftState(res.payload.notStarted ? null : res.payload);
+      setDraftState(normalizeDraftState(res?.payload));
     } catch (err) {
       setError(err?.message ?? 'Unable to load draft state');
     } finally {
       setLoading(false);
     }
-  }, [actions]);
+  }, [actions, normalizeDraftState]);
 
   // Enrich each pick with isUser flag for the completed-picks panel
   const enrichedDraftState = useMemo(() => {
@@ -2254,21 +2267,21 @@ export default function Draft({ league, actions, onNavigate = null }) {
   }, [loadDraftState]);
 
   const handleDraftStarted = useCallback((state) => {
-    setDraftState(state);
-  }, []);
+      setDraftState(normalizeDraftState(state));
+  }, [normalizeDraftState]);
 
   const handleSimToMyPick = useCallback(async () => {
     setSimming(true);
     setError(null);
     try {
       const res = await actions.simDraftPick();
-      if (res?.payload) setDraftState(res.payload);
+      if (res?.payload) setDraftState(normalizeDraftState(res.payload));
     } catch (err) {
       setError(err.message);
     } finally {
       setSimming(false);
     }
-  }, [actions]);
+  }, [actions, normalizeDraftState]);
 
   const handleDraftPlayer = useCallback(
     async (playerId) => {
@@ -2276,7 +2289,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
       try {
         const res = await actions.makeDraftPick(playerId);
         if (res?.payload) {
-          setDraftState(res.payload);
+          setDraftState(normalizeDraftState(res.payload));
 
           // Show pick grade for the user's pick
           const picks = res.payload.completedPicks ?? [];
@@ -2298,7 +2311,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
         setError(err.message);
       }
     },
-    [actions, league?.userTeamId],
+    [actions, league?.userTeamId, normalizeDraftState],
   );
 
   // ── Render ─────────────────────────────────────────────────────────────────
