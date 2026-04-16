@@ -1029,7 +1029,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
 export function filterDraftProspectsForView(prospects, { filterPos, nameFilter, advancedFilters }) {
   let list = [...(prospects ?? [])];
   if (filterPos) list = list.filter((p) => p.pos === filterPos);
-  if (nameFilter) list = list.filter((p) => p.name.toLowerCase().includes(nameFilter.toLowerCase()));
+  if (nameFilter) list = list.filter((p) => String(p?.name ?? "").toLowerCase().includes(nameFilter.toLowerCase()));
   return applyAdvancedPlayerFilters(list, advancedFilters);
 }
 
@@ -2230,6 +2230,12 @@ export default function Draft({ league, actions, onNavigate = null }) {
   const normalizeDraftState = useCallback((incoming) => normalizeIncomingDraftState(incoming), []);
 
   const loadDraftState = useCallback(async () => {
+    if (!actions?.getDraftState) {
+      setLoading(false);
+      setError("Draft service unavailable for this save.");
+      setDraftState(null);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -2417,12 +2423,30 @@ export default function Draft({ league, actions, onNavigate = null }) {
       )}
 
       {/* Pre-draft: no draft started yet */}
-      {!loading && !draftState && (
+      {!loading && !draftState && league?.phase !== "draft" && (
         <PreDraftPanel
           league={league}
           actions={actions}
           onDraftStarted={handleDraftStarted}
         />
+      )}
+
+      {/* Draft phase recovery: entered draft but state is missing/unhydrated */}
+      {!loading && !draftState && league?.phase === "draft" && (
+        <Card className="card-premium">
+          <CardHeader>
+            <CardTitle>Draft data is still initializing</CardTitle>
+          </CardHeader>
+          <CardContent style={{ display: "grid", gap: "var(--space-3)" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
+              The draft is active, but board data has not been hydrated yet. Retry loading or return to League HQ.
+            </div>
+            <div style={{ display: "flex", gap: "var(--space-2)" }}>
+              <Button className="btn" onClick={loadDraftState}>Retry Draft Load</Button>
+              <Button className="btn btn-secondary" onClick={() => onNavigate?.("League")}>Return to League</Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Draft board: draft in progress */}

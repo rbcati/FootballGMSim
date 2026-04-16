@@ -87,7 +87,7 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/b
 import { resolveCompletedGameId } from "../utils/gameResultIdentity.js";
 import { getGame as getArchivedGame } from "../../core/archive/gameArchive.ts";
 import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
-import { safeGetLeagueState, getScheduleViewModel } from "../../state/selectors.js";
+import { safeGetLeagueState, getSafePhaseContext, getSafeStandingsRows, getScheduleViewModel } from "../../state/selectors.js";
 import {
   SHELL_SECTIONS,
   getShellSectionForDashboardTab,
@@ -124,6 +124,7 @@ class TabErrorBoundary extends Component {
     if (!this.state.hasError) return this.props.children;
 
     const label = this.props.label ?? "This tab";
+    const fallbackTab = this.props.fallbackTab ?? "HQ";
     return (
       <div
         style={{
@@ -158,6 +159,16 @@ class TabErrorBoundary extends Component {
           onClick={() => this.setState({ hasError: false, error: null })}
         >
           Retry
+        </button>
+        <button
+          className="btn btn-secondary"
+          style={{ marginLeft: "var(--space-2)" }}
+          onClick={() => {
+            this.setState({ hasError: false, error: null });
+            this.props.onNavigate?.(fallbackTab);
+          }}
+        >
+          Return to {fallbackTab}
         </button>
       </div>
     );
@@ -1391,8 +1402,10 @@ export default function LeagueDashboard({
       </div>
     );
   }
-  const safeTeams = Array.isArray(league?.teams) ? league.teams : [];
-  const safeLeague = { ...league, teams: safeTeams, week: Number(league?.week ?? 1) };
+  const safeLeague = safeGetLeagueState(league);
+  const safeTeams = safeLeague.teams;
+  const phaseContext = getSafePhaseContext(safeLeague);
+  const safeStandingsRows = useMemo(() => getSafeStandingsRows(safeLeague), [safeLeague]);
   const isInitialized = safeTeams.length > 0;
 
   // NOTE: a missing schedule only affects the Schedule tab.
@@ -1497,12 +1510,12 @@ export default function LeagueDashboard({
       </div>
 
       {/* ── Contextual Action Banners (compact) ── */}
-      {activeTab !== "HQ" && league.phase === "offseason_resign" && (
+      {activeTab !== "HQ" && phaseContext.phase === "offseason_resign" && (
         <div onClick={() => setActiveTab("Roster")} className="action-banner action-banner-success">
           ✍️ <strong>Expiring Contracts</strong> — review before Free Agency
         </div>
       )}
-      {activeTab !== "HQ" && league.phase === "preseason" && (
+      {activeTab !== "HQ" && phaseContext.phase === "preseason" && (
         <div className="action-banner action-banner-warning">
           ⚠️ <strong>Roster Cutdown:</strong>{" "}
           <span style={{ color: (userTeam?.rosterCount ?? 0) > 53 ? "var(--danger)" : "var(--success)" }}>
@@ -1511,12 +1524,12 @@ export default function LeagueDashboard({
           {" "}/ 53 — must release {Math.max(0, (userTeam?.rosterCount ?? 0) - 53)} players
         </div>
       )}
-      {activeTab !== "HQ" && league.phase === "playoffs" && activeTab !== "Postseason" && (
+      {activeTab !== "HQ" && phaseContext.phase === "playoffs" && activeTab !== "Postseason" && (
         <div onClick={() => setActiveTab("Postseason")} className="action-banner action-banner-gold">
           🏆 <strong>PLAYOFFS</strong> — click to view bracket
         </div>
       )}
-      {activeTab !== "HQ" && league.phase === "draft" && activeTab !== "Draft" && (
+      {activeTab !== "HQ" && phaseContext.phase === "draft" && activeTab !== "Draft" && (
         <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
@@ -1573,7 +1586,7 @@ export default function LeagueDashboard({
       <div className="fade-in" key={activeTab}>
         {TEAM_FACING_TABS.has(activeTab) ? <FranchiseSummaryPanel league={league} compact className="" /> : null}
         {(activeTab === "HQ" || activeTab === "Weekly Hub" || activeTab === "Home") && (
-          <TabErrorBoundary label="Franchise HQ">
+          <TabErrorBoundary label="Franchise HQ" onNavigate={setActiveTab}>
               <FranchiseHQ
                 league={safeLeague}
                 onNavigate={(tab) => {
@@ -1604,7 +1617,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Team" && (
-          <TabErrorBoundary label="Team">
+          <TabErrorBoundary label="Team" onNavigate={setActiveTab}>
             <TeamHub
               league={league}
               actions={actions}
@@ -1634,7 +1647,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "League" && (
-          <TabErrorBoundary label="League">
+          <TabErrorBoundary label="League" onNavigate={setActiveTab}>
             <LeagueHub
               league={league}
               actions={actions}
@@ -1663,7 +1676,7 @@ export default function LeagueDashboard({
               )}
               renderStandings={() => (
                 <StandingsTab
-                  teams={league.teams}
+                  teams={safeStandingsRows}
                   userTeamId={league.userTeamId}
                   onTeamSelect={setSelectedTeamId}
                   leagueSettings={league.settings}
@@ -1673,7 +1686,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "News" && (
-          <TabErrorBoundary label="News">
+          <TabErrorBoundary label="News" onNavigate={setActiveTab}>
             <SectionSubnav items={["All", "Team", "League", "Transactions"]} activeItem={newsSubtab} onChange={setNewsSubtab} />
             <NewsFeed
               league={league}
@@ -1687,9 +1700,9 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (
-          <TabErrorBoundary label="Standings">
+          <TabErrorBoundary label="Standings" onNavigate={setActiveTab} fallbackTab="League">
             <StandingsTab
-              teams={league.teams}
+              teams={safeStandingsRows}
               userTeamId={league.userTeamId}
               onTeamSelect={setSelectedTeamId}
               leagueSettings={league.settings}
@@ -1697,7 +1710,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Schedule" && (
-          <TabErrorBoundary label="Schedule">
+          <TabErrorBoundary label="Schedule" onNavigate={setActiveTab}>
             <ScheduleTab
               schedule={league.schedule}
               teams={league.teams}
@@ -1716,7 +1729,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Stats" && (
-          <TabErrorBoundary label="Stats">
+          <TabErrorBoundary label="Stats" onNavigate={setActiveTab}>
             <PlayerStats
               actions={actions}
               league={league}
@@ -1726,7 +1739,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Leaders" && (
-          <TabErrorBoundary label="Leaders">
+          <TabErrorBoundary label="Leaders" onNavigate={setActiveTab}>
             <Leaders
               onPlayerSelect={setSelectedPlayerId}
               userTeamId={league.userTeamId}
@@ -1737,7 +1750,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {isInitialized && activeTab === "League Leaders" && (
-          <TabErrorBoundary label="League Leaders">
+          <TabErrorBoundary label="League Leaders" onNavigate={setActiveTab} fallbackTab="League">
             <LeagueLeaders
               league={league}
               actions={actions}
@@ -1747,7 +1760,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Award Races" && (
-          <TabErrorBoundary label="Award Races">
+          <TabErrorBoundary label="Award Races" onNavigate={setActiveTab}>
             <AwardRaces
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
@@ -1755,17 +1768,17 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Strategy" && (
-          <TabErrorBoundary label="Strategy">
+          <TabErrorBoundary label="Strategy" onNavigate={setActiveTab}>
             <StrategyPanel league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Game Plan" && (
-          <TabErrorBoundary label="Game Plan">
+          <TabErrorBoundary label="Game Plan" onNavigate={setActiveTab}>
             <GamePlanScreen league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Roster" && (
-          <TabErrorBoundary label="Roster">
+          <TabErrorBoundary label="Roster" onNavigate={setActiveTab}>
             <Roster
               league={league}
               actions={actions}
@@ -1777,7 +1790,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Depth Chart" && (
-          <TabErrorBoundary label="Depth Chart">
+          <TabErrorBoundary label="Depth Chart" onNavigate={setActiveTab}>
             <DragAndDropDepthChart
               league={league}
               actions={actions}
@@ -1787,7 +1800,7 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Roster Hub" && (
-          <TabErrorBoundary label="Roster Hub">
+          <TabErrorBoundary label="Roster Hub" onNavigate={setActiveTab}>
             <RosterHub
               league={league}
               actions={actions}
@@ -1796,17 +1809,17 @@ export default function LeagueDashboard({
           </TabErrorBoundary>
         )}
         {activeTab === "Financials" && (
-          <TabErrorBoundary label="Financials">
+          <TabErrorBoundary label="Financials" onNavigate={setActiveTab}>
             <FinancialsView league={league} actions={actions} />
           </TabErrorBoundary>
         )}
         {activeTab === "Contract Center" && (
-          <TabErrorBoundary label="Contract Center">
+          <TabErrorBoundary label="Contract Center" onNavigate={setActiveTab}>
             <ContractCenter league={league} actions={actions} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft" && (
-          <TabErrorBoundary label="Draft">
+          <TabErrorBoundary label="Draft" onNavigate={setActiveTab} fallbackTab="League">
             <Draft
               league={league}
               actions={actions}
