@@ -60,6 +60,8 @@ import { usePlayerCompare } from "../utils/playerCompare.js";
 import SocialFeed from "./SocialFeed.jsx";
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
 import { ToneChip, DevelopmentSignalRow } from "./PlayerDevelopmentUI.jsx";
+import EmptyState from "./EmptyState.jsx";
+import { getPositionColor } from "../constants/positionColors.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -457,18 +459,20 @@ function OvrBadge({ ovr }) {
 }
 
 function PosBadge({ pos }) {
+  const posColor = getPositionColor(pos);
   return (
     <Badge
       variant="outline"
       style={{
         display: "inline-block",
         minWidth: 32,
-        padding: "1px 6px",
+        padding: "1px 8px",
         borderRadius: "var(--radius-pill)",
-        background: "var(--surface-strong)",
+        background: `${posColor}26`,
+        borderColor: `${posColor}66`,
         fontSize: "var(--text-xs)",
         fontWeight: 700,
-        color: "var(--text-muted)",
+        color: posColor,
         textAlign: "center",
       }}
     >
@@ -491,6 +495,7 @@ function RosterTable({
   schemeName,
   chemistry,
   initialFilter = "ALL",
+  salaryCap = 200_000_000,
 }) {
   const isResignPhase = phase === "offseason_resign";
   // Default to EXPIRING view in resign phase
@@ -643,14 +648,8 @@ function RosterTable({
           <span><strong style={{ color: "#BF5AF2" }}>{decisionSummary.trade_or_tag}</strong> tag/trade calls</span>
         </div>
       )}
-      <div
-        style={{
-          display: "flex",
-          gap: "var(--space-2)",
-          flexWrap: "wrap",
-          marginBottom: "var(--space-4)",
-        }}
-      >
+      <div className="roster-filter-bar" style={{ marginBottom: "var(--space-4)" }}>
+
         {activeFilters.map((pos) => (
           <Button
             key={pos}
@@ -824,15 +823,14 @@ function RosterTable({
             <TableBody>
               {displayed.length === 0 && (
                 <TableRow>
-                  <TableCell
-                    colSpan={12}
-                    style={{
-                      textAlign: "center",
-                      padding: "var(--space-8)",
-                      color: "var(--text-muted)",
-                    }}
-                  >
-                    No players match this filter.
+                  <TableCell colSpan={12} style={{ padding: 0 }}>
+                    <EmptyState
+                      icon="🧾"
+                      title="No players match this filter"
+                      subtitle="Try clearing one or more roster filters."
+                      action="Reset filter"
+                      onAction={() => setPosFilter("ALL")}
+                    />
                   </TableCell>
                 </TableRow>
               )}
@@ -882,9 +880,9 @@ function RosterTable({
                     {/* Name */}
                     <TableCell
                       style={{
-                        fontWeight: 600,
+                        fontWeight: 700,
                         color: "var(--text)",
-                        fontSize: "var(--text-sm)",
+                        fontSize: "var(--text-md)",
                         whiteSpace: "nowrap",
                       }}
                     >
@@ -907,6 +905,13 @@ function RosterTable({
                           <ToneChip label={devContext.fit.label} tone={devContext.fit.tone} />
                         </div>
                       </button>
+                      {(() => {
+                        const salary = Number(derivePlayerContractFinancials(player)?.annualSalary ?? 0);
+                        const capHit = Math.max(1, Number(salaryCap ?? 200_000_000));
+                        const widthPct = Math.min((salary / capHit) * 100, 100);
+                        if (!(salary > 0) || !Number.isFinite(widthPct)) return null;
+                        return <div className="salary-bar" style={{ width: `${widthPct}%`, height: 2, background: 'var(--accent)', borderRadius: 'var(--radius-pill)', marginTop: 2 }} />;
+                      })()}
                       {isResignPhase && isZeroYears && (
                         <span
                           style={{
@@ -958,11 +963,7 @@ function RosterTable({
                       {player.progressionDelta != null &&
                         player.progressionDelta !== 0 && (
                           <span
-                            className={
-                              player.progressionDelta > 0
-                                ? "text-success"
-                                : "text-danger"
-                            }
+                            className={`stat-updated ${player.progressionDelta > 0 ? "text-success" : "text-danger"}`}
                             style={{
                               fontSize: 10,
                               fontWeight: 700,
@@ -1253,7 +1254,7 @@ function DepthCard({ player, isStarter, schemeName, style = {}, dragHandleProps 
       >
         <span
           style={{
-            fontWeight: 600,
+            fontWeight: 700,
             fontSize: "var(--text-xs)",
             color: "var(--text)",
             overflow: "hidden",
@@ -1520,13 +1521,6 @@ function DepthChartView({ players, onReorder, schemeName }) {
 // ── Player Card Components ─────────────────────────────────────────────────────
 // Beautiful card-based roster view — the primary display mode for the Roster tab.
 
-/** Position brand colours (matches PlayerDetailModal.jsx). */
-const CARD_POS_COLORS = {
-  QB: "#ef4444", RB: "#22c55e", WR: "#3b82f6", TE: "#a855f7",
-  OL: "#f59e0b", DL: "#ec4899", LB: "#0ea5e9", CB: "#14b8a6",
-  S: "#6366f1", K: "#9ca3af", P: "#6b7280",
-};
-
 /**
  * Return the 3 most-representative attributes for a player's position.
  * Values are taken from player.ratings first, then player-level fallbacks.
@@ -1679,7 +1673,7 @@ export function normalizeInitialRosterState(initialState, initialViewMode = "tab
  */
 function PlayerCard({ player, onSelect, showDecisionContext = false, decisionContext = {} }) {
   const pos = player.pos || "";
-  const posColor = CARD_POS_COLORS[pos] || "#9ca3af";
+  const posColor = getPositionColor(pos);
   const ovr = player.ovr ?? 70;
   const ovrColor =
     ovr >= 90 ? "#FFD700" :
@@ -1924,13 +1918,13 @@ function PlayerCardGrid({ players, onPlayerSelect, phase, team, week, initialFil
         )}
 
         {/* Position filter pills */}
-        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
+        <div className="roster-filter-bar" style={{ alignItems: "center" }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-subtle)", textTransform: "uppercase", letterSpacing: "0.5px", flexShrink: 0 }}>
             Position
           </span>
           {activeFilters.map((pos) => {
             const isActive = posFilter === pos;
-            const posCol = CARD_POS_COLORS[pos];
+            const posCol = getPositionColor(pos);
             return (
               <button
                 key={pos}
@@ -2349,6 +2343,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
           phase={league?.phase}
           chemistry={chemistry}
           initialFilter={initialFilter}
+          salaryCap={league?.salaryCap ?? 200_000_000}
           schemeName={(() => {
             const ut = league?.teams?.find(t => t.id === league.userTeamId);
             const offId = ut?.strategies?.offSchemeId;
@@ -2362,15 +2357,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       {!loading && viewMode === "depth" && (
         <Card className="card-premium"><CardContent style={{ padding: "var(--space-5)" }}>
           {players.length === 0 ? (
-            <div
-              style={{
-                textAlign: "center",
-                color: "var(--text-muted)",
-                padding: "var(--space-8)",
-              }}
-            >
-              No players on roster.
-            </div>
+            <EmptyState icon="🧍" title="No players on roster" subtitle="Add or sign players to build out your depth chart." />
           ) : (
             <>
               <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>

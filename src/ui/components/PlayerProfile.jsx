@@ -22,6 +22,7 @@ import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement
 import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.js';
 import { buildDevelopmentNotes, classifyDevelopmentTrend, getPlayerReadiness, getSchemeFitSignal, getAgeCurveContext, getDevelopmentSnapshot, getDevelopmentDrivers } from '../utils/playerDevelopmentSignals.js';
 import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDevelopmentUI.jsx';
+import EmptyState from './EmptyState.jsx';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -293,6 +294,26 @@ function getPlayerSummaryChips(player, ringCount, nonRing) {
     });
   }
   return chips;
+}
+
+
+function AttrRow({ label, value }) {
+  const safeValue = Math.max(0, Math.min(100, Number(value ?? 0)));
+  return (
+    <div className="attr-row">
+      <span className="attr-label">{label}</span>
+      <div className="attr-track">
+        <div
+          className="attr-fill"
+          style={{
+            width: `${safeValue}%`,
+            background: safeValue >= 80 ? 'var(--success)' : safeValue >= 60 ? 'var(--warning)' : 'var(--danger)',
+          }}
+        />
+      </div>
+      <span className="attr-value">{safeValue}</span>
+    </div>
+  );
 }
 
 const sectionLabelStyle = {
@@ -796,7 +817,7 @@ export default function PlayerProfile({
 
         {/* ── Body ── */}
         <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
-          <div className="standings-tabs" style={{ gap: 6, flexWrap: "wrap" }}>
+          <div className="standings-tabs profile-tab-row" style={{ gap: 6, flexWrap: "nowrap" }}>
             {["Overview", "Career Stats"].map((tab) => (
               <button
                 key={tab}
@@ -810,7 +831,7 @@ export default function PlayerProfile({
           {activeProfileTab === "Overview" && (
             <>
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Tab</h3>
               <div style={{ display: 'grid', gap: 10 }}>
                 {devHistory.length > 0 ? <Line data={devChartData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: 'var(--text-muted)' } } } }} height={220} /> : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No preseason development snapshots yet.</div>}
@@ -839,7 +860,7 @@ export default function PlayerProfile({
             </section>
           )}
           {!loading && player && summaryChips.length > 0 && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Quick Read</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
                 {summaryChips.map((chip, idx) => (
@@ -866,8 +887,18 @@ export default function PlayerProfile({
             </section>
           )}
 
+          {!loading && player && (
+            <section className="card-enter">
+              <h3 style={sectionLabelStyle}>Core Attributes</h3>
+              <AttrRow label="OVR" value={player?.ovr ?? 0} />
+              <AttrRow label="Potential" value={player?.potential ?? player?.ovr ?? 0} />
+              <AttrRow label="Morale" value={player?.morale ?? 0} />
+              <AttrRow label="Scheme Fit" value={player?.schemeFit ?? 50} />
+            </section>
+          )}
+
           {!loading && player && isProspect && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Prospect Evaluation</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
@@ -901,7 +932,7 @@ export default function PlayerProfile({
 
 
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Intelligence</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <DevelopmentStatCard
@@ -956,7 +987,7 @@ export default function PlayerProfile({
           )}
 
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Morale & Role Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
@@ -981,7 +1012,7 @@ export default function PlayerProfile({
 
 
           {!loading && player && player?.motivationProfile && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Motivation & Contract Outlook</h3>
               <div style={{ display: 'grid', gap: 'var(--space-2)', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
                 <div style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: '10px' }}>
@@ -1009,7 +1040,7 @@ export default function PlayerProfile({
 
 
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Contract Retention Panel</h3>
               {(() => {
                 const userTeam = teams.find((t) => Number(t.id) === Number(player?.teamId)) || {};
@@ -1045,7 +1076,7 @@ export default function PlayerProfile({
 
 
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Current vs Peak Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
@@ -1063,7 +1094,7 @@ export default function PlayerProfile({
           )}
 
           {!loading && player && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Legacy Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
                 <div style={{ border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)", padding: "10px" }}>
@@ -1087,7 +1118,7 @@ export default function PlayerProfile({
           )}
 
           {careerHighs.length > 0 && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Career Highs</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
                 {careerHighs.map((entry) => (
@@ -1102,7 +1133,7 @@ export default function PlayerProfile({
           )}
 
           {accoladesByYear.length > 0 && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Awards Timeline</h3>
               <div style={{ display: "grid", gap: 4 }}>
                 {accoladesByYear.slice(-12).map((acc, idx) => (
@@ -1115,7 +1146,7 @@ export default function PlayerProfile({
           )}
 
           {careerArcRows.length > 0 && (
-            <section>
+            <section className="card-enter">
               <h3 style={sectionLabelStyle}>Career Arc</h3>
               <div style={{ display: "grid", gap: 4 }}>
                 {careerArcRows.map((row, idx) => (
@@ -1128,7 +1159,7 @@ export default function PlayerProfile({
             </section>
           )}
 
-          <section>
+          <section className="card-enter">
           <h3
             style={{
               marginTop: 0,
@@ -1289,7 +1320,7 @@ export default function PlayerProfile({
 
           {/* ── Per-season Career Stats (from player.careerStats archive) ── */}
           {!loading && player?.careerStats?.length > 0 && (
-            <section>
+            <section className="card-enter">
               <h3
                 style={{
                   fontSize: "var(--text-sm)",
@@ -1451,11 +1482,13 @@ export default function PlayerProfile({
             </>
           )}
           {activeProfileTab === "Career Stats" && (
-            <section>
+            <section className="card-enter">
               {careerRows.length === 0 ? (
-                <p style={{ color: "var(--text-muted)" }}>
-                  No career stats recorded yet. Stats accumulate after each completed season.
-                </p>
+                <EmptyState
+                  icon="📉"
+                  title="No career stats yet"
+                  subtitle="Stats accumulate after each completed season."
+                />
               ) : (
                 <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
                   <Table className="standings-table" style={{ width: "100%", minWidth: 760 }}>
