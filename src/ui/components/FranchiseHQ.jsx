@@ -171,7 +171,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
           <LinkedGameSummaryCard
             label={`Week ${latestArchived?.week ?? vm.league?.week} final`}
             title={`${latestArchived?.awayAbbr} ${latestArchived?.score?.away} @ ${latestArchived?.homeAbbr} ${latestArchived?.score?.home}`}
-            subtitle={latestGamePresentation?.canOpen ? "Open box score" : "View result unavailable"}
+            subtitle={latestGamePresentation?.canOpen ? (latestGamePresentation?.ctaLabel ?? "View result") : "Open schedule"}
             onOpen={() => onOpenBoxScore?.(latestArchived?.id)}
             disabled={!latestGamePresentation?.canOpen}
           />

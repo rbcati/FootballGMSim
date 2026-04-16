@@ -14,6 +14,7 @@ import {
 import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
 import { normalizeArchivedGamePayload } from "../../core/gameArchive.js";
 import { buildTeamComparisonRows, PLAYER_STATS_TABLES } from "../../core/footballMeta";
+import GameDetailV2 from "./game/GameDetailV2.tsx";
 
 function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
@@ -27,13 +28,14 @@ function PlayerButton({ player, onSelect }) {
   return <button className="btn-link" onClick={() => onSelect(player.playerId)}>{player.name}</button>;
 }
 
-function LeaderCard({ label, player, line, onPlayerSelect }) {
+function LeaderCard({ label, player, line, onPlayerSelect, impactSkill }) {
   if (!player) return null;
   return (
     <div className="bs-leader-card">
       <div className="bs-leader-label">{label}</div>
       <div className="bs-leader-name"><PlayerButton player={player} onSelect={onPlayerSelect} /></div>
       <div className="bs-leader-line">{line}</div>
+      {impactSkill ? <div className="bs-impact-skill">Impact skill: {impactSkill}</div> : null}
     </div>
   );
 }
@@ -460,11 +462,12 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </div>
               ))}
             </div>
+            <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
             <div className="bs-leaders-grid">
-              <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} />
-              <LeaderCard label="Rushing leader" player={leaders.rush} line={describeStatLine(leaders.rush, ["rushAtt", "rushYd", "rushTD"])} onPlayerSelect={onPlayerSelect} />
-              <LeaderCard label="Receiving leader" player={leaders.receive} line={describeStatLine(leaders.receive, ["receptions", "recYd", "recTD"])} onPlayerSelect={onPlayerSelect} />
-              <LeaderCard label="Defensive leader" player={leaders.defense} line={describeStatLine(leaders.defense, ["tackles", "sacks", "interceptions", "forcedFumbles"])} onPlayerSelect={onPlayerSelect} />
+              <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.pass?.impactSkill ?? leaders.pass?.subAttributeHighlight ?? leaders.pass?.impactTrait ?? null} />
+              <LeaderCard label="Rushing leader" player={leaders.rush} line={describeStatLine(leaders.rush, ["rushAtt", "rushYd", "rushTD"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.rush?.impactSkill ?? leaders.rush?.subAttributeHighlight ?? leaders.rush?.impactTrait ?? null} />
+              <LeaderCard label="Receiving leader" player={leaders.receive} line={describeStatLine(leaders.receive, ["receptions", "recYd", "recTD"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.receive?.impactSkill ?? leaders.receive?.subAttributeHighlight ?? leaders.receive?.impactTrait ?? null} />
+              <LeaderCard label="Defensive leader" player={leaders.defense} line={describeStatLine(leaders.defense, ["tackles", "sacks", "interceptions", "forcedFumbles"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.defense?.impactSkill ?? leaders.defense?.subAttributeHighlight ?? leaders.defense?.impactTrait ?? null} />
             </div>
             {!leaders.pass && !leaders.rush && !leaders.receive && !leaders.defense ? (
               <EmptyState title="Player leaders not archived" body="This legacy game has a final score and recap, but player leader rows were not saved." />
