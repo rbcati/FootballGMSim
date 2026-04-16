@@ -117,3 +117,48 @@
 .team-cap-summary-strip__item strong.tone-danger { color: var(--danger); }
 .team-cap-summary-strip__item strong.tone-warning { color: var(--warning); }
 .team-cap-summary-strip__item strong.tone-ok { color: var(--success); }
+
+/* HQ Hero Section Styles */
+.hq-hero-section {
+  position: relative;
+  overflow: hidden;
+}
+
+.hq-hero-section h1 {
+  letter-spacing: -0.02em;
+}
+
+/* Mobile Adjustments for HQ */
+@media (max-width: 768px) {
+  .franchise-hq {
+    padding-bottom: 80px; /* Room for bottom nav */
+  }
+
+  .hq-hero-section {
+    padding: var(--space-3) !important;
+  }
+
+  .hq-hero-section h1 {
+    font-size: var(--text-lg) !important;
+  }
+
+  .app-section-card {
+    padding: var(--space-3) !important;
+  }
+
+  .app-section-card__header {
+    margin-bottom: var(--space-2) !important;
+  }
+
+  .app-section-card__title {
+    font-size: var(--text-sm) !important;
+  }
+
+  .app-section-card__body {
+    gap: 4px !important;
+  }
+
+  .btn-outline {
+    padding: 8px !important;
+  }
+}
