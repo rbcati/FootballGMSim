@@ -49,6 +49,41 @@ const POSITIONS = [
   "P",
 ];
 
+const DRAFT_ROOM_PHASES = Object.freeze({
+  PRE_DRAFT: "PRE_DRAFT",
+  ON_THE_CLOCK: "ON_THE_CLOCK",
+  CPU_PICKING: "CPU_PICKING",
+  PICK_MADE: "PICK_MADE",
+  DRAFT_COMPLETE: "DRAFT_COMPLETE",
+});
+
+function formatClock(seconds = 0) {
+  const mins = Math.floor(Math.max(0, seconds) / 60);
+  const secs = Math.max(0, seconds) % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+}
+
+function buildPickOrder(teams, rounds = 7, userTeamId = null) {
+  if (!Array.isArray(teams) || teams.length === 0) return [];
+  const sorted = [...teams].sort((a, b) => (a?.wins ?? 0) - (b?.wins ?? 0));
+  const order = [];
+  for (let round = 1; round <= rounds; round++) {
+    sorted.forEach((team, idx) => {
+      const overall = (round - 1) * sorted.length + idx + 1;
+      order.push({
+        round,
+        pick: overall,
+        overallPick: overall,
+        teamId: team.id,
+        teamName: team.name,
+        teamAbbr: team.abbr ?? "TEAM",
+        isUserTeam: Number(team.id) === Number(userTeamId),
+      });
+    });
+  }
+  return order;
+}
+
 function ovrColor(ovr) {
   if (ovr >= 85) return "var(--success)";
   if (ovr >= 75) return "var(--accent)";
@@ -985,7 +1020,7 @@ function PreDraftPanel({ league, actions, onDraftStarted }) {
               }}
             >
               Generate a draft class of rookies (Age 21). Worst record picks
-              first; Super Bowl winner picks last. 5 rounds.
+              first; Super Bowl winner picks last. 7 rounds.
             </p>
           </div>
           <Button
@@ -1032,6 +1067,11 @@ function DraftBoard({
   const [tradeDownProcessing, setTradeDownProcessing] = useState(false);
   const [manualBoard, setManualBoard] = useState([]);
   const [pickClock, setPickClock] = useState(90);
+  const [userAutoPick, setUserAutoPick] = useState(false);
+  const [draftPhase, setDraftPhase] = useState(DRAFT_ROOM_PHASES.PRE_DRAFT);
+  const [pickFlash, setPickFlash] = useState(null);
+  const [cpuPending, setCpuPending] = useState(false);
+  const [activeRound, setActiveRound] = useState(1);
 
   const {
     currentPick,
@@ -1052,10 +1092,81 @@ function DraftBoard({
     setPickClock(90);
   }, [currentPick?.overall]);
   useEffect(() => {
-    if (isDraftComplete) return undefined;
-    const timer = setInterval(() => setPickClock((prev) => (prev <= 0 ? 90 : prev - 1)), 1000);
+    if (currentPick?.round) setActiveRound(currentPick.round);
+  }, [currentPick?.round]);
+
+  useEffect(() => {
+    if (isDraftComplete) {
+      setDraftPhase(DRAFT_ROOM_PHASES.DRAFT_COMPLETE);
+      return;
+    }
+    if (!currentPick) {
+      setDraftPhase(DRAFT_ROOM_PHASES.PRE_DRAFT);
+      return;
+    }
+    if (isUserPick) setDraftPhase(DRAFT_ROOM_PHASES.ON_THE_CLOCK);
+    else setDraftPhase(DRAFT_ROOM_PHASES.CPU_PICKING);
+  }, [currentPick, isUserPick, isDraftComplete]);
+
+  useEffect(() => {
+    if (!completedPicks.length) return;
+    const lastPick = completedPicks[completedPicks.length - 1];
+    if (!lastPick || lastPick.overall === pickFlash?.overall) return;
+    setPickFlash(lastPick);
+    setDraftPhase(DRAFT_ROOM_PHASES.PICK_MADE);
+    const timer = setTimeout(() => {
+      setPickFlash(null);
+      if (isDraftComplete) setDraftPhase(DRAFT_ROOM_PHASES.DRAFT_COMPLETE);
+      else if (isUserPick) setDraftPhase(DRAFT_ROOM_PHASES.ON_THE_CLOCK);
+      else setDraftPhase(DRAFT_ROOM_PHASES.CPU_PICKING);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [completedPicks, isDraftComplete, isUserPick, pickFlash?.overall]);
+
+  const sortedByOvr = useMemo(
+    () => [...prospects].sort((a, b) => (b?.ovr ?? 0) - (a?.ovr ?? 0)),
+    [prospects],
+  );
+
+  useEffect(() => {
+    if (draftPhase !== DRAFT_ROOM_PHASES.ON_THE_CLOCK || !isUserPick || isDraftComplete) return undefined;
+    if (!userAutoPick) return undefined;
+    const bestProspect = sortedByOvr[0];
+    if (bestProspect) onDraftPlayer(bestProspect.id);
+    return undefined;
+  }, [draftPhase, isUserPick, isDraftComplete, userAutoPick, sortedByOvr, onDraftPlayer]);
+
+  useEffect(() => {
+    if (draftPhase !== DRAFT_ROOM_PHASES.ON_THE_CLOCK || !isUserPick || userAutoPick || isDraftComplete) return undefined;
+    const timer = setInterval(() => {
+      setPickClock((prev) => {
+        if (prev <= 1) {
+          const bestProspect = sortedByOvr[0];
+          if (bestProspect) onDraftPlayer(bestProspect.id);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(timer);
-  }, [isDraftComplete]);
+  }, [draftPhase, isUserPick, isDraftComplete, userAutoPick, sortedByOvr, onDraftPlayer]);
+
+  useEffect(() => {
+    if (draftPhase !== DRAFT_ROOM_PHASES.CPU_PICKING || isUserPick || isDraftComplete || cpuPending) return undefined;
+    setCpuPending(true);
+    const delay = 400 + Math.random() * 800;
+    const timer = setTimeout(async () => {
+      try {
+        await onSimToMyPick();
+      } finally {
+        setCpuPending(false);
+      }
+    }, delay);
+    return () => {
+      clearTimeout(timer);
+      setCpuPending(false);
+    };
+  }, [draftPhase, isUserPick, isDraftComplete, cpuPending, onSimToMyPick]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => -d);
@@ -1105,6 +1216,25 @@ function DraftBoard({
     () => [...new Set(prospects.map((p) => p.pos))].sort(),
     [prospects],
   );
+  const pickOrder = useMemo(
+    () => buildPickOrder(league?.teams ?? [], 7, league?.userTeamId),
+    [league?.teams, league?.userTeamId],
+  );
+  const topProspectByPos = useMemo(() => {
+    const map = new Map();
+    sortedByOvr.forEach((prospect) => {
+      if (!map.has(prospect.pos)) map.set(prospect.pos, String(prospect.id));
+    });
+    return map;
+  }, [sortedByOvr]);
+  const userPickCountsByRound = useMemo(() => {
+    const counts = new Map();
+    completedPicks.forEach((pk) => {
+      if (pk.teamId !== userTeamId) return;
+      counts.set(pk.round, (counts.get(pk.round) ?? 0) + 1);
+    });
+    return counts;
+  }, [completedPicks, userTeamId]);
 
   return (
     <div>
@@ -1202,6 +1332,11 @@ function DraftBoard({
           onTradeComplete={() => onSimToMyPick()}
         />
       )}
+      {pickOrder.length === 0 && (
+        <div style={{ marginBottom: "var(--space-4)", padding: "var(--space-3)", borderRadius: "var(--radius-md)", background: "rgba(255,69,58,0.1)", border: "1px solid var(--danger)", color: "var(--danger)", fontSize: "var(--text-sm)" }}>
+          Draft cannot start — no teams found.
+        </div>
+      )}
 
       <div
         className="draft-layout"
@@ -1257,8 +1392,14 @@ function DraftBoard({
                     fontSize: "var(--text-xl)",
                     color: "var(--text)",
                     marginBottom: 4,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "var(--space-2)",
                   }}
                 >
+                  <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--surface-strong)", border: "1px solid var(--hairline)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10 }}>
+                    {currentPick?.teamAbbr?.slice(0, 2) ?? "TM"}
+                  </span>
                   {currentPick?.teamAbbr ?? "???"}
                 </div>
                 <div
@@ -1300,14 +1441,27 @@ function DraftBoard({
                     Overall #{currentPick?.overall}
                   </span>
                 </div>
-                <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
-                  Clock: {pickClock}s
+                {draftPhase === DRAFT_ROOM_PHASES.ON_THE_CLOCK && (
+                  <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
+                    Clock: {formatClock(pickClock)}
+                  </div>
+                )}
+                <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700 }}>
+                  Phase: {draftPhase.replaceAll("_", " ")}
                 </div>
                 {currentPick?.isCompensatory && (
                   <div style={{ marginTop: 6, fontSize: "var(--text-xs)", color: "var(--warning, #FF9F0A)", fontWeight: 700 }}>
                     Compensatory pick · {currentPick?.compensatoryForName ? `for loss of ${currentPick.compensatoryForName}` : "NFL comp selection"}
                   </div>
                 )}
+                <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: "var(--space-3)", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  <input
+                    type="checkbox"
+                    checked={userAutoPick}
+                    onChange={(e) => setUserAutoPick(e.target.checked)}
+                  />
+                  Enable Auto-Pick (BPA)
+                </label>
               </>
             )}
           </CardContent>
@@ -1407,7 +1561,7 @@ function DraftBoard({
             </Card>
           )}
 
-          {/* Recently completed (last 10) */}
+          {/* Recently completed (last 8) */}
           {completedPicks.length > 0 && (
             <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}>
               <CardHeader style={{ padding: "var(--space-2) var(--space-3)", background: "var(--surface-strong)", borderBottom: "1px solid var(--hairline)" }}>
@@ -1419,7 +1573,8 @@ function DraftBoard({
               <ScrollArea style={{ maxHeight: 240 }}>
                 {[...completedPicks]
                   .reverse()
-                  .slice(0, 10)
+                  .filter((pk) => Number(pk.round) === Number(activeRound))
+                  .slice(0, 8)
                   .map((pk) => (
                     <div
                       key={pk.overall}
@@ -1772,7 +1927,16 @@ function DraftBoard({
                     </TableRow>
                   )}
                   {sortedProspects.map((p, i) => (
-                    <TableRow key={p.id} style={String(p.id) === String(recommendedPick?.playerId ?? '') ? { background: "rgba(52,199,89,0.1)" } : undefined}>
+                    <TableRow
+                      key={p.id}
+                      style={
+                        String(p.id) === String(recommendedPick?.playerId ?? '')
+                          ? { background: "rgba(52,199,89,0.1)" }
+                          : (topProspectByPos.get(p.pos) === String(p.id)
+                            ? { background: "rgba(10,132,255,0.08)" }
+                            : undefined)
+                      }
+                    >
                       <TableCell style={{ textAlign: "center", fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                         {Math.max(1, manualBoard.indexOf(String(p.id)) + 1)}
                       </TableCell>
@@ -1867,7 +2031,7 @@ function DraftBoard({
                           whiteSpace: "nowrap",
                         }}
                       >
-                        {p.college ?? "—"}
+                        {p.college ?? p.origin ?? "—"}
                       </TableCell>
                       {isUserPick && !isDraftComplete && (
                         <TableCell
@@ -1878,6 +2042,7 @@ function DraftBoard({
                         >
                           <Button
                             className="btn btn-primary"
+                            disabled={!(draftPhase === DRAFT_ROOM_PHASES.ON_THE_CLOCK && isUserPick)}
                             style={{
                               padding: "3px 12px",
                               fontSize: "var(--text-xs)",
@@ -1911,6 +2076,32 @@ function DraftBoard({
           </Card>
         </div>
       </div>
+      <Card className="card-premium" style={{ marginTop: "var(--space-4)" }}>
+        <CardContent style={{ padding: "var(--space-3)" }}>
+          <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 700, marginRight: 6 }}>Round Navigator</span>
+            {Array.from({ length: 7 }).map((_, idx) => {
+              const round = idx + 1;
+              const userPicksInRound = userPickCountsByRound.get(round) ?? 0;
+              return (
+                <button
+                  key={round}
+                  className="btn"
+                  onClick={() => setActiveRound(round)}
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    padding: "3px 8px",
+                    borderColor: activeRound === round ? "var(--accent)" : "var(--hairline)",
+                    color: activeRound === round ? "var(--accent)" : "var(--text-muted)",
+                  }}
+                >
+                  R{round}: {userPicksInRound > 0 ? "✓" : "—"} {userPicksInRound} pick{userPicksInRound === 1 ? "" : "s"}
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
