@@ -24,5 +24,5 @@ export interface Player {
   age?: number;
   ovr?: number;
   ratings?: Record<string, number>;
-  attributesV2: AttributesV2;
+  attributesV2?: AttributesV2;
 }
