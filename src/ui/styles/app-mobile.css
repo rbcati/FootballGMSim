@@ -1416,3 +1416,21 @@
     display: none !important;
   }
 }
+
+.mobile-bottom-tab.active {
+  color: var(--accent);
+  border-top: 2px solid var(--accent);
+  font-weight: 700;
+}
+.mobile-nav-panel {
+  background: linear-gradient(180deg, var(--surface-raised), var(--surface-overlay));
+  box-shadow: var(--shadow-lg);
+}
+.mobile-nav-item {
+  border: 1px solid transparent;
+}
+.mobile-nav-item:hover,
+.mobile-nav-item:active {
+  border-color: var(--hairline);
+  transform: translateX(2px);
+}

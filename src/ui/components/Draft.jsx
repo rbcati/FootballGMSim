@@ -32,6 +32,8 @@ import PlayerComparison from "./PlayerComparison.jsx";
 import PlayerCompareTray from "./PlayerCompareTray.jsx";
 import { applyAdvancedPlayerFilters, allFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
+import EmptyState from "./EmptyState.jsx";
+import { POS_COLORS } from "../constants/positionColors.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -90,21 +92,6 @@ function ovrColor(ovr) {
   if (ovr >= 65) return "var(--warning)";
   return "var(--danger)";
 }
-
-// ── Position colour map ───────────────────────────────────────────────────────
-const POS_COLORS = {
-  QB:  "#FF6B35",
-  RB:  "#34C759",
-  WR:  "#0A84FF",
-  TE:  "#5E5CE6",
-  OL:  "#64D2FF",
-  DL:  "#FF453A",
-  LB:  "#FF9F0A",
-  CB:  "#30D158",
-  S:   "#FFD60A",
-  K:   "#AEC6CF",
-  P:   "#B4A0E5",
-};
 
 // ── Scouting Fog of War ───────────────────────────────────────────────────────
 // Uses the player id as a stable seed so grades don't change on re-render.
@@ -1298,7 +1285,7 @@ function DraftBoard({
               justifyContent: "flex-end",
             }}
           >
-            {Object.entries(POS_COLORS).map(([pos, color]) => (
+            {Object.entries(POS_COLORS).filter(([pos]) => !["default", "DB", "CB", "S"].includes(pos)).map(([pos, color]) => (
               <span
                 key={pos}
                 style={{
@@ -1912,17 +1899,12 @@ function DraftBoard({
                 <TableBody>
                   {sortedProspects.length === 0 && (
                     <TableRow>
-                      <TableCell
-                        colSpan={isUserPick ? 12 : 11}
-                        style={{
-                          textAlign: "center",
-                          padding: "var(--space-6)",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {isDraftComplete
-                          ? "All prospects have been drafted."
-                          : "No prospects match the filter."}
+                      <TableCell colSpan={isUserPick ? 12 : 11} style={{ padding: 0 }}>
+                        <EmptyState
+                          icon="🎯"
+                          title={isDraftComplete ? "No prospects remain" : "No prospects match"}
+                          subtitle={isDraftComplete ? "All prospects have been drafted." : "Adjust your filters to broaden the board."}
+                        />
                       </TableCell>
                     </TableRow>
                   )}

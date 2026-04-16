@@ -8,8 +8,6 @@ import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/num
 import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
 import { buildNeedsAttentionItems, buildPrimaryAction } from "../utils/weeklyHubLayout.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
-import { ScreenHeader } from "./ScreenSystem.jsx";
-import { buildHeaderMetadata } from "../utils/screenSystem.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -90,6 +88,34 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
   }, [league]);
 
   const topOffer = weeklyContext?.incomingOffers?.[0] ?? null;
+
+  const standingsMeta = useMemo(() => {
+    const teams = Array.isArray(league?.teams) ? league.teams : [];
+    const userTeam = teams.find((team) => Number(team?.id) === Number(league?.userTeamId));
+    if (!userTeam) return { standingsPosition: 'Unranked', divisionName: 'Division' };
+    const divisionTeams = teams.filter((team) => Number(team?.conf) === Number(userTeam?.conf) && Number(team?.div) === Number(userTeam?.div));
+    const byPct = [...divisionTeams].sort((a, b) => {
+      const aGames = (a?.wins ?? 0) + (a?.losses ?? 0) + (a?.ties ?? 0);
+      const bGames = (b?.wins ?? 0) + (b?.losses ?? 0) + (b?.ties ?? 0);
+      const aPct = aGames ? ((a?.wins ?? 0) + 0.5 * (a?.ties ?? 0)) / aGames : 0;
+      const bPct = bGames ? ((b?.wins ?? 0) + 0.5 * (b?.ties ?? 0)) / bGames : 0;
+      return bPct - aPct;
+    });
+    const divRank = byPct.findIndex((team) => Number(team?.id) === Number(userTeam?.id)) + 1;
+    const divisionLabels = ['East', 'North', 'South', 'West'];
+    const divisionName = `${Number(userTeam?.conf) === 0 ? 'AFC' : 'NFC'} ${divisionLabels[Number(userTeam?.div)] ?? 'Division'}`;
+    return { standingsPosition: divRank > 0 ? `#${divRank}` : 'Unranked', divisionName };
+  }, [league]);
+
+  const quickActions = useMemo(() => ([
+    { icon: '🧭', label: 'Team', sub: 'Depth + game plan', tab: 'Team' },
+    { icon: '📋', label: 'Roster', sub: 'Lineup and contracts', tab: 'Roster' },
+    { icon: '📈', label: 'League', sub: 'Standings and leaders', tab: 'League' },
+    { icon: '💸', label: 'Free Agency', sub: 'Market movement', tab: 'Free Agency' },
+    { icon: '🎯', label: 'Draft', sub: 'Big board and picks', tab: 'Draft' },
+    { icon: '📰', label: 'News', sub: 'Latest stories', tab: 'News' },
+  ]), []);
+
   const topOfferSummary = topOffer ? buildIncomingOfferPresentation({ offer: topOffer, league, userTeamId: league?.userTeamId }) : null;
 
   const handlePrimaryAction = () => {
@@ -100,16 +126,22 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
 
   return (
     <div className="weekly-hub-v2 weekly-hub-v3 app-screen-stack">
-      <ScreenHeader
-        title="Weekly Hub"
-        subtitle="One place for this week: act, review your result, and move forward."
-        eyebrow={`${user.name} · ${phaseLabel(league.phase)}`}
-        metadata={buildHeaderMetadata([
-          { label: "Week", value: league.week ?? 1 },
-          { label: "Record", value: `${user.wins ?? 0}-${user.losses ?? 0}${(user.ties ?? 0) ? `-${user.ties}` : ""}` },
-          { label: "Owner", value: ownerDisplay },
-        ])}
-      />
+      <div className="hub-hero card-enter">
+        <div className="hub-hero__eyebrow">WEEK {league?.week ?? 1} · SEASON {league?.seasonId ?? league?.year ?? '—'}</div>
+        <div className="hub-hero__title">{user?.name ?? 'Your Team'}</div>
+        <div className="hub-hero__record">{user?.wins ?? 0}–{user?.losses ?? 0}{(user?.ties ?? 0) > 0 ? `–${user?.ties ?? 0}` : ''}</div>
+        <div className="hub-hero__meta">{standingsMeta.standingsPosition} in {standingsMeta.divisionName}</div>
+      </div>
+
+      <div className="hub-action-grid">
+        {quickActions.map((item) => (
+          <button key={item.tab} className="hub-action-card card-enter" onClick={() => onNavigate?.(item.tab)}>
+            <span className="hub-action-card__icon" aria-hidden>{item.icon}</span>
+            <span className="hub-action-card__label">{item.label}</span>
+            <span className="hub-action-card__sub">{item.sub}</span>
+          </button>
+        ))}
+      </div>
 
       <section className="weekly-section">
         <SectionHeader title="This Week" subtitle="Primary action first, then urgent follow-ups." />

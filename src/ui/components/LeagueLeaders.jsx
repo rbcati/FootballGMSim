@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import EmptyState from "./EmptyState.jsx";
 
 const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions"];
 
@@ -108,7 +109,7 @@ export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
-      <div className="standings-tabs" style={{ flexWrap: "wrap", gap: 6 }}>
+      <div className="standings-tabs profile-tab-row" style={{ flexWrap: "nowrap", gap: 6 }}>
         {TABS.map((tab) => (
           <button key={tab} className={`standings-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
             {tab}
@@ -130,6 +131,7 @@ export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
             {rows.map((entry, index) => (
               <tr
                 key={`${entry.player?.id ?? entry.player?.name ?? "player"}-${index}`}
+                className="card-enter"
                 style={entry.player?.isUserTeam ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" } : undefined}
               >
                 <td>{index + 1}</td>
@@ -149,11 +151,14 @@ export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-4)" }}>
-                  No player stats available yet.{" "}
-                  <button className="btn btn-link" onClick={() => onNavigate?.("League")} style={{ padding: 0, minHeight: 0 }}>
-                    Return to League
-                  </button>
+                <td colSpan={5} style={{ padding: 0 }}>
+                  <EmptyState
+                    icon="📊"
+                    title="No league leaders yet"
+                    subtitle="No players have logged enough stats this season."
+                    action="Open league"
+                    onAction={() => onNavigate?.("League")}
+                  />
                 </td>
               </tr>
             )}
