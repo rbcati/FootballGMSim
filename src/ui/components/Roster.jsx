@@ -59,6 +59,7 @@ import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import SocialFeed from "./SocialFeed.jsx";
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
+import { ToneChip, DevelopmentSignalRow } from "./PlayerDevelopmentUI.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -429,32 +430,6 @@ function StatusBadge({ injuryWeeks }) {
       }}
     >
       {isIR ? "IR" : "OUT"}
-    </span>
-  );
-}
-
-function DevelopmentTag({ label, tone = "neutral" }) {
-  const tones = {
-    good: { color: "var(--success)", bg: "rgba(52,199,89,0.14)" },
-    warn: { color: "var(--warning)", bg: "rgba(255,159,10,0.14)" },
-    bad: { color: "var(--danger)", bg: "rgba(255,69,58,0.14)" },
-    neutral: { color: "var(--text-subtle)", bg: "var(--surface-strong)" },
-  };
-  const cfg = tones[tone] ?? tones.neutral;
-  return (
-    <span
-      style={{
-        fontSize: 9,
-        fontWeight: 800,
-        borderRadius: "var(--radius-pill)",
-        padding: "1px 6px",
-        color: cfg.color,
-        background: cfg.bg,
-        letterSpacing: ".03em",
-        textTransform: "uppercase",
-      }}
-    >
-      {label}
     </span>
   );
 }
@@ -927,8 +902,9 @@ function RosterTable({
                         {player.name}
                         <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>{TRADE_STATUS_LABELS[normalizeManagement(player).tradeStatus]}{normalizeManagement(player).contractPlan[0] ? ` · ${CONTRACT_PLAN_LABELS[normalizeManagement(player).contractPlan[0]]}` : ""}</div>
                         <div style={{ marginTop: 2, display: "flex", gap: 4, flexWrap: "wrap" }}>
-                          <DevelopmentTag label={devContext.trend.label} tone={devContext.trend.tone} />
-                          <DevelopmentTag label={devContext.readiness.label} tone={devContext.readiness.tone} />
+                          <ToneChip label={devContext.trend.label} tone={devContext.trend.tone} />
+                          <ToneChip label={devContext.readiness.label} tone={devContext.readiness.tone} />
+                          <ToneChip label={devContext.fit.label} tone={devContext.fit.tone} />
                         </div>
                       </button>
                       {isResignPhase && isZeroYears && (
@@ -2247,13 +2223,23 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
             <Badge variant={developmentSummary.slipping.length > 0 ? "destructive" : "outline"}>📉 Slipping: {developmentSummary.slipping.length}</Badge>
             <Badge variant={developmentSummary.moraleRisk.length > 0 ? "destructive" : "outline"}>😕 Morale risk: {developmentSummary.moraleRisk.length}</Badge>
             <Badge variant={developmentSummary.mismatch.length > 0 ? "destructive" : "secondary"}>🧩 Scheme mismatch: {developmentSummary.mismatch.length}</Badge>
+            <Badge variant={developmentSummary.blocked.length > 0 ? "secondary" : "outline"}>🚧 Blocked dev: {developmentSummary.blocked.length}</Badge>
+            <Badge variant={developmentSummary.contractPressure.length > 0 ? "secondary" : "outline"}>⏱ Contract pressure: {developmentSummary.contractPressure.length}</Badge>
             <Badge variant="secondary">🌱 Rookie watch: {developmentSummary.rookieWatch.length}</Badge>
           </div>
           <div style={{ display: "grid", gap: 4, fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>
             {developmentSummary.rising[0] ? <div>Best current development bet: <strong style={{ color: "var(--text)" }}>{developmentSummary.rising[0].name}</strong> ({developmentSummary.rising[0].progressionDelta > 0 ? "+" : ""}{developmentSummary.rising[0].progressionDelta ?? 0} OVR).</div> : null}
             {developmentSummary.slipping[0] ? <div>Regression watch: <strong style={{ color: "var(--text)" }}>{developmentSummary.slipping[0].name}</strong> ({developmentSummary.slipping[0].progressionDelta ?? 0} OVR) — review role, usage, and contract timeline.</div> : null}
             {developmentSummary.mismatch[0] ? <div>Top scheme mismatch: <strong style={{ color: "var(--text)" }}>{developmentSummary.mismatch[0].name}</strong> (fit {developmentSummary.mismatch[0].schemeFit ?? 50}) — consider package changes or depth-chart adjustment.</div> : null}
+            {developmentSummary.blocked[0] ? <div>Blocked prospect: <strong style={{ color: "var(--text)" }}>{developmentSummary.blocked[0].name}</strong> is depth-clamped — consider role/package changes.</div> : null}
+            {developmentSummary.contractPressure[0] ? <div>Trajectory + contract decision: <strong style={{ color: "var(--text)" }}>{developmentSummary.contractPressure[0].name}</strong> is up for a near-term call.</div> : null}
           </div>
+          <DevelopmentSignalRow items={[
+            developmentSummary.rising[0] ? { label: `Rising: ${developmentSummary.rising[0].name}`, tone: 'good' } : null,
+            developmentSummary.slipping[0] ? { label: `Slipping: ${developmentSummary.slipping[0].name}`, tone: 'bad' } : null,
+            developmentSummary.moraleRisk[0] ? { label: `Morale risk: ${developmentSummary.moraleRisk[0].name}`, tone: 'warn' } : null,
+            developmentSummary.blocked[0] ? { label: `Blocked: ${developmentSummary.blocked[0].name}`, tone: 'warn' } : null,
+          ].filter(Boolean)} />
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             <Button variant="outline" size="sm" onClick={() => { setViewMode("table"); setInitialFilter("DEVELOPMENT"); }}>Open young/development group</Button>
             <Button variant="outline" size="sm" onClick={() => { setViewMode("depth"); setInitialFilter("DEPTH"); }}>Adjust depth chart</Button>

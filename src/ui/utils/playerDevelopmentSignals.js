@@ -84,6 +84,59 @@ export function getSchemeFitSignal(player) {
   return { key: 'neutral_fit', label: 'Neutral fit', tone: 'neutral' };
 }
 
+export function getAgeCurveContext(player) {
+  const age = safeNumber(player?.age, 30);
+  if (age <= 23) return { key: 'early_growth', label: 'Early growth window', detail: 'High variance development stage.', tone: 'good' };
+  if (age <= 28) return { key: 'prime', label: 'Prime growth/stability window', detail: 'Expect steadier week-to-week outcomes.', tone: 'neutral' };
+  if (age <= 31) return { key: 'maintenance', label: 'Maintenance window', detail: 'Role and health management matter most.', tone: 'warn' };
+  return { key: 'late_curve', label: 'Late-career curve', detail: 'Regression risk rises without ideal usage/health.', tone: 'bad' };
+}
+
+export function getDevelopmentDrivers(player, moraleContext = null) {
+  const reasons = [];
+  const ageContext = getAgeCurveContext(player);
+  reasons.push(ageContext.label);
+
+  const fit = safeNumber(player?.schemeFit, 50);
+  if (fit >= 75) reasons.push('Scheme alignment supporting growth');
+  else if (fit <= 45) reasons.push('Scheme mismatch suppressing output');
+
+  const injuryWeeks = safeNumber(player?.injuryWeeksRemaining ?? player?.injury?.weeksRemaining, 0);
+  if (injuryWeeks > 0) reasons.push(`Injury recovery (${injuryWeeks}w)`);
+
+  const depthOrder = normalizeDepthOrder(player);
+  if (depthOrder >= 3 && safeNumber(player?.age, 30) <= 25) reasons.push('Depth role may be limiting reps');
+
+  const topMoraleReason = moraleContext?.reasons?.[0];
+  if (topMoraleReason) reasons.push(topMoraleReason);
+
+  return reasons.slice(0, 4);
+}
+
+export function getDevelopmentSnapshot(player) {
+  const history = Array.isArray(player?.developmentHistory) ? player.developmentHistory : [];
+  if (history.length < 2) return null;
+  const latest = history[history.length - 1] ?? {};
+  const prev = history[history.length - 2] ?? {};
+  const keys = [
+    ['physical', 'Physical'],
+    ['passing', 'Passing'],
+    ['rushingReceiving', 'Rush/Rec'],
+    ['blocking', 'Blocking'],
+    ['defense', 'Defense'],
+    ['kicking', 'Kicking'],
+  ];
+  const deltas = keys.map(([key, label]) => ({
+    key,
+    label,
+    delta: safeNumber(latest?.[key], 0) - safeNumber(prev?.[key], 0),
+  })).filter((entry) => entry.delta !== 0);
+
+  const topGain = [...deltas].sort((a, b) => b.delta - a.delta)[0] ?? null;
+  const topDrop = [...deltas].sort((a, b) => a.delta - b.delta)[0] ?? null;
+  return { topGain, topDrop, deltas };
+}
+
 export function buildDevelopmentNotes(player, moraleContext = null) {
   const trend = classifyDevelopmentTrend(player);
   const readiness = getPlayerReadiness(player);
@@ -96,10 +149,11 @@ export function buildDevelopmentNotes(player, moraleContext = null) {
   if (moraleContext?.state) {
     notes.push(`Morale: ${moraleContext.state}`);
   }
-  const topReason = moraleContext?.reasons?.[0];
-  if (topReason) notes.push(topReason);
-  return { trend, readiness, fit, notes };
+  const drivers = getDevelopmentDrivers(player, moraleContext);
+  notes.push(...drivers);
+  return { trend, readiness, fit, notes: [...new Set(notes)].slice(0, 6) };
 }
+
 
 export function summarizeRosterDevelopment(players = [], moraleById = new Map()) {
   const list = Array.isArray(players) ? players : [];
@@ -108,6 +162,8 @@ export function summarizeRosterDevelopment(players = [], moraleById = new Map())
   const moraleRisk = [];
   const mismatch = [];
   const rookiesWatch = [];
+  const blocked = [];
+  const contractPressure = [];
 
   for (const player of list) {
     const trend = classifyDevelopmentTrend(player);
@@ -121,6 +177,8 @@ export function summarizeRosterDevelopment(players = [], moraleById = new Map())
     if (moraleScore <= 62 || String(moraleState).toLowerCase().includes('friction') || String(moraleState).toLowerCase().includes('frustrated')) moraleRisk.push(player);
     if (fit <= 45) mismatch.push(player);
     if (age <= 24) rookiesWatch.push(player);
+    if (normalizeDepthOrder(player) >= 3 && age <= 25 && safeNumber(player?.ovr, 0) >= 68) blocked.push(player);
+    if (safeNumber(player?.contract?.yearsRemaining ?? player?.contract?.years, 0) <= 1 && ['breakout_candidate','trending_up','trending_down','regression_risk'].includes(trend.key)) contractPressure.push(player);
   }
 
   const sortByDelta = (a, b) => safeNumber(b?.progressionDelta, 0) - safeNumber(a?.progressionDelta, 0);
@@ -132,5 +190,8 @@ export function summarizeRosterDevelopment(players = [], moraleById = new Map())
     moraleRisk: moraleRisk.sort((a, b) => safeNumber(a?.morale, 100) - safeNumber(b?.morale, 100)),
     mismatch: mismatch.sort((a, b) => safeNumber(a?.schemeFit, 100) - safeNumber(b?.schemeFit, 100)),
     rookieWatch: rookiesWatch.sort((a, b) => safeNumber(a?.age, 99) - safeNumber(b?.age, 99)),
+    blocked: blocked.sort((a, b) => safeNumber(a?.age, 99) - safeNumber(b?.age, 99)),
+    contractPressure: contractPressure.sort((a, b) => safeNumber(a?.contract?.yearsRemaining ?? a?.contract?.years, 9) - safeNumber(b?.contract?.yearsRemaining ?? b?.contract?.years, 9)),
   };
 }
+
