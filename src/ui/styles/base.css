@@ -175,6 +175,25 @@ body.theme-light {
   --ring: 221 83% 53%;
 }
 
+:root.theme-high-contrast {
+  --bg: #000000;
+  --bg-secondary: #050505;
+  --surface: #000000;
+  --surface-strong: #0a0a0a;
+  --surface-elevated: #101010;
+  --hairline: rgba(255, 255, 255, 0.4);
+  --hairline-strong: rgba(255, 255, 255, 0.7);
+  --text: #ffffff;
+  --text-muted: #f5f5f5;
+  --text-subtle: #d4d4d4;
+  --accent: #00a2ff;
+  --accent-hover: #45b9ff;
+  --accent-muted: rgba(0, 162, 255, 0.3);
+  --danger: #ff6464;
+  --success: #5cf58a;
+  --warning: #ffd166;
+}
+
 /* ============================================================================
    BASE STYLES
    ============================================================================ */

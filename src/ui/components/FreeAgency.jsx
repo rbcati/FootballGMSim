@@ -815,6 +815,7 @@ export default function FreeAgency({
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Badge variant="outline">{formatNeedsLine(needsSummary)}</Badge>
             <Badge variant="outline">Direction: {teamIntel.direction}</Badge>
+            <Button size="sm" variant="outline" onClick={() => onNavigate?.("Team")}>Return to team overview</Button>
             <Button size="sm" variant="secondary" onClick={() => onNavigate?.("FA Hub")}>Open FA Hub Overview</Button>
           </div>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{buildDirectionGuidance(teamIntel)}</div>

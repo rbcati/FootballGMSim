@@ -13,6 +13,7 @@ const THEMES = {
   system: { label: "System", icon: SunMoonIcon },
   dark: { label: "Dark", icon: MoonIcon },
   light: { label: "Light", icon: SunIcon },
+  high: { label: "High Contrast", icon: ContrastIcon },
 };
 
 export default function ThemeToggle({ compact = false }) {
@@ -32,12 +33,15 @@ export default function ThemeToggle({ compact = false }) {
 
     // Clear all theme classes
     root.classList.remove("force-dark");
+    root.classList.remove("theme-high-contrast");
     body.classList.remove("theme-light");
 
     if (t === "dark") {
       root.classList.add("force-dark");
     } else if (t === "light") {
       body.classList.add("theme-light");
+    } else if (t === "high") {
+      root.classList.add("theme-high-contrast");
     }
     // "system" — let @media (prefers-color-scheme) handle it
   }, []);
@@ -51,6 +55,7 @@ export default function ThemeToggle({ compact = false }) {
     setTheme(prev => {
       if (prev === "system") return "dark";
       if (prev === "dark") return "light";
+      if (prev === "light") return "high";
       return "system";
     });
   }, []);
@@ -138,6 +143,15 @@ function SunMoonIcon({ size = 18 }) {
       <path d="M20 12h2" />
       <path d="M6.34 17.66l-1.41 1.41" />
       <path d="M19.07 4.93l-1.41 1.41" />
+    </svg>
+  );
+}
+
+function ContrastIcon({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3a9 9 0 0 1 0 18z" />
     </svg>
   );
 }

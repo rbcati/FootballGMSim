@@ -315,6 +315,8 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
             {/* Advanced Settings Toggle */}
             <Button
               onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-expanded={showAdvanced}
+              aria-controls="advanced-settings-panel"
               style={{
                 width: "100%", padding: "var(--space-3) var(--space-4)",
                 background: "transparent",
@@ -338,7 +340,7 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
 
             {/* Advanced Settings Panel */}
             {showAdvanced && (
-              <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
+              <div id="advanced-settings-panel" className="fade-in" style={{ display: "flex", flexDirection: "column", gap: "var(--space-5)" }}>
                 {/* Playoff Format */}
                 <div className="settings-group">
                   <label className="settings-label">Playoff Format</label>

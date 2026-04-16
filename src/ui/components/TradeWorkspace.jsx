@@ -13,7 +13,7 @@ import { buildNewsDeskModel } from '../utils/newsDesk.js';
 
 const VIEWS = ['Block', 'Finder', 'Builder', 'Offers', 'Summary'];
 
-export default function TradeWorkspace({ league, actions, onPlayerSelect, initialView = 'Finder', initialPartnerTeamId = null }) {
+export default function TradeWorkspace({ league, actions, onPlayerSelect, onNavigate = null, initialView = 'Finder', initialPartnerTeamId = null }) {
   const normalizedInitialView = typeof initialView === 'string' && initialView.includes(':')
     ? (initialView.split(':')[1] || 'Finder')
     : initialView;
@@ -71,6 +71,7 @@ export default function TradeWorkspace({ league, actions, onPlayerSelect, initia
       />
       <StickySubnav title="Trade views">
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary" onClick={() => onNavigate?.('Team')}>Back to Team</button>
           {VIEWS.map((v) => (
             <button key={v} className={`standings-tab${view === v ? ' active' : ''}`} onClick={() => setView(v)}>{v}</button>
           ))}

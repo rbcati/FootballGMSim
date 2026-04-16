@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState.jsx";
 
 const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions"];
@@ -76,9 +76,49 @@ function displayNumber(value, decimals = 0, suffix = "") {
   return `${safe.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`;
 }
 
-export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
+function normalizeLeaderRows(rawRows = []) {
+  return (Array.isArray(rawRows) ? rawRows : []).map((row) => ({
+    id: row?.playerId ?? row?.id ?? row?.pid ?? row?.player?.id ?? null,
+    name: row?.name ?? row?.playerName ?? row?.player?.name ?? "—",
+    teamAbbr: row?.teamAbbr ?? row?.abbr ?? row?.team ?? "—",
+    teamId: row?.teamId ?? row?.tid ?? row?.team?.id ?? null,
+    value: Number(row?.value ?? row?.stat ?? row?.amount ?? 0) || 0,
+    raw: row,
+  }));
+}
+
+const API_TAB_MAP = Object.freeze({
+  Passing: { category: "passing", statKeys: ["passYards", "passTDs", "completions"] },
+  Rushing: { category: "rushing", statKeys: ["rushYards", "rushTDs", "rushAttempts"] },
+  Receiving: { category: "receiving", statKeys: ["recYards", "recTDs", "receptions"] },
+  Tackles: { category: "defense", statKeys: ["tackles"] },
+  Sacks: { category: "defense", statKeys: ["sacks"] },
+  Interceptions: { category: "defense", statKeys: ["interceptions"] },
+});
+
+export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
   const [activeTab, setActiveTab] = useState("Passing");
+  const [remoteCategories, setRemoteCategories] = useState(null);
+  const firstTabRef = useRef(null);
   const teams = Array.isArray(league?.teams) ? league.teams : [];
+
+  useEffect(() => {
+    firstTabRef.current?.focus?.();
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    actions?.getLeagueLeaders?.("season")
+      .then((resp) => {
+        if (!alive) return;
+        setRemoteCategories(resp?.payload?.categories ?? null);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setRemoteCategories(null);
+      });
+    return () => { alive = false; };
+  }, [actions]);
 
   const allPlayers = useMemo(
     () =>
@@ -94,6 +134,26 @@ export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
   );
 
   const rows = useMemo(() => {
+    const apiConfig = API_TAB_MAP[activeTab];
+    if (remoteCategories && apiConfig) {
+      const bucket = remoteCategories?.[apiConfig.category] ?? {};
+      const statKey = apiConfig.statKeys.find((key) => Array.isArray(bucket?.[key]) && bucket[key].length > 0);
+      if (statKey) {
+        return normalizeLeaderRows(bucket[statKey]).slice(0, 10).map((row) => ({
+          player: {
+            ...row.raw,
+            id: row.id,
+            name: row.name,
+            teamName: row.teamAbbr,
+            teamId: row.teamId,
+            isUserTeam: Number(row.teamId) === Number(league?.userTeamId),
+          },
+          primary: row.value,
+          secondary: "—",
+        }));
+      }
+    }
+
     const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
     return allPlayers
       .map((player) => ({
@@ -109,9 +169,16 @@ export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
 
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
-      <div className="standings-tabs profile-tab-row" style={{ flexWrap: "nowrap", gap: 6 }}>
-        {TABS.map((tab) => (
-          <button key={tab} className={`standings-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
+      <div className="standings-tabs profile-tab-row" role="tablist" aria-label="League leader categories" style={{ flexWrap: "nowrap", gap: 6, alignItems: "center" }}>
+        {TABS.map((tab, index) => (
+          <button
+            key={tab}
+            ref={index === 0 ? firstTabRef : null}
+            role="tab"
+            aria-selected={activeTab === tab}
+            className={`standings-tab${activeTab === tab ? " active" : ""}`}
+            onClick={() => setActiveTab(tab)}
+          >
             {tab}
           </button>
         ))}
