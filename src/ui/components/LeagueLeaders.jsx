@@ -99,7 +99,7 @@ const API_TAB_MAP = Object.freeze({
 
 export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
   const [activeTab, setActiveTab] = useState("Passing");
-  const [remoteCategories, setRemoteCategories] = useState(null);
+  const [leaderPayload, setLeaderPayload] = useState({ categories: null, source: null, phase: null });
   const firstTabRef = useRef(null);
   const teams = Array.isArray(league?.teams) ? league.teams : [];
 
@@ -112,11 +112,15 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
     actions?.getLeagueLeaders?.("season")
       .then((resp) => {
         if (!alive) return;
-        setRemoteCategories(resp?.payload?.categories ?? null);
+        setLeaderPayload({
+          categories: resp?.payload?.categories ?? null,
+          source: resp?.payload?.source ?? null,
+          phase: resp?.payload?.phase ?? null,
+        });
       })
       .catch(() => {
         if (!alive) return;
-        setRemoteCategories(null);
+        setLeaderPayload({ categories: null, source: null, phase: null });
       });
     return () => { alive = false; };
   }, [actions]);
@@ -134,6 +138,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
     [teams, league?.userTeamId],
   );
 
+  const remoteCategories = leaderPayload?.categories;
   const rows = useMemo(() => {
     const apiConfig = API_TAB_MAP[activeTab];
     if (remoteCategories && apiConfig) {
@@ -171,6 +176,9 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
   }, [allPlayers, activeTab, league?.userTeamId, remoteCategories]);
 
   const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
+  const sourceLabel = leaderPayload?.source === "last_completed_regular_season"
+    ? "Showing last completed regular-season leaders."
+    : "Showing current regular-season leaders.";
 
   return (
     <div style={{ display: "grid", gap: "var(--space-3)" }}>
@@ -188,6 +196,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
           </button>
         ))}
       </div>
+      <div style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>{sourceLabel}</div>
       <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
         <table className="standings-table" style={{ width: "100%", minWidth: 680 }}>
           <thead>

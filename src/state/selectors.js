@@ -73,7 +73,7 @@ export function getScheduleViewModel(league, filters = {}) {
 
 export function getSafeStandingsRows(league) {
   const safe = safeGetLeagueState(league);
-  const rows = Array.isArray(safe?.standings) ? safe.standings : safe.teams;
+  const rows = Array.isArray(safe?.standings) ? safe.standings : [];
   return (Array.isArray(rows) ? rows : []).map((team) => ({
     id: team?.id ?? null,
     name: team?.name ?? 'Unknown Team',
@@ -83,8 +83,8 @@ export function getSafeStandingsRows(league) {
     wins: Number(team?.wins ?? 0),
     losses: Number(team?.losses ?? 0),
     ties: Number(team?.ties ?? 0),
-    ptsFor: Number(team?.ptsFor ?? 0),
-    ptsAgainst: Number(team?.ptsAgainst ?? 0),
+    ptsFor: Number(team?.ptsFor ?? team?.pf ?? 0),
+    ptsAgainst: Number(team?.ptsAgainst ?? team?.pa ?? 0),
     ovr: Number(team?.ovr ?? 0),
     capRoom: Number(team?.capRoom ?? team?.capSpace ?? 0),
     recentResults: Array.isArray(team?.recentResults) ? team.recentResults : [],
@@ -100,6 +100,7 @@ export function getSafePhaseContext(league) {
     week: Number(safe?.week ?? 1),
     userTeamId: safe?.userTeamId ?? null,
     seasonId: safe?.seasonId ?? null,
+    standingsContext: safe?.standingsContext ?? null,
     hasSchedule: Array.isArray(safe?.schedule?.weeks) && safe.schedule.weeks.length > 0,
   };
 }
