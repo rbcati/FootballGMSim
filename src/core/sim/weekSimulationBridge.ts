@@ -97,19 +97,41 @@ export function buildDeterministicSeed(input: string): number {
 }
 
 export function mapGameSummaryToLegacyResult(summary: GameSummary) {
+  const homePassRate = Number((summary.teamStats.home.passAtt / Math.max(1, summary.teamStats.home.plays)).toFixed(3));
+  const awayPassRate = Number((summary.teamStats.away.passAtt / Math.max(1, summary.teamStats.away.plays)).toFixed(3));
+
   return {
     gameId: summary.gameId,
     home: summary.homeTeamId,
     away: summary.awayTeamId,
     scoreHome: summary.homeScore,
     scoreAway: summary.awayScore,
-    recapText: summary.topReason1 ? `${summary.topReason1}. ${summary.topReason2 ?? ''}`.trim() : null,
+    recapText: summary.recapText ?? (summary.topReason1 ? `${summary.topReason1}. ${summary.topReason2 ?? ''}`.trim() : null),
+    recap: summary.recapText ?? null,
+    quarterScores: summary.quarterScores,
+    boxScore: summary.boxScore,
+    playLogs: summary.playLogs,
+    eventDigest: summary.playDigest,
+    linescore: summary.quarterScores,
+    teamDriveStats: summary.teamStats,
     summary: {
-      storyline: summary.topReason1 ? `Key edge: ${summary.topReason1}` : 'Simulation complete.',
+      storyline: summary.summary?.storyline ?? (summary.topReason1 ? `Key edge: ${summary.topReason1}` : 'Simulation complete.'),
+      headlineMoments: summary.summary?.headlineMoments ?? [],
+      teamStats: summary.teamStats,
     },
     simFactors: {
-      home: { qbRating: Math.round(summary.homeSuccessRate * 100), rushYpc: Number((summary.homePassYards / Math.max(1, summary.totalPlays / 2)).toFixed(2)) },
-      away: { qbRating: Math.round(summary.awaySuccessRate * 100), rushYpc: Number((summary.awayPassYards / Math.max(1, summary.totalPlays / 2)).toFixed(2)) },
+      home: {
+        qbRating: summary.simFactors?.home?.qbRating ?? Math.round(summary.homeSuccessRate * 100),
+        rushYpc: summary.simFactors?.home?.rushYpc ?? Number((summary.teamStats.home.rushYd / Math.max(1, summary.teamStats.home.rushAtt)).toFixed(2)),
+        successRate: summary.homeSuccessRate,
+        passRate: summary.simFactors?.home?.passRate ?? homePassRate,
+      },
+      away: {
+        qbRating: summary.simFactors?.away?.qbRating ?? Math.round(summary.awaySuccessRate * 100),
+        rushYpc: summary.simFactors?.away?.rushYpc ?? Number((summary.teamStats.away.rushYd / Math.max(1, summary.teamStats.away.rushAtt)).toFixed(2)),
+        successRate: summary.awaySuccessRate,
+        passRate: summary.simFactors?.away?.passRate ?? awayPassRate,
+      },
     },
   };
 }

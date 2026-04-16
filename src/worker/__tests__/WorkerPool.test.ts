@@ -29,5 +29,8 @@ describe('SimulationManager', () => {
     expect(summary.completedGames).toBe(16);
     expect(summary.results).toHaveLength(16);
     expect(progress.at(-1)).toBe('16/16');
+    expect(summary.results[0].teamStats.home.plays).toBeGreaterThan(0);
+    expect(summary.results[0].boxScore.home).toBeTruthy();
+    expect(summary.results[0].playDigest.length).toBeGreaterThan(0);
   });
 });
