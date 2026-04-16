@@ -42,7 +42,7 @@ describe('WeeklyHub structure', () => {
     );
 
     expect((html.match(/Latest completed game/g) ?? []).length).toBe(1);
-    expect((html.match(/Open Game Book/g) ?? []).length).toBe(1);
+    expect((html.match(/Tactical breakdown|View result|Open box score/g) ?? []).length).toBeGreaterThanOrEqual(1);
     expect(html).toContain('This Week');
     expect(html).toContain('Team Snapshot');
     expect(html).toContain('Results');

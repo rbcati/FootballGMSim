@@ -53,11 +53,20 @@ export function getBoxScoreAvailability(game, context = {}) {
   const resolvedGameId = resolveBoxScoreGameId(normalized, context);
   const archiveQuality = detectArchiveQuality(normalized);
   const isCompleted = hasFinalScore(normalized);
-  const canOpen = Boolean(isCompleted && resolvedGameId && archiveQuality !== "missing");
+  const hasAnyDetail = Boolean(
+    normalized?.recap
+    || normalized?.summary
+    || normalized?.quarterScores
+    || (normalized?.playLog?.length ?? 0) > 0
+    || (normalized?.eventDigest?.length ?? 0) > 0
+    || normalized?.teamDriveStats?.home
+    || normalized?.teamDriveStats?.away,
+  );
+  const canOpen = Boolean(isCompleted && resolvedGameId && (archiveQuality !== "missing" || hasAnyDetail));
   let fallbackReason = null;
   if (!isCompleted) fallbackReason = "Game not completed";
   else if (!resolvedGameId) fallbackReason = "Missing game identity";
-  else if (archiveQuality === "missing") fallbackReason = "Archive unavailable";
+  else if (!canOpen) fallbackReason = "Archive unavailable";
   return { resolvedGameId, archiveQuality, canOpen, fallbackReason, isCompleted };
 }
 
@@ -67,13 +76,23 @@ export function getArchiveQualityLabel(archiveQuality) {
 
 export function buildCompletedGamePresentation(game, context = {}) {
   const availability = getBoxScoreAvailability(game, context);
+  const hasTacticalData = Boolean(
+    (Array.isArray(game?.eventDigest) && game.eventDigest.length > 0)
+    || (Array.isArray(game?.summary?.headlineMoments) && game.summary.headlineMoments.length > 0)
+    || game?.topReason1
+    || game?.topReason2
+    || game?.teamDriveStats?.home
+    || game?.teamDriveStats?.away,
+  );
   const away = context?.teamById?.[toTeamId(game?.awayId ?? game?.away)] ?? null;
   const home = context?.teamById?.[toTeamId(game?.homeId ?? game?.home)] ?? null;
   const displayScoreLine = `${away?.abbr ?? "AWY"} ${game?.awayScore ?? "—"} - ${game?.homeScore ?? "—"} ${home?.abbr ?? "HME"}`;
   return {
     ...availability,
     ctaLabel: availability.canOpen
-      ? (availability.archiveQuality === "partial" ? "Open box score (partial archive)" : "Open box score")
+      ? (hasTacticalData
+        ? "Tactical breakdown"
+        : (availability.archiveQuality === "partial" ? "View result" : "Open box score"))
       : "View result",
     statusLabel: getArchiveQualityLabel(availability.archiveQuality),
     displayScoreLine,

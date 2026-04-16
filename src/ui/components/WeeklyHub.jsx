@@ -8,6 +8,7 @@ import { deriveTeamCapSnapshot, formatMoneyM, formatPercent } from "../utils/num
 import { buildIncomingOfferPresentation } from "../utils/tradeOfferPresentation.js";
 import { buildNeedsAttentionItems, buildPrimaryAction } from "../utils/weeklyHubLayout.js";
 import { findLatestUserCompletedGame } from "../utils/completedGameSelectors.js";
+import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
 
 function getUserTeam(league) {
   return league?.teams?.find((t) => t.id === league?.userTeamId) ?? null;
@@ -51,6 +52,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
   const nextGame = useMemo(() => getNextGame(league), [league]);
   const weeklyContext = useMemo(() => evaluateWeeklyContext(league), [league]);
   const latestCompletedGame = useMemo(() => findLatestUserCompletedGame(league), [league]);
+  const latestResultPresentation = useMemo(() => buildCompletedGamePresentation(latestCompletedGame?.game ?? null, { seasonId: league?.seasonId, week: latestCompletedGame?.week, source: "weekly_hub_last_game" }), [league?.seasonId, latestCompletedGame]);
 
   if (!league || !user || !weeklyContext) return null;
 
@@ -217,7 +219,7 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
               variant="outline"
               onClick={() => (latestCompletedGame?.gameId ? onOpenBoxScore?.(latestCompletedGame.gameId) : onNavigate?.("Schedule"))}
             >
-              {latestCompletedGame?.gameId ? "Open Game Book" : "Open schedule"}
+              {latestCompletedGame?.gameId ? (latestResultPresentation?.ctaLabel ?? "View result") : "Open schedule"}
             </Button>
           </CardContent>
         </Card>
