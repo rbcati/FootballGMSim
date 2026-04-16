@@ -51,6 +51,7 @@ import ThemeToggle         from './components/ThemeToggle.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
+import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
@@ -278,6 +279,14 @@ function AppContent() {
       advancingRef.current = true;
       actions.advanceWeek();
     } else if (['offseason_resign', 'offseason'].includes(league.phase)) {
+      if (league.phase === 'offseason_resign') {
+        const actionCenter = buildOffseasonActionCenter(league);
+        const unresolvedKey = Number(actionCenter?.unresolved?.keyExpiringContracts ?? 0);
+        if (unresolvedKey > 0) {
+          const proceed = window.confirm(`You still have ${unresolvedKey} unresolved key re-signing decisions. Advance anyway?`);
+          if (!proceed) return;
+        }
+      }
       advancingRef.current = true;
       actions.advanceOffseason();
     } else if (league.phase === 'free_agency') {

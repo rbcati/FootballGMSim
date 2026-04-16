@@ -11,15 +11,15 @@ const PHASE_LABELS = {
 
 const PHASE_ACTIONS = {
   offseason_resign: [
-    { label: 'Open Re-sign table', tab: 'Free Agency' },
+    { label: 'Open Re-signing Center', tab: 'Contract Center' },
     { label: 'Review cap outlook', tab: 'Financials' },
   ],
   free_agency: [
     { label: 'Open market board', tab: 'Free Agency' },
-    { label: 'Open FA Hub', tab: 'FA Hub' },
+    { label: 'Review roster needs', tab: 'Roster:EXPIRING' },
   ],
   trades: [
-    { label: 'Open Trade Workspace', tab: 'Trades' },
+    { label: 'Open Trade Workspace', tab: 'Transactions:Builder' },
     { label: 'Review roster surplus', tab: 'Roster' },
   ],
   draft: [
@@ -64,13 +64,19 @@ function summarizePerformanceNeeds(userTeam) {
 }
 
 function deriveExpiringPriority(expiring = []) {
-  const key = expiring
-    .filter((p) => toNumber(p?.ovr, 0) >= 74 || ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase()))
-    .filter((p) => !p?.extensionDecision || p.extensionDecision === 'pending');
+  const unresolved = expiring.filter((p) => !['extended', 'let_walk', 'tagged'].includes(String(p?.extensionDecision ?? 'pending')));
+  const key = unresolved
+    .filter((p) => toNumber(p?.ovr, 0) >= 74 || ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase()));
+  const premiumUnresolved = unresolved.filter((p) => ['QB', 'LT', 'EDGE', 'CB'].includes(String(p?.pos ?? '').toUpperCase()));
+  const projectedCapDelta = unresolved
+    .filter((p) => String(p?.extensionDecision ?? '') === 'deferred')
+    .reduce((sum, p) => sum + Math.max(0, toNumber(p?.extensionAsk?.baseAnnual, toNumber(p?.contract?.baseAnnual, 0) * 1.15) - toNumber(p?.contract?.baseAnnual, 0)), 0);
   return {
     total: expiring.length,
-    unresolved: expiring.filter((p) => !p?.extensionDecision || p.extensionDecision === 'pending').length,
+    unresolved: unresolved.length,
     keyUnresolved: key.length,
+    premiumUnresolved: premiumUnresolved.length,
+    projectedCapDelta,
   };
 }
 
@@ -110,8 +116,14 @@ export function buildOffseasonActionCenter(league) {
     blockers.push(`${expiringPriority.keyUnresolved} key expiring contracts still unresolved.`);
     priorities.push('Resolve core re-sign decisions before market opens.');
   }
+  if (phase === 'offseason_resign' && expiringPriority.premiumUnresolved > 0) {
+    blockers.push(`${expiringPriority.premiumUnresolved} premium position decisions are still pending.`);
+  }
   if (phase === 'free_agency' && capRoom <= 0) {
     blockers.push('No cap room remaining for competitive offers.');
+  }
+  if (capRoom < 5) {
+    blockers.push('Cap room is below safe operating threshold ($5M).');
   }
   if (phase === 'draft' && !Array.isArray(league?.draftClass)) {
     blockers.push('Draft board is not hydrated yet.');
@@ -119,6 +131,28 @@ export function buildOffseasonActionCenter(league) {
   if (phase === 'preseason' && rosterCount > 53) {
     blockers.push(`Roster cutdown required (${rosterCount}/53).`);
   }
+
+  if (phase === 'offseason_resign') {
+    const premiumShortages = ['QB', 'LT', 'EDGE', 'CB'].filter((pos) => !expiring.some((p) => String(p?.pos ?? '').toUpperCase() === pos && ['extended', 'tagged', 'deferred', 'pending'].includes(String(p?.extensionDecision ?? 'pending'))) && !(userTeam?.roster ?? []).some((p) => String(p?.pos ?? '').toUpperCase() === pos && toNumber(p?.contract?.years, 0) > 1));
+    if (premiumShortages.length > 0) {
+      blockers.push(`No starter security at premium spots: ${premiumShortages.join(', ')}.`);
+    }
+  }
+
+  const depthByPos = (userTeam?.roster ?? []).reduce((acc, p) => {
+    const pos = String(p?.pos ?? '').toUpperCase();
+    if (!pos) return acc;
+    acc[pos] = (acc[pos] ?? 0) + 1;
+    return acc;
+  }, {});
+  const thinGroups = ['OL', 'CB', 'DL', 'LB']
+    .filter((group) => {
+      const count = Object.entries(depthByPos)
+        .filter(([pos]) => pos.includes(group) || (group === 'OL' && ['LT', 'LG', 'C', 'RG', 'RT'].includes(pos)) || (group === 'DL' && ['DT', 'DE', 'EDGE'].includes(pos)))
+        .reduce((sum, [, count]) => sum + count, 0);
+      return count > 0 && count < 4;
+    });
+  if (thinGroups.length > 0) priorities.push(`Depth is thin in ${thinGroups.join(', ')}.`);
 
   if (capRoom < 8) priorities.push('Cap flexibility is thin; focus on value signings or restructures.');
   if (draftPickCount < 5) priorities.push('Limited draft capital; prioritize trade-back opportunities.');
@@ -138,6 +172,7 @@ export function buildOffseasonActionCenter(league) {
     },
     metrics: {
       capRoom,
+      projectedCapRoom: Math.round((capRoom - expiringPriority.projectedCapDelta) * 10) / 10,
       rosterCount,
       draftPickCount,
       expiringContracts: expiringPriority.total,
