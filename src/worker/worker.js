@@ -647,6 +647,8 @@ let meta = getSafeMeta();
  */
 function buildViewState() {
   const meta = getSafeMeta();
+  const standingsContext = resolveStandingsContext(meta);
+  const standingsRows = resolveStandingsRows(meta, standingsContext);
   const tradeDeadline = getTradeDeadlineSnapshot(meta);
   const teams = cache.getAllTeams().map(t => {
     const roster = cache.getPlayersByTeam(t.id);
@@ -756,6 +758,7 @@ function buildViewState() {
     offseasonProgressionDone: meta?.offseasonProgressionDone ?? false,
     freeAgencyState: meta?.freeAgencyState ?? null,
     draftStarted: !!(meta?.draftState),
+    draftLifecycleStatus: resolveDraftLifecycleStatus(meta),
     nextGameStakes,
     playoffSeeds: meta?.playoffSeeds ?? null,
     championTeamId: meta?.championTeamId ?? null,
@@ -779,8 +782,54 @@ function buildViewState() {
     commissionerMode: !!meta?.commissionerMode,
     commissionerEverEnabled: !!meta?.commissionerEverEnabled,
     commissionerLog: Array.isArray(meta?.commissionerLog) ? meta.commissionerLog.slice(-100) : [],
+    standings: standingsRows,
+    standingsContext,
     teams,
   };
+}
+
+function resolveDraftLifecycleStatus(metaObj) {
+  const phase = String(metaObj?.phase ?? '');
+  const draftState = metaObj?.draftState;
+  if (!draftState) return phase === 'draft' ? 'not_generated' : 'not_available';
+  const total = Number(draftState?.picks?.length ?? 0);
+  const current = Number(draftState?.currentPickIndex ?? 0);
+  if (total > 0 && current >= total) return 'draft_complete';
+  if (phase === 'draft') return 'draft_ready';
+  return 'draft_generated';
+}
+
+function resolveStandingsContext(metaObj) {
+  const phase = String(metaObj?.phase ?? 'regular');
+  if (phase === 'regular') return { phase, mode: 'live_regular', label: 'Current standings' };
+  if (phase === 'playoffs') return { phase, mode: 'playoff_snapshot', label: 'Playoff standings snapshot' };
+  if (phase === 'offseason_resign' || phase === 'free_agency' || phase === 'draft' || phase === 'offseason') {
+    return { phase, mode: 'final_season', label: 'Final regular season standings' };
+  }
+  if (phase === 'preseason') return { phase, mode: 'archive', label: 'Previous season final standings' };
+  return { phase, mode: 'live_regular', label: 'Standings' };
+}
+
+function resolveStandingsRows(metaObj, context) {
+  const current = buildStandings();
+  if (context?.mode !== 'archive') return current;
+  const history = Array.isArray(metaObj?.leagueHistory) ? metaObj.leagueHistory : [];
+  const latest = history[history.length - 1];
+  const rows = Array.isArray(latest?.standings) ? latest.standings : [];
+  if (rows.length === 0) return current;
+  return rows.map((row) => ({
+    id: row?.id ?? null,
+    name: row?.name ?? 'Unknown Team',
+    abbr: row?.abbr ?? '---',
+    conf: row?.conf ?? null,
+    div: row?.div ?? null,
+    wins: Number(row?.wins ?? 0),
+    losses: Number(row?.losses ?? 0),
+    ties: Number(row?.ties ?? 0),
+    pf: Number(row?.pf ?? row?.ptsFor ?? 0),
+    pa: Number(row?.pa ?? row?.ptsAgainst ?? 0),
+    pct: Number(row?.pct ?? 0),
+  }));
 }
 
 function pruneIncomingTradeOffers(metaObj) {
@@ -8137,6 +8186,10 @@ async function handleGetDashboardLeaders(payload, id) {
 
 async function handleGetLeagueLeaders({ mode = 'season' }, id) {
   const meta = ensureDynastyMeta(cache.getMeta());
+  const phase = String(meta?.phase ?? 'regular');
+  const contextualMode = mode === 'season'
+    ? (phase === 'regular' ? 'current_regular_season' : 'last_completed_regular_season')
+    : mode;
 
   // Helper: build display-ready top-N list for a stat key
   const topN = (entries, key, n = 10) => {
@@ -8171,7 +8224,40 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
 
   let entries = [];
 
+  const buildEntriesForSeason = async (seasonId) => {
+    if (!seasonId) return [];
+    const seasonStats = await PlayerStats.bySeason(seasonId).catch(() => []);
+    if (!Array.isArray(seasonStats) || seasonStats.length === 0) return [];
+    const missingIds = [];
+    const local = [];
+    for (const s of seasonStats) {
+      const p = cache.getPlayer(s.playerId);
+      if (!p) missingIds.push(s.playerId);
+      local.push({ stat: s, player: p ?? null });
+    }
+    const loadedPlayers = new Map();
+    if (missingIds.length > 0) {
+      const players = await Players.loadBulk([...new Set(missingIds)]);
+      for (const p of players) if (p) loadedPlayers.set(String(p.id), p);
+    }
+    const built = [];
+    for (const row of local) {
+      const p = row.player ?? loadedPlayers.get(String(row.stat.playerId));
+      if (!p) continue;
+      built.push({ ...row.stat, name: p.name, pos: p.pos, teamId: p.teamId ?? row.stat.teamId });
+    }
+    return built;
+  };
+
   if (mode === 'season') {
+    if (contextualMode === 'last_completed_regular_season') {
+      const history = Array.isArray(meta?.leagueHistory) ? meta.leagueHistory : [];
+      const latestSeasonId = history[history.length - 1]?.id ?? null;
+      entries = await buildEntriesForSeason(latestSeasonId);
+    }
+  }
+
+  if (mode === 'season' && entries.length === 0) {
     // Build a map seeded from in-memory stats (always the freshest source).
     // Then backfill with DB-flushed stats for any player NOT yet in memory —
     // this covers the post-save/load case where _seasonStats has been cleared.
@@ -8292,7 +8378,16 @@ async function handleGetLeagueLeaders({ mode = 'season' }, id) {
     },
   };
 
-  post(toUI.LEAGUE_LEADERS, { mode, categories, year: meta?.year, seasonId: meta?.currentSeasonId }, id);
+  post(toUI.LEAGUE_LEADERS, {
+    mode,
+    categories,
+    year: meta?.year,
+    seasonId: contextualMode === 'last_completed_regular_season'
+      ? (Array.isArray(meta?.leagueHistory) ? meta.leagueHistory[meta.leagueHistory.length - 1]?.id : null)
+      : meta?.currentSeasonId,
+    source: contextualMode,
+    phase,
+  }, id);
 }
 
 // ── Handler: GET_ALL_PLAYER_STATS ─────────────────────────────────────────────

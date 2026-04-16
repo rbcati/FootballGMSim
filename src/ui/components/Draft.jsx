@@ -2239,6 +2239,9 @@ export default function Draft({ league, actions, onNavigate = null }) {
     setLoading(true);
     setError(null);
     try {
+      if (league?.phase === "draft" && !league?.draftStarted) {
+        await actions.startDraft?.();
+      }
       const res = await actions.getDraftState();
       setDraftState(normalizeDraftState(res?.payload));
     } catch (err) {
@@ -2246,7 +2249,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
     } finally {
       setLoading(false);
     }
-  }, [actions, normalizeDraftState]);
+  }, [actions, normalizeDraftState, league?.phase, league?.draftStarted]);
 
   // Enrich each pick with isUser flag for the completed-picks panel
   const enrichedDraftState = useMemo(() => {
@@ -2439,11 +2442,15 @@ export default function Draft({ league, actions, onNavigate = null }) {
           </CardHeader>
           <CardContent style={{ display: "grid", gap: "var(--space-3)" }}>
             <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
-              The draft is active, but board data has not been hydrated yet. Retry loading or return to League HQ.
+              {league?.draftLifecycleStatus === "not_generated"
+                ? "Draft generation is pending. Starting draft setup now."
+                : "The draft is active, but board data has not been hydrated yet. Retry loading or return to League HQ."}
             </div>
             <div style={{ display: "flex", gap: "var(--space-2)" }}>
               <Button className="btn" onClick={loadDraftState}>Retry Draft Load</Button>
-              <Button className="btn btn-secondary" onClick={() => onNavigate?.("League")}>Return to League</Button>
+              <Button className="btn btn-secondary" onClick={() => onNavigate?.(league?.phase === "draft" ? "HQ" : "League")}>
+                Return to {league?.phase === "draft" ? "HQ" : "League"}
+              </Button>
             </div>
           </CardContent>
         </Card>

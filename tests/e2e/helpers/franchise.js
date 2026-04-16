@@ -71,6 +71,8 @@ export async function goToTab(page, name) {
     standings: 'league',
     schedule: 'league',
     stats: 'league',
+    'league-leaders': 'league',
+    draft: 'transactions',
     transactions: 'transactions',
     'free-agency': 'transactions',
     'history-hub': 'history',

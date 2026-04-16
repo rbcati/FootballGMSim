@@ -94,6 +94,7 @@ import {
   normalizeDashboardTab,
   normalizeShellSectionId,
 } from "../utils/shellNavigation.js";
+import { usePhaseRouteHydration } from "../hooks/usePhaseRouteHydration.js";
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -509,7 +510,7 @@ function PlayoffPictureView({ teams, activeConf, userTeamId, onTeamSelect }) {
   );
 }
 
-function StandingsTab({ teams = [], userTeamId, onTeamSelect, leagueSettings }) {
+function StandingsTab({ teams = [], userTeamId, onTeamSelect, leagueSettings, standingsContext = null }) {
   const confNames = Array.isArray(leagueSettings?.conferenceNames) && leagueSettings.conferenceNames.length
     ? leagueSettings.conferenceNames
     : CONFS;
@@ -554,6 +555,11 @@ function StandingsTab({ teams = [], userTeamId, onTeamSelect, leagueSettings }) 
 
   return (
     <div>
+      {standingsContext?.label ? (
+        <div style={{ marginBottom: "var(--space-2)", color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
+          {standingsContext.label}
+        </div>
+      ) : null}
       {/* Conference tab pills + view mode toggle */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "var(--space-2)", marginBottom: "var(--space-4)" }}>
         <Tabs value={activeConf} onValueChange={setActiveConf}>
@@ -1407,6 +1413,8 @@ export default function LeagueDashboard({
   const phaseContext = getSafePhaseContext(safeLeague);
   const safeStandingsRows = useMemo(() => getSafeStandingsRows(safeLeague), [safeLeague]);
   const isInitialized = safeTeams.length > 0;
+  const standingsContext = phaseContext?.standingsContext ?? league?.standingsContext ?? null;
+  usePhaseRouteHydration({ activeTab, league: safeLeague, actions });
 
   // NOTE: a missing schedule only affects the Schedule tab.
   // Do NOT block the whole dashboard — all other tabs remain usable.
@@ -1529,7 +1537,7 @@ export default function LeagueDashboard({
           🏆 <strong>PLAYOFFS</strong> — click to view bracket
         </div>
       )}
-      {activeTab !== "HQ" && phaseContext.phase === "draft" && activeTab !== "Draft" && (
+      {activeTab !== "HQ" && phaseContext.phase === "draft" && activeTab !== "Draft" && (league?.draftLifecycleStatus === "draft_ready" || league?.draftLifecycleStatus === "draft_generated") && (
         <div onClick={() => setActiveTab("Draft")} className="action-banner action-banner-accent">
           🏈 <strong>Draft Board is Open</strong> — click to make picks
         </div>
@@ -1680,6 +1688,7 @@ export default function LeagueDashboard({
                   userTeamId={league.userTeamId}
                   onTeamSelect={setSelectedTeamId}
                   leagueSettings={league.settings}
+                  standingsContext={standingsContext}
                 />
               )}
             />
@@ -1706,6 +1715,7 @@ export default function LeagueDashboard({
               userTeamId={league.userTeamId}
               onTeamSelect={setSelectedTeamId}
               leagueSettings={league.settings}
+              standingsContext={standingsContext}
             />
           </TabErrorBoundary>
         )}
