@@ -24,6 +24,7 @@ const MORE_GROUPS = [
   {
     title: 'League + History',
     items: [
+      { id: 'league-leaders', label: 'League Leaders', icon: StandingsIcon },
       { id: 'History Hub', label: 'History', icon: HomeIcon },
       { id: 'Analytics', label: 'Analytics', icon: AnalyticsIcon },
       { id: 'Saves', label: 'Saves', icon: SaveIcon },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useSettings } from "../../context/SettingsContext.jsx";
+import { useSettings } from "../context/SettingsContext.jsx";
 
 /**
  * ThemeToggle — Dark/Light/System theme switcher
@@ -16,7 +16,8 @@ const THEMES = {
 };
 
 export default function ThemeToggle({ compact = false }) {
-  const { theme: savedTheme = "system", setTheme: setSavedTheme } = useSettings();
+  const { settings, updateSetting } = useSettings();
+  const savedTheme = settings?.theme ?? "system";
   const [theme, setTheme] = useState(() => {
     return savedTheme || "system";
   });
@@ -43,8 +44,8 @@ export default function ThemeToggle({ compact = false }) {
 
   useEffect(() => {
     applyTheme(theme);
-    setSavedTheme?.(theme);
-  }, [theme, applyTheme]);
+    updateSetting?.("theme", theme);
+  }, [theme, applyTheme, updateSetting]);
 
   const cycle = useCallback(() => {
     setTheme(prev => {

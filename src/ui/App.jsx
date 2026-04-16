@@ -48,7 +48,7 @@ import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
-import { SettingsProvider, useSettings } from '../context/SettingsContext.jsx';
+import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
@@ -123,7 +123,8 @@ function AppContent() {
   const [watchMode, setWatchMode] = useState('watch');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
-  const { soundEnabled, toggleSound } = useSettings();
+  const { settings, updateSetting } = useSettings();
+  const soundEnabled = settings?.soundEnabled ?? true;
   const isWeeklyResultPhase = league?.phase === 'preseason' || league?.phase === 'regular' || league?.phase === 'playoffs';
   const authoritativeResults = useMemo(
     () => (isWeeklyResultPhase && Array.isArray(lastResults) ? lastResults : []),
@@ -640,7 +641,13 @@ function AppContent() {
         </div>
 
         <div className="app-header-actions">
-          <button className="btn app-icon-btn" onClick={toggleSound} title={soundEnabled ? "Mute sound" : "Unmute sound"}>
+          <button
+            className="btn app-icon-btn"
+            onClick={() => updateSetting("soundEnabled", !soundEnabled)}
+            title="Toggle sound effects"
+            aria-label="Toggle sound effects"
+            style={{ minWidth: 44, minHeight: 44 }}
+          >
             {soundEnabled ? "🔊" : "🔇"}
           </button>
           <ThemeToggle compact />
