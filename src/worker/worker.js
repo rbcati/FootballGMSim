@@ -2684,6 +2684,18 @@ function buildWeekMatchupsFromLeague(league, meta, week) {
       homeDefense: homeUnits.defense,
       awayOffense: awayUnits.offense,
       awayDefense: awayUnits.defense,
+      homePlayers: homeRoster.map((player) => ({
+        id: player.id,
+        name: player.name,
+        pos: player.pos,
+        ovr: player.ovr ?? player?.ratings?.overall ?? player?.ratings?.ovr ?? 70,
+      })),
+      awayPlayers: awayRoster.map((player) => ({
+        id: player.id,
+        name: player.name,
+        pos: player.pos,
+        ovr: player.ovr ?? player?.ratings?.overall ?? player?.ratings?.ovr ?? 70,
+      })),
       seed: buildDeterministicSeed(`${meta?.currentSeasonId ?? 1}:${week}:${game?.home?.id}:${game?.away?.id}`),
       weather: 'clear',
     });

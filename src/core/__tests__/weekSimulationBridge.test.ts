@@ -68,9 +68,34 @@ describe('weekSimulationBridge', () => {
       normalizationConstant: 0.74,
       topReason1: 'Pocket survived pressure',
       topReason2: 'Route leverage over zone',
+      quarterScores: { home: [7, 7, 7, 7], away: [7, 7, 0, 7] },
+      teamStats: {
+        home: {
+          plays: 62, firstDowns: 21, passAtt: 35, passComp: 23, passYd: 260, passTD: 2,
+          rushAtt: 27, rushYd: 110, rushTD: 2, totalYards: 370, yardsPerPlay: 5.97,
+          turnovers: 1, sacksAllowed: 2, sacksMade: 3, interceptions: 1,
+          redZoneTrips: 3, redZoneScores: 2, explosivePlays: 4, successRate: 0.58,
+        },
+        away: {
+          plays: 58, firstDowns: 18, passAtt: 31, passComp: 20, passYd: 230, passTD: 2,
+          rushAtt: 27, rushYd: 93, rushTD: 1, totalYards: 323, yardsPerPlay: 5.57,
+          turnovers: 2, sacksAllowed: 3, sacksMade: 2, interceptions: 1,
+          redZoneTrips: 2, redZoneScores: 2, explosivePlays: 3, successRate: 0.53,
+        },
+      },
+      boxScore: { home: {}, away: {} },
+      playDigest: [],
+      playLogs: [],
+      summary: { storyline: 'Key edge: Pocket survived pressure', headlineMoments: [] },
+      recapText: 'Home wins with late pressure.',
+      simFactors: {
+        home: { qbRating: 101.4, rushYpc: 4.07, successRate: 0.58, passRate: 0.565 },
+        away: { qbRating: 89.1, rushYpc: 3.44, successRate: 0.53, passRate: 0.534 },
+      },
     });
 
     expect(mapped.scoreHome).toBe(28);
+    expect(mapped.boxScore).toEqual({ home: {}, away: {} });
     expect(mapped.summary.storyline).toContain('Key edge');
   });
 
