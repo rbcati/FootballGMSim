@@ -1,121 +1,165 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getTeamIdentity } from "../../data/team-utils.js";
-import { toFiniteNumber } from "../utils/numberFormatting.js";
+import React, { useMemo, useState } from "react";
 
-function rankBadge(rank) {
-  if (rank === 1) return "🥇";
-  if (rank === 2) return "🥈";
-  if (rank === 3) return "🥉";
-  return `#${rank}`;
+const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions"];
+
+const CATEGORY_CONFIG = {
+  Passing: {
+    primaryLabel: "Pass Yds",
+    secondaryLabel: "TD / Cmp%",
+    getPrimary: (player) => stat(player, ["passingYards", "passYd"]),
+    getSecondary: (player) => {
+      const td = stat(player, ["touchdowns", "passTD", "passTDs"]);
+      const comp = stat(player, ["completions", "passComp"]);
+      const att = stat(player, ["attempts", "passAtt"]);
+      const pct = att > 0 ? (comp / att) * 100 : 0;
+      return `${displayNumber(td)} / ${displayNumber(pct, 1, "%")}`;
+    },
+  },
+  Rushing: {
+    primaryLabel: "Rush Yds",
+    secondaryLabel: "TD / YPC",
+    getPrimary: (player) => stat(player, ["rushingYards", "rushYd", "rushYds"]),
+    getSecondary: (player) => {
+      const td = stat(player, ["rushingTDs", "rushTD", "rushTDs"]);
+      const yds = stat(player, ["rushingYards", "rushYd", "rushYds"]);
+      const att = stat(player, ["rushingAttempts", "rushAtt"]);
+      const ypc = att > 0 ? yds / att : 0;
+      return `${displayNumber(td)} / ${displayNumber(ypc, 1)}`;
+    },
+  },
+  Receiving: {
+    primaryLabel: "Rec Yds",
+    secondaryLabel: "Rec / TD",
+    getPrimary: (player) => stat(player, ["receivingYards", "recYd", "recYds"]),
+    getSecondary: (player) => {
+      const rec = stat(player, ["receptions"]);
+      const td = stat(player, ["receivingTDs", "recTD", "recTDs"]);
+      return `${displayNumber(rec)} / ${displayNumber(td)}`;
+    },
+  },
+  Tackles: {
+    primaryLabel: "Total Tkl",
+    secondaryLabel: "Solo / Ast",
+    getPrimary: (player) => {
+      const solo = stat(player, ["soloTackles"]);
+      const assist = stat(player, ["assistTackles"]);
+      const tackles = stat(player, ["totalTackles", "tackles"]);
+      return Math.max(tackles, solo + assist);
+    },
+    getSecondary: (player) => `${displayNumber(stat(player, ["soloTackles"]))} / ${displayNumber(stat(player, ["assistTackles"]))}`,
+  },
+  Sacks: {
+    primaryLabel: "Sacks",
+    secondaryLabel: "TFL / FF",
+    getPrimary: (player) => stat(player, ["sacks"]),
+    getSecondary: (player) => `${displayNumber(stat(player, ["tacklesForLoss", "tfl"]))} / ${displayNumber(stat(player, ["forcedFumbles", "ffum"]))}`,
+  },
+  Interceptions: {
+    primaryLabel: "INT",
+    secondaryLabel: "PD / Tkl",
+    getPrimary: (player) => stat(player, ["interceptions", "ints"]),
+    getSecondary: (player) => `${displayNumber(stat(player, ["passesDefended"]))} / ${displayNumber(stat(player, ["tackles", "totalTackles"]))}`,
+  },
+};
+
+function stat(player, keys) {
+  const source = player?.stats ?? player?.seasonStats ?? player?.totals ?? {};
+  const fromSource = keys.reduce((value, key) => (value != null ? value : source?.[key]), null);
+  const fromPlayer = keys.reduce((value, key) => (value != null ? value : player?.[key]), null);
+  return Number(fromSource ?? fromPlayer ?? 0) || 0;
 }
 
-function LeaderList({ title, statLabel, rows }) {
-  return (
-    <Card className="card-premium">
-      <CardHeader className="py-2 px-3 border-b border-[color:var(--hairline)]" style={{ background: "var(--surface-strong)" }}>
-        <CardTitle className="text-xs font-bold uppercase tracking-widest text-[color:var(--text-muted)]">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        {rows.map((row, idx) => (
-          <div key={`${row.id}-${idx}`} style={{ display: "grid", gridTemplateColumns: "40px 1fr auto", gap: 10, alignItems: "center", padding: "10px 12px", borderBottom: idx < rows.length - 1 ? "1px solid var(--hairline)" : "none" }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: idx < 3 ? "#FFD60A" : "var(--text-subtle)" }}>{rankBadge(idx + 1)}</div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{row.name ?? "Unknown"}</span>
-                <Badge variant="outline" style={{ fontSize: 10, padding: "0 6px", background: "var(--surface)", borderColor: "var(--hairline)" }}>{row.pos ?? "?"}</Badge>
-                <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{row.teamAbbr ?? "—"}</span>
-              </div>
-              <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>{statLabel}</div>
-            </div>
-            <div style={{ fontWeight: 900, fontVariantNumeric: "tabular-nums", color: "var(--text)" }}>{(toFiniteNumber(row.value, 0)).toLocaleString()}</div>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+function displayNumber(value, decimals = 0, suffix = "") {
+  const safe = Number(value ?? 0) || 0;
+  if (safe === 0) return "—";
+  return `${safe.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}${suffix}`;
+}
+
+export default function LeagueLeaders({ league, onPlayerSelect, onNavigate }) {
+  const [activeTab, setActiveTab] = useState("Passing");
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+
+  const allPlayers = useMemo(
+    () =>
+      teams.flatMap((team) =>
+        (Array.isArray(team?.roster) ? team.roster : []).map((p) => ({
+          ...p,
+          teamName: team?.name ?? "—",
+          teamId: team?.id ?? null,
+          isUserTeam: team?.isUserTeam ?? Number(team?.id) === Number(league?.userTeamId),
+        })),
+      ),
+    [teams, league?.userTeamId],
   );
-}
 
-export default function LeagueLeaders({ league, actions }) {
-  const [rostersByTeam, setRostersByTeam] = useState({});
-  const currentSeason = league?.year ?? league?.seasonId;
-  const isReady = Boolean(league && currentSeason && Array.isArray(league?.teams));
-  const teams = league?.teams ?? [];
-  const getStat = (player, key) => toFiniteNumber(player?.seasonLog?.[currentSeason]?.[key], 0);
+  const rows = useMemo(() => {
+    const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
+    return allPlayers
+      .map((player) => ({
+        player,
+        primary: config.getPrimary(player) ?? 0,
+        secondary: config.getSecondary(player),
+      }))
+      .sort((a, b) => (b.primary ?? 0) - (a.primary ?? 0))
+      .slice(0, 10);
+  }, [allPlayers, activeTab]);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      if (!league?.teams?.length || !actions?.getRoster) return;
-      const responses = await Promise.all(
-        league.teams.map(async (team) => {
-          try {
-            const resp = await actions.getRoster(team.id);
-            return [team.id, resp?.payload?.players ?? []];
-          } catch {
-            return [team.id, []];
-          }
-        }),
-      );
-      if (mounted) setRostersByTeam(Object.fromEntries(responses));
-    };
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [league?.teams, actions]);
-
-  const allPlayers = useMemo(() => {
-    const aggregated = [];
-    teams.forEach((team) => {
-      const loadedRoster = rostersByTeam?.[team?.id];
-      const roster = Array.isArray(loadedRoster) ? loadedRoster : (team?.roster ?? []);
-      roster.forEach((player) => {
-        if (player) aggregated.push({ ...player, teamId: Number(team?.id) });
-      });
-    });
-    return aggregated;
-  }, [rostersByTeam, teams]);
-
-  const topPassing = useMemo(() => allPlayers
-    .map((player) => {
-      const team = getTeamIdentity(player.teamId, teams);
-      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: getStat(player, "passYd") };
-    })
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, teams]);
-
-  const topRushing = useMemo(() => allPlayers
-    .map((player) => {
-      const team = getTeamIdentity(player.teamId, teams);
-      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: getStat(player, "rushYd") };
-    })
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, teams]);
-
-  const topDefense = useMemo(() => allPlayers
-    .map((player) => {
-      const team = getTeamIdentity(player.teamId, teams);
-      const combined = getStat(player, "tackles") + getStat(player, "sacks");
-      return { id: player.id, name: player.name, pos: player.pos, teamAbbr: team.abbr, value: combined };
-    })
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10), [allPlayers, currentSeason, teams]);
-
-  if (!isReady) {
-    return (
-      <div className="leaders-empty">
-        <p>Stats will appear after Week 1.</p>
-      </div>
-    );
-  }
+  const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
 
   return (
-    <div style={{ display: "grid", gap: "var(--space-4)" }}>
-      <LeaderList title="Top 10 Passing" statLabel="Pass Yards" rows={topPassing} />
-      <LeaderList title="Top 10 Rushing" statLabel="Rush Yards" rows={topRushing} />
-      <LeaderList title="Top 10 Defense" statLabel="Tackles + Sacks" rows={topDefense} />
+    <div style={{ display: "grid", gap: "var(--space-3)" }}>
+      <div className="standings-tabs" style={{ flexWrap: "wrap", gap: 6 }}>
+        {TABS.map((tab) => (
+          <button key={tab} className={`standings-tab${activeTab === tab ? " active" : ""}`} onClick={() => setActiveTab(tab)}>
+            {tab}
+          </button>
+        ))}
+      </div>
+      <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+        <table className="standings-table" style={{ width: "100%", minWidth: 680 }}>
+          <thead>
+            <tr>
+              <th style={{ width: 70 }}>Rank</th>
+              <th>Player</th>
+              <th>Team</th>
+              <th style={{ textAlign: "right" }}>{config.primaryLabel}</th>
+              <th style={{ textAlign: "right" }}>{config.secondaryLabel}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((entry, index) => (
+              <tr
+                key={`${entry.player?.id ?? entry.player?.name ?? "player"}-${index}`}
+                style={entry.player?.isUserTeam ? { background: "color-mix(in srgb, var(--accent) 10%, transparent)" } : undefined}
+              >
+                <td>{index + 1}</td>
+                <td>
+                  <button
+                    className="btn btn-link"
+                    style={{ padding: 0, minHeight: 0 }}
+                    onClick={() => onPlayerSelect?.(entry.player)}
+                  >
+                    {entry.player?.name ?? "—"}
+                  </button>
+                </td>
+                <td>{entry.player?.teamName ?? "—"}</td>
+                <td style={{ textAlign: "right" }}>{displayNumber(entry.primary)}</td>
+                <td style={{ textAlign: "right" }}>{entry.secondary ?? "—"}</td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5} style={{ textAlign: "center", color: "var(--text-muted)", padding: "var(--space-4)" }}>
+                  No player stats available yet.{" "}
+                  <button className="btn btn-link" onClick={() => onNavigate?.("League")} style={{ padding: 0, minHeight: 0 }}>
+                    Return to League
+                  </button>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

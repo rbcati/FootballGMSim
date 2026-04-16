@@ -197,6 +197,12 @@ const POS_COLUMNS = {
   ],
 };
 
+const PASS_POSITIONS = ["QB"];
+const RUSH_POSITIONS = ["RB", "FB"];
+const REC_POSITIONS = ["WR", "TE"];
+const DEF_POSITIONS = ["CB", "S", "SS", "FS", "LB", "MLB", "OLB", "DE", "DT", "NT"];
+const SPEC_POSITIONS = ["K", "P", "LS"];
+
 function getColumns(pos) {
   if (!pos) return POS_COLUMNS.QB;
   const p = pos.toUpperCase();
@@ -318,6 +324,7 @@ export default function PlayerProfile({
   const [loading, setLoading] = useState(true);
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
+  const [activeProfileTab, setActiveProfileTab] = useState("Overview");
 
   const fetchProfile = React.useCallback(() => {
     if (!playerId) return;
@@ -462,6 +469,30 @@ export default function PlayerProfile({
       { label: 'Kicking', data: devHistory.map((d) => d.kicking ?? null), borderColor: '#14b8a6', backgroundColor: 'transparent' },
     ],
   }), [devHistory]);
+
+  const careerRows = useMemo(
+    () => (Array.isArray(player?.careerStats) ? [...player.careerStats] : []),
+    [player?.careerStats],
+  );
+  const careerTotals = useMemo(
+    () =>
+      careerRows.reduce((totals, line) => ({
+        gamesPlayed: totals.gamesPlayed + Number(line?.gamesPlayed ?? line?.gp ?? 0),
+        passYds: totals.passYds + Number(line?.passYds ?? line?.passingYards ?? 0),
+        passTDs: totals.passTDs + Number(line?.passTDs ?? line?.touchdowns ?? 0),
+        rushYds: totals.rushYds + Number(line?.rushYds ?? line?.rushingYards ?? 0),
+        rushTDs: totals.rushTDs + Number(line?.rushTDs ?? line?.rushingTDs ?? 0),
+        receptions: totals.receptions + Number(line?.receptions ?? 0),
+        recYds: totals.recYds + Number(line?.recYds ?? line?.receivingYards ?? 0),
+        recTDs: totals.recTDs + Number(line?.recTDs ?? line?.receivingTDs ?? 0),
+        tackles: totals.tackles + Number(line?.tackles ?? line?.totalTackles ?? 0),
+        sacks: totals.sacks + Number(line?.sacks ?? 0),
+        interceptions: totals.interceptions + Number(line?.interceptions ?? line?.ints ?? 0),
+      }), {
+        gamesPlayed: 0, passYds: 0, passTDs: 0, rushYds: 0, rushTDs: 0, receptions: 0, recYds: 0, recTDs: 0, tackles: 0, sacks: 0, interceptions: 0,
+      }),
+    [careerRows],
+  );
 
   return (
     <div
@@ -765,6 +796,19 @@ export default function PlayerProfile({
 
         {/* ── Body ── */}
         <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
+          <div className="standings-tabs" style={{ gap: 6, flexWrap: "wrap" }}>
+            {["Overview", "Career Stats"].map((tab) => (
+              <button
+                key={tab}
+                className={`standings-tab${activeProfileTab === tab ? " active" : ""}`}
+                onClick={() => setActiveProfileTab(tab)}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          {activeProfileTab === "Overview" && (
+            <>
           {!loading && player && (
             <section>
               <h3 style={sectionLabelStyle}>Development Tab</h3>
@@ -1402,6 +1446,58 @@ export default function PlayerProfile({
                   </TableBody>
                 </Table>
               </div>
+            </section>
+          )}
+            </>
+          )}
+          {activeProfileTab === "Career Stats" && (
+            <section>
+              {careerRows.length === 0 ? (
+                <p style={{ color: "var(--text-muted)" }}>
+                  No career stats recorded yet. Stats accumulate after each completed season.
+                </p>
+              ) : (
+                <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+                  <Table className="standings-table" style={{ width: "100%", minWidth: 760 }}>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Season</TableHead>
+                        <TableHead>Team</TableHead>
+                        <TableHead style={{ textAlign: "center" }}>Games</TableHead>
+                        {PASS_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableHead style={{ textAlign: "right" }}>Pass Yds</TableHead><TableHead style={{ textAlign: "right" }}>Pass TD</TableHead></>)}
+                        {RUSH_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableHead style={{ textAlign: "right" }}>Rush Yds</TableHead><TableHead style={{ textAlign: "right" }}>Rush TD</TableHead></>)}
+                        {REC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableHead style={{ textAlign: "right" }}>Rec</TableHead><TableHead style={{ textAlign: "right" }}>Rec Yds</TableHead><TableHead style={{ textAlign: "right" }}>Rec TD</TableHead></>)}
+                        {DEF_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableHead style={{ textAlign: "right" }}>Tackles</TableHead><TableHead style={{ textAlign: "right" }}>Sacks</TableHead><TableHead style={{ textAlign: "right" }}>INT</TableHead></>)}
+                        {SPEC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableHead style={{ textAlign: "right" }}>FGM</TableHead><TableHead style={{ textAlign: "right" }}>XPM</TableHead></>)}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {careerRows.map((line, index) => (
+                        <TableRow key={`${line?.season ?? "season"}-${line?.team ?? "team"}-${index}`}>
+                          <TableCell>{line?.season ?? line?.seasonId ?? "—"}</TableCell>
+                          <TableCell>{line?.team ?? "—"}</TableCell>
+                          <TableCell style={{ textAlign: "center" }}>{line?.gamesPlayed ?? line?.gp ?? "—"}</TableCell>
+                          {PASS_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.passYds ?? line?.passingYards ?? 0) > 0 ? Number(line?.passYds ?? line?.passingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.passTDs ?? line?.touchdowns ?? 0) > 0 ? Number(line?.passTDs ?? line?.touchdowns ?? 0) : "—"}</TableCell></>)}
+                          {RUSH_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.rushYds ?? line?.rushingYards ?? 0) > 0 ? Number(line?.rushYds ?? line?.rushingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.rushTDs ?? line?.rushingTDs ?? 0) > 0 ? Number(line?.rushTDs ?? line?.rushingTDs ?? 0) : "—"}</TableCell></>)}
+                          {REC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.receptions ?? 0) > 0 ? Number(line?.receptions ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.recYds ?? line?.receivingYards ?? 0) > 0 ? Number(line?.recYds ?? line?.receivingYards ?? 0).toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.recTDs ?? line?.receivingTDs ?? 0) > 0 ? Number(line?.recTDs ?? line?.receivingTDs ?? 0) : "—"}</TableCell></>)}
+                          {DEF_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{Number(line?.tackles ?? line?.totalTackles ?? 0) > 0 ? Number(line?.tackles ?? line?.totalTackles ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.sacks ?? 0) > 0 ? Number(line?.sacks ?? 0) : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{Number(line?.interceptions ?? line?.ints ?? 0) > 0 ? Number(line?.interceptions ?? line?.ints ?? 0) : "—"}</TableCell></>)}
+                          {SPEC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{line?.fgMade || 0 ? line?.fgMade ?? 0 : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{line?.xpMade || 0 ? line?.xpMade ?? 0 : "—"}</TableCell></>)}
+                        </TableRow>
+                      ))}
+                      <TableRow style={{ fontWeight: 800, background: "var(--surface-strong)" }}>
+                        <TableCell>Career Totals</TableCell>
+                        <TableCell>—</TableCell>
+                        <TableCell style={{ textAlign: "center" }}>{careerTotals.gamesPlayed || "—"}</TableCell>
+                        {PASS_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{careerTotals.passYds ? careerTotals.passYds.toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.passTDs || "—"}</TableCell></>)}
+                        {RUSH_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{careerTotals.rushYds ? careerTotals.rushYds.toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.rushTDs || "—"}</TableCell></>)}
+                        {REC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{careerTotals.receptions || "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.recYds ? careerTotals.recYds.toLocaleString() : "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.recTDs || "—"}</TableCell></>)}
+                        {DEF_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>{careerTotals.tackles || "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.sacks || "—"}</TableCell><TableCell style={{ textAlign: "right" }}>{careerTotals.interceptions || "—"}</TableCell></>)}
+                        {SPEC_POSITIONS.includes(player?.position ?? player?.pos) && (<><TableCell style={{ textAlign: "right" }}>—</TableCell><TableCell style={{ textAlign: "right" }}>—</TableCell></>)}
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </section>
           )}
         </div>

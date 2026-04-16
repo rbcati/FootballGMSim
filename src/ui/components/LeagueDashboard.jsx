@@ -213,7 +213,7 @@ const BASE_TABS = [
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
-  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Schedule", "Standings", "Stats", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
 ];
 
@@ -228,6 +228,14 @@ const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game P
 const TAB_ALIASES = {
   Trades: "Transactions",
 };
+
+const MOBILE_TAB_MAP = Object.freeze({
+  "League Leaders": "league-leaders",
+});
+
+const REVERSE_TAB_MAP = Object.freeze(
+  Object.fromEntries(Object.entries(MOBILE_TAB_MAP).map(([tab, slug]) => [slug, tab])),
+);
 
 // Division display labels and their numeric indices (from App.jsx DEFAULT_TEAMS).
 // div: 0=East  1=North  2=South  3=West
@@ -286,6 +294,11 @@ function toTestId(value = "") {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function canonicalizeMobileTab(tab) {
+  if (!tab) return tab;
+  return REVERSE_TAB_MAP[tab] ?? tab;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -1719,7 +1732,11 @@ export default function LeagueDashboard({
         )}
         {isInitialized && activeTab === "League Leaders" && (
           <TabErrorBoundary label="League Leaders">
-            <LeagueLeaders league={league} actions={actions} />
+            <LeagueLeaders
+              league={league}
+              onPlayerSelect={(player) => setSelectedPlayerId(player?.id ?? player)}
+              onNavigate={setActiveTab}
+            />
           </TabErrorBoundary>
         )}
         {activeTab === "Award Races" && (
@@ -1997,7 +2014,7 @@ export default function LeagueDashboard({
       <MobileNav
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
-        onDestinationChange={(tab) => setActiveTab(tab)}
+        onDestinationChange={(tab) => setActiveTab(canonicalizeMobileTab(tab))}
         onAdvance={onAdvanceWeek}
         advanceLabel={advanceLabel}
         advanceDisabled={advanceDisabled}
