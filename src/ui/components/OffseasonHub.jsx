@@ -17,6 +17,7 @@ import {
   toFiniteNumber,
 } from "../utils/numberFormatting.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
+import { buildOffseasonActionCenter } from "../utils/offseasonActionCenter.js";
 
 const PHASES = [
   {
@@ -309,6 +310,7 @@ function OffseasonStatsCard({ league, onNavigate }) {
 
 export default function OffseasonHub({ league, onNavigate }) {
   const currentPhase = league?.phase ?? "regular";
+  const actionCenter = useMemo(() => buildOffseasonActionCenter(league), [league]);
 
   const phaseOrder = PHASES.map(p => p.id);
   const currentIdx = phaseOrder.indexOf(currentPhase);
@@ -343,6 +345,41 @@ export default function OffseasonHub({ league, onNavigate }) {
       </div>
 
       <OffseasonStatsCard league={league} onNavigate={onNavigate} />
+
+      <div className="rounded-xl border border-white/10 bg-slate-950/65 p-3.5 shadow-xl">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <div>
+            <div style={{ fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "1px", color: "var(--text-muted)", fontWeight: 800 }}>Offseason Action Center</div>
+            <div style={{ fontSize: "0.9rem", fontWeight: 800 }}>{actionCenter.phaseLabel} · Next: {actionCenter.nextPhaseLabel}</div>
+          </div>
+          <div style={{ fontSize: "0.72rem", color: actionCenter.canSkipPhase ? "var(--success)" : "var(--warning)", fontWeight: 700 }}>
+            {actionCenter.canSkipPhase ? "No blockers — phase can be skipped." : "Blocking tasks remain."}
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginBottom: 10 }}>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2"><div style={{ fontSize: 10, color: "var(--text-muted)" }}>Cap Room</div><div style={{ fontWeight: 800 }}>${actionCenter.metrics.capRoom.toFixed(1)}M</div></div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2"><div style={{ fontSize: 10, color: "var(--text-muted)" }}>Roster</div><div style={{ fontWeight: 800 }}>{actionCenter.metrics.rosterCount} players</div></div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2"><div style={{ fontSize: 10, color: "var(--text-muted)" }}>Expiring</div><div style={{ fontWeight: 800 }}>{actionCenter.metrics.expiringContracts} ({actionCenter.unresolved?.keyExpiringContracts ?? 0} key)</div></div>
+          <div className="rounded-lg border border-white/10 bg-white/5 p-2"><div style={{ fontSize: 10, color: "var(--text-muted)" }}>Owned Picks</div><div style={{ fontWeight: 800 }}>{actionCenter.metrics.draftPickCount}</div></div>
+        </div>
+        {!!actionCenter.blockers?.length && (
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: "0.66rem", textTransform: "uppercase", color: "var(--warning)", fontWeight: 800 }}>Blockers</div>
+            {actionCenter.blockers.map((item) => <div key={item} style={{ fontSize: "0.75rem" }}>• {item}</div>)}
+          </div>
+        )}
+        {!!actionCenter.priorities?.length && (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: "0.66rem", textTransform: "uppercase", color: "var(--accent)", fontWeight: 800 }}>Unresolved Priorities</div>
+            {actionCenter.priorities.map((item) => <div key={item} style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>• {item}</div>)}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {(actionCenter.actions ?? []).map((action) => (
+            <button key={action.label} className="btn btn-sm" onClick={() => onNavigate?.(action.tab)}>{action.label}</button>
+          ))}
+        </div>
+      </div>
 
       {/* Phase timeline */}
       <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 backdrop-blur-md">

@@ -48,6 +48,7 @@ import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { usePlayerCompare } from "../utils/playerCompare.js";
+import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -621,6 +622,12 @@ export default function FreeAgency({
   const [nameFilter, setNameFilter] = useState("");
   const [minOvr, setMinOvr] = useState(60);
   const [advancedFilters, setAdvancedFilters] = useState([]);
+  const [maxAge, setMaxAge] = useState(40);
+  const [minSchemeFit, setMinSchemeFit] = useState(0);
+  const [demandTier, setDemandTier] = useState("ALL");
+  const [watchOnly, setWatchOnly] = useState(false);
+  const [watchlistIds, setWatchlistIds] = useState(new Set());
+  const [sortPreset, setSortPreset] = useState("best_available");
 
   // Sorting
   const [sortKey, setSortKey] = useState("ovr");
@@ -687,11 +694,35 @@ export default function FreeAgency({
   }, [faState]);
 
   const displayed = useMemo(() => {
-    return filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters });
-  }, [faPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters]);
+    const base = filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters });
+    return base.filter((player) => {
+      if ((player.age ?? 99) > maxAge) return false;
+      if ((player.schemeFit ?? 0) < minSchemeFit) return false;
+      if (demandTier !== "ALL" && formatDemandTier(player) !== demandTier) return false;
+      if (watchOnly && !watchlistIds.has(player.id)) return false;
+      return true;
+    });
+  }, [faPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds]);
 
   const sortedAgents = useMemo(() => {
     const arr = [...displayed];
+    if (sortPreset === "best_available") {
+      arr.sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+      return arr;
+    }
+    if (sortPreset === "cheapest_value") {
+      arr.sort((a, b) => ((b.ovr ?? 0) / Math.max(0.2, b._ask ?? 1)) - ((a.ovr ?? 0) / Math.max(0.2, a._ask ?? 1)));
+      return arr;
+    }
+    if (sortPreset === "youngest") {
+      arr.sort((a, b) => (a.age ?? 99) - (b.age ?? 99));
+      return arr;
+    }
+    if (sortPreset === "position_need") {
+      const needs = new Set((needsSummary?.needs ?? []).slice(0, 4));
+      arr.sort((a, b) => Number(needs.has(b.pos)) - Number(needs.has(a.pos)) || (b.ovr ?? 0) - (a.ovr ?? 0));
+      return arr;
+    }
     arr.sort((a, b) => {
       let va = a[sortKey];
       let vb = b[sortKey];
@@ -704,7 +735,7 @@ export default function FreeAgency({
       return va < vb ? 1 : -1;
     });
     return arr;
-  }, [displayed, sortKey, sortDir]);
+  }, [displayed, sortKey, sortDir, sortPreset, needsSummary?.needs]);
 
 
   const {
@@ -1003,6 +1034,28 @@ export default function FreeAgency({
                 }}
               />
             </div>
+            <label style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Max Age
+              <Input type="number" min="21" max="45" value={maxAge} onChange={(e) => setMaxAge(Number(e.target.value) || 40)} style={{ width: 62, marginLeft: 6 }} />
+            </label>
+            <label style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Min Fit
+              <Input type="number" min="0" max="100" value={minSchemeFit} onChange={(e) => setMinSchemeFit(Number(e.target.value) || 0)} style={{ width: 62, marginLeft: 6 }} />
+            </label>
+            <select value={demandTier} onChange={(e) => setDemandTier(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
+              <option value="ALL">Demand: All</option>
+              <option value="value">Demand: Value</option>
+              <option value="starter">Demand: Starter</option>
+              <option value="premium">Demand: Premium</option>
+            </select>
+            <select value={sortPreset} onChange={(e) => setSortPreset(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
+              <option value="best_available">Sort: Best available</option>
+              <option value="cheapest_value">Sort: Cheapest value</option>
+              <option value="youngest">Sort: Youngest</option>
+              <option value="position_need">Sort: Position need</option>
+              <option value="manual">Sort: Manual columns</option>
+            </select>
+            <Button className="btn" onClick={() => setWatchOnly((prev) => !prev)} style={{ whiteSpace: "nowrap" }}>
+              {watchOnly ? "Showing watchlist" : `Watchlist (${watchlistIds.size})`}
+            </Button>
             {isResignPhase ? (
               <Button className="btn btn-primary" onClick={handleQuickFilterPriorities} style={{ whiteSpace: "nowrap" }}>
                 Quick Filter: Re-sign Priorities
@@ -1141,6 +1194,9 @@ export default function FreeAgency({
                     <TableHead style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 600, textAlign: "center" }}>
                       CMP
                     </TableHead>
+                    <TableHead style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 600, textAlign: "center" }}>
+                      WL
+                    </TableHead>
                     <TableHead
                       style={{
                         fontSize: "var(--text-xs)",
@@ -1175,7 +1231,7 @@ export default function FreeAgency({
                   {sortedAgents.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={10}
+                        colSpan={11}
                         style={{
                           textAlign: "center",
                           padding: "var(--space-8)",
@@ -1289,6 +1345,7 @@ export default function FreeAgency({
                             <TableCell><OvrBadge ovr={player.ovr} />{player.scoutUncertaintyBand ? <div style={{fontSize:11,color:'var(--text-muted)'}}>{player.scoutConfidenceLabel} · ±{player.scoutUncertaintyBand}</div> : null}</TableCell>
                             <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
                             <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
+                            <TableCell style={{ textAlign: "center" }}><Button title={watchlistIds.has(player.id) ? "Remove from watchlist" : "Add to watchlist"} onClick={() => setWatchlistIds((prev) => { const next = new Set(prev); if (next.has(player.id)) next.delete(player.id); else next.add(player.id); return next; })} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${watchlistIds.has(player.id) ? "var(--warning)" : "var(--hairline)"}`, background: watchlistIds.has(player.id) ? "rgba(255,159,10,0.16)" : "transparent", fontSize: 12, color: watchlistIds.has(player.id) ? "var(--warning)" : "var(--text-subtle)" }}>{watchlistIds.has(player.id) ? "★" : "☆"}</Button></TableCell>
                             <TableCell style={{ textAlign: "center" }}>
                               <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                             </TableCell>
@@ -1328,6 +1385,7 @@ export default function FreeAgency({
                         <TableCell><OvrBadge ovr={player.ovr} /></TableCell>
                         <TableCell style={{ color: "var(--text-muted)" }}>{player.age}</TableCell>
                         <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
+                        <TableCell style={{ textAlign: "center" }}><Button title={watchlistIds.has(player.id) ? "Remove from watchlist" : "Add to watchlist"} onClick={() => setWatchlistIds((prev) => { const next = new Set(prev); if (next.has(player.id)) next.delete(player.id); else next.add(player.id); return next; })} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${watchlistIds.has(player.id) ? "var(--warning)" : "var(--hairline)"}`, background: watchlistIds.has(player.id) ? "rgba(255,159,10,0.16)" : "transparent", fontSize: 12, color: watchlistIds.has(player.id) ? "var(--warning)" : "var(--text-subtle)" }}>{watchlistIds.has(player.id) ? "★" : "☆"}</Button></TableCell>
                         <TableCell style={{ textAlign: "center" }}>
                           <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
                         </TableCell>
