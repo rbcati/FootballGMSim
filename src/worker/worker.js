@@ -138,6 +138,12 @@ import { getScoutingRangeFromProfile, scoreDraftBoardEntry } from '../core/draft
 import { generateDynamicEvents, calculateSeasonAwards } from '../core/events/eventSystem.js';
 import { validateCustomRoster, validateDraftClass, validateLeagueFile, validateLeagueSettingsPayload, summarizeValidationErrors } from './modding/schemaValidation.js';
 import { buildDraftOrder } from './modding/ruleEngine.js';
+import { simulationManager } from './WorkerPool.ts';
+import {
+  aggregateTeamUnitsFromRoster,
+  buildDeterministicSeed,
+  simulateWithOptionalNewEngine,
+} from '../core/sim/weekSimulationBridge.ts';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2256,105 +2262,95 @@ async function handleAdvanceWeek(payload, id) {
   }
 
   post(toUI.SIM_PROGRESS, { done: 0, total: league._weekGames.length }, id);
-
-  // --- Simulate ---
-  // Run in small batches so we can yield between them.
-  // v2: Reduced from 4→2 so yieldFrame() fires every 2 games max,
-  // keeping each tick well under 30ms on mobile Safari/Chrome.
-  const BATCH_SIZE = 2;
   const gamesToSim = [...league._weekGames];
-  const results    = [];
-  const injuryFactor = Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50);
+  const { matchups, migratedPlayers } = buildWeekMatchupsFromLeague(league, meta, week);
+  const useNewSimulationEngine = Boolean(getLeagueSetting('useNewSimulationEngine', false)) && matchups.length === gamesToSim.length;
 
-  for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
-    const batch = gamesToSim.slice(i, i + BATCH_SIZE);
-    let batchResults;
-    try {
-      batchResults = simulateBatch(batch, {
-        league,
-        isPlayoff: meta.phase === 'playoffs',
-        injuryFactor,
-        overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
+  if (migratedPlayers.length > 0) {
+    for (const migrated of migratedPlayers) {
+      const player = cache.getPlayer(migrated.id);
+      if (!player?.attributesV2) {
+        cache.updatePlayer(migrated.id, { attributesV2: migrated.attributesV2 });
+      }
+    }
+  }
+
+  const { mode: simulationMode, results } = await simulateWithOptionalNewEngine({
+    enabled: useNewSimulationEngine,
+    matchups,
+    manager: simulationManager,
+    onProgress: ({ done, total }) => post(toUI.SIM_PROGRESS, { done, total }, id),
+    onError: (error) => {
+      console.warn('[Worker] New simulation path failed, reverting to legacy simulation.', error);
+      post(toUI.NOTIFICATION, {
+        level: 'warn',
+        message: 'New simulation engine failed this week. The legacy simulator completed the week safely.',
       });
-    } catch (simErr) {
-      console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
-      batchResults = [];
+    },
+    legacySimulate: () => simulateWeekLegacy({ gamesToSim, league, meta, id }),
+  });
+
+  if (simulationMode === 'new') {
+    post(toUI.NOTIFICATION, { level: 'info', message: 'Weekly simulation ran on the AttributesV2 engine.' });
+  }
+
+  // Apply each game result to cache and emit GAME_EVENT per game
+  for (const res of results) {
+    applyGameResultToCache(res, week, seasonId);
+
+    // Mark injured players as dirty so changes persist
+    if (res.injuries) {
+      for (const inj of res.injuries) {
+        const p = cache.getPlayer(inj.playerId);
+        if (p) {
+          cache.updatePlayer(p.id, {
+            injuries: p.injuries,
+            injured: p.injured,
+            injuryWeeksRemaining: p.injuryWeeksRemaining,
+            seasonEndingInjury: p.seasonEndingInjury
+          });
+        }
+      }
     }
-    if (batchResults.length === 0 && batch.length > 0) {
-      console.warn(`[Worker] simulateBatch returned 0 results for ${batch.length} games (batch at index ${i}). Games:`,
-        batch.map(g => `${g.home?.abbr ?? g.home?.id ?? '?'} vs ${g.away?.abbr ?? g.away?.id ?? '?'}`).join(', '));
-    }
-    results.push(...batchResults);
 
-    // Apply each game result to cache and emit GAME_EVENT per game
-    for (const res of batchResults) {
-      applyGameResultToCache(res, week, seasonId);
-
-      // Log significant injuries to News
-
-      // Mark injured players as dirty so changes persist
-      if (res.injuries) {
-          for (const inj of res.injuries) {
-             // We just need to trigger a dirty flag. Passing current state works.
-             const p = cache.getPlayer(inj.playerId);
-             if (p) {
-                 cache.updatePlayer(p.id, {
-                     injuries: p.injuries,
-                     injured: p.injured,
-                     injuryWeeksRemaining: p.injuryWeeksRemaining,
-                     seasonEndingInjury: p.seasonEndingInjury
-                 });
-             }
+    if (res.injuries && res.injuries.length > 0) {
+      for (const inj of res.injuries) {
+        if (inj.duration > 2 || inj.seasonEnding) {
+          const p = cache.getPlayer(inj.playerId);
+          if (p) {
+            await NewsEngine.logInjury(p, inj.type, inj.duration);
+            const injuryNews = createNewsItem('injury', { playerName: p?.name, position: p?.pos, weeks: inj?.duration, teamName: cache.getTeam(p?.teamId)?.name, teamId: p?.teamId ?? null }, week, meta?.season);
+            cache.setMeta(addNewsItem(cache.getMeta(), injuryNews));
           }
-      }
-
-if (res.injuries && res.injuries.length > 0) {
-          for (const inj of res.injuries) {
-              // Log only if duration > 2 weeks to reduce noise, or if season ending
-              if (inj.duration > 2 || inj.seasonEnding) {
-                  const p = cache.getPlayer(inj.playerId);
-                  if (p) {
-                      // Fire and forget (don't await to keep sim speed up, or await if consistency needed)
-                      // Since IDB ops are async, we should await or at least trigger.
-                      // Since we are inside an async function, let's await to be safe.
-                      await NewsEngine.logInjury(p, inj.type, inj.duration);
-                      const injuryNews = createNewsItem('injury', { playerName: p?.name, position: p?.pos, weeks: inj?.duration, teamName: cache.getTeam(p?.teamId)?.name, teamId: p?.teamId ?? null }, week, meta?.season);
-                      cache.setMeta(addNewsItem(cache.getMeta(), injuryNews));
-                  }
-              }
-          }
-      }
-
-      // Emit GAME_EVENT so the LiveGame viewer can update the scoreboard in real-time
-      const rawH   = res.home      ?? res.homeTeamId;
-      const rawA   = res.away      ?? res.awayTeamId;
-      const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
-      const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
-      if (!isNaN(homeId) && !isNaN(awayId)) {
-        post(toUI.GAME_EVENT, {
-          gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
-          week,
-          homeId,
-          awayId,
-          homeName:  res.homeTeamName ?? cache.getTeam(homeId)?.name ?? '?',
-          awayName:  res.awayTeamName ?? cache.getTeam(awayId)?.name ?? '?',
-          homeAbbr:  res.homeTeamAbbr ?? cache.getTeam(homeId)?.abbr ?? '???',
-          awayAbbr:  res.awayTeamAbbr ?? cache.getTeam(awayId)?.abbr ?? '???',
-          homeScore: res.scoreHome ?? res.homeScore ?? 0,
-          awayScore: res.scoreAway ?? res.awayScore ?? 0,
-          recapText: res.recapText ?? null,
-          teamDriveStats: res.teamDriveStats ?? null,
-        });
+        }
       }
     }
 
-    post(toUI.SIM_PROGRESS, { done: i + batch.length, total: gamesToSim.length }, id);
-    await yieldFrame();
+    const rawH   = res.home      ?? res.homeTeamId;
+    const rawA   = res.away      ?? res.awayTeamId;
+    const homeId = Number(typeof rawH === 'object' ? rawH?.id : rawH);
+    const awayId = Number(typeof rawA === 'object' ? rawA?.id : rawA);
+    if (!isNaN(homeId) && !isNaN(awayId)) {
+      post(toUI.GAME_EVENT, {
+        gameId:    buildCanonicalGameId({ seasonId, week, homeId, awayId }),
+        week,
+        homeId,
+        awayId,
+        homeName:  res.homeTeamName ?? cache.getTeam(homeId)?.name ?? '?',
+        awayName:  res.awayTeamName ?? cache.getTeam(awayId)?.name ?? '?',
+        homeAbbr:  res.homeTeamAbbr ?? cache.getTeam(homeId)?.abbr ?? '???',
+        awayAbbr:  res.awayTeamAbbr ?? cache.getTeam(awayId)?.abbr ?? '???',
+        homeScore: res.scoreHome ?? res.homeScore ?? 0,
+        awayScore: res.scoreAway ?? res.awayScore ?? 0,
+        recapText: res.recapText ?? null,
+        teamDriveStats: res.teamDriveStats ?? null,
+      });
+    }
   }
 
   // SAFETY: If simulation produced 0 results, don't advance the week
   if (results.length === 0) {
-    console.error(`[Worker] ADVANCE_WEEK: simulateBatch returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
+    console.error(`[Worker] ADVANCE_WEEK: simulation returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
     post(toUI.WEEK_COMPLETE, {
       week,
       results:    [],
@@ -2661,6 +2657,70 @@ function buildLeagueForSim(schedule, week, seasonId) {
   };
 
   return leagueObj;
+}
+
+function buildWeekMatchupsFromLeague(league, meta, week) {
+  const matchups = [];
+  const migratedPlayers = [];
+
+  for (const game of (league?._weekGames ?? [])) {
+    const homeRoster = Array.isArray(game?.home?.roster) ? game.home.roster : [];
+    const awayRoster = Array.isArray(game?.away?.roster) ? game.away.roster : [];
+
+    const homeUnits = aggregateTeamUnitsFromRoster(homeRoster);
+    const awayUnits = aggregateTeamUnitsFromRoster(awayRoster);
+    migratedPlayers.push(...homeUnits.migratedPlayers, ...awayUnits.migratedPlayers);
+
+    matchups.push({
+      gameId: buildCanonicalGameId({
+        seasonId: Number(meta?.currentSeasonId ?? meta?.season ?? 1),
+        week: Number(week),
+        homeId: Number(game?.home?.id),
+        awayId: Number(game?.away?.id),
+      }),
+      homeTeamId: Number(game?.home?.id),
+      awayTeamId: Number(game?.away?.id),
+      homeOffense: homeUnits.offense,
+      homeDefense: homeUnits.defense,
+      awayOffense: awayUnits.offense,
+      awayDefense: awayUnits.defense,
+      seed: buildDeterministicSeed(`${meta?.currentSeasonId ?? 1}:${week}:${game?.home?.id}:${game?.away?.id}`),
+      weather: 'clear',
+    });
+  }
+
+  return { matchups, migratedPlayers };
+}
+
+async function simulateWeekLegacy({ gamesToSim, league, meta, id }) {
+  const BATCH_SIZE = 2;
+  const results = [];
+  const injuryFactor = Math.max(0, Number(getLeagueSetting('injuryFrequency', 50)) / 50);
+
+  for (let i = 0; i < gamesToSim.length; i += BATCH_SIZE) {
+    const batch = gamesToSim.slice(i, i + BATCH_SIZE);
+    let batchResults;
+    try {
+      batchResults = simulateBatch(batch, {
+        league,
+        isPlayoff: meta.phase === 'playoffs',
+        injuryFactor,
+        overtimeFormat: getLeagueSetting('overtimeFormat', 'nfl'),
+      });
+    } catch (simErr) {
+      console.error(`[Worker] simulateBatch crashed for batch starting at game ${i}:`, simErr);
+      batchResults = [];
+    }
+    if (batchResults.length === 0 && batch.length > 0) {
+      console.warn(`[Worker] simulateBatch returned 0 results for ${batch.length} games (batch at index ${i}). Games:`,
+        batch.map(g => `${g.home?.abbr ?? g.home?.id ?? '?'} vs ${g.away?.abbr ?? g.away?.id ?? '?'}`).join(', '));
+    }
+    results.push(...batchResults);
+    post(toUI.SIM_PROGRESS, { done: i + batch.length, total: gamesToSim.length }, id);
+    await yieldFrame();
+  }
+
+  return results;
 }
 
 function roundStat(value, decimals = 1) {

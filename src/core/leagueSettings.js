@@ -36,6 +36,7 @@ export const DEFAULT_LEAGUE_SETTINGS = Object.freeze({
   progressionEnvironmentStrength: 50,
   draftClassStrength: 50,
   staffImpactStrength: 50,
+  useNewSimulationEngine: false,
   revenueSharing: true,
   luxuryTaxRate: 20,
   revealHiddenRatingsForCommissioner: true,
@@ -95,6 +96,7 @@ export function normalizeLeagueSettings(partial = {}) {
   if (!['nfl', 'college'].includes(String(out.overtimeFormat))) out.overtimeFormat = 'nfl';
   if (!['reverse_standings', 'lottery', 'random'].includes(String(out.draftOrderLogic))) out.draftOrderLogic = 'reverse_standings';
   if (!['fictional', 'historical'].includes(String(out.leagueUniverse))) out.leagueUniverse = 'fictional';
+  out.useNewSimulationEngine = Boolean(out.useNewSimulationEngine);
 
   if (!Array.isArray(out.conferenceNames) || out.conferenceNames.length === 0) {
     out.conferenceNames = [...DEFAULT_LEAGUE_SETTINGS.conferenceNames];
