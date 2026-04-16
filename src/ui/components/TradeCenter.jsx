@@ -127,9 +127,10 @@ function pickLabel(pk) {
 
 function PickSelector({ side, picks, onChange, availablePicks = [] }) {
   const [selectedPickId, setSelectedPickId] = useState("");
+  const selectedIds = useMemo(() => new Set(picks.map(p => String(p.id))), [picks]);
   const available = useMemo(
-    () => availablePicks.filter((pk) => !picks.some((chosen) => String(chosen.id) === String(pk.id))),
-    [availablePicks, picks],
+    () => availablePicks.filter((pk) => !selectedIds.has(String(pk.id))),
+    [availablePicks, selectedIds],
   );
   const addPick = () => {
     if (!selectedPickId) return;
@@ -372,15 +373,17 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
   const theirNeedsSummary = useMemo(() => computeTeamNeedsSummary({ ...liveTheirTeam, roster: theirRoster }), [liveTheirTeam, theirRoster]);
   const myAvailablePicks = useMemo(() => Array.isArray(liveMyTeam?.picks) ? liveMyTeam.picks : [], [liveMyTeam?.picks]);
   const theirAvailablePicks = useMemo(() => Array.isArray(liveTheirTeam?.picks) ? liveTheirTeam.picks : [], [liveTheirTeam?.picks]);
+  const myAvailablePicksMap = useMemo(() => new Map(myAvailablePicks.map(pk => [String(pk.id), pk])), [myAvailablePicks]);
+  const theirAvailablePicksMap = useMemo(() => new Map(theirAvailablePicks.map(pk => [String(pk.id), pk])), [theirAvailablePicks]);
   const myIntel = useMemo(() => buildTeamIntelligence({ ...liveMyTeam, roster: myRoster }, { week: league?.week ?? 1 }), [liveMyTeam, myRoster, league?.week]);
 
   useEffect(() => {
     if (!counterOfferId) return;
     const source = incomingOffers.find((offer) => offer.id === counterOfferId);
     if (!source) return;
-    setMyPicks((source?.receiving?.pickIds ?? []).map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
-    setTheirPicks((source?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
-  }, [counterOfferId, incomingOffers, myAvailablePicks, theirAvailablePicks]);
+    setMyPicks((source?.receiving?.pickIds ?? []).map((id) => myAvailablePicksMap.get(String(id)) ?? { id }));
+    setTheirPicks((source?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }));
+  }, [counterOfferId, incomingOffers, myAvailablePicksMap, theirAvailablePicksMap]);
 
   const myOfferValue = useMemo(() => [...offering].reduce((s, id) => s + playerTradeValue(myRosterMap.get(toAssetId(id))), 0) + myPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [offering, myRosterMap, myPicks]);
   const theirOfferValue = useMemo(() => [...receiving].reduce((s, id) => s + playerTradeValue(theirRosterMap.get(toAssetId(id))), 0) + theirPicks.reduce((s, pk) => s + (PICK_VALUES[pk.round] ?? 10), 0), [receiving, theirRosterMap, theirPicks]);
@@ -426,8 +429,8 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     setTargetId(aiTeamId);
     setOffering(new Set((offer?.receiving?.playerIds ?? []).map(toAssetId)));
     setReceiving(new Set((offer?.offering?.playerIds ?? []).map(toAssetId)));
-    setMyPicks((offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
-    setTheirPicks((offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+    setMyPicks((offer?.receiving?.pickIds ?? []).map((id) => myAvailablePicksMap.get(String(id)) ?? { id }));
+    setTheirPicks((offer?.offering?.pickIds ?? []).map((id) => theirAvailablePicksMap.get(String(id)) ?? { id }));
     setTradeResult(null);
   };
 
@@ -481,9 +484,9 @@ export default function TradeCenter({ league, actions, initialTradeContext = nul
     if (Array.isArray(initialTradeContext.outgoingPlayerIds)) setOffering(new Set(initialTradeContext.outgoingPlayerIds.map(toAssetId)));
     if (Array.isArray(initialTradeContext.incomingPlayerIds)) setReceiving(new Set(initialTradeContext.incomingPlayerIds.map(toAssetId)));
     if (Array.isArray(initialTradeContext.outgoingPickIds)) {
-      setMyPicks(initialTradeContext.outgoingPickIds.map((id) => myAvailablePicks.find((pk) => String(pk.id) === String(id)) ?? { id }));
+      setMyPicks(initialTradeContext.outgoingPickIds.map((id) => myAvailablePicksMap.get(String(id)) ?? { id }));
     }
-  }, [initialTradeContext, myAvailablePicks]);
+  }, [initialTradeContext, myAvailablePicksMap]);
 
   useEffect(() => {
     onTradeContextChange?.({
