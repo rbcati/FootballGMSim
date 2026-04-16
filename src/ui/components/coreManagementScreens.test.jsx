@@ -4,6 +4,7 @@ import { renderToString } from "react-dom/server";
 import TradeWorkspace from "./TradeWorkspace.jsx";
 import Roster from "./Roster.jsx";
 import PlayerStats from "./PlayerStats.jsx";
+import OffseasonHub from "./OffseasonHub.jsx";
 
 const baseLeague = {
   week: 1,
@@ -37,5 +38,27 @@ describe("core management screens", () => {
   it("renders stats with empty data and deep-linked family", () => {
     const html = renderToString(<PlayerStats actions={{}} initialFamily="defense" />);
     expect(html).toContain("Player Stats");
+  });
+
+  it("renders offseason action center with blockers and guided actions", () => {
+    const offseasonLeague = {
+      ...baseLeague,
+      phase: "offseason_resign",
+      teams: [
+        {
+          ...baseLeague.teams[0],
+          capRoom: 6,
+          roster: [
+            { id: 1, pos: "QB", ovr: 86, contract: { years: 1 }, extensionDecision: "pending" },
+            { id: 2, pos: "WR", ovr: 72, contract: { years: 1 }, extensionDecision: "pending" },
+          ],
+          picks: [{ id: "1-1" }, { id: "2-1" }],
+        },
+      ],
+    };
+    const html = renderToString(<OffseasonHub league={offseasonLeague} onNavigate={() => {}} />);
+    expect(html).toContain("Offseason Action Center");
+    expect(html).toContain("Blocking tasks remain");
+    expect(html).toContain("Open Re-sign table");
   });
 });
