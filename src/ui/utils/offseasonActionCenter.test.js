@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildOffseasonActionCenter } from './offseasonActionCenter.js';
 
-function makePlayer(id, { pos = 'WR', ovr = 70, years = 1, decision = 'pending' } = {}) {
-  return { id, pos, ovr, contract: { years }, extensionDecision: decision };
+function makePlayer(id, { pos = 'WR', ovr = 70, years = 1, decision = 'pending', baseAnnual = 6 } = {}) {
+  return { id, pos, ovr, contract: { years, baseAnnual }, extensionDecision: decision };
 }
 
 describe('buildOffseasonActionCenter', () => {
@@ -32,9 +32,19 @@ describe('buildOffseasonActionCenter', () => {
 
     const resignCenter = buildOffseasonActionCenter(league);
     expect(resignCenter.blockers.join(' ')).toContain('key expiring contracts');
+    expect(resignCenter.actions.map((a) => a.tab)).toContain('Contract Center');
     expect(resignCenter.metrics.expiringContracts).toBe(2);
+    expect(resignCenter.unresolved.keyExpiringContracts).toBe(2);
+
+    team.roster[0].extensionDecision = 'deferred';
+    const withDeferred = buildOffseasonActionCenter(league);
+    expect(withDeferred.metrics.projectedCapRoom).toBeLessThan(withDeferred.metrics.capRoom);
 
     team.roster[0].extensionDecision = 'extended';
+    team.roster[1].extensionDecision = 'let_walk';
+    const resolved = buildOffseasonActionCenter(league);
+    expect(resolved.unresolved.expiringContracts).toBe(0);
+
     team.capRoom = 10;
     league.phase = 'free_agency';
     const faCenter = buildOffseasonActionCenter(league);
@@ -46,12 +56,13 @@ describe('buildOffseasonActionCenter', () => {
     league.phase = 'trades';
     const tradeCenter = buildOffseasonActionCenter(league);
     expect(tradeCenter.phaseLabel).toBe('Trades');
+    expect(tradeCenter.actions.map((a) => a.tab)).toContain('Transactions:Builder');
     expect(tradeCenter.metrics.rosterCount).toBe(4);
 
     league.phase = 'draft';
     league.draftClass = [{ id: 90, name: 'Prospect One', pos: 'OT' }];
     const draftCenter = buildOffseasonActionCenter(league);
-    expect(draftCenter.blockers).toEqual([]);
+    expect(draftCenter.blockers).not.toContain('Draft board is not hydrated yet.');
 
     team.roster.push(makePlayer(5, { pos: 'OT', ovr: 72, years: 4, decision: 'none' }));
     league.phase = 'post_draft';

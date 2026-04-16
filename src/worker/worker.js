@@ -3668,7 +3668,7 @@ async function handleApplyFranchiseTag({ playerId, teamId }, id) {
       guaranteedPct: 100, // Fully guaranteed
   };
 
-  cache.updatePlayer(playerId, { contract, isTagged: true });
+  cache.updatePlayer(playerId, { contract, isTagged: true, extensionDecision: 'tagged' });
   recalculateTeamCap(resolvedTeamId);
 
   await Transactions.add({
@@ -5393,7 +5393,7 @@ async function handleExtendContract({ playerId, teamId, contract }, id) {
       return;
     }
 
-    cache.updatePlayer(playerId, { contract, negotiationStatus: 'SIGNED' });
+    cache.updatePlayer(playerId, { contract, negotiationStatus: 'SIGNED', extensionDecision: 'extended' });
     recalculateTeamCap(resolvedTeamId);
     await Transactions.add({
       type: 'EXTEND',
@@ -6725,6 +6725,7 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
 
   const validTradeStatuses = new Set(['untouchable', 'soft_block', 'available', 'actively_shopping', 'not_available']);
   const validPlanFlags = new Set(['shortlist_extension', 'trade_candidate', 'defer_offseason', 'prioritize_deadline']);
+  const validExtensionDecisions = new Set(['pending', 'deferred', 'let_walk', 'extended', 'tagged']);
 
   const patch = {};
   if (typeof updates.tradeStatus === 'string' && validTradeStatuses.has(updates.tradeStatus)) {
@@ -6733,6 +6734,9 @@ async function handleUpdatePlayerManagement({ playerId, teamId, updates = {} }, 
   }
   if (Array.isArray(updates.contractPlan)) {
     patch.contractPlan = updates.contractPlan.filter((flag) => validPlanFlags.has(flag));
+  }
+  if (typeof updates.extensionDecision === 'string' && validExtensionDecisions.has(updates.extensionDecision)) {
+    patch.extensionDecision = updates.extensionDecision;
   }
 
   if (Object.keys(patch).length === 0) {

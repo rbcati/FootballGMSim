@@ -32,7 +32,7 @@ const PHASES = [
       "Players with >90 OVR may demand near max deals.",
     ],
     actions: [
-      { label: "View FA Hub", tab: "FA Hub" },
+      { label: "Re-signing Center", tab: "Contract Center" },
       { label: "Check Roster", tab: "Roster" },
       { label: "Financials", tab: "Financials" },
     ],
@@ -49,8 +49,8 @@ const PHASES = [
       "Look for scheme-fit free agents (green 70%+) for instant impact.",
     ],
     actions: [
-      { label: "FA Hub", tab: "FA Hub" },
       { label: "Free Agency", tab: "Free Agency" },
+      { label: "Contract Center", tab: "Contract Center" },
       { label: "Financials", tab: "Financials" },
     ],
   },

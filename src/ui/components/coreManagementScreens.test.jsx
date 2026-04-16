@@ -59,6 +59,6 @@ describe("core management screens", () => {
     const html = renderToString(<OffseasonHub league={offseasonLeague} onNavigate={() => {}} />);
     expect(html).toContain("Offseason Action Center");
     expect(html).toContain("Blocking tasks remain");
-    expect(html).toContain("Open Re-sign table");
+    expect(html).toContain("Open Re-signing Center");
   });
 });
