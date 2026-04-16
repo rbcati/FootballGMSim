@@ -70,3 +70,52 @@ export function getScheduleViewModel(league, filters = {}) {
     games: filtered,
   };
 }
+
+export function getSafeStandingsRows(league) {
+  const safe = safeGetLeagueState(league);
+  const rows = Array.isArray(safe?.standings) ? safe.standings : safe.teams;
+  return (Array.isArray(rows) ? rows : []).map((team) => ({
+    id: team?.id ?? null,
+    name: team?.name ?? 'Unknown Team',
+    abbr: team?.abbr ?? '---',
+    conf: team?.conf ?? 0,
+    div: team?.div ?? 0,
+    wins: Number(team?.wins ?? 0),
+    losses: Number(team?.losses ?? 0),
+    ties: Number(team?.ties ?? 0),
+    ptsFor: Number(team?.ptsFor ?? 0),
+    ptsAgainst: Number(team?.ptsAgainst ?? 0),
+    ovr: Number(team?.ovr ?? 0),
+    capRoom: Number(team?.capRoom ?? team?.capSpace ?? 0),
+    recentResults: Array.isArray(team?.recentResults) ? team.recentResults : [],
+    tiebreakers: team?.tiebreakers ?? {},
+  }));
+}
+
+export function getSafePhaseContext(league) {
+  const safe = safeGetLeagueState(league);
+  return {
+    phase: safe?.phase ?? 'regular',
+    year: Number(safe?.year ?? 0),
+    week: Number(safe?.week ?? 1),
+    userTeamId: safe?.userTeamId ?? null,
+    seasonId: safe?.seasonId ?? null,
+    hasSchedule: Array.isArray(safe?.schedule?.weeks) && safe.schedule.weeks.length > 0,
+  };
+}
+
+export function getSafeLeagueLeaderCategories(categories) {
+  const safeCategories = categories && typeof categories === 'object' ? categories : {};
+  const normalizeBucket = (bucket) => {
+    const safeBucket = bucket && typeof bucket === 'object' ? bucket : {};
+    return Object.fromEntries(
+      Object.entries(safeBucket).map(([key, value]) => [key, Array.isArray(value) ? value : []]),
+    );
+  };
+  return {
+    passing: normalizeBucket(safeCategories.passing),
+    rushing: normalizeBucket(safeCategories.rushing),
+    receiving: normalizeBucket(safeCategories.receiving),
+    defense: normalizeBucket(safeCategories.defense),
+  };
+}

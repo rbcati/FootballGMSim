@@ -17,4 +17,14 @@ describe('draft advanced filter integration', () => {
 
     expect(result.map((p) => p.id)).toEqual([1]);
   });
+
+  it('handles prospects without names during draft state hydration', () => {
+    const prospects = [{ id: 4, pos: 'QB', potential: 81 }, { id: 5, name: 'Chris Clean', pos: 'QB', potential: 79 }];
+    const result = filterDraftProspectsForView(prospects, {
+      filterPos: 'QB',
+      nameFilter: 'ch',
+      advancedFilters: [],
+    });
+    expect(result.map((p) => p.id)).toEqual([5]);
+  });
 });

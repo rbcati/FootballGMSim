@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState.jsx";
+import { getSafeLeagueLeaderCategories } from "../../state/selectors.js";
 
 const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions"];
 
@@ -88,12 +89,12 @@ function normalizeLeaderRows(rawRows = []) {
 }
 
 const API_TAB_MAP = Object.freeze({
-  Passing: { category: "passing", statKeys: ["passYards", "passTDs", "completions"] },
-  Rushing: { category: "rushing", statKeys: ["rushYards", "rushTDs", "rushAttempts"] },
-  Receiving: { category: "receiving", statKeys: ["recYards", "recTDs", "receptions"] },
-  Tackles: { category: "defense", statKeys: ["tackles"] },
-  Sacks: { category: "defense", statKeys: ["sacks"] },
-  Interceptions: { category: "defense", statKeys: ["interceptions"] },
+  Passing: { category: "passing", primaryKey: "passYards", secondaryKey: "passTDs" },
+  Rushing: { category: "rushing", primaryKey: "rushYards", secondaryKey: "rushTDs" },
+  Receiving: { category: "receiving", primaryKey: "recYards", secondaryKey: "receptions" },
+  Tackles: { category: "defense", primaryKey: "tackles", secondaryKey: "sacks" },
+  Sacks: { category: "defense", primaryKey: "sacks", secondaryKey: "pressures" },
+  Interceptions: { category: "defense", primaryKey: "interceptions", secondaryKey: "passesDefended" },
 });
 
 export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
@@ -136,10 +137,14 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
   const rows = useMemo(() => {
     const apiConfig = API_TAB_MAP[activeTab];
     if (remoteCategories && apiConfig) {
-      const bucket = remoteCategories?.[apiConfig.category] ?? {};
-      const statKey = apiConfig.statKeys.find((key) => Array.isArray(bucket?.[key]) && bucket[key].length > 0);
-      if (statKey) {
-        return normalizeLeaderRows(bucket[statKey]).slice(0, 10).map((row) => ({
+      const safeCategories = getSafeLeagueLeaderCategories(remoteCategories);
+      const bucket = safeCategories?.[apiConfig.category] ?? {};
+      const primaryRows = normalizeLeaderRows(bucket?.[apiConfig.primaryKey]).slice(0, 10);
+      const secondaryMap = new Map(
+        normalizeLeaderRows(bucket?.[apiConfig.secondaryKey]).map((row) => [String(row.id), row.value]),
+      );
+      if (primaryRows.length > 0) {
+        return primaryRows.map((row) => ({
           player: {
             ...row.raw,
             id: row.id,
@@ -149,7 +154,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
             isUserTeam: Number(row.teamId) === Number(league?.userTeamId),
           },
           primary: row.value,
-          secondary: "—",
+          secondary: displayNumber(secondaryMap.get(String(row.id))),
         }));
       }
     }
@@ -163,7 +168,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
       }))
       .sort((a, b) => (b.primary ?? 0) - (a.primary ?? 0))
       .slice(0, 10);
-  }, [allPlayers, activeTab]);
+  }, [allPlayers, activeTab, league?.userTeamId, remoteCategories]);
 
   const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
 
