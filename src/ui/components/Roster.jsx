@@ -2395,6 +2395,14 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
                     {warning.severity === 'error' ? 'Missing starter: ' : 'Warning: '}{warning.message}
                   </div>
                 )) : <div style={{ fontSize: 12, color: 'var(--success)' }}>Starter requirements currently covered.</div>}
+                <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <Button variant="outline" size="sm" onClick={() => actions.repairRoster(teamId).then(fetchRoster)}>
+                    Auto-Fix Missing
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => actions.optimizeRoster(teamId).then(fetchRoster)}>
+                    Optimize for Plan
+                  </Button>
+                </div>
               </div>
               <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={(() => {
                 const ut = league?.teams?.find(t => t.id === league.userTeamId);
