@@ -1147,25 +1147,58 @@ function transferPickOwnership(pickIds = [], fromTeamId, toTeamId) {
   cache.updateTeam(Number(toTeamId), { picks: toPicks });
 }
 
-function ensureTeamDepthChart(teamId) {
+function ensureTeamDepthChart(teamId, context = {}) {
+  const team = cache.getTeam(teamId);
   const players = cache.getPlayersByTeam(teamId);
-  if (!players?.length) return;
-  const existing = {};
-  for (const p of players) {
-    const rowKey = p?.depthChart?.rowKey;
-    if (!rowKey) continue;
-    if (!existing[rowKey]) existing[rowKey] = [];
-    existing[rowKey].push({ id: Number(p.id), order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
-  }
-  Object.keys(existing).forEach((k) => {
-    existing[k] = existing[k].sort((a, b) => a.order - b.order).map((row) => row.id);
-  });
+  if (!team || !players?.length) return { modified: false, summary: 'No team depth chart changes required.' };
 
-  const assignments = autoBuildDepthChart(players, existing);
-  const updated = applyDepthChartToPlayers(players, assignments);
-  for (const p of updated) {
-    cache.updatePlayer(p.id, { depthOrder: p.depthOrder, depthChart: p.depthChart });
+  const existing = team?.depthChart && Object.keys(team.depthChart).length > 0
+    ? team.depthChart
+    : null;
+
+  const inferredFromPlayers = {};
+  if (!existing) {
+    for (const p of players) {
+      const rowKey = p?.depthChart?.rowKey;
+      if (!rowKey) continue;
+      if (!inferredFromPlayers[rowKey]) inferredFromPlayers[rowKey] = [];
+      inferredFromPlayers[rowKey].push({ id: Number(p.id), order: Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) });
+    }
+    Object.keys(inferredFromPlayers).forEach((k) => {
+      inferredFromPlayers[k] = inferredFromPlayers[k].sort((a, b) => a.order - b.order).map((row) => row.id);
+    });
   }
+
+  const startingAssignments = existing ?? inferredFromPlayers;
+  const repair = repairDepthChart(
+    { id: team.id, roster: players, depthChart: startingAssignments, weeklyGamePlan: team.weeklyGamePlan },
+    context,
+  );
+  const assignments = repair?.repairedAssignments ?? autoBuildDepthChart(players, startingAssignments);
+  cache.updateTeam(teamId, { depthChart: assignments });
+  const updated = applyDepthChartToPlayers(players, assignments);
+  for (const p of updated) cache.updatePlayer(p.id, { depthOrder: p.depthOrder, depthChart: p.depthChart });
+  return repair;
+}
+
+function validateAndRepairAllTeamDepthCharts(stage = 'pre-sim') {
+  const leagueMeta = ensureDynastyMeta(cache.getMeta());
+  const outcomes = [];
+  for (const team of cache.getAllTeams()) {
+    const isUserTeam = Number(team.id) === Number(leagueMeta?.userTeamId);
+    const outcome = ensureTeamDepthChart(team.id, {
+      phase: leagueMeta?.phase,
+      isAI: !isUserTeam,
+    });
+    outcomes.push({ teamId: team.id, teamAbbr: team?.abbr ?? team?.name ?? `Team ${team.id}`, ...outcome });
+  }
+
+  return {
+    stage,
+    outcomes,
+    modifiedCount: outcomes.filter((o) => o?.modified).length,
+    unresolvedCount: outcomes.reduce((sum, o) => sum + Number(o?.unresolvedIssues?.length ?? 0), 0),
+  };
 }
 
 /**
@@ -1561,6 +1594,13 @@ async function handleLoadSave({ leagueId }, id) {
         recalculateTeamCap(team.id, { debugReason: 'load-save' });
         const normalizedStaff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
         cache.updateTeam(team.id, { staff: normalizedStaff, ...deriveTeamUnitRatings(team.id) });
+      }
+      const loadDepthIntegrity = validateAndRepairAllTeamDepthCharts('load-save');
+      if (loadDepthIntegrity.modifiedCount > 0) {
+        post(toUI.NOTIFICATION, {
+          level: 'info',
+          message: `Roster validated: ${loadDepthIntegrity.modifiedCount} team${loadDepthIntegrity.modifiedCount === 1 ? '' : 's'} repaired.`,
+        });
       }
       const loadLegality = runLegalityValidation({ stage: 'load-save', notify: true });
 
@@ -2163,24 +2203,13 @@ async function handleAdvanceWeek(payload, id) {
     return;
   }
 
-  // Ensure depth chart integrity before every simulation step.
-  for (const team of cache.getAllTeams()) {
-    ensureTeamDepthChart(team.id);
-  }
-  // ── ROSTER INTEGRITY PASS: Repair every AI team before simulation ────────
-  for (const team of cache.getAllTeams()) {
-    const isUserTeam = team.id === meta.userTeamId;
-    // AI teams are ALWAYS repaired/optimized. User team is only REPAIRED if broken.
-    const roster = cache.getPlayersByTeam(team.id);
-    const repair = repairDepthChart(
-      { id: team.id, roster, depthChart: team.depthChart },
-      { isAI: !isUserTeam, phase: meta.phase }
-    );
-    if (repair.modified) {
-      cache.updateTeam(team.id, { depthChart: repair.repairedAssignments });
-      if (isUserTeam) {
-        post(toUI.NOTIFICATION, { level: "info", message: `Emergency roster adjustments made for ${team.abbr || "your team"}.` });
-      }
+  // Centralized roster integrity pass before every simulation step.
+  const preSimIntegrity = validateAndRepairAllTeamDepthCharts('pre-sim');
+  for (const outcome of preSimIntegrity.outcomes) {
+    if (!outcome?.modified) continue;
+    const isUserTeam = Number(outcome.teamId) === Number(meta.userTeamId);
+    if (isUserTeam) {
+      post(toUI.NOTIFICATION, { level: 'info', message: outcome.summary || 'Depth chart repaired for simulation readiness.' });
     }
   }
 
@@ -8760,31 +8789,24 @@ self.onmessage = (event) => {
 async function handleRepairRoster({ teamId }, id) {
   const team = cache.getTeam(teamId);
   if (!team) return;
-  const roster = cache.getPlayersByTeam(teamId);
-  const repair = repairDepthChart(
-    { id: team.id, roster, depthChart: team.depthChart },
-    { phase: cache.getPhase() }
-  );
-  if (repair.modified) {
-    cache.updateTeam(teamId, { depthChart: repair.repairedAssignments });
-    post(toUI.NOTIFICATION, { level: "info", message: `Roster repaired: ${repair.changes.length} adjustments made.` });
-    post(toUI.ROSTER_DATA, { teamId, team: cache.getTeam(teamId), players: cache.getPlayersByTeam(teamId) });
-  } else {
-    post(toUI.NOTIFICATION, { level: "info", message: "Roster is already valid." });
-  }
+  const repair = ensureTeamDepthChart(teamId, { phase: cache.getPhase(), isAI: false });
+  post(toUI.NOTIFICATION, { level: 'info', message: repair?.modified ? repair.summary : 'Roster is already valid.' });
+  if (repair?.modified) post(toUI.ROSTER_DATA, { teamId, team: cache.getTeam(teamId), players: cache.getPlayersByTeam(teamId) });
 }
 
-async function handleOptimizeRoster({ teamId }, id) {
+async function handleOptimizeRoster({ teamId, mode = 'optimize' }, id) {
   const team = cache.getTeam(teamId);
   if (!team) return;
   const roster = cache.getPlayersByTeam(teamId);
   const repair = optimizeDepthChartForPlan(
     { id: team.id, roster, depthChart: team.depthChart, weeklyGamePlan: team.weeklyGamePlan },
-    { phase: cache.getPhase() }
+    { phase: cache.getPhase(), mode }
   );
   if (repair.modified) {
     cache.updateTeam(teamId, { depthChart: repair.repairedAssignments });
-    post(toUI.NOTIFICATION, { level: "info", message: "Roster optimized for current strategy." });
+    const updated = applyDepthChartToPlayers(roster, repair.repairedAssignments);
+    for (const p of updated) cache.updatePlayer(p.id, { depthOrder: p.depthOrder, depthChart: p.depthChart });
+    post(toUI.NOTIFICATION, { level: "info", message: repair.summary });
     post(toUI.ROSTER_DATA, { teamId, team: cache.getTeam(teamId), players: cache.getPlayersByTeam(teamId) });
   }
 }

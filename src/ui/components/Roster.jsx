@@ -2388,7 +2388,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
             <>
               <div style={{ marginBottom: 10, display: "grid", gap: 6 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  Drag players within each position row to set starter order. Auto-sort prioritizes scheme-adjusted OVR and preserves position grouping.
+                  Drag players within each position row to set starter order. Repair fills only broken slots, while best-available and plan optimization are explicit lineup tools.
                 </div>
                 {depthAlerts.length > 0 ? depthAlerts.slice(0, 6).map((warning, idx) => (
                   <div key={`${warning.rowKey}-${idx}`} style={{ fontSize: 12, color: warning.severity === "error" ? "var(--danger)" : "var(--warning)", border: '1px solid var(--hairline)', borderRadius: 8, padding: '6px 8px' }}>
@@ -2397,7 +2397,10 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
                 )) : <div style={{ fontSize: 12, color: 'var(--success)' }}>Starter requirements currently covered.</div>}
                 <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
                   <Button variant="outline" size="sm" onClick={() => actions.repairRoster(teamId).then(fetchRoster)}>
-                    Auto-Fix Missing
+                    Auto-Fix Missing Assignments
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => actions.optimizeRoster(teamId, "best_available").then(fetchRoster)}>
+                    Auto-Set Best Available
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => actions.optimizeRoster(teamId).then(fetchRoster)}>
                     Optimize for Plan

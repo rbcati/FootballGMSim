@@ -30,4 +30,10 @@ describe('load pipeline regression guards', () => {
     expect(workerSource.includes("buildLoadResult('repaired_with_warning'")).toBe(true);
     expect(workerSource.includes("buildLoadResult(recoverable ? 'recoverable_error' : 'fatal_error'")).toBe(true);
   });
+
+  it('runs centralized depth chart integrity pass on load-save and pre-sim', () => {
+    const workerSource = readFileSync(resolve(process.cwd(), 'src/worker/worker.js'), 'utf8');
+    expect(workerSource.includes("validateAndRepairAllTeamDepthCharts('load-save')")).toBe(true);
+    expect(workerSource.includes("validateAndRepairAllTeamDepthCharts('pre-sim')")).toBe(true);
+  });
 });
