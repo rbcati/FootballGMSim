@@ -16,7 +16,7 @@ import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildTeamChemistrySummary } from "../utils/teamChemistry.js";
 import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
-import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -115,10 +115,7 @@ function StatBox({ label, value, sub }) {
 export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null, league = null }) {
   const [showRelocate, setShowRelocate] = useState(false);
   const requestKey = useMemo(() => buildRouteRequestKey("team", teamId), [teamId]);
-  const cacheScopeKey = useMemo(
-    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
-    [league?.seasonId, league?.week, league?.year],
-  );
+  const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchTeamProfile = React.useCallback(async () => {
     const resp = await actions?.getTeamProfile?.(teamId);
     return resp?.payload ?? resp ?? null;

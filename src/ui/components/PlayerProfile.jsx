@@ -23,7 +23,7 @@ import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.j
 import { buildDevelopmentNotes, classifyDevelopmentTrend, getPlayerReadiness, getSchemeFitSignal, getAgeCurveContext, getDevelopmentSnapshot, getDevelopmentDrivers } from '../utils/playerDevelopmentSignals.js';
 import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDevelopmentUI.jsx';
 import EmptyState from './EmptyState.jsx';
-import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
@@ -344,22 +344,20 @@ export default function PlayerProfile({
   isUserOnClock = false,
   onDraftPlayer = null,
 }) {
+
   const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loadingLocal, setLoadingLocal] = useState(true);
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
-  const cacheScopeKey = useMemo(
-    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
-    [league?.seasonId, league?.week, league?.year],
-  );
+  const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchProfileData = React.useCallback(async () => {
     const response = await actions?.getPlayerCareer?.(playerId);
     return response?.payload ?? response ?? null;
   }, [actions, playerId]);
   const {
-    data,
+    data: fetchedData,
     loading,
     error: requestError,
     refresh: fetchProfile,
@@ -378,6 +376,10 @@ export default function PlayerProfile({
     }
   }, [requestError]);
 
+
+  useEffect(() => {
+    if (fetchedData) setData(fetchedData);
+  }, [fetchedData]);
   const player = data?.player;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: data?.meta?.week ?? 1 }), [userTeam, data?.meta?.week]);

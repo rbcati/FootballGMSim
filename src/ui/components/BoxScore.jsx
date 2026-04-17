@@ -15,7 +15,7 @@ import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/b
 import { normalizeArchivedGamePayload } from "../../core/gameArchive.js";
 import { buildTeamComparisonRows, PLAYER_STATS_TABLES } from "../../core/footballMeta";
 import GameDetailV2 from "./game/GameDetailV2.tsx";
-import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 function TeamButton({ team, onSelect }) {
@@ -196,10 +196,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const [playerTeamFilter, setPlayerTeamFilter] = useState("all");
   const sectionRefs = useRef({});
   const requestKey = useMemo(() => buildRouteRequestKey("game", gameId), [gameId]);
-  const cacheScopeKey = useMemo(
-    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
-    [league?.seasonId, league?.week, league?.year],
-  );
+  const cacheScopeKey = useMemo(() => buildLeagueCacheScopeKey(league), [league]);
   const fetchBoxScore = React.useCallback(async () => {
     const res = await actions?.getBoxScore?.(gameId);
     const payload = normalizeArchivedGamePayload(res?.game ?? getGameDetailPayload(gameId, league));

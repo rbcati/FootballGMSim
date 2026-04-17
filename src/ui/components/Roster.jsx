@@ -1,3 +1,4 @@
+import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 /**
  * Roster.jsx
  *
@@ -619,7 +620,7 @@ function RosterTable({
           player={extending}
           actions={actions}
           teamId={teamId}
-          cacheScopeKey={`${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`}
+          cacheScopeKey={buildLeagueCacheScopeKey(league)}
           statusNode={<StatusBadge injuryWeeks={extending.injuryWeeksRemaining} />}
           onClose={() => setExtending(null)}
           onComplete={() => {
