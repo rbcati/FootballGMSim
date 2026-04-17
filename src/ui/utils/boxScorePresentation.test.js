@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { deriveLeaders, deriveQuarterScores, deriveScoringSummary, getGameDetailSections, groupScoringByPeriod } from './boxScorePresentation.js';
+import {
+  deriveLeaders,
+  deriveQuarterScores,
+  deriveScoringSummary,
+  deriveStandoutStorylines,
+  deriveTeamLeaders,
+  getGameDetailSections,
+  groupScoringByPeriod,
+} from './boxScorePresentation.js';
 
 describe('box score presentation fallback', () => {
   it('builds quarter scores from logs when quarterScores missing', () => {
@@ -48,5 +56,59 @@ describe('box score presentation fallback', () => {
   it('handles missing optional archive fields without crashing', () => {
     expect(getGameDetailSections({ homeScore: 10, awayScore: 7 }).quarterByQuarter).toBe(true);
     expect(getGameDetailSections({}).playLog).toBe(false);
+  });
+
+  it('keeps scoring summary ordering stable by quarter then game clock', () => {
+    const rows = deriveScoringSummary([
+      { quarter: 2, clock: '1:05', text: 'Touchdown pass', teamId: 2 },
+      { quarter: 1, clock: '0:59', text: 'Field goal', teamId: 1 },
+      { quarter: 2, clock: '10:30', text: 'Field goal', teamId: 1 },
+    ], { 1: { abbr: 'KC' }, 2: { abbr: 'BUF' } });
+    expect(rows.map((row) => `${row.quarter}-${row.clock}`)).toEqual(['1-0:59', '2-10:30', '2-1:05']);
+  });
+
+  it('derives per-team leaders and deterministic data-driven storylines', () => {
+    const game = {
+      awayId: 2,
+      homeId: 1,
+      awayScore: 27,
+      homeScore: 20,
+      topReason1: 'Pocket survived pressure',
+      playerStats: {
+        away: {
+          20: { name: 'Away QB', pos: 'QB', stats: { passComp: 22, passAtt: 31, passYd: 288, passTD: 2 } },
+          21: { name: 'Away RB', pos: 'RB', stats: { rushAtt: 18, rushYd: 92, rushTD: 1 } },
+          22: { name: 'Away WR', pos: 'WR', stats: { receptions: 7, recYd: 118, recTD: 1 } },
+          23: { name: 'Away LB', pos: 'LB', stats: { tackles: 9, sacks: 2, interceptions: 1 } },
+          24: { name: 'Away K', pos: 'K', stats: { fieldGoalsMade: 2, fieldGoalsAttempted: 2, extraPointsMade: 3, extraPointsAttempted: 3 } },
+        },
+        home: {
+          10: { name: 'Home QB', pos: 'QB', stats: { passComp: 18, passAtt: 30, passYd: 236, passTD: 1, interceptions: 2 } },
+          11: { name: 'Home LB', pos: 'LB', stats: { tackles: 8, sacks: 1 } },
+        },
+      },
+    };
+    const teamLeaders = deriveTeamLeaders(game);
+    expect(teamLeaders.away.passing?.name).toBe('Away QB');
+    expect(teamLeaders.away.kicking?.name).toBe('Away K');
+
+    const storylineInput = {
+      game,
+      awayTeam: { abbr: 'BUF' },
+      homeTeam: { abbr: 'KC' },
+      teamTotals: {
+        away: { turnovers: 1, sacks: 4, totalYards: 410, passYards: 288 },
+        home: { turnovers: 3, sacks: 2, totalYards: 338, passYards: 236 },
+      },
+      driveStats: {
+        away: { redZoneScores: 3, redZoneTrips: 4, explosivePlays: 6 },
+        home: { redZoneScores: 1, redZoneTrips: 3, explosivePlays: 3 },
+      },
+    };
+    const firstRun = deriveStandoutStorylines(storylineInput);
+    const secondRun = deriveStandoutStorylines(storylineInput);
+    expect(firstRun).toEqual(secondRun);
+    expect(firstRun.length).toBeGreaterThanOrEqual(3);
+    expect(firstRun.join(' ')).toContain('pass protection neutralized');
   });
 });
