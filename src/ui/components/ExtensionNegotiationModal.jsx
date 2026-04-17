@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatMoneyM, safeRound, toFiniteNumber } from "../utils/numberFormatting.js";
+import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 export default function ExtensionNegotiationModal({
   player,
@@ -12,28 +14,26 @@ export default function ExtensionNegotiationModal({
   statusNode = null,
 }) {
   const [ask, setAsk] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [offer, setOffer] = useState(null);
   const [response, setResponse] = useState(null);
+  const requestKey = useMemo(() => buildRouteRequestKey("extension-ask", player?.id), [player?.id]);
+  const fetchExtensionAsk = React.useCallback(async () => {
+    const resp = await actions?.getExtensionAsk?.(player?.id);
+    return resp?.payload?.ask ?? null;
+  }, [actions, player?.id]);
+  const { data: askData, loading } = useStableRouteRequest({
+    requestKey,
+    enabled: player?.id != null,
+    fetcher: fetchExtensionAsk,
+    warnLabel: "ExtensionNegotiationModal",
+    clearDataOnLoad: true,
+  });
 
   useEffect(() => {
-    let stale = false;
-    setLoading(true);
-    actions
-      .getExtensionAsk(player.id)
-      .then((resp) => {
-        if (stale) return;
-        if (resp?.payload?.ask) { setAsk(resp.payload.ask); setOffer(resp.payload.ask); }
-        setLoading(false);
-      })
-      .catch(() => {
-        if (!stale) setLoading(false);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [player.id, actions]);
+    setAsk(askData ?? null);
+    setOffer(askData ?? null);
+  }, [askData]);
 
   const askYears = toFiniteNumber(ask?.years, null);
   const askBaseAnnual = toFiniteNumber(ask?.baseAnnual, null);

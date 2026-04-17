@@ -23,7 +23,8 @@ import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.j
 import { buildDevelopmentNotes, classifyDevelopmentTrend, getPlayerReadiness, getSchemeFitSignal, getAgeCurveContext, getDevelopmentSnapshot, getDevelopmentDrivers } from '../utils/playerDevelopmentSignals.js';
 import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDevelopmentUI.jsx';
 import EmptyState from './EmptyState.jsx';
-import { buildRouteRequestKey, shouldStartRouteRequest, shouldWarnRepeatedRouteRequest } from "../utils/requestLoopGuard.js";
+import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -347,56 +348,29 @@ export default function PlayerProfile({
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
-  const getPlayerCareerRef = useRef(actions?.getPlayerCareer);
-  const requestStateRef = useRef({ inFlightKey: null, lastCompletedKey: null, repeatCount: 0, previousKey: null });
+  const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
+  const fetchProfileData = React.useCallback(async () => {
+    const response = await actions?.getPlayerCareer?.(playerId);
+    return response?.payload ?? response ?? null;
+  }, [actions, playerId]);
+  const {
+    data,
+    loading,
+    error: requestError,
+    refresh: fetchProfile,
+  } = useStableRouteRequest({
+    requestKey,
+    enabled: playerId != null,
+    fetcher: fetchProfileData,
+    warnLabel: 'PlayerProfile',
+    clearDataOnLoad: false,
+  });
 
   useEffect(() => {
-    getPlayerCareerRef.current = actions?.getPlayerCareer;
-  }, [actions?.getPlayerCareer]);
-
-  const loadProfile = React.useCallback((force = false) => {
-    const requestKey = buildRouteRequestKey("player", playerId);
-    const requestState = requestStateRef.current;
-    if (!shouldStartRouteRequest({ requestKey, inFlightKey: requestState.inFlightKey, lastCompletedKey: requestState.lastCompletedKey, force })) {
-      return Promise.resolve(null);
+    if (requestError) {
+      console.error("Failed to load player profile:", requestError);
     }
-    const getPlayerCareer = getPlayerCareerRef.current;
-    if (!getPlayerCareer) return Promise.resolve(null);
-
-    const nextRepeatCount = requestState.previousKey === requestKey ? requestState.repeatCount + 1 : 1;
-    if (import.meta.env.DEV && shouldWarnRepeatedRouteRequest({ requestKey, previousKey: requestState.previousKey, repeatCount: requestState.repeatCount })) {
-      console.warn("[PlayerProfile] repeated profile request for same player", { playerId, repeatCount: nextRepeatCount });
-    }
-    requestState.previousKey = requestKey;
-    requestState.repeatCount = nextRepeatCount;
-    requestState.inFlightKey = requestKey;
-
-    setLoading(true);
-    return getPlayerCareer(playerId)
-      .then((response) => {
-        setData(response?.payload ?? response);
-        requestState.lastCompletedKey = requestKey;
-      })
-      .catch((err) => {
-        console.error("Failed to load player profile:", err);
-      })
-      .finally(() => {
-        if (requestStateRef.current.inFlightKey === requestKey) {
-          requestStateRef.current.inFlightKey = null;
-        }
-        setLoading(false);
-      });
-  }, [playerId]);
-
-  const fetchProfile = React.useCallback(() => {
-    requestStateRef.current.lastCompletedKey = null;
-    return loadProfile(true);
-  }, [loadProfile]);
-
-  useEffect(() => {
-    if (!playerId) return;
-    loadProfile(false);
-  }, [playerId, loadProfile]);
+  }, [requestError]);
 
   const player = data?.player;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);

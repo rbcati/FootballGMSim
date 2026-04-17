@@ -16,6 +16,8 @@ import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { buildTeamChemistrySummary } from "../utils/teamChemistry.js";
 import { franchiseInvestmentSummary } from "../utils/franchiseInvestments.js";
+import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -111,25 +113,25 @@ function StatBox({ label, value, sub }) {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [showRelocate, setShowRelocate] = useState(false);
+  const requestKey = useMemo(() => buildRouteRequestKey("team", teamId), [teamId]);
+  const fetchTeamProfile = React.useCallback(async () => {
+    const resp = await actions?.getTeamProfile?.(teamId);
+    return resp?.payload ?? resp ?? null;
+  }, [actions, teamId]);
+  const { data, loading, error } = useStableRouteRequest({
+    requestKey,
+    enabled: teamId != null,
+    fetcher: fetchTeamProfile,
+    warnLabel: "TeamProfile",
+    clearDataOnLoad: true,
+  });
 
   useEffect(() => {
-    if (!teamId && teamId !== 0) return;
-    setLoading(true);
-    setData(null);
-    actions
-      .getTeamProfile(teamId)
-      .then((resp) => {
-        setData(resp.payload ?? resp);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("TeamProfile fetch failed:", err);
-        setLoading(false);
-      });
-  }, [teamId]);
+    if (error) {
+      console.error("TeamProfile fetch failed:", error);
+    }
+  }, [error]);
 
   if (teamId == null) return null;
 
