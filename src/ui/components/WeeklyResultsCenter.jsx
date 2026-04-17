@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 import { deriveCompactResultRecap, getGameLifecycleBucket, selectWeekGames } from '../utils/gameCenterResults.js';
+import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 
 function normalizeTeam(team) {
   if (!team || typeof team !== 'object') return { abbr: '—', name: 'Unknown' };
@@ -42,6 +43,38 @@ function ResultRow({ row, seasonId, onGameSelect }) {
   );
 }
 
+
+
+function SpotlightCard({ row, seasonId, onGameSelect }) {
+  const presentation = buildCompletedGamePresentation(row.game, { seasonId, week: row.week, source: 'weekly_results_spotlight' });
+  const clickable = Boolean(presentation.canOpen && onGameSelect);
+  const awayId = Number(row?.game?.away?.id ?? row?.game?.away);
+  const homeId = Number(row?.game?.home?.id ?? row?.game?.home);
+
+  return (
+    <article className="card" style={{ padding: 'var(--space-3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+        <strong>Spotlight game</strong>
+        <span className="badge">Score {row.score}</span>
+      </div>
+      <div style={{ marginTop: 6, fontWeight: 700 }}>
+        {row.teamById[awayId]?.abbr ?? 'AWY'} {row.game?.awayScore ?? '—'} @ {row.teamById[homeId]?.abbr ?? 'HME'} {row.game?.homeScore ?? '—'}
+      </div>
+      <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{row.reason}</div>
+      <div style={{ marginTop: 8 }}>
+        <button
+          type="button"
+          className="btn btn-sm"
+          onClick={clickable ? () => openResolvedBoxScore(row.game, { seasonId, week: row.week, source: 'weekly_results_spotlight' }, onGameSelect) : undefined}
+          disabled={!clickable}
+        >
+          {clickable ? 'Open spotlight' : (presentation?.statusLabel ?? 'Archive unavailable')}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect }) {
   const totalWeeks = Number(league?.schedule?.weeks?.length ?? 0);
   const currentWeek = Number(initialWeek ?? league?.week ?? 1);
@@ -76,6 +109,9 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect 
   const live = rows.filter((row) => row.bucket === 'live');
   const upcoming = rows.filter((row) => row.bucket === 'upcoming');
 
+  const leagueRecap = useMemo(() => buildWeeklyLeagueRecap(league, { week: selectedWeek }), [league, selectedWeek]);
+  const spotlightRows = useMemo(() => leagueRecap.spotlights.map((spotlight) => ({ ...spotlight, teamById })), [leagueRecap.spotlights, teamById]);
+
   if (!totalWeeks) {
     return <div className="card" style={{ padding: 'var(--space-4)' }}>No schedule data available for weekly results.</div>;
   }
@@ -100,6 +136,48 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect 
           <span className="badge">Upcoming {upcoming.length}</span>
         </div>
       </section>
+
+
+      {leagueRecap.bullets.length > 0 && (
+        <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Weekly League Recap</h3>
+          <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+            {leagueRecap.bullets.map((bullet, idx) => <li key={`bullet-${idx}`} style={{ fontSize: 'var(--text-sm)' }}>{bullet}</li>)}
+          </ul>
+          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+            <div className="card" style={{ padding: 'var(--space-2)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Race center</div>
+              <div style={{ fontSize: 'var(--text-sm)' }}>
+                <strong>Hottest:</strong> {leagueRecap.raceCenter.hottest[0] ? `${leagueRecap.raceCenter.hottest[0].team?.abbr ?? leagueRecap.raceCenter.hottest[0].team?.name} (${leagueRecap.raceCenter.hottest[0].streak.length}W)` : '—'}
+              </div>
+              <div style={{ fontSize: 'var(--text-sm)' }}>
+                <strong>Coldest:</strong> {leagueRecap.raceCenter.coldest[0] ? `${leagueRecap.raceCenter.coldest[0].team?.abbr ?? leagueRecap.raceCenter.coldest[0].team?.name} (${leagueRecap.raceCenter.coldest[0].streak.length}L)` : '—'}
+              </div>
+              <div style={{ fontSize: 'var(--text-sm)' }}>
+                <strong>Mover:</strong> {leagueRecap.raceCenter.biggestMover?.change > 0 ? `${leagueRecap.raceCenter.biggestMover.team?.abbr ?? leagueRecap.raceCenter.biggestMover.team?.name} (+${leagueRecap.raceCenter.biggestMover.change})` : 'No major move'}
+              </div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                {leagueRecap.raceCenter.bubble ? `Bubble: ${(leagueRecap.raceCenter.bubble.gap * 100).toFixed(1)} pct gap` : 'Bubble context unlocks as standings deepen.'}
+              </div>
+            </div>
+            <div className="card" style={{ padding: 'var(--space-2)' }}>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Team trajectories</div>
+              <div style={{ display: 'grid', gap: 4 }}>
+                {leagueRecap.trajectories.slice(0, 3).map((team) => (
+                  <div key={team.teamId ?? team.label} style={{ fontSize: 'var(--text-xs)' }}><strong>{team.label}:</strong> {team.snippet}</div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {spotlightRows.length > 0 && (
+        <section style={{ display: 'grid', gap: 8 }}>
+          <h3 style={{ margin: 0 }}>Weekly Spotlight</h3>
+          {spotlightRows.map((row) => <SpotlightCard key={row.key} row={row} seasonId={league?.seasonId} onGameSelect={onGameSelect} />)}
+        </section>
+      )}
 
       {completed.length > 0 && (
         <section style={{ display: 'grid', gap: 8 }}>
