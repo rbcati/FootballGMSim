@@ -118,7 +118,7 @@ export function getActionDestination(type, nextGame) {
     case 'news':
       return nextGame ? 'Injuries' : 'News';
     case 'opponent':
-      return nextGame ? 'Game Plan' : 'Schedule';
+      return nextGame ? 'Weekly Prep' : 'Schedule';
     default:
       return 'HQ';
   }

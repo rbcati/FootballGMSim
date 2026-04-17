@@ -77,6 +77,7 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Next Game');
     expect(html).toContain('Last Game');
     expect(html).toContain('Matchup note');
+    expect(html).toContain('Prep status');
   });
 
   it('is safe with partial/older save payloads', () => {

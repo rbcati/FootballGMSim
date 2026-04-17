@@ -46,7 +46,7 @@ describe('hqHelpers', () => {
     expect(getActionContext('lineup', weekly, nextGame)).toContain('3 injury');
     expect(getActionContext('gameplan', weekly, nextGame)).toContain('explosive offense');
     expect(getActionDestination('lineup', nextGame)).toBe('Roster:depth|ALL');
-    expect(getActionDestination('opponent', nextGame)).toBe('Game Plan');
+    expect(getActionDestination('opponent', nextGame)).toBe('Weekly Prep');
   });
 
   it('ranks a featured urgent item and limits secondary items', () => {

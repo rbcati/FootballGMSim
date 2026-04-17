@@ -19,6 +19,7 @@ import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js"
 import { OFFENSIVE_PLANS, DEFENSIVE_PLANS } from "../../core/strategy.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
+import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 
 // ── Local-storage key for game plan sliders ───────────────────────────────────
 const GP_STORAGE_KEY = "footballgm_gameplan_v1";
@@ -294,6 +295,10 @@ export default function GamePlanScreen({ league, actions }) {
   // ── Toast state ──
   const [toastVisible, setToastVisible] = useState(false);
   const toastTimer = useRef(null);
+
+  useEffect(() => {
+    markWeeklyPrepStep(league, 'planReviewed', true);
+  }, [league?.seasonId, league?.week, league?.userTeamId]);
 
   // Sync scheme from server if it updates
   useEffect(() => {

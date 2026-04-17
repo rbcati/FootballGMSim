@@ -40,6 +40,7 @@ import AwardRaces from "./AwardRaces.jsx";
 import PlayerStats from "./PlayerStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
 import GamePlanScreen from "./GamePlanScreen.jsx";
+import WeeklyPrepScreen from "./WeeklyPrepScreen.jsx";
 import NewsFeed from "./NewsFeed.jsx";
 import RecordBook from "./RecordBook.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
@@ -190,6 +191,7 @@ const BASE_TABS = [
   "League Leaders",
   "Award Races",
   "Analytics",
+  "Weekly Prep",
   "Game Plan",
   "Roster",
   "Depth Chart",
@@ -224,7 +226,7 @@ const BASE_TABS = [
 
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
-  { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
+  { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
   { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
 ];
@@ -236,7 +238,7 @@ const NAV_TEST_IDS = {
   [SHELL_SECTIONS.news]: "nav-news",
 };
 
-const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
+const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
 const TAB_ALIASES = {
   Trades: "Transactions",
 };
@@ -1304,8 +1306,8 @@ function getPhasePriorityTabs(phase) {
   if (phase === "free_agency") return ["HQ", "Free Agency", "Trades", "Draft"];
   if (phase === "draft") return ["HQ", "Draft", "Mock Draft", "Transactions"];
   if (phase === "preseason") return ["HQ", "Roster Hub", "Depth Chart", "Training"];
-  if (phase === "playoffs") return ["HQ", "Postseason", "Game Plan", "Injuries"];
-  return ["HQ", "Game Plan", "Roster", "Transactions"];
+  if (phase === "playoffs") return ["HQ", "Postseason", "Weekly Prep", "Game Plan", "Injuries"];
+  return ["HQ", "Weekly Prep", "Game Plan", "Roster", "Transactions"];
 }
 
 export default function LeagueDashboard({
@@ -1780,6 +1782,11 @@ export default function LeagueDashboard({
         {activeTab === "Strategy" && (
           <TabErrorBoundary label="Strategy" onNavigate={setActiveTab}>
             <StrategyPanel league={league} actions={actions} />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Weekly Prep" && (
+          <TabErrorBoundary label="Weekly Prep" onNavigate={setActiveTab}>
+            <WeeklyPrepScreen league={league} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Game Plan" && (
