@@ -335,8 +335,6 @@ function getTeamName(teamId, teams) {
 }
 
 export default function PlayerProfile({
-  const [localData, setLocalData] = useState(null);
-
   playerId,
   onClose,
   actions,
