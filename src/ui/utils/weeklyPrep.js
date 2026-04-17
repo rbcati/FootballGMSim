@@ -1,6 +1,8 @@
 import { autoBuildDepthChart, depthWarnings, DEPTH_CHART_ROWS } from '../../core/depthChart.js';
+import { deriveGamePlanMultipliers, getGamePlanSynergySummary } from '../../core/sim/gamePlanMultipliers.ts';
 
 const PREP_STORAGE_KEY = 'footballgm_weekly_prep_v1';
+const GAME_PLAN_STORAGE_KEY = 'footballgm_gameplan_v1';
 
 function safeNum(value, fallback = 0) {
   const parsed = Number(value);
@@ -254,6 +256,16 @@ function prepProgressKey(league) {
   return `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 1}:${league?.userTeamId ?? 'user'}`;
 }
 
+function readStoredGamePlan() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(GAME_PLAN_STORAGE_KEY) ?? '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function writeStoredPrepProgress(allProgress) {
   if (typeof window === 'undefined') return;
   try {
@@ -290,6 +302,28 @@ export function markWeeklyPrepStep(league, step, value = true) {
   writeStoredPrepProgress(all);
 }
 
+export function clearWeeklyPrepForWeek(league) {
+  if (typeof window === 'undefined') return;
+  const key = prepProgressKey(league);
+  const all = readStoredPrepProgress();
+  if (!all || typeof all !== 'object' || !all[key]) return;
+  delete all[key];
+  writeStoredPrepProgress(all);
+}
+
+export function pruneWeeklyPrepStorage(activeLeague) {
+  if (typeof window === 'undefined') return;
+  const all = readStoredPrepProgress();
+  const activeSeason = String(activeLeague?.seasonId ?? activeLeague?.year ?? 'season');
+  const keepPrefix = `${activeSeason}:`;
+  const next = Object.fromEntries(
+    Object.entries(all).filter(([key]) => key.startsWith(keepPrefix)),
+  );
+  if (Object.keys(next).length !== Object.keys(all).length) {
+    writeStoredPrepProgress(next);
+  }
+}
+
 export function deriveWeeklyPrepState(league) {
   const userTeam = getTeam(league, league?.userTeamId);
   const nextGame = getNextGame(league);
@@ -304,6 +338,7 @@ export function deriveWeeklyPrepState(league) {
     offenseGap: userOff - oppDef,
     defenseGap: userDef - oppOff,
   };
+  const matchupAbsGap = Math.max(Math.abs(matchup.ovrGap), Math.abs(matchup.offenseGap), Math.abs(matchup.defenseGap));
 
   const opponentStrengths = [];
   if (oppOff >= 84) opponentStrengths.push(`Top-tier offense (${oppOff}) can create explosive drives.`);
@@ -317,6 +352,19 @@ export function deriveWeeklyPrepState(league) {
 
   const lineupIssues = buildLineupReadiness(userTeam, league);
   const recommendations = createRecommendationCards({ userTeam, opponent, matchup });
+  const gamePlan = {
+    ...(userTeam?.strategies?.gamePlan ?? {}),
+    ...readStoredGamePlan(),
+  };
+  const insights = {
+    weakSecondary: oppDef <= 76 || matchup.offenseGap >= 6,
+    weakRunDefense: oppDef <= 78 || matchup.offenseGap >= 4,
+    elitePassRush: oppDef >= 85 || (oppDef - userOff) >= 5,
+    explosiveOpponentOffense: oppOff >= 84,
+    balancedMatchup: matchupAbsGap <= 4,
+  };
+  const hasBlockingLineupIssue = lineupIssues.some((issue) => issue.level === 'urgent' && String(issue.label).toLowerCase().includes('depth chart blocker'));
+  const majorInjuryStress = lineupIssues.some((issue) => String(issue.label).toLowerCase().includes('injury stack'));
 
   const pressurePoints = [];
   if (matchup.defenseGap <= -4) pressurePoints.push('Defensive front must limit explosive passing downs.');
@@ -333,6 +381,19 @@ export function deriveWeeklyPrepState(league) {
 
   const remaining = Object.values(completion).filter((done) => !done).length;
   const readinessLabel = remaining === 0 ? 'Ready for kickoff' : `${remaining} prep item${remaining > 1 ? 's' : ''} remaining`;
+  const prepMultipliers = deriveGamePlanMultipliers({
+    weeklyPrepState: {
+      insights,
+      completion,
+      hasTracking: true,
+    },
+    gamePlan,
+    teamContext: {
+      hasBlockingLineupIssue,
+      majorInjuryStress,
+    },
+  });
+  const prepSummary = getGamePlanSynergySummary(prepMultipliers);
 
   return {
     userTeam,
@@ -366,6 +427,11 @@ export function deriveWeeklyPrepState(league) {
     completion,
     remaining,
     readinessLabel,
+    gamePlan,
+    insights,
+    prepMultipliers,
+    prepSummary,
+    readinessTier: prepSummary.severity,
     keyMatchupNote: recommendations?.[0]?.title ?? 'No clear tactical edge identified yet.',
   };
 }

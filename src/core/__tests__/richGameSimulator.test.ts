@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { mapOverallToAttributesV2 } from '../migration/attributeMigrator.ts';
 import { simulateRichGame } from '../sim/richGameSimulator.ts';
+import type { DerivedGamePlanMultipliers } from '../sim/gamePlanMultipliers.ts';
+
+const PREP_EDGE: DerivedGamePlanMultipliers = {
+  passSuccessDelta: 0.03,
+  rushSuccessDelta: 0,
+  explosivePlayDelta: 0.01,
+  turnoverAvoidanceDelta: 0.01,
+  redZoneDelta: 0.005,
+  fatigueDisciplineDelta: 0.01,
+  chemistryPenalty: 0,
+  score: 0.065,
+  netImpact: 0.065,
+  severity: 'ready',
+  activeReasons: ['Test prep edge'],
+};
 
 function buildPayload(seed = 7) {
   return {
@@ -33,6 +48,7 @@ function buildPayload(seed = 7) {
       { id: 'a-lb', name: 'Away LB', pos: 'LB', ovr: 80 },
       { id: 'a-cb', name: 'Away CB', pos: 'CB', ovr: 81 },
     ],
+    homePrepMultipliers: PREP_EDGE,
   };
 }
 
@@ -73,5 +89,11 @@ describe('simulateRichGame', () => {
     expect(homePassRate).toBeLessThan(0.85);
     expect(awayPassRate).toBeGreaterThan(0.25);
     expect(awayPassRate).toBeLessThan(0.85);
+  });
+
+  it('accepts prep multipliers and keeps deterministic behavior for same inputs', () => {
+    const one = simulateRichGame(buildPayload(455));
+    const two = simulateRichGame(buildPayload(455));
+    expect(one).toEqual(two);
   });
 });
