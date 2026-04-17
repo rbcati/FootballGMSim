@@ -41,6 +41,7 @@ import PlayerStats from "./PlayerStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
 import GamePlanScreen from "./GamePlanScreen.jsx";
 import WeeklyPrepScreen from "./WeeklyPrepScreen.jsx";
+import WeeklyResultsCenter from "./WeeklyResultsCenter.jsx";
 import NewsFeed from "./NewsFeed.jsx";
 import RecordBook from "./RecordBook.jsx";
 import StatLeadersWidget from "./StatLeadersWidget.jsx";
@@ -186,6 +187,7 @@ const BASE_TABS = [
   "News",
   "Standings",
   "Schedule",
+  "Weekly Results",
   "Stats",
   "Leaders",
   "League Leaders",
@@ -227,7 +229,7 @@ const BASE_TABS = [
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
-  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
 ];
 
@@ -1684,6 +1686,13 @@ export default function LeagueDashboard({
                   onPlayerSelect={setSelectedPlayerId}
                 />
               )}
+              renderResults={() => (
+                <WeeklyResultsCenter
+                  league={league}
+                  initialWeek={league?.week}
+                  onGameSelect={(gameId) => openGameDetail(gameId, "League")}
+                />
+              )}
               renderStandings={() => (
                 <StandingsTab
                   teams={safeStandingsRows}
@@ -1737,6 +1746,15 @@ export default function LeagueDashboard({
               }}
               league={league}
               onPlayerSelect={setSelectedPlayerId}
+            />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Weekly Results" && (
+          <TabErrorBoundary label="Weekly Results" onNavigate={setActiveTab} fallbackTab="League">
+            <WeeklyResultsCenter
+              league={league}
+              initialWeek={league?.week}
+              onGameSelect={(gameId) => openGameDetail(gameId, "Weekly Results")}
             />
           </TabErrorBoundary>
         )}

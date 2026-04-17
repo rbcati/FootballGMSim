@@ -353,13 +353,13 @@ function SeasonExplorer({ seasons, onPlayerSelect, onOpenBoxScore, league }) {
             <h4 className="text-sm font-bold mb-2">Completed game archive</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               {(selected?.gameIndex ?? []).slice(-12).reverse().map((game) => {
-                const presentation = buildCompletedGamePresentation(game, { seasonId: selected?.year, source: "league_history" });
+                const presentation = buildCompletedGamePresentation(game, { seasonId: selected?.year, week: game?.week, source: "league_history" });
                 const clickable = Boolean(presentation.canOpen && onOpenBoxScore);
                 return (
                   <button
                     key={game.id}
                     className="rounded-md border border-[color:var(--hairline)] px-3 py-2 text-left"
-                    onClick={() => openResolvedBoxScore(game, { seasonId: selected?.year, source: "league_history" }, onOpenBoxScore)}
+                    onClick={() => openResolvedBoxScore(game, { seasonId: selected?.year, week: game?.week, source: "league_history" }, onOpenBoxScore)}
                     style={{ cursor: clickable ? "pointer" : "default", opacity: clickable ? 1 : 0.75 }}
                     title={clickable ? presentation.ctaLabel : presentation.statusLabel}
                   >

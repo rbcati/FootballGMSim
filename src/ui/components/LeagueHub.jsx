@@ -7,7 +7,7 @@ import { buildNewsDeskModel } from '../utils/newsDesk.js';
 import SocialFeed from './SocialFeed.jsx';
 import { CompactListRow, ScreenHeader, StatusChip } from './ScreenSystem.jsx';
 
-const LEAGUE_SUBNAV = ['Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
+const LEAGUE_SUBNAV = ['Results', 'Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
 
 function TeamComparison({ teams = [] }) {
   const rows = [...teams]
@@ -32,7 +32,7 @@ function TeamComparison({ teams = [] }) {
   );
 }
 
-export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigateTrade, renderStandings, renderSchedule }) {
+export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigateTrade, renderStandings, renderSchedule, renderResults }) {
   const [subtab, setSubtab] = useState('Schedule');
   const teams = Array.isArray(league?.teams) ? league.teams : [];
 
@@ -78,6 +78,7 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
       <SectionSubnav items={LEAGUE_SUBNAV} activeItem={subtab} onChange={setSubtab} />
       <SocialFeed league={league} defaultFilter="league" maxItems={8} onPlayerSelect={onPlayerSelect} />
 
+      {subtab === 'Results' && renderResults?.('League')}
       {subtab === 'Standings' && renderStandings?.()}
       {subtab === 'Schedule' && renderSchedule?.('League')}
       {subtab === 'Stats' && (
