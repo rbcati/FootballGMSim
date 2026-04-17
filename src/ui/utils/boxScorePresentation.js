@@ -108,6 +108,24 @@ function parseScoreType(play = "") {
   return "Score";
 }
 
+function parseClockToSec(clockValue) {
+  if (clockValue == null) return -1;
+  const normalized = String(clockValue).trim();
+  const match = normalized.match(/^(\d+):(\d{1,2})$/);
+  if (!match) return -1;
+  return (Number(match[1]) * 60) + Number(match[2]);
+}
+
+export function sortScoringSummaryRows(rows = []) {
+  return [...rows].sort((a, b) => {
+    const quarterDelta = Number(a.quarter ?? 0) - Number(b.quarter ?? 0);
+    if (quarterDelta !== 0) return quarterDelta;
+    const clockDelta = parseClockToSec(b.clock) - parseClockToSec(a.clock);
+    if (clockDelta !== 0) return clockDelta;
+    return Number(a.sortIndex ?? 0) - Number(b.sortIndex ?? 0);
+  });
+}
+
 export function deriveScoringSummary(logs = [], teamsById = {}) {
   const scoring = logs
     .filter((log) => log?.isScore || log?.isTouchdown || /touchdown|field goal|safety/i.test(log?.text ?? ""))
@@ -116,6 +134,7 @@ export function deriveScoringSummary(logs = [], teamsById = {}) {
       const team = teamsById[teamId];
       return {
         id: `${idx}-${teamId}`,
+        sortIndex: idx,
         quarter: log.quarter ?? "—",
         clock: log.clock ?? log.time ?? "",
         teamId,
@@ -126,7 +145,7 @@ export function deriveScoringSummary(logs = [], teamsById = {}) {
       };
     });
 
-  return scoring;
+  return sortScoringSummaryRows(scoring);
 }
 
 export function groupScoringByPeriod(scoring = []) {
@@ -187,6 +206,124 @@ export function deriveMomentumNotes(logs = []) {
     quarter: log.quarter ?? "—",
     text: log.text ?? "Momentum shifted",
   }));
+}
+
+function getSidePlayers(game, side) {
+  const sideRows = game?.playerStats?.[side] ?? game?.stats?.[side] ?? {};
+  return toPlayerArray(sideRows, side === 'home' ? game?.homeId : game?.awayId);
+}
+
+function getLeaderByStat(players, statKey, min = 1) {
+  return players
+    .filter((player) => Number(player?.stats?.[statKey] ?? 0) >= min)
+    .sort((a, b) => Number(b?.stats?.[statKey] ?? 0) - Number(a?.stats?.[statKey] ?? 0))[0] ?? null;
+}
+
+export function deriveTeamLeaders(game = {}) {
+  const build = (side) => {
+    const players = getSidePlayers(game, side);
+    return {
+      passing: getLeaderByStat(players, 'passYd', 1),
+      rushing: getLeaderByStat(players, 'rushYd', 1),
+      receiving: getLeaderByStat(players, 'recYd', 1),
+      tackles: getLeaderByStat(players, 'tackles', 1),
+      sacks: getLeaderByStat(players, 'sacks', 1),
+      interceptions: getLeaderByStat(players, 'interceptions', 1),
+      kicking: players
+        .filter((player) => Number(player?.stats?.fieldGoalsAttempted ?? 0) > 0 || Number(player?.stats?.extraPointsAttempted ?? 0) > 0)
+        .sort((a, b) => (
+          Number(b?.stats?.fieldGoalsMade ?? 0) - Number(a?.stats?.fieldGoalsMade ?? 0)
+          || Number(b?.stats?.extraPointsMade ?? 0) - Number(a?.stats?.extraPointsMade ?? 0)
+        ))[0] ?? null,
+    };
+  };
+  return { away: build('away'), home: build('home') };
+}
+
+function numericDelta(away, home) {
+  const awayNum = Number(away);
+  const homeNum = Number(home);
+  if (!Number.isFinite(awayNum) || !Number.isFinite(homeNum) || awayNum === homeNum) return null;
+  return { winner: awayNum > homeNum ? 'away' : 'home', margin: Math.abs(awayNum - homeNum), awayNum, homeNum };
+}
+
+export function deriveStandoutStorylines({
+  game,
+  awayTeam,
+  homeTeam,
+  teamTotals,
+  driveStats,
+} = {}) {
+  if (!game) return [];
+  const lines = [];
+  const awayAbbr = awayTeam?.abbr ?? 'Away';
+  const homeAbbr = homeTeam?.abbr ?? 'Home';
+
+  const pushUnique = (text) => {
+    if (!text || lines.includes(text) || lines.length >= 5) return;
+    lines.push(text);
+  };
+
+  const turnoverEdge = numericDelta(teamTotals?.home?.turnovers, teamTotals?.away?.turnovers);
+  if (turnoverEdge && turnoverEdge.margin >= 1) {
+    const winner = turnoverEdge.winner === 'away' ? awayAbbr : homeAbbr;
+    const loser = turnoverEdge.winner === 'away' ? homeAbbr : awayAbbr;
+    pushUnique(`${winner} protected the football better and finished +${turnoverEdge.margin} in turnovers against ${loser}.`);
+  }
+
+  const redZoneAway = Number(driveStats?.away?.redZoneScores ?? 0) / Math.max(1, Number(driveStats?.away?.redZoneTrips ?? 0));
+  const redZoneHome = Number(driveStats?.home?.redZoneScores ?? 0) / Math.max(1, Number(driveStats?.home?.redZoneTrips ?? 0));
+  const redZoneEdge = numericDelta(redZoneAway, redZoneHome);
+  if (redZoneEdge && Number.isFinite(redZoneAway) && Number.isFinite(redZoneHome)) {
+    const winner = redZoneEdge.winner === 'away' ? awayAbbr : homeAbbr;
+    pushUnique(`The difference was red-zone finishing: ${winner} converted at a higher rate inside the 20.`);
+  }
+
+  const explosivesEdge = numericDelta(driveStats?.away?.explosivePlays, driveStats?.home?.explosivePlays);
+  if (explosivesEdge && explosivesEdge.margin >= 1) {
+    const winner = explosivesEdge.winner === 'away' ? awayAbbr : homeAbbr;
+    pushUnique(`${winner} created the bigger chunk plays edge (${Math.round(explosivesEdge.margin)} more explosives).`);
+  }
+
+  const sacksEdge = numericDelta(teamTotals?.away?.sacks, teamTotals?.home?.sacks);
+  if (sacksEdge && sacksEdge.margin >= 1) {
+    const winner = sacksEdge.winner === 'away' ? awayAbbr : homeAbbr;
+    const loser = sacksEdge.winner === 'away' ? homeAbbr : awayAbbr;
+    pushUnique(`${winner}'s pass rush won key downs with ${Math.round(sacksEdge.margin)} more sacks than ${loser}.`);
+  }
+
+  const simReasons = [game?.topReason1, game?.topReason2, game?.summary?.topReason1, game?.summary?.topReason2]
+    .filter((reason) => typeof reason === 'string' && reason.trim());
+  const reasonText = simReasons[0] ?? '';
+  if (/pocket survived pressure/i.test(reasonText)) {
+    const awaySacks = Number(teamTotals?.away?.sacks ?? 0);
+    const homeSacks = Number(teamTotals?.home?.sacks ?? 0);
+    const winner = awaySacks <= homeSacks ? awayAbbr : homeAbbr;
+    const loser = winner === awayAbbr ? homeAbbr : awayAbbr;
+    pushUnique(`${winner}'s pass protection neutralized ${loser}'s pass rush in the defining stretches.`);
+  } else if (/route leverage over zone/i.test(reasonText)) {
+    const winner = Number(teamTotals?.away?.passYards ?? 0) >= Number(teamTotals?.home?.passYards ?? 0) ? awayAbbr : homeAbbr;
+    const loser = winner === awayAbbr ? homeAbbr : awayAbbr;
+    pushUnique(`${winner}'s route running consistently beat ${loser}'s zone coverage leverage.`);
+  } else if (/win on the release/i.test(reasonText)) {
+    const winner = Number(teamTotals?.away?.passYards ?? 0) >= Number(teamTotals?.home?.passYards ?? 0) ? awayAbbr : homeAbbr;
+    const loser = winner === awayAbbr ? homeAbbr : awayAbbr;
+    pushUnique(`${winner}'s release quickness separated from ${loser}'s press coverage at the catch point.`);
+  }
+
+  const yardsEdge = numericDelta(teamTotals?.away?.totalYards, teamTotals?.home?.totalYards);
+  if (yardsEdge && yardsEdge.margin >= 40) {
+    const winner = yardsEdge.winner === 'away' ? awayAbbr : homeAbbr;
+    pushUnique(`${winner} controlled field position with a ${Math.round(yardsEdge.margin)}-yard total offense edge.`);
+  }
+
+  if (lines.length < 3) {
+    const winnerAbbr = Number(game?.awayScore) > Number(game?.homeScore) ? awayAbbr : homeAbbr;
+    const loserAbbr = winnerAbbr === awayAbbr ? homeAbbr : awayAbbr;
+    pushUnique(`${winnerAbbr} executed cleaner situational football late to close out ${loserAbbr}.`);
+  }
+
+  return lines.slice(0, 5);
 }
 
 export function getGameDetailSections(game = {}) {

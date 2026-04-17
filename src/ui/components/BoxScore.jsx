@@ -5,10 +5,13 @@ import {
   deriveMomentumNotes,
   deriveQuarterScores,
   deriveScoringSummary,
+  deriveStandoutStorylines,
+  deriveTeamLeaders,
   deriveTeamTotals,
   describeStatLine,
   getGameDetailSections,
   groupScoringByPeriod,
+  sortScoringSummaryRows,
   toPlayerArray,
 } from "../utils/boxScorePresentation.js";
 import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/boxScoreAccess.js";
@@ -18,13 +21,13 @@ import GameDetailV2 from "./game/GameDetailV2.tsx";
 import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
-function TeamButton({ team, onSelect }) {
+export function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
   if (!onSelect) return <span>{team.abbr}</span>;
   return <button className="btn-link" onClick={() => onSelect(team.id)}>{team.abbr}</button>;
 }
 
-function PlayerButton({ player, onSelect }) {
+export function PlayerButton({ player, onSelect }) {
   if (!player) return <span>—</span>;
   if (!onSelect || !player.playerId) return <span>{player.name}</span>;
   return <button className="btn-link" onClick={() => onSelect(player.playerId)}>{player.name}</button>;
@@ -48,6 +51,16 @@ function StatCompareRow({ label, homeValue, awayValue, homeWins, awayWins }) {
       <span className={awayWins ? "bs-compare-value bs-compare-value--winner" : "bs-compare-value"}>{awayValue ?? "—"}</span>
       <span className="bs-compare-label">{label}</span>
       <span className={homeWins ? "bs-compare-value bs-compare-value--winner" : "bs-compare-value"}>{homeValue ?? "—"}</span>
+    </div>
+  );
+}
+
+function TeamLeaderCell({ label, player, statKeys, onPlayerSelect }) {
+  return (
+    <div className="bs-list-item">
+      <span>{label}</span>
+      <span><PlayerButton player={player} onSelect={onPlayerSelect} /></span>
+      <span>{describeStatLine(player, statKeys)}</span>
     </div>
   );
 }
@@ -250,7 +263,22 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const awayTeam = teamsById[game?.awayId] ?? { id: game?.awayId, abbr: game?.awayAbbr ?? "AWAY", wins: 0, losses: 0, ties: 0 };
 
   const leaders = useMemo(() => deriveLeaders(game), [game]);
-  const scoring = useMemo(() => (game?.scoringSummary?.length ? game.scoringSummary : deriveScoringSummary(game?.playLog ?? game?.stats?.playLogs ?? [], teamsById)), [game, teamsById]);
+  const teamLeaders = useMemo(() => deriveTeamLeaders(game), [game]);
+  const hasTeamLeaders = useMemo(() => {
+    const all = [teamLeaders?.away, teamLeaders?.home].filter(Boolean);
+    return all.some((side) => Object.values(side).some(Boolean));
+  }, [teamLeaders]);
+  const scoring = useMemo(() => {
+    if (game?.scoringSummary?.length) {
+      const normalized = game.scoringSummary.map((row, idx) => ({
+        ...row,
+        sortIndex: idx,
+        teamAbbr: row?.teamAbbr ?? teamsById?.[Number(row?.teamId)]?.abbr ?? "—",
+      }));
+      return sortScoringSummaryRows(normalized);
+    }
+    return deriveScoringSummary(game?.playLog ?? game?.stats?.playLogs ?? [], teamsById);
+  }, [game, teamsById]);
   const scoringGroups = useMemo(() => groupScoringByPeriod(scoring), [scoring]);
   const momentumNotes = useMemo(() => (Array.isArray(game?.turningPoints) && game.turningPoints.length ? game.turningPoints : deriveMomentumNotes(game?.playLog ?? game?.stats?.playLogs ?? [])), [game]);
   const quarterScores = useMemo(() => deriveQuarterScores(game, game?.playLog ?? game?.stats?.playLogs ?? []), [game]);
@@ -309,6 +337,13 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
       },
     ];
   }, [rushingYpcAway, rushingYpcHome, teamTotals]);
+  const storylineBullets = useMemo(() => deriveStandoutStorylines({
+    game,
+    awayTeam,
+    homeTeam,
+    teamTotals,
+    driveStats: game?.teamDriveStats ?? game?.summary?.teamStats ?? null,
+  }), [awayTeam, game, homeTeam, teamTotals]);
 
   const topFacts = useMemo(() => {
     const totalYardEdge = (teamTotals.home?.totalYards ?? 0) - (teamTotals.away?.totalYards ?? 0);
@@ -457,6 +492,14 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </div>
               ))}
             </div>
+            {!!storylineBullets.length && (
+              <section className="bs-subsection" data-testid="standout-storylines">
+                <h5>Standout storylines</h5>
+                <ul className="bs-list">
+                  {storylineBullets.map((line, idx) => <li key={`storyline-${idx}`} className="bs-list-item">{line}</li>)}
+                </ul>
+              </section>
+            )}
             <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
             <div className="bs-leaders-grid">
               <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.pass?.impactSkill ?? leaders.pass?.subAttributeHighlight ?? leaders.pass?.impactTrait ?? null} />
@@ -468,6 +511,31 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <EmptyState title="Player leaders not archived" body="This legacy game has a final score and recap, but player leader rows were not saved." />
             ) : null}
           </section>
+
+          {hasTeamLeaders && (
+            <section className="bs-section" data-testid="team-leaders">
+              <h4>Team leaders</h4>
+              <div className="bs-team-groups">
+                {[{ side: "away", team: awayTeam }, { side: "home", team: homeTeam }].map(({ side, team }) => {
+                  const rows = teamLeaders?.[side] ?? {};
+                  return (
+                    <div key={side} className="bs-team-group">
+                      <h5>{team?.abbr ?? side.toUpperCase()}</h5>
+                      <div className="bs-list">
+                        <TeamLeaderCell label="Passing" player={rows.passing} statKeys={["passComp", "passAtt", "passYd", "passTD", "interceptions"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Rushing" player={rows.rushing} statKeys={["rushAtt", "rushYd", "rushTD"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Receiving" player={rows.receiving} statKeys={["receptions", "recYd", "recTD"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Tackles" player={rows.tackles} statKeys={["tackles", "sacks"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Sacks" player={rows.sacks} statKeys={["sacks", "tackles"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Interceptions" player={rows.interceptions} statKeys={["interceptions", "passesDefended"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Kicking" player={rows.kicking} statKeys={["fieldGoalsMade", "fieldGoalsAttempted", "extraPointsMade", "extraPointsAttempted"]} onPlayerSelect={onPlayerSelect} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {sections.teamComparison && (
             <section className="bs-section" ref={(node) => { sectionRefs.current.team = node; }} data-section="team">
@@ -560,7 +628,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
 
           {sections.turningPoints && (
             <section className="bs-section">
-              <h4>Turning points</h4>
+              <h4>Game flow & momentum</h4>
               {!!momentumNotes.length ?
                 <div className="bs-list">
                   {momentumNotes.map((note) => (
