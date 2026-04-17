@@ -56,6 +56,7 @@ import { buildDevelopmentNotes, summarizeRosterDevelopment } from "../utils/play
 import { getDepthRows, autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
+import { buildPlayerEvaluation } from "../../core/playerEvaluation.js";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import SocialFeed from "./SocialFeed.jsx";
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimitives.jsx";
@@ -505,6 +506,7 @@ function RosterTable({
   const [releasing, setReleasing] = useState(null);
   const [extending, setExtending] = useState(null);
   const [advancedFilters, setAdvancedFilters] = useState([]);
+  const [evaluationMode, setEvaluationMode] = useState(true);
   const {
     compareIds,
     setCompareIds,
@@ -520,6 +522,15 @@ function RosterTable({
     const filtered = applyAdvancedPlayerFilters(quickFiltered, advancedFilters);
     return sortPlayers(filtered, sortKey, sortDir);
   }, [players, posFilter, sortKey, sortDir, advancedFilters]);
+  const evaluatedDisplayed = useMemo(() => displayed.map((player) => ({
+    player,
+    eval: buildPlayerEvaluation(player, {
+      teamContext: team,
+      rosterContext: { roster: players },
+      depthChartNeeds: (team?.needsNow ?? []).map((n) => n?.pos ?? n),
+      gamePlan: team?.gamePlan ?? {},
+    }),
+  })), [displayed, team, players]);
   const teamDirection = useMemo(() => classifyTeamDirection(team, week), [team, week]);
   const decisionSummary = useMemo(
     () => buildExpiringDecisionSummary(players, { team, roster: players, direction: teamDirection }),
@@ -673,6 +684,11 @@ function RosterTable({
         onChange={setAdvancedFilters}
         title="Advanced player search (AND)"
       />
+      <div style={{ marginBottom: 8 }}>
+        <Button variant={evaluationMode ? "default" : "outline"} onClick={() => setEvaluationMode((v) => !v)}>
+          {evaluationMode ? "Evaluation view on" : "Evaluation view off"}
+        </Button>
+      </div>
 
       {/* Table */}
       <Card className="card-premium" style={{ padding: 0, overflow: "hidden" }}><CardContent style={{ padding: 0 }}>
@@ -834,7 +850,7 @@ function RosterTable({
                   </TableCell>
                 </TableRow>
               )}
-              {displayed.map((player, idx) => {
+                  {evaluatedDisplayed.map(({ player, eval: playerEval }, idx) => {
                 const isReleasing = releasing === player.id;
                 const isExpiring = (player.contract?.years || 0) <= 1;
                 const yearsLeft =
@@ -904,6 +920,16 @@ function RosterTable({
                           <ToneChip label={devContext.readiness.label} tone={devContext.readiness.tone} />
                           <ToneChip label={devContext.fit.label} tone={devContext.fit.tone} />
                         </div>
+                        {evaluationMode && (
+                          <div style={{ marginTop: 4, display: "grid", gap: 2 }}>
+                            <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                              <strong style={{ color: "var(--text)" }}>{playerEval?.archetype?.archetype}</strong> · Fit {playerEval?.schemeFit?.score} ({playerEval?.schemeFit?.tier}) · {playerEval?.roleProjection?.role}
+                            </div>
+                            <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>
+                              {playerEval?.simImpact?.summary}
+                            </div>
+                          </div>
+                        )}
                       </button>
                       {(() => {
                         const salary = Number(derivePlayerContractFinancials(player)?.annualSalary ?? 0);

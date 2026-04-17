@@ -8,6 +8,7 @@ import {
   resolveCompareStatSections,
   shouldShowGroupForPosition,
 } from '../../core/footballCompare';
+import { buildPlayerEvaluation, deriveAttributeBuckets, getPositionGroup } from '../../core/playerEvaluation.js';
 
 function formatContract(player) {
   const amount = Number(player?.contract?.baseAnnual ?? player?.contractAmount ?? player?.askingPrice ?? 0);
@@ -39,6 +40,23 @@ function Row({ label, a, b, lowerIsBetter = false }) {
   );
 }
 
+export function buildComparisonViewModel(playerA, playerB) {
+  if (!playerA || !playerB) return null;
+  const evalA = buildPlayerEvaluation(playerA, { rosterContext: { roster: [] } });
+  const evalB = buildPlayerEvaluation(playerB, { rosterContext: { roster: [] } });
+  const groupA = deriveAttributeBuckets(playerA, getPositionGroup(playerA));
+  const groupB = deriveAttributeBuckets(playerB, getPositionGroup(playerB));
+  return {
+    evalA,
+    evalB,
+    groupedRows: Array.from(new Set([...(groupA.focus ?? []), ...(groupB.focus ?? [])])).map((key) => ({
+      key,
+      a: groupA.values?.[key] ?? null,
+      b: groupB.values?.[key] ?? null,
+    })),
+  };
+}
+
 export default function PlayerComparison({ playerA, playerB, onClose }) {
   const [showAllStats, setShowAllStats] = useState(false);
 
@@ -52,6 +70,7 @@ export default function PlayerComparison({ playerA, playerB, onClose }) {
       b: getPlayerRatingValue(playerB, key),
     }))
     .filter((row) => row.a != null || row.b != null), [playerA, playerB]);
+  const evalModel = useMemo(() => buildComparisonViewModel(playerA, playerB), [playerA, playerB]);
 
   if (!playerA || !playerB) return null;
 
@@ -77,6 +96,18 @@ export default function PlayerComparison({ playerA, playerB, onClose }) {
           <h4 style={{ margin: '14px 0 8px 0' }}>Ratings</h4>
           {ratings.map((rating) => (
             <Row key={rating.key} label={rating.label} a={rating.a ?? '—'} b={rating.b ?? '—'} />
+          ))}
+
+          <h4 style={{ margin: '14px 0 8px 0' }}>Tactical Comparison</h4>
+          <Row label="Archetype" a={evalModel?.evalA?.archetype?.archetype ?? '—'} b={evalModel?.evalB?.archetype?.archetype ?? '—'} />
+          <Row label="Scheme Fit" a={`${evalModel?.evalA?.schemeFit?.score ?? '—'} (${evalModel?.evalA?.schemeFit?.tier ?? '—'})`} b={`${evalModel?.evalB?.schemeFit?.score ?? '—'} (${evalModel?.evalB?.schemeFit?.tier ?? '—'})`} />
+          <Row label="Projected Role" a={evalModel?.evalA?.roleProjection?.role ?? '—'} b={evalModel?.evalB?.roleProjection?.role ?? '—'} />
+          <Row label="Starter Context" a={evalModel?.evalA?.roleProjection?.replaceContext ?? '—'} b={evalModel?.evalB?.roleProjection?.replaceContext ?? '—'} />
+          <Row label="Sim Impact" a={evalModel?.evalA?.simImpact?.summary ?? '—'} b={evalModel?.evalB?.simImpact?.summary ?? '—'} />
+
+          <h4 style={{ margin: '14px 0 8px 0' }}>Attribute Buckets</h4>
+          {evalModel?.groupedRows?.map((row) => (
+            <Row key={row.key} label={row.key} a={row.a ?? '—'} b={row.b ?? '—'} />
           ))}
 
           <h4 style={{ margin: '14px 0 8px 0', display: 'flex', justifyContent: 'space-between' }}>
