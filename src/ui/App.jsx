@@ -53,6 +53,7 @@ import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
 import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
+import { clearWeeklyPrepForWeek, pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
 
@@ -383,6 +384,23 @@ function AppContent() {
     };
     localStorage.setItem(`footballgm_slot_${slotNum}_meta`, JSON.stringify(nextMeta));
   }, [league, activeSlot]);
+
+  useEffect(() => {
+    if (!league) return;
+    pruneWeeklyPrepStorage(league);
+  }, [league?.seasonId, league?.year]);
+
+  const previousWeekRef = useRef(null);
+  useEffect(() => {
+    if (!league) return;
+    const marker = `${league?.seasonId ?? league?.year}:${league?.week ?? 0}:${league?.userTeamId ?? 'user'}`;
+    const prior = previousWeekRef.current;
+    if (prior && prior !== marker) {
+      const [seasonId, week, userTeamId] = String(prior).split(':');
+      clearWeeklyPrepForWeek({ seasonId, week: Number(week), userTeamId });
+    }
+    previousWeekRef.current = marker;
+  }, [league?.seasonId, league?.year, league?.week, league?.userTeamId]);
 
   useEffect(() => {
     if (!league || !pendingNewSlot) return;

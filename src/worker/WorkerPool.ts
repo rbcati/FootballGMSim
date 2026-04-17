@@ -4,6 +4,7 @@ import {
   type RichGameSummary,
   type SimPlayerRef,
 } from '../core/sim/richGameSimulator.ts';
+import type { DerivedGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 
 export interface Matchup {
   gameId: number | string;
@@ -18,6 +19,8 @@ export interface Matchup {
   awayDefense: AttributesV2;
   homePlayers?: SimPlayerRef[];
   awayPlayers?: SimPlayerRef[];
+  homePrepMultipliers?: DerivedGamePlanMultipliers;
+  awayPrepMultipliers?: DerivedGamePlanMultipliers;
 }
 
 export type GameSummary = RichGameSummary;

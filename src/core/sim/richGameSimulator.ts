@@ -1,5 +1,6 @@
 import { resolveMatchup, DEFAULT_NORMALIZATION_CONSTANT } from './matchupEngine.ts';
 import type { AttributesV2 } from '../../types/player.ts';
+import type { DerivedGamePlanMultipliers } from './gamePlanMultipliers.ts';
 
 export interface SimPlayerRef {
   id: number | string;
@@ -86,10 +87,59 @@ export interface RichMatchupPayload {
   awayDefense: AttributesV2;
   homePlayers?: SimPlayerRef[];
   awayPlayers?: SimPlayerRef[];
+  homePrepMultipliers?: DerivedGamePlanMultipliers;
+  awayPrepMultipliers?: DerivedGamePlanMultipliers;
 }
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+const NEUTRAL_PREP: DerivedGamePlanMultipliers = {
+  passSuccessDelta: 0,
+  rushSuccessDelta: 0,
+  explosivePlayDelta: 0,
+  turnoverAvoidanceDelta: 0,
+  redZoneDelta: 0,
+  fatigueDisciplineDelta: 0,
+  chemistryPenalty: 0,
+  score: 0,
+  netImpact: 0,
+  severity: 'ready',
+  activeReasons: [],
+};
+
+function applyPrepToOffenseAttributes(
+  offense: AttributesV2,
+  prep: DerivedGamePlanMultipliers,
+  playType: 'pass' | 'run',
+  isRedZone: boolean,
+): AttributesV2 {
+  const passDelta = prep.passSuccessDelta + prep.chemistryPenalty;
+  const rushDelta = prep.rushSuccessDelta + prep.chemistryPenalty;
+  const explosiveDelta = prep.explosivePlayDelta;
+  const disciplineDelta = prep.turnoverAvoidanceDelta + prep.fatigueDisciplineDelta;
+  const redZoneDelta = isRedZone ? prep.redZoneDelta : 0;
+
+  const passBoost = playType === 'pass' ? passDelta : 0;
+  const runBoost = playType === 'run' ? rushDelta : 0;
+
+  const point = (value: number, delta: number, scale = 42) => clamp(value + (delta * scale), 25, 99);
+  return {
+    ...offense,
+    throwAccuracyShort: point(offense.throwAccuracyShort, passBoost + disciplineDelta * 0.35 + redZoneDelta * 0.25),
+    throwAccuracyDeep: point(offense.throwAccuracyDeep, passBoost * 0.85 + explosiveDelta + redZoneDelta * 0.2),
+    throwPower: point(offense.throwPower, explosiveDelta * 0.75 + passBoost * 0.3),
+    release: point(offense.release, passBoost * 0.8 + disciplineDelta * 0.25),
+    routeRunning: point(offense.routeRunning, passBoost * 0.75 + explosiveDelta * 0.4),
+    separation: point(offense.separation, passBoost * 0.7 + explosiveDelta * 0.5),
+    catchInTraffic: point(offense.catchInTraffic, disciplineDelta * 0.65 + redZoneDelta * 0.4),
+    ballTracking: point(offense.ballTracking, explosiveDelta * 0.7 + passBoost * 0.25),
+    decisionMaking: point(offense.decisionMaking, disciplineDelta * 0.9 + passBoost * 0.2 + runBoost * 0.2),
+    pocketPresence: point(offense.pocketPresence, disciplineDelta * 0.75 + passBoost * 0.2),
+    passBlockFootwork: point(offense.passBlockFootwork, passBoost * 0.3 + runBoost * 0.45 + disciplineDelta * 0.25),
+    passBlockStrength: point(offense.passBlockStrength, runBoost * 0.65 + disciplineDelta * 0.4 + redZoneDelta * 0.2),
+  };
 }
 
 function makeRng(seed = 1): () => number {
@@ -102,7 +152,11 @@ function makeRng(seed = 1): () => number {
   };
 }
 
-function getPlayType(state: { down: number; distance: number; quarter: number; clockSec: number; homeScore: number; awayScore: number; possession: 'home' | 'away' }, rng: () => number): 'pass' | 'run' {
+function getPlayType(
+  state: { down: number; distance: number; quarter: number; clockSec: number; homeScore: number; awayScore: number; possession: 'home' | 'away' },
+  rng: () => number,
+  prep: DerivedGamePlanMultipliers,
+): 'pass' | 'run' {
   const offenseLead = state.possession === 'home' ? state.homeScore - state.awayScore : state.awayScore - state.homeScore;
   let passProb = 0.49;
   if (state.down === 1) passProb -= 0.06;
@@ -116,7 +170,8 @@ function getPlayType(state: { down: number; distance: number; quarter: number; c
   if (state.quarter >= 3 && offenseLead >= 10) passProb -= 0.08;
   if (state.quarter >= 3 && offenseLead <= -10) passProb += 0.08;
 
-  passProb = clamp(passProb + (rng() - 0.5) * 0.1, 0.25, 0.82);
+  const prepPassBias = clamp((prep.passSuccessDelta - prep.rushSuccessDelta) * 1.4, -0.05, 0.05);
+  passProb = clamp(passProb + prepPassBias + (rng() - 0.5) * 0.1, 0.25, 0.82);
   return rng() <= passProb ? 'pass' : 'run';
 }
 
@@ -211,6 +266,8 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
   const quarterScores = { home: [0, 0, 0, 0], away: [0, 0, 0, 0] };
   const digest: GameEventDigestItem[] = [];
   const reasonMap = new Map<string, number>();
+  const homePrep = payload.homePrepMultipliers ?? NEUTRAL_PREP;
+  const awayPrep = payload.awayPrepMultipliers ?? NEUTRAL_PREP;
 
   const stats = {
     home: { plays: 0, passAtt: 0, passComp: 0, passYd: 0, passTD: 0, rushAtt: 0, rushYd: 0, rushTD: 0, firstDowns: 0, turnovers: 0, sacksAllowed: 0, sacksMade: 0, interceptions: 0, redZoneTrips: 0, redZoneScores: 0, explosivePlays: 0, success: 0 },
@@ -226,8 +283,11 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
     const wasRedZone = state.yardLine >= 80;
     const wasFourthDown = state.down === 4;
 
-    const playType = getPlayType(state, rng);
-    const result = resolveMatchup(offense, defense, {
+    const offensePrep = state.possession === 'home' ? homePrep : awayPrep;
+    const playType = getPlayType(state, rng, offensePrep);
+    const tunedOffense = applyPrepToOffenseAttributes(offense, offensePrep, playType, state.yardLine >= 80);
+    const fatigueBaseline = (stats.home.plays + stats.away.plays) / 220;
+    const result = resolveMatchup(tunedOffense, defense, {
       down: state.down,
       distance: state.distance,
       yardLine: state.yardLine,
@@ -235,7 +295,7 @@ export function simulateRichGame(payload: RichMatchupPayload): RichGameSummary {
       clockSec: state.clockSec,
       weather: payload.weather,
       normalizationConstant: state.normalizationConstant,
-      fatigueFactor: (stats.home.plays + stats.away.plays) / 220,
+      fatigueFactor: clamp(fatigueBaseline - offensePrep.fatigueDisciplineDelta * 0.35, 0, 0.95),
       playType,
     }, rng);
 

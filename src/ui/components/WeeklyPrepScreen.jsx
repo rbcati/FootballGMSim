@@ -39,7 +39,7 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
       <SectionCard
         title={`Week ${prep.nextGame.week} Prep · ${prep.nextGame.isHome ? 'vs' : '@'} ${prep.opponent.abbr ?? prep.opponent.name}`}
         subtitle={`Opponent ${prep.opponentSnapshot.record} · ${prep.opponentSnapshot.homeAway} game`}
-        actions={<TonePill tone={prep.remaining === 0 ? 'success' : 'warning'} label={prep.readinessLabel} />}
+        actions={<TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.remaining === 0 ? 'success' : 'warning'} label={prep.prepSummary?.status ?? prep.readinessLabel} />}
       >
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
           <div style={{ fontSize: 'var(--text-xs)' }}><strong>You:</strong> OVR {prep.teamSnapshot.overall} · OFF {prep.teamSnapshot.offense} · DEF {prep.teamSnapshot.defense}</div>
@@ -101,6 +101,20 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
               <Button size="sm" variant="outline" style={{ marginTop: 8 }} onClick={() => openAction(card.actionTab, 'planReviewed')}>
                 {card.actionLabel}
               </Button>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Active effects" subtitle="Strategy synergy and readiness impacts for this week.">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+          <TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.prepSummary?.severity === 'minor_risk' ? 'warning' : 'success'} label={`Prep state: ${prep.prepSummary?.status ?? 'Ready'}`} />
+          <TonePill tone={prep.prepSummary?.netImpact >= 0 ? 'success' : 'warning'} label={`Net impact ${prep.prepSummary?.netImpact >= 0 ? '+' : ''}${Number(prep.prepSummary?.netImpact ?? 0).toFixed(3)}`} />
+        </div>
+        <div style={{ display: 'grid', gap: 6 }}>
+          {(prep.prepSummary?.reasons?.length ? prep.prepSummary.reasons : ['No active matchup synergy or readiness penalties.']).map((reason) => (
+            <div key={reason} style={{ fontSize: 'var(--text-sm)', border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 8 }}>
+              {reason}
             </div>
           ))}
         </div>

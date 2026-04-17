@@ -144,6 +144,7 @@ import {
   buildDeterministicSeed,
   simulateWithOptionalNewEngine,
 } from '../core/sim/weekSimulationBridge.ts';
+import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -2712,6 +2713,18 @@ function buildWeekMatchupsFromLeague(league, meta, week) {
   const matchups = [];
   const migratedPlayers = [];
 
+  const getRating = (team, key) => Number(team?.[key] ?? team?.[`${key}Rating`] ?? team?.[`${key}Ovr`] ?? team?.ovr ?? 0);
+  const countInjured = (roster = []) => roster.filter((player) => {
+    const weeks = Number(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injuryDuration ?? 0);
+    const status = String(player?.status ?? '').toLowerCase();
+    return weeks > 0 || status === 'injured' || status === 'ir';
+  }).length;
+  const blockingLineupIssue = (roster = []) => {
+    const starters = roster.filter((p) => Number(p?.depthOrder ?? 0) === 1 || Number(p?.depthChart?.order ?? 0) === 1);
+    const startersWithInjury = starters.filter((p) => Number(p?.injuryWeeksRemaining ?? p?.injuredWeeks ?? 0) > 0).length;
+    return starters.length > 0 && startersWithInjury >= 2;
+  };
+
   for (const game of (league?._weekGames ?? [])) {
     const homeRoster = Array.isArray(game?.home?.roster) ? game.home.roster : [];
     const awayRoster = Array.isArray(game?.away?.roster) ? game.away.roster : [];
@@ -2719,6 +2732,31 @@ function buildWeekMatchupsFromLeague(league, meta, week) {
     const homeUnits = aggregateTeamUnitsFromRoster(homeRoster);
     const awayUnits = aggregateTeamUnitsFromRoster(awayRoster);
     migratedPlayers.push(...homeUnits.migratedPlayers, ...awayUnits.migratedPlayers);
+
+    const homePlan = game?.home?.strategies?.gamePlan ?? {};
+    const awayPlan = game?.away?.strategies?.gamePlan ?? {};
+    const homeGap = getRating(game?.home, 'ovr') - getRating(game?.away, 'ovr');
+
+    const buildPrep = ({ team, opp, plan, isHome }) => deriveGamePlanMultipliers({
+      weeklyPrepState: {
+        insights: {
+          weakSecondary: getRating(opp, 'defense') <= 76 || (getRating(team, 'offense') - getRating(opp, 'defense')) >= 6,
+          weakRunDefense: getRating(opp, 'defense') <= 78 || (getRating(team, 'offense') - getRating(opp, 'defense')) >= 4,
+          elitePassRush: getRating(opp, 'defense') >= 85,
+          explosiveOpponentOffense: getRating(opp, 'offense') >= 84,
+          balancedMatchup: Math.abs(homeGap * (isHome ? 1 : -1)) <= 4,
+        },
+        hasTracking: false,
+      },
+      gamePlan: plan,
+      teamContext: {
+        majorInjuryStress: countInjured(team?.roster ?? []) >= 3,
+        hasBlockingLineupIssue: blockingLineupIssue(team?.roster ?? []),
+      },
+    });
+
+    const homePrepMultipliers = buildPrep({ team: game?.home, opp: game?.away, plan: homePlan, isHome: true });
+    const awayPrepMultipliers = buildPrep({ team: game?.away, opp: game?.home, plan: awayPlan, isHome: false });
 
     matchups.push({
       gameId: buildCanonicalGameId({
@@ -2733,6 +2771,8 @@ function buildWeekMatchupsFromLeague(league, meta, week) {
       homeDefense: homeUnits.defense,
       awayOffense: awayUnits.offense,
       awayDefense: awayUnits.defense,
+      homePrepMultipliers,
+      awayPrepMultipliers,
       homePlayers: homeRoster.map((player) => ({
         id: player.id,
         name: player.name,

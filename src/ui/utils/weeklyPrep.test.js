@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveWeeklyPrepState } from './weeklyPrep.js';
+import { deriveWeeklyPrepState, getWeeklyPrepProgress, markWeeklyPrepStep, clearWeeklyPrepForWeek } from './weeklyPrep.js';
 
 const league = {
   year: 2028,
@@ -49,6 +49,23 @@ const league = {
 };
 
 describe('weeklyPrep', () => {
+  it('resets weekly prep progress when week advances', () => {
+    const bucket = new Map();
+    global.window = {
+      localStorage: {
+        getItem: (key) => bucket.get(key) ?? null,
+        setItem: (key, value) => bucket.set(key, String(value)),
+        removeItem: (key) => bucket.delete(key),
+      },
+    };
+    const scopedLeague = { seasonId: 's-reset', week: 3, userTeamId: 1 };
+    markWeeklyPrepStep(scopedLeague, 'planReviewed', true);
+    expect(getWeeklyPrepProgress(scopedLeague).planReviewed).toBe(true);
+    clearWeeklyPrepForWeek(scopedLeague);
+    expect(getWeeklyPrepProgress(scopedLeague).planReviewed).toBe(false);
+    delete global.window;
+  });
+
   it('builds opponent scout/readiness model from league context', () => {
     const prep = deriveWeeklyPrepState(league);
     expect(prep.opponentSnapshot.record).toBe('2-3');
@@ -57,6 +74,8 @@ describe('weeklyPrep', () => {
     expect(prep.lineupIssues.length).toBeGreaterThan(0);
     expect(prep.recommendations.length).toBeGreaterThan(0);
     expect(prep.readinessLabel).toContain('remaining');
+    expect(prep.prepMultipliers).toBeTruthy();
+    expect(Array.isArray(prep.prepSummary.reasons)).toBe(true);
   });
 
   it('is safe with partial saves and missing opponent data', () => {
@@ -72,5 +91,6 @@ describe('weeklyPrep', () => {
     expect(prep.recommendations).toEqual([]);
     expect(Array.isArray(prep.lineupIssues)).toBe(true);
     expect(prep.readinessLabel).toContain('remaining');
+    expect(prep.prepSummary).toBeTruthy();
   });
 });

@@ -46,6 +46,7 @@ describe('WeeklyPrepScreen', () => {
     expect(html).toContain('Opponent scout');
     expect(html).toContain('Lineup readiness');
     expect(html).toContain('Game plan recommendations');
+    expect(html).toContain('Active effects');
     expect(html).toContain('Prep completion');
   });
 
