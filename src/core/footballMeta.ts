@@ -81,11 +81,18 @@ export const TEAM_STATS_TABLES: { comparison: { key: TeamStatAttr; label: string
     { key: 'rushYards', label: 'Rush Yards' },
     { key: 'turnovers', label: 'Turnovers' },
     { key: 'sacks', label: 'Sacks' },
+    { key: 'firstDowns', label: 'First Downs' },
+    {
+      key: 'redZoneAtt',
+      label: 'Red Zone',
+      formatter: (_value, side) => (side?.redZoneAtt != null ? `${side?.redZoneMade ?? 0}/${side.redZoneAtt}` : 'Unavailable'),
+    },
     {
       key: 'thirdDownAtt',
       label: '3rd Down',
       formatter: (_value, side) => (side?.thirdDownAtt != null ? `${side?.thirdDownMade ?? 0}/${side.thirdDownAtt}` : 'Unavailable'),
     },
+    { key: 'penalties', label: 'Penalties' },
   ],
 };
 
@@ -126,6 +133,8 @@ export function buildTeamComparisonRows(teamTotals: { away: Record<string, any>;
     label: row.label,
     awayValue: row.formatter ? row.formatter(teamTotals.away?.[row.key], teamTotals.away) : (teamTotals.away?.[row.key] ?? 'Unavailable'),
     homeValue: row.formatter ? row.formatter(teamTotals.home?.[row.key], teamTotals.home) : (teamTotals.home?.[row.key] ?? 'Unavailable'),
+    awayRaw: teamTotals.away?.[row.key],
+    homeRaw: teamTotals.home?.[row.key],
   }));
 }
 

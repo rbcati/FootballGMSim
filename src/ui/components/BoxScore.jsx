@@ -45,12 +45,24 @@ function LeaderCard({ label, player, line, onPlayerSelect, impactSkill }) {
   );
 }
 
-function StatCompareRow({ label, homeValue, awayValue, homeWins, awayWins }) {
+function StatCompareRow({ label, homeValue, awayValue, homeWins, awayWins, awayRaw, homeRaw }) {
+  const awayNum = Number(awayRaw);
+  const homeNum = Number(homeRaw);
+  const total = Math.max(Math.abs(awayNum) + Math.abs(homeNum), 1);
+  const awayPct = Number.isFinite(awayNum) ? Math.max((Math.abs(awayNum) / total) * 100, 2) : 50;
+  const homePct = Number.isFinite(homeNum) ? Math.max((Math.abs(homeNum) / total) * 100, 2) : 50;
+
   return (
-    <div className="bs-compare-row">
-      <span className={awayWins ? "bs-compare-value bs-compare-value--winner" : "bs-compare-value"}>{awayValue ?? "—"}</span>
-      <span className="bs-compare-label">{label}</span>
-      <span className={homeWins ? "bs-compare-value bs-compare-value--winner" : "bs-compare-value"}>{homeValue ?? "—"}</span>
+    <div className="bs-compare-row-v2">
+      <div className="bs-compare-meta">
+        <span className={awayWins ? "bs-compare-value is-winner" : "bs-compare-value"}>{awayValue ?? "—"}</span>
+        <span className="bs-compare-label">{label}</span>
+        <span className={homeWins ? "bs-compare-value is-winner" : "bs-compare-value"}>{homeValue ?? "—"}</span>
+      </div>
+      <div className="bs-compare-bar-track">
+        <div className="bs-compare-bar-fill away" style={{ width: `${awayPct}%`, borderRight: "2px solid var(--bg-card)" }} />
+        <div className="bs-compare-bar-fill home" style={{ width: `${homePct}%` }} />
+      </div>
     </div>
   );
 }
@@ -90,10 +102,9 @@ function formatRecord(team) {
 
 function TeamStatsSection({ rows }) {
   const grouped = useMemo(() => ([
-    { title: "Overview", keys: ["Total Yards", "First Downs"] },
-    { title: "Passing & Rushing", keys: ["Pass Yards", "Rush Yards", "Rush YPC"] },
-    { title: "Efficiency", keys: ["3rd Down", "Time of Possession"] },
-    { title: "Turnovers & Defense", keys: ["Turnovers", "Sacks"] },
+    { title: "Efficiency", keys: ["First Downs", "3rd Down", "Success Rate", "Red Zone", "Time of Possession"] },
+    { title: "Offense", keys: ["Total Yards", "Pass Yards", "Rush Yards", "Rush YPC", "Explosive Plays"] },
+    { title: "Defense & Discipline", keys: ["Turnovers", "Sacks", "Penalties"] },
   ].map((g) => ({ ...g, rows: rows.filter((row) => g.keys.includes(row.label)) })).filter((g) => g.rows.length > 0)), [rows]);
 
   if (!rows.length) {
@@ -116,6 +127,8 @@ function TeamStatsSection({ rows }) {
                   homeValue={row.homeValue}
                   awayWins={outcome.awayWins}
                   homeWins={outcome.homeWins}
+                  awayRaw={row.awayRaw}
+                  homeRaw={row.homeRaw}
                 />
               );
             })}
@@ -311,16 +324,9 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const rushingYpcAway = simOutputs?.away?.rushingYpc ?? ((teamTotals.away?.rushAtt ?? 0) > 0 ? (teamTotals.away?.rushYards ?? 0) / teamTotals.away.rushAtt : null);
   const rushingYpcHome = simOutputs?.home?.rushingYpc ?? ((teamTotals.home?.rushAtt ?? 0) > 0 ? (teamTotals.home?.rushYards ?? 0) / teamTotals.home.rushAtt : null);
   const teamComparisonRows = useMemo(() => {
-    const baseRows = buildTeamComparisonRows(teamTotals).map((row) => ({ ...row, awayRaw: null, homeRaw: null }));
+    const baseRows = buildTeamComparisonRows(teamTotals);
     return [
       ...baseRows,
-      {
-        label: "First Downs",
-        awayValue: teamTotals.away?.firstDowns ?? "Unavailable",
-        homeValue: teamTotals.home?.firstDowns ?? "Unavailable",
-        awayRaw: teamTotals.away?.firstDowns,
-        homeRaw: teamTotals.home?.firstDowns,
-      },
       {
         label: "Rush YPC",
         awayValue: rushingYpcAway != null ? Number(rushingYpcAway).toFixed(2) : "Unavailable",
@@ -337,13 +343,16 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
       },
     ];
   }, [rushingYpcAway, rushingYpcHome, teamTotals]);
+
+  const driveStats = useMemo(() => game?.teamDriveStats ?? game?.summary?.teamStats ?? null, [game]);
+
   const storylineBullets = useMemo(() => deriveStandoutStorylines({
     game,
     awayTeam,
     homeTeam,
     teamTotals,
-    driveStats: game?.teamDriveStats ?? game?.summary?.teamStats ?? null,
-  }), [awayTeam, game, homeTeam, teamTotals]);
+    driveStats,
+  }), [awayTeam, game, homeTeam, teamTotals, driveStats]);
 
   const topFacts = useMemo(() => {
     const totalYardEdge = (teamTotals.home?.totalYards ?? 0) - (teamTotals.away?.totalYards ?? 0);
@@ -492,25 +501,18 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </div>
               ))}
             </div>
+
             {!!storylineBullets.length && (
-              <section className="bs-subsection" data-testid="standout-storylines">
+              <div className="bs-storylines-box" data-testid="standout-storylines" style={{ marginTop: 16 }}>
                 <h5>Standout storylines</h5>
                 <ul className="bs-list">
                   {storylineBullets.map((line, idx) => <li key={`storyline-${idx}`} className="bs-list-item">{line}</li>)}
                 </ul>
-              </section>
+              </div>
             )}
-            <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
-            <div className="bs-leaders-grid">
-              <LeaderCard label="Passing leader" player={leaders.pass} line={describeStatLine(leaders.pass, ["passComp", "passAtt", "passYd", "passTD", "interceptions"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.pass?.impactSkill ?? leaders.pass?.subAttributeHighlight ?? leaders.pass?.impactTrait ?? null} />
-              <LeaderCard label="Rushing leader" player={leaders.rush} line={describeStatLine(leaders.rush, ["rushAtt", "rushYd", "rushTD"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.rush?.impactSkill ?? leaders.rush?.subAttributeHighlight ?? leaders.rush?.impactTrait ?? null} />
-              <LeaderCard label="Receiving leader" player={leaders.receive} line={describeStatLine(leaders.receive, ["receptions", "recYd", "recTD"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.receive?.impactSkill ?? leaders.receive?.subAttributeHighlight ?? leaders.receive?.impactTrait ?? null} />
-              <LeaderCard label="Defensive leader" player={leaders.defense} line={describeStatLine(leaders.defense, ["tackles", "sacks", "interceptions", "forcedFumbles"])} onPlayerSelect={onPlayerSelect} impactSkill={leaders.defense?.impactSkill ?? leaders.defense?.subAttributeHighlight ?? leaders.defense?.impactTrait ?? null} />
-            </div>
-            {!leaders.pass && !leaders.rush && !leaders.receive && !leaders.defense ? (
-              <EmptyState title="Player leaders not archived" body="This legacy game has a final score and recap, but player leader rows were not saved." />
-            ) : null}
           </section>
+
+          <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
 
           {hasTeamLeaders && (
             <section className="bs-section" data-testid="team-leaders">
@@ -537,33 +539,34 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             </section>
           )}
 
-          {sections.teamComparison && (
-            <section className="bs-section" ref={(node) => { sectionRefs.current.team = node; }} data-section="team">
-              <h4>Team stats</h4>
-              <TeamStatsSection rows={teamComparisonRows} />
-            </section>
-          )}
+          <section className="bs-section" ref={(node) => { sectionRefs.current.team = node; }} data-section="team">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {sections.quarterByQuarter && (
+                <div>
+                  <h4>Quarter-by-quarter</h4>
+                  {hasQuarterData ? (
+                    <div className="bs-table-wrap">
+                      <table className="box-score-table">
+                        <thead><tr><th>Team</th>{quarterHeaders.map((label) => <th key={label}>{label}</th>)}<th className="bs-final-col">Final</th></tr></thead>
+                        <tbody>
+                          <tr className={Number(game.awayScore) > Number(game.homeScore) ? "bs-winning-row" : ""}><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`away-q-${idx}`}>{quarterScores.away[idx] ?? "0"}</td>)}<td className="bs-final-col">{game.awayScore}</td></tr>
+                          <tr className={Number(game.homeScore) > Number(game.awayScore) ? "bs-winning-row" : ""}><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`home-q-${idx}`}>{quarterScores.home[idx] ?? "0"}</td>)}<td className="bs-final-col">{game.homeScore}</td></tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <EmptyState title="Quarter scores not archived" body="Only the final score was saved for this game." />
+                  )}
+                </div>
+              )}
 
-          <section className="bs-section" ref={(node) => { sectionRefs.current.players = node; }} data-section="players">
-            <div className="bs-section-header">
-              <h4>Player stats</h4>
-              <div className="bs-segmented" data-testid="player-team-filter">
-                <button className={playerTeamFilter === "all" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("all")}>All Players</button>
-                <button className={playerTeamFilter === "away" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("away")}>{awayTeam.abbr}</button>
-                <button className={playerTeamFilter === "home" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("home")}>{homeTeam.abbr}</button>
-              </div>
+              {sections.teamComparison && (
+                <div>
+                  <h4>Team comparison</h4>
+                  <TeamStatsSection rows={teamComparisonRows} />
+                </div>
+              )}
             </div>
-            {playerTables.map((category) => (
-              <PlayerCategoryTable
-                key={category.key}
-                title={category.table.title}
-                players={expanded ? category.rows : category.rows.slice(0, 14)}
-                cols={category.table.columns}
-                onPlayerSelect={onPlayerSelect}
-                emptyText={category.table.emptyText}
-                defaultSort={category.table.sortBy}
-              />
-            ))}
           </section>
 
           {sections.scoringSummary && (
@@ -590,73 +593,68 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
             </section>
           )}
 
-          {sections.quarterByQuarter && (
-            <section className="bs-section">
-              <h4>Quarter-by-quarter</h4>
-              {hasQuarterData ? (
-                <div className="bs-table-wrap">
-                  <table className="box-score-table">
-                    <thead><tr><th>Team</th>{quarterHeaders.map((label) => <th key={label}>{label}</th>)}<th className="bs-final-col">Final</th></tr></thead>
-                    <tbody>
-                      <tr className={Number(game.awayScore) > Number(game.homeScore) ? "bs-winning-row" : ""}><td><TeamButton team={awayTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`away-q-${idx}`}>{quarterScores.away[idx] ?? "Not archived"}</td>)}<td className="bs-final-col">{game.awayScore}</td></tr>
-                      <tr className={Number(game.homeScore) > Number(game.awayScore) ? "bs-winning-row" : ""}><td><TeamButton team={homeTeam} onSelect={onTeamSelect} /></td>{quarterHeaders.map((_, idx) => <td key={`home-q-${idx}`}>{quarterScores.home[idx] ?? "Not archived"}</td>)}<td className="bs-final-col">{game.homeScore}</td></tr>
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <EmptyState title="Quarter scores not archived" body="Only the final score was saved for this game." />
-              )}
-            </section>
-          )}
+          <section className="bs-section" ref={(node) => { sectionRefs.current.players = node; }} data-section="players">
+            <div className="bs-section-header">
+              <h4>Player stats</h4>
+              <div className="bs-segmented" data-testid="player-team-filter">
+                <button className={playerTeamFilter === "all" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("all")}>All Players</button>
+                <button className={playerTeamFilter === "away" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("away")}>{awayTeam.abbr}</button>
+                <button className={playerTeamFilter === "home" ? "is-active" : ""} onClick={() => setPlayerTeamFilter("home")}>{homeTeam.abbr}</button>
+              </div>
+            </div>
+            {playerTables.map((category) => (
+              <PlayerCategoryTable
+                key={category.key}
+                title={category.table.title}
+                players={expanded ? category.rows : category.rows.slice(0, 14)}
+                cols={category.table.columns}
+                onPlayerSelect={onPlayerSelect}
+                emptyText={category.table.emptyText}
+                defaultSort={category.table.sortBy}
+              />
+            ))}
+          </section>
 
-          {sections.driveSummary && (
+          {(sections.driveSummary || sections.playLog) && (
             <section className="bs-section" ref={(node) => { sectionRefs.current.drives = node; }} data-section="drives">
-              <h4>Drive summary</h4>
-              {!!driveSummary.length ? (
-                <div className="bs-list">
-                  {driveSummary.slice(expanded ? 0 : 12).map((drive, idx) => (
-                    <div key={`drive-${idx}`} className="bs-list-item bs-drive-item">
-                      <span>Q{drive.quarter ?? "—"} · {drive.startClock ?? drive.clock ?? ""}</span>
-                      <span><strong>{drive.teamAbbr ?? teamsById?.[Number(drive.teamId)]?.abbr ?? "Drive"}</strong> <em className="bs-drive-badge">{drive.result ?? "Result"}</em></span>
-                      <span>{drive.summary ?? `${drive.plays ?? 0} plays · ${drive.yards ?? 0} yds`}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : <EmptyState title="No drive chart available" body="This game was simulated with summary-only detail." />}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                {sections.driveSummary && (
+                  <div>
+                    <h4>Drive summary</h4>
+                    {!!driveSummary.length ? (
+                      <div className="bs-list">
+                        {driveSummary.slice(expanded ? 0 : 12).map((drive, idx) => (
+                          <div key={`drive-${idx}`} className="bs-list-item bs-drive-item">
+                            <span>Q{drive.quarter ?? "—"} · {drive.startClock ?? drive.clock ?? ""}</span>
+                            <span><strong>{drive.teamAbbr ?? teamsById?.[Number(drive.teamId)]?.abbr ?? "Drive"}</strong> <em className="bs-drive-badge">{drive.result ?? "Result"}</em></span>
+                            <span>{drive.summary ?? `${drive.plays ?? 0} plays · ${drive.yards ?? 0} yds`}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <EmptyState title="No drive chart available" body="This game was simulated with summary-only detail." />}
+                  </div>
+                )}
+                {sections.playLog && (
+                  <div ref={(node) => { sectionRefs.current.plays = node; }} data-section="plays">
+                    <h4>Play log</h4>
+                    {!!playLog.length ? (
+                      <div className="bs-list">
+                        {playLog.slice(expanded ? 0 : 24).map((play, idx) => (
+                          <div key={`play-${idx}`} className="bs-list-item bs-play-item">
+                            <span>Q{play.quarter ?? "—"} · {play.clock ?? play.time ?? ""}</span>
+                            <span><strong>{teamsById?.[Number(play.teamId)]?.abbr ?? "—"}</strong></span>
+                            <span>{play.text ?? "Play event"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <EmptyState title="No play log archived" body="Full event-by-event tracking was not available for this game." />}
+                  </div>
+                )}
+              </div>
             </section>
           )}
 
-          {sections.turningPoints && (
-            <section className="bs-section">
-              <h4>Game flow & momentum</h4>
-              {!!momentumNotes.length ?
-                <div className="bs-list">
-                  {momentumNotes.map((note) => (
-                    <div key={note.id} className="bs-list-item"><span>Q{note.quarter}</span><span>{note.text}</span></div>
-                  ))}
-                </div>
-                : <EmptyState title="No turning points available" body="Turning-point annotations are unavailable for this game." />}
-            </section>
-          )}
-
-          {sections.playLog && (
-            <section className="bs-section" ref={(node) => { sectionRefs.current.plays = node; }} data-section="plays">
-              <h4>Play log</h4>
-              {!!playLog.length ? (
-                <div className="bs-list">
-                  {playLog.slice(expanded ? 0 : 24).map((play, idx) => (
-                    <div key={`play-${idx}`} className="bs-list-item bs-play-item">
-                      <span>Q{play.quarter ?? "—"} · {play.clock ?? play.time ?? ""}</span>
-                      <span><strong>{teamsById?.[Number(play.teamId)]?.abbr ?? "—"}</strong></span>
-                      <span>{play.text ?? "Play event"}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : <EmptyState title="No play log archived" body="Full event-by-event tracking was not available for this game." />}
-            </section>
-          )}
-
-          {game?.recap && (
+          {game?.recap && !sections.recap && (
             <section className="bs-section">
               <h4>Recap</h4>
               <div className="bs-list-item">{game.recap}</div>
