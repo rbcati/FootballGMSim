@@ -62,6 +62,9 @@ describe('BoxScore postgame command center', () => {
           { quarter: 2, clock: '10:20', text: 'Touchdown pass', isTouchdown: true, teamId: 2 },
           { quarter: 1, clock: '1:59', text: 'Field goal', teamId: 1 },
         ],
+        eventDigest: [
+          { quarter: 3, clockSec: 312, team: 'away', type: 'explosive_play', text: '50-yard bomb flips field', winProbSwing: 0.2, isScore: true },
+        ],
       },
       errorMessage: null,
     };
@@ -78,6 +81,7 @@ describe('BoxScore postgame command center', () => {
     expect(html).toContain('Standout storylines');
     expect(html).toContain('Team leaders');
     expect(html).toContain('Scoring summary');
+    expect(html).toContain('Game flow &amp; momentum');
   });
 
   it('fails safely for partial archived payloads without crashing', () => {

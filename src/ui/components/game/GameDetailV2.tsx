@@ -84,7 +84,68 @@ export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; 
     return rows.filter((row) => row.awayRaw != null || row.homeRaw != null);
   }, [driveStats]);
 
-  const hasRecapData = digest.length > 0 || tacticalReasons.length > 0 || headlineMoments.length > 0 || comparisonRows.length > 0;
+  const flowStory = useMemo(() => {
+    const notes: string[] = [];
+    const add = (line?: string | null) => {
+      if (!line || notes.includes(line)) return;
+      notes.push(line);
+    };
+    const abbrFor = (side: 'away' | 'home') => (side === 'away' ? awayTeam?.abbr ?? 'Away' : homeTeam?.abbr ?? 'Home');
+
+    const biggestSwing = [...digest]
+      .map((item, idx) => ({ item, idx, swing: Math.abs(Number(item?.winProbSwing ?? item?.leverage ?? 0)) }))
+      .sort((a, b) => b.swing - a.swing || b.idx - a.idx)[0];
+    if (biggestSwing?.swing && biggestSwing.swing > 0) {
+      const swingPct = `${Math.round(biggestSwing.swing * 100)}%`;
+      const team = biggestSwing.item?.team === 'away' || biggestSwing.item?.team === 'home'
+        ? abbrFor(biggestSwing.item.team)
+        : 'Neutral';
+      add(`Biggest swing: ${team} generated a ${swingPct} leverage moment in Q${biggestSwing.item?.quarter ?? '—'}.`);
+    } else if (digest.length) {
+      add(`Biggest swing: ${digest[digest.length - 1]?.text ?? 'late-game leverage shifted with one key play.'}`);
+    }
+
+    if (driveStats?.away || driveStats?.home) {
+      const awayExplosive = Number(driveStats?.away?.explosivePlays ?? 0);
+      const homeExplosive = Number(driveStats?.home?.explosivePlays ?? 0);
+      if (awayExplosive !== homeExplosive) {
+        const winner = awayExplosive > homeExplosive ? 'away' : 'home';
+        add(`${abbrFor(winner)} won the explosives battle (${Math.max(awayExplosive, homeExplosive)} vs ${Math.min(awayExplosive, homeExplosive)}).`);
+      }
+
+      const awayTurnovers = Number(driveStats?.away?.turnovers ?? 0);
+      const homeTurnovers = Number(driveStats?.home?.turnovers ?? 0);
+      if (awayTurnovers !== homeTurnovers) {
+        const cleanerSide = awayTurnovers < homeTurnovers ? 'away' : 'home';
+        add(`${abbrFor(cleanerSide)} protected the ball better and finished cleaner in turnover sequences.`);
+      }
+
+      const awayRzTrips = Number(driveStats?.away?.redZoneTrips ?? 0);
+      const homeRzTrips = Number(driveStats?.home?.redZoneTrips ?? 0);
+      if (awayRzTrips > 0 || homeRzTrips > 0) {
+        const awayRzRate = Number(driveStats?.away?.redZoneScores ?? 0) / Math.max(1, awayRzTrips);
+        const homeRzRate = Number(driveStats?.home?.redZoneScores ?? 0) / Math.max(1, homeRzTrips);
+        if (awayRzRate !== homeRzRate) {
+          const winner = awayRzRate > homeRzRate ? 'away' : 'home';
+          add(`Red-zone finishing tilted to ${abbrFor(winner)} (${Math.round(Math.max(awayRzRate, homeRzRate) * 100)}%).`);
+        }
+      }
+    }
+
+    const decidingStretch = [...digest]
+      .filter((item) => item?.isScore || item?.type === 'turnover' || item?.turnover)
+      .slice(-2);
+    if (decidingStretch.length) {
+      const summary = decidingStretch
+        .map((item) => `Q${item?.quarter ?? '—'} ${item?.text ?? 'key play'}`)
+        .join(' → ');
+      add(`Deciding stretch: ${summary}`);
+    }
+
+    return notes.slice(0, 5);
+  }, [digest, driveStats, awayTeam?.abbr, homeTeam?.abbr]);
+
+  const hasRecapData = digest.length > 0 || tacticalReasons.length > 0 || headlineMoments.length > 0 || comparisonRows.length > 0 || flowStory.length > 0;
   if (!hasRecapData) return null;
 
   return (
@@ -108,6 +169,15 @@ export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; 
               <div className="gdv2-play-score">{item?.awayScore ?? game?.awayScore ?? '—'} - {item?.homeScore ?? game?.homeScore ?? '—'}</div>
             </div>
           ))}
+        </div>
+      ) : null}
+
+      {flowStory.length ? (
+        <div className="bs-storylines-box" data-testid="game-flow-momentum">
+          <h5>Game flow &amp; momentum</h5>
+          <ul className="bs-list">
+            {flowStory.map((line, idx) => <li key={`flow-${idx}`} className="bs-list-item">{line}</li>)}
+          </ul>
         </div>
       ) : null}
 
