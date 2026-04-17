@@ -115,6 +115,8 @@ export const toWorker = Object.freeze({
   GET_FREE_AGENTS:    'GET_FREE_AGENTS',      // {}
 
   /** Coaching */
+  REPAIR_ROSTER:      'REPAIR_ROSTER',    // { teamId }
+  OPTIMIZE_ROSTER:    'OPTIMIZE_ROSTER',  // { teamId }
   HIRE_COACH:         'HIRE_COACH',           // { teamId, coachId, role }
   FIRE_COACH:         'FIRE_COACH',           // { teamId, role }
   GET_AVAILABLE_COACHES: 'GET_AVAILABLE_COACHES', // {}

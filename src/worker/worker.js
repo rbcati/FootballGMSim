@@ -107,6 +107,7 @@ import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
 import { ensureLeagueMemoryMeta, buildSeasonArchiveSummary, updateFranchiseHistory, updateRecordBook, evaluateHallOfFameCandidate, addHallOfFameClass, buildSeasonStorylineSnapshot } from '../core/league-memory.js';
+import { repairDepthChart, validateDepthChart, optimizeDepthChartForPlan } from "../core/roster/depthChartManager.js";
 import { ensureDynastyMeta, generateOwnerGoals, applyGameFanApproval, updateGoalsForWin } from '../core/dynasty-story.js';
 import { isValidSaveId, sanitizeSaveList } from './saveIntegrity.js';
 import { autoBuildDepthChart, applyDepthChartToPlayers } from '../core/depthChart.js';
@@ -2165,6 +2166,22 @@ async function handleAdvanceWeek(payload, id) {
   // Ensure depth chart integrity before every simulation step.
   for (const team of cache.getAllTeams()) {
     ensureTeamDepthChart(team.id);
+  }
+  // ── ROSTER INTEGRITY PASS: Repair every AI team before simulation ────────
+  for (const team of cache.getAllTeams()) {
+    const isUserTeam = team.id === meta.userTeamId;
+    // AI teams are ALWAYS repaired/optimized. User team is only REPAIRED if broken.
+    const roster = cache.getPlayersByTeam(team.id);
+    const repair = repairDepthChart(
+      { id: team.id, roster, depthChart: team.depthChart },
+      { isAI: !isUserTeam, phase: meta.phase }
+    );
+    if (repair.modified) {
+      cache.updateTeam(team.id, { depthChart: repair.repairedAssignments });
+      if (isUserTeam) {
+        post(toUI.NOTIFICATION, { level: "info", message: `Emergency roster adjustments made for ${team.abbr || "your team"}.` });
+      }
+    }
   }
 
   // ── Preseason Cutdown Check ──────────────────────────────────────────────
@@ -8740,6 +8757,38 @@ self.onmessage = (event) => {
     }
   });
 };
+async function handleRepairRoster({ teamId }, id) {
+  const team = cache.getTeam(teamId);
+  if (!team) return;
+  const roster = cache.getPlayersByTeam(teamId);
+  const repair = repairDepthChart(
+    { id: team.id, roster, depthChart: team.depthChart },
+    { phase: cache.getPhase() }
+  );
+  if (repair.modified) {
+    cache.updateTeam(teamId, { depthChart: repair.repairedAssignments });
+    post(toUI.NOTIFICATION, { level: "info", message: `Roster repaired: ${repair.changes.length} adjustments made.` });
+    post(toUI.ROSTER_DATA, { teamId, team: cache.getTeam(teamId), players: cache.getPlayersByTeam(teamId) });
+  } else {
+    post(toUI.NOTIFICATION, { level: "info", message: "Roster is already valid." });
+  }
+}
+
+async function handleOptimizeRoster({ teamId }, id) {
+  const team = cache.getTeam(teamId);
+  if (!team) return;
+  const roster = cache.getPlayersByTeam(teamId);
+  const repair = optimizeDepthChartForPlan(
+    { id: team.id, roster, depthChart: team.depthChart, weeklyGamePlan: team.weeklyGamePlan },
+    { phase: cache.getPhase() }
+  );
+  if (repair.modified) {
+    cache.updateTeam(teamId, { depthChart: repair.repairedAssignments });
+    post(toUI.NOTIFICATION, { level: "info", message: "Roster optimized for current strategy." });
+    post(toUI.ROSTER_DATA, { teamId, team: cache.getTeam(teamId), players: cache.getPlayersByTeam(teamId) });
+  }
+}
+
 
 async function handleMessage(event) {
   const { type, payload = {}, id } = event.data;
@@ -8817,6 +8866,8 @@ async function handleMessage(event) {
       case toWorker.START_DRAFT:        return await handleStartDraft(payload, id);
       case toWorker.MAKE_DRAFT_PICK:    return await handleMakeDraftPick(payload, id);
       case toWorker.CONDUCT_PRIVATE_WORKOUT: return await handleConductPrivateWorkout(payload, id);
+      case toWorker.REPAIR_ROSTER:      return await handleRepairRoster(payload, id);
+      case toWorker.OPTIMIZE_ROSTER:    return await handleOptimizeRoster(payload, id);
       case toWorker.UPDATE_DEPTH_CHART: return await handleUpdateDepthChart(payload, id);
       case toWorker.SIM_DRAFT_PICK:     return await handleSimDraftPick(payload, id);
       case toWorker.ACCEPT_DRAFT_TRADE: return await handleAcceptDraftTrade(payload, id);
