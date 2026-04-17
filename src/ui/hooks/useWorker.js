@@ -525,7 +525,7 @@ export function useWorker() {
     /** Fetch a team's roster (returns a Promise — does NOT set busy). */
     getRoster: (teamId) => request(toWorker.GET_ROSTER, { teamId }, { silent: true }),
     repairRoster: (teamId) => request(toWorker.REPAIR_ROSTER, { teamId }),
-    optimizeRoster: (teamId) => request(toWorker.OPTIMIZE_ROSTER, { teamId }),
+    optimizeRoster: (teamId, mode = 'optimize') => request(toWorker.OPTIMIZE_ROSTER, { teamId, mode }),
 
     /** Fetch the free agent pool (returns a Promise — does NOT set busy). */
     getFreeAgents: () => request(toWorker.GET_FREE_AGENTS, {}, { silent: true }),
