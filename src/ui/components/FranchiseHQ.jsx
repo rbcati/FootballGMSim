@@ -8,7 +8,13 @@ import { EmptyState, SectionCard, StatCard } from "./common/UiPrimitives.jsx";
 import { StatusChip, CompactListRow } from "./ScreenSystem.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
 import { autoBuildDepthChart, depthWarnings } from "../../core/depthChart.js";
-import { getTeamStatusLine, getActionContext } from "../utils/hqHelpers.js";
+import {
+  getTeamStatusLine,
+  getActionContext,
+  getActionDestination,
+  rankHqPriorityItems,
+  getTeamSnapshotNotes,
+} from "../utils/hqHelpers.js";
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -55,27 +61,8 @@ function getPrevGame(league) {
 
 function getSeverityTone(level) {
   if (level === "urgent" || level === "blocker") return "danger";
-  if (level === "recommended" || level === "warning") return "warning";
+  if (level === "recommended" || level === "warning" || level === "recommendation") return "warning";
   return "info";
-}
-
-function ovrTier(ovr) {
-  const value = safeNum(ovr);
-  if (value >= 84) return "Contender";
-  if (value >= 77) return "Playoff bubble";
-  return "Rebuilding";
-}
-
-function capTier(room) {
-  if (room < 0) return "Overcommitted";
-  if (room < 6) return "Tight";
-  return "Healthy";
-}
-
-function rosterTier(rosterSize, injuries) {
-  if (injuries >= 5) return "Thin";
-  if (rosterSize > 53) return "Cutdown needed";
-  return "Healthy";
 }
 
 const HQHero = ({ team, league, record, statusLine, nextGame, onAdvanceWeek, onNavigate, busy, simulating }) => (
@@ -137,7 +124,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const cap = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
   const record = formatRecord(team);
   const statusLine = getTeamStatusLine(team, vm.league, weekly);
-  const urgentItems = (weekly?.urgentItems ?? []).slice(0, 6);
+  const rankedPriorities = rankHqPriorityItems(team, vm.league, weekly, nextGame);
+  const featuredPriority = rankedPriorities.featured;
+  const secondaryPriorities = rankedPriorities.secondary;
+  const snapshotNotes = getTeamSnapshotNotes(team, weekly, cap.capRoom);
 
   const teamDevelopments = (vm.league?.newsItems ?? [])
     .filter((item) => item?.teamId == null || Number(item?.teamId) === Number(vm.league?.userTeamId))
@@ -166,15 +156,12 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
 
   const commandCenterActions = [
     { label: "Set lineup", type: "lineup", onClick: handleSetLineup },
-    { label: "Game plan", type: "gameplan", onClick: () => onNavigate?.("Game Plan") },
-    { label: "News & injuries", type: "news", onClick: () => onNavigate?.("News") },
-    { label: "Preview opponent", type: "opponent", onClick: () => onNavigate?.("Schedule") },
+    { label: "Game plan", type: "gameplan", onClick: () => onNavigate?.(getActionDestination("gameplan", nextGame)) },
+    { label: "News & injuries", type: "news", onClick: () => onNavigate?.(getActionDestination("news", nextGame)) },
+    { label: "Scout opponent", type: "opponent", onClick: () => onNavigate?.(getActionDestination("opponent", nextGame)) },
   ]
     .map((a) => ({ ...a, context: getActionContext(a.type, weekly, nextGame) }))
     .slice(0, 4);
-
-  const featuredPriority = urgentItems[0] ?? null;
-  const secondaryPriorities = urgentItems.slice(1, 4);
 
   const latestGamePresentation = latestArchived
     ? buildCompletedGamePresentation(
@@ -213,6 +200,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
     if (margin >= 14) return "Lopsided outcome; trench and turnover battles tilted early.";
     return "Momentum swung in the second half and decided the final margin.";
   })();
+  const recapCtaLabel = latestGamePresentation?.canOpen
+    ? (latestGamePresentation?.ctaLabel?.toLowerCase().includes("tactical") ? "Tactical Recap" : "Box Score")
+    : "View Result";
 
   const leagueLeadersSnapshot = (() => {
     const teams = Array.isArray(vm.league?.teams) ? vm.league.teams : [];
@@ -228,6 +218,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   })();
 
   const matchupGap = nextGame?.opp ? safeNum(team?.ovr) - safeNum(nextGame.opp?.ovr) : null;
+  const offenseGap = nextGame?.opp ? safeNum(team?.offenseRating ?? team?.offRating ?? team?.offense) - safeNum(nextGame.opp?.offenseRating ?? nextGame.opp?.offRating ?? nextGame.opp?.offense) : null;
+  const defenseGap = nextGame?.opp ? safeNum(team?.defenseRating ?? team?.defRating ?? team?.defense) - safeNum(nextGame.opp?.defenseRating ?? nextGame.opp?.defRating ?? nextGame.opp?.defense) : null;
   const matchupNote =
     matchupGap == null
       ? "Use schedule + game plan to prep your next checkpoint."
@@ -307,13 +299,13 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
 
       <SectionCard title="Team Snapshot" subtitle="Interpretive status for roster, cap, and window.">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
-          <StatCard label="OVR" value={`${safeNum(team?.ovr, 0)}`} note={ovrTier(team?.ovr)} />
-          <StatCard label="Cap room" value={formatMoneyM(cap.capRoom)} note={capTier(cap.capRoom)} />
-          <StatCard label="Roster" value={`${(team?.roster ?? []).length} active`} note={rosterTier((team?.roster ?? []).length, safeNum(weekly?.pressurePoints?.injuriesCount))} />
+          <StatCard label="OVR" value={`${safeNum(team?.ovr, 0)}`} note={snapshotNotes.ovrNote} />
+          <StatCard label="Cap room" value={formatMoneyM(cap.capRoom)} note={snapshotNotes.capNote} />
+          <StatCard label="Roster" value={`${(team?.roster ?? []).length} active`} note={snapshotNotes.rosterNote} />
           <StatCard
             label="Expiring deals"
             value={`${safeNum(weekly?.pressurePoints?.expiringCount)}`}
-            note={safeNum(weekly?.pressurePoints?.expiringCount) > 2 ? "Key starters at risk" : "Stable core"}
+            note={snapshotNotes.expiringNote}
           />
         </div>
       </SectionCard>
@@ -327,9 +319,14 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                 {nextGame?.opp ? `Opponent record: ${formatRecord(nextGame.opp)} · OVR ${safeNum(nextGame.opp?.ovr, 0)}` : "Schedule or playoff bracket context will appear here."}
               </div>
+              {nextGame?.opp ? (
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
+                  OVR edge: {matchupGap > 0 ? "+" : ""}{safeNum(matchupGap)} · Offense: {offenseGap > 0 ? "+" : ""}{safeNum(offenseGap)} · Defense: {defenseGap > 0 ? "+" : ""}{safeNum(defenseGap)}
+                </div>
+              ) : null}
               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Matchup note: {matchupNote}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Preview Matchup</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.(getActionDestination("opponent", nextGame))}>Scout Matchup</Button>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Prepare Game</Button>
               </div>
             </div>
@@ -353,7 +350,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                       onClick={() => onOpenBoxScore?.(latestArchived?.id ?? lastGame?.id)}
                       disabled={latestArchived ? !latestGamePresentation?.canOpen : false}
                     >
-                      {latestGamePresentation?.ctaLabel ?? "Tactical Recap"}
+                      {recapCtaLabel}
                     </Button>
                   </div>
                 </>
