@@ -131,10 +131,6 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const secondaryPriorities = rankedPriorities.secondary;
   const snapshotNotes = getTeamSnapshotNotes(team, weekly, cap.capRoom);
 
-  const teamDevelopments = (vm.league?.newsItems ?? [])
-    .filter((item) => item?.teamId == null || Number(item?.teamId) === Number(vm.league?.userTeamId))
-    .slice(0, 3);
-
   const handleSetLineup = () => {
     const roster = Array.isArray(team?.roster) ? team.roster : [];
     const existingAssignments = {};
@@ -207,24 +203,54 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
     ? (latestGamePresentation?.ctaLabel?.toLowerCase().includes("tactical") ? "Tactical Recap" : "Box Score")
     : "View Result";
 
-  const leagueLeadersSnapshot = (() => {
-    const teams = Array.isArray(vm.league?.teams) ? vm.league.teams : [];
-    if (!teams.length) return [];
-    const bestRecord = [...teams].sort((a, b) => (safeNum(b.wins) - safeNum(b.losses)) - (safeNum(a.wins) - safeNum(a.losses)))[0];
-    const topOffense = [...teams].sort((a, b) => safeNum(b.ptsFor) - safeNum(a.ptsFor))[0];
-    const topDefense = [...teams].sort((a, b) => safeNum(a.ptsAgainst) - safeNum(b.ptsAgainst))[0];
-    return [
-      { label: "Best record", value: bestRecord?.abbr ?? bestRecord?.name ?? "—" },
-      { label: "Top offense", value: topOffense?.abbr ?? topOffense?.name ?? "—" },
-      { label: "Top defense", value: topDefense?.abbr ?? topDefense?.name ?? "—" },
-    ];
-  })();
-
   const matchupGap = nextGame?.opp ? safeNum(team?.ovr) - safeNum(nextGame.opp?.ovr) : null;
   const offenseGap = nextGame?.opp ? safeNum(team?.offenseRating ?? team?.offRating ?? team?.offense) - safeNum(nextGame.opp?.offenseRating ?? nextGame.opp?.offRating ?? nextGame.opp?.offense) : null;
   const defenseGap = nextGame?.opp ? safeNum(team?.defenseRating ?? team?.defRating ?? team?.defense) - safeNum(nextGame.opp?.defenseRating ?? nextGame.opp?.defRating ?? nextGame.opp?.defense) : null;
   const matchupNote = prep?.keyMatchupNote ?? "Use Weekly Prep to scout your next opponent.";
   const prepStatus = prep?.readinessLabel ?? "Prep status unavailable";
+  const ownerApproval = safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, null);
+  const injuriesCount = safeNum(weekly?.pressurePoints?.injuriesCount, 0);
+  const expiringCount = safeNum(weekly?.pressurePoints?.expiringCount, 0);
+  const rosterCount = Array.isArray(team?.roster) ? team.roster.length : safeNum(team?.rosterCount, 0);
+  const ownerMandateTone = ownerApproval != null && ownerApproval < 40
+    ? "danger"
+    : ownerApproval != null && ownerApproval < 55
+      ? "warning"
+      : "info";
+  const teamContextRows = [
+    {
+      key: "owner",
+      title: "Owner mandate",
+      subtitle: ownerApproval == null
+        ? "Owner approval data unavailable in this save."
+        : `Approval ${ownerApproval} — ${ownerApproval < 40 ? "results required immediately" : ownerApproval < 55 ? "expectations rising this month" : "mandate on track"}`,
+      tone: ownerMandateTone,
+      cta: ownerApproval != null && ownerApproval < 55 ? "Open Advisor" : "Review goals",
+      destination: "🤖 GM Advisor",
+    },
+    {
+      key: "injuries",
+      title: "Injury pressure",
+      subtitle: injuriesCount > 0
+        ? `${injuriesCount} active injury impact${injuriesCount > 1 ? "s" : ""} on depth chart decisions.`
+        : "No major injury blockers this week.",
+      tone: injuriesCount >= 3 ? "danger" : injuriesCount > 0 ? "warning" : "info",
+      cta: "Injury report",
+      destination: "Injuries",
+    },
+    {
+      key: "roster",
+      title: "Roster pressure",
+      subtitle: rosterCount > 53
+        ? `Roster at ${rosterCount}; cutdown action required.`
+        : expiringCount >= 3
+          ? `${expiringCount} rotation contracts are expiring soon.`
+          : "Core roster pressure is currently manageable.",
+      tone: rosterCount > 53 ? "danger" : expiringCount >= 3 ? "warning" : "info",
+      cta: rosterCount > 53 ? "Open roster hub" : "Contract center",
+      destination: rosterCount > 53 ? "Roster Hub" : "Contract Center",
+    },
+  ];
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-2)" }}>
@@ -240,77 +266,67 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         simulating={simulating}
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "var(--space-2)" }}>
-        <SectionCard title="This Week" subtitle="Contextual prep actions before kickoff.">
-          <div style={{ display: "grid", gap: 6 }}>
-            {commandCenterActions.map((action) => (
-              <CompactListRow
-                key={action.label}
-                title={action.label}
-                subtitle={action.context}
-                meta={<StatusChip label="Prep" tone="team" />}
-              >
-                <Button size="sm" variant="outline" onClick={action.onClick}>{action.label}</Button>
-              </CompactListRow>
-            ))}
-          </div>
-          {lineupToast ? <div style={{ fontSize: "var(--text-xs)", color: "var(--accent)", marginTop: 6 }}>{lineupToast}</div> : null}
-        </SectionCard>
-
-        <SectionCard title="Priority Queue" subtitle="Ranked by urgency and impact.">
-          {featuredPriority ? (
-            <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ border: "1px solid var(--danger)", borderRadius: "var(--radius-md)", padding: "10px", background: "color-mix(in srgb, var(--danger) 10%, var(--surface))" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "start" }}>
-                  <div>
-                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase" }}>Urgent</div>
-                    <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>{featuredPriority.label}</div>
-                    <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>{featuredPriority.detail}</div>
-                  </div>
-                  <Button size="sm" onClick={() => onNavigate?.(featuredPriority?.tab ?? "Team")}>{featuredPriority.verb || "Review now"}</Button>
-                </div>
-              </div>
-
-              {secondaryPriorities.map((item, idx) => (
+      <section style={{ display: "grid", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: "var(--text-sm)", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-muted)" }}>Act Now</h3>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(270px, 1fr))", gap: "var(--space-2)" }}>
+          <SectionCard title="This Week" subtitle="Must-do franchise actions before kickoff.">
+            <div style={{ display: "grid", gap: 6 }}>
+              {commandCenterActions.map((action) => (
                 <CompactListRow
-                  key={`${item.label}-${idx}`}
-                  title={item.label}
-                  subtitle={item.detail}
-                  meta={<StatusChip label={item.level === "blocker" ? "Urgent" : item.level === "recommendation" ? "Recommended" : "Info"} tone={getSeverityTone(item.level)} />}
+                  key={action.label}
+                  title={action.label}
+                  subtitle={action.context}
+                  meta={<StatusChip label="Prep" tone="team" />}
                 >
-                  <Button size="sm" variant="outline" onClick={() => onNavigate?.(item?.tab ?? "Team")}>{item.verb || "Review"}</Button>
+                  <Button size="sm" variant="outline" onClick={action.onClick}>{action.label}</Button>
                 </CompactListRow>
               ))}
             </div>
-          ) : (
-            <CompactListRow
-              title="No urgent blockers"
-              subtitle="Use this week to improve cap, depth, and scouting position."
-              meta={<StatusChip label="Info" tone="info" />}
-            >
-              <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Upgrade facility</Button>
-            </CompactListRow>
-          )}
-        </SectionCard>
-      </div>
+            {lineupToast ? <div style={{ fontSize: "var(--text-xs)", color: "var(--accent)", marginTop: 6 }}>{lineupToast}</div> : null}
+          </SectionCard>
 
-      <SectionCard title="Team Snapshot" subtitle="Interpretive status for roster, cap, and window.">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
-          <StatCard label="OVR" value={`${safeNum(team?.ovr, 0)}`} note={snapshotNotes.ovrNote} />
-          <StatCard label="Cap room" value={formatMoneyM(cap.capRoom)} note={snapshotNotes.capNote} />
-          <StatCard label="Roster" value={`${(team?.roster ?? []).length} active`} note={snapshotNotes.rosterNote} />
-          <StatCard
-            label="Expiring deals"
-            value={`${safeNum(weekly?.pressurePoints?.expiringCount)}`}
-            note={snapshotNotes.expiringNote}
-          />
+          <SectionCard title="Priority Queue" subtitle="Critical blockers and high-impact calls.">
+            {featuredPriority ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ border: "1px solid var(--danger)", borderRadius: "var(--radius-md)", padding: "10px", background: "color-mix(in srgb, var(--danger) 10%, var(--surface))" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "start" }}>
+                    <div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase" }}>Urgent</div>
+                      <div style={{ fontWeight: 700, fontSize: "var(--text-sm)" }}>{featuredPriority.label}</div>
+                      <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>{featuredPriority.detail}</div>
+                    </div>
+                    <Button size="sm" onClick={() => onNavigate?.(featuredPriority?.tab ?? "Team")}>{featuredPriority.verb || "Review now"}</Button>
+                  </div>
+                </div>
+
+                {secondaryPriorities.map((item, idx) => (
+                  <CompactListRow
+                    key={`${item.label}-${idx}`}
+                    title={item.label}
+                    subtitle={item.detail}
+                    meta={<StatusChip label={item.level === "blocker" ? "Urgent" : item.level === "recommendation" ? "Recommended" : "Info"} tone={getSeverityTone(item.level)} />}
+                  >
+                    <Button size="sm" variant="outline" onClick={() => onNavigate?.(item?.tab ?? "Team")}>{item.verb || "Review"}</Button>
+                  </CompactListRow>
+                ))}
+              </div>
+            ) : (
+              <CompactListRow
+                title="No urgent blockers"
+                subtitle="Use this week to improve cap, depth, and scouting position."
+                meta={<StatusChip label="Info" tone="info" />}
+              >
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Financials")}>Upgrade facility</Button>
+              </CompactListRow>
+            )}
+          </SectionCard>
         </div>
-      </SectionCard>
+      </section>
 
-      <section style={{ display: "grid", gap: "var(--space-2)" }}>
-        <h3 style={{ margin: 0, fontSize: "var(--text-base)", opacity: 0.9 }}>League Pulse</h3>
+      <section style={{ display: "grid", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: "var(--text-sm)", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-muted)" }}>This Week</h3>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "var(--space-2)" }}>
-          <SectionCard title="Next Game" actions={nextGame ? <StatusChip label={`Week ${nextGame.week}`} tone="team" /> : null}>
+          <SectionCard title="Next Opponent" actions={nextGame ? <StatusChip label={`Week ${nextGame.week}`} tone="team" /> : null}>
             <div style={{ display: "grid", gap: 5 }}>
               <div style={{ fontWeight: 700 }}>{nextGame ? `${nextGame.isHome ? "vs" : "@"} ${nextGame.opp?.name ?? "TBD"}` : "No scheduled matchup"}</div>
               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
@@ -330,7 +346,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
             </div>
           </SectionCard>
 
-          <SectionCard title="Last Game">
+          <SectionCard title="Latest Team Result">
             <div style={{ display: "grid", gap: 5 }}>
               {lastGame ? (
                 <>
@@ -341,7 +357,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                   <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                     Top performer: {latestGamePresentation?.spotlightPlayer?.name ?? latestGamePresentation?.headline ?? "Team effort carried the result."}
                   </div>
-                  <div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <Button
                       size="sm"
                       variant="outline"
@@ -360,8 +376,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                     >
                       {recapCtaLabel}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")} style={{ marginLeft: 6 }}>
-                      Weekly Results
+                    <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>
+                      Full Weekly Results
                     </Button>
                   </div>
                 </>
@@ -377,33 +393,64 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
               )}
             </div>
           </SectionCard>
-
-          <SectionCard title="News & Leaders" actions={<Button size="sm" variant="ghost" onClick={() => onNavigate?.("News")}>News Desk</Button>}>
-            {teamDevelopments.length > 0 ? (
-              <div style={{ display: "grid", gap: 6 }}>
-                {teamDevelopments.map((item, idx) => (
-                  <div key={item?.id || idx} style={{ fontSize: "var(--text-sm)", borderBottom: "1px solid var(--hairline)", paddingBottom: 5 }}>
-                    <strong>{item.headline}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 6 }}>
-                <CompactListRow
-                  title="News Desk quiet"
-                  subtitle="No major team storylines this week."
-                  meta={<StatusChip label="League Pulse" tone="info" />}
-                />
-                {leagueLeadersSnapshot.map((item) => (
-                  <div key={item.label} style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
-                    {item.label}: <strong style={{ color: "var(--text)" }}>{item.value}</strong>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SectionCard>
         </div>
       </section>
+
+      <section style={{ display: "grid", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: "var(--text-sm)", textTransform: "uppercase", letterSpacing: ".05em", color: "var(--text-muted)" }}>Team Status</h3>
+        <SectionCard title="Team Snapshot" subtitle="Roster, cap, and pressure at a glance.">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(125px, 1fr))", gap: 8 }}>
+            <StatCard label="OVR" value={`${safeNum(team?.ovr, 0)}`} note={snapshotNotes.ovrNote} />
+            <StatCard label="Cap room" value={formatMoneyM(cap.capRoom)} note={snapshotNotes.capNote} />
+            <StatCard label="Roster" value={`${(team?.roster ?? []).length} active`} note={snapshotNotes.rosterNote} />
+            <StatCard
+              label="Expiring deals"
+              value={`${safeNum(weekly?.pressurePoints?.expiringCount)}`}
+              note={snapshotNotes.expiringNote}
+            />
+          </div>
+        </SectionCard>
+        <SectionCard title="Team Context" subtitle="Owner mandate, injuries, and roster pressure.">
+          <div style={{ display: "grid", gap: 6 }}>
+            {teamContextRows.map((row) => (
+              <CompactListRow
+                key={row.key}
+                title={row.title}
+                subtitle={row.subtitle}
+                meta={<StatusChip label={row.tone === "danger" ? "Critical" : row.tone === "warning" ? "Watch" : "Stable"} tone={row.tone} />}
+              >
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.(row.destination)}>{row.cta}</Button>
+              </CompactListRow>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
+      <SectionCard title="League Watch (Teasers)" subtitle="League-wide context now lives in League and Weekly Results.">
+        <div style={{ display: "grid", gap: 6 }}>
+          <CompactListRow
+            title="Weekly League Recap"
+            subtitle="Open full recap, race center, and spotlight games in Weekly Results."
+            meta={<StatusChip label="Results" tone="league" />}
+          >
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>Open Results</Button>
+          </CompactListRow>
+          <CompactListRow
+            title="League Pulse"
+            subtitle="League activity, standings context, and social pulse moved to League."
+            meta={<StatusChip label="League" tone="league" />}
+          >
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League")}>Open League</Button>
+          </CompactListRow>
+          <CompactListRow
+            title="League Leaders"
+            subtitle="Team and player leaders are maintained in League Leaders."
+            meta={<StatusChip label="Leaders" tone="info" />}
+          >
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League Leaders")}>Open Leaders</Button>
+          </CompactListRow>
+        </div>
+      </SectionCard>
     </div>
   );
 }
