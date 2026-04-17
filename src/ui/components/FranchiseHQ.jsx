@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
 import { deriveTeamCapSnapshot, formatMoneyM } from "../utils/numberFormatting.js";
 import { getHQViewModel } from "../../state/selectors.js";
-import { buildCompletedGamePresentation } from "../utils/boxScoreAccess.js";
+import { buildCompletedGamePresentation, openResolvedBoxScore } from "../utils/boxScoreAccess.js";
 import { EmptyState, SectionCard, StatCard } from "./common/UiPrimitives.jsx";
 import { StatusChip, CompactListRow } from "./ScreenSystem.jsx";
 import { getRecentGames as getArchivedRecentGames } from "../../core/archive/gameArchive.ts";
@@ -345,10 +345,23 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => onOpenBoxScore?.(latestArchived?.id ?? lastGame?.id)}
+                      onClick={() => openResolvedBoxScore(
+                        {
+                          ...latestArchived,
+                          id: latestArchived?.id ?? lastGame?.id,
+                          week: latestArchived?.week ?? lastGame?.week,
+                          homeScore: latestArchived?.score?.home ?? lastGame?.score?.home,
+                          awayScore: latestArchived?.score?.away ?? lastGame?.score?.away,
+                        },
+                        { seasonId: vm.league?.seasonId, week: Number(latestArchived?.week ?? lastGame?.week ?? vm.league?.week ?? 1), source: "hq_last_game" },
+                        onOpenBoxScore,
+                      )}
                       disabled={latestArchived ? !latestGamePresentation?.canOpen : false}
                     >
                       {recapCtaLabel}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")} style={{ marginLeft: 6 }}>
+                      Weekly Results
                     </Button>
                   </div>
                 </>
@@ -359,6 +372,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                   meta={<StatusChip label="Info" tone="info" />}
                 >
                   <Button size="sm" variant="outline" onClick={() => onNavigate?.("Schedule")}>Open Schedule</Button>
+                  <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>Weekly Results</Button>
                 </CompactListRow>
               )}
             </div>

@@ -221,6 +221,9 @@ export default function WeeklyHub({ league, onNavigate, onAdvanceWeek, busy, sim
             >
               {latestCompletedGame?.gameId ? (latestResultPresentation?.ctaLabel ?? "View result") : "Open schedule"}
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>
+              Weekly Results
+            </Button>
           </CardContent>
         </Card>
       </section>

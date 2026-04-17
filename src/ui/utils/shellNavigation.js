@@ -41,6 +41,7 @@ const TAB_TO_SECTION = Object.freeze({
   League: SHELL_SECTIONS.league,
   Standings: SHELL_SECTIONS.league,
   Schedule: SHELL_SECTIONS.league,
+  'Weekly Results': SHELL_SECTIONS.league,
   Stats: SHELL_SECTIONS.league,
   Leaders: SHELL_SECTIONS.league,
   Analytics: SHELL_SECTIONS.league,
