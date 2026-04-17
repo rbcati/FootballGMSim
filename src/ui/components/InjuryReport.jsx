@@ -9,13 +9,14 @@
  *  - onPlayerSelect: (playerId) => void
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { markWeeklyPrepStep } from "../utils/weeklyPrep.js";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -384,7 +385,13 @@ function InjuryHistoryLog({ league }) {
 
 // ── Main Component ───────────────────────────────────────────────────────────
 
-export default function InjuryReport({ league, onPlayerSelect }) {
+export default function InjuryReport({
+  league, onPlayerSelect,
+}) {
+  useEffect(() => {
+    markWeeklyPrepStep(league, 'injuriesReviewed', true);
+  }, [league?.seasonId, league?.week, league?.userTeamId]);
+
   const [posFilter, setPosFilter] = useState("ALL");
   const [sevFilter, setSevFilter] = useState("ALL");
   const [teamFilter, setTeamFilter] = useState("ALL");

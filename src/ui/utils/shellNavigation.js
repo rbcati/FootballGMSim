@@ -29,6 +29,7 @@ const TAB_TO_SECTION = Object.freeze({
   Roster: SHELL_SECTIONS.team,
   'Depth Chart': SHELL_SECTIONS.team,
   'Roster Hub': SHELL_SECTIONS.team,
+  'Weekly Prep': SHELL_SECTIONS.team,
   'Game Plan': SHELL_SECTIONS.team,
   Training: SHELL_SECTIONS.team,
   Injuries: SHELL_SECTIONS.team,

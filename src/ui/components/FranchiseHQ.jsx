@@ -15,6 +15,7 @@ import {
   rankHqPriorityItems,
   getTeamSnapshotNotes,
 } from "../utils/hqHelpers.js";
+import { deriveWeeklyPrepState, markWeeklyPrepStep } from "../utils/weeklyPrep.js";
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -99,7 +100,7 @@ const HQHero = ({ team, league, record, statusLine, nextGame, onAdvanceWeek, onN
         </div>
       </div>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-        <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Prepare Game</Button>
+        <Button size="sm" variant="outline" onClick={() => onNavigate?.("Weekly Prep")}>Prepare Game</Button>
         <Button size="sm" className="app-advance-btn" onClick={onAdvanceWeek} disabled={busy || simulating}>
           {busy || simulating ? "Working…" : "Advance Week"}
         </Button>
@@ -112,6 +113,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const vm = useMemo(() => getHQViewModel(league), [league]);
   const [lineupToast, setLineupToast] = useState(null);
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
+  const prep = useMemo(() => deriveWeeklyPrepState(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
   const previousScheduledGame = useMemo(() => getPrevGame(vm.league), [vm.league]);
   const latestArchived = useMemo(() => getArchivedRecentGames(1)?.[0] ?? null, [vm.league?.seasonId, vm.league?.week]);
@@ -145,6 +147,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
     const assignments = autoBuildDepthChart(roster, existingAssignments);
     const warnings = depthWarnings(assignments, roster);
     const hasBlockingLineupIssue = warnings.some((warning) => warning.level === "error");
+    if (!hasBlockingLineupIssue) markWeeklyPrepStep(vm.league, "lineupChecked", true);
     setLineupToast(
       hasBlockingLineupIssue
         ? "Depth chart still has missing starters. Fix red-warning rows to finalize lineup."
@@ -156,9 +159,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
 
   const commandCenterActions = [
     { label: "Set lineup", type: "lineup", onClick: handleSetLineup },
-    { label: "Game plan", type: "gameplan", onClick: () => onNavigate?.(getActionDestination("gameplan", nextGame)) },
-    { label: "News & injuries", type: "news", onClick: () => onNavigate?.(getActionDestination("news", nextGame)) },
-    { label: "Scout opponent", type: "opponent", onClick: () => onNavigate?.(getActionDestination("opponent", nextGame)) },
+    { label: "Game plan", type: "gameplan", onClick: () => { markWeeklyPrepStep(vm.league, "planReviewed", true); onNavigate?.(getActionDestination("gameplan", nextGame)); } },
+    { label: "News & injuries", type: "news", onClick: () => { markWeeklyPrepStep(vm.league, "injuriesReviewed", true); onNavigate?.(getActionDestination("news", nextGame)); } },
+    { label: "Scout opponent", type: "opponent", onClick: () => { markWeeklyPrepStep(vm.league, "opponentScouted", true); onNavigate?.(getActionDestination("opponent", nextGame)); } },
   ]
     .map((a) => ({ ...a, context: getActionContext(a.type, weekly, nextGame) }))
     .slice(0, 4);
@@ -220,14 +223,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
   const matchupGap = nextGame?.opp ? safeNum(team?.ovr) - safeNum(nextGame.opp?.ovr) : null;
   const offenseGap = nextGame?.opp ? safeNum(team?.offenseRating ?? team?.offRating ?? team?.offense) - safeNum(nextGame.opp?.offenseRating ?? nextGame.opp?.offRating ?? nextGame.opp?.offense) : null;
   const defenseGap = nextGame?.opp ? safeNum(team?.defenseRating ?? team?.defRating ?? team?.defense) - safeNum(nextGame.opp?.defenseRating ?? nextGame.opp?.defRating ?? nextGame.opp?.defense) : null;
-  const matchupNote =
-    matchupGap == null
-      ? "Use schedule + game plan to prep your next checkpoint."
-      : matchupGap >= 5
-        ? "You hold the OVR edge—avoid self-inflicted mistakes."
-        : matchupGap <= -5
-          ? "Talent deficit on paper—scheme and turnovers become critical."
-          : "Even matchup—situational football and depth should swing it.";
+  const matchupNote = prep?.keyMatchupNote ?? "Use Weekly Prep to scout your next opponent.";
+  const prepStatus = prep?.readinessLabel ?? "Prep status unavailable";
 
   return (
     <div className="app-screen-stack franchise-hq" style={{ display: "grid", gap: "var(--space-2)" }}>
@@ -325,9 +322,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
                 </div>
               ) : null}
               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Matchup note: {matchupNote}</div>
+              <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>Prep status: {prepStatus}</div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 <Button size="sm" variant="outline" onClick={() => onNavigate?.(getActionDestination("opponent", nextGame))}>Scout Matchup</Button>
-                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Game Plan")}>Prepare Game</Button>
+                <Button size="sm" variant="outline" onClick={() => onNavigate?.("Weekly Prep")}>Prepare Game</Button>
               </div>
             </div>
           </SectionCard>
