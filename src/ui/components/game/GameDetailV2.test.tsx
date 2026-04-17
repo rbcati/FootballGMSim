@@ -13,7 +13,10 @@ describe('GameDetailV2 tactical recap stability', () => {
     const html = renderToString(
       <GameDetailV2
         game={{
-          eventDigest: [{ quarter: 2, clockSec: 201, team: 'away', type: 'explosive_play', text: 'Deep shot sets up score', awayScore: 10, homeScore: 7 }],
+          eventDigest: [
+            { quarter: 2, clockSec: 201, team: 'away', type: 'explosive_play', text: 'Deep shot sets up score', awayScore: 10, homeScore: 7, winProbSwing: 0.22, isScore: true },
+            { quarter: 4, clockSec: 89, team: 'away', type: 'turnover', text: 'Late interception seals it', awayScore: 24, homeScore: 20, turnover: true },
+          ],
           summary: {
             headlineMoments: ['QB scramble flips field position'],
             teamStats: {
@@ -29,6 +32,9 @@ describe('GameDetailV2 tactical recap stability', () => {
 
     expect(html).toContain('Tactical recap');
     expect(html).toContain('Controlled early-down efficiency');
+    expect(html).toContain('Game flow &amp; momentum');
+    expect(html).toContain('Biggest swing');
+    expect(html).toContain('Deciding stretch');
   });
 
   it('fails safely (returns empty output) for partial/malformed detail payloads', () => {

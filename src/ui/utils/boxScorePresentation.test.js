@@ -109,8 +109,8 @@ describe('box score presentation fallback', () => {
     const secondRun = deriveStandoutStorylines(storylineInput);
     expect(firstRun).toEqual(secondRun);
     expect(firstRun.length).toBeGreaterThanOrEqual(3);
-    expect(firstRun.join(' ')).toContain('pass protection neutralized');
     expect(firstRun.join(' ')).toContain('critical third-down conversion battle');
+    expect(firstRun.join(' ')).toContain('red-zone finishing');
   });
 
   it('fails safely with partial or malformed payloads', () => {
