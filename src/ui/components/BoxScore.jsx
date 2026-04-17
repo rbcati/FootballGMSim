@@ -15,7 +15,8 @@ import { buildCompletedGamePresentation, getGameDetailPayload } from "../utils/b
 import { normalizeArchivedGamePayload } from "../../core/gameArchive.js";
 import { buildTeamComparisonRows, PLAYER_STATS_TABLES } from "../../core/footballMeta";
 import GameDetailV2 from "./game/GameDetailV2.tsx";
-import { buildRouteRequestKey, shouldStartRouteRequest, shouldWarnRepeatedRouteRequest } from "../utils/requestLoopGuard.js";
+import { buildRouteRequestKey } from "../utils/requestLoopGuard.js";
+import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 
 function TeamButton({ team, onSelect }) {
   if (!team) return <span>—</span>;
@@ -190,68 +191,28 @@ export function GameBookQuickNav({ activeSection, onJump }) {
 }
 
 export default function BoxScore({ gameId, actions, league, onClose, onBack, onPlayerSelect, onTeamSelect, embedded = false }) {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [game, setGame] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [activeSection, setActiveSection] = useState("summary");
   const [playerTeamFilter, setPlayerTeamFilter] = useState("all");
   const sectionRefs = useRef({});
-  const getBoxScoreRef = useRef(actions?.getBoxScore);
-  const leagueRef = useRef(league);
-  const requestStateRef = useRef({ inFlightKey: null, lastCompletedKey: null, repeatCount: 0, previousKey: null });
-
-  useEffect(() => {
-    getBoxScoreRef.current = actions?.getBoxScore;
-  }, [actions?.getBoxScore]);
-
-  useEffect(() => {
-    leagueRef.current = league;
-  }, [league]);
-
-  useEffect(() => {
-    const requestKey = buildRouteRequestKey("game", gameId);
-    const requestState = requestStateRef.current;
-    if (!shouldStartRouteRequest({ requestKey, inFlightKey: requestState.inFlightKey, lastCompletedKey: requestState.lastCompletedKey })) {
-      return;
-    }
-    const getBoxScore = getBoxScoreRef.current;
-    if (!requestKey || !getBoxScore) return;
-
-    const nextRepeatCount = requestState.previousKey === requestKey ? requestState.repeatCount + 1 : 1;
-    if (import.meta.env.DEV && shouldWarnRepeatedRouteRequest({ requestKey, previousKey: requestState.previousKey, repeatCount: requestState.repeatCount })) {
-      console.warn("[BoxScore] repeated box score request for same game", { gameId, repeatCount: nextRepeatCount });
-    }
-    requestState.previousKey = requestKey;
-    requestState.repeatCount = nextRepeatCount;
-    requestState.inFlightKey = requestKey;
-
-    let alive = true;
-    setLoading(true);
-    setError("");
-    setGame(null);
-
-    getBoxScore(gameId)
-      .then((res) => {
-        if (!alive) return;
-        const payload = normalizeArchivedGamePayload(res?.game ?? getGameDetailPayload(gameId, leagueRef.current));
-        setGame(payload ?? null);
-        if (!payload) setError(res?.error ?? "Box score unavailable for this game.");
-        requestState.lastCompletedKey = requestKey;
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setError(err?.message ?? "Unable to load box score.");
-      })
-      .finally(() => {
-        if (requestStateRef.current.inFlightKey === requestKey) {
-          requestStateRef.current.inFlightKey = null;
-        }
-        if (alive) setLoading(false);
-      });
-
-    return () => { alive = false; };
-  }, [gameId]);
+  const requestKey = useMemo(() => buildRouteRequestKey("game", gameId), [gameId]);
+  const fetchBoxScore = React.useCallback(async () => {
+    const res = await actions?.getBoxScore?.(gameId);
+    const payload = normalizeArchivedGamePayload(res?.game ?? getGameDetailPayload(gameId, league));
+    return {
+      payload: payload ?? null,
+      errorMessage: payload ? null : (res?.error ?? "Box score unavailable for this game."),
+    };
+  }, [actions, gameId, league]);
+  const { data: requestData, loading, error: requestError } = useStableRouteRequest({
+    requestKey,
+    enabled: gameId != null,
+    fetcher: fetchBoxScore,
+    warnLabel: "BoxScore",
+    clearDataOnLoad: true,
+  });
+  const game = requestData?.payload ?? null;
+  const error = requestError?.message ?? requestData?.errorMessage ?? "";
 
   useEffect(() => {
     if (!game) return undefined;
