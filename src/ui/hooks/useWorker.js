@@ -17,6 +17,8 @@
  */
 
 import { useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
+import { __invalidateStableRouteRequestCache } from "./useStableRouteRequest.js";
+import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import { toWorker, toUI, send as buildMsg } from '../../worker/protocol.js';
 
 const WORKER_REQUEST_TIMEOUT_MS = 20000;
@@ -184,6 +186,10 @@ function reducer(state, action) {
 
 export function useWorker() {
   const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+  const leagueRef = useRef(null);
+  useEffect(() => {
+    leagueRef.current = state.league;
+  }, [state.league]);
 
   /** Ref to the worker instance so it can be used inside callbacks without re-renders. */
   const workerRef = useRef(null);
@@ -209,6 +215,19 @@ export function useWorker() {
 
     worker.onmessage = (event) => {
       const { type, payload = {}, id } = event.data;
+      // Invalidate route-detail cache on material changes
+      if (type === toUI.READY || type === toUI.FULL_STATE) {
+        __invalidateStableRouteRequestCache(); // Full wipe for new saves/reset
+      } else if (
+        type === toUI.STATE_UPDATE ||
+        type === toUI.WEEK_COMPLETE ||
+        type === toUI.SEASON_START ||
+        type === toUI.OFFSEASON_PHASE
+      ) {
+        const currentScope = buildLeagueCacheScopeKey(leagueRef.current);
+        __invalidateStableRouteRequestCache(currentScope);
+      }
+
 
       // Resolve/reject any waiting promise first.
       // Silent requests (getRoster, getFreeAgents, history lookups) never set

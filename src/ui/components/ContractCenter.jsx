@@ -1,3 +1,4 @@
+import { buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import React, { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import ExtensionNegotiationModal from './ExtensionNegotiationModal.jsx';
@@ -437,7 +438,7 @@ export default function ContractCenter({ league, actions, compact = false, onNav
           player={extensionPlayer}
           teamId={team?.id}
           actions={actions}
-          cacheScopeKey={`${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`}
+          cacheScopeKey={buildLeagueCacheScopeKey(league)}
           onClose={() => setExtensionPlayer(null)}
           onComplete={() => {
             setStatusMessage(`${extensionPlayer.name} extension signed.`);

@@ -196,4 +196,69 @@ describe('useStableRouteRequest controller behavior', () => {
 
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+
+  it("invalidates same-scope cache when __invalidateStableRouteRequestCache is called with matching scope", async () => {
+    const controller = createStableRouteRequestController();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ player: { id: 1, ver: 1 } })
+      .mockResolvedValueOnce({ player: { id: 1, ver: 2 } });
+
+    const scope = "season:2024:week:1";
+
+    // First request
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: scope,
+      fetcher,
+    });
+
+    // Invalidate the scope
+    __invalidateStableRouteRequestCache(scope);
+
+    // Second request with same key and scope
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: scope,
+      fetcher,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not invalidate other scopes when __invalidateStableRouteRequestCache is called with specific scope", async () => {
+    const controller = createStableRouteRequestController();
+    const fetcher = vi.fn()
+      .mockResolvedValue({ player: { id: 1 } });
+
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: "scope-a",
+      fetcher,
+    });
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: "scope-b",
+      fetcher,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+
+    __invalidateStableRouteRequestCache("scope-a");
+
+    // Request scope-a again -> should fetch
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: "scope-a",
+      fetcher,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+
+    // Request scope-b again -> should NOT fetch (still cached)
+    await controller.request({
+      requestKey: buildRouteRequestKey("player", 1),
+      cacheScopeKey: "scope-b",
+      fetcher,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(3);
+  });
 });
