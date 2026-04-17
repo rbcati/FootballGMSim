@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { buildRouteRequestKey } from '../utils/requestLoopGuard.js';
 import {
+  __invalidateStableRouteRequestCache,
   __resetStableRouteRequestCache,
   createStableRouteRequestController,
 } from './useStableRouteRequest.js';
@@ -96,10 +97,12 @@ describe('useStableRouteRequest controller behavior', () => {
 
     const one = controller.request({
       requestKey: buildRouteRequestKey('game', 'g1'),
+      cacheScopeKey: 'scope-a',
       fetcher,
     });
     const two = controller.request({
       requestKey: buildRouteRequestKey('game', 'g1'),
+      cacheScopeKey: 'scope-a',
       fetcher,
     });
 
@@ -112,6 +115,7 @@ describe('useStableRouteRequest controller behavior', () => {
     fetcher.mockImplementationOnce(() => refreshRequest.promise);
     const refreshPromise = controller.refresh({
       requestKey: buildRouteRequestKey('game', 'g1'),
+      cacheScopeKey: 'scope-a',
       fetcher,
     });
     refreshRequest.resolve({ game: { id: 'g1', rev: 2 } });
@@ -121,5 +125,75 @@ describe('useStableRouteRequest controller behavior', () => {
     const latest = snapshots.at(-1);
     expect(latest.data.game.rev).toBe(2);
     expect(latest.loading).toBe(false);
+  });
+
+  it('isolates completed cache entries by scope', async () => {
+    const controller = createStableRouteRequestController();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ player: { id: 1, scope: 'A' } })
+      .mockResolvedValueOnce({ player: { id: 1, scope: 'B' } });
+
+    await controller.request({
+      requestKey: buildRouteRequestKey('player', 1),
+      cacheScopeKey: 'scope-a',
+      fetcher,
+    });
+    await controller.request({
+      requestKey: buildRouteRequestKey('player', 1),
+      cacheScopeKey: 'scope-b',
+      fetcher,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps in-flight dedupe isolated by scope', async () => {
+    const controller = createStableRouteRequestController();
+    const scopedA = deferred();
+    const scopedB = deferred();
+    const fetcher = vi.fn((scope) => (scope === 'scope-a' ? scopedA.promise : scopedB.promise));
+
+    const reqA1 = controller.request({
+      requestKey: buildRouteRequestKey('team', 5),
+      cacheScopeKey: 'scope-a',
+      fetcher: () => fetcher('scope-a'),
+    });
+    const reqA2 = controller.request({
+      requestKey: buildRouteRequestKey('team', 5),
+      cacheScopeKey: 'scope-a',
+      fetcher: () => fetcher('scope-a'),
+    });
+    const reqB = controller.request({
+      requestKey: buildRouteRequestKey('team', 5),
+      cacheScopeKey: 'scope-b',
+      fetcher: () => fetcher('scope-b'),
+    });
+
+    scopedA.resolve({ team: { id: 5, scope: 'A' } });
+    scopedB.resolve({ team: { id: 5, scope: 'B' } });
+    await Promise.all([reqA1, reqA2, reqB]);
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates completed cache by scope when requested', async () => {
+    const controller = createStableRouteRequestController();
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce({ game: { id: 'g1', rev: 1 } })
+      .mockResolvedValueOnce({ game: { id: 'g1', rev: 2 } });
+
+    await controller.request({
+      requestKey: buildRouteRequestKey('game', 'g1'),
+      cacheScopeKey: 'scope-a',
+      fetcher,
+    });
+    __invalidateStableRouteRequestCache('scope-a');
+    await controller.request({
+      requestKey: buildRouteRequestKey('game', 'g1'),
+      cacheScopeKey: 'scope-a',
+      fetcher,
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });

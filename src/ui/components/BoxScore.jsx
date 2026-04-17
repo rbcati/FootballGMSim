@@ -196,6 +196,10 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const [playerTeamFilter, setPlayerTeamFilter] = useState("all");
   const sectionRefs = useRef({});
   const requestKey = useMemo(() => buildRouteRequestKey("game", gameId), [gameId]);
+  const cacheScopeKey = useMemo(
+    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
+    [league?.seasonId, league?.week, league?.year],
+  );
   const fetchBoxScore = React.useCallback(async () => {
     const res = await actions?.getBoxScore?.(gameId);
     const payload = normalizeArchivedGamePayload(res?.game ?? getGameDetailPayload(gameId, league));
@@ -206,6 +210,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   }, [actions, gameId, league]);
   const { data: requestData, loading, error: requestError } = useStableRouteRequest({
     requestKey,
+    cacheScopeKey,
     enabled: gameId != null,
     fetcher: fetchBoxScore,
     warnLabel: "BoxScore",

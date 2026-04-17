@@ -2067,6 +2067,7 @@ export default function LeagueDashboard({
             onClose={() => setSelectedPlayerId(null)}
             actions={actions}
             teams={league.teams}
+            league={league}
             onNavigate={setActiveTab}
           />
         </TabErrorBoundary>
@@ -2083,6 +2084,7 @@ export default function LeagueDashboard({
               setSelectedPlayerId(id);
             }}
             actions={actions}
+            league={league}
             onNavigate={setActiveTab}
           />
         </TabErrorBoundary>

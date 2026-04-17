@@ -339,6 +339,7 @@ export default function PlayerProfile({
   onClose,
   actions,
   teams = [],
+  league = null,
   onNavigate = null,
   isUserOnClock = false,
   onDraftPlayer = null,
@@ -349,6 +350,10 @@ export default function PlayerProfile({
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
   const requestKey = useMemo(() => buildRouteRequestKey("player", playerId), [playerId]);
+  const cacheScopeKey = useMemo(
+    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
+    [league?.seasonId, league?.week, league?.year],
+  );
   const fetchProfileData = React.useCallback(async () => {
     const response = await actions?.getPlayerCareer?.(playerId);
     return response?.payload ?? response ?? null;
@@ -360,6 +365,7 @@ export default function PlayerProfile({
     refresh: fetchProfile,
   } = useStableRouteRequest({
     requestKey,
+    cacheScopeKey,
     enabled: playerId != null,
     fetcher: fetchProfileData,
     warnLabel: 'PlayerProfile',
@@ -1529,6 +1535,7 @@ export default function PlayerProfile({
           player={player}
           actions={actions}
           teamId={player.teamId}
+          cacheScopeKey={cacheScopeKey}
           onClose={() => setExtending(false)}
           onComplete={() => {
             setExtending(false);

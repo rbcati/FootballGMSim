@@ -2490,6 +2490,7 @@ export default function Draft({ league, actions, onNavigate = null }) {
           playerId={profilePlayerId}
           onClose={() => setProfilePlayerId(null)}
           actions={actions}
+          league={league}
           isUserOnClock={
             enrichedDraftState?.isUserPick &&
             !enrichedDraftState?.isDraftComplete
