@@ -97,8 +97,8 @@ describe('box score presentation fallback', () => {
       awayTeam: { abbr: 'BUF' },
       homeTeam: { abbr: 'KC' },
       teamTotals: {
-        away: { turnovers: 1, sacks: 4, totalYards: 410, passYards: 288 },
-        home: { turnovers: 3, sacks: 2, totalYards: 338, passYards: 236 },
+        away: { turnovers: 1, sacks: 4, totalYards: 410, passYards: 288, rushYards: 122, thirdDownMade: 8, thirdDownAtt: 12 },
+        home: { turnovers: 3, sacks: 2, totalYards: 338, passYards: 236, rushYards: 102, thirdDownMade: 4, thirdDownAtt: 14 },
       },
       driveStats: {
         away: { redZoneScores: 3, redZoneTrips: 4, explosivePlays: 6 },
@@ -110,5 +110,17 @@ describe('box score presentation fallback', () => {
     expect(firstRun).toEqual(secondRun);
     expect(firstRun.length).toBeGreaterThanOrEqual(3);
     expect(firstRun.join(' ')).toContain('pass protection neutralized');
+    expect(firstRun.join(' ')).toContain('critical third-down conversion battle');
+  });
+
+  it('fails safely with partial or malformed payloads', () => {
+    const storylines = deriveStandoutStorylines({ game: { id: 'test' } });
+    expect(Array.isArray(storylines)).toBe(true);
+
+    const leaders = deriveLeaders(null);
+    expect(leaders).toBeDefined();
+
+    const scoring = deriveScoringSummary(undefined);
+    expect(scoring).toEqual([]);
   });
 });

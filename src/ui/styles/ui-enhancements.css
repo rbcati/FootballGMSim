@@ -2830,3 +2830,46 @@ body {
 .impact-pulse {
   animation: impact-pulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+
+/* Box Score Command Center Polish */
+.bs-compare-row-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.bs-compare-row-v2:last-child { border-bottom: none; }
+.bs-compare-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.bs-compare-value { font-weight: 700; width: 40px; text-align: center; color: var(--text-muted); }
+.bs-compare-value.is-winner { color: var(--accent); }
+.bs-compare-label { flex: 1; text-align: center; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-subtle); }
+.bs-compare-bar-track {
+  height: 6px;
+  background: var(--hairline);
+  border-radius: 3px;
+  display: flex;
+  overflow: hidden;
+}
+.bs-compare-bar-fill { height: 100%; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+.bs-compare-bar-fill.away { background: var(--text-muted); opacity: 0.6; }
+.bs-compare-bar-fill.home { background: var(--accent); opacity: 0.8; }
+
+.bs-storylines-box {
+  background: rgba(10, 132, 255, 0.05);
+  border: 1px solid rgba(10, 132, 255, 0.15);
+  border-radius: 8px;
+  padding: 12px;
+}
+.bs-storylines-box h5 { margin: 0 0 8px; color: var(--accent); font-size: 12px; text-transform: uppercase; }
+
+@media (max-width: 768px) {
+  .bs-section [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}

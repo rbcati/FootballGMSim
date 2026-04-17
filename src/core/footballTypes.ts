@@ -9,7 +9,7 @@ export type TeamStatAttr =
   | 'thirdDownAtt'
   | 'redZoneMade'
   | 'redZoneAtt'
-  | 'penalties';
+  | 'penalties' | 'successRate' | 'explosivePlays';
 
 export type PrimaryPosition = 'QB' | 'RB' | 'WR' | 'TE' | 'OL' | 'DL' | 'LB' | 'CB' | 'S' | 'K' | 'P';
 

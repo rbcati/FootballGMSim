@@ -264,11 +264,19 @@ export function deriveStandoutStorylines({
     lines.push(text);
   };
 
+  const thirdDownAway = Number(teamTotals?.away?.thirdDownMade ?? 0) / Math.max(1, Number(teamTotals?.away?.thirdDownAtt ?? 0));
+  const thirdDownHome = Number(teamTotals?.home?.thirdDownMade ?? 0) / Math.max(1, Number(teamTotals?.home?.thirdDownAtt ?? 0));
+  const thirdDownEdge = numericDelta(thirdDownAway, thirdDownHome);
+  if (thirdDownEdge && thirdDownEdge.margin >= 0.15) {
+    const winner = thirdDownEdge.winner === "away" ? awayAbbr : homeAbbr;
+    pushUnique(`${winner} stayed on schedule, winning the critical third-down conversion battle.`);
+  }
+
   const turnoverEdge = numericDelta(teamTotals?.home?.turnovers, teamTotals?.away?.turnovers);
   if (turnoverEdge && turnoverEdge.margin >= 1) {
     const winner = turnoverEdge.winner === 'away' ? awayAbbr : homeAbbr;
     const loser = turnoverEdge.winner === 'away' ? homeAbbr : awayAbbr;
-    pushUnique(`${winner} protected the football better and finished +${turnoverEdge.margin} in turnovers against ${loser}.`);
+    pushUnique(`${winner} protected the football better and finished +${turnoverEdge.margin} in turnover margin.`);
   }
 
   const redZoneAway = Number(driveStats?.away?.redZoneScores ?? 0) / Math.max(1, Number(driveStats?.away?.redZoneTrips ?? 0));
@@ -277,6 +285,12 @@ export function deriveStandoutStorylines({
   if (redZoneEdge && Number.isFinite(redZoneAway) && Number.isFinite(redZoneHome)) {
     const winner = redZoneEdge.winner === 'away' ? awayAbbr : homeAbbr;
     pushUnique(`The difference was red-zone finishing: ${winner} converted at a higher rate inside the 20.`);
+  }
+
+  const rushEdge = numericDelta(teamTotals?.away?.rushYards, teamTotals?.home?.rushYards);
+  if (rushEdge && rushEdge.margin >= 75) {
+    const winner = rushEdge.winner === "away" ? awayAbbr : homeAbbr;
+    pushUnique(`${winner} imposed their will on the ground, out-rushing their opponent by ${Math.round(rushEdge.margin)} yards.`);
   }
 
   const explosivesEdge = numericDelta(driveStats?.away?.explosivePlays, driveStats?.home?.explosivePlays);
