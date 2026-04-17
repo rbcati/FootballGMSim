@@ -59,7 +59,7 @@ const baseLeague = {
 };
 
 describe('FranchiseHQ', () => {
-  it('renders command center, ranked priorities, and matchup/recap cards', () => {
+  it('renders action-first grouped sections in the intended order', () => {
     const html = renderToString(
       <FranchiseHQ
         league={baseLeague}
@@ -71,13 +71,28 @@ describe('FranchiseHQ', () => {
       />,
     );
 
+    const actNowIdx = html.indexOf('Act Now');
+    const thisWeekIdx = html.indexOf('This Week');
+    const teamStatusIdx = html.indexOf('Team Status');
+    expect(actNowIdx).toBeGreaterThan(-1);
+    expect(thisWeekIdx).toBeGreaterThan(actNowIdx);
+    expect(teamStatusIdx).toBeGreaterThan(thisWeekIdx);
+
     expect(html).toContain('This Week');
     expect(html).toContain('Scout opponent');
     expect(html).toContain('Priority Queue');
-    expect(html).toContain('Next Game');
-    expect(html).toContain('Last Game');
+    expect(html).toContain('Next Opponent');
+    expect(html).toContain('Latest Team Result');
     expect(html).toContain('Matchup note');
     expect(html).toContain('Prep status');
+    expect(html).toContain('Owner mandate');
+    expect(html).toContain('Injury pressure');
+    expect(html).toContain('Roster pressure');
+    expect(html).toContain('League Watch (Teasers)');
+    expect(html).toContain('Open Results');
+    expect(html).toContain('Open League');
+    expect(html).toContain('Open Leaders');
+    expect(html).not.toContain('News & Leaders');
   });
 
   it('is safe with partial/older save payloads', () => {
