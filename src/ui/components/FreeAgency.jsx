@@ -47,6 +47,7 @@ import { getBudgetLabel, getMarketPlayerTags, toneToCssColor } from "../utils/tr
 import { ScreenHeader, EmptyState, StickySubnav } from "./ScreenSystem.jsx";
 import AdvancedPlayerSearch from "./AdvancedPlayerSearch.jsx";
 import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
+import { buildPlayerEvaluation } from "../../core/playerEvaluation.js";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 
@@ -133,15 +134,56 @@ export function formatPlaybookKnowledge(playbookKnowledge) {
   return `${playbookKnowledge?.label ?? "None"} (${playbookKnowledge?.score ?? 0})`;
 }
 
-export function filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters }) {
+export function filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters, archetypeFilter = "ALL", fitTierFilter = "ALL", roleFilter = "ALL", positionNeedOnly = false, needs = [] }) {
   const baseFiltered = faPool.filter((p) => {
     if (signedIds?.has?.(p.id)) return false;
     if (posFilter !== "ALL" && p.pos !== posFilter) return false;
     if (minOvr > 0 && p.ovr < minOvr) return false;
     if (nameFilter && !p.name.toLowerCase().includes(nameFilter.toLowerCase())) return false;
+    if (archetypeFilter !== "ALL" && p?._eval?.archetype?.archetype !== archetypeFilter) return false;
+    if (fitTierFilter !== "ALL" && p?._eval?.schemeFit?.tier !== fitTierFilter) return false;
+    if (roleFilter !== "ALL" && p?._eval?.roleProjection?.role !== roleFilter) return false;
+    if (positionNeedOnly && !new Set(needs).has(p.pos)) return false;
     return true;
   });
   return applyAdvancedPlayerFilters(baseFiltered, advancedFilters);
+}
+
+export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs = [] }) {
+  const arr = [...displayed];
+  if (sortPreset === "best_available") {
+    arr.sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+    return arr;
+  }
+  if (sortPreset === "cheapest_value") {
+    arr.sort((a, b) => ((b.ovr ?? 0) / Math.max(0.2, b._ask ?? 1)) - ((a.ovr ?? 0) / Math.max(0.2, a._ask ?? 1)));
+    return arr;
+  }
+  if (sortPreset === "youngest") {
+    arr.sort((a, b) => (a.age ?? 99) - (b.age ?? 99));
+    return arr;
+  }
+  if (sortPreset === "position_need") {
+    const needSet = new Set(needs);
+    arr.sort((a, b) => Number(needSet.has(b.pos)) - Number(needSet.has(a.pos)) || (b.ovr ?? 0) - (a.ovr ?? 0));
+    return arr;
+  }
+  if (sortPreset === "tactical_fit") {
+    arr.sort((a, b) => (b?._eval?.schemeFit?.score ?? 0) - (a?._eval?.schemeFit?.score ?? 0) || (b.ovr ?? 0) - (a.ovr ?? 0));
+    return arr;
+  }
+  arr.sort((a, b) => {
+    let va = a[sortKey];
+    let vb = b[sortKey];
+    if (sortKey === "ask") {
+      va = a._ask;
+      vb = b._ask;
+    }
+    if (va === vb) return 0;
+    if (sortDir === "asc") return va > vb ? 1 : -1;
+    return va < vb ? 1 : -1;
+  });
+  return arr;
 }
 
 // ── Shared sub-components (identical signature & appearance to Roster.jsx) ────
@@ -626,6 +668,10 @@ export default function FreeAgency({
   const [minSchemeFit, setMinSchemeFit] = useState(0);
   const [demandTier, setDemandTier] = useState("ALL");
   const [watchOnly, setWatchOnly] = useState(false);
+  const [archetypeFilter, setArchetypeFilter] = useState("ALL");
+  const [fitTierFilter, setFitTierFilter] = useState("ALL");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [positionNeedOnly, setPositionNeedOnly] = useState(false);
   const [watchlistIds, setWatchlistIds] = useState(new Set());
   const [sortPreset, setSortPreset] = useState("best_available");
 
@@ -692,50 +738,37 @@ export default function FreeAgency({
       _ask: resolveDemandAnnual(p),
     }));
   }, [faState]);
+  const evaluatedFaPool = useMemo(() => faPool.map((p) => ({
+    ...p,
+    _eval: buildPlayerEvaluation(p, {
+      teamContext: teamIntel,
+      rosterContext: { roster: userTeam?.roster ?? [] },
+      depthChartNeeds: (needsSummary?.needs ?? []).slice(0, 4),
+      gamePlan: userTeam?.gamePlan ?? {},
+    }),
+  })), [faPool, teamIntel, userTeam?.roster, userTeam?.gamePlan, needsSummary?.needs]);
+  const topNeeds = useMemo(() => (needsSummary?.needs ?? []).slice(0, 4), [needsSummary?.needs]);
 
   const displayed = useMemo(() => {
-    const base = filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, nameFilter, advancedFilters });
+    const base = filterFreeAgentsForView(evaluatedFaPool, {
+      signedIds, posFilter, minOvr, nameFilter, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, needs: topNeeds,
+    });
     return base.filter((player) => {
       if ((player.age ?? 99) > maxAge) return false;
-      if ((player.schemeFit ?? 0) < minSchemeFit) return false;
+      if ((player._eval?.schemeFit?.score ?? player.schemeFit ?? 0) < minSchemeFit) return false;
       if (demandTier !== "ALL" && formatDemandTier(player) !== demandTier) return false;
       if (watchOnly && !watchlistIds.has(player.id)) return false;
       return true;
     });
-  }, [faPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds]);
+  }, [evaluatedFaPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, topNeeds, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds]);
 
   const sortedAgents = useMemo(() => {
-    const arr = [...displayed];
-    if (sortPreset === "best_available") {
-      arr.sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
-      return arr;
-    }
-    if (sortPreset === "cheapest_value") {
-      arr.sort((a, b) => ((b.ovr ?? 0) / Math.max(0.2, b._ask ?? 1)) - ((a.ovr ?? 0) / Math.max(0.2, a._ask ?? 1)));
-      return arr;
-    }
-    if (sortPreset === "youngest") {
-      arr.sort((a, b) => (a.age ?? 99) - (b.age ?? 99));
-      return arr;
-    }
-    if (sortPreset === "position_need") {
-      const needs = new Set((needsSummary?.needs ?? []).slice(0, 4));
-      arr.sort((a, b) => Number(needs.has(b.pos)) - Number(needs.has(a.pos)) || (b.ovr ?? 0) - (a.ovr ?? 0));
-      return arr;
-    }
-    arr.sort((a, b) => {
-      let va = a[sortKey];
-      let vb = b[sortKey];
-      if (sortKey === "ask") {
-        va = a._ask;
-        vb = b._ask;
-      }
-      if (va === vb) return 0;
-      if (sortDir === "asc") return va > vb ? 1 : -1;
-      return va < vb ? 1 : -1;
-    });
-    return arr;
+    return sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs: (needsSummary?.needs ?? []).slice(0, 4) });
   }, [displayed, sortKey, sortDir, sortPreset, needsSummary?.needs]);
+  const archetypeOptions = useMemo(
+    () => Array.from(new Set(evaluatedFaPool.map((p) => p?._eval?.archetype?.archetype).filter(Boolean))).slice(0, 24),
+    [evaluatedFaPool],
+  );
 
 
   const {
@@ -1051,8 +1084,30 @@ export default function FreeAgency({
               <option value="cheapest_value">Sort: Cheapest value</option>
               <option value="youngest">Sort: Youngest</option>
               <option value="position_need">Sort: Position need</option>
+              <option value="tactical_fit">Sort: Tactical fit</option>
               <option value="manual">Sort: Manual columns</option>
             </select>
+            <select value={fitTierFilter} onChange={(e) => setFitTierFilter(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
+              <option value="ALL">Fit tier: All</option>
+              <option value="Excellent">Excellent</option>
+              <option value="Strong">Strong</option>
+              <option value="Neutral">Neutral</option>
+              <option value="Poor">Poor</option>
+            </select>
+            <select value={archetypeFilter} onChange={(e) => setArchetypeFilter(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12, maxWidth: 220 }}>
+              <option value="ALL">Archetype: All</option>
+              {archetypeOptions.map((arch) => <option key={arch} value={arch}>{arch}</option>)}
+            </select>
+            <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
+              <option value="ALL">Role: All</option>
+              <option value="Starter">Starter</option>
+              <option value="Rotation">Rotation</option>
+              <option value="Depth">Depth</option>
+              <option value="Development">Development</option>
+            </select>
+            <Button className="btn" onClick={() => setPositionNeedOnly((v) => !v)} style={{ whiteSpace: "nowrap", opacity: positionNeedOnly ? 1 : 0.8 }}>
+              {positionNeedOnly ? "Need positions only" : "All positions"}
+            </Button>
             <Button className="btn" onClick={() => setWatchOnly((prev) => !prev)} style={{ whiteSpace: "nowrap" }}>
               {watchOnly ? "Showing watchlist" : `Watchlist (${watchlistIds.size})`}
             </Button>
@@ -1093,6 +1148,9 @@ export default function FreeAgency({
               </Button>
             ))}
             <div style={{ marginLeft: "auto", display: "flex", gap: 6 }} />
+          </div>
+          <div style={{ fontSize: 11, color: "var(--text-subtle)" }}>
+            Top needs: {topNeeds.join(", ") || "No urgent positional needs"}.
           </div>
         </CardContent>
       </Card>
@@ -1338,6 +1396,9 @@ export default function FreeAgency({
                             <TableCell><PosBadge pos={player.pos} /></TableCell>
                             <TableCell onClick={() => setPreviewPlayer(player)} style={{ fontWeight: 600, color: "var(--text)", cursor: "pointer" }}>
                               <span style={{ borderBottom: "1px dotted var(--text-muted)" }}>{player.name}</span>
+                              <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
+                                {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.role ?? "Depth"} · {player?._eval?.simImpact?.summary}
+                              </div>
                             </TableCell>
                             <TableCell style={{ whiteSpace: "nowrap" }}>
                               {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1347,7 +1408,8 @@ export default function FreeAgency({
                             <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
                             <TableCell style={{ textAlign: "center" }}><Button title={watchlistIds.has(player.id) ? "Remove from watchlist" : "Add to watchlist"} onClick={() => setWatchlistIds((prev) => { const next = new Set(prev); if (next.has(player.id)) next.delete(player.id); else next.add(player.id); return next; })} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${watchlistIds.has(player.id) ? "var(--warning)" : "var(--hairline)"}`, background: watchlistIds.has(player.id) ? "rgba(255,159,10,0.16)" : "transparent", fontSize: 12, color: watchlistIds.has(player.id) ? "var(--warning)" : "var(--text-subtle)" }}>{watchlistIds.has(player.id) ? "★" : "☆"}</Button></TableCell>
                             <TableCell style={{ textAlign: "center" }}>
-                              <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
+                              <PipBar value={player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} color="var(--accent)" />
+                              <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>{player?._eval?.schemeFit?.tier ?? "Neutral"}</div>
                             </TableCell>
                             {topBidCell}
                             <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)" }}>
@@ -1378,6 +1440,9 @@ export default function FreeAgency({
                         <TableCell><PosBadge pos={player.pos} /></TableCell>
                         <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
                           <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
+                          <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
+                            {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
+                          </div>
                         </TableCell>
                         <TableCell style={{ whiteSpace: "nowrap" }}>
                           {(player.traits || []).map((t) => <TraitBadge key={t} traitId={t} />)}
@@ -1387,7 +1452,8 @@ export default function FreeAgency({
                         <TableCell style={{ textAlign: "center" }}><Button title={compareIds.includes(player.id) ? "Remove from compare" : "Add to compare"} onClick={() => toggleCompare(player)} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${compareIds.includes(player.id) ? "var(--accent)" : "var(--hairline)"}`, background: compareIds.includes(player.id) ? "var(--accent-muted)" : "transparent", fontSize: 12, color: compareIds.includes(player.id) ? "var(--accent)" : "var(--text-subtle)" }}>{compareIds.includes(player.id) ? "✓" : "⊕"}</Button></TableCell>
                         <TableCell style={{ textAlign: "center" }}><Button title={watchlistIds.has(player.id) ? "Remove from watchlist" : "Add to watchlist"} onClick={() => setWatchlistIds((prev) => { const next = new Set(prev); if (next.has(player.id)) next.delete(player.id); else next.add(player.id); return next; })} style={{ width: 22, height: 22, borderRadius: "var(--radius-sm)", border: `1.5px solid ${watchlistIds.has(player.id) ? "var(--warning)" : "var(--hairline)"}`, background: watchlistIds.has(player.id) ? "rgba(255,159,10,0.16)" : "transparent", fontSize: 12, color: watchlistIds.has(player.id) ? "var(--warning)" : "var(--text-subtle)" }}>{watchlistIds.has(player.id) ? "★" : "☆"}</Button></TableCell>
                         <TableCell style={{ textAlign: "center" }}>
-                          <PipBar value={player.schemeFit ?? 50} color="var(--accent)" />
+                          <PipBar value={player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} color="var(--accent)" />
+                          <div style={{ fontSize: 10, color: "var(--text-subtle)" }}>{player?._eval?.schemeFit?.tier ?? "Neutral"}</div>
                         </TableCell>
                         {topBidCell}
                         <TableCell style={{ textAlign: "right", paddingRight: "var(--space-5)", whiteSpace: "nowrap" }}>
@@ -1442,7 +1508,8 @@ export default function FreeAgency({
                   <Card key={player.id} className="card-premium" style={{ padding: "var(--space-3)" }}>
                     <div style={{ fontWeight: 700 }}>{idx + 1}. {player.name}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player.pos} · age {player.age} · OVR {player.ovr}{player.scoutUncertaintyBand ? ` (Scout ${player.scoutOvr} ±${player.scoutUncertaintyBand})` : ''}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Scheme fit {player.schemeFit ?? 50} · morale {player.morale ?? 70}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player?._eval?.archetype?.archetype ?? "Balanced"} · Fit {player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} ({player?._eval?.schemeFit?.tier ?? "Neutral"})</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{player?._eval?.roleProjection?.replaceContext ?? "Depth option"} · {player?._eval?.simImpact?.summary}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Playbook {formatPlaybookKnowledge(player?.playbookKnowledge)}</div>
                     <div style={{ fontSize: 12, marginTop: 4 }}>Demand {(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M / yr</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
@@ -1490,9 +1557,12 @@ export default function FreeAgency({
                                    <span onClick={() => setPreviewPlayer(player)} style={{ cursor: "pointer", borderBottom: "1px dotted" }}>{idx + 1}. {player.name}</span>
                                    <OvrBadge ovr={player.ovr} />
                                </div>
-                               <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
+                                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", marginTop: 2 }}>
                                    Age {player.age} · Ask: ${(player?.demandProfile?.askAnnual ?? player._ask ?? 0).toFixed(1)}M/yr ({askYrs} yr)
                                 </div>
+                               <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
+                                  {player?._eval?.archetype?.archetype ?? "Balanced"} · Fit {player?._eval?.schemeFit?.score ?? player.schemeFit ?? 50} ({player?._eval?.schemeFit?.tier ?? "Neutral"}) · {player?._eval?.roleProjection?.role ?? "Depth"}
+                               </div>
                                <div style={{ fontSize: "10px", color: "var(--text-muted)", marginTop: 2 }}>
                                    {player?.demandProfile?.headline ?? "Balanced priorities"} · {mMarket.attention ?? `${mMarket.heatLabel ?? "No market heat signal"} market`} · {mMarket.knownBidderLabel}
                                 </div>
