@@ -437,6 +437,7 @@ export default function ContractCenter({ league, actions, compact = false, onNav
           player={extensionPlayer}
           teamId={team?.id}
           actions={actions}
+          cacheScopeKey={`${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`}
           onClose={() => setExtensionPlayer(null)}
           onComplete={() => {
             setStatusMessage(`${extensionPlayer.name} extension signed.`);

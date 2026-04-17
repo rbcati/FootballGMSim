@@ -9,6 +9,7 @@ export default function ExtensionNegotiationModal({
   player,
   actions,
   teamId,
+  cacheScopeKey = "global",
   onClose,
   onComplete,
   statusNode = null,
@@ -24,6 +25,7 @@ export default function ExtensionNegotiationModal({
   }, [actions, player?.id]);
   const { data: askData, loading } = useStableRouteRequest({
     requestKey,
+    cacheScopeKey,
     enabled: player?.id != null,
     fetcher: fetchExtensionAsk,
     warnLabel: "ExtensionNegotiationModal",

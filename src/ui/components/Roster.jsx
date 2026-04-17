@@ -619,6 +619,7 @@ function RosterTable({
           player={extending}
           actions={actions}
           teamId={teamId}
+          cacheScopeKey={`${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`}
           statusNode={<StatusBadge injuryWeeks={extending.injuryWeeksRemaining} />}
           onClose={() => setExtending(null)}
           onComplete={() => {
@@ -2422,6 +2423,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
           playerId={selectedPlayerId}
           actions={actions}
           teams={league?.teams ?? []}
+          league={league}
           onClose={() => setSelectedPlayerId(null)}
         />
       )}

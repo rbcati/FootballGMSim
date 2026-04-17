@@ -112,15 +112,20 @@ function StatBox({ label, value, sub }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null }) {
+export default function TeamProfile({ teamId, onClose, onPlayerSelect, actions, onNavigate = null, league = null }) {
   const [showRelocate, setShowRelocate] = useState(false);
   const requestKey = useMemo(() => buildRouteRequestKey("team", teamId), [teamId]);
+  const cacheScopeKey = useMemo(
+    () => `${league?.seasonId ?? league?.year ?? 'season'}:${league?.week ?? 0}`,
+    [league?.seasonId, league?.week, league?.year],
+  );
   const fetchTeamProfile = React.useCallback(async () => {
     const resp = await actions?.getTeamProfile?.(teamId);
     return resp?.payload ?? resp ?? null;
   }, [actions, teamId]);
   const { data, loading, error } = useStableRouteRequest({
     requestKey,
+    cacheScopeKey,
     enabled: teamId != null,
     fetcher: fetchTeamProfile,
     warnLabel: "TeamProfile",
