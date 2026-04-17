@@ -1,0 +1,268 @@
+
+> football-gm-sim@2.0.0 dev
+> vite
+
+
+  VITE v7.3.2  ready in 470 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error:   Failed to scan for dependencies from entries:
+  /app/index.html
+
+  [31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mExpected "}" but found "-"[0m
+
+    src/ui/components/FranchiseHQ.jsx:53:86:
+[37m      53 │ ...tTransform: 'uppercase', letter[32m-[37mspacing: '0.05em', color: 'var(...
+         │                                   [32m^[37m
+         ╵                                   [32m}[0m
+
+
+    at failureErrorWithLog (/app/node_modules/esbuild/lib/main.js:1467:15)
+    at /app/node_modules/esbuild/lib/main.js:926:25
+    at runOnEndCallbacks (/app/node_modules/esbuild/lib/main.js:1307:45)
+    at buildResponseToResult (/app/node_modules/esbuild/lib/main.js:924:7)
+    at /app/node_modules/esbuild/lib/main.js:936:9
+    at new Promise (<anonymous>)
+    at requestCallbacks.on-end (/app/node_modules/esbuild/lib/main.js:935:54)
+    at handleRequest (/app/node_modules/esbuild/lib/main.js:628:17)
+    at handleIncomingPacket (/app/node_modules/esbuild/lib/main.js:653:7)
+    at Socket.readFromStdout (/app/node_modules/esbuild/lib/main.js:581:7)
+11:35:41 PM [vite] (client) Pre-transform error: /app/src/ui/components/FranchiseHQ.jsx: Unexpected token, expected "," (53:86)
+
+  51 |       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |         <div>
+> 53 |           <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>
+     |                                                                                       ^
+  54 |             {league.year} · Week {league.week} · {league.phase}
+  55 |           </div>
+  56 |           <h1 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 900, lineHeight: 1 }}>
+  Plugin: vite:react-babel
+  File: /app/src/ui/components/FranchiseHQ.jsx:53:86
+  51 |        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |          <div>
+  53 |  ...ntSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', margin...
+     |                                                                 ^
+  54 |              {league.year} · Week {league.week} · {league.phase}
+  55 |            </div>
+11:35:44 PM [vite] Internal server error: /app/src/ui/components/FranchiseHQ.jsx: Unexpected token, expected "," (53:86)
+
+  51 |       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |         <div>
+> 53 |           <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>
+     |                                                                                       ^
+  54 |             {league.year} · Week {league.week} · {league.phase}
+  55 |           </div>
+  56 |           <h1 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 900, lineHeight: 1 }}>
+  Plugin: vite:react-babel
+  File: /app/src/ui/components/FranchiseHQ.jsx:53:86
+  51 |        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |          <div>
+  53 |  ...ntSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', margin...
+     |                                                                 ^
+  54 |              {league.year} · Week {league.week} · {league.phase}
+  55 |            </div>
+      at constructor (/app/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/app/node_modules/@babel/parser/lib/index.js:6599:19)
+      at JSXParserMixin.unexpected (/app/node_modules/@babel/parser/lib/index.js:6619:16)
+      at JSXParserMixin.expect (/app/node_modules/@babel/parser/lib/index.js:6899:12)
+      at JSXParserMixin.parseObjectLike (/app/node_modules/@babel/parser/lib/index.js:11822:14)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at JSXParserMixin.parseExpressionBase (/app/node_modules/@babel/parser/lib/index.js:10784:23)
+      at /app/node_modules/@babel/parser/lib/index.js:10780:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseExpression (/app/node_modules/@babel/parser/lib/index.js:10780:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/app/node_modules/@babel/parser/lib/index.js:4632:31)
+      at JSXParserMixin.jsxParseAttributeValue (/app/node_modules/@babel/parser/lib/index.js:4604:21)
+      at JSXParserMixin.jsxParseAttribute (/app/node_modules/@babel/parser/lib/index.js:4653:38)
+      at JSXParserMixin.jsxParseOpeningElementAfterName (/app/node_modules/@babel/parser/lib/index.js:4667:28)
+      at JSXParserMixin.jsxParseOpeningElementAt (/app/node_modules/@babel/parser/lib/index.js:4662:17)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4686:33)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElement (/app/node_modules/@babel/parser/lib/index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at /app/node_modules/@babel/parser/lib/index.js:10800:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/app/node_modules/@babel/parser/lib/index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/app/node_modules/@babel/parser/lib/index.js:12493:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/app/node_modules/@babel/parser/lib/index.js:11675:28)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11331:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+11:35:45 PM [vite] (client) ✨ new dependencies optimized: react-dom/client, class-variance-authority, @radix-ui/react-slot, @radix-ui/react-scroll-area, @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, clsx, tailwind-merge, react-chartjs-2, chart.js, @radix-ui/react-tabs, facesjs, facesjs/react
+11:35:45 PM [vite] (client) ✨ optimized dependencies changed. reloading
+11:35:47 PM [vite] (client) Pre-transform error: /app/src/ui/components/FranchiseHQ.jsx: Unexpected token, expected "," (53:86)
+
+  51 |       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |         <div>
+> 53 |           <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>
+     |                                                                                       ^
+  54 |             {league.year} · Week {league.week} · {league.phase}
+  55 |           </div>
+  56 |           <h1 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 900, lineHeight: 1 }}>
+  Plugin: vite:react-babel
+  File: /app/src/ui/components/FranchiseHQ.jsx:53:86
+  51 |        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |          <div>
+  53 |  ...ntSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', margin...
+     |                                                                 ^
+  54 |              {league.year} · Week {league.week} · {league.phase}
+  55 |            </div>
+11:35:49 PM [vite] Internal server error: /app/src/ui/components/FranchiseHQ.jsx: Unexpected token, expected "," (53:86)
+
+  51 |       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |         <div>
+> 53 |           <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>
+     |                                                                                       ^
+  54 |             {league.year} · Week {league.week} · {league.phase}
+  55 |           </div>
+  56 |           <h1 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 900, lineHeight: 1 }}>
+  Plugin: vite:react-babel
+  File: /app/src/ui/components/FranchiseHQ.jsx:53:86
+  51 |        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |          <div>
+  53 |  ...ntSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', margin...
+     |                                                                 ^
+  54 |              {league.year} · Week {league.week} · {league.phase}
+  55 |            </div>
+      at constructor (/app/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/app/node_modules/@babel/parser/lib/index.js:6599:19)
+      at JSXParserMixin.unexpected (/app/node_modules/@babel/parser/lib/index.js:6619:16)
+      at JSXParserMixin.expect (/app/node_modules/@babel/parser/lib/index.js:6899:12)
+      at JSXParserMixin.parseObjectLike (/app/node_modules/@babel/parser/lib/index.js:11822:14)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at JSXParserMixin.parseExpressionBase (/app/node_modules/@babel/parser/lib/index.js:10784:23)
+      at /app/node_modules/@babel/parser/lib/index.js:10780:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseExpression (/app/node_modules/@babel/parser/lib/index.js:10780:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/app/node_modules/@babel/parser/lib/index.js:4632:31)
+      at JSXParserMixin.jsxParseAttributeValue (/app/node_modules/@babel/parser/lib/index.js:4604:21)
+      at JSXParserMixin.jsxParseAttribute (/app/node_modules/@babel/parser/lib/index.js:4653:38)
+      at JSXParserMixin.jsxParseOpeningElementAfterName (/app/node_modules/@babel/parser/lib/index.js:4667:28)
+      at JSXParserMixin.jsxParseOpeningElementAt (/app/node_modules/@babel/parser/lib/index.js:4662:17)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4686:33)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElement (/app/node_modules/@babel/parser/lib/index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at /app/node_modules/@babel/parser/lib/index.js:10800:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/app/node_modules/@babel/parser/lib/index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/app/node_modules/@babel/parser/lib/index.js:12493:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/app/node_modules/@babel/parser/lib/index.js:11675:28)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11331:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+11:36:09 PM [vite] Internal server error: /app/src/ui/components/FranchiseHQ.jsx: Unexpected token, expected "," (53:86)
+
+  51 |       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |         <div>
+> 53 |           <div style={{ fontSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', marginBottom: 4 }}>
+     |                                                                                       ^
+  54 |             {league.year} · Week {league.week} · {league.phase}
+  55 |           </div>
+  56 |           <h1 style={{ margin: 0, fontSize: 'var(--text-xl)', fontWeight: 900, lineHeight: 1 }}>
+  Plugin: vite:react-babel
+  File: /app/src/ui/components/FranchiseHQ.jsx:53:86
+  51 |        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+  52 |          <div>
+  53 |  ...ntSize: 'var(--text-xs)', textTransform: 'uppercase', letter-spacing: '0.05em', color: 'var(--text-muted)', margin...
+     |                                                                 ^
+  54 |              {league.year} · Week {league.week} · {league.phase}
+  55 |            </div>
+      at constructor (/app/node_modules/@babel/parser/lib/index.js:365:19)
+      at JSXParserMixin.raise (/app/node_modules/@babel/parser/lib/index.js:6599:19)
+      at JSXParserMixin.unexpected (/app/node_modules/@babel/parser/lib/index.js:6619:16)
+      at JSXParserMixin.expect (/app/node_modules/@babel/parser/lib/index.js:6899:12)
+      at JSXParserMixin.parseObjectLike (/app/node_modules/@babel/parser/lib/index.js:11822:14)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11339:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at JSXParserMixin.parseExpressionBase (/app/node_modules/@babel/parser/lib/index.js:10784:23)
+      at /app/node_modules/@babel/parser/lib/index.js:10780:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseExpression (/app/node_modules/@babel/parser/lib/index.js:10780:17)
+      at JSXParserMixin.jsxParseExpressionContainer (/app/node_modules/@babel/parser/lib/index.js:4632:31)
+      at JSXParserMixin.jsxParseAttributeValue (/app/node_modules/@babel/parser/lib/index.js:4604:21)
+      at JSXParserMixin.jsxParseAttribute (/app/node_modules/@babel/parser/lib/index.js:4653:38)
+      at JSXParserMixin.jsxParseOpeningElementAfterName (/app/node_modules/@babel/parser/lib/index.js:4667:28)
+      at JSXParserMixin.jsxParseOpeningElementAt (/app/node_modules/@babel/parser/lib/index.js:4662:17)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4686:33)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElementAt (/app/node_modules/@babel/parser/lib/index.js:4698:32)
+      at JSXParserMixin.jsxParseElement (/app/node_modules/@babel/parser/lib/index.js:4749:17)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4759:19)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+      at /app/node_modules/@babel/parser/lib/index.js:10800:39
+      at JSXParserMixin.allowInAnd (/app/node_modules/@babel/parser/lib/index.js:12426:12)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/app/node_modules/@babel/parser/lib/index.js:10800:17)
+      at JSXParserMixin.parseMaybeAssignAllowInOrVoidPattern (/app/node_modules/@babel/parser/lib/index.js:12493:17)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/app/node_modules/@babel/parser/lib/index.js:11675:28)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:11331:23)
+      at JSXParserMixin.parseExprAtom (/app/node_modules/@babel/parser/lib/index.js:4764:20)
+      at JSXParserMixin.parseExprSubscripts (/app/node_modules/@babel/parser/lib/index.js:11081:23)
+      at JSXParserMixin.parseUpdate (/app/node_modules/@babel/parser/lib/index.js:11066:21)
+      at JSXParserMixin.parseMaybeUnary (/app/node_modules/@babel/parser/lib/index.js:11046:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/node_modules/@babel/parser/lib/index.js:10899:61)
+      at JSXParserMixin.parseExprOps (/app/node_modules/@babel/parser/lib/index.js:10904:23)
+      at JSXParserMixin.parseMaybeConditional (/app/node_modules/@babel/parser/lib/index.js:10881:23)
+      at JSXParserMixin.parseMaybeAssign (/app/node_modules/@babel/parser/lib/index.js:10831:21)
+11:37:06 PM [vite] (client) hmr update /src/ui/styles/base.css
