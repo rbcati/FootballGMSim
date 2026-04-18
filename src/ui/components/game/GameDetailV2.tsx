@@ -55,6 +55,11 @@ function TacticalBar({ label, awayValue, homeValue, awayRaw, homeRaw }: {
 
 export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; awayTeam: any; homeTeam: any; }) {
   const digest = useMemo(() => (Array.isArray(game?.eventDigest) ? game.eventDigest : []), [game?.eventDigest]);
+  const developmentFlash = useMemo(() => {
+    const source = game?.developmentFlash ?? game?.summary?.developmentFlash;
+    if (!Array.isArray(source)) return [];
+    return source.filter((note) => typeof note === 'string' && note.trim().length > 0).slice(0, 2);
+  }, [game?.developmentFlash, game?.summary?.developmentFlash]);
 
   const tacticalReasons = useMemo(() => {
     const reasons = [game?.topReason1, game?.topReason2, game?.summary?.topReason1, game?.summary?.topReason2].filter(Boolean);
@@ -145,7 +150,7 @@ export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; 
     return notes.slice(0, 5);
   }, [digest, driveStats, awayTeam?.abbr, homeTeam?.abbr]);
 
-  const hasRecapData = digest.length > 0 || tacticalReasons.length > 0 || headlineMoments.length > 0 || comparisonRows.length > 0 || flowStory.length > 0;
+  const hasRecapData = digest.length > 0 || tacticalReasons.length > 0 || headlineMoments.length > 0 || comparisonRows.length > 0 || flowStory.length > 0 || developmentFlash.length > 0;
   if (!hasRecapData) return null;
 
   return (
@@ -177,6 +182,15 @@ export default function GameDetailV2({ game, awayTeam, homeTeam }: { game: any; 
           <h5>Game flow &amp; momentum</h5>
           <ul className="bs-list">
             {flowStory.map((line, idx) => <li key={`flow-${idx}`} className="bs-list-item">{line}</li>)}
+          </ul>
+        </div>
+      ) : null}
+
+      {developmentFlash.length ? (
+        <div className="bs-storylines-box" data-testid="game-development-flash">
+          <h5>Development flash</h5>
+          <ul className="bs-list">
+            {developmentFlash.map((line: string, idx: number) => <li key={`dev-flash-${idx}`} className="bs-list-item">{line}</li>)}
           </ul>
         </div>
       ) : null}

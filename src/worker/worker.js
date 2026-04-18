@@ -103,6 +103,7 @@ import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js'
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
+import { processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
@@ -2390,6 +2391,35 @@ async function handleAdvanceWeek(payload, id) {
     post(toUI.NOTIFICATION, { level: 'info', message: 'Weekly simulation ran on the AttributesV2 engine.' });
   }
 
+  // SAFETY: If simulation produced 0 results, don't advance the week
+  if (results.length === 0) {
+    console.error(`[Worker] ADVANCE_WEEK: simulation returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
+    post(toUI.WEEK_COMPLETE, {
+      week,
+      results:    [],
+      standings:  buildStandings(),
+      nextWeek:   week,       // stay on same week
+      phase:      cache.getPhase(),
+      isSeasonOver: false,
+    }, id);
+    post(toUI.STATE_UPDATE, buildViewState());
+    post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.`, retryable: true });
+    return;
+  }
+
+  const evolutionOutcome = applyWeeklyEvolution({
+    week,
+    seasonId,
+    results,
+    metaObj: meta,
+  });
+  if (!evolutionOutcome.skipped && evolutionOutcome.developmentEvents.length > 0) {
+    post(toUI.NOTIFICATION, {
+      level: 'info',
+      message: `Weekly development updated for ${evolutionOutcome.developmentEvents.length} players from game usage and production.`,
+    });
+  }
+
   // Apply each game result to cache and emit GAME_EVENT per game
   for (const res of results) {
     applyGameResultToCache(res, week, seasonId);
@@ -2442,22 +2472,6 @@ async function handleAdvanceWeek(payload, id) {
         teamDriveStats: res.teamDriveStats ?? null,
       });
     }
-  }
-
-  // SAFETY: If simulation produced 0 results, don't advance the week
-  if (results.length === 0) {
-    console.error(`[Worker] ADVANCE_WEEK: simulation returned 0 results for week ${week} (${gamesToSim.length} games attempted) — aborting advance.`);
-    post(toUI.WEEK_COMPLETE, {
-      week,
-      results:    [],
-      standings:  buildStandings(),
-      nextWeek:   week,       // stay on same week
-      phase:      cache.getPhase(),
-      isSeasonOver: false,
-    }, id);
-    post(toUI.STATE_UPDATE, buildViewState());
-    post(toUI.NOTIFICATION, { level: 'warn', message: `Week ${week} simulation failed — please try again.`, retryable: true });
-    return;
   }
 
   // --- Advance week / phase ---
@@ -3145,7 +3159,9 @@ function applyGameResultToCache(result, week, seasonId) {
       playerOfGame: playerLeaders?.playerOfGame ?? null,
       standoutPerformances: playerLeaders?.standouts ?? [],
       storyline,
+      developmentFlash: Array.isArray(result?.developmentFlash) ? result.developmentFlash.slice(0, 2) : [],
     },
+    developmentFlash: Array.isArray(result?.developmentFlash) ? result.developmentFlash.slice(0, 2) : [],
     teamStats,
     turningPoints,
     notablePerformances: playerLeaders?.standouts ?? [],
@@ -3189,6 +3205,101 @@ function buildStandings() {
 function winPct(t) {
   const g = (t.wins ?? 0) + (t.losses ?? 0) + (t.ties ?? 0);
   return g === 0 ? 0 : ((t.wins ?? 0) + (t.ties ?? 0) * 0.5) / g;
+}
+
+function normalizeWeeklyDevelopmentMeta(metaObj = {}) {
+  return {
+    ...(metaObj?.developmentModel ?? {}),
+    version: 1,
+    lastEvolutionStamp: metaObj?.developmentModel?.lastEvolutionStamp ?? null,
+  };
+}
+
+function buildTeamDevelopmentFocusMap(metaObj = ensureDynastyMeta(cache.getMeta())) {
+  const map = {};
+  for (const team of cache.getAllTeams()) {
+    const focus = team?.weeklyDevelopmentFocus ?? {};
+    map[String(team.id)] = {
+      trainingFocus: team?.franchiseInvestments?.trainingFocus ?? 'balanced',
+      intensity: focus?.intensity ?? 'normal',
+      drillType: focus?.drillType ?? 'technique',
+      positionGroups: Array.isArray(focus?.positionGroups) ? focus.positionGroups : [],
+    };
+  }
+  return map;
+}
+
+function applyWeeklyEvolution({ week, seasonId, results, metaObj }) {
+  const stamp = `${seasonId}:${week}`;
+  const model = normalizeWeeklyDevelopmentMeta(metaObj);
+  if (model.lastEvolutionStamp === stamp) {
+    return { skipped: true, stamp, developmentEvents: [] };
+  }
+
+  const evolution = processWeeklyEvolution({
+    players: cache.getAllPlayers(),
+    results,
+    week,
+    seasonId,
+    seed: buildDeterministicSeed({ year: Number(metaObj?.year ?? 2025), week, salt: 'weekly_evolution_v1' }),
+    teamFocusByTeamId: buildTeamDevelopmentFocusMap(metaObj),
+  });
+
+  const gameFlashByPlayer = new Map();
+  for (const event of evolution.developmentEvents) {
+    if (!event?.note) continue;
+    if (!gameFlashByPlayer.has(event.playerId)) gameFlashByPlayer.set(event.playerId, []);
+    const list = gameFlashByPlayer.get(event.playerId);
+    if (list.length < 2) list.push(event.note);
+  }
+
+  for (const update of evolution.updates) {
+    const player = cache.getPlayer(update.playerId);
+    if (!player) continue;
+    const history = Array.isArray(player?.growthHistory) ? player.growthHistory : [];
+    const trimmedHistory = [...history.slice(-23), update.growthHistoryEntry];
+    cache.updatePlayer(update.playerId, {
+      attributesV2: update.attributesV2,
+      attributeXp: update.attributeXp,
+      growthHistory: trimmedHistory,
+      lastEvolutionWeek: evolution.stamp,
+    });
+  }
+
+  const weeklyLog = Array.isArray(metaObj?.weeklyDevelopmentLog) ? metaObj.weeklyDevelopmentLog : [];
+  const nextLogEntry = {
+    stamp: evolution.stamp,
+    seasonId,
+    week,
+    summary: evolution.summary,
+    events: evolution.developmentEvents.slice(0, 20),
+  };
+  const nextWeeklyLog = [...weeklyLog.slice(-23), nextLogEntry];
+  cache.setMeta({
+    developmentModel: { ...model, lastEvolutionStamp: evolution.stamp },
+    weeklyDevelopmentLog: nextWeeklyLog,
+  });
+
+  for (const result of results) {
+    const sideBoxes = [
+      ...(Object.keys(result?.boxScore?.home ?? {})),
+      ...(Object.keys(result?.boxScore?.away ?? {})),
+    ];
+    const notes = [];
+    for (const playerId of sideBoxes) {
+      const playerNotes = gameFlashByPlayer.get(String(playerId)) ?? [];
+      for (const note of playerNotes) {
+        if (!notes.includes(note)) notes.push(note);
+        if (notes.length >= 2) break;
+      }
+      if (notes.length >= 2) break;
+    }
+    if (notes.length > 0) {
+      result.developmentFlash = notes.slice(0, 2);
+    }
+  }
+
+  return { skipped: false, stamp: evolution.stamp, developmentEvents: evolution.developmentEvents };
 }
 
 // ── Handler: SIM_TO_WEEK ─────────────────────────────────────────────────────
@@ -5319,6 +5430,15 @@ async function handleConductDrill({ teamId, intensity, drillType, positionGroups
             (POS_GROUP_MAP[grp] || [grp]).forEach(pos => activePosSet.add(pos));
         }
     }
+
+    cache.updateTeam(numId, {
+      weeklyDevelopmentFocus: {
+        intensity: intensity || 'normal',
+        drillType: drillType || 'technique',
+        positionGroups: Array.from(focusSet),
+        stamp: `${meta?.currentSeasonId ?? 1}:${meta?.currentWeek ?? 1}`,
+      },
+    });
 
     // Drill type bonus: Technique/Conditioning/TeamDrills/FilmStudy
     // Each unlocks slightly different boosts
