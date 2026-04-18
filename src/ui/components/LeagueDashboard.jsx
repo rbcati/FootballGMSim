@@ -1338,6 +1338,7 @@ export default function LeagueDashboard({
   const [rosterInitialState, setRosterInitialState] = useState({ view: "table", filter: "ALL" });
   const [rosterInitialView, setRosterInitialView] = useState("table");
   const [statsInitialFamily, setStatsInitialFamily] = useState("passing");
+  const [leagueInitialSection, setLeagueInitialSection] = useState("Overview");
   const [newsSubtab, setNewsSubtab] = useState("All");
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 767 : false));
 
@@ -1613,6 +1614,9 @@ export default function LeagueDashboard({
                   if (destination.statsFamily) {
                     setStatsInitialFamily(destination.statsFamily);
                   }
+                  if (destination.leagueSection) {
+                    setLeagueInitialSection(destination.leagueSection);
+                  }
                   setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
                 }}
                 onAdvanceWeek={onAdvanceWeek}
@@ -1671,6 +1675,7 @@ export default function LeagueDashboard({
                 setActiveTab("Transactions");
               }}
               onOpenGameDetail={openGameDetail}
+              initialSection={leagueInitialSection}
               renderSchedule={(sourceTab = "League") => (
                 <ScheduleTab
                   schedule={league.schedule}

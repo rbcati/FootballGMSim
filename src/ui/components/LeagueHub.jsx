@@ -1,53 +1,39 @@
-import React, { useMemo, useState } from 'react';
-import RecordBook from './RecordBook.jsx';
-import PostseasonHub from './PostseasonHub.jsx';
-import PlayerStats from './PlayerStats.jsx';
+import React, { useEffect, useMemo, useState } from 'react';
 import SectionSubnav from './SectionSubnav.jsx';
-import { buildNewsDeskModel } from '../utils/newsDesk.js';
 import SocialFeed from './SocialFeed.jsx';
+import LeagueLeaders from './LeagueLeaders.jsx';
+import { buildNewsDeskModel } from '../utils/newsDesk.js';
+import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import { CompactListRow, ScreenHeader, StatusChip } from './ScreenSystem.jsx';
+import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 
-const LEAGUE_SUBNAV = ['Results', 'Schedule', 'Standings', 'Stats', 'Transactions', 'History'];
+const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders'];
 
-function TeamComparison({ teams = [] }) {
-  const rows = [...teams]
-    .map((t) => ({ ...t, pd: Number(t?.ptsFor ?? 0) - Number(t?.ptsAgainst ?? 0) }))
-    .sort((a, b) => b.pd - a.pd)
-    .slice(0, 16);
-
-  return (
-    <div className="card" style={{ padding: 'var(--space-3)' }}>
-      <div style={{ fontWeight: 700, marginBottom: 8 }}>League team comparisons</div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', fontSize: 12 }}>
-          <thead><tr><th align="left">Team</th><th>Record</th><th>PF</th><th>PA</th><th>PD</th><th>OVR</th></tr></thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}><td>{row.abbr ?? row.name}</td><td>{row.wins}-{row.losses}</td><td>{row.ptsFor ?? 0}</td><td>{row.ptsAgainst ?? 0}</td><td>{row.pd}</td><td>{row.ovr ?? '—'}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+function normalizeSection(section) {
+  if (typeof section !== 'string') return 'Overview';
+  return LEAGUE_SECTIONS.find((entry) => entry.toLowerCase() === section.toLowerCase()) ?? 'Overview';
 }
 
-export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigateTrade, renderStandings, renderSchedule, renderResults }) {
-  const [subtab, setSubtab] = useState('Schedule');
-  const teams = Array.isArray(league?.teams) ? league.teams : [];
+export default function LeagueHub({
+  league,
+  actions,
+  initialSection = 'Overview',
+  onOpenGameDetail,
+  onPlayerSelect,
+  renderStandings,
+  renderResults,
+}) {
+  const [section, setSection] = useState(() => normalizeSection(initialSection));
 
-  const leaders = useMemo(() => {
-    const by = (label, sorter) => ({ label, team: [...teams].sort(sorter)[0] });
-    return [
-      by('Best Record', (a, b) => (b.wins - b.losses) - (a.wins - a.losses)),
-      by('Top Offense', (a, b) => Number(b.ptsFor ?? 0) - Number(a.ptsFor ?? 0)),
-      by('Top Defense', (a, b) => Number(a.ptsAgainst ?? 0) - Number(b.ptsAgainst ?? 0)),
-    ];
-  }, [teams]);
+  useEffect(() => {
+    setSection(normalizeSection(initialSection));
+  }, [initialSection]);
 
-  const newsDesk = useMemo(() => buildNewsDeskModel(league, { segment: 'all', limit: 120 }), [league]);
+  const week = Number(league?.week ?? 1);
+  const recap = useMemo(() => buildWeeklyLeagueRecap(league, { week }), [league, week]);
+  const newsDesk = useMemo(() => buildNewsDeskModel(league, { segment: 'league', limit: 80 }), [league]);
   const transactionRows = useMemo(() => {
-    return (newsDesk.transactions ?? []).slice(0, 14).map((item) => {
+    return (newsDesk.transactions ?? []).slice(0, 8).map((item) => {
       const raw = `${item?.headline ?? ''} ${item?.body ?? ''}`.toLowerCase();
       const type = raw.includes('trade')
         ? 'Trade'
@@ -59,90 +45,118 @@ export default function LeagueHub({ league, actions, onOpenGameDetail, onPlayerS
       return { ...item, _txType: type };
     });
   }, [newsDesk.transactions]);
-  const transactionTotals = useMemo(() => (
-    transactionRows.reduce((acc, row) => {
-      acc[row._txType] = (acc[row._txType] ?? 0) + 1;
-      return acc;
-    }, {})
-  ), [transactionRows]);
-  const champions = Array.isArray(league?.history?.champions) ? league.history.champions : [];
-  const recentWinners = champions.slice(-3).reverse();
+
+  const spotlightRows = recap?.spotlights ?? [];
 
   return (
     <div className="app-screen-stack">
       <ScreenHeader
-        title="League Hub"
-        subtitle="Schedule, standings, stats, transactions, and history."
-        eyebrow={`${league?.year ?? "Season"} · Week ${league?.week ?? 1}`}
+        title="League Command Center"
+        subtitle="League-wide overview, results, standings pressure, news, and leaders."
+        eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? 1}`}
       />
-      <SectionSubnav items={LEAGUE_SUBNAV} activeItem={subtab} onChange={setSubtab} />
-      <SocialFeed league={league} defaultFilter="league" maxItems={8} onPlayerSelect={onPlayerSelect} />
+      <SectionSubnav items={LEAGUE_SECTIONS} activeItem={section} onChange={setSection} />
 
-      {subtab === 'Results' && renderResults?.('League')}
-      {subtab === 'Standings' && renderStandings?.()}
-      {subtab === 'Schedule' && renderSchedule?.('League')}
-      {subtab === 'Stats' && (
+      {section === 'Overview' && (
         <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700 }}>League leaders snapshot</div>
-            {leaders.map((item) => <div key={item.label} style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>{item.label}: <strong style={{ color: 'var(--text)' }}>{item.team?.abbr ?? item.team?.name ?? '—'}</strong></div>)}
-          </div>
-          <TeamComparison teams={teams} />
-          <PlayerStats actions={actions} league={league} onPlayerSelect={onPlayerSelect} initialFamily="passing" />
+          <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0 }}>League Pulse</h3>
+              <StatusChip label="Overview" tone="league" />
+            </div>
+            <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
+              {(recap?.bullets ?? []).slice(0, 3).map((bullet, idx) => <li key={`overview-bullet-${idx}`}>{bullet}</li>)}
+            </ul>
+            {(recap?.bullets ?? []).length === 0 ? (
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                Weekly pulse unlocks once completed game results are available.
+              </div>
+            ) : null}
+          </section>
+
+          <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 6 }}>
+            <h3 style={{ margin: 0 }}>Standings pressure</h3>
+            <div style={{ display: 'grid', gap: 4, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Hottest</div>
+                <div style={{ fontWeight: 700 }}>
+                  {recap?.raceCenter?.hottest?.[0]
+                    ? `${recap.raceCenter.hottest[0].team?.abbr ?? recap.raceCenter.hottest[0].team?.name} (${recap.raceCenter.hottest[0].streak.length}W)`
+                    : '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Coldest</div>
+                <div style={{ fontWeight: 700 }}>
+                  {recap?.raceCenter?.coldest?.[0]
+                    ? `${recap.raceCenter.coldest[0].team?.abbr ?? recap.raceCenter.coldest[0].team?.name} (${recap.raceCenter.coldest[0].streak.length}L)`
+                    : '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Mover</div>
+                <div style={{ fontWeight: 700 }}>
+                  {recap?.raceCenter?.biggestMover?.change > 0
+                    ? `${recap.raceCenter.biggestMover.team?.abbr ?? recap.raceCenter.biggestMover.team?.name} (+${recap.raceCenter.biggestMover.change})`
+                    : 'No major move'}
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {spotlightRows.length > 0 && (
+            <section style={{ display: 'grid', gap: 6 }}>
+              <h3 style={{ margin: 0 }}>Spotlight games</h3>
+              {spotlightRows.slice(0, 2).map((spotlight, idx) => (
+                <CompactListRow
+                  key={spotlight.key ?? `spotlight-${idx}`}
+                  title={spotlight.score ?? 'Spotlight game'}
+                  subtitle={spotlight.reason ?? 'Weekly spotlight game'}
+                  meta={<StatusChip label={`Week ${spotlight.week ?? week}`} tone="league" />}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => openResolvedBoxScore(spotlight.game, { seasonId: league?.seasonId, week: spotlight.week ?? week, source: 'league_overview_spotlight' }, onOpenGameDetail)}
+                  >
+                    Open spotlight
+                  </button>
+                </CompactListRow>
+              ))}
+            </section>
+          )}
         </div>
       )}
-      {subtab === 'Transactions' && (
+
+      {section === 'Results' && renderResults?.('League')}
+      {section === 'Standings' && renderStandings?.()}
+
+      {section === 'News' && (
         <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
+          <section className="card" style={{ padding: 'var(--space-3)' }}>
             <div style={{ fontWeight: 700, marginBottom: 8 }}>League activity center</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
               {['Trade', 'Signing', 'Release', 'Draft'].map((label) => (
                 <div key={label} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface-2)' }}>
                   <div style={{ fontSize: 11, color: 'var(--text-subtle)', textTransform: 'uppercase' }}>{label}</div>
-                  <div style={{ fontWeight: 800, fontSize: 18 }}>{transactionTotals[label] ?? 0}</div>
+                  <div style={{ fontWeight: 800, fontSize: 18 }}>{transactionRows.filter((row) => row?._txType === label).length}</div>
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Recent transactions</div>
-            <div style={{ display: 'grid', gap: 7 }}>
-              {transactionRows.map((item, idx) => (
-                <CompactListRow
-                  key={item?.id ?? `tx-${idx}`}
-                  title={item?.headline ?? 'League transaction'}
-                  subtitle={item?.body ?? 'No detail available.'}
-                  meta={<><StatusChip label={item?._txType} tone="league" /> <span style={{ marginLeft: 6 }}>W{item?.week ?? '-'} · {item?.phase ?? 'season'}</span></>}
-                >
-                  {item?.playerId != null ? <button className="btn btn-sm" onClick={() => onPlayerSelect?.(item.playerId)}>Player</button> : null}
-                  {item?._txType === 'Trade' ? <button className="btn btn-sm" onClick={() => onNavigateTrade?.(item?.teamId ?? null)}>Scout market</button> : null}
-                  {item?.gameId ? <button className="btn btn-sm" onClick={() => onOpenGameDetail?.(item.gameId, 'League')}>Open game</button> : null}
-                </CompactListRow>
-              ))}
-              {transactionRows.length === 0 ? <div style={{ color: 'var(--text-muted)' }}>No transaction activity yet.</div> : null}
-            </div>
-          </div>
+          </section>
+          <SocialFeed league={league} defaultFilter="league" maxItems={12} onPlayerSelect={onPlayerSelect} />
         </div>
       )}
-      {subtab === 'History' && (
+
+      {section === 'Leaders' && (
         <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <div className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700 }}>History spotlight</div>
-            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-muted)' }}>
-              Defending champion: <strong style={{ color: 'var(--text)' }}>{league?.championAbbr ?? recentWinners?.[0]?.champion ?? 'TBD'}</strong>
+          <section className="card" style={{ padding: 'var(--space-3)' }}>
+            <h3 style={{ margin: 0 }}>League leaders</h3>
+            <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+              Season production leaders and race snapshots across the league.
             </div>
-            <div style={{ display: 'grid', gap: 4, marginTop: 8 }}>
-              {recentWinners.map((entry, idx) => (
-                <div key={`winner-${idx}`} style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {entry?.year ?? '—'}: <strong style={{ color: 'var(--text)' }}>{entry?.champion ?? 'Champion TBD'}</strong>
-                </div>
-              ))}
-              {recentWinners.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Play more seasons to unlock dynasty arcs.</div> : null}
-            </div>
-          </div>
-          <PostseasonHub league={league} onOpenBoxScore={(gameId) => onOpenGameDetail?.(gameId, 'League')} />
-          <RecordBook league={league} />
+          </section>
+          <LeagueLeaders league={league} actions={actions} onPlayerSelect={onPlayerSelect} />
         </div>
       )}
     </div>

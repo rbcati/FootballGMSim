@@ -433,21 +433,21 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
             subtitle="Open full recap, race center, and spotlight games in Weekly Results."
             meta={<StatusChip label="Results" tone="league" />}
           >
-            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Weekly Results")}>Open Results</Button>
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League:Results")}>Open Results</Button>
           </CompactListRow>
           <CompactListRow
             title="League Pulse"
             subtitle="League activity, standings context, and social pulse moved to League."
             meta={<StatusChip label="League" tone="league" />}
           >
-            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League")}>Open League</Button>
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League:Overview")}>Open League</Button>
           </CompactListRow>
           <CompactListRow
             title="League Leaders"
-            subtitle="Team and player leaders are maintained in League Leaders."
+            subtitle="Team and player leaders now live in the League command center."
             meta={<StatusChip label="Leaders" tone="info" />}
           >
-            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League Leaders")}>Open Leaders</Button>
+            <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League:Leaders")}>Open Leaders</Button>
           </CompactListRow>
         </div>
       </SectionCard>
