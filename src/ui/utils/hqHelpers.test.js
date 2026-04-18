@@ -45,7 +45,7 @@ describe('hqHelpers', () => {
 
     expect(getActionContext('lineup', weekly, nextGame)).toContain('3 injury');
     expect(getActionContext('gameplan', weekly, nextGame)).toContain('explosive offense');
-    expect(getActionDestination('lineup', nextGame)).toBe('Roster:depth|ALL');
+    expect(getActionDestination('lineup', nextGame)).toBe('Team:Roster / Depth');
     expect(getActionDestination('opponent', nextGame)).toBe('Weekly Prep');
   });
 

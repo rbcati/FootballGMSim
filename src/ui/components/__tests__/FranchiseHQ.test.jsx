@@ -86,8 +86,8 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Matchup note');
     expect(html).toContain('Prep status');
     expect(html).toContain('Owner mandate');
-    expect(html).toContain('Injury pressure');
-    expect(html).toContain('Roster pressure');
+    expect(html).toContain('Team Command Center');
+    expect(html).not.toContain('Injury pressure');
     expect(html).toContain('League Watch (Teasers)');
     expect(html).toContain('Open Results');
     expect(html).toContain('Open League');

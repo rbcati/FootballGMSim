@@ -150,7 +150,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
         : "Lineup is valid. Opening depth chart.",
     );
     window.setTimeout(() => setLineupToast(null), 2200);
-    onNavigate?.("Roster:depth|ALL");
+    onNavigate?.("Team:Roster / Depth");
   };
 
   const commandCenterActions = [
@@ -229,26 +229,14 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
       destination: "🤖 GM Advisor",
     },
     {
-      key: "injuries",
-      title: "Injury pressure",
-      subtitle: injuriesCount > 0
-        ? `${injuriesCount} active injury impact${injuriesCount > 1 ? "s" : ""} on depth chart decisions.`
-        : "No major injury blockers this week.",
-      tone: injuriesCount >= 3 ? "danger" : injuriesCount > 0 ? "warning" : "info",
-      cta: "Injury report",
-      destination: "Injuries",
-    },
-    {
-      key: "roster",
-      title: "Roster pressure",
+      key: "team",
+      title: "Team Command Center",
       subtitle: rosterCount > 53
-        ? `Roster at ${rosterCount}; cutdown action required.`
-        : expiringCount >= 3
-          ? `${expiringCount} rotation contracts are expiring soon.`
-          : "Core roster pressure is currently manageable.",
-      tone: rosterCount > 53 ? "danger" : expiringCount >= 3 ? "warning" : "info",
-      cta: rosterCount > 53 ? "Open roster hub" : "Contract center",
-      destination: rosterCount > 53 ? "Roster Hub" : "Contract Center",
+        ? `Roster at ${rosterCount}; cutdown and depth decisions now live in Team.`
+        : `${injuriesCount} injuries, ${expiringCount} expirings, and development signals are tracked in Team.`,
+      tone: rosterCount > 53 || injuriesCount >= 3 ? "warning" : "info",
+      cta: "Open Team",
+      destination: "Team:Overview",
     },
   ];
 
@@ -410,7 +398,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onTeam
             />
           </div>
         </SectionCard>
-        <SectionCard title="Team Context" subtitle="Owner mandate, injuries, and roster pressure.">
+        <SectionCard title="Team Context" subtitle="HQ links into Team-owned roster, injury, and contract context.">
           <div style={{ display: "grid", gap: 6 }}>
             {teamContextRows.map((row) => (
               <CompactListRow
