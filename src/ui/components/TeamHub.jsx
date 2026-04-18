@@ -3,8 +3,7 @@ import Roster from './Roster.jsx';
 import ContractCenter from './ContractCenter.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
 import InjuryReport from './InjuryReport.jsx';
-import { SectionCard, CtaRow, StatusChip, CompactListRow } from './ScreenSystem.jsx';
-import { TeamWorkspaceHeader, TeamCapSummaryStrip } from './TeamWorkspacePrimitives.jsx';
+import { SectionCard, CtaRow, StatusChip, CompactListRow, HeroCard, StatStrip, SectionHeader, CompactInsightCard } from './ScreenSystem.jsx';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
 import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js';
@@ -19,14 +18,6 @@ function normalizeSection(section) {
 
 function getGameId(game) {
   return game?.id ?? game?.gameId ?? game?.gid ?? null;
-}
-
-function getStarterHealth(team) {
-  const roster = Array.isArray(team?.roster) ? team.roster : [];
-  const starters = roster.filter((p) => Number(p?.depthChart?.order ?? p?.depthOrder ?? 999) === 1);
-  if (!starters.length) return 'Unset';
-  const healthy = starters.filter((p) => Number(p?.injury?.gamesRemaining ?? p?.injuryWeeksRemaining ?? 0) <= 0).length;
-  return `${healthy}/${starters.length} healthy`;
 }
 
 function getPositionGroupPressure(roster = []) {
@@ -52,15 +43,14 @@ function getPositionGroupPressure(roster = []) {
     })
     .filter((row) => row.severity > 0)
     .sort((a, b) => b.severity - a.severity || a.healthy - b.healthy)
-    .slice(0, 4);
+    .slice(0, 3);
 }
 
 function makeMatchupLabel(game, team) {
   if (!game || !team) return '—';
   const homeId = Number(game.homeId ?? game.home);
-  const awayId = Number(game.awayId ?? game.away);
   const isHome = homeId === Number(team.id);
-  const oppAbbr = isHome ? (game.awayAbbr ?? `Team ${awayId}`) : (game.homeAbbr ?? `Team ${homeId}`);
+  const oppAbbr = isHome ? (game.awayAbbr ?? `Team`) : (game.homeAbbr ?? `Team`);
   return `${isHome ? 'vs' : '@'} ${oppAbbr} · Week ${game.week ?? '—'}`;
 }
 
@@ -70,10 +60,6 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
-  const avgSchemeFit = useMemo(() => {
-    if (!roster.length) return 50;
-    return Math.round(roster.reduce((sum, player) => sum + Number(player?.schemeFit ?? 50), 0) / roster.length);
-  }, [roster]);
 
   const expiringPlayers = useMemo(() => roster.filter((p) => Number(derivePlayerContractFinancials(p).yearsRemaining ?? 0) <= 1), [roster]);
   const injuredPlayers = useMemo(() => roster.filter((p) => Number(p?.injury?.gamesRemaining ?? p?.injuryWeeksRemaining ?? 0) > 0), [roster]);
@@ -101,69 +87,50 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     if (injuredPlayers.length > 0) flags.push({ tone: 'warning', label: `${injuredPlayers.length} injured players impact depth`, target: 'Injuries' });
     if (pressureGroups.length > 0) flags.push({ tone: 'warning', label: `${pressureGroups.length} position groups under pressure`, target: 'Roster / Depth' });
     if (roster.length > 53 && league?.phase === 'preseason') flags.push({ tone: 'danger', label: `Roster cutdown required (${roster.length}/53)`, target: 'Roster / Depth' });
-    return flags;
+    return flags.slice(0, 3);
   }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, pressureGroups.length, roster.length, league?.phase]);
 
   return (
     <div className="app-screen-stack">
-      <TeamWorkspaceHeader
+      <HeroCard
+        eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? '—'} · ${league?.phase ?? 'regular'}`}
         title="Team Command Center"
-        subtitle="State of your roster, depth, contracts, development, and availability."
-        eyebrow={team?.name ?? 'Team'}
-        metadata={[
-          { label: 'Record', value: `${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}` },
-          { label: 'Week', value: league?.week ?? '—' },
-          { label: 'Phase', value: league?.phase ?? 'regular' },
-        ]}
-        actions={[
-          { label: 'Overview', primary: true, onClick: () => setSubtab('Overview') },
-          { label: 'Roster / Depth', onClick: () => setSubtab('Roster / Depth') },
-          { label: 'Contracts', onClick: () => setSubtab('Contracts') },
-          { label: 'Development', onClick: () => setSubtab('Development') },
-          { label: 'Injuries', onClick: () => setSubtab('Injuries') },
-        ]}
-        quickContext={[
-          { label: `Cap ${formatMoneyM(capSnapshot.capRoom)} room`, tone: capSnapshot.capRoom <= 10 ? 'warning' : 'ok' },
-          { label: `${expiringPlayers.length} expiring deals`, tone: expiringPlayers.length >= 8 ? 'warning' : 'league' },
-          { label: `${injuredPlayers.length} injuries`, tone: injuredPlayers.length > 0 ? 'warning' : 'ok' },
-        ]}
-      />
+        subtitle={`${team?.name ?? 'Team'} · ${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}`}
+        rightMeta={<StatusChip label={`${injuredPlayers.length} injuries`} tone={injuredPlayers.length ? 'warning' : 'ok'} />}
+      >
+        <div className="app-hero-summary-grid">
+          <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</strong></div>
+          <div><span>Next game</span><strong>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup'}</strong></div>
+        </div>
+      </HeroCard>
 
       <SectionSubnav items={TEAM_SECTIONS} activeItem={subtab} onChange={setSubtab} sticky />
 
       {subtab === 'Overview' && (
-        <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
-          <TeamCapSummaryStrip
-            capSnapshot={capSnapshot}
-            rosterCount={roster.length}
-            starterHealth={getStarterHealth(team)}
-            expiringCount={expiringPlayers.length}
-          />
+        <div className="app-screen-stack">
+          <SectionHeader eyebrow="Operations" title="Roster Status" subtitle="High-impact team signals." />
+          <StatStrip items={[
+            { label: 'Cap Room', value: formatMoneyM(capSnapshot.capRoom), tone: capSnapshot.capRoom < 10 ? 'warning' : 'ok' },
+            { label: 'Roster', value: `${roster.length}/53`, tone: roster.length > 53 ? 'danger' : 'neutral' },
+            { label: 'Expiring', value: `${expiringPlayers.length}`, tone: expiringPlayers.length > 8 ? 'warning' : 'neutral' },
+            { label: 'Development', value: `+${developmentSummary.rising.length} / -${developmentSummary.slipping.length}`, tone: 'team' },
+          ]} />
 
-          <SectionCard title="Priority queue" subtitle="Most important front-office actions this week.">
+          <SectionCard title="Priority queue" subtitle="Top actions to keep operations healthy." variant="compact">
             {urgentActions.length > 0 ? urgentActions.map((item) => (
-              <button
+              <CompactInsightCard
                 key={item.label}
-                onClick={() => setSubtab(item.target)}
-                style={{
-                  width: '100%',
-                  border: '1px solid var(--hairline)',
-                  borderRadius: 8,
-                  background: 'transparent',
-                  textAlign: 'left',
-                  padding: '8px 10px',
-                  fontSize: 12,
-                  color: item.tone === 'danger' ? 'var(--danger)' : 'var(--warning)',
-                }}
-              >
-                {item.label} →
-              </button>
-            )) : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No urgent team issues right now.</div>}
+                title={item.label}
+                tone={item.tone}
+                ctaLabel="Open"
+                onCta={() => setSubtab(item.target)}
+              />
+            )) : <CompactInsightCard title="No urgent team issues" subtitle="Use this week to improve depth and scouting." tone="info" ctaLabel="Open Roster" onCta={() => setSubtab('Roster / Depth')} />}
           </SectionCard>
 
-          <SectionCard title="Position group pressure" subtitle="Where the current depth chart is stressed.">
-            <div style={{ display: 'grid', gap: 6 }}>
-              {pressureGroups.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No major weak spots detected from current healthy depth.</div> : pressureGroups.map((group) => (
+          <SectionCard title="Position pressure" subtitle="Where your depth chart is currently stressed." variant="compact">
+            <div className="app-row-stack">
+              {pressureGroups.length === 0 ? <CompactInsightCard title="No major weak spots" subtitle="Current healthy depth clears critical thresholds." tone="ok" /> : pressureGroups.map((group) => (
                 <CompactListRow
                   key={group.pos}
                   title={group.pos}
@@ -176,57 +143,23 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             </div>
           </SectionCard>
 
-          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
-            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Availability</div><div style={{ fontWeight: 800 }}>{injuredPlayers.length} out</div></div>
-            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Expiring deals</div><div style={{ fontWeight: 800 }}>{expiringPlayers.length}</div></div>
-            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Development</div><div style={{ fontWeight: 800 }}>+{developmentSummary.rising.length} / -{developmentSummary.slipping.length}</div></div>
-            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg scheme fit</div><div style={{ fontWeight: 800 }}>{avgSchemeFit}</div></div>
-          </section>
-
-          <SectionCard title="Game context" subtitle="Quick links back to game flow without leaving team ops.">
-            <div style={{ display: 'grid', gap: 8 }}>
-              <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
-                const gameId = getGameId(latestGame);
-                if (gameId != null) onOpenGameDetail?.(gameId, 'Team');
-              }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>LAST RESULT</div>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</div>
-              </button>
-              <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
-                const gameId = getGameId(upcomingGame);
-                if (gameId != null) onOpenGameDetail?.(gameId, 'Team');
-              }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>NEXT MATCHUP</div>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup found'}</div>
-              </button>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Team workflow" subtitle="Move through the full roster management loop.">
+          <SectionCard title="Game context" variant="compact">
             <CtaRow actions={[
-              { label: 'Open roster/depth', compact: true, onClick: () => setSubtab('Roster / Depth') },
-              { label: 'Review contracts', compact: true, onClick: () => setSubtab('Contracts') },
-              { label: 'Development watchlist', compact: true, onClick: () => setSubtab('Development') },
-              { label: 'Injury impact', compact: true, onClick: () => setSubtab('Injuries') },
-              { label: 'Explore free agents', compact: true, onClick: () => onNavigate?.('Free Agency') },
+              { label: 'Open last result', compact: true, onClick: () => { const gameId = getGameId(latestGame); if (gameId != null) onOpenGameDetail?.(gameId, 'Team'); } },
+              { label: 'Open next matchup', compact: true, onClick: () => { const gameId = getGameId(upcomingGame); if (gameId != null) onOpenGameDetail?.(gameId, 'Team'); } },
+              { label: 'Free Agency', compact: true, onClick: () => onNavigate?.('Free Agency') },
             ]} />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              <StatusChip label="Connected team workspace" tone="team" />
-              <StatusChip label="Transactions linked" tone="league" />
-            </div>
           </SectionCard>
         </div>
       )}
 
       {subtab === 'Roster / Depth' && (
-        <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
-          <SectionCard title="Roster and depth ownership" subtitle="Set roles, identify thin spots, and keep the lineup game-ready.">
+        <div className="app-screen-stack">
+          <SectionCard title="Roster and depth" subtitle="Set roles and keep the lineup game-ready." variant="compact">
             <CtaRow actions={[
               { label: 'Roster table', compact: true, onClick: () => setRosterMode('roster') },
               { label: 'Depth chart', compact: true, onClick: () => setRosterMode('depth') },
-              { label: 'Injured filter', compact: true, onClick: () => {
-                setSubtab('Injuries');
-              } },
+              { label: 'Injured filter', compact: true, onClick: () => setSubtab('Injuries') },
             ]} />
           </SectionCard>
           <Roster
@@ -241,19 +174,14 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
       )}
       {subtab === 'Contracts' && <ContractCenter league={league} actions={actions} compact onNavigate={onNavigate} />}
       {subtab === 'Development' && (
-        <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
-          <SectionCard title="Development board" subtitle="Track risers, fallers, and prospects blocked by current depth roles.">
-            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
-              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Rising</div><div style={{ fontWeight: 800 }}>{developmentSummary.rising.length}</div></div>
-              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slipping</div><div style={{ fontWeight: 800 }}>{developmentSummary.slipping.length}</div></div>
-              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Blocked</div><div style={{ fontWeight: 800 }}>{developmentSummary.blocked.length}</div></div>
-              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Contract pressure</div><div style={{ fontWeight: 800 }}>{developmentSummary.contractPressure.length}</div></div>
-            </section>
-            <div style={{ display: 'grid', gap: 6 }}>
-              {developmentSummary.rising[0] ? <div style={{ fontSize: 12 }}>Top riser: <strong>{developmentSummary.rising[0].name}</strong>.</div> : null}
-              {developmentSummary.slipping[0] ? <div style={{ fontSize: 12 }}>Top faller: <strong>{developmentSummary.slipping[0].name}</strong>.</div> : null}
-              {developmentSummary.blocked[0] ? <div style={{ fontSize: 12 }}>Blocked depth concern: <strong>{developmentSummary.blocked[0].name}</strong>.</div> : null}
-            </div>
+        <div className="app-screen-stack">
+          <SectionCard title="Development board" subtitle="Risers, fallers, and blocked prospects." variant="compact">
+            <StatStrip items={[
+              { label: 'Rising', value: `${developmentSummary.rising.length}`, tone: 'ok' },
+              { label: 'Slipping', value: `${developmentSummary.slipping.length}`, tone: developmentSummary.slipping.length ? 'warning' : 'neutral' },
+              { label: 'Blocked', value: `${developmentSummary.blocked.length}`, tone: developmentSummary.blocked.length ? 'warning' : 'neutral' },
+              { label: 'Contract Pressure', value: `${developmentSummary.contractPressure.length}`, tone: 'info' },
+            ]} />
           </SectionCard>
           <Roster
             league={league}

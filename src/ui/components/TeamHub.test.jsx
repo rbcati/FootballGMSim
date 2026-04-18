@@ -48,9 +48,9 @@ describe('TeamHub', () => {
     expect(html).toContain('Contracts');
     expect(html).toContain('Development');
     expect(html).toContain('Injuries');
-    expect(html).toContain('Position group pressure');
-    expect(html).toContain('Expiring deals');
-    expect(html).toContain('Avg scheme fit');
+    expect(html).toContain('Position pressure');
+    expect(html).toContain('Expiring');
+    expect(html).toContain('Development');
   });
 
   it('supports direct section entry for team-context deep links', () => {

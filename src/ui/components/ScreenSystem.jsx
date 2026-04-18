@@ -36,9 +36,22 @@ export function ScreenHeader({
   );
 }
 
-export function SectionCard({ title, subtitle, actions = null, children }) {
+export function SectionHeader({ eyebrow, title, subtitle, actions = null }) {
   return (
-    <section className="app-section-card card">
+    <div className="app-section-header">
+      <div>
+        {eyebrow ? <div className="app-section-header__eyebrow">{eyebrow}</div> : null}
+        <h2 className="app-section-header__title">{title}</h2>
+        {subtitle ? <p className="app-section-header__subtitle">{subtitle}</p> : null}
+      </div>
+      {actions ? <div className="app-section-header__actions">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function SectionCard({ title, subtitle, actions = null, children, variant = 'elevated' }) {
+  return (
+    <section className={`app-section-card card variant-${variant}`}>
       {(title || subtitle || actions) ? (
         <div className="app-section-card__header">
           <div>
@@ -53,6 +66,67 @@ export function SectionCard({ title, subtitle, actions = null, children }) {
   );
 }
 
+export function HeroCard({ eyebrow, title, subtitle, rightMeta = null, children, actions = null }) {
+  return (
+    <section className="app-hero-card card">
+      <div className="app-hero-card__top">
+        <div>
+          {eyebrow ? <div className="app-hero-card__eyebrow">{eyebrow}</div> : null}
+          <h1 className="app-hero-card__title">{title}</h1>
+          {subtitle ? <p className="app-hero-card__subtitle">{subtitle}</p> : null}
+        </div>
+        {rightMeta ? <div className="app-hero-card__meta">{rightMeta}</div> : null}
+      </div>
+      {children ? <div className="app-hero-card__body">{children}</div> : null}
+      {actions ? <div className="app-hero-card__actions">{actions}</div> : null}
+    </section>
+  );
+}
+
+export function ActionTile({ title, subtitle, badge = null, onClick, tone = 'info' }) {
+  return (
+    <button type="button" className={`app-action-tile tone-${tone}`} onClick={onClick}>
+      <div className="app-action-tile__title-row">
+        <strong>{title}</strong>
+        {badge}
+      </div>
+      {subtitle ? <span className="app-action-tile__subtitle">{subtitle}</span> : null}
+    </button>
+  );
+}
+
+export function StatPill({ label, value, tone = 'neutral' }) {
+  return (
+    <div className={`app-stat-pill tone-${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+export function StatStrip({ items = [] }) {
+  if (!items.length) return null;
+  return (
+    <section className="app-stat-strip card">
+      {items.map((item) => (
+        <StatPill key={`${item.label}-${item.value}`} label={item.label} value={item.value} tone={item.tone ?? 'neutral'} />
+      ))}
+    </section>
+  );
+}
+
+export function CompactInsightCard({ title, subtitle, tone = 'info', ctaLabel, onCta }) {
+  return (
+    <div className={`app-compact-insight tone-${tone}`}>
+      <div className="app-compact-insight__text">
+        <strong>{title}</strong>
+        {subtitle ? <span>{subtitle}</span> : null}
+      </div>
+      {ctaLabel ? <button type="button" className="btn btn-sm" onClick={onCta}>{ctaLabel}</button> : null}
+    </div>
+  );
+}
+
 export function EmptyState({ title, body }) {
   return (
     <div className="app-empty-state">
@@ -62,7 +136,7 @@ export function EmptyState({ title, body }) {
   );
 }
 
-export function StatusChip({ label, tone = "neutral" }) {
+export function StatusChip({ label, tone = 'neutral' }) {
   return <span className={`app-status-chip tone-${tone}`}>{label}</span>;
 }
 
@@ -72,9 +146,9 @@ export function CtaRow({ actions = [] }) {
     <div className="app-cta-row">
       {actions.map((action) => (
         <button
-          key={`${action.label}-${action.href ?? action.variant ?? "default"}`}
+          key={`${action.label}-${action.href ?? action.variant ?? 'default'}`}
           type="button"
-          className={`btn ${action.compact ? "btn-sm" : ""}`}
+          className={`btn ${action.compact ? 'btn-sm' : ''}`}
           onClick={action.onClick}
           disabled={action.disabled}
         >

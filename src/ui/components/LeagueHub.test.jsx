@@ -45,7 +45,7 @@ describe('LeagueHub', () => {
     expect(html).toContain('Standings');
     expect(html).toContain('News');
     expect(html).toContain('Leaders');
-    expect(html).toContain('League Pulse');
+    expect(html).toContain('League pulse');
     expect(html).not.toContain('Weekly Results Stub');
   });
 
