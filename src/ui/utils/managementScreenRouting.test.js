@@ -20,7 +20,7 @@ describe("normalizeManagementDestination", () => {
     });
     expect(normalizeManagementDestination("Roster:Depth")).toMatchObject({
       tab: "Roster",
-      rosterState: { view: "depth", filter: "ALL" },
+      rosterState: { view: "depth", filter: "DEPTH" },
     });
   });
 
@@ -35,12 +35,24 @@ describe("normalizeManagementDestination", () => {
     });
   });
 
+  it("supports league command center section deep links with default", () => {
+    expect(normalizeManagementDestination("League:Results")).toMatchObject({
+      tab: "League",
+      leagueSection: "Results",
+    });
+    expect(normalizeManagementDestination("League:unknown")).toMatchObject({
+      tab: "League",
+      leagueSection: "Overview",
+    });
+  });
+
   it("leaves unknown tabs untouched", () => {
     expect(normalizeManagementDestination("Financials")).toMatchObject({
       tab: "Financials",
       tradeView: null,
       rosterState: null,
       statsFamily: null,
+      leagueSection: null,
     });
   });
 });

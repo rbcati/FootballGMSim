@@ -2,9 +2,16 @@ const TRANSACTION_VIEWS = new Set(["Finder", "Builder", "Offers", "Block", "Summ
 const ROSTER_VIEWS = new Set(["table", "cards", "depth"]);
 const ROSTER_FILTERS = new Set(["ALL", "EXPIRING", "STARTERS", "DEPTH", "INJURED", "DEVELOPMENT"]);
 const STAT_FAMILIES = new Set(["passing", "rushing", "receiving", "defense"]);
+const LEAGUE_SECTIONS = new Set(["Overview", "Results", "Standings", "News", "Leaders"]);
 
 export function normalizeManagementDestination(tabToken) {
-  const normalized = { tab: tabToken, tradeView: null, rosterState: null, statsFamily: null };
+  const normalized = {
+    tab: tabToken,
+    tradeView: null,
+    rosterState: null,
+    statsFamily: null,
+    leagueSection: null,
+  };
   if (typeof tabToken !== "string") return normalized;
 
   const [tab, rawState = ""] = tabToken.split(":");
@@ -34,6 +41,13 @@ export function normalizeManagementDestination(tabToken) {
     normalized.tab = "Stats";
     const family = [...STAT_FAMILIES].find((v) => v.toLowerCase() === state.toLowerCase());
     normalized.statsFamily = family ?? "passing";
+    return normalized;
+  }
+
+  if (tab === "League") {
+    normalized.tab = "League";
+    const canonicalSection = [...LEAGUE_SECTIONS].find((v) => v.toLowerCase() === state.toLowerCase());
+    normalized.leagueSection = canonicalSection ?? "Overview";
     return normalized;
   }
 
