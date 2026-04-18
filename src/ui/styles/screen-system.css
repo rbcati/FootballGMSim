@@ -178,3 +178,52 @@
 .app-news-aux-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 .app-news-cta-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .app-news-cta-copy { font-size: var(--text-xs); color: var(--text-subtle); }
+
+.schedule-center-screen { display: grid; gap: 10px; }
+.schedule-center-filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.schedule-center-filter-row select { min-height: 34px; }
+.schedule-center-status-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.schedule-center-week-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.schedule-center-week-row .standings-tab { min-width: 36px; }
+.schedule-center-bucket-grid { display: grid; gap: 10px; }
+
+.standings-center-screen { display: grid; gap: 10px; }
+.standings-center-filter-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.standings-center-division-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.standings-center-table { display: grid; gap: 6px; }
+.standings-center-row {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 94%, black 6%);
+  color: var(--text);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 22px auto 1fr auto auto auto auto auto auto;
+  gap: 8px;
+  align-items: center;
+  text-align: left;
+}
+.standings-center-row.is-user { border-color: rgba(var(--accent-rgb), .5); box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .2) inset; }
+.standings-center-row__team { min-width: 0; display: grid; }
+.standings-center-row__team span { font-size: var(--text-xs); color: var(--text-muted); }
+.standings-center-playoff-list { display: grid; gap: 6px; }
+.standings-center-playoff-row {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 24px auto 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  cursor: pointer;
+}
+.standings-center-playoff-row.is-user { border-color: rgba(var(--accent-rgb), .5); background: rgba(var(--accent-rgb), .08); }
+.standings-center-playoff-row__seed { font-weight: 700; color: var(--text-muted); text-align: center; }
+
+@media (max-width: 768px) {
+  .standings-center-row {
+    grid-template-columns: 20px auto 1fr auto;
+  }
+  .standings-center-row > :nth-child(n + 5) { display: none; }
+}
