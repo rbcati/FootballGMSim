@@ -1,16 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Roster from './Roster.jsx';
 import ContractCenter from './ContractCenter.jsx';
-import StaffManagement from './StaffManagement.jsx';
 import SectionSubnav from './SectionSubnav.jsx';
-import SocialFeed from './SocialFeed.jsx';
-import FinancialsView from './FinancialsView.jsx';
-import { SectionCard, CtaRow, StatusChip } from './ScreenSystem.jsx';
+import InjuryReport from './InjuryReport.jsx';
+import { SectionCard, CtaRow, StatusChip, CompactListRow } from './ScreenSystem.jsx';
 import { TeamWorkspaceHeader, TeamCapSummaryStrip } from './TeamWorkspacePrimitives.jsx';
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
+import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js';
 
-const TEAM_SUBNAV = ['Overview', 'Roster', 'Depth Chart', 'Contracts', 'Financials', 'Staff'];
+const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
+const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
+
+function normalizeSection(section) {
+  if (typeof section !== 'string') return 'Overview';
+  return TEAM_SECTIONS.find((entry) => entry.toLowerCase() === section.toLowerCase()) ?? 'Overview';
+}
 
 function getGameId(game) {
   return game?.id ?? game?.gameId ?? game?.gid ?? null;
@@ -24,6 +29,32 @@ function getStarterHealth(team) {
   return `${healthy}/${starters.length} healthy`;
 }
 
+function getPositionGroupPressure(roster = []) {
+  const byPos = new Map();
+  for (const player of roster) {
+    const pos = String(player?.pos ?? player?.position ?? 'UNK').toUpperCase();
+    if (!byPos.has(pos)) byPos.set(pos, { pos, total: 0, injured: 0, starterHealthy: false });
+    const row = byPos.get(pos);
+    row.total += 1;
+    const injured = Number(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining ?? 0) > 0;
+    if (injured) row.injured += 1;
+    const depthOrder = Number(player?.depthChart?.order ?? player?.depthOrder ?? 99);
+    if (depthOrder === 1 && !injured) row.starterHealthy = true;
+  }
+  return [...byPos.values()]
+    .map((row) => {
+      const min = CRITICAL_POSITION_MIN[row.pos] ?? 2;
+      const healthy = row.total - row.injured;
+      const thin = healthy < min;
+      const starterGap = !row.starterHealthy && row.total > 0;
+      const severity = thin && starterGap ? 3 : thin ? 2 : starterGap ? 1 : 0;
+      return { ...row, healthy, thin, starterGap, severity };
+    })
+    .filter((row) => row.severity > 0)
+    .sort((a, b) => b.severity - a.severity || a.healthy - b.healthy)
+    .slice(0, 4);
+}
+
 function makeMatchupLabel(game, team) {
   if (!game || !team) return '—';
   const homeId = Number(game.homeId ?? game.home);
@@ -33,14 +64,25 @@ function makeMatchupLabel(game, team) {
   return `${isHome ? 'vs' : '@'} ${oppAbbr} · Week ${game.week ?? '—'}`;
 }
 
-export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null }) {
-  const [subtab, setSubtab] = useState('Overview');
+export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSelect, onNavigate = null, initialSection = 'Overview' }) {
+  const [subtab, setSubtab] = useState(() => normalizeSection(initialSection));
+  const [rosterMode, setRosterMode] = useState('roster');
   const team = useMemo(() => (league?.teams ?? []).find((t) => Number(t.id) === Number(league?.userTeamId)) ?? null, [league]);
   const roster = Array.isArray(team?.roster) ? team.roster : [];
   const capSnapshot = deriveTeamCapSnapshot(team, { fallbackCapTotal: 255 });
+  const avgSchemeFit = useMemo(() => {
+    if (!roster.length) return 50;
+    return Math.round(roster.reduce((sum, player) => sum + Number(player?.schemeFit ?? 50), 0) / roster.length);
+  }, [roster]);
 
   const expiringPlayers = useMemo(() => roster.filter((p) => Number(derivePlayerContractFinancials(p).yearsRemaining ?? 0) <= 1), [roster]);
   const injuredPlayers = useMemo(() => roster.filter((p) => Number(p?.injury?.gamesRemaining ?? p?.injuryWeeksRemaining ?? 0) > 0), [roster]);
+  const developmentSummary = useMemo(() => summarizeRosterDevelopment(roster, new Map()), [roster]);
+  const pressureGroups = useMemo(() => getPositionGroupPressure(roster), [roster]);
+
+  useEffect(() => {
+    setSubtab(normalizeSection(initialSection));
+  }, [initialSection]);
 
   const latestGame = useMemo(() => {
     const games = Array.isArray(league?.schedule) ? league.schedule : [];
@@ -56,16 +98,17 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     const flags = [];
     if (capSnapshot.capRoom < 10) flags.push({ tone: 'danger', label: `Cap room low (${formatMoneyM(capSnapshot.capRoom)})`, target: 'Financials' });
     if (expiringPlayers.length > 8) flags.push({ tone: 'warning', label: `${expiringPlayers.length} contracts need attention`, target: 'Contracts' });
-    if (injuredPlayers.length > 0) flags.push({ tone: 'warning', label: `${injuredPlayers.length} injured players impact depth`, target: 'Depth Chart' });
-    if (roster.length > 53 && league?.phase === 'preseason') flags.push({ tone: 'danger', label: `Roster cutdown required (${roster.length}/53)`, target: 'Roster' });
+    if (injuredPlayers.length > 0) flags.push({ tone: 'warning', label: `${injuredPlayers.length} injured players impact depth`, target: 'Injuries' });
+    if (pressureGroups.length > 0) flags.push({ tone: 'warning', label: `${pressureGroups.length} position groups under pressure`, target: 'Roster / Depth' });
+    if (roster.length > 53 && league?.phase === 'preseason') flags.push({ tone: 'danger', label: `Roster cutdown required (${roster.length}/53)`, target: 'Roster / Depth' });
     return flags;
-  }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, roster.length, league?.phase]);
+  }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, pressureGroups.length, roster.length, league?.phase]);
 
   return (
     <div className="app-screen-stack">
       <TeamWorkspaceHeader
-        title="Team Operations"
-        subtitle="Command center for roster, contracts, cap pressure, and transactions."
+        title="Team Command Center"
+        subtitle="State of your roster, depth, contracts, development, and availability."
         eyebrow={team?.name ?? 'Team'}
         metadata={[
           { label: 'Record', value: `${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}` },
@@ -73,12 +116,11 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           { label: 'Phase', value: league?.phase ?? 'regular' },
         ]}
         actions={[
-          { label: 'View roster details', primary: true, onClick: () => setSubtab('Roster') },
-          { label: 'Depth Chart', onClick: () => setSubtab('Depth Chart') },
-          { label: 'Review contracts', onClick: () => setSubtab('Contracts') },
-          { label: 'Financials', onClick: () => setSubtab('Financials') },
-          { label: 'Explore free agents', onClick: () => onNavigate?.('Free Agency') },
-          { label: 'Shop trade market', onClick: () => onNavigate?.('Transactions') },
+          { label: 'Overview', primary: true, onClick: () => setSubtab('Overview') },
+          { label: 'Roster / Depth', onClick: () => setSubtab('Roster / Depth') },
+          { label: 'Contracts', onClick: () => setSubtab('Contracts') },
+          { label: 'Development', onClick: () => setSubtab('Development') },
+          { label: 'Injuries', onClick: () => setSubtab('Injuries') },
         ]}
         quickContext={[
           { label: `Cap ${formatMoneyM(capSnapshot.capRoom)} room`, tone: capSnapshot.capRoom <= 10 ? 'warning' : 'ok' },
@@ -87,7 +129,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
         ]}
       />
 
-      <SectionSubnav items={TEAM_SUBNAV} activeItem={subtab} onChange={setSubtab} sticky />
+      <SectionSubnav items={TEAM_SECTIONS} activeItem={subtab} onChange={setSubtab} sticky />
 
       {subtab === 'Overview' && (
         <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
@@ -119,6 +161,28 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
             )) : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No urgent team issues right now.</div>}
           </SectionCard>
 
+          <SectionCard title="Position group pressure" subtitle="Where the current depth chart is stressed.">
+            <div style={{ display: 'grid', gap: 6 }}>
+              {pressureGroups.length === 0 ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No major weak spots detected from current healthy depth.</div> : pressureGroups.map((group) => (
+                <CompactListRow
+                  key={group.pos}
+                  title={group.pos}
+                  subtitle={`${group.healthy}/${group.total} healthy · ${group.starterGap ? 'starter unavailable' : 'starter active'}`}
+                  meta={<StatusChip label={group.thin ? 'Thin' : 'Watch'} tone={group.thin ? 'warning' : 'info'} />}
+                >
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => setSubtab('Roster / Depth')}>Open depth</button>
+                </CompactListRow>
+              ))}
+            </div>
+          </SectionCard>
+
+          <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Availability</div><div style={{ fontWeight: 800 }}>{injuredPlayers.length} out</div></div>
+            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Expiring deals</div><div style={{ fontWeight: 800 }}>{expiringPlayers.length}</div></div>
+            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Development</div><div style={{ fontWeight: 800 }}>+{developmentSummary.rising.length} / -{developmentSummary.slipping.length}</div></div>
+            <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Avg scheme fit</div><div style={{ fontWeight: 800 }}>{avgSchemeFit}</div></div>
+          </section>
+
           <SectionCard title="Game context" subtitle="Quick links back to game flow without leaving team ops.">
             <div style={{ display: 'grid', gap: 8 }}>
               <button className="card" style={{ padding: '10px', textAlign: 'left' }} onClick={() => {
@@ -140,37 +204,68 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
           <SectionCard title="Team workflow" subtitle="Move through the full roster management loop.">
             <CtaRow actions={[
-              { label: 'View player details', compact: true, onClick: () => setSubtab('Roster') },
-              { label: 'Set depth', compact: true, onClick: () => setSubtab('Depth Chart') },
+              { label: 'Open roster/depth', compact: true, onClick: () => setSubtab('Roster / Depth') },
               { label: 'Review contracts', compact: true, onClick: () => setSubtab('Contracts') },
-              { label: 'Cap outlook', compact: true, onClick: () => setSubtab('Financials') },
+              { label: 'Development watchlist', compact: true, onClick: () => setSubtab('Development') },
+              { label: 'Injury impact', compact: true, onClick: () => setSubtab('Injuries') },
               { label: 'Explore free agents', compact: true, onClick: () => onNavigate?.('Free Agency') },
-              { label: 'Shop trade market', compact: true, onClick: () => onNavigate?.('Transactions') },
             ]} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <StatusChip label="Connected team workspace" tone="team" />
               <StatusChip label="Transactions linked" tone="league" />
             </div>
           </SectionCard>
-
-          <SocialFeed league={league} defaultFilter="team" maxItems={5} onPlayerSelect={onPlayerSelect} />
         </div>
       )}
 
-      {subtab === 'Roster' && <Roster league={league} actions={actions} onPlayerSelect={onPlayerSelect} onNavigate={onNavigate} />}
-      {subtab === 'Depth Chart' && (
-        <Roster
-          league={league}
-          actions={actions}
-          onPlayerSelect={onPlayerSelect}
-          onNavigate={onNavigate}
-          initialState={{ viewMode: 'depth', initialFilter: 'ALL' }}
-          initialViewMode="depth"
-        />
+      {subtab === 'Roster / Depth' && (
+        <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
+          <SectionCard title="Roster and depth ownership" subtitle="Set roles, identify thin spots, and keep the lineup game-ready.">
+            <CtaRow actions={[
+              { label: 'Roster table', compact: true, onClick: () => setRosterMode('roster') },
+              { label: 'Depth chart', compact: true, onClick: () => setRosterMode('depth') },
+              { label: 'Injured filter', compact: true, onClick: () => {
+                setSubtab('Injuries');
+              } },
+            ]} />
+          </SectionCard>
+          <Roster
+            league={league}
+            actions={actions}
+            onPlayerSelect={onPlayerSelect}
+            onNavigate={onNavigate}
+            initialState={{ viewMode: rosterMode === 'depth' ? 'depth' : 'table', initialFilter: 'ALL' }}
+            initialViewMode={rosterMode === 'depth' ? 'depth' : 'table'}
+          />
+        </div>
       )}
       {subtab === 'Contracts' && <ContractCenter league={league} actions={actions} compact onNavigate={onNavigate} />}
-      {subtab === 'Financials' && <FinancialsView league={league} actions={actions} />}
-      {subtab === 'Staff' && <StaffManagement league={league} actions={actions} compact />}
+      {subtab === 'Development' && (
+        <div className="app-screen-stack" style={{ gap: 'var(--space-2)' }}>
+          <SectionCard title="Development board" subtitle="Track risers, fallers, and prospects blocked by current depth roles.">
+            <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Rising</div><div style={{ fontWeight: 800 }}>{developmentSummary.rising.length}</div></div>
+              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Slipping</div><div style={{ fontWeight: 800 }}>{developmentSummary.slipping.length}</div></div>
+              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Blocked</div><div style={{ fontWeight: 800 }}>{developmentSummary.blocked.length}</div></div>
+              <div className="card" style={{ padding: 10 }}><div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Contract pressure</div><div style={{ fontWeight: 800 }}>{developmentSummary.contractPressure.length}</div></div>
+            </section>
+            <div style={{ display: 'grid', gap: 6 }}>
+              {developmentSummary.rising[0] ? <div style={{ fontSize: 12 }}>Top riser: <strong>{developmentSummary.rising[0].name}</strong>.</div> : null}
+              {developmentSummary.slipping[0] ? <div style={{ fontSize: 12 }}>Top faller: <strong>{developmentSummary.slipping[0].name}</strong>.</div> : null}
+              {developmentSummary.blocked[0] ? <div style={{ fontSize: 12 }}>Blocked depth concern: <strong>{developmentSummary.blocked[0].name}</strong>.</div> : null}
+            </div>
+          </SectionCard>
+          <Roster
+            league={league}
+            actions={actions}
+            onPlayerSelect={onPlayerSelect}
+            onNavigate={onNavigate}
+            initialState={{ viewMode: 'table', initialFilter: 'DEVELOPMENT' }}
+            initialViewMode="table"
+          />
+        </div>
+      )}
+      {subtab === 'Injuries' && <InjuryReport league={league} onPlayerSelect={onPlayerSelect} />}
     </div>
   );
 }

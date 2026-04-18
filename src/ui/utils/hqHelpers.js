@@ -112,11 +112,11 @@ export function getActionContext(type, weekly, nextGame) {
 export function getActionDestination(type, nextGame) {
   switch (type) {
     case 'lineup':
-      return 'Roster:depth|ALL';
+      return 'Team:Roster / Depth';
     case 'gameplan':
       return 'Game Plan';
     case 'news':
-      return nextGame ? 'Injuries' : 'News';
+      return nextGame ? 'Team:Injuries' : 'News';
     case 'opponent':
       return nextGame ? 'Weekly Prep' : 'Schedule';
     default:
@@ -139,13 +139,13 @@ export function rankHqPriorityItems(team, league, weekly, nextGame) {
   }
 
   if (injuries >= 4) {
-    items.push({ level: 'urgent', rank: 95, label: 'Depth chart stress test', detail: `${injuries} injuries are impacting lineup stability.`, verb: 'Set emergency lineup', tab: 'Roster:depth|ALL' });
+    items.push({ level: 'urgent', rank: 95, label: 'Depth chart stress test', detail: `${injuries} injuries are impacting lineup stability.`, verb: 'Set emergency lineup', tab: 'Team:Roster / Depth' });
   } else if (injuries >= 2) {
-    items.push({ level: 'recommended', rank: 74, label: 'Injury coverage needed', detail: `${injuries} active injuries require role adjustments.`, verb: 'Reassign roles', tab: 'Injuries' });
+    items.push({ level: 'recommended', rank: 74, label: 'Injury coverage needed', detail: `${injuries} active injuries require role adjustments.`, verb: 'Reassign roles', tab: 'Team:Injuries' });
   }
 
   if (expiring >= 4 && week >= 8) {
-    items.push({ level: 'recommended', rank: 84, label: 'Core contracts nearing expiry', detail: `${expiring} rotation players are in contract-year windows.`, verb: 'Start extension talks', tab: 'Financials' });
+    items.push({ level: 'recommended', rank: 84, label: 'Core contracts nearing expiry', detail: `${expiring} rotation players are in contract-year windows.`, verb: 'Start extension talks', tab: 'Team:Contracts' });
   }
 
   if (capRoom < 0) {

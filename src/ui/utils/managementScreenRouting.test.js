@@ -46,6 +46,17 @@ describe("normalizeManagementDestination", () => {
     });
   });
 
+  it("supports team command center section deep links with default", () => {
+    expect(normalizeManagementDestination("Team:Contracts")).toMatchObject({
+      tab: "Team",
+      teamSection: "Contracts",
+    });
+    expect(normalizeManagementDestination("Team:unknown")).toMatchObject({
+      tab: "Team",
+      teamSection: "Overview",
+    });
+  });
+
   it("leaves unknown tabs untouched", () => {
     expect(normalizeManagementDestination("Financials")).toMatchObject({
       tab: "Financials",
@@ -53,6 +64,7 @@ describe("normalizeManagementDestination", () => {
       rosterState: null,
       statsFamily: null,
       leagueSection: null,
+      teamSection: null,
     });
   });
 });
