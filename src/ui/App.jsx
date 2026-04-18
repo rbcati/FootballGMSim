@@ -52,7 +52,12 @@ import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
-import { hasMinimumPlayableLeague, summarizeBootstrapState } from './utils/leagueBootstrap.js';
+import {
+  hasMinimumPlayableLeague,
+  shouldFinalizeNewSlotBootstrap,
+  shouldShowNewFranchiseBootstrapGate,
+  summarizeBootstrapState,
+} from './utils/leagueBootstrap.js';
 import { clearWeeklyPrepForWeek, pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
@@ -137,6 +142,12 @@ function AppContent() {
   const [postGameResult, setPostGameResult] = useState(null);
   const [initFlow, setInitFlow] = useState(null);
   const archiveMigrationRef = useRef(null);
+  const leagueReady = hasMinimumPlayableLeague(league);
+  const isNewFranchiseBootstrapping = shouldShowNewFranchiseBootstrapGate({
+    league,
+    pendingNewSlot,
+    initFlowMode: initFlow?.mode,
+  });
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
   const advancingRef = useRef(false);
@@ -210,10 +221,10 @@ function AppContent() {
 
   // Auto-save when user navigates away
   useEffect(() => {
-    const handler = () => { if (league && activeSlot) actions.saveSlot(activeSlot); };
+    const handler = () => { if (leagueReady && activeSlot) actions.saveSlot(activeSlot); };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
-  }, [league, activeSlot, actions]);
+  }, [leagueReady, activeSlot, actions]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -340,7 +351,7 @@ function AppContent() {
         e.preventDefault();
         if (typeof handleAdvanceWeek === 'function') handleAdvanceWeek();
       } else if (e.key === 's' || e.key === 'S') {
-        if (!busy && league) {
+        if (!busy && leagueReady) {
           if (activeSlot) actions.saveSlot(activeSlot);
         }
       } else if (e.key === '?') {
@@ -349,7 +360,7 @@ function AppContent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [league, busy, postGameResult, promptUserGame, userGameLogs, handleAdvanceWeek, actions]);
+  }, [league, busy, leagueReady, postGameResult, promptUserGame, userGameLogs, handleAdvanceWeek, actions, activeSlot]);
 
   // Expose state and actions to window for E2E testing
   useEffect(() => {
@@ -368,7 +379,7 @@ function AppContent() {
 
 
   useEffect(() => {
-    if (!league || !activeSlot) return;
+    if (!leagueReady || !activeSlot) return;
     const slotNum = activeSlot?.split('_')?.[2];
     if (!slotNum) return;
     const userTeam = Array.isArray(league?.teams) ? league.teams.find(t => t?.id === league?.userTeamId) : null;
@@ -383,7 +394,7 @@ function AppContent() {
       lastSaved: new Date().toISOString(),
     };
     localStorage.setItem(`footballgm_slot_${slotNum}_meta`, JSON.stringify(nextMeta));
-  }, [league, activeSlot]);
+  }, [leagueReady, league, activeSlot]);
 
   useEffect(() => {
     if (!league) return;
@@ -403,7 +414,7 @@ function AppContent() {
   }, [league?.seasonId, league?.year, league?.week, league?.userTeamId]);
 
   useEffect(() => {
-    if (!league || !pendingNewSlot) return;
+    if (!shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot })) return;
     actions.saveSlot(pendingNewSlot);
     setActiveSlot(pendingNewSlot);
     setPendingNewSlot(null);
@@ -604,13 +615,37 @@ function AppContent() {
   }
 
   const bootstrapSummary = summarizeBootstrapState(league);
-  const leagueReady = bootstrapSummary.ready;
   const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
   const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
 
   const isPostseason = league?.phase === 'playoffs';
 
   const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
+
+  if (isNewFranchiseBootstrapping) {
+    return (
+      <div className="app-loading">
+        <div className="app-loading-spinner" />
+        <p className="app-loading-text">
+          Loading playable league state… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
+        </p>
+        {initFlow?.timedOut && (
+          <div role="alert" className="app-banner app-banner-error" style={{ marginTop: 12 }}>
+            <span>{initFlow.message}</span>
+            <div style={{ display: 'inline-flex', gap: 8, marginLeft: 10 }}>
+              <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
+                Retry Setup
+              </button>
+              <button className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
+                Back to Slots
+              </button>
+            </div>
+          </div>
+        )}
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" data-testid="app-shell-ready">

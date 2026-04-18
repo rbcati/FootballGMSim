@@ -68,6 +68,16 @@ describe('fresh save core screens', () => {
     )).not.toThrow();
   });
 
+  it('keeps extracted dashboard surfaces safe when league is null/partial', () => {
+    expect(() => renderToString(
+      <LeagueDashboard league={null} actions={actions} busy={false} simulating={false} onAdvanceWeek={() => {}} />,
+    )).not.toThrow();
+
+    expect(() => renderToString(
+      <LeagueDashboard league={{ teams: [], userTeamId: 0, phase: 'preseason' }} actions={actions} busy={false} simulating={false} onAdvanceWeek={() => {}} />,
+    )).not.toThrow();
+  });
+
   it('renders trade workspace without offers', () => {
     expect(() => renderToString(
       <TradeWorkspace league={freshLeague} actions={actions} onPlayerSelect={() => {}} initialView="Offers" />,

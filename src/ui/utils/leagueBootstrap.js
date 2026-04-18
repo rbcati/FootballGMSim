@@ -20,3 +20,14 @@ export function summarizeBootstrapState(league) {
   if (!hasUserTeam) reasons.push('Your team assignment is still resolving.');
   return { ready: hasMinimumPlayableLeague(league), reasons };
 }
+
+export function shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot }) {
+  if (!pendingNewSlot) return false;
+  return hasMinimumPlayableLeague(league);
+}
+
+export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, initFlowMode }) {
+  if (initFlowMode !== 'new') return false;
+  if (!pendingNewSlot) return false;
+  return !hasMinimumPlayableLeague(league);
+}
