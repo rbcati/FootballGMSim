@@ -14,6 +14,20 @@ describe('GameDetailScreen canonical title', () => {
     );
 
     expect(html).toContain('Game Book');
+    expect(html).toContain('Week');
     expect(html).not.toContain('Completed Game Detail');
+  });
+
+  it('renders an explicit empty state when no game is selected', () => {
+    const html = renderToString(
+      <GameDetailScreen
+        gameId={null}
+        league={{ seasonId: '2031' }}
+        actions={{}}
+      />,
+    );
+
+    expect(html).toContain('No completed game selected yet.');
+    expect(html).toContain('No game selected');
   });
 });

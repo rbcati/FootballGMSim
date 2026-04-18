@@ -2,6 +2,15 @@ import React, { useMemo, useState } from 'react';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 import { deriveCompactResultRecap, getGameLifecycleBucket, selectWeekGames } from '../utils/gameCenterResults.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
+import {
+  CompactInsightCard,
+  EmptyState,
+  HeroCard,
+  SectionCard,
+  SectionHeader,
+  StatStrip,
+  StatusChip,
+} from './ScreenSystem.jsx';
 
 function normalizeTeam(team) {
   if (!team || typeof team !== 'object') return { abbr: '—', name: 'Unknown' };
@@ -14,25 +23,25 @@ function formatPeriodLabel(game) {
   return 'Final';
 }
 
-function ResultRow({ row, seasonId, onGameSelect }) {
-  const presentation = buildCompletedGamePresentation(row.game, { seasonId, week: row.week, teamById: row.teamById, source: 'weekly_results_center' });
+function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_center' }) {
+  const presentation = buildCompletedGamePresentation(row.game, { seasonId, week: row.week, teamById: row.teamById, source });
   const clickable = Boolean(presentation.canOpen && onGameSelect);
 
   return (
-    <article className="premium-game-card is-completed" style={{ padding: 'var(--space-3)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+    <article className="app-game-center-card card">
+      <div className="app-game-center-card__top">
         <strong>Week {row.week}</strong>
-        <span className="badge">{formatPeriodLabel(row.game)}</span>
+        <StatusChip label={formatPeriodLabel(row.game)} tone="ok" />
       </div>
-      <div style={{ marginTop: 6, fontWeight: 700 }}>
+      <div className="app-game-center-card__scoreline">
         {row.away.abbr} {row.game?.awayScore ?? '—'} @ {row.home.abbr} {row.game?.homeScore ?? '—'}
       </div>
-      <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{row.recap}</div>
-      <div style={{ marginTop: 8 }}>
+      <p className="app-game-center-card__summary">{row.recap}</p>
+      <div className="app-game-center-card__footer">
         <button
           type="button"
           className="btn btn-sm"
-          onClick={clickable ? () => openResolvedBoxScore(row.game, { seasonId, week: row.week, source: 'weekly_results_center' }, onGameSelect) : undefined}
+          onClick={clickable ? () => openResolvedBoxScore(row.game, { seasonId, week: row.week, source }, onGameSelect) : undefined}
           disabled={!clickable}
           title={clickable ? (presentation?.ctaLabel ?? 'Open Game Book') : (presentation?.statusLabel ?? 'Archive unavailable')}
         >
@@ -43,7 +52,20 @@ function ResultRow({ row, seasonId, onGameSelect }) {
   );
 }
 
-
+function LiveOrUpcomingRow({ row, label, tone = 'info' }) {
+  return (
+    <article className="app-game-center-card card is-compact">
+      <div className="app-game-center-card__top">
+        <strong>Week {row.week}</strong>
+        <StatusChip label={label} tone={tone} />
+      </div>
+      <div className="app-game-center-card__scoreline">
+        {row.away.abbr} @ {row.home.abbr}
+      </div>
+      <p className="app-game-center-card__summary">{row.recap}</p>
+    </article>
+  );
+}
 
 function SpotlightCard({ row, seasonId, onGameSelect }) {
   const presentation = buildCompletedGamePresentation(row.game, { seasonId, week: row.week, source: 'weekly_results_spotlight' });
@@ -52,16 +74,16 @@ function SpotlightCard({ row, seasonId, onGameSelect }) {
   const homeId = Number(row?.game?.home?.id ?? row?.game?.home);
 
   return (
-    <article className="card" style={{ padding: 'var(--space-3)' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+    <article className="app-game-center-card card is-spotlight">
+      <div className="app-game-center-card__top">
         <strong>Spotlight game</strong>
-        <span className="badge">Score {row.score}</span>
+        <StatusChip label={`Score ${row.score}`} tone="warning" />
       </div>
-      <div style={{ marginTop: 6, fontWeight: 700 }}>
+      <div className="app-game-center-card__scoreline">
         {row.teamById[awayId]?.abbr ?? 'AWY'} {row.game?.awayScore ?? '—'} @ {row.teamById[homeId]?.abbr ?? 'HME'} {row.game?.homeScore ?? '—'}
       </div>
-      <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{row.reason}</div>
-      <div style={{ marginTop: 8 }}>
+      <p className="app-game-center-card__summary">{row.reason}</p>
+      <div className="app-game-center-card__footer">
         <button
           type="button"
           className="btn btn-sm"
@@ -113,104 +135,119 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect 
   const spotlightRows = useMemo(() => leagueRecap.spotlights.map((spotlight) => ({ ...spotlight, teamById })), [leagueRecap.spotlights, teamById]);
 
   if (!totalWeeks) {
-    return <div className="card" style={{ padding: 'var(--space-4)' }}>No schedule data available for weekly results.</div>;
+    return <EmptyState title="No schedule data available for weekly results." body="Weekly game center will populate when league schedule weeks are present." />;
   }
 
   return (
     <div className="app-screen-stack">
-      <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 8 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Game Center</div>
-            <h2 style={{ margin: 0 }}>Weekly Results</h2>
-          </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <HeroCard
+        eyebrow="Game Center"
+        title="Weekly Results"
+        subtitle="Track finals, live windows, and upcoming slates from one command view."
+        rightMeta={<StatusChip label={`Week ${selectedWeek}`} tone="info" />}
+        actions={(
+          <div className="app-weekly-results-nav">
             <button type="button" className="btn btn-sm" onClick={() => setSelectedWeek((w) => Math.max(1, w - 1))} disabled={selectedWeek <= 1}>Prev</button>
-            <span className="badge">Week {selectedWeek}</span>
             <button type="button" className="btn btn-sm" onClick={() => setSelectedWeek((w) => Math.min(totalWeeks, w + 1))} disabled={selectedWeek >= totalWeeks}>Next</button>
           </div>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <span className="badge">Completed {completed.length}</span>
-          <span className="badge">Live {live.length}</span>
-          <span className="badge">Upcoming {upcoming.length}</span>
-        </div>
-      </section>
-
+        )}
+      >
+        <StatStrip
+          items={[
+            { label: 'Completed', value: completed.length, tone: 'ok' },
+            { label: 'Live', value: live.length, tone: live.length ? 'warning' : 'neutral' },
+            { label: 'Upcoming', value: upcoming.length, tone: 'info' },
+            { label: 'Games', value: rows.length, tone: 'neutral' },
+          ]}
+        />
+        {leagueRecap.bullets[0] ? (
+          <CompactInsightCard
+            title="Featured weekly recap"
+            subtitle={leagueRecap.bullets[0]}
+            tone="info"
+          />
+        ) : null}
+      </HeroCard>
 
       {leagueRecap.bullets.length > 0 && (
-        <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Weekly League Recap</h3>
-          <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
-            {leagueRecap.bullets.map((bullet, idx) => <li key={`bullet-${idx}`} style={{ fontSize: 'var(--text-sm)' }}>{bullet}</li>)}
-          </ul>
-          <div style={{ display: 'grid', gap: 6, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-            <div className="card" style={{ padding: 'var(--space-2)' }}>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Race center</div>
-              <div style={{ fontSize: 'var(--text-sm)' }}>
-                <strong>Hottest:</strong> {leagueRecap.raceCenter.hottest[0] ? `${leagueRecap.raceCenter.hottest[0].team?.abbr ?? leagueRecap.raceCenter.hottest[0].team?.name} (${leagueRecap.raceCenter.hottest[0].streak.length}W)` : '—'}
-              </div>
-              <div style={{ fontSize: 'var(--text-sm)' }}>
-                <strong>Coldest:</strong> {leagueRecap.raceCenter.coldest[0] ? `${leagueRecap.raceCenter.coldest[0].team?.abbr ?? leagueRecap.raceCenter.coldest[0].team?.name} (${leagueRecap.raceCenter.coldest[0].streak.length}L)` : '—'}
-              </div>
-              <div style={{ fontSize: 'var(--text-sm)' }}>
-                <strong>Mover:</strong> {leagueRecap.raceCenter.biggestMover?.change > 0 ? `${leagueRecap.raceCenter.biggestMover.team?.abbr ?? leagueRecap.raceCenter.biggestMover.team?.name} (+${leagueRecap.raceCenter.biggestMover.change})` : 'No major move'}
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                {leagueRecap.raceCenter.bubble ? `Bubble: ${(leagueRecap.raceCenter.bubble.gap * 100).toFixed(1)} pct gap` : 'Bubble context unlocks as standings deepen.'}
-              </div>
+        <SectionCard
+          title="Weekly League Recap"
+          subtitle="Race center trends, movement, and macro context from this week."
+          variant="info"
+        >
+          <div className="app-weekly-results-recap-grid">
+            <div className="app-weekly-results-bullets">
+              {leagueRecap.bullets.map((bullet, idx) => (
+                <CompactInsightCard key={`bullet-${idx}`} title={bullet} tone="info" />
+              ))}
             </div>
-            <div className="card" style={{ padding: 'var(--space-2)' }}>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Team trajectories</div>
-              <div style={{ display: 'grid', gap: 4 }}>
-                {leagueRecap.trajectories.slice(0, 3).map((team) => (
-                  <div key={team.teamId ?? team.label} style={{ fontSize: 'var(--text-xs)' }}><strong>{team.label}:</strong> {team.snippet}</div>
-                ))}
-              </div>
+            <div className="app-weekly-results-bullets">
+              <CompactInsightCard
+                title="Race center"
+                subtitle={`Hottest: ${leagueRecap.raceCenter.hottest[0] ? `${leagueRecap.raceCenter.hottest[0].team?.abbr ?? leagueRecap.raceCenter.hottest[0].team?.name} (${leagueRecap.raceCenter.hottest[0].streak.length}W)` : '—'}`}
+                tone="ok"
+              />
+              <CompactInsightCard
+                title="Playoff pressure"
+                subtitle={`Coldest: ${leagueRecap.raceCenter.coldest[0] ? `${leagueRecap.raceCenter.coldest[0].team?.abbr ?? leagueRecap.raceCenter.coldest[0].team?.name} (${leagueRecap.raceCenter.coldest[0].streak.length}L)` : '—'}`}
+                tone="warning"
+              />
+              <CompactInsightCard
+                title="Biggest mover"
+                subtitle={leagueRecap.raceCenter.biggestMover?.change > 0
+                  ? `${leagueRecap.raceCenter.biggestMover.team?.abbr ?? leagueRecap.raceCenter.biggestMover.team?.name} (+${leagueRecap.raceCenter.biggestMover.change})`
+                  : 'No major move'}
+                tone="info"
+              />
+              <CompactInsightCard
+                title="Bubble context"
+                subtitle={leagueRecap.raceCenter.bubble
+                  ? `${(leagueRecap.raceCenter.bubble.gap * 100).toFixed(1)} pct gap`
+                  : 'Bubble context unlocks as standings deepen.'}
+                tone="info"
+              />
             </div>
           </div>
-        </section>
+        </SectionCard>
       )}
 
       {spotlightRows.length > 0 && (
-        <section style={{ display: 'grid', gap: 8 }}>
-          <h3 style={{ margin: 0 }}>Weekly Spotlight</h3>
-          {spotlightRows.map((row) => <SpotlightCard key={row.key} row={row} seasonId={league?.seasonId} onGameSelect={onGameSelect} />)}
+        <section className="app-screen-stack">
+          <SectionHeader title="Weekly Spotlight" subtitle="High-leverage finals and headline outcomes." />
+          <div className="app-weekly-results-grid">
+            {spotlightRows.map((row) => <SpotlightCard key={row.key} row={row} seasonId={league?.seasonId} onGameSelect={onGameSelect} />)}
+          </div>
         </section>
       )}
 
       {completed.length > 0 && (
-        <section style={{ display: 'grid', gap: 8 }}>
-          <h3 style={{ margin: 0 }}>Completed</h3>
-          {completed.map((row) => <ResultRow key={row.key} row={row} seasonId={league?.seasonId} onGameSelect={onGameSelect} />)}
+        <section className="app-screen-stack">
+          <SectionHeader title="Completed" subtitle="Finals available to open in Game Book." />
+          <div className="app-weekly-results-grid">
+            {completed.map((row) => <ResultRow key={row.key} row={row} seasonId={league?.seasonId} onGameSelect={onGameSelect} />)}
+          </div>
         </section>
       )}
 
       {live.length > 0 && (
-        <section style={{ display: 'grid', gap: 8 }}>
-          <h3 style={{ margin: 0 }}>In progress</h3>
-          {live.map((row) => (
-            <article key={row.key} className="card" style={{ padding: 'var(--space-3)' }}>
-              <strong>{row.away.abbr} @ {row.home.abbr}</strong>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{row.recap}</div>
-            </article>
-          ))}
+        <section className="app-screen-stack">
+          <SectionHeader title="In progress" subtitle="Live windows and in-flight game scripts." />
+          <div className="app-weekly-results-grid">
+            {live.map((row) => <LiveOrUpcomingRow key={row.key} row={row} label="Live" tone="warning" />)}
+          </div>
         </section>
       )}
 
       {upcoming.length > 0 && (
-        <section style={{ display: 'grid', gap: 8 }}>
-          <h3 style={{ margin: 0 }}>Upcoming</h3>
-          {upcoming.map((row) => (
-            <article key={row.key} className="card" style={{ padding: 'var(--space-3)' }}>
-              <strong>{row.away.abbr} @ {row.home.abbr}</strong>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{row.recap}</div>
-            </article>
-          ))}
+        <section className="app-screen-stack">
+          <SectionHeader title="Upcoming" subtitle="Scheduled matchups waiting to kick off." />
+          <div className="app-weekly-results-grid">
+            {upcoming.map((row) => <LiveOrUpcomingRow key={row.key} row={row} label="Upcoming" tone="info" />)}
+          </div>
         </section>
       )}
 
-      {rows.length === 0 ? <div className="card" style={{ padding: 'var(--space-4)' }}>No games scheduled for week {selectedWeek}.</div> : null}
+      {rows.length === 0 ? <EmptyState title={`No games scheduled for week ${selectedWeek}.`} body="Try another week to view slate and recap context." /> : null}
     </div>
   );
 }
