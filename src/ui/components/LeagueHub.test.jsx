@@ -39,7 +39,7 @@ describe('LeagueHub', () => {
       />,
     );
 
-    expect(html).toContain('League Command Center');
+    expect(html).toContain('League Desk');
     expect(html).toContain('Overview');
     expect(html).toContain('Results');
     expect(html).toContain('Standings');

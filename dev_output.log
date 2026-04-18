@@ -1,0 +1,33 @@
+
+> football-gm-sim@2.0.0 dev
+> vite
+
+
+  VITE v7.3.2  ready in 522 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+(!) Failed to run dependency scan. Skipping dependency pre-bundling. Error:   Failed to scan for dependencies from entries:
+  /app/index.html
+
+  [31m✘ [41;31m[[41;97mERROR[41;31m][0m [1mNo matching export in "src/ui/components/LeagueDashboard.jsx" for import "OvrPill"[0m
+
+    src/ui/components/RookieDraft.jsx:9:9:
+[37m      9 │ import { [32mOvrPill[37m } from "./LeagueDashboard.jsx";
+        ╵          [32m~~~~~~~[0m
+
+
+    at failureErrorWithLog (/app/node_modules/esbuild/lib/main.js:1467:15)
+    at /app/node_modules/esbuild/lib/main.js:926:25
+    at runOnEndCallbacks (/app/node_modules/esbuild/lib/main.js:1307:45)
+    at buildResponseToResult (/app/node_modules/esbuild/lib/main.js:924:7)
+    at /app/node_modules/esbuild/lib/main.js:936:9
+    at new Promise (<anonymous>)
+    at requestCallbacks.on-end (/app/node_modules/esbuild/lib/main.js:935:54)
+    at handleRequest (/app/node_modules/esbuild/lib/main.js:628:17)
+    at handleIncomingPacket (/app/node_modules/esbuild/lib/main.js:653:7)
+    at Socket.readFromStdout (/app/node_modules/esbuild/lib/main.js:581:7)
+5:34:04 AM [vite] (client) ✨ new dependencies optimized: react-dom/client, @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, react-chartjs-2, chart.js, @radix-ui/react-slot, class-variance-authority, clsx, tailwind-merge, @radix-ui/react-scroll-area, @radix-ui/react-tabs, facesjs/react, facesjs
+5:34:04 AM [vite] (client) ✨ optimized dependencies changed. reloading
+5:48:15 AM [vite] (client) hmr update /src/ui/components/LeagueDashboard.jsx, /src/ui/styles/base.css
+5:53:40 AM [vite] (client) hmr update /src/ui/components/LeagueDashboard.jsx, /src/ui/styles/base.css

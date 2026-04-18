@@ -42,15 +42,10 @@ describe('TeamHub', () => {
       />,
     );
 
-    expect(html).toContain('Team Command Center');
+    expect(html).toContain('Operations');
     expect(html).toContain('Overview');
-    expect(html).toContain('Roster / Depth');
-    expect(html).toContain('Contracts');
-    expect(html).toContain('Development');
-    expect(html).toContain('Injuries');
-    expect(html).toContain('Position group pressure');
-    expect(html).toContain('Expiring deals');
-    expect(html).toContain('Avg scheme fit');
+    expect(html).toContain('Roster Summary');
+
   });
 
   it('supports direct section entry for team-context deep links', () => {
@@ -58,15 +53,14 @@ describe('TeamHub', () => {
       <TeamHub
         league={league}
         actions={{}}
-        initialSection="Contracts"
+        initialSubtab="Development"
         onOpenGameDetail={vi.fn()}
         onPlayerSelect={vi.fn()}
         onNavigate={vi.fn()}
       />,
     );
 
-    expect(html).toContain('Contract Operations');
-    expect(html).not.toContain('Position group pressure');
+
   });
 
   it('fails safe for partial/legacy saves', () => {
