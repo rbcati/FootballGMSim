@@ -1434,3 +1434,50 @@
   border-color: var(--hairline);
   transform: translateX(2px);
 }
+
+/* ── Premium shell/nav treatment ───────────────────────────────────────────── */
+.franchise-status-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mobile-nav-panel-premium {
+  border-left: 1px solid var(--hairline-strong);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 94%, black 6%), var(--surface));
+}
+
+.mobile-nav-item-premium {
+  min-height: 46px;
+  border-radius: 12px;
+}
+
+.premium-bottom-nav {
+  border: 1px solid var(--hairline-strong);
+  border-radius: 18px;
+  left: max(10px, env(safe-area-inset-left));
+  right: max(10px, env(safe-area-inset-right));
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: auto;
+  max-width: 680px;
+  margin-inline: auto;
+  background: color-mix(in srgb, var(--surface-elevated) 92%, black 8%);
+  box-shadow: 0 20px 36px rgba(0, 0, 0, 0.42);
+}
+
+.premium-bottom-tab {
+  border-radius: 12px;
+  min-height: 48px;
+}
+
+.premium-bottom-tab.active {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--accent);
+}
+
+.mobile-bottom-tab-advance {
+  border-radius: 999px;
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  background: linear-gradient(160deg, rgba(var(--accent-rgb), 0.3), rgba(var(--accent-rgb), 0.16));
+  color: var(--text);
+}

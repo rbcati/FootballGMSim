@@ -1514,12 +1514,11 @@ export default function LeagueDashboard({
             }}
           />
         </div>
-        <div className="franchise-status-bar__meta">
-          <span><strong>{shell.teamAbbr}</strong> {shell.teamName}</span>
-          <span>{shell.year}</span>
-          <span>Week {shell.week}</span>
-          <span style={{ textTransform: 'capitalize' }}>{shell.phase}</span>
-          <span>Cap {shell.capSummary}</span>
+        <div className="franchise-status-pill-row">
+          <span className="app-status-chip tone-team"><strong>{shell.teamAbbr}</strong></span>
+          <span className="app-status-chip tone-league">Week {shell.week}</span>
+          <span className="app-status-chip tone-info" style={{ textTransform: 'capitalize' }}>{shell.phase}</span>
+          <span className="app-status-chip">Cap {shell.capSummary}</span>
         </div>
       </div>
 

@@ -4,7 +4,7 @@ import SocialFeed from './SocialFeed.jsx';
 import LeagueLeaders from './LeagueLeaders.jsx';
 import { buildNewsDeskModel } from '../utils/newsDesk.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
-import { CompactListRow, ScreenHeader, StatusChip } from './ScreenSystem.jsx';
+import { CompactListRow, StatusChip, HeroCard, SectionCard, StatStrip, CompactInsightCard } from './ScreenSystem.jsx';
 import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 
 const LEAGUE_SECTIONS = ['Overview', 'Results', 'Standings', 'News', 'Leaders'];
@@ -50,63 +50,61 @@ export default function LeagueHub({
 
   return (
     <div className="app-screen-stack">
-      <ScreenHeader
-        title="League Command Center"
-        subtitle="League-wide overview, results, standings pressure, news, and leaders."
+      <HeroCard
         eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? 1}`}
-      />
+        title="League Command Center"
+        subtitle="Results, standings pressure, league activity, and leaders."
+        rightMeta={<StatusChip label={section} tone="league" />}
+      >
+        <StatStrip items={[
+          { label: 'Spotlights', value: `${spotlightRows.length}`, tone: 'league' },
+          { label: 'Trades', value: `${transactionRows.filter((row) => row?._txType === 'Trade').length}`, tone: 'info' },
+          { label: 'Signings', value: `${transactionRows.filter((row) => row?._txType === 'Signing').length}`, tone: 'neutral' },
+          { label: 'Releases', value: `${transactionRows.filter((row) => row?._txType === 'Release').length}`, tone: transactionRows.some((row) => row?._txType === 'Release') ? 'warning' : 'neutral' },
+        ]} />
+      </HeroCard>
+
       <SectionSubnav items={LEAGUE_SECTIONS} activeItem={section} onChange={setSection} />
 
       {section === 'Overview' && (
-        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <h3 style={{ margin: 0 }}>League Pulse</h3>
-              <StatusChip label="Overview" tone="league" />
+        <div className="app-screen-stack">
+          <SectionCard title="League pulse" subtitle="What changed this week." variant="compact">
+            <div className="app-row-stack">
+              {(recap?.bullets ?? []).slice(0, 3).map((bullet, idx) => (
+                <CompactInsightCard key={`overview-bullet-${idx}`} title={bullet} tone="info" />
+              ))}
+              {(recap?.bullets ?? []).length === 0 ? <CompactInsightCard title="Pulse unlocks after results" subtitle="Complete games to populate weekly pulse and race context." tone="info" /> : null}
             </div>
-            <ul style={{ margin: 0, paddingLeft: 18, display: 'grid', gap: 4 }}>
-              {(recap?.bullets ?? []).slice(0, 3).map((bullet, idx) => <li key={`overview-bullet-${idx}`}>{bullet}</li>)}
-            </ul>
-            {(recap?.bullets ?? []).length === 0 ? (
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                Weekly pulse unlocks once completed game results are available.
-              </div>
-            ) : null}
-          </section>
+          </SectionCard>
 
-          <section className="card" style={{ padding: 'var(--space-3)', display: 'grid', gap: 6 }}>
-            <h3 style={{ margin: 0 }}>Standings pressure</h3>
-            <div style={{ display: 'grid', gap: 4, gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
-              <div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Hottest</div>
-                <div style={{ fontWeight: 700 }}>
-                  {recap?.raceCenter?.hottest?.[0]
-                    ? `${recap.raceCenter.hottest[0].team?.abbr ?? recap.raceCenter.hottest[0].team?.name} (${recap.raceCenter.hottest[0].streak.length}W)`
-                    : '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Coldest</div>
-                <div style={{ fontWeight: 700 }}>
-                  {recap?.raceCenter?.coldest?.[0]
-                    ? `${recap.raceCenter.coldest[0].team?.abbr ?? recap.raceCenter.coldest[0].team?.name} (${recap.raceCenter.coldest[0].streak.length}L)`
-                    : '—'}
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Mover</div>
-                <div style={{ fontWeight: 700 }}>
-                  {recap?.raceCenter?.biggestMover?.change > 0
-                    ? `${recap.raceCenter.biggestMover.team?.abbr ?? recap.raceCenter.biggestMover.team?.name} (+${recap.raceCenter.biggestMover.change})`
-                    : 'No major move'}
-                </div>
-              </div>
-            </div>
-          </section>
+          <SectionCard title="Standings pressure" variant="compact">
+            <StatStrip items={[
+              {
+                label: 'Hottest',
+                value: recap?.raceCenter?.hottest?.[0]
+                  ? `${recap.raceCenter.hottest[0].team?.abbr ?? recap.raceCenter.hottest[0].team?.name} (${recap.raceCenter.hottest[0].streak.length}W)`
+                  : '—',
+                tone: 'ok',
+              },
+              {
+                label: 'Coldest',
+                value: recap?.raceCenter?.coldest?.[0]
+                  ? `${recap.raceCenter.coldest[0].team?.abbr ?? recap.raceCenter.coldest[0].team?.name} (${recap.raceCenter.coldest[0].streak.length}L)`
+                  : '—',
+                tone: 'warning',
+              },
+              {
+                label: 'Mover',
+                value: recap?.raceCenter?.biggestMover?.change > 0
+                  ? `${recap.raceCenter.biggestMover.team?.abbr ?? recap.raceCenter.biggestMover.team?.name} (+${recap.raceCenter.biggestMover.change})`
+                  : 'No major move',
+                tone: 'league',
+              },
+            ]} />
+          </SectionCard>
 
           {spotlightRows.length > 0 && (
-            <section style={{ display: 'grid', gap: 6 }}>
-              <h3 style={{ margin: 0 }}>Spotlight games</h3>
+            <SectionCard title="Spotlight games" variant="compact">
               {spotlightRows.slice(0, 2).map((spotlight, idx) => (
                 <CompactListRow
                   key={spotlight.key ?? `spotlight-${idx}`}
@@ -123,7 +121,7 @@ export default function LeagueHub({
                   </button>
                 </CompactListRow>
               ))}
-            </section>
+            </SectionCard>
           )}
         </div>
       )}
@@ -132,30 +130,21 @@ export default function LeagueHub({
       {section === 'Standings' && renderStandings?.()}
 
       {section === 'News' && (
-        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <section className="card" style={{ padding: 'var(--space-3)' }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>League activity center</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
-              {['Trade', 'Signing', 'Release', 'Draft'].map((label) => (
-                <div key={label} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: '8px 10px', background: 'var(--surface-2)' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-subtle)', textTransform: 'uppercase' }}>{label}</div>
-                  <div style={{ fontWeight: 800, fontSize: 18 }}>{transactionRows.filter((row) => row?._txType === label).length}</div>
-                </div>
-              ))}
-            </div>
-          </section>
+        <div className="app-screen-stack">
+          <SectionCard title="League activity" subtitle="Transaction mix this week." variant="compact">
+            <StatStrip items={['Trade', 'Signing', 'Release', 'Draft'].map((label) => ({
+              label,
+              value: `${transactionRows.filter((row) => row?._txType === label).length}`,
+              tone: label === 'Release' ? 'warning' : 'league',
+            }))} />
+          </SectionCard>
           <SocialFeed league={league} defaultFilter="league" maxItems={12} onPlayerSelect={onPlayerSelect} />
         </div>
       )}
 
       {section === 'Leaders' && (
-        <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
-          <section className="card" style={{ padding: 'var(--space-3)' }}>
-            <h3 style={{ margin: 0 }}>League leaders</h3>
-            <div style={{ marginTop: 4, fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              Season production leaders and race snapshots across the league.
-            </div>
-          </section>
+        <div className="app-screen-stack">
+          <SectionCard title="League leaders" subtitle="Season production and race snapshots." variant="compact" />
           <LeagueLeaders league={league} actions={actions} onPlayerSelect={onPlayerSelect} />
         </div>
       )}

@@ -80,9 +80,9 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
 
       {menuOpen && <div className="mobile-nav-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
 
-      <nav className={`mobile-nav-panel ${menuOpen ? 'open' : ''}`} aria-label="More navigation">
+      <nav className={`mobile-nav-panel mobile-nav-panel-premium ${menuOpen ? 'open' : ''}`} aria-label="More navigation">
         <div className="mobile-nav-header">
-          <h2 className="mobile-nav-title">More</h2>
+          <h2 className="mobile-nav-title">Command Menu</h2>
           {league && <p className="mobile-nav-subtitle">{league.year ?? league.seasonId} · {league.phase}</p>}
         </div>
 
@@ -93,7 +93,7 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button key={item.id} className="mobile-nav-item" onClick={() => handleDestinationClick(item.id)}>
+                  <button key={item.id} className="mobile-nav-item mobile-nav-item-premium" onClick={() => handleDestinationClick(item.id)}>
                     <Icon size={20} />
                     <span>{item.label}</span>
                   </button>
@@ -104,12 +104,12 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
         </div>
       </nav>
 
-      <div className="mobile-bottom-bar">
+      <div className="mobile-bottom-bar premium-bottom-nav">
         {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeSection === tab.id;
           return (
-            <button key={tab.id} className={`mobile-bottom-tab ${isActive ? 'active' : ''}`} onClick={() => handleSectionClick(tab.id)} aria-label={tab.label}>
+            <button key={tab.id} className={`mobile-bottom-tab premium-bottom-tab ${isActive ? 'active' : ''}`} onClick={() => handleSectionClick(tab.id)} aria-label={tab.label}>
               <Icon size={20} />
               <span className="mobile-bottom-label">{tab.label}</span>
             </button>
@@ -117,7 +117,7 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
         })}
 
         <button
-          className="mobile-bottom-tab mobile-bottom-tab-advance"
+          className="mobile-bottom-tab premium-bottom-tab mobile-bottom-tab-advance"
           onClick={onAdvance}
           disabled={advanceDisabled}
           aria-label={advanceLabel || 'Advance'}
@@ -126,7 +126,7 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
           <span className="mobile-bottom-label">{advanceLabel || 'Advance'}</span>
         </button>
 
-        <button className={`mobile-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open more menu">
+        <button className={`mobile-bottom-tab premium-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open more menu">
           <MoreIcon size={20} />
           <span className="mobile-bottom-label">{NAV_LABELS.more}</span>
         </button>
