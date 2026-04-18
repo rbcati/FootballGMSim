@@ -1,4 +1,4 @@
-export const CURRENT_SAVE_SCHEMA_VERSION = 5.5;
+export const CURRENT_SAVE_SCHEMA_VERSION = 5.6;
 
 function migratePreVersioned(meta = {}) {
   return {
@@ -45,6 +45,7 @@ const MIGRATIONS = {
   5.2: migrateV52ToV53,
   5.3: migrateV53ToV54,
   5.4: migrateV54ToV55,
+  5.5: migrateV55ToV56,
 };
 
 function migrateV4ToV5(meta = {}) {
@@ -147,6 +148,21 @@ function migrateV54ToV55(meta = {}) {
     financialSystem,
     baselineRevenue,
     saveVersion: 5.5,
+  };
+}
+
+function migrateV55ToV56(meta = {}) {
+  const developmentModel = {
+    version: 1,
+    lastEvolutionStamp: null,
+    ...(meta?.developmentModel ?? {}),
+  };
+  const weeklyDevelopmentLog = Array.isArray(meta?.weeklyDevelopmentLog) ? meta.weeklyDevelopmentLog : [];
+  return {
+    ...meta,
+    developmentModel,
+    weeklyDevelopmentLog,
+    saveVersion: 5.6,
   };
 }
 

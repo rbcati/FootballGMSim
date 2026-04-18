@@ -170,6 +170,11 @@ export const State = {
       playoffs: null,
       trainingPlan: null,
       pendingOffers: [],
+      weeklyDevelopmentLog: [],
+      developmentModel: {
+        version: 1,
+        lastEvolutionStamp: null,
+      },
       
       // User interface
       currentView: 'hub',
@@ -454,6 +459,13 @@ export const State = {
         history: [],
       };
       migratedTeam.rivalTeamId = migratedTeam?.rivalTeamId ?? null;
+      migratedTeam.weeklyDevelopmentFocus = migratedTeam?.weeklyDevelopmentFocus ?? null;
+      migratedTeam.roster = migratedTeam.roster.map((player) => ({
+        ...player,
+        attributeXp: player?.attributeXp ?? {},
+        growthHistory: Array.isArray(player?.growthHistory) ? player.growthHistory : [],
+        lastEvolutionWeek: player?.lastEvolutionWeek ?? null,
+      }));
       if (migratedTeam.staff && typeof migratedTeam.staff === 'object') {
         Object.keys(migratedTeam.staff).forEach((key) => {
           if (migratedTeam.staff[key] && typeof migratedTeam.staff[key] === 'object') {
