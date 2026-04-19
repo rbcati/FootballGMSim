@@ -1,0 +1,692 @@
+// player.js - Combined Player System
+// Core Logic - Pure JS (No DOM/Window dependencies)
+
+import { Utils as U } from './utils.js';
+import { Constants as C } from './constants.js';
+import { calculateWAR as calculateWARImpl } from './war-calculator.js';
+import { generateTraits } from './traits.js';
+import { generateFaceConfig } from './face.js';
+import { generatePersonalityProfile, ensurePersonalityProfile, contractPersonalityModifier } from './development/personalitySystem.js';
+import { generateCollegeStats, generateInterviewReport, getScoutingRangeFromProfile, simulateCombineResults } from './draft/draftScouting.js';
+
+const CONTRACT_DEFAULT = {
+  salary: 2,
+  years: 1,
+  guaranteed: 0,
+  isFranchiseTagged: false,
+};
+
+const DEV_TRAITS = ['Normal', 'Star', 'Superstar', 'XFactor'];
+
+// ============================================================================
+// PLAYER PROGRESSION & SKILL TREES
+// ============================================================================
+
+const SKILL_TREES = {
+    QB: [
+      { name: 'Pocket Presence', cost: 1, boosts: { awareness: 2, intelligence: 1 } },
+      { name: 'Arm Strength I', cost: 1, boosts: { throwPower: 3 } },
+      { name: 'Short Accuracy', cost: 1, boosts: { throwAccuracy: 2, awareness: 1 } },
+      { name: 'Deep Ball I', cost: 2, boosts: { throwPower: 2, throwAccuracy: 2 } },
+      { name: 'Scramble Drill', cost: 2, boosts: { speed: 2, agility: 2, awareness: 1 } },
+      { name: 'Play Action Mastery', cost: 2, boosts: { awareness: 3, intelligence: 1 } },
+      { name: 'Clutch Passer', cost: 3, boosts: { awareness: 4, intelligence: 2 } },
+      { name: 'Deadeye Elite', cost: 3, boosts: { throwAccuracy: 5 } }
+    ],
+    RB: [
+      { name: 'Evasive Runner', cost: 1, boosts: { juking: 3, agility: 1 } },
+      { name: 'Power Runner I', cost: 1, boosts: { trucking: 3, weight: 5 } },
+      { name: 'Burst of Speed', cost: 1, boosts: { acceleration: 3 } },
+      { name: 'Receiving Back', cost: 2, boosts: { catching: 3, agility: 2 } },
+      { name: 'Endurance Training', cost: 2, boosts: { awareness: 1 } },
+      { name: 'Pass Protection', cost: 2, boosts: { passBlock: 3, intelligence: 2 } },
+      { name: 'Workhorse', cost: 3, boosts: { trucking: 4, awareness: 3 } },
+      { name: 'Human Joystick', cost: 3, boosts: { juking: 4, agility: 4 } }
+    ],
+    WR: [
+      { name: 'Route Running', cost: 1, boosts: { agility: 2, awareness: 1 } },
+      { name: 'Hands', cost: 1, boosts: { catching: 3 } },
+      { name: 'Speed Training', cost: 1, boosts: { speed: 3 } },
+      { name: 'Deep Threat', cost: 2, boosts: { speed: 2, catching: 2 } },
+      { name: 'Possession Receiver', cost: 2, boosts: { catchInTraffic: 3, catching: 2 } },
+      { name: 'Elite Receiver', cost: 3, boosts: { catching: 4, agility: 3 } }
+    ],
+    DL: [
+      { name: 'Pass Rush I', cost: 1, boosts: { passRushSpeed: 3 } },
+      { name: 'Power Rush', cost: 1, boosts: { passRushPower: 3 } },
+      { name: 'Run Stopper', cost: 1, boosts: { runStop: 3 } },
+      { name: 'Elite Pass Rusher', cost: 2, boosts: { passRushSpeed: 2, passRushPower: 2 } },
+      { name: 'Complete Defender', cost: 3, boosts: { passRushSpeed: 3, runStop: 3 } }
+    ],
+    LB: [
+      { name: 'Coverage I', cost: 1, boosts: { coverage: 3 } },
+      { name: 'Run Defense', cost: 1, boosts: { runStop: 3 } },
+      { name: 'Blitz Specialist', cost: 1, boosts: { passRushSpeed: 2, awareness: 1 } },
+      { name: 'Coverage Master', cost: 2, boosts: { coverage: 4, speed: 2 } },
+      { name: 'Complete Linebacker', cost: 3, boosts: { coverage: 3, runStop: 3, awareness: 2 } }
+    ],
+    CB: [
+      { name: 'Man Coverage', cost: 1, boosts: { coverage: 3, speed: 1 } },
+      { name: 'Zone Coverage', cost: 1, boosts: { coverage: 2, awareness: 2 } },
+      { name: 'Ball Skills', cost: 1, boosts: { awareness: 3 } },
+      { name: 'Shutdown Corner', cost: 2, boosts: { coverage: 4, speed: 2 } },
+      { name: 'Elite Coverage', cost: 3, boosts: { coverage: 5, awareness: 3 } }
+    ],
+    S: [
+      { name: 'Deep Coverage', cost: 1, boosts: { coverage: 2, awareness: 2 } },
+      { name: 'Run Support', cost: 1, boosts: { runStop: 3 } },
+      { name: 'Ball Hawk', cost: 1, boosts: { awareness: 3 } },
+      { name: 'Complete Safety', cost: 2, boosts: { coverage: 3, runStop: 3 } },
+      { name: 'Elite Safety', cost: 3, boosts: { coverage: 4, awareness: 4 } }
+    ],
+    OL: [
+      { name: 'Pass Block I', cost: 1, boosts: { passBlock: 3 } },
+      { name: 'Run Block I', cost: 1, boosts: { runBlock: 3 } },
+      { name: 'Technique', cost: 1, boosts: { awareness: 2, intelligence: 1 } },
+      { name: 'Elite Pass Protector', cost: 2, boosts: { passBlock: 4 } },
+      { name: 'Complete Lineman', cost: 3, boosts: { passBlock: 3, runBlock: 3, awareness: 2 } }
+    ],
+    TE: [
+      { name: 'Receiving', cost: 1, boosts: { catching: 3 } },
+      { name: 'Blocking', cost: 1, boosts: { runBlock: 2, passBlock: 2 } },
+      { name: 'Route Running', cost: 1, boosts: { agility: 2, awareness: 1 } },
+      { name: 'Complete Tight End', cost: 2, boosts: { catching: 3, runBlock: 2 } },
+      { name: 'Elite TE', cost: 3, boosts: { catching: 4, runBlock: 3 } }
+    ],
+    K: [
+      { name: 'Accuracy', cost: 1, boosts: { kickAccuracy: 3 } },
+      { name: 'Power', cost: 1, boosts: { kickPower: 3 } },
+      { name: 'Clutch Kicker', cost: 2, boosts: { kickAccuracy: 4, kickPower: 2 } }
+    ],
+    P: [
+      { name: 'Distance', cost: 1, boosts: { kickPower: 3 } },
+      { name: 'Accuracy', cost: 1, boosts: { kickAccuracy: 3 } },
+      { name: 'Elite Punter', cost: 2, boosts: { kickPower: 4, kickAccuracy: 3 } }
+    ]
+};
+
+function initProgressionStats(player) {
+    if (!player.progression) {
+      player.progression = {
+        xp: 0,
+        skillPoints: 0,
+        upgrades: [],
+        treeOvrBonus: 0
+      };
+    }
+}
+
+function calculateGameXP(gameStats, ovr) {
+    let baseXP = 50;
+    if (ovr >= 90) baseXP += 40;
+    else if (ovr >= 80) baseXP += 30;
+    else if (ovr >= 70) baseXP += 20;
+
+    const age = gameStats.age || 22;
+    const potential = gameStats.potential || ovr;
+    const potentialDiff = potential - ovr;
+    baseXP += U.clamp(potentialDiff * 5, 0, 100);
+
+    if (age <= 24) baseXP *= 1.15;
+    else if (age <= 27) baseXP *= 1.0;
+    else if (age <= 30) baseXP *= 0.8;
+    else if (age <= 33) baseXP *= 0.4;
+    else baseXP *= 0.15;
+
+    const workEthic = gameStats.workEthic || gameStats.character?.workEthic || 75;
+    if (workEthic >= 90) baseXP *= 1.25;
+    else if (workEthic >= 80) baseXP *= 1.10;
+    else if (workEthic < 65) baseXP *= 0.85;
+
+    if (gameStats.years <= 1) baseXP += 20;
+
+    if (gameStats.passYd && gameStats.passYd > 200) baseXP += Math.floor(gameStats.passYd / 50);
+    if (gameStats.rushYd && gameStats.rushYd > 100) baseXP += Math.floor(gameStats.rushYd / 20);
+    if (gameStats.interceptions === 0) baseXP += 10;
+
+    return U.clamp(Math.round(baseXP), 20, 500);
+}
+
+function addXP(player, xpGained) {
+    initProgressionStats(player);
+    const XP_FOR_SP = 1000;
+    player.progression.xp += xpGained;
+    while (player.progression.xp >= XP_FOR_SP) {
+      player.progression.xp -= XP_FOR_SP;
+      player.progression.skillPoints++;
+    }
+}
+
+function applySkillTreeUpgrade(player, skillName) {
+    initProgressionStats(player);
+    if (!SKILL_TREES[player.pos]) return false;
+
+    const skill = SKILL_TREES[player.pos].find(s => s.name === skillName);
+    if (!skill) return false;
+
+    if (player.progression.upgrades.includes(skillName)) return false;
+    if (player.progression.skillPoints < skill.cost) return false;
+
+    player.progression.skillPoints -= skill.cost;
+
+    let ovrGained = 0;
+    for (const [rating, boost] of Object.entries(skill.boosts)) {
+      if (player.ratings[rating] !== undefined) {
+        player.ratings[rating] = Math.min(99, player.ratings[rating] + boost);
+        ovrGained += boost * 0.5;
+      }
+    }
+
+    player.progression.upgrades.push(skillName);
+    player.progression.treeOvrBonus += ovrGained;
+    player.ovr = calculateOvr(player.pos, player.ratings);
+
+    return true;
+}
+
+// ============================================================================
+// CORE HELPERS (Extracted from fixes.js)
+// ============================================================================
+
+function generatePlayerRatings(pos, targetOvr = null) {
+  const genRating = (min, max, weight = 1.0) => {
+      if (targetOvr) {
+          const variance = 10;
+          let r = targetOvr + U.rand(-variance, variance);
+          r = r * weight;
+          return U.clamp(Math.round(r), min, max);
+      }
+      return U.rand(min, max);
+  };
+
+  const baseRatings = {
+    throwPower: genRating(50, 99),
+    throwAccuracy: genRating(50, 99),
+    awareness: genRating(40, 99),
+    catching: genRating(40, 99),
+    catchInTraffic: genRating(40, 99),
+    acceleration: genRating(60, 99),
+    speed: genRating(60, 99),
+    agility: genRating(60, 99),
+    trucking: genRating(40, 99),
+    juking: genRating(40, 99),
+    passRushSpeed: genRating(40, 99),
+    passRushPower: genRating(40, 99),
+    runStop: genRating(40, 99),
+    coverage: genRating(40, 99),
+    runBlock: genRating(50, 99),
+    passBlock: genRating(50, 99),
+    intelligence: genRating(40, 99),
+    kickPower: genRating(60, 99),
+    kickAccuracy: genRating(60, 99),
+    durability: genRating(60, 99),
+    height: U.rand(68, 80),
+    weight: U.rand(180, 320)
+  };
+
+  const positionAdjustments = {
+    QB: { speed: [50, 90], throwPower: [65, 99], throwAccuracy: [55, 99] },
+    RB: { speed: [70, 99], acceleration: [70, 99], trucking: [60, 99], juking: [50, 99] },
+    WR: { speed: [75, 99], acceleration: [70, 99], catching: [65, 99], catchInTraffic: [55, 99] },
+    TE: { catching: [55, 95], runBlock: [60, 95], passBlock: [55, 90], speed: [45, 85] },
+    OL: { speed: [40, 65], runBlock: [70, 99], passBlock: [70, 99], weight: [290, 350] },
+    DL: { passRushPower: [60, 99], passRushSpeed: [55, 99], runStop: [65, 99], weight: [250, 320] },
+    LB: { speed: [60, 95], runStop: [60, 95], coverage: [45, 90], awareness: [55, 95] },
+    CB: { speed: [75, 99], acceleration: [75, 99], coverage: [60, 99], intelligence: [50, 95] },
+    S: { speed: [65, 95], coverage: [55, 95], runStop: [50, 90], awareness: [60, 95] },
+    K: { kickPower: [70, 99], kickAccuracy: [60, 99], speed: [40, 70] },
+    P: { kickPower: [65, 99], kickAccuracy: [60, 99], speed: [40, 70] }
+  };
+
+  const adjustments = positionAdjustments[pos] || {};
+  Object.keys(adjustments).forEach(stat => {
+    const [min, max] = adjustments[stat];
+    baseRatings[stat] = genRating(min, max);
+  });
+
+  return baseRatings;
+}
+
+function calculateOvr(pos, ratings) {
+  const weights = C.OVR_WEIGHTS[pos];
+  if (!weights) return U.rand(50, 75);
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const stat in weights) {
+    const weight = weights[stat];
+    let rating = parseInt(ratings[stat], 10);
+    if (isNaN(rating)) rating = 50;
+    weightedSum += rating * weight;
+    totalWeight += weight;
+  }
+
+  const rawOvr = totalWeight > 0 ? weightedSum / totalWeight : 50;
+  return U.clamp(Math.round(rawOvr), C.PLAYER_CONFIG.MIN_OVR, C.PLAYER_CONFIG.MAX_OVR);
+}
+
+function generateContract(ovr, pos) {
+  const byOvr = (elite, star, depth) => {
+    if (ovr >= 90) return elite;
+    if (ovr >= 80) return star;
+    return depth;
+  };
+  let range = [2, 6];
+  if (pos === 'QB') range = byOvr([35, 45], [20, 34], [3, 9]);
+  else if (pos === 'WR' || pos === 'CB') range = byOvr([20, 28], [12, 19], [3, 11]);
+  else if (pos === 'RB') range = byOvr([12, 16], [7, 11], [1, 6]);
+  else if (pos === 'OL' || pos === 'DL') range = byOvr([18, 24], [10, 17], [2, 9]);
+  else if (pos === 'LB' || pos === 'TE') range = byOvr([14, 20], [8, 13], [2, 7]);
+  else if (pos === 'K' || pos === 'P') range = [1, 4];
+  else if (pos === 'S') range = byOvr([12, 18], [7, 12], [2, 8]);
+
+  const salary = Math.round((U.rand(range[0] * 10, range[1] * 10) / 10) * 10) / 10;
+  const years = U.rand(1, 5);
+  const guaranteedRatio = 0.3 + (U.random() * 0.4);
+  const guaranteed = Math.round((salary * years * guaranteedRatio) * 10) / 10;
+
+  return { salary, years, guaranteed, isFranchiseTagged: false };
+}
+
+function tagAbilities(player) {
+  if (!player || !player.ratings) return;
+  player.abilities = [];
+  const r = player.ratings;
+
+  const abilityThresholds = { ELITE: 95, VERY_GOOD: 88, GOOD: 82 };
+
+  if (player.pos === 'QB') {
+    if (r.throwPower >= abilityThresholds.ELITE) player.abilities.push('Cannon Arm');
+    if (r.throwAccuracy >= abilityThresholds.ELITE) player.abilities.push('Deadeye');
+    if (r.speed >= abilityThresholds.VERY_GOOD) player.abilities.push('Escape Artist');
+  }
+  // Add other positions if needed... simplified for brevity but core logic is here
+}
+
+function generatePersonality() {
+    const traits = [];
+    const numTraits = U.rand(1, 2);
+    const possibleTraits = ['High Work Ethic', 'Low Work Ethic', 'Leadership', 'Divisive', 'Clutch', 'Loyal', 'Greedy', 'Mentor'];
+
+    // Prevent conflicting traits
+    const addTrait = (trait) => {
+        if (trait === 'High Work Ethic' && traits.includes('Low Work Ethic')) return false;
+        if (trait === 'Low Work Ethic' && traits.includes('High Work Ethic')) return false;
+        if (trait === 'Leadership' && traits.includes('Divisive')) return false;
+        if (trait === 'Divisive' && traits.includes('Leadership')) return false;
+        if (!traits.includes(trait)) {
+            traits.push(trait);
+            return true;
+        }
+        return false;
+    };
+
+    let attempts = 0;
+    while (traits.length < numTraits && attempts < 10) {
+        addTrait(U.choice(possibleTraits));
+        attempts++;
+    }
+    return { traits };
+}
+
+function getZeroStats() {
+    return {
+      gamesPlayed: 0,
+      passYd: 0, passTD: 0, interceptions: 0, passAtt: 0, passComp: 0, sacks: 0,
+      rushYd: 0, rushTD: 0, rushAtt: 0, fumbles: 0,
+      recYd: 0, recTD: 0, receptions: 0, targets: 0, drops: 0,
+      tackles: 0, forcedFumbles: 0, passesDefended: 0, tacklesForLoss: 0,
+      fgMade: 0, fgAttempts: 0, xpMade: 0, xpAttempts: 0, punts: 0,
+      twoPtMade: 0
+    };
+}
+
+function generateCollege() {
+    return U.choice(C.COLLEGES) || 'Unknown University';
+}
+
+function generateName() {
+    // Use Constants directly for names to avoid window dep
+    return U.choice(C.FIRST_NAMES) + ' ' + U.choice(C.LAST_NAMES);
+}
+
+/**
+ * Generate a unique name that doesn't collide with existing elite players (OVR > 80).
+ * Re-rolls up to 10 times if a collision with an elite player name is found.
+ * @param {Set<string>} eliteNames - Set of names belonging to elite players.
+ * @returns {string} A player name.
+ */
+function generateUniqueName(eliteNames) {
+    if (!eliteNames || eliteNames.size === 0) return generateName();
+    for (let attempt = 0; attempt < 10; attempt++) {
+        const name = generateName();
+        if (!eliteNames.has(name)) return name;
+    }
+    // Fallback: return whatever we got (extremely rare with 52k+ combos)
+    return generateName();
+}
+
+// ============================================================================
+// MAIN PLAYER FUNCTIONS
+// ============================================================================
+
+function makePlayer(pos, age = null, ovr = null, eliteNames = null) {
+    if (!U || !C) throw new Error('Utils and Constants must be loaded');
+
+    const playerAge = age || U.rand(C.PLAYER_CONFIG.MIN_AGE, C.PLAYER_CONFIG.MAX_AGE);
+    const ratings = generatePlayerRatings(pos, ovr);
+    const playerOvr = calculateOvr(pos, ratings);
+    const contractDetails = generateContract(playerOvr, pos);
+
+    const playerPotential = Math.min(99, playerOvr + U.rand(0, 30));
+    const college = generateCollege();
+    const personalityProfile = generatePersonalityProfile({ college, age: playerAge });
+    const combineResults = simulateCombineResults(pos, ratings);
+    const collegeStats = generateCollegeStats(pos, playerOvr, playerPotential);
+    const player = {
+        id: U.id(),
+        name: eliteNames ? generateUniqueName(eliteNames) : generateName(),
+        pos: pos,
+        age: playerAge,
+        ratings: ratings,
+        ovr: playerOvr,
+        displayOvr: playerOvr, // Simplified calibration
+        years: contractDetails.years,
+        yearsTotal: contractDetails.years,
+        baseAnnual: contractDetails.salary,
+        signingBonus: 0,
+        guaranteedPct: contractDetails.years > 0
+          ? (contractDetails.guaranteed / (contractDetails.salary * contractDetails.years))
+          : 0.5,
+        contract: {
+          ...CONTRACT_DEFAULT,
+          ...contractDetails
+        },
+        injuryWeeksRemaining: 0,
+        injuryWeeks: 0,
+        fatigue: 0,
+        morale: U.rand(70, 95),
+        negotiationStatus: 'OPEN',
+        lockoutWeeks: 0,
+        devTrait: U.choice(DEV_TRAITS),
+        xp: 0,
+        ovrHistory: [],
+        potential: playerPotential,
+        isFollowed: false,
+                depthOrder: 0,
+        scoutStatus: { grade: calculateScoutGrade(playerOvr, playerPotential), fullyScouted: false },
+        combineStats: generateCombineStats(ratings, pos),
+        combineResults,
+        collegeStats,
+traits: generateTraits(pos, playerOvr),
+        abilities: [],
+        offers: [], // FA offers
+        onTradeBlock: false,
+        awards: [],
+        personality: generatePersonality(),
+        personalityProfile,
+        mentorship: { mentorId: null, menteeIds: [], maxMentees: 2 },
+        face: generateFaceConfig(`player-${pos}-${playerAge}-${Date.now()}-${Math.random()}`),
+        stats: {
+          game: getZeroStats(),
+          season: getZeroStats(),
+          career: getZeroStats()
+        },
+        // careerStats: archived per-season stat lines (SeasonStatLine[]).
+        // Populated by archiveSeason() in the worker at the end of each season.
+        // Shape: { season, team, gamesPlayed, passYds, passTDs, ints, compPct,
+        //          rushYds, rushTDs, receptions, recYds, recTDs,
+        //          tackles, sacks, ffum, ovr }
+        careerStats: [],
+        history: [],
+        college,
+        trueOvr: playerOvr,
+        scoutedOvr: U.clamp(playerOvr + U.rand(-15, 15), 40, 99),
+        interviewReport: generateInterviewReport({ ratings, personalityProfile }),
+        trueRatings: { ...ratings },
+        visibleRatings: { ...ratings },
+    };
+
+    initProgressionStats(player);
+    tagAbilities(player);
+
+    return player;
+}
+
+function progressPlayer(player) {
+    if (!player) return player;
+    player.age++;
+    if (player.age > (C.HALL_OF_FAME?.FORCED_RETIREMENT_AGE || 38)) {
+        player.retired = true;
+        return player;
+    }
+    // Simplified progression: Re-calc OVR based on existing ratings (which might be updated elsewhere)
+    // In a real worker loop, we'd add the detailed regression logic here.
+    // For now, keep it simple/safe.
+    player.ovr = calculateOvr(player.pos, player.ratings);
+    return player;
+}
+
+// ============================================================================
+// LEGACY & STATS (Simplified)
+// ============================================================================
+
+function initializePlayerLegacy(player) {
+    if (!player.legacy) {
+      player.legacy = { milestones: [], achievements: [], awards: {}, records: { team: [], league: [] }, metrics: {} };
+    }
+}
+
+function updatePlayerGameLegacy(player, gameStats, gameContext) {
+    initializePlayerLegacy(player);
+    // ... Legacy logic can be expanded here
+}
+
+function updateAdvancedStats(player, seasonStats) {
+    if (!player.stats.career) player.stats.career = getZeroStats();
+    if (!player.stats.career.advanced) player.stats.career.advanced = {};
+
+    // Calculate WAR
+    if (calculateWARImpl) {
+        seasonStats.war = calculateWARImpl(player, seasonStats);
+    }
+}
+
+// ============================================================================
+// ROOKIES
+// ============================================================================
+
+function generateDraftClass(year, options = {}) {
+    const classSize = options.classSize || 250;
+    const draftClass = [];
+    const positions = C.DRAFT_CONFIG?.POSITIONS || C.POSITIONS; // Fallback
+    const posKeys = Object.keys(positions).length > 0 && isNaN(Object.keys(positions)[0]) ? Object.keys(positions) : C.POSITIONS;
+
+    // Build a set of existing elite player names to avoid collisions
+    const eliteNames = options.eliteNames || new Set();
+
+    for (let i = 0; i < classSize; i++) {
+        const pos = U.choice(posKeys);
+        const rookie = makePlayer(pos, 21, null, eliteNames); // Rookies are young
+        rookie.year = year;
+        rookie.draftId = i + 1;
+        rookie.age = U.choice([21, 22, 23]);
+        rookie.trueOvr = rookie.trueOvr ?? rookie.ovr;
+        const scoutingRange = getScoutingRangeFromProfile({
+          trueRating: rookie.trueOvr,
+          scoutSkill: options?.scoutSkill ?? 68,
+          scoutingLevel: options?.scoutingLevel ?? 1,
+          scoutingBudget: options?.scoutingBudget ?? 1,
+          fogStrength: options?.fogStrength ?? 55,
+        });
+        rookie.scoutedOvr = scoutingRange.estimated;
+        rookie.scoutingReport = scoutingRange;
+        rookie.devTrait = U.choice(DEV_TRAITS);
+        rookie.projectedRound = U.clamp(Math.ceil((100 - rookie.scoutedOvr) / 10), 1, 7);
+        rookie.combineResults = simulateCombineResults(rookie.pos, rookie.ratings);
+        rookie.collegeStats = generateCollegeStats(rookie.pos, rookie.trueOvr, rookie.potential);
+        rookie.interviewReport = generateInterviewReport(rookie);
+        rookie.trueRatings = { ...(rookie.ratings ?? {}) };
+        rookie.visibleRatings = Object.fromEntries(
+          Object.entries(rookie.trueRatings).map(([key, value]) => {
+            if (typeof value !== 'number') return [key, value];
+            const spread = Math.max(1, Math.round((scoutingRange.spread ?? 8) / 2));
+            return [key, U.clamp(value + U.rand(-spread, spread), 35, 99)];
+          })
+        );
+        rookie.collegeProductionScore = Math.round((((rookie.collegeStats?.games ?? 12) * 1.3) + (rookie.collegeStats?.passTD ?? rookie.collegeStats?.rushTD ?? rookie.collegeStats?.receivingTD ?? rookie.collegeStats?.sacks ?? 0)));
+        draftClass.push(rookie);
+        // If this rookie is elite, add them to the set too
+        if (rookie.ovr > 80) eliteNames.add(rookie.name);
+    }
+
+    draftClass.sort((a, b) => b.ovr - a.ovr);
+    return draftClass;
+}
+
+// ============================================================================
+// EXPORTS
+// ============================================================================
+
+function applyStaffDevelopmentInfluence(baseDelta, staffBonuses = {}) {
+    const dev = Number(staffBonuses?.developmentDelta ?? 0);
+    const mentor = Number(staffBonuses?.mentorDelta ?? 0);
+    return Number(baseDelta || 0) + (dev * 2.4) + (mentor * 1.8);
+}
+
+export {
+    SKILL_TREES,
+    initProgressionStats,
+    calculateGameXP,
+    addXP,
+    applySkillTreeUpgrade,
+    makePlayer,
+    progressPlayer,
+    getZeroStats,
+    generatePersonality,
+    initializePlayerLegacy,
+    updatePlayerGameLegacy,
+    updateAdvancedStats,
+    generateDraftClass,
+    calculateOvr,
+    generateContract,
+    generatePlayerRatings,
+    tagAbilities,
+    calculateMorale,
+    calculateExtensionDemand,
+    generateUniqueName,
+    applyStaffDevelopmentInfluence,
+};
+
+/**
+ * Calculates a player's morale based on team performance and their role.
+ * @param {Object} player - Player object.
+ * @param {Object} team - Team object (must have wins/losses).
+ * @param {boolean} isStarter - Whether the player is a starter.
+ * @returns {number} Morale value (0-100).
+ */
+function calculateMorale(player, team, isStarter = true) {
+    if (!player || !team) return 50;
+
+    // 1. Team Performance (Weight: 40%)
+    const games = (team.wins || 0) + (team.losses || 0);
+    const winPct = games > 0 ? team.wins / games : 0.5; // Default to .500 for new season
+
+    // 0.0 -> -20, 1.0 -> +20
+    let teamFactor = (winPct - 0.5) * 40;
+
+    // 2. Personal/Role (Weight: 30%)
+    // Deterministic base component (Player personality)
+    const baseMorale = 75;
+
+    // Personality Trait Check
+    let traitFactor = 0;
+    if (player.personality && player.personality.traits) {
+        if (player.personality.traits.includes('Winner')) {
+             // Winners care MORE about winning
+             traitFactor = (winPct - 0.5) * 20;
+        } else if (player.personality.traits.includes('Loyal')) {
+             traitFactor = 5; // Always happier
+        }
+    }
+
+    // Role Satisfaction
+    // Starters are happier (+10), Bench players (-5)
+    const roleFactor = isStarter ? 10 : -5;
+
+    // Calculate final
+    let morale = baseMorale + teamFactor + traitFactor + roleFactor;
+
+    // Jitter (Deterministic based on ID to avoid flickering)
+    // Use player.id as seed
+    const idNum = parseInt(player.id, 36) || 0;
+    const jitter = (idNum % 11) - 5; // -5 to +5
+    morale += jitter;
+
+    return Math.max(0, Math.min(100, Math.round(morale)));
+}
+
+/**
+ * Calculate contract extension demand for a player.
+ * @param {Object} player
+ * @returns {Object} { years, baseAnnual, signingBonus, guaranteedPct }
+ */
+function calculateExtensionDemand(player, difficulty = 'Normal') {
+    if (!player) return null;
+
+    // Determine years based on age
+    let years = 1;
+    const age = player.age;
+    if (age < 26) years = U.rand(4, 5);
+    else if (age < 30) years = U.rand(3, 4);
+    else if (age < 33) years = U.rand(2, 3);
+    else years = 1;
+
+    // Use generateContract logic but override years
+    // generateContract uses U.rand heavily. Extension should be slightly higher (retention premium).
+    // We can call generateContract to get a baseline market value for their OVR.
+    const baseline = generateContract(player.ovr, player.pos);
+
+    // Apply Extension Premium & Difficulty Modifier
+    let diffMult = 1.0;
+    if (difficulty === 'Easy') diffMult = 0.9;
+    if (difficulty === 'Hard') diffMult = 1.1;
+    if (difficulty === 'Legendary') diffMult = 1.25;
+
+    const personalityProfile = ensurePersonalityProfile(player);
+    const personality = contractPersonalityModifier(personalityProfile);
+    const premiumMult = 1.15 * diffMult * (personality.annualDemandMultiplier || 1);
+    const baseAnnual = Math.round((baseline.baseAnnual || baseline.salary || 1) * premiumMult * 10) / 10;
+
+    // Recalculate signing bonus based on new annual
+    // Maintain similar bonus ratio as baseline
+    const bonusRatio = (baseline.signingBonus / (baseline.baseAnnual * baseline.yearsTotal)) || 0.15;
+
+    // Cap bonus ratio
+    const safeBonusRatio = Math.min(bonusRatio, 0.4);
+
+    const signingBonus = Math.round(baseAnnual * years * safeBonusRatio * 10) / 10;
+
+    return {
+        years,
+        yearsTotal: years,
+        baseAnnual,
+        signingBonus,
+        guaranteedPct: baseline.guaranteedPct || 0.5,
+        holdoutRisk: personality.holdoutRisk,
+    };
+}
+
+function calculateScoutGrade(ovr, pot) {
+    const avg = (ovr + pot) / 2;
+    if (avg >= 85) return "1st Round Talent";
+    if (avg >= 75) return "Day 2 Starter";
+    if (avg >= 65) return "Day 3 Project";
+    return "Undrafted Free Agent";
+}
+
+function generateCombineStats(ratings, pos) {
+    const combine = simulateCombineResults(pos, ratings);
+    return `40-Yd: ${combine.fortyTime}s | Bench: ${combine.benchPress} | Vertical: ${combine.verticalLeap}"`;
+}

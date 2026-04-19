@@ -1,0 +1,348 @@
+// league.js - Core League Generation Logic
+'use strict';
+import { initializeCoachingStats } from './coach-system.js';
+import { makePlayer as makePlayerImport } from './player.js';
+import { Constants as ConstantsImport } from './constants.js';
+import { Utils as UtilsImport } from './utils.js';
+
+/**
+ * Generates draft picks for a team for the next few years.
+ * @param {string|number} teamId - The team's ID.
+ * @param {number} startYear - The current league year.
+ * @param {number} years - Number of years to generate picks for.
+ * @param {Object} Utils - Utils dependency.
+ * @returns {Array} Array of draft pick objects.
+ */
+const generateDraftPicks = (teamId, startYear, years = 3, Utils, rounds = 7) => {
+    const picks = [];
+    // Fallback ID generator if Utils is missing or doesn't have id()
+    const genId = Utils?.id || (() => Math.random().toString(36).slice(2, 10));
+
+    for (let y = 0; y < years; y++) {
+        for (let r = 1; r <= rounds; r++) {
+            picks.push({
+                id: genId(),
+                round: r,
+                season: startYear + y,
+                originalOwner: teamId,
+                currentOwner: teamId,
+                isCompensatory: false
+            });
+        }
+    }
+    return picks;
+};
+
+/**
+ * Initializes the roster for a team based on depth needs.
+ * @param {Object} team - The team object.
+ * @param {Object} Constants - Constants dependency.
+ * @param {Object} Utils - Utils dependency.
+ * @param {Function} makePlayer - Factory function to create a player.
+ * @returns {Array} Array of player objects.
+ */
+const initializeRoster = (team, Constants, Utils, makePlayer, eliteNames = new Set()) => {
+    if (!Constants?.DEPTH_NEEDS) return [];
+
+    const roster = [];
+    const positions = Object.keys(Constants.DEPTH_NEEDS);
+
+    // Track estimated cap usage to avoid going over
+    // We can't perfectly predict proration here without cap.js logic,
+    // but we can track base salaries.
+    let estimatedCapUsed = 0;
+    const capLimit = team.capTotal || 220; // Default buffer
+    const safeCapLimit = capLimit * 0.95; // Leave 5% buffer
+
+    // Calculate total players needed to reserve budget for depth
+    const totalPlayersNeeded = positions.reduce((sum, pos) => sum + Constants.DEPTH_NEEDS[pos], 0);
+    let playersCreated = 0;
+
+    const LG = Constants.LEAGUE_GEN_CONFIG || {};
+    positions.forEach(pos => {
+        const count = Constants.DEPTH_NEEDS[pos];
+        for (let j = 0; j < count; j++) {
+            // Logic for rating ranges (simplified OVR targets) from Constants
+            let ovrRange = LG.ROSTER_OVR_RANGES?.BACKUP || [65, 75]; // Default backup range
+
+            // Starters should be better
+            const startersCount = (LG.STARTERS_COUNT && LG.STARTERS_COUNT[pos]) || 1;
+
+            if (j < startersCount) {
+                ovrRange = LG.ROSTER_OVR_RANGES?.STARTER || [76, 90]; // Starter material
+                if (j === 0 && ['QB', 'WR', 'DL', 'LB'].includes(pos)) {
+                    ovrRange = LG.ROSTER_OVR_RANGES?.STAR || [82, 95]; // Star material
+                }
+            } else {
+                ovrRange = LG.ROSTER_OVR_RANGES?.DEPTH || [60, 74]; // Depth
+            }
+
+            const ovr = Utils.rand(ovrRange[0], ovrRange[1]);
+            const age = Utils.rand(21, 35);
+
+            const player = makePlayer(pos, age, ovr, eliteNames);
+            if (player) {
+                player.teamId = team.id;
+                // Track elite player names to prevent duplicates
+                if (player.ovr > 80) eliteNames.add(player.name);
+
+                // --- Cap Safety Check ---
+                const playersRemaining = totalPlayersNeeded - playersCreated - 1;
+                // Reserve ~0.8M per remaining player
+                const reservedBudget = playersRemaining * 0.8;
+
+                // Calculate current cap hit (base + prorated bonus)
+                let capHit = (player.baseAnnual || 0) + ((player.signingBonus || 0) / (player.yearsTotal || 1));
+
+                const availableBudget = safeCapLimit - estimatedCapUsed - reservedBudget;
+
+                // If player salary exceeds available budget, clamp it
+                if (capHit > availableBudget) {
+                    // Force restructure/reduction to fit cap
+                    const maxAllowedHit = Math.max(0.75, availableBudget);
+
+                    // Simple reduction: set bonus to 0 and clamp base salary
+                    player.signingBonus = 0;
+                    player.baseAnnual = Math.max(0.75, Math.min(player.baseAnnual, maxAllowedHit));
+
+                    capHit = player.baseAnnual;
+                }
+
+                estimatedCapUsed += capHit;
+                roster.push(player);
+                playersCreated++;
+            }
+        }
+    });
+    return roster;
+};
+
+/**
+ * Returns an object with team stats initialized to 0.
+ * @returns {Object} Zeroed team stats object
+ */
+function getZeroTeamStats() {
+    return {
+        wins: 0, losses: 0, ties: 0,
+        ptsFor: 0, ptsAgainst: 0,
+        passYds: 0, rushYds: 0,
+        passTD: 0, rushTD: 0,
+        turnovers: 0,
+        sacks: 0,
+        // Game specific
+        thirdDownAttempts: 0, thirdDownConversions: 0,
+        redZoneTrips: 0, redZoneTDs: 0
+    };
+}
+
+/**
+ * Main function to generate the league.
+ * @param {Array} teams - Array of team objects.
+ * @param {Object} options - Configuration options (startPoint, year, etc.).
+ * @param {Object} dependencies - Optional dependencies (Constants, Utils, etc.).
+ * @returns {Object} The generated league object.
+ */
+function makeLeague(teams, options = {}, dependencies = {}) {
+    // Explicitly access dependencies to avoid potential destructuring/scope issues
+    const Constants = dependencies.Constants || ConstantsImport;
+    const Utils = dependencies.Utils || UtilsImport;
+    const makePlayer = dependencies.makePlayer || makePlayerImport;
+    const makeSchedule = dependencies.makeSchedule || null;
+    const recalcCap = dependencies.recalcCap || null;
+    const generateInitialStaff = dependencies.generateInitialStaff || null;
+
+    const missingDependencies = [];
+    if (!Constants) missingDependencies.push('Constants');
+    if (!Utils) missingDependencies.push('Utils');
+    if (!makePlayer) missingDependencies.push('makePlayer');
+    // makeSchedule, recalcCap, generateInitialStaff are optional/handled gracefully
+
+    if (missingDependencies.length > 0) {
+        console.error('Critical dependencies missing for league creation:', missingDependencies);
+        throw new Error(`Critical dependencies missing: ${missingDependencies.join(', ')}`);
+    }
+
+    try {
+        // Configuration
+        const leagueYear = options.year || Constants.GAME_CONFIG.YEAR_START;
+        const startPoint = options.startPoint || 'regular';
+
+        const league = {
+            teams: [],
+            year: leagueYear,
+            season: 1,
+            week: 1, // Default to week 1; offseason flag handles phase logic
+            offseason: startPoint === 'offseason',
+            schedule: null,
+            resultsByWeek: [],
+            transactions: [],
+            ownerChallenge: null,
+            newsItems: [],
+            ownerGoals: [],
+            retiredPlayers: [],
+            records: {
+                mostPassingYardsSeason: null,
+                mostRushingYardsSeason: null,
+                mostWinsSeason: null,
+                mostChampionships: null,
+                highestOvrPlayer: null,
+            },
+        };
+
+        // Shared set of elite player names across all teams to prevent duplicates
+        const eliteNames = new Set();
+
+        // Main Orchestration Loop
+        league.teams = teams.map((teamData, index) => {
+            const team = {
+                ...teamData,
+                id: index,
+                // Explicitly initialize standings properties
+                wins: 0,
+                losses: 0,
+                ties: 0,
+                ptsFor: 0,
+                ptsAgainst: 0,
+                // Legacy record object for compatibility
+                record: { w: 0, l: 0, t: 0, pf: 0, pa: 0 },
+                stats: { season: getZeroTeamStats(), game: getZeroTeamStats() },
+                history: [],
+                capTotal: Constants.SALARY_CAP?.BASE || 220,
+                deadCap: 0,
+                capRollover: 0,
+                capUsed: 0,
+                capRoom: Constants.SALARY_CAP?.BASE || 220,
+                capSpace: Constants.SALARY_CAP?.BASE || 220,
+                scoutingPoints: 100,
+                fanApproval: 50,
+                franchiseInvestments: {
+                  stadiumLevel: 1,
+                  concessionsStrategy: 'balanced',
+                  trainingLevel: 1,
+                  scoutingLevel: 1,
+                  scoutingRegion: 'national',
+                  ownerCapacity: 10,
+                  usedCapacity: 4,
+                  trainingFocus: 'balanced',
+                  history: [],
+                },
+                rivalTeamId: null
+            };
+            team.offScheme = team?.offScheme ?? 'Pro Style';
+            team.fanApproval = team?.fanApproval ?? 50;
+            team.defScheme = team?.defScheme ?? '4-3';
+            team.coachingStaff = team?.coachingStaff ?? {
+              headCoach: {
+                name: `${team.city || team.name || 'Team'} HC`,
+                offenseMind: Utils.rand(50, 99),
+                defenseMind: Utils.rand(50, 99),
+                morale: 75,
+              },
+              offCoord: {
+                name: `${team.city || team.name || 'Team'} OC`,
+                scheme: team.offScheme,
+                rating: Utils.rand(50, 99),
+              },
+              defCoord: {
+                name: `${team.city || team.name || 'Team'} DC`,
+                scheme: team.defScheme,
+                rating: Utils.rand(50, 99),
+              },
+            };
+
+            // Delegate tasks to specialized functions
+            team.roster = initializeRoster(team, Constants, Utils, makePlayer, eliteNames);
+            const draftRounds = Math.max(1, Math.min(12, Number(options?.settings?.draftRounds ?? 7)));
+            team.picks = generateDraftPicks(team.id, leagueYear, 3, Utils, draftRounds);
+
+            if (generateInitialStaff) {
+                team.staff = generateInitialStaff();
+            } else {
+                 // Fallback staff generation
+                 team.staff = {
+                    headCoach: { name: 'Interim HC', ovr: 70 },
+                    offCoordinator: { name: 'Interim OC', ovr: 70 },
+                    defCoordinator: { name: 'Interim DC', ovr: 70 },
+                    scout: { name: 'Head Scout', ovr: 70 }
+                };
+            }
+
+            // Initialize Coaching Stats
+            if (initializeCoachingStats) {
+                 if (team.staff?.headCoach) initializeCoachingStats(team.staff.headCoach);
+            }
+
+            // Set Strategies
+            team.strategies = {
+                offPlanId: 'BALANCED',
+                defPlanId: 'BALANCED',
+                riskId: 'BALANCED',
+                starTargetId: null,
+                baseOffense: Utils.choice(['Pass Heavy', 'Run Heavy', 'Balanced', 'West Coast', 'Vertical']),
+                baseDefense: Utils.choice(['4-3', '3-4', 'Nickel', 'Aggressive', 'Conservative']),
+                // Keep legacy fields for a bit if anything reads them directly, but aim to migrate
+                offense: 'Balanced',
+                defense: '4-3'
+            };
+            team.strategies.offense = team.strategies.baseOffense;
+            team.strategies.defense = team.strategies.baseDefense;
+
+            // Initial Cap Check
+            if (recalcCap) {
+                recalcCap(league, team);
+
+                // Log warning if still over cap (sanity check)
+                if (team.capUsed > team.capTotal) {
+                    console.warn(`⚠️ Team ${team.name || team.abbr} created over cap: $${team.capUsed.toFixed(1)}M / $${team.capTotal.toFixed(1)}M`);
+                }
+            } else {
+                 // Fallback simple calc
+                 team.capUsed = team.roster.reduce((sum, p) => sum + (p.baseAnnual || 0), 0);
+                 team.capRoom = team.capTotal - team.capUsed;
+            }
+
+            return team;
+        });
+
+        // Final Setup
+        if (makeSchedule) {
+            league.schedule = makeSchedule(league.teams);
+        } else {
+            console.warn('⚠️ makeSchedule not provided. Schedule is empty.');
+        }
+
+        // Calculate team overall ratings from roster
+        league.teams.forEach(t => {
+            if (t.roster.length) {
+                const totalOvr = t.roster.reduce((acc, p) => acc + p.ovr, 0);
+                t.ovr = Math.round(totalOvr / t.roster.length);
+            } else {
+                t.ovr = 75;
+            }
+        });
+
+        const teamsByDivision = new Map();
+        league.teams.forEach((team) => {
+            const key = `${team?.conf ?? ''}-${team?.div ?? ''}`;
+            const bucket = teamsByDivision.get(key) ?? [];
+            bucket.push(team);
+            teamsByDivision.set(key, bucket);
+        });
+        teamsByDivision.forEach((divisionTeams) => {
+            if (!Array.isArray(divisionTeams)) return;
+            divisionTeams.forEach((team, index) => {
+                if (!team) return;
+                const rival = divisionTeams[(index + 1) % divisionTeams.length];
+                team.rivalTeamId = rival?.id ?? null;
+            });
+        });
+
+    return league;
+
+    } catch (error) {
+        console.error('CRITICAL: League generation failed:', error);
+        throw error;
+    }
+}
+
+export { makeLeague, getZeroTeamStats };
