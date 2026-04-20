@@ -1,33 +1,118 @@
-export function hasMinimumPlayableLeague(league) {
-  if (!league || typeof league !== 'object') return false;
-  const teams = Array.isArray(league.teams) ? league.teams : [];
-  const hasTeams = teams.length > 0;
-  const hasPhase = typeof league.phase === 'string' && league.phase.length > 0;
-  const hasWeek = Number.isFinite(Number(league.week ?? 1));
-  const hasUserTeam = teams.some((t) => Number(t?.id) === Number(league?.userTeamId));
-  return hasTeams && hasPhase && hasWeek && hasUserTeam;
-}
+import { describe, it, expect } from 'vitest';
+import {
+  canPersistActiveSlot,
+  hasMinimumPlayableLeague,
+  NEW_SLOT_BOOTSTRAP_PHASES,
+  shouldFinalizeNewSlotBootstrap,
+  shouldShowAuthoritativeInitGate,
+  shouldStartNewSlotInitialSave,
+  summarizeBootstrapState,
+} from './leagueBootstrap.js';
 
-export function summarizeBootstrapState(league) {
-  if (!league) return { ready: false, reasons: ['No league payload yet.'] };
-  const reasons = [];
-  if (!Array.isArray(league?.teams) || league.teams.length === 0) reasons.push('Teams are still loading.');
-  if (!league?.phase) reasons.push('Phase is missing.');
-  if (!Number.isFinite(Number(league?.week ?? 1))) reasons.push('Week is missing.');
-  const hasUserTeam = Array.isArray(league?.teams)
-    ? league.teams.some((t) => Number(t?.id) === Number(league?.userTeamId))
-    : false;
-  if (!hasUserTeam) reasons.push('Your team assignment is still resolving.');
-  return { ready: hasMinimumPlayableLeague(league), reasons };
-}
+const playableLeague = {
+  activeLeagueId: 'save_slot_1',
+  phase: 'preseason',
+  week: 1,
+  userTeamId: 4,
+  teams: [{ id: 4, name: 'Phoenix' }],
+};
 
-export function shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot }) {
-  if (!pendingNewSlot) return false;
-  return hasMinimumPlayableLeague(league);
-}
+describe('league bootstrap guards', () => {
+  it('accepts minimal playable league payload', () => {
+    expect(hasMinimumPlayableLeague(playableLeague)).toBe(true);
+  });
 
-export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, initFlowMode }) {
-  if (initFlowMode !== 'new') return false;
-  if (!pendingNewSlot) return false;
-  return !hasMinimumPlayableLeague(league);
-}
+  it('rejects partial payloads and reports reasons', () => {
+    const summary = summarizeBootstrapState({ teams: [], userTeamId: 0 });
+    expect(summary.ready).toBe(false);
+    expect(summary.reasons.length).toBeGreaterThan(0);
+  });
+
+  it('does not request the first new-save write before a league is minimally playable', () => {
+    expect(shouldStartNewSlotInitialSave({
+      league: { teams: [{ id: 4 }], userTeamId: 4 },
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
+    })).toBe(false);
+
+    expect(canPersistActiveSlot({
+      league: { teams: [{ id: 4 }], userTeamId: 4 },
+      activeSlot: 'save_slot_1',
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
+    })).toBe(false);
+  });
+
+  it('keeps new-save initialization gated for partial leagues and while the opening save is in-flight', () => {
+    expect(shouldShowAuthoritativeInitGate({
+      league: { teams: [{ id: 4 }], userTeamId: 4 },
+      initFlowMode: 'new',
+      initFlowActive: true,
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
+    })).toBe(true);
+
+    expect(shouldShowAuthoritativeInitGate({
+      league: playableLeague,
+      initFlowMode: 'new',
+      initFlowActive: true,
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
+    })).toBe(true);
+  });
+
+  it('does not finalize bootstrap until the matching slot save acknowledgement arrives', () => {
+    expect(shouldFinalizeNewSlotBootstrap({
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
+      saveEvent: null,
+    })).toBe(false);
+
+    expect(shouldFinalizeNewSlotBootstrap({
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
+      saveEvent: { kind: 'slot', slotKey: 'save_slot_2' },
+    })).toBe(false);
+  });
+
+  it('treats a playable league plus matching slot save acknowledgement as the normal completion path', () => {
+    expect(shouldStartNewSlotInitialSave({
+      league: playableLeague,
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
+    })).toBe(true);
+
+    expect(shouldFinalizeNewSlotBootstrap({
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
+      saveEvent: { kind: 'slot', slotKey: 'save_slot_1' },
+    })).toBe(true);
+
+    expect(canPersistActiveSlot({
+      league: playableLeague,
+      activeSlot: 'save_slot_1',
+      pendingNewSlot: 'save_slot_1',
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
+    })).toBe(true);
+  });
+
+  it('preserves the existing-slot load gate until the requested save is fully playable', () => {
+    expect(shouldShowAuthoritativeInitGate({
+      league: playableLeague,
+      initFlowMode: 'load',
+      initFlowActive: true,
+      pendingNewSlot: null,
+      loadReady: false,
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
+    })).toBe(true);
+
+    expect(shouldShowAuthoritativeInitGate({
+      league: playableLeague,
+      initFlowMode: 'load',
+      initFlowActive: true,
+      pendingNewSlot: null,
+      loadReady: true,
+      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
+    })).toBe(false);
+  });
+});
