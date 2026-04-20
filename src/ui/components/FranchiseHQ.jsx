@@ -211,7 +211,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
           )) : (
             <CompactInsightCard title="No urgent blockers" subtitle="Use this week to gain edges in prep and depth." tone="info" ctaLabel="Open Team" onCta={() => onNavigate?.("Team:Overview")} />
           )}
-        </div>
+        </div></SectionCard>
       {developmentSummary.rising.length > 0 && (
         <SectionCard title="Development Outlook" subtitle="Risers and breakout candidates." variant="compact">
           <div className="app-priority-rail">

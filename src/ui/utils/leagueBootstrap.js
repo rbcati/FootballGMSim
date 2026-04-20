@@ -101,7 +101,7 @@ export function shouldFinalizeNewSlotBootstrap({ pendingNewSlot, bootstrapPhase,
   if (!pendingNewSlot) return false;
 
   // Simple check for App.jsx effects that don't track fine-grained phases
-  if (league && bootstrapPhase === undefined) {
+  if (league && (bootstrapPhase === undefined || bootstrapPhase === null)) {
      return hasMinimumPlayableLeague(league);
   }
 
