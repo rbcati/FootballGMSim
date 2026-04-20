@@ -105,6 +105,7 @@ import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
 import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
 import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
+import { derivePlayerVisibleRatingsPatch } from './playerDerivedRatings.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
@@ -452,6 +453,7 @@ function deriveTeamUnitRatings(teamId) {
     defRating: def,
     offOvr: off,
     defOvr: def,
+    ovr: averageOvr(roster),
   };
 }
 
@@ -3282,11 +3284,13 @@ function applyWeeklyEvolution({ week, seasonId, results, metaObj }) {
     if (!player) continue;
     const history = Array.isArray(player?.growthHistory) ? player.growthHistory : [];
     const trimmedHistory = [...history.slice(-23), update.growthHistoryEntry];
+    const visibleRatingsPatch = derivePlayerVisibleRatingsPatch(player, update.attributesV2);
     cache.updatePlayer(update.playerId, {
       attributesV2: update.attributesV2,
       attributeXp: update.attributeXp,
       growthHistory: trimmedHistory,
       lastEvolutionWeek: evolution.stamp,
+      ...(visibleRatingsPatch ?? {}),
     });
   }
 
@@ -7600,16 +7604,19 @@ async function handleAdvanceOffseason(payload, id) {
     seed: buildDeterministicSeed({ year: Number(meta?.year ?? 2025), week: 0, salt: 'offseason_evolution_v1' }),
     teamFocusByTeamId: focusByTeamId,
   });
+  const touchedAttrTeamIds = new Set();
   for (const update of offseasonEvolution.updates) {
     const player = cache.getPlayer(update.playerId);
     if (!player) continue;
     const history = Array.isArray(player?.growthHistory) ? player.growthHistory : [];
+    const visibleRatingsPatch = derivePlayerVisibleRatingsPatch(player, update.attributesV2);
     cache.updatePlayer(update.playerId, {
       attributesV2: update.attributesV2,
       attributeXp: update.attributeXp,
       growthHistory: [...history.slice(-23), update.growthHistoryEntry],
       lastEvolutionWeek: offseasonEvolution.stamp,
       progressionDelta: Number(update?.growthHistoryEntry?.totalDelta ?? 0),
+      ...(visibleRatingsPatch ?? {}),
       developmentHistory: [...(Array.isArray(player?.developmentHistory) ? player.developmentHistory.slice(-11) : []), {
         season: Number(meta?.year ?? 2025),
         phase: 'offseason',
@@ -7617,6 +7624,12 @@ async function handleAdvanceOffseason(payload, id) {
         totalDelta: Number(update?.growthHistoryEntry?.totalDelta ?? 0),
       }],
     });
+    const teamId = resolvePlayerTeamId(player);
+    if (teamId != null) touchedAttrTeamIds.add(teamId);
+  }
+
+  for (const teamId of touchedAttrTeamIds) {
+    cache.updateTeam(teamId, deriveTeamUnitRatings(teamId));
   }
 
   // Backward compatibility: keep the legacy progression path for players that
