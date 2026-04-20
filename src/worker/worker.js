@@ -103,7 +103,8 @@ import NewsEngine, { createNewsItem, addNewsItem } from '../core/news-engine.js'
 import { calculateAwardRaces } from '../core/awards-logic.js';
 import { Constants } from '../core/constants.js';
 import { processPlayerProgression } from '../core/progression-logic.js';
-import { processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
+import { processOffseasonEvolution, processWeeklyEvolution } from '../core/progression/evolutionEngine.ts';
+import { buildTeamDevelopmentFocusMap as buildCanonicalDevelopmentFocusMap } from './developmentFocus.js';
 import { evaluateRetirements }     from '../core/retirement-system.js';
 import { runAIToAITrades, generateAITradeProposalsForUser, evaluateCounterOffer } from '../core/trade-logic.js';
 import { processSeasonRecords, createEmptyRecords, getMostPlayedTeam } from '../core/records.js';
@@ -3216,20 +3217,41 @@ function normalizeWeeklyDevelopmentMeta(metaObj = {}) {
 }
 
 function buildTeamDevelopmentFocusMap(metaObj = ensureDynastyMeta(cache.getMeta())) {
-  const map = {};
-  for (const team of cache.getAllTeams()) {
-    const focus = team?.weeklyDevelopmentFocus ?? {};
-    map[String(team.id)] = {
-      trainingFocus: team?.franchiseInvestments?.trainingFocus ?? "balanced",
-      intensity: focus?.intensity ?? "normal",
-      drillType: focus?.drillType ?? "technique",
-      positionGroups: Array.isArray(focus?.positionGroups) ? focus.positionGroups : [],
-      staffQuality: team?.staffState?.overallScore ?? 50,
-      medicalQuality: team?.medicalStaff?.overallScore ?? 50,
-      facilityQuality: team?.franchiseInvestments?.facilityLevel ?? 50,
-    };
+  return buildCanonicalDevelopmentFocusMap({
+    teams: cache.getAllTeams(),
+    year: Number(metaObj?.year ?? 2025),
+    ensureTeamStaff,
+    computeStaffTeamBonuses,
+    normalizeFranchiseInvestments,
+  });
+}
+
+function summarizeOffseasonEvolutionLeaders(evolutionResult, playersById) {
+  const rows = [];
+  for (const update of evolutionResult?.updates ?? []) {
+    const player = playersById.get(String(update?.playerId));
+    if (!player) continue;
+    const totalDelta = Number(update?.growthHistoryEntry?.totalDelta ?? 0);
+    const attrCount = Math.max(1, Object.keys(update?.growthHistoryEntry?.deltas ?? {}).length);
+    const avgDelta = Math.round((totalDelta / attrCount) * 10) / 10;
+    rows.push({
+      id: player.id,
+      name: player.name,
+      pos: player.pos,
+      delta: avgDelta,
+      isBreakout: avgDelta >= 2.5,
+      isCliff: avgDelta <= -2.5,
+      isWall: avgDelta <= -2.5,
+    });
   }
-  return map;
+  const gainers = rows.filter((row) => row.delta > 0).sort((a, b) => b.delta - a.delta);
+  const regressors = rows.filter((row) => row.delta < 0).sort((a, b) => a.delta - b.delta);
+  return {
+    gainers,
+    regressors,
+    breakouts: gainers.filter((row) => row.isBreakout),
+    wallHits: regressors.filter((row) => row.isWall),
+  };
 }
 function applyWeeklyEvolution({ week, seasonId, results, metaObj }) {
   const stamp = `${seasonId}:${week}`;
@@ -7567,37 +7589,78 @@ async function handleAdvanceOffseason(payload, id) {
   // processPlayerProgression mutates each player's ratings, ovr, and
   // progressionDelta in place.  We then flush those fields to cache.
   const allPlayers = cache.getAllPlayers();
-  const progressionEnv = Math.max(0, Math.min(100, Number(getLeagueSetting('progressionEnvironmentStrength', 50))));
-  const staffImpact = Math.max(0, Math.min(100, Number(getLeagueSetting('staffImpactStrength', 50))));
-  const envScale = 0.75 + (progressionEnv / 100) * 0.5;
-  const staffScale = 0.7 + (staffImpact / 100) * 0.6;
-  const teamEnvironments = {};
-  for (const team of allTeams) {
-    const inv = team?.franchiseInvestments ?? {};
-    const trainingLevel = Math.max(1, Math.min(5, Math.round(Number(inv?.trainingLevel ?? 1) || 1)));
-    const trainingFocus = String(inv?.trainingFocus ?? 'balanced');
-    const roster = Array.isArray(team?.roster) ? team.roster : allPlayers.filter((p) => Number(p?.teamId) === Number(team?.id));
-    const moraleAvg = roster.length ? roster.reduce((sum, p) => sum + (Number(p?.morale ?? 70) || 70), 0) / roster.length : 70;
-    const stableMorale = moraleAvg >= 74 ? 1 : moraleAvg <= 60 ? -1 : 0;
-    const staff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
-    const staffBonuses = computeStaffTeamBonuses({ ...team, staff }, { staffImpactStrength: staffImpact, year: Number(meta?.year ?? 2025) });
-    const continuityCount = ['headCoach', 'offCoordinator', 'defCoordinator', 'offCoord', 'defCoord']
-      .map((key) => staff?.[key])
-      .filter(Boolean)
-      .reduce((sum, member) => sum + (Number(member?.yearsWithTeam ?? member?.tenure ?? 0) >= 2 ? 1 : 0), 0);
-    const continuitySignal = continuityCount >= 2 ? 1 : continuityCount === 0 ? -1 : 0;
-    const focusGrowth = trainingFocus === 'youth_development' ? 0.08 : trainingFocus === 'win_now' ? -0.03 : trainingFocus === 'strength_conditioning' ? 0.04 : 0;
-    const focusReadiness = trainingFocus === 'win_now' ? 0.05 : trainingFocus === 'rehab_recovery' ? -0.02 : 0;
-    const focusRecovery = trainingFocus === 'rehab_recovery' ? 0.06 : trainingFocus === 'strength_conditioning' ? 0.03 : 0;
-    const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + focusGrowth + (staffBonuses.developmentDelta ?? 0) + (staffBonuses.mentorDelta ?? 0)) * envScale;
-    const volatilityDampener = ((continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) + (staffBonuses.moraleStabilityDelta ?? 0) + focusReadiness) * staffScale;
-    const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0) + focusRecovery) * envScale;
-    teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
+  const focusByTeamId = buildTeamDevelopmentFocusMap(meta);
+  const playersById = new Map(allPlayers.map((p) => [String(p?.id), p]));
+  const attrPlayers = allPlayers.filter((player) => !!player?.attributesV2);
+  const legacyPlayers = allPlayers.filter((player) => !player?.attributesV2);
+
+  const offseasonEvolution = processOffseasonEvolution({
+    players: attrPlayers,
+    seasonId: Number(meta?.year ?? 2025),
+    seed: buildDeterministicSeed({ year: Number(meta?.year ?? 2025), week: 0, salt: 'offseason_evolution_v1' }),
+    teamFocusByTeamId: focusByTeamId,
+  });
+  for (const update of offseasonEvolution.updates) {
+    const player = cache.getPlayer(update.playerId);
+    if (!player) continue;
+    const history = Array.isArray(player?.growthHistory) ? player.growthHistory : [];
+    cache.updatePlayer(update.playerId, {
+      attributesV2: update.attributesV2,
+      attributeXp: update.attributeXp,
+      growthHistory: [...history.slice(-23), update.growthHistoryEntry],
+      lastEvolutionWeek: offseasonEvolution.stamp,
+      progressionDelta: Number(update?.growthHistoryEntry?.totalDelta ?? 0),
+      developmentHistory: [...(Array.isArray(player?.developmentHistory) ? player.developmentHistory.slice(-11) : []), {
+        season: Number(meta?.year ?? 2025),
+        phase: 'offseason',
+        stamp: offseasonEvolution.stamp,
+        totalDelta: Number(update?.growthHistoryEntry?.totalDelta ?? 0),
+      }],
+    });
   }
-  const teamRosters = {};
-  for (const team of allTeams) teamRosters[team.id] = allPlayers.filter((p) => Number(p?.teamId) === Number(team.id));
-  for (const player of allPlayers) player.season = Number(meta?.year ?? 2025);
-  const { gainers, regressors, breakouts, wallHits } = processPlayerProgression(allPlayers, { teamEnvironments, teamRosters });
+
+  // Backward compatibility: keep the legacy progression path for players that
+  // do not yet have attributesV2 in older saves.
+  let legacyProgression = { gainers: [], regressors: [], breakouts: [], wallHits: [] };
+  if (legacyPlayers.length > 0) {
+    const progressionEnv = Math.max(0, Math.min(100, Number(getLeagueSetting('progressionEnvironmentStrength', 50))));
+    const staffImpact = Math.max(0, Math.min(100, Number(getLeagueSetting('staffImpactStrength', 50))));
+    const envScale = 0.75 + (progressionEnv / 100) * 0.5;
+    const staffScale = 0.7 + (staffImpact / 100) * 0.6;
+    const teamEnvironments = {};
+    for (const team of allTeams) {
+      const inv = team?.franchiseInvestments ?? {};
+      const trainingLevel = Math.max(1, Math.min(5, Math.round(Number(inv?.trainingLevel ?? 1) || 1)));
+      const trainingFocus = String(inv?.trainingFocus ?? 'balanced');
+      const roster = Array.isArray(team?.roster) ? team.roster : legacyPlayers.filter((p) => Number(p?.teamId) === Number(team?.id));
+      const moraleAvg = roster.length ? roster.reduce((sum, p) => sum + (Number(p?.morale ?? 70) || 70), 0) / roster.length : 70;
+      const stableMorale = moraleAvg >= 74 ? 1 : moraleAvg <= 60 ? -1 : 0;
+      const staff = ensureTeamStaff(team, { year: Number(meta?.year ?? 2025) });
+      const staffBonuses = computeStaffTeamBonuses({ ...team, staff }, { staffImpactStrength: staffImpact, year: Number(meta?.year ?? 2025) });
+      const continuityCount = ['headCoach', 'offCoordinator', 'defCoordinator', 'offCoord', 'defCoord']
+        .map((key) => staff?.[key])
+        .filter(Boolean)
+        .reduce((sum, member) => sum + (Number(member?.yearsWithTeam ?? member?.tenure ?? 0) >= 2 ? 1 : 0), 0);
+      const continuitySignal = continuityCount >= 2 ? 1 : continuityCount === 0 ? -1 : 0;
+      const focusGrowth = trainingFocus === 'youth_development' ? 0.08 : trainingFocus === 'win_now' ? -0.03 : trainingFocus === 'strength_conditioning' ? 0.04 : 0;
+      const focusReadiness = trainingFocus === 'win_now' ? 0.05 : trainingFocus === 'rehab_recovery' ? -0.02 : 0;
+      const focusRecovery = trainingFocus === 'rehab_recovery' ? 0.06 : trainingFocus === 'strength_conditioning' ? 0.03 : 0;
+      const youngGrowthBonus = ((trainingLevel >= 4 ? 0.12 : trainingLevel >= 3 ? 0.06 : trainingLevel <= 2 ? -0.04 : 0) + focusGrowth + (staffBonuses.developmentDelta ?? 0) + (staffBonuses.mentorDelta ?? 0)) * envScale;
+      const volatilityDampener = ((continuitySignal > 0 ? 0.08 : continuitySignal < 0 ? -0.05 : 0) + (staffBonuses.moraleStabilityDelta ?? 0) + focusReadiness) * staffScale;
+      const rookieAdaptation = ((trainingLevel >= 4 ? 0.08 : 0) + (stableMorale > 0 ? 0.07 : stableMorale < 0 ? -0.07 : 0) + (staffBonuses.rookieAdaptationDelta ?? 0) + focusRecovery) * envScale;
+      teamEnvironments[team.id] = { youngGrowthBonus, volatilityDampener, rookieAdaptation, trainingFocus, staffDevelopmentModifier: staffBonuses.developmentDelta ?? 0 };
+    }
+    const teamRosters = {};
+    for (const team of allTeams) teamRosters[team.id] = legacyPlayers.filter((p) => Number(p?.teamId) === Number(team.id));
+    for (const player of legacyPlayers) player.season = Number(meta?.year ?? 2025);
+    legacyProgression = processPlayerProgression(legacyPlayers, { teamEnvironments, teamRosters });
+  }
+
+  const evolvedLeaders = summarizeOffseasonEvolutionLeaders(offseasonEvolution, playersById);
+  const gainers = [...evolvedLeaders.gainers, ...legacyProgression.gainers].sort((a, b) => Number(b?.delta ?? 0) - Number(a?.delta ?? 0));
+  const regressors = [...evolvedLeaders.regressors, ...legacyProgression.regressors].sort((a, b) => Number(a?.delta ?? 0) - Number(b?.delta ?? 0));
+  const breakouts = [...evolvedLeaders.breakouts, ...legacyProgression.breakouts];
+  const wallHits = [...evolvedLeaders.wallHits, ...legacyProgression.wallHits];
 
   // Flush progression mutations (ratings, ovr, progressionDelta, potential)
   for (const player of allPlayers) {
