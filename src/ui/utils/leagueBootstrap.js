@@ -1,118 +1,123 @@
-import { describe, it, expect } from 'vitest';
-import {
-  canPersistActiveSlot,
-  hasMinimumPlayableLeague,
-  NEW_SLOT_BOOTSTRAP_PHASES,
-  shouldFinalizeNewSlotBootstrap,
-  shouldShowAuthoritativeInitGate,
-  shouldStartNewSlotInitialSave,
-  summarizeBootstrapState,
-} from './leagueBootstrap.js';
+/**
+ * leagueBootstrap.js
+ *
+ * Authoritative readiness gates for league initialization.
+ * Prevents race conditions during new franchise creation.
+ */
 
-const playableLeague = {
-  activeLeagueId: 'save_slot_1',
-  phase: 'preseason',
-  week: 1,
-  userTeamId: 4,
-  teams: [{ id: 4, name: 'Phoenix' }],
+export const NEW_SLOT_BOOTSTRAP_PHASES = {
+  IDLE: 'idle',
+  AWAITING_PLAYABLE: 'awaiting_playable',
+  SAVING_SLOT: 'saving_slot',
+  FINALIZING: 'finalizing',
 };
 
-describe('league bootstrap guards', () => {
-  it('accepts minimal playable league payload', () => {
-    expect(hasMinimumPlayableLeague(playableLeague)).toBe(true);
-  });
+/**
+ * Returns true only if the league object has all critical fields
+ * required to render the dashboard and simulate games.
+ */
+export function hasMinimumPlayableLeague(league) {
+  if (!league) return false;
+  const hasPhase = !!league.phase;
+  const hasWeek = typeof league.week === 'number';
+  const hasTeams = Array.isArray(league.teams) && league.teams.length > 0;
+  const hasUserTeam = typeof league.userTeamId !== 'undefined' && league.userTeamId !== null;
 
-  it('rejects partial payloads and reports reasons', () => {
-    const summary = summarizeBootstrapState({ teams: [], userTeamId: 0 });
-    expect(summary.ready).toBe(false);
-    expect(summary.reasons.length).toBeGreaterThan(0);
-  });
+  return hasPhase && hasWeek && hasTeams && hasUserTeam;
+}
 
-  it('does not request the first new-save write before a league is minimally playable', () => {
-    expect(shouldStartNewSlotInitialSave({
-      league: { teams: [{ id: 4 }], userTeamId: 4 },
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
-    })).toBe(false);
+/**
+ * Diagnostic helper to see exactly why a league isn't ready.
+ */
+export function summarizeBootstrapState(league) {
+  const reasons = [];
+  if (!league) {
+    reasons.push('No league state received');
+  } else {
+    if (!league.phase) reasons.push('Missing phase (preseason/regular/etc)');
+    if (typeof league.week !== 'number') reasons.push('Missing week number');
+    if (!Array.isArray(league.teams) || league.teams.length === 0) reasons.push('No teams loaded');
+    if (typeof league.userTeamId === 'undefined' || league.userTeamId === null) reasons.push('No user team assigned');
+  }
 
-    expect(canPersistActiveSlot({
-      league: { teams: [{ id: 4 }], userTeamId: 4 },
-      activeSlot: 'save_slot_1',
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
-    })).toBe(false);
-  });
+  return {
+    ready: reasons.length === 0,
+    reasons,
+  };
+}
 
-  it('keeps new-save initialization gated for partial leagues and while the opening save is in-flight', () => {
-    expect(shouldShowAuthoritativeInitGate({
-      league: { teams: [{ id: 4 }], userTeamId: 4 },
-      initFlowMode: 'new',
-      initFlowActive: true,
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
-    })).toBe(true);
+/**
+ * Gate for the very first save of a brand new slot.
+ */
+export function shouldStartNewSlotInitialSave({ league, pendingNewSlot, bootstrapPhase }) {
+  if (!pendingNewSlot) return false;
+  if (bootstrapPhase !== NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE) return false;
+  return hasMinimumPlayableLeague(league);
+}
 
-    expect(shouldShowAuthoritativeInitGate({
-      league: playableLeague,
-      initFlowMode: 'new',
-      initFlowActive: true,
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
-    })).toBe(true);
-  });
+/**
+ * General persistence gate. Prevents auto-saves during
+ * sensitive bootstrap transitions.
+ */
+export function canPersistActiveSlot({ league, activeSlot, pendingNewSlot, bootstrapPhase }) {
+  if (!activeSlot) return false;
+  // If we are bootstrapping a new slot, don't auto-save until it's finalized
+  if (pendingNewSlot && bootstrapPhase !== NEW_SLOT_BOOTSTRAP_PHASES.IDLE) return false;
+  return hasMinimumPlayableLeague(league);
+}
 
-  it('does not finalize bootstrap until the matching slot save acknowledgement arrives', () => {
-    expect(shouldFinalizeNewSlotBootstrap({
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
-      saveEvent: null,
-    })).toBe(false);
+/**
+ * Decides if we show the "Initializing League..." authoritative overlay.
+ */
+export function shouldShowAuthoritativeInitGate({
+  league,
+  initFlowMode,
+  initFlowActive,
+  pendingNewSlot,
+  bootstrapPhase,
+  loadReady
+}) {
+  if (!initFlowActive) return false;
 
-    expect(shouldFinalizeNewSlotBootstrap({
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
-      saveEvent: { kind: 'slot', slotKey: 'save_slot_2' },
-    })).toBe(false);
-  });
+  if (initFlowMode === 'new') {
+    // Show gate if league isn't playable yet OR if we are still in the saving phase
+    if (!hasMinimumPlayableLeague(league)) return true;
+    if (bootstrapPhase === NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT) return true;
+    return false;
+  }
 
-  it('treats a playable league plus matching slot save acknowledgement as the normal completion path', () => {
-    expect(shouldStartNewSlotInitialSave({
-      league: playableLeague,
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.AWAITING_PLAYABLE,
-    })).toBe(true);
+  if (initFlowMode === 'load') {
+    return !loadReady;
+  }
 
-    expect(shouldFinalizeNewSlotBootstrap({
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT,
-      saveEvent: { kind: 'slot', slotKey: 'save_slot_1' },
-    })).toBe(true);
+  return false;
+}
 
-    expect(canPersistActiveSlot({
-      league: playableLeague,
-      activeSlot: 'save_slot_1',
-      pendingNewSlot: 'save_slot_1',
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
-    })).toBe(true);
-  });
+/**
+ * Finalizing check. Handles both simple App.jsx check and complex
+ * bootstrap-aware save-event check.
+ */
+export function shouldFinalizeNewSlotBootstrap({ pendingNewSlot, bootstrapPhase, saveEvent, league }) {
+  if (!pendingNewSlot) return false;
 
-  it('preserves the existing-slot load gate until the requested save is fully playable', () => {
-    expect(shouldShowAuthoritativeInitGate({
-      league: playableLeague,
-      initFlowMode: 'load',
-      initFlowActive: true,
-      pendingNewSlot: null,
-      loadReady: false,
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
-    })).toBe(true);
+  // Simple check for App.jsx effects that don't track fine-grained phases
+  if (league && bootstrapPhase === undefined) {
+     return hasMinimumPlayableLeague(league);
+  }
 
-    expect(shouldShowAuthoritativeInitGate({
-      league: playableLeague,
-      initFlowMode: 'load',
-      initFlowActive: true,
-      pendingNewSlot: null,
-      loadReady: true,
-      bootstrapPhase: NEW_SLOT_BOOTSTRAP_PHASES.IDLE,
-    })).toBe(false);
-  });
-});
+  // Robust check for multi-step bootstrap flow
+  if (bootstrapPhase === NEW_SLOT_BOOTSTRAP_PHASES.SAVING_SLOT) {
+    if (!saveEvent) return false;
+    return saveEvent.kind === 'slot' && saveEvent.slotKey === pendingNewSlot;
+  }
+
+  return false;
+}
+
+/**
+ * Gates the main dashboard view during new franchise creation.
+ */
+export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, initFlowMode }) {
+  if (initFlowMode !== 'new' || !pendingNewSlot) return false;
+  return !hasMinimumPlayableLeague(league);
+}

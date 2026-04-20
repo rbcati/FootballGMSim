@@ -3220,15 +3220,17 @@ function buildTeamDevelopmentFocusMap(metaObj = ensureDynastyMeta(cache.getMeta(
   for (const team of cache.getAllTeams()) {
     const focus = team?.weeklyDevelopmentFocus ?? {};
     map[String(team.id)] = {
-      trainingFocus: team?.franchiseInvestments?.trainingFocus ?? 'balanced',
-      intensity: focus?.intensity ?? 'normal',
-      drillType: focus?.drillType ?? 'technique',
+      trainingFocus: team?.franchiseInvestments?.trainingFocus ?? "balanced",
+      intensity: focus?.intensity ?? "normal",
+      drillType: focus?.drillType ?? "technique",
       positionGroups: Array.isArray(focus?.positionGroups) ? focus.positionGroups : [],
+      staffQuality: team?.staffState?.overallScore ?? 50,
+      medicalQuality: team?.medicalStaff?.overallScore ?? 50,
+      facilityQuality: team?.franchiseInvestments?.facilityLevel ?? 50,
     };
   }
   return map;
 }
-
 function applyWeeklyEvolution({ week, seasonId, results, metaObj }) {
   const stamp = `${seasonId}:${week}`;
   const model = normalizeWeeklyDevelopmentMeta(metaObj);

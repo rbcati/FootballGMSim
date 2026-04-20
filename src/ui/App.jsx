@@ -415,10 +415,13 @@ function AppContent() {
 
   useEffect(() => {
     if (!shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot })) return;
-    actions.saveSlot(pendingNewSlot);
-    setActiveSlot(pendingNewSlot);
-    setPendingNewSlot(null);
-    setInitFlow(null);
+    // FIX: Only save and finalize if the league is actually playable
+    if (hasMinimumPlayableLeague(league)) {
+      actions.saveSlot(pendingNewSlot);
+      setActiveSlot(pendingNewSlot);
+      setPendingNewSlot(null);
+      setInitFlow(null);
+    }
   }, [league, pendingNewSlot, actions]);
 
   useEffect(() => {
@@ -546,7 +549,7 @@ function AppContent() {
     return <Loading message="Starting game engine…" />;
   }
 
-  if (!league || activeSlot === null) {
+  if ((!leagueReady && !pendingNewSlot) || activeSlot === null) {
     const initTimeoutPanel = initFlow?.timedOut ? (
       <div role="alert" className="app-banner app-banner-error" style={{ marginBottom: 12 }}>
         <span>{initFlow.message}</span>
