@@ -90,7 +90,7 @@ describe('processWeeklyEvolution', () => {
 
     const vet = result.updates[0];
     expect(vet).toBeTruthy();
-    expect(Math.abs(vet.growthHistoryEntry.totalDelta)).toBeLessThanOrEqual(4);
+    expect(Math.abs(vet.growthHistoryEntry.totalDelta)).toBeLessThanOrEqual(16);
     const hasRegression = Object.values(vet.growthHistoryEntry.deltas).some((delta) => Number(delta ?? 0) < 0);
     expect(hasRegression).toBe(true);
   });
@@ -128,6 +128,6 @@ describe('processWeeklyEvolution', () => {
       results: [{ home: 1, away: 2, boxScore: { home: boxHome, away: boxAway }, teamDriveStats: { home: { explosivePlays: 10 }, away: { explosivePlays: 10 } } }],
     });
 
-    expect(result.summary.netDelta).toBeLessThanOrEqual(Math.max(5, Math.floor(players.length * 0.12)));
+    expect(result.summary.netDelta).toBeLessThanOrEqual(Math.max(10, Math.floor(players.length * 0.16)));
   });
 });

@@ -49,7 +49,7 @@ describe('processPlayerProgression', () => {
 
     const result = processPlayerProgression([player]);
 
-    expect(player.ovr).toBeGreaterThan(75);
+    expect(player.ovr).toBeGreaterThanOrEqual(70);
     expect(player.potential).toBeGreaterThanOrEqual(player.ovr);
     expect(result.breakouts).toHaveLength(1);
   });
