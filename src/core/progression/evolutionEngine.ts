@@ -10,6 +10,7 @@ export interface EvolutionPlayer {
   attributeXp?: Partial<Record<keyof AttributesV2, number>>;
   growthHistory?: Array<Record<string, unknown>>;
   lastEvolutionWeek?: string | null;
+  isSchemeFit?: boolean;
 }
 
 export interface EvolutionGameResult {
@@ -30,6 +31,9 @@ export interface TeamDevelopmentFocus {
   intensity?: 'light' | 'normal' | 'hard' | string;
   drillType?: 'technique' | 'conditioning' | 'teamwork' | 'film' | string;
   positionGroups?: string[];
+  staffQuality?: number;
+  medicalQuality?: number;
+  facilityQuality?: number;
 }
 
 interface PlayerDevelopmentAccumulator {
@@ -118,12 +122,16 @@ function emptyXp(): Partial<Record<keyof AttributesV2, number>> {
 
 function getAgeCurve(ageRaw: unknown) {
   const age = Math.round(num(ageRaw) || 25);
-  if (age <= 23) return { growth: 1.3, maintenancePressure: 0.02 };
-  if (age <= 25) return { growth: 1.15, maintenancePressure: 0.05 };
-  if (age <= 28) return { growth: 0.95, maintenancePressure: 0.11 };
-  if (age <= 30) return { growth: 0.82, maintenancePressure: 0.19 };
-  if (age <= 33) return { growth: 0.68, maintenancePressure: 0.3 };
-  return { growth: 0.55, maintenancePressure: 0.4 };
+  // 20–24: strongest growth potential
+  if (age <= 24) return { growth: 1.45, maintenancePressure: 0.01, regressionRisk: 0.02 };
+  // 25–28: consolidation / selective growth
+  if (age <= 28) return { growth: 1.1, maintenancePressure: 0.06, regressionRisk: 0.08 };
+  // 29–31: plateau / maintenance
+  if (age <= 31) return { growth: 0.85, maintenancePressure: 0.18, regressionRisk: 0.25 };
+  // 32–34: regression pressure
+  if (age <= 34) return { growth: 0.65, maintenancePressure: 0.4, regressionRisk: 0.55 };
+  // 35+: heavy regression
+  return { growth: 0.45, maintenancePressure: 0.7, regressionRisk: 0.9 };
 }
 
 function addXp(acc: PlayerDevelopmentAccumulator, attribute: keyof AttributesV2, value: number) {
@@ -132,30 +140,47 @@ function addXp(acc: PlayerDevelopmentAccumulator, attribute: keyof AttributesV2,
   acc.xp[attribute] = current + value;
 }
 
-function deriveFocusMultiplier(playerPos: string, teamFocus?: TeamDevelopmentFocus) {
+function deriveFocusMultiplier(player: EvolutionPlayer, teamFocus?: TeamDevelopmentFocus) {
   if (!teamFocus) return 1;
+  const playerPos = String(player.pos ?? '').toUpperCase();
   const trainingFocus = String(teamFocus.trainingFocus ?? 'balanced');
   const intensity = String(teamFocus.intensity ?? 'normal');
   const drillType = String(teamFocus.drillType ?? 'technique');
   const focusGroups = new Set((teamFocus.positionGroups ?? []).map((g) => String(g).toLowerCase()));
 
-  let multiplier = 1;
-  if (intensity === 'light') multiplier *= 0.94;
-  if (intensity === 'hard') multiplier *= 1.06;
+  let multiplier = 1.0;
 
-  if (drillType === 'film' && ['QB', 'WR', 'TE', 'CB', 'S', 'LB'].includes(playerPos)) multiplier *= 1.06;
-  if (drillType === 'conditioning' && ['RB', 'WR', 'CB', 'S', 'DL', 'LB'].includes(playerPos)) multiplier *= 1.05;
+  // Intensity effects
+  if (intensity === 'light') multiplier *= 0.92;
+  if (intensity === 'hard') multiplier *= 1.12;
 
-  if (trainingFocus === 'youth_development') multiplier *= 1.08;
-  if (trainingFocus === 'win_now' && ['QB', 'OL', 'DL', 'LB'].includes(playerPos)) multiplier *= 1.04;
-  if (trainingFocus === 'strength_conditioning' && ['OL', 'DL', 'LB', 'TE'].includes(playerPos)) multiplier *= 1.07;
+  // Staff and facility bonuses
+  const staffBonus = (num(teamFocus.staffQuality) / 100) * 0.1;
+  const facilityBonus = (num(teamFocus.facilityQuality) / 100) * 0.05;
+  multiplier += (staffBonus + facilityBonus);
 
+  // Scheme fit bonus
+  if (player.isSchemeFit) multiplier *= 1.05;
+
+  // Drill type bonuses
+  if (drillType === 'film' && ['QB', 'WR', 'TE', 'CB', 'S', 'LB'].includes(playerPos)) multiplier *= 1.08;
+  if (drillType === 'conditioning' && ['RB', 'WR', 'CB', 'S', 'DL', 'LB', 'OL'].includes(playerPos)) multiplier *= 1.07;
+  if (drillType === 'technique' && ['QB', 'WR', 'OL', 'DL', 'TE'].includes(playerPos)) multiplier *= 1.07;
+
+  // Training focus biases
+  if (trainingFocus === 'youth_development' && num(player.age) <= 24) multiplier *= 1.15;
+  if (trainingFocus === 'win_now' && num(player.age) >= 28) multiplier *= 1.08;
+  if (trainingFocus === 'strength_conditioning' && ['OL', 'DL', 'LB', 'TE'].includes(playerPos)) multiplier *= 1.1;
+
+  // Group focus
   if (focusGroups.size > 0) {
-    const focused = Object.entries(POSITION_GROUPS).some(([group, positions]) => focusGroups.has(group) && positions.includes(playerPos));
-    if (focused) multiplier *= 1.08;
+    const isFocused = Object.entries(POSITION_GROUPS).some(([group, positions]) =>
+      focusGroups.has(group) && positions.includes(playerPos)
+    );
+    if (isFocused) multiplier *= 1.1;
   }
 
-  return clamp(multiplier, 0.86, 1.2);
+  return clamp(multiplier, 0.8, 1.4);
 }
 
 function summarizeNotableNote(pos: string, deltas: Partial<Record<keyof AttributesV2, number>>) {
@@ -170,6 +195,12 @@ function summarizeNotableNote(pos: string, deltas: Partial<Record<keyof Attribut
   }
   if (['WR', 'TE'].includes(pos) && top.attr === 'routeRunning' && top.delta > 0) {
     return 'Route running trend improved after high-volume usage.';
+  }
+  if (['CB', 'S'].includes(pos) && top.attr === 'pressCoverage' && top.delta > 0) {
+    return 'Press coverage techniques sharpened through consistent usage.';
+  }
+  if (['OL', 'C', 'G', 'T'].includes(pos) && top.attr === 'passBlockFootwork' && top.delta > 0) {
+    return 'Pass blocking footwork improved with heavy snap counts.';
   }
   return null;
 }
@@ -196,64 +227,64 @@ function applyPositionXp(
   const passesDefended = num(stats.passesDefended);
 
   if (pos === 'QB') {
-    const usage = clamp((passAtt + sacks) / 34, 0, 1.4);
+    const usage = clamp((passAtt + sacks) / 34, 0, 1.5);
     const efficiency = passAtt > 0 ? (passComp / passAtt) * 0.8 + (passYd / passAtt) * 0.08 : 0;
-    const production = efficiency + passTd * 0.25 - interceptions * 0.35 - sacks * 0.05;
-    addXp(acc, 'throwAccuracyShort', usage * 4.2 + production * 2.2);
-    addXp(acc, 'throwAccuracyDeep', usage * 3.3 + production * 2.6 + num(teamStats.explosivePlays) * 0.12);
-    addXp(acc, 'decisionMaking', usage * 2.8 + production * 2.5);
-    addXp(acc, 'pocketPresence', usage * 2.1 + (1 - clamp(sacks / Math.max(1, passAtt), 0, 1)) * 2.1);
-    addXp(acc, 'throwPower', (passYd / Math.max(1, passAtt)) * 0.9 + passTd * 0.15);
+    const production = efficiency + passTd * 0.3 - interceptions * 0.4 - sacks * 0.08;
+    addXp(acc, 'throwAccuracyShort', usage * 4.5 + production * 2.5);
+    addXp(acc, 'throwAccuracyDeep', usage * 3.5 + production * 3.0 + num(teamStats.explosivePlays) * 0.15);
+    addXp(acc, 'decisionMaking', usage * 3.0 + production * 2.8);
+    addXp(acc, 'pocketPresence', usage * 2.5 + (1 - clamp(sacks / Math.max(1, passAtt), 0, 1)) * 2.5);
+    addXp(acc, 'throwPower', (passYd / Math.max(1, passAtt)) * 1.0 + passTd * 0.2);
     acc.production += production;
     return;
   }
 
   if (pos === 'RB' || pos === 'FB') {
     const touches = rushAtt + receptions;
-    const usage = clamp(touches / 20, 0, 1.35);
+    const usage = clamp(touches / 20, 0, 1.4);
     const ypc = rushAtt > 0 ? rushYd / rushAtt : 0;
-    const production = ypc * 0.35 + rushTd * 0.25 + recYd * 0.012;
-    addXp(acc, 'decisionMaking', usage * 2.1 + production * 0.9);
-    addXp(acc, 'separation', receptions * 0.32 + production * 0.3);
-    addXp(acc, 'catchInTraffic', receptions * 0.24 + targets * 0.1);
-    addXp(acc, 'throwPower', rushAtt * 0.04 + rushYd * 0.012);
+    const production = ypc * 0.4 + rushTd * 0.3 + recYd * 0.015;
+    addXp(acc, 'decisionMaking', usage * 2.5 + production * 1.0);
+    addXp(acc, 'separation', receptions * 0.35 + production * 0.4);
+    addXp(acc, 'catchInTraffic', receptions * 0.3 + targets * 0.15);
+    addXp(acc, 'throwPower', rushAtt * 0.05 + rushYd * 0.015);
     acc.production += production;
     return;
   }
 
   if (pos === 'WR' || pos === 'TE') {
-    const usage = clamp(targets / 10, 0, 1.45);
+    const usage = clamp(targets / 10, 0, 1.5);
     const catchRate = targets > 0 ? receptions / targets : 0;
-    const production = catchRate * 0.8 + recYd * 0.015 + recTd * 0.5;
-    addXp(acc, 'release', usage * 1.8 + receptions * 0.38);
-    addXp(acc, 'routeRunning', usage * 3.2 + production * 1.7);
-    addXp(acc, 'separation', usage * 2.8 + production * 1.5 + num(teamStats.explosivePlays) * 0.1);
-    addXp(acc, 'catchInTraffic', receptions * 0.25 + targets * 0.18 + recTd * 0.35);
-    addXp(acc, 'ballTracking', recYd * 0.02 + recTd * 0.45);
+    const production = catchRate * 1.0 + recYd * 0.02 + recTd * 0.6;
+    addXp(acc, 'release', usage * 2.0 + receptions * 0.4);
+    addXp(acc, 'routeRunning', usage * 3.5 + production * 2.0);
+    addXp(acc, 'separation', usage * 3.0 + production * 1.8 + num(teamStats.explosivePlays) * 0.15);
+    addXp(acc, 'catchInTraffic', receptions * 0.3 + targets * 0.2 + recTd * 0.4);
+    addXp(acc, 'ballTracking', recYd * 0.025 + recTd * 0.5);
     acc.production += production;
     return;
   }
 
   if (['OL', 'C', 'G', 'T'].includes(pos)) {
     const plays = num(teamStats.plays);
-    const sackPenalty = num(teamStats.sacksAllowed) * 0.35;
+    const sackPenalty = num(teamStats.sacksAllowed) * 0.4;
     const runSupport = num(teamStats.rushYd) / Math.max(1, num(teamStats.rushAtt));
-    const production = clamp((plays / 65) + runSupport * 0.5 - sackPenalty, -1.5, 2.5);
-    addXp(acc, 'passBlockFootwork', plays * 0.06 + production * 2.1);
-    addXp(acc, 'passBlockStrength', runSupport * 1.2 + production * 2.3);
-    addXp(acc, 'decisionMaking', production * 0.6);
+    const production = clamp((plays / 65) + runSupport * 0.6 - sackPenalty, -2.0, 3.0);
+    addXp(acc, 'passBlockFootwork', plays * 0.08 + production * 2.5);
+    addXp(acc, 'passBlockStrength', runSupport * 1.5 + production * 2.8);
+    addXp(acc, 'decisionMaking', production * 0.8);
     acc.production += production;
     return;
   }
 
-  if (['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB'].includes(pos)) {
+  if (['DL', 'DE', 'DT', 'NT', 'EDGE', 'LB', 'MLB', 'OLB'].includes(pos)) {
     const pressures = num(stats.pressures);
     const sacksMade = num(stats.sacks);
     const tackles = num(stats.tackles);
-    const production = sacksMade * 0.8 + pressures * 0.28 + tackles * 0.06;
-    addXp(acc, 'passRush', production * 2.7 + num(teamStats.sacksMade) * 0.2);
-    addXp(acc, 'decisionMaking', tackles * 0.08 + production * 0.45);
-    addXp(acc, 'zoneCoverage', tackles * 0.04);
+    const production = sacksMade * 1.0 + pressures * 0.35 + tackles * 0.08;
+    addXp(acc, 'passRush', production * 3.0 + num(teamStats.sacksMade) * 0.25);
+    addXp(acc, 'decisionMaking', tackles * 0.1 + production * 0.5);
+    addXp(acc, 'zoneCoverage', tackles * 0.05);
     acc.production += production;
     return;
   }
@@ -261,10 +292,10 @@ function applyPositionXp(
   if (['CB', 'S', 'FS', 'SS'].includes(pos)) {
     const ints = num(stats.interceptions);
     const tackles = num(stats.tackles);
-    const production = passesDefended * 0.55 + ints * 1.2 + tackles * 0.05;
-    addXp(acc, 'pressCoverage', production * 1.7 + passesDefended * 0.65);
-    addXp(acc, 'zoneCoverage', production * 1.75 + ints * 0.4);
-    addXp(acc, 'ballTracking', ints * 0.9 + passesDefended * 0.28);
+    const production = passesDefended * 0.7 + ints * 1.5 + tackles * 0.06;
+    addXp(acc, 'pressCoverage', production * 2.0 + passesDefended * 0.8);
+    addXp(acc, 'zoneCoverage', production * 2.0 + ints * 0.5);
+    addXp(acc, 'ballTracking', ints * 1.1 + passesDefended * 0.35);
     acc.production += production;
   }
 }
@@ -272,7 +303,7 @@ function applyPositionXp(
 function applyParityGuardrail(entries: Array<{ playerId: string; attr: keyof AttributesV2; delta: number }>, playerCount: number) {
   const positive = entries.reduce((sum, row) => sum + Math.max(0, row.delta), 0);
   const negative = Math.abs(entries.reduce((sum, row) => sum + Math.min(0, row.delta), 0));
-  const maxNetPositive = Math.max(5, Math.floor(playerCount * 0.12));
+  const maxNetPositive = Math.max(5, Math.floor(playerCount * 0.15));
   let net = positive - negative;
   if (net <= maxNetPositive) return entries;
 
@@ -319,7 +350,7 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
         applyPositionXp(acc, pos, stats, side.teamStats);
 
         const focusKey = String(player.teamId ?? side.teamId ?? '');
-        const focusMultiplier = deriveFocusMultiplier(pos, input.teamFocusByTeamId?.[focusKey]);
+        const focusMultiplier = deriveFocusMultiplier(player, input.teamFocusByTeamId?.[focusKey]);
         for (const key of ATTRIBUTE_KEYS) {
           acc.xp[key] = num(acc.xp[key]) * focusMultiplier;
         }
@@ -332,17 +363,25 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
     const player = playersById.get(playerId);
     if (!player?.attributesV2) continue;
     const ageCurve = getAgeCurve(player.age);
-    const productionSoftener = clamp(acc.production * 0.03, 0, 0.55);
-    const veteranPenalty = Number(player.age ?? 0) >= 34 ? 5 : Number(player.age ?? 0) >= 31 ? 2 : 0;
+    const productionSoftener = clamp(acc.production * 0.05, 0, 0.65);
+
+    // Medical quality reduces regression pressure
+    const teamFocus = input.teamFocusByTeamId?.[String(player.teamId ?? '')];
+    const medicalMitigation = (num(teamFocus?.medicalQuality) / 100) * 0.2;
+
+    const veteranPenalty = Number(player.age ?? 0) >= 34 ? 8 : Number(player.age ?? 0) >= 31 ? 3 : 0;
 
     for (const attr of ATTRIBUTE_KEYS) {
-      const agePressureXp = -(ageCurve.maintenancePressure * 12 * (1 - productionSoftener) + veteranPenalty);
+      const agePressureXp = -(ageCurve.maintenancePressure * 12 * (1 - productionSoftener - medicalMitigation) + veteranPenalty);
       const xp = num(player.attributeXp?.[attr]) + num(acc.xp[attr]) * ageCurve.growth + agePressureXp;
-      const boundedXp = clamp(xp, -140, 140);
-      let delta = clamp(Math.trunc(boundedXp / 12), -2, 2);
-      if (Number(player.age ?? 0) >= 34 && ['throwPower', 'separation', 'passRush', 'pressCoverage'].includes(attr)) {
-        delta = Math.min(delta, -1);
+      const boundedXp = clamp(xp, -160, 160);
+      let delta = clamp(Math.trunc(boundedXp / 12), -3, 3);
+
+      // Veteran specific regression
+      if (Number(player.age ?? 0) >= 33 && ['throwPower', 'separation', 'passRush', 'pressCoverage'].includes(attr)) {
+        delta = Math.min(delta, 0); // Harder to grow physical traits after 33
       }
+
       deltaRows.push({ playerId, attr, delta });
     }
   }
@@ -378,11 +417,11 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
     for (const key of ATTRIBUTE_KEYS) {
       const raw = num(player.attributeXp?.[key]) + num(acc?.xp[key]) * ageCurve.growth;
       const consumed = num(deltas[key]) * 12;
-      nextXp[key] = clamp(raw - consumed, -140, 140);
+      nextXp[key] = clamp(raw - consumed, -160, 160);
     }
 
     const notes: string[] = [];
-    if (Math.abs(totalDelta) >= 2 && (player.pos === 'QB' || player.pos === 'WR' || player.pos === 'TE')) {
+    if (Math.abs(totalDelta) >= 2 && (player.pos === 'QB' || player.pos === 'WR' || player.pos === 'TE' || player.pos === 'CB')) {
       const note = summarizeNotableNote(String(player.pos ?? ''), deltas);
       if (note) notes.push(note);
     }
@@ -414,18 +453,79 @@ export function processWeeklyEvolution(input: WeeklyEvolutionInput): WeeklyEvolu
     }
   }
 
-  const totalPositiveDelta = updates.reduce((sum, update) => sum + Object.values(update.growthHistoryEntry.deltas).reduce((inner, delta) => inner + Math.max(0, num(delta)), 0), 0);
-  const totalNegativeDelta = updates.reduce((sum, update) => sum + Object.values(update.growthHistoryEntry.deltas).reduce((inner, delta) => inner + Math.abs(Math.min(0, num(delta))), 0), 0);
-
   return {
     updates,
     developmentEvents,
     stamp,
     summary: {
       processedPlayers: updates.length,
-      totalPositiveDelta,
-      totalNegativeDelta,
-      netDelta: totalPositiveDelta - totalNegativeDelta,
+      totalPositiveDelta: updates.reduce((sum, u) => sum + Object.values(u.growthHistoryEntry.deltas).reduce((i, d) => i + Math.max(0, num(d)), 0), 0),
+      totalNegativeDelta: updates.reduce((sum, u) => sum + Object.values(u.growthHistoryEntry.deltas).reduce((i, d) => i + Math.abs(Math.min(0, num(d))), 0), 0),
+      netDelta: updates.reduce((sum, u) => sum + u.growthHistoryEntry.totalDelta, 0),
+    },
+  };
+}
+
+export interface OffseasonEvolutionInput {
+  players: EvolutionPlayer[];
+  seasonId: number;
+  seed: number;
+  teamFocusByTeamId?: Record<string, TeamDevelopmentFocus>;
+}
+
+export function processOffseasonEvolution(input: OffseasonEvolutionInput): WeeklyEvolutionResult {
+  const stamp = `offseason:${input.seasonId}`;
+  const updates: PlayerEvolutionUpdate[] = [];
+
+  for (const player of input.players) {
+    if (!player?.attributesV2) continue;
+
+    const ageCurve = getAgeCurve(player.age);
+    const nextAttributes = { ...player.attributesV2 };
+    const deltas: Partial<Record<keyof AttributesV2, number>> = {};
+    let totalDelta = 0;
+
+    const teamFocus = input.teamFocusByTeamId?.[String(player.teamId ?? '')];
+    const staffBonus = (num(teamFocus?.staffQuality) / 100) * 1.5;
+
+    for (const key of ATTRIBUTE_KEYS) {
+      // Offseason is more aggressive based on age
+      const baseGrowth = ageCurve.growth > 1.1 ? 3 : ageCurve.growth > 0.9 ? 1 : ageCurve.growth < 0.6 ? -4 : -1;
+      const noise = (Math.abs((input.seed + num(player.id)) % 5) - 2);
+      const delta = clamp(baseGrowth + noise + Math.round(staffBonus), -6, 5);
+
+      if (delta !== 0) {
+        nextAttributes[key] = clamp(num(nextAttributes[key]) + delta, 25, 99);
+        deltas[key] = delta;
+        totalDelta += delta;
+      }
+    }
+
+    if (totalDelta !== 0) {
+      updates.push({
+        playerId: String(player.id),
+        attributesV2: nextAttributes,
+        attributeXp: player.attributeXp ?? {},
+        growthHistoryEntry: {
+          seasonId: input.seasonId,
+          week: 0,
+          deltas,
+          totalDelta,
+          notes: [],
+        },
+      });
+    }
+  }
+
+  return {
+    updates,
+    developmentEvents: [],
+    stamp,
+    summary: {
+      processedPlayers: updates.length,
+      totalPositiveDelta: updates.reduce((sum, u) => sum + Math.max(0, u.growthHistoryEntry.totalDelta), 0),
+      totalNegativeDelta: updates.reduce((sum, u) => sum + Math.abs(Math.min(0, u.growthHistoryEntry.totalDelta)), 0),
+      netDelta: updates.reduce((sum, u) => sum + u.growthHistoryEntry.totalDelta, 0),
     },
   };
 }

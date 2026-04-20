@@ -1,3 +1,4 @@
+import { summarizeRosterDevelopment } from "../utils/playerDevelopmentSignals.js";
 import React, { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { evaluateWeeklyContext } from "../utils/weeklyContext.js";
@@ -77,6 +78,7 @@ function getSeverityTone(level) {
 export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdvanceWeek, busy, simulating }) {
   const vm = useMemo(() => getHQViewModel(league), [league]);
   const [lineupToast, setLineupToast] = useState(null);
+  const developmentSummary = useMemo(() => summarizeRosterDevelopment(vm.userTeam?.roster ?? [], new Map()), [vm.userTeam?.roster]);
   const weekly = useMemo(() => evaluateWeeklyContext(vm.league), [vm.league]);
   const prep = useMemo(() => deriveWeeklyPrepState(vm.league), [vm.league]);
   const nextGame = useMemo(() => getNextGame(vm.league), [vm.league]);
@@ -210,7 +212,22 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
             <CompactInsightCard title="No urgent blockers" subtitle="Use this week to gain edges in prep and depth." tone="info" ctaLabel="Open Team" onCta={() => onNavigate?.("Team:Overview")} />
           )}
         </div>
-      </SectionCard>
+      {developmentSummary.rising.length > 0 && (
+        <SectionCard title="Development Outlook" subtitle="Risers and breakout candidates." variant="compact">
+          <div className="app-priority-rail">
+            {developmentSummary.rising.slice(0, 2).map((p) => (
+              <CompactInsightCard
+                key={p.id}
+                title={p.name}
+                subtitle={`${p.pos} · Rising trend · OVR ${p.ovr}`}
+                tone="ok"
+                ctaLabel="Profile"
+                onCta={() => onNavigate?.("Team:Development")}
+              />
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       <SectionHeader eyebrow="Team status" title="Snapshot" subtitle="Roster and cap in one line." />
       <StatStrip items={[
