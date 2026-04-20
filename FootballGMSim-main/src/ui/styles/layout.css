@@ -1,0 +1,262 @@
+/*
+ * Layout CSS - Grid, Navigation, Sidebars
+ * Part of modular CSS structure
+ */
+
+/* ============================================================================
+   LAYOUT SYSTEM
+   ============================================================================ */
+
+.layout { 
+  display: grid; 
+  grid-template-columns: 280px 1fr; 
+  gap: var(--space-6); 
+  padding: var(--space-6);
+  padding-top: max(var(--space-6), env(safe-area-inset-top)); /* Ensure breathing room */
+  padding-left: calc(200px + var(--space-6)); /* Account for nav sidebar */
+  min-height: 100vh;
+  margin-top: 0;
+  transition: padding-left var(--dur-slow) var(--ease);
+}
+
+.layout.nav-collapsed {
+  padding-left: var(--space-6);
+}
+
+.sidebar { 
+  position: sticky; 
+  top: var(--space-6); 
+  height: fit-content;
+  z-index: 10;
+}
+
+/* ============================================================================
+   TOPBAR
+   ============================================================================ */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: calc(var(--space-3) + env(safe-area-inset-top, 0px)) var(--space-4);
+  padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+  padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--hairline);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.brand { 
+  font-weight: 700; 
+  font-size: 14px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ============================================================================
+   NAVIGATION
+   ============================================================================ */
+
+.nav-toggle-container {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  left: 10px;
+  z-index: 1002;
+}
+
+.nav-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  cursor: pointer;
+  transition: all var(--dur) var(--ease);
+  flex-shrink: 0;
+}
+
+.nav-toggle:hover {
+  background: var(--surface);
+  border-color: var(--hairline-strong);
+}
+
+.nav-toggle:active {
+  transform: scale(0.95);
+}
+
+.nav-sidebar {
+  position: fixed;
+  left: 0;
+  top: env(safe-area-inset-top, 0px);
+  bottom: 0;
+  width: 200px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--hairline);
+  z-index: 40;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-top: 60px; /* Space for toggle button */
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.nav-sidebar.collapsed {
+  transform: translateX(-100%);
+  pointer-events: none;
+}
+
+.nav-menu {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2);
+  gap: var(--space-1);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  transition: all var(--dur) var(--ease);
+  white-space: nowrap;
+  min-height: 36px;
+  cursor: pointer;
+}
+
+.nav-item:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.nav-item.active,
+.nav-item[aria-current="page"] {
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+/* Navigation Pills (Legacy compatibility) */
+.nav-pills { 
+  display: flex; 
+  gap: var(--space-2); 
+  justify-content: center;
+  background: var(--surface);
+  border-radius: var(--radius-pill);
+  padding: var(--space-1);
+  border: 1px solid var(--hairline);
+}
+
+.nav-pill {
+  display: inline-flex; 
+  align-items: center; 
+  gap: var(--space-2);
+  height: 36px; 
+  padding: 0 var(--space-4); 
+  border-radius: var(--radius-pill);
+  color: var(--text-muted); 
+  text-decoration: none; 
+  font-weight: 500;
+  font-size: var(--text-sm);
+  transition: all var(--dur) var(--ease);
+  position: relative;
+  overflow: hidden;
+}
+
+.nav-pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+  border-radius: var(--radius-pill);
+}
+
+.nav-pill:hover { 
+  color: var(--text); 
+  transform: translateY(-1px);
+}
+
+.nav-pill:hover::before {
+  opacity: 0.1;
+}
+
+.nav-pill[aria-current="page"] { 
+  color: white; 
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 999;
+  pointer-events: auto;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body.nav-open .nav-overlay,
+.nav-overlay.show {
+  display: block;
+}
+
+/* --- League Dashboard --- */
+#leagueDashboard {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+#leagueDashboard h1 {
+    font-size: 2rem;
+    margin-bottom: var(--space-4);
+    color: var(--text-highlight);
+    text-align: center;
+}
+
+.dashboard-section {
+    margin-bottom: var(--space-4);
+}
+
+.dashboard-section h3 {
+    margin-bottom: var(--space-2);
+    border-bottom: 1px solid var(--hairline);
+    padding-bottom: var(--space-2);
+}
+
+/* Ensure table looks good */
+#leagues-table {
+    width: 100%;
+}
+
+#leagues-table th, #leagues-table td {
+    vertical-align: middle;
+}
+
+.btn-load {
+    min-width: 60px;
+}

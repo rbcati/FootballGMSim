@@ -1,0 +1,14 @@
+{
+  "name": "NFL GM Simulator",
+  "short_name": "NFL GM",
+  "description": "Professional NFL General Manager Simulation Game",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "orientation": "portrait-primary",
+  "icons": [],
+  "categories": ["games", "sports"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

@@ -1,0 +1,456 @@
+
+Running 8 tests using 1 worker
+
+BROWSER LOG: Loaded 421 first names and 1349 last names
+BROWSER LOG: This provides 567929 possible name combinations
+BROWSER LOG: Teams.js loaded - Real teams: 32 Fictional teams: 32
+BROWSER LOG: ✅ Offseason System loaded
+BROWSER LOG: Enhanced Team Statistics System loaded successfully
+BROWSER LOG: ✅ Box Score Viewer loaded
+BROWSER LOG: ✅ Player Database system loaded
+BROWSER LOG: ✅ History system loaded
+BROWSER LOG: ✅ Comprehensive Award System loaded
+BROWSER LOG: ✅ All-Time Records System loaded
+BROWSER LOG: Stats Viewer Loaded Successfully
+BROWSER LOG: ✅ Injury System loaded
+BROWSER LOG: ✅ Player Comparison system loaded
+BROWSER LOG: ✅ Retirement System loaded
+BROWSER LOG: ✅ Data Visualization System loaded
+BROWSER LOG: ✅ UI Components System loaded
+BROWSER LOG: 🔒 Hiding game results modal
+BROWSER LOG: [vite] connecting...
+BROWSER LOG: [vite] connected.
+BROWSER LOG: Initializing fresh state...
+BROWSER LOG: Fresh state created
+BROWSER LOG: Auto-save hook installed
+BROWSER LOG: ✅ State-Save Manager loaded. Full state persistence is active.
+BROWSER LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+BROWSER LOG: [LeagueCreationFix] Loaded
+BROWSER LOG: [TeamSelectionFix] Team selection fix initialized (will apply when makeLeague is available).
+BROWSER LOG: 🧭 Loading complete navigation fix...
+BROWSER LOG: 💡 Navigation fix loaded. Available commands:
+BROWSER LOG: - fixNavigation() - Apply complete navigation fix
+BROWSER LOG: - diagnoseNavigation() - Show navigation diagnostic
+BROWSER LOG: 🔧 Loading critical fixes...
+BROWSER LOG: 🚀 Initializing all critical fixes...
+BROWSER LOG: 🔧 Fixing click handlers...
+BROWSER LOG: ✅ Click handlers fixed
+BROWSER LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+BROWSER LOG: ✅ Navigation toggle made visible and clickable {isMobile: false}
+BROWSER LOG: ✅ iOS optimizations added
+BROWSER LOG: 🔧 Fixing modal accessibility...
+BROWSER LOG: ✅ Modal accessibility fixed
+BROWSER LOG: ✅ All critical fixes initialized
+BROWSER LOG: ✅ Critical fixes loaded
+BROWSER LOG: ✅ Combined fixes.js loaded - includes error-overlay, missing-functions, league-creation-fix, team-selection-fix, navbar-fix, dom-helpers-fix, and critical-fixes
+BROWSER LOG: ✅ Trade system (manual + CPU) loaded and optimized for value
+BROWSER LOG: ✅ Draft system fixed and loaded
+BROWSER LOG: ✅ Scheme Management system loaded
+BROWSER LOG: ✅ PlayerStatsViewer initialized and enhanced with Training Potential
+BROWSER LOG: ✅ Live Game Viewer loaded
+BROWSER LOG: 🎉 UI master file loaded successfully!
+BROWSER LOG: GameController: Initializing...
+BROWSER LOG: Rebuilding league metadata...
+BROWSER LOG: Initializing fresh state...
+BROWSER LOG: Fresh state created
+BROWSER LOG: No saves found, starting onboarding.
+BROWSER LOG: ✅ GameController functions exported globally (patched version)
+BROWSER LOG: Setting up core event listeners...
+BROWSER LOG: 🎯 Initializing UI...
+BROWSER LOG: Navigation enhancement called.
+BROWSER LOG: ✅ GameController initialized successfully
+BROWSER LOG: ✅ Premium UI interactions initialized
+BROWSER LOG: Dashboard rendered with 0 leagues.
+BROWSER LOG: Dashboard rendered with 0 leagues.
+BROWSER LOG: Owner mode system initialized
+BROWSER LOG: 🔒 Hiding game results modal
+BROWSER LOG: Dashboard rendered with 0 leagues.
+BROWSER LOG: ✅ FootballDB connected: football_sim_db
+BROWSER LOG: 🚀 Initializing complete navigation fix...
+BROWSER LOG: 🔧 Checking navigation HTML...
+BROWSER LOG: Adding missing nav item: Standings
+BROWSER LOG: ✅ Navigation HTML checked and fixed
+BROWSER LOG: 🎨 Navigation styles are in style.css
+BROWSER LOG: 🔧 Setting up enhanced navigation...
+BROWSER LOG: ✅ Navigation toggle setup complete
+BROWSER LOG: ✅ Enhanced navigation set up
+BROWSER LOG: ✅ Complete navigation fix initialized
+BROWSER LOG: 🎯 Initializing UI...
+BROWSER LOG: Navigation enhancement called.
+BROWSER LOG: 🎯 Running initial route...
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+BROWSER LOG: ✅ Combined player.js loaded - includes progression, legacy, rookies, factory, and depth chart system
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [Hub] Render blocked: League object missing
+BROWSER LOG: ✅ Hub rendered
+BROWSER LOG: ✅ Critical fixes already initialized
+BROWSER LOG: ✅ Start Season button clicked
+BROWSER LOG: Initializing fresh state...
+BROWSER LOG: Fresh state created
+BROWSER LOG: [TeamSelectionFix] Selected team BEFORE league creation: Boston Minutemen (index 0)
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Miguel Ruiz (Disciplinarian)
+BROWSER LOG: Generated OC: Pedro Sanchez (Ground & Pound)
+BROWSER LOG: Generated DC: Zion Adkins (No Fly Zone)
+BROWSER LOG: Generated Scout: Kevin Cooper (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Ivan Luna (Disciplinarian)
+BROWSER LOG: Generated OC: Sage Pennington (Balanced)
+BROWSER LOG: Generated DC: Dennis Fields (Blitz Happy)
+BROWSER LOG: Generated Scout: Kai Wilkins (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Parker Franks (Disciplinarian)
+BROWSER LOG: Generated OC: Stephen Munoz (Air Raid)
+BROWSER LOG: Generated DC: Ioan Dawson (Bend Dont Break)
+BROWSER LOG: Generated Scout: Trent Harvey (Analytics Expert)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Dominic Stephens (Motivator)
+BROWSER LOG: Generated OC: Cameron Hunter (Ground & Pound)
+BROWSER LOG: Generated DC: Tiernan Harmon (Bend Dont Break)
+BROWSER LOG: Generated Scout: Kevin Shaw (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Thomas Vazquez (Motivator)
+BROWSER LOG: Generated OC: Carlos Carpenter (Balanced)
+BROWSER LOG: Generated DC: Anthony Black (Blitz Happy)
+BROWSER LOG: Generated Scout: Kenji Ellis (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Casey Carson (Strategist)
+BROWSER LOG: Generated OC: Sebastian Gordon (Air Raid)
+BROWSER LOG: Generated DC: Xavi Stanton (No Fly Zone)
+BROWSER LOG: Generated Scout: Hayden Hayden (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Vladimir Wells (Disciplinarian)
+BROWSER LOG: Generated OC: Albert Stevens (Balanced)
+BROWSER LOG: Generated DC: Roman Travis (No Fly Zone)
+BROWSER LOG: Generated Scout: Oliver Christensen (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Cian Bell (Strategist)
+BROWSER LOG: Generated OC: Pedro Tucker (Air Raid)
+BROWSER LOG: Generated DC: Fernando Powell (No Fly Zone)
+BROWSER LOG: Generated Scout: Hayden Spencer (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Wesley Nolan (Motivator)
+BROWSER LOG: Generated OC: Zhenya Sullivan (Ground & Pound)
+BROWSER LOG: Generated DC: Zachary Hyde (No Fly Zone)
+BROWSER LOG: Generated Scout: Grant Pittman (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Thomas Conway (Motivator)
+BROWSER LOG: Generated OC: Rohan Paul (Balanced)
+BROWSER LOG: Generated DC: Jason Waters (Blitz Happy)
+BROWSER LOG: Generated Scout: Dalton Hamilton (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Jamal Hamilton (Disciplinarian)
+BROWSER LOG: Generated OC: Sergei Pennington (Air Raid)
+BROWSER LOG: Generated DC: Javier Beck (Bend Dont Break)
+BROWSER LOG: Generated Scout: Tiernan Carlson (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Walter Montoya (Disciplinarian)
+BROWSER LOG: Generated OC: Kai Rice (Balanced)
+BROWSER LOG: Generated DC: Kenneth George (Blitz Happy)
+BROWSER LOG: Generated Scout: Dennis Bass (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Jonathan Briggs (Strategist)
+BROWSER LOG: Generated OC: Hector Valdez (Air Raid)
+BROWSER LOG: Generated DC: Omar Booth (No Fly Zone)
+BROWSER LOG: Generated Scout: Vladimir Shepard (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Sergio George (Strategist)
+BROWSER LOG: Generated OC: Santiago Shannon (Ground & Pound)
+BROWSER LOG: Generated DC: Devon Herman (Bend Dont Break)
+BROWSER LOG: Generated Scout: Zion Mcdonald (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Justin Rosario (Strategist)
+BROWSER LOG: Generated OC: Dennis Long (Balanced)
+BROWSER LOG: Generated DC: Dennis Ellis (Blitz Happy)
+BROWSER LOG: Generated Scout: Julian Larsen (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Wade Pennington (Disciplinarian)
+BROWSER LOG: Generated OC: Zayden Mcclain (Balanced)
+BROWSER LOG: Generated DC: Zackary Cash (No Fly Zone)
+BROWSER LOG: Generated Scout: Zachary Hahn (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Zachary Rivera (Strategist)
+BROWSER LOG: Generated OC: Russell Ellis (Ground & Pound)
+BROWSER LOG: Generated DC: Jared Allen (Blitz Happy)
+BROWSER LOG: Generated Scout: Josh Griffin (Analytics Expert)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Jesus Rice (Motivator)
+BROWSER LOG: Generated OC: Vincenzo Tucker (Ground & Pound)
+BROWSER LOG: Generated DC: Joshua Herring (Blitz Happy)
+BROWSER LOG: Generated Scout: Noah Sullivan (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Gregory Washington (Strategist)
+BROWSER LOG: Generated OC: Wyatt Gillespie (Air Raid)
+BROWSER LOG: Generated DC: Mikhail Savage (Bend Dont Break)
+BROWSER LOG: Generated Scout: Miles Casey (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Charles Bird (Disciplinarian)
+BROWSER LOG: Generated OC: Gary Hansen (Air Raid)
+BROWSER LOG: Generated DC: Chad Jordan (Bend Dont Break)
+BROWSER LOG: Generated Scout: Benjamin Ramirez (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: James Pierce (Motivator)
+BROWSER LOG: Generated OC: Zyair Madden (Air Raid)
+BROWSER LOG: Generated DC: Timothy Savage (Bend Dont Break)
+BROWSER LOG: Generated Scout: Tariq Hill (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Trevor Bolton (Strategist)
+BROWSER LOG: Generated OC: Morgan Cole (Ground & Pound)
+BROWSER LOG: Generated DC: John Rogers (Blitz Happy)
+BROWSER LOG: Generated Scout: Yahir Fletcher (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Zayden Snyder (Disciplinarian)
+BROWSER LOG: Generated OC: Zion Hancock (Ground & Pound)
+BROWSER LOG: Generated DC: Jorge Delaney (No Fly Zone)
+BROWSER LOG: Generated Scout: Arthur Bishop (Analytics Expert)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Ioan Blackburn (Disciplinarian)
+BROWSER LOG: Generated OC: Wilbur Hanson (Balanced)
+BROWSER LOG: Generated DC: Shane Moore (No Fly Zone)
+BROWSER LOG: Generated Scout: Parker Mckenzie (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Carl Powell (Strategist)
+BROWSER LOG: Generated OC: Samir Ellison (Air Raid)
+BROWSER LOG: Generated DC: Yuki Nelson (Blitz Happy)
+BROWSER LOG: Generated Scout: Logan Gray (Analytics Expert)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Xavier Henry (Disciplinarian)
+BROWSER LOG: Generated OC: Philip Osborne (Balanced)
+BROWSER LOG: Generated DC: Yaretzi Moss (No Fly Zone)
+BROWSER LOG: Generated Scout: Ivan Vazquez (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Joel Newman (Disciplinarian)
+BROWSER LOG: Generated OC: Lane Burns (Ground & Pound)
+BROWSER LOG: Generated DC: Grant Farley (Bend Dont Break)
+BROWSER LOG: Generated Scout: Zeus Fletcher (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Kendall Castro (Strategist)
+BROWSER LOG: Generated OC: Jesus Huff (Balanced)
+BROWSER LOG: Generated DC: Frank Day (Blitz Happy)
+BROWSER LOG: Generated Scout: Scott Mcgee (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Dmitri Ryan (Strategist)
+BROWSER LOG: Generated OC: Zyair Carroll (Air Raid)
+BROWSER LOG: Generated DC: Yusuf Gordon (Blitz Happy)
+BROWSER LOG: Generated Scout: Troy Rowe (Draft Guru)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Donald Pittman (Disciplinarian)
+BROWSER LOG: Generated OC: Willis Crawford (Balanced)
+BROWSER LOG: Generated DC: Colton Mckinney (No Fly Zone)
+BROWSER LOG: Generated Scout: Timothy Medina (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Devin Lowe (Motivator)
+BROWSER LOG: Generated OC: Vihaan Haley (Balanced)
+BROWSER LOG: Generated DC: Santiago Rios (Bend Dont Break)
+BROWSER LOG: Generated Scout: Theodore Ramirez (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Generating initial staff...
+BROWSER LOG: Generated HC: Willie Espinoza (Strategist)
+BROWSER LOG: Generated OC: Dakota Booth (Air Raid)
+BROWSER LOG: Generated DC: Skylar Albert (Bend Dont Break)
+BROWSER LOG: Generated Scout: Blake Manning (Talent Spotter)
+BROWSER LOG: Generated staff: {headCoach: Object, offCoordinator: Object, defCoordinator: Object, scout: Object}
+BROWSER LOG: Creating NFL-style schedule...
+BROWSER LOG: Schedule validation failed, attempting to fix: [Team Philadelphia Quakers has 0 bye weeks instead of 1, Team San Francisco Demons has 0 bye weeks instead of 1]
+BROWSER LOG: Fixing schedule completely...
+BROWSER LOG: Final validation failed, using simple schedule: [Team Memphis Blues has 0 bye weeks instead of 1, Team Carolina Cougars has 0 bye weeks instead of 1]
+BROWSER LOG: Creating simple fallback schedule...
+BROWSER LOG: [Calibration] Starters: 800, Mean: 83.64, StdDev: 5.17
+BROWSER LOG: [Calibration] League players updated.
+BROWSER LOG: ✨ League creation complete and modularized!
+BROWSER LOG: Running schema migration...
+BROWSER LOG: Generated 120 free agents
+BROWSER LOG: ✅ League "League 1770547338020" saved to IndexedDB.
+BROWSER LOG: Game saved successfully to League 1770547338020
+BROWSER LOG: Dashboard rendered with 1 leagues.
+BROWSER LOG: ✅ League created successfully: {teams: 32, userTeamId: 0, onboarded: true, hasLeague: true}
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+BROWSER LOG: ✅ Hub rendered successfully
+BROWSER LOG: ✅ Hub rendered
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+BROWSER LOG: ✅ Hub rendered successfully
+BROWSER LOG: ✅ Hub rendered
+BROWSER LOG: Owner mode system initialized
+State Audit: { capRoom: [33m12.7[39m, rosterSize: [33m53[39m, week: [33m1[39m }
+BROWSER LOG: [GameController] Global Advance triggered
+BROWSER LOG: Simulating week...
+BROWSER LOG: [GameController] Calling simulateWeek()
+BROWSER LOG: [SIM-DEBUG] Requesting Week 1 Simulation from Worker
+BROWSER LOG: 🎯 Initializing UI...
+BROWSER LOG: Navigation enhancement called.
+BROWSER LOG: Showing view: hub
+BROWSER LOG: ✅ View shown successfully: hub
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+BROWSER LOG: Showing view: hub
+BROWSER LOG: ✅ View shown successfully: hub
+BROWSER LOG: ✅ UI updated after league creation
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+BROWSER LOG: ✅ Hub rendered successfully
+BROWSER LOG: ✅ Hub rendered
+BROWSER LOG: [Worker] Starting simulation for Week 1
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [HUB-DEBUG] Resolving schedule for Week 1. Schedule type: Array
+BROWSER LOG: ✅ Hub rendered successfully
+BROWSER LOG: [SIM-DEBUG] Worker completed simulation for Week 1
+BROWSER LOG: [XP] Zyaire Herring gained 1 Skill Point!
+BROWSER LOG: [XP] Zyaire Herring gained 1 Skill Point!
+BROWSER LOG: [XP] Nicolae Price gained 1 Skill Point!
+BROWSER LOG: [XP] Nicolae Price gained 1 Skill Point!
+BROWSER LOG: [XP] Diego Dawson gained 1 Skill Point!
+BROWSER LOG: [XP] Diego Dawson gained 1 Skill Point!
+BROWSER LOG: [XP] Reid Haynes gained 1 Skill Point!
+BROWSER LOG: [XP] Reid Haynes gained 1 Skill Point!
+BROWSER LOG: [XP] Zion Herman gained 1 Skill Point!
+BROWSER LOG: [XP] Zion Herman gained 1 Skill Point!
+BROWSER LOG: [XP] Zion Herman gained 1 Skill Point!
+BROWSER LOG: [XP] Nathaniel Franks gained 1 Skill Point!
+BROWSER LOG: [XP] Nathaniel Franks gained 1 Skill Point!
+BROWSER LOG: [XP] Gabriel Martin gained 1 Skill Point!
+BROWSER LOG: [XP] Gabriel Martin gained 1 Skill Point!
+BROWSER LOG: [XP] Ryder Hayes gained 1 Skill Point!
+BROWSER LOG: [XP] Ryder Hayes gained 1 Skill Point!
+BROWSER LOG: [XP] Maxwell Nguyen gained 1 Skill Point!
+BROWSER LOG: [XP] Maxwell Nguyen gained 1 Skill Point!
+BROWSER LOG: [XP] Maxwell Nguyen gained 1 Skill Point!
+BROWSER LOG: [XP] Maxwell Nguyen gained 1 Skill Point!
+BROWSER LOG: [XP] Tyler Burns gained 1 Skill Point!
+BROWSER LOG: [XP] Tyler Burns gained 1 Skill Point!
+BROWSER LOG: [XP] Zack Lane gained 1 Skill Point!
+BROWSER LOG: [XP] Zack Lane gained 1 Skill Point!
+BROWSER LOG: [XP] Zack Lane gained 1 Skill Point!
+BROWSER LOG: Achievement Unlocked: First Win
+BROWSER LOG: [QA-AUDIT] saveState: Saving state. Week: 2, Teams Count: 32
+BROWSER LOG: [QA-AUDIT] saveState: Sample Team 0 Wins: 1
+BROWSER LOG: Rendering dedicated standings page...
+BROWSER LOG: ✅ Standings page rendered successfully, period.
+BROWSER LOG: Rendering hub...
+BROWSER LOG: [HUB-DEBUG] Resolving schedule for Week 2. Schedule type: Array
+BROWSER LOG: ✅ Hub rendered successfully
+BROWSER LOG: ✅ League "League 1770547338020" saved to IndexedDB.
+BROWSER LOG: Game saved successfully to League 1770547338020
+BROWSER LOG: Dashboard rendered with 1 leagues.
+BROWSER LOG: 🧭 Routing to: hub from path: #/hub
+BROWSER LOG: ✅ Showing view: hub
+BROWSER LOG: ✅ Game ready, rendering view: hub
+Week advanced from 1 to 2
+  ✓  1 tests/daily_regression.spec.js:5:5 › Daily Regression Pass › Playability Smoke Test & State Audit (4.2s)
+Roster size after release: [33m52[39m
+Found 121 signable players
+Roster size increased from 52 to 53
+  ✓  2 tests/daily_regression.spec.js:81:5 › Daily Regression Pass › Contracts & Free Agency (8.2s)
+  ✓  3 tests/daily_regression.spec.js:153:5 › Daily Regression Pass › Mobile UI Check (2.6s)
+Initial Week: 1
+Week after sim: 2
+Reloading page...
+Persisted Week: 2
+  ✓  4 tests/daily_regression.spec.js:196:5 › Daily Regression Pass › Persistence Check (5.3s)
+Persisted Strategy: {
+  offPlanId: [32m'AGGRESSIVE_PASSING'[39m,
+  defPlanId: [32m'BALANCED'[39m,
+  riskId: [32m'AGGRESSIVE'[39m
+}
+  ✓  5 tests/daily_regression.spec.js:242:5 › Daily Regression Pass › Strategy Persistence (6.3s)
+No played user game found, advancing week... (Attempt 1)
+No played user game found, advancing week... (Attempt 2)
+No played user game found, advancing week... (Attempt 3)
+Decision modal found, dismissing...
+  ✘  6 tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention (30.1s)
+  ✓  7 tests/daily_regression.spec.js:373:5 › Daily Regression Pass › High Stakes Visuals (1.9s)
+Retirement Result: {
+  success: [33mtrue[39m,
+  announcement: [32m'🏈 Test Legend (QB) has announced his retirement from the Boston Minutemen at age 50. Career: 60,000 passing yards. 2 Super Bowls won.'[39m,
+  newsAdded: [33mtrue[39m
+}
+  ✓  8 tests/daily_regression.spec.js:400:5 › Daily Regression Pass › Legacy & Retirement Verification (2.2s)
+
+
+  1) tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention ──────
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('button', { name: /Continue to Week/i })[22m
+    [2m    - locator resolved to <button class="btn primary large" onclick="this.closest('.modal').remove(); if(window.renderHub) window.renderHub();">Continue to Week 3</button>[22m
+    [2m  - attempting click action[22m
+    [2m    2 × waiting for element to be visible, enabled and stable[22m
+    [2m      - element is visible, enabled and stable[22m
+    [2m      - scrolling into view if needed[22m
+    [2m      - done scrolling[22m
+    [2m      - <div class="modal" id="decisionModal">…</div> intercepts pointer events[22m
+    [2m    - retrying click action[22m
+    [2m    - waiting 20ms[22m
+    [2m    2 × waiting for element to be visible, enabled and stable[22m
+    [2m      - element is visible, enabled and stable[22m
+    [2m      - scrolling into view if needed[22m
+    [2m      - done scrolling[22m
+    [2m      - <div class="modal" id="decisionModal">…</div> intercepts pointer events[22m
+    [2m    - retrying click action[22m
+    [2m      - waiting 100ms[22m
+    [2m    35 × waiting for element to be visible, enabled and stable[22m
+    [2m       - element is visible, enabled and stable[22m
+    [2m       - scrolling into view if needed[22m
+    [2m       - done scrolling[22m
+    [2m       - <div class="modal" id="decisionModal">…</div> intercepts pointer events[22m
+    [2m     - retrying click action[22m
+    [2m       - waiting 500ms[22m
+    [2m    - waiting for element to be visible, enabled and stable[22m
+
+
+      337 |             const continueBtn = page.getByRole('button', { name: /Continue to Week/i });
+      338 |             if (await continueBtn.isVisible()) {
+    > 339 |                 await continueBtn.click();
+          |                                   ^
+      340 |             } else if (await page.locator('.modal.active .btn.primary').isVisible()) {
+      341 |                  // Fallback for other blocking modals
+      342 |                  await page.locator('.modal.active .btn.primary').first().click();
+        at /app/tests/daily_regression.spec.js:339:35
+
+    Error Context: test-results/tests-daily_regression-Dai-d26f2-s-Replay-Exploit-Prevention/error-context.md
+
+  1 failed
+    tests/daily_regression.spec.js:287:5 › Daily Regression Pass › Replay Exploit Prevention ───────
+  7 passed (1.1m)

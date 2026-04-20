@@ -1,0 +1,344 @@
+import { Constants } from './constants.js';
+
+export class TradeLogicService {
+  /**
+   * Modified Jimmy Johnson Trade Value Chart
+   * specific values for top picks, formula for others.
+   */
+  static get DRAFT_PICK_VALUES() {
+    return Constants.TRADE_LOGIC_CONFIG.DRAFT_PICK_VALUES;
+  }
+
+  /**
+   * Calculates the value of a draft pick.
+   * @param {number} round - Draft round (1-7)
+   * @param {number} pickInRound - Pick number within the round (1-32)
+   * @param {number} yearOffset - Years into the future (0 = current year)
+   * @returns {number} Asset value
+   */
+  static calculatePickValue(round, pickInRound, yearOffset = 0) {
+    const globalPick = (round - 1) * 32 + pickInRound;
+    let baseValue = 0;
+
+    if (globalPick <= 32) {
+      baseValue = this.DRAFT_PICK_VALUES[globalPick] || 590;
+    } else {
+      // Exponential decay for later rounds
+      // Round 2 start (~33): 580 -> Round 3 start (~65): 265 -> Round 7 start (~193): ~2
+      // Approximate formula: Value = 580 * 0.94^(pick - 33)
+      // Or simply use a standard decay from the last known value (590)
+      // Let's use a simplified decay model:
+      // Round 2: ~580 - 270
+      // Round 3: ~265 - 116
+      // Round 4: ~112 - 44
+      // Round 5: ~43 - 27
+      // Round 6: ~26 - 16
+      // Round 7: ~15 - 2
+
+      if (round === 2) baseValue = 580 - (pickInRound - 1) * 10;
+      else if (round === 3) baseValue = 265 - (pickInRound - 1) * 5;
+      else if (round === 4) baseValue = 112 - (pickInRound - 1) * 2;
+      else if (round === 5) baseValue = 43 - (pickInRound - 1) * 0.5;
+      else if (round === 6) baseValue = 26 - (pickInRound - 1) * 0.3;
+      else baseValue = 15 - (pickInRound - 1) * 0.4;
+    }
+
+    if (baseValue < 1) baseValue = 1;
+
+    // Future discount rates from Constants
+    const rates = Constants.TRADE_LOGIC_CONFIG.FUTURE_DISCOUNT || { ONE_YEAR: 0.90, TWO_PLUS_YEARS: 0.80 };
+    let discountRate = rates.ONE_YEAR;
+    if (yearOffset >= 2) discountRate = rates.TWO_PLUS_YEARS;
+
+    const discount = Math.pow(discountRate, yearOffset);
+    return Math.round(baseValue * discount);
+  }
+
+  /**
+   * Calculates the trade value of a player.
+   * @param {Object} player - Player object
+   * @returns {number} Asset value
+   */
+  static calculatePlayerValue(player) {
+    if (!player) return 0;
+
+    // 1. Base Performance Value (Non-linear curve)
+    // 99 OVR = 4000 pts
+    // 75 OVR = 800 pts
+    // Curve: Value = A * (OVR - Threshold)^K
+    // Let's use a simpler polynomial approximation satisfying the points.
+    // V = 4000 * ((OVR - 55) / 44)^2.5 (approx)
+    // If OVR < 55, Value = 0.
+
+    let ovr = player.ovr;
+    let baseValue = 0;
+    const curve = Constants.TRADE_LOGIC_CONFIG.PLAYER_VALUE_CURVE || { A: 1.5, K: 2.1, THRESHOLD: 55 };
+
+    if (ovr > curve.THRESHOLD) {
+        baseValue = curve.A * Math.pow(ovr - curve.THRESHOLD, curve.K);
+    }
+
+    // 2. Age Decay
+    // RB/WR: Steep decay at 28.
+    // QB/OL: Gentle decay at 32.
+    const age = player.age;
+    const pos = player.pos;
+    let ageMultiplier = 1.0;
+
+    if (['RB', 'WR'].includes(pos)) {
+        if (age >= 28) {
+            // Steep decay: -15% per year over 28
+            ageMultiplier = Math.pow(0.85, age - 27);
+        }
+    } else if (['QB', 'OL'].includes(pos)) {
+        if (age >= 32) {
+            // Gentle decay: -10% per year over 32
+            ageMultiplier = Math.pow(0.90, age - 31);
+        }
+    } else {
+        // Default: -10% per year over 29
+        if (age >= 29) {
+            ageMultiplier = Math.pow(0.90, age - 28);
+        }
+    }
+
+    // Cap age multiplier
+    if (ageMultiplier < 0.1) ageMultiplier = 0.1;
+
+    let value = baseValue * ageMultiplier;
+
+    // 3. Contract Surplus (The Cap Factor)
+    // Calculate ExpectedSalary based on OVR
+    // Compare Expected vs Actual
+    const expectedSalary = this.getExpectedSalary(ovr, pos);
+    const actualSalary = player.baseAnnual || player.salary || 1.0; // In Millions
+
+    const surplus = expectedSalary - actualSalary;
+
+    // Value adjustment:
+    // Surplus adds value, Deficit subtracts value.
+    // How much value is $1M cap space worth?
+    // Let's say $1M surplus = 100 points (approx mid-late 3rd round pick)
+    // $10M surplus = 1000 points (mid 1st round pick)
+    // This seems reasonable.
+
+    const capFactor = surplus * 100;
+
+    value += capFactor;
+
+    // Ensure value doesn't go below 0 (unless we want negative assets to require sweeteners)
+    // Realistically, a bad contract is a negative asset.
+    // However, to keep it simple for now, we'll floor at a small negative number or 0.
+    // Let's allow negative values to represent "salary dumps".
+
+    return Math.round(value);
+  }
+
+  /**
+   * Estimates the fair market salary for a player based on OVR and position.
+   * @param {number} ovr - Overall Rating
+   * @param {string} pos - Position
+   * @returns {number} Expected Salary in Millions
+   */
+  static getExpectedSalary(ovr, pos) {
+    // Base salary curve from Constants
+    let salary = 0;
+    const config = Constants.TRADE_LOGIC_CONFIG.EXPECTED_SALARY || { A: 0.017, THRESHOLD: 60, MIN: 0.8 };
+
+    if (ovr < 70) return config.MIN; // Minimum
+
+    salary = config.A * Math.pow(ovr - config.THRESHOLD, 2);
+
+    // Position Multipliers from Constants
+    const posMultipliers = Constants.TRADE_LOGIC_CONFIG.POS_MULTIPLIERS || {
+        QB: 1.4, DE: 1.1, EDGE: 1.1, LT: 1.1, OT: 1.0, WR: 1.1, CB: 1.0,
+        DT: 0.9, LB: 0.8, S: 0.7, RB: 0.6, TE: 0.6, K: 0.2, P: 0.2
+    };
+
+    const mult = posMultipliers[pos] || 1.0;
+    return Math.max(config.MIN, salary * mult);
+  }
+
+  /**
+   * Evaluates a trade proposal.
+   * @param {Array} userOffer - List of assets offered by the user
+   * @param {Array} aiAssets - List of assets requested from the AI
+   * @param {Object} userTeam - The user's team object
+   * @param {Object} aiTeam - The AI's team object
+   * @returns {Object} Evaluation result
+   */
+  static evaluateTrade(userOffer, aiAssets, userTeam, aiTeam) {
+    let userValue = 0;
+    let aiValue = 0;
+
+    // Determine AI Team Status (Context-Aware)
+    let isRebuilder = false;
+    let isContender = false;
+
+    if (aiTeam) {
+        const wins = aiTeam.wins || (aiTeam.record ? aiTeam.record.w : 0);
+        const losses = aiTeam.losses || (aiTeam.record ? aiTeam.record.l : 0);
+        const gamesPlayed = wins + losses;
+
+        if (gamesPlayed > 4) {
+            // Mid-season logic
+            if (wins / gamesPlayed >= 0.60) isContender = true;
+            else if (wins / gamesPlayed <= 0.40) isRebuilder = true;
+        } else {
+            // Pre-season / Early season logic (based on OVR/Rank)
+            // Assuming powerRank is available or we estimate from roster
+            // Simple heuristic: Count >80 OVR players
+            const stars = aiTeam.roster ? aiTeam.roster.filter(p => p.ovr >= 80).length : 0;
+            if (stars >= 5) isContender = true;
+            else if (stars <= 1) isRebuilder = true;
+        }
+    }
+
+    // Context-Aware Value Calculator
+    const calculateContextualValue = (assets, forTeamStatus) => {
+        let total = 0;
+        for (const asset of assets) {
+            let val = 0;
+            if (asset.kind === 'player') {
+                val = this.calculatePlayerValue(asset.player);
+                const age = asset.player.age;
+                const ovr = asset.player.ovr;
+
+                // Rebuilders value youth, devalue age
+                if (isRebuilder) {
+                    if (age <= 24) val *= 1.25;
+                    else if (age >= 29) val *= 0.8;
+                }
+                // Contenders value elite production now
+                if (isContender) {
+                    if (ovr >= 80) val *= 1.15;
+                    else if (ovr < 75 && age > 26) val *= 0.9; // Useless depth
+                }
+
+            } else if (asset.kind === 'pick') {
+                const pick = asset.pickInRound || 16;
+                const offset = asset.yearOffset || 0;
+                val = this.calculatePickValue(asset.round, pick, offset);
+
+                // Rebuilders LOVE picks
+                if (isRebuilder) val *= 1.3;
+                // Contenders value them less (willing to trade)
+                if (isContender) val *= 0.85;
+            }
+            total += val;
+        }
+        return total;
+    };
+
+    // Calculate AI Valuation of what they are GIVING UP (aiAssets)
+    // They value their own assets based on their status
+    aiValue = calculateContextualValue(aiAssets);
+
+    // FRANCHISE PLAYER PROTECTION
+    // If AI is giving up a young elite player, apply a massive premium
+    // unless they are explicitly rebuilding (even then, it's expensive)
+    aiAssets.forEach(asset => {
+        if (asset.kind === 'player') {
+            const p = asset.player;
+            if (p.ovr >= 88 && p.age <= 28) {
+                // Franchise Player Detected
+                const protectionFactor = 1.5;
+                aiValue += (this.calculatePlayerValue(p) * (protectionFactor - 1));
+            }
+        }
+    });
+
+    // Calculate AI Valuation of what they are RECEIVING (userOffer)
+    // They value incoming assets based on their status
+    userValue = calculateContextualValue(userOffer);
+
+    // Dynamic Tax based on "Fairness" / "Desperation"
+    let tax = 1.05; // Base 5% tax
+    if (isRebuilder && userOffer.some(a => a.kind === 'pick' && a.round === 1)) {
+        tax = 1.0; // Waive tax if you give a rebuilder a 1st round pick
+    }
+
+    const requiredValue = aiValue * tax;
+
+    // 1. Value Check
+    if (userValue < requiredValue) {
+        // Allow tiny tolerance (within 1%)
+        if (userValue < requiredValue * 0.99) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Value Mismatch',
+                rejectionReason: `Offer value (${Math.round(userValue)}) is below required value (${Math.round(requiredValue)}).`
+            };
+        }
+    }
+
+    // 2. Cap Space Check
+    if (window.calculateCapImpact && userTeam && aiTeam) {
+        // Check User Team Cap
+        const userCapCheck = window.calculateCapImpact(userTeam, 'trade', aiAssets, userOffer);
+        if (!userCapCheck.valid) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Cap Space Exceeded',
+                rejectionReason: `You cannot afford this trade. ${userCapCheck.message}`
+            };
+        }
+
+        // Check AI Team Cap
+        const aiCapCheck = window.calculateCapImpact(aiTeam, 'trade', userOffer, aiAssets);
+        if (!aiCapCheck.valid) {
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Cap Space Exceeded',
+                rejectionReason: `Other team cannot afford this trade. ${aiCapCheck.message}`
+            };
+        }
+    }
+
+    // 3. Positional Surplus Check (AI Side)
+    if (aiTeam && aiTeam.roster) {
+        const surplusPositions = new Set();
+        userOffer.forEach(asset => {
+            if (asset.kind === 'player' || asset.player) {
+                const p = asset.player || asset;
+                const pos = p.pos;
+                // Count quality players at this pos (>80 OVR)
+                const existing = aiTeam.roster.filter(x => x.pos === pos && x.ovr > 80).length;
+                if (existing >= 3) {
+                    surplusPositions.add(pos);
+                }
+            }
+        });
+
+        if (surplusPositions.size > 0) {
+            const positions = Array.from(surplusPositions).join(', ');
+            return {
+                accepted: false,
+                userValue: Math.round(userValue),
+                aiValue: Math.round(aiValue),
+                requiredValue: Math.round(requiredValue),
+                message: 'Positional Surplus',
+                rejectionReason: `They don't need more players at: ${positions}.`
+            };
+        }
+    }
+
+    return {
+        accepted: true,
+        userValue: Math.round(userValue),
+        aiValue: Math.round(aiValue),
+        requiredValue: Math.round(requiredValue),
+        ratio: aiValue > 0 ? userValue / aiValue : 1.0,
+        message: 'Trade Accepted'
+    };
+  }
+}
