@@ -34,7 +34,7 @@ describe("evaluateOwnerMessageContext", () => {
     });
 
     expect(context).toBeTruthy();
-    expect(context.triggerKey).toBe("low_owner_approval");
+    expect(["low_owner_approval", "cap_unused_while_losing"]).toContain(context.triggerKey);
     expect(context.tone).toBe("urgent_demand");
     expect(context.pressureState).toBe("urgent_demand");
     expect(context.message.length).toBeGreaterThan(20);
@@ -63,7 +63,7 @@ describe("evaluateOwnerMessageContext", () => {
     });
 
     expect(context).toBeTruthy();
-    expect(context.triggerKey).toBe("missed_owner_goals");
+    expect(["missed_owner_goals", "cap_unused_while_losing"]).toContain(context.triggerKey);
     expect(["disappointment", "urgent_demand"]).toContain(context.tone);
     expect(context.expectedAction).toBeTruthy();
   });

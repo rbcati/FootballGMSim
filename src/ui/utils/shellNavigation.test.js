@@ -11,13 +11,13 @@ describe('shell navigation mapping', () => {
   it('maps dashboard tabs into new shell sections', () => {
     expect(getShellSectionForDashboardTab('Roster')).toBe('team');
     expect(getShellSectionForDashboardTab('Standings')).toBe('league');
-    expect(getShellSectionForDashboardTab('Transactions')).toBe('transactions');
-    expect(getShellSectionForDashboardTab('Season Recap')).toBe('history');
+    expect(getShellSectionForDashboardTab('Transactions')).toBe('league');
+    expect(getShellSectionForDashboardTab('Season Recap')).toBe('league');
   });
 
   it('accepts legacy mobile ids as section inputs', () => {
     expect(normalizeShellSectionId('weekly')).toBe('hq');
-    expect(normalizeShellSectionId('trade')).toBe('transactions');
-    expect(normalizeShellSectionId('history')).toBe('history');
+    expect(normalizeShellSectionId('trade')).toBe('league');
+    expect(normalizeShellSectionId('history')).toBe('league');
   });
 });

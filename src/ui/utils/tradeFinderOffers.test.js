@@ -27,7 +27,7 @@ describe('buildAskOfferOutcome', () => {
       partnerTeam: {
         abbr: 'DAL',
         capRoom: 2.1,
-        roster: [{ id: 4, name: 'Locked', pos: 'CB', ovr: 89, management: { tradeStatus: 'untouchable' } }],
+        roster: [{ id: 4, name: 'Locked', pos: 'CB', ovr: 89, tradeStatus: 'untouchable' }],
       },
       partnerIntel: { direction: 'balanced' },
       outgoingValue: 1200,

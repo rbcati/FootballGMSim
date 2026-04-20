@@ -4,6 +4,9 @@
   command   = "npm run build"
   publish   = "dist"
 
+[build.environment]
+  NODE_VERSION = "22"
+
 # SPA fallback: route all paths to index.html so React Router (or any
 # client-side routing) works on direct URL loads and refreshes.
 [[redirects]]

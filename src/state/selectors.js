@@ -73,7 +73,9 @@ export function getScheduleViewModel(league, filters = {}) {
 
 export function getSafeStandingsRows(league) {
   const safe = safeGetLeagueState(league);
-  const rows = Array.isArray(safe?.standings) ? safe.standings : [];
+  const rows = Array.isArray(safe?.standings) && safe.standings.length > 0
+    ? safe.standings
+    : safe.teams;
   return (Array.isArray(rows) ? rows : []).map((team) => ({
     id: team?.id ?? null,
     name: team?.name ?? 'Unknown Team',

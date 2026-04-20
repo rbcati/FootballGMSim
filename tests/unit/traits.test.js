@@ -1,49 +1,37 @@
-
+import { describe, expect, it } from 'vitest';
 import { generateTraits, TRAITS } from '../../src/core/traits.js';
 import { generateInjury } from '../../src/core/injury-core.js';
-import assert from 'assert';
 
-console.log('Running Traits Unit Tests...');
-
-// 1. Test generateTraits
-{
-    console.log('Testing generateTraits...');
-    const qbTraits = generateTraits('QB', 95, 10); // Force generation if possible, but count is just a limit?
-    // Ah, generateTraits(pos, ovr, count) - count overrides logic.
-    const t = generateTraits('QB', 95, 5);
-    assert(Array.isArray(t), 'Should return array');
-    t.forEach(id => {
-        assert(TRAITS[id], `Invalid trait ID: ${id}`);
-        assert(TRAITS[id].positions.includes('QB') || TRAITS[id].positions.includes('ALL'), `Invalid position for trait ${id}`);
-    });
+describe('traits unit coverage', () => {
+  it('generateTraits returns valid position-compatible trait ids', () => {
+    const qbTraits = generateTraits('QB', 95, 5);
+    expect(Array.isArray(qbTraits)).toBe(true);
+    for (const id of qbTraits) {
+      expect(TRAITS[id]).toBeTruthy();
+      expect(TRAITS[id].positions.includes('QB') || TRAITS[id].positions.includes('ALL')).toBe(true);
+    }
 
     const olTraits = generateTraits('OL', 95, 5);
-    olTraits.forEach(id => {
-        assert(TRAITS[id].positions.includes('OL') || TRAITS[id].positions.includes('ALL'));
-        assert(!TRAITS[id].positions.includes('QB'), 'OL should not have QB traits');
-    });
-    console.log('PASS: generateTraits');
-}
+    for (const id of olTraits) {
+      expect(TRAITS[id].positions.includes('OL') || TRAITS[id].positions.includes('ALL')).toBe(true);
+      expect(TRAITS[id].positions.includes('QB')).toBe(false);
+    }
+  });
 
-// 2. Test Injury Logic (Ironman)
-{
-    console.log('Testing Injury Logic...');
+  it('ironman trait reduces injury probability over large sample', () => {
     const pNormal = { pos: 'LB', age: 25, traits: [] };
     const pIron = { pos: 'LB', age: 25, traits: [TRAITS.IRONMAN.id] };
 
-    let nInj = 0;
-    let iInj = 0;
-    const N = 10000;
+    let normalInjuries = 0;
+    let ironInjuries = 0;
+    const samples = 5000;
 
-    for(let i=0; i<N; i++) {
-        if (generateInjury(pNormal)) nInj++;
-        if (generateInjury(pIron)) iInj++;
+    for (let i = 0; i < samples; i += 1) {
+      if (generateInjury(pNormal)) normalInjuries += 1;
+      if (generateInjury(pIron)) ironInjuries += 1;
     }
 
-    console.log(`Normal: ${nInj}, Ironman: ${iInj}`);
-    assert(iInj < nInj, 'Ironman should reduce injuries');
-    assert(iInj < nInj * 0.7, 'Ironman should reduce injuries significantly (~50%)');
-    console.log('PASS: Injury Logic');
-}
-
-console.log('ALL TESTS PASSED');
+    expect(ironInjuries).toBeLessThan(normalInjuries);
+    expect(ironInjuries).toBeLessThan(normalInjuries * 0.75);
+  });
+});

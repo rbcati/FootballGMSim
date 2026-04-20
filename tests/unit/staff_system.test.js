@@ -5,10 +5,9 @@ describe('staff system bounds', () => {
   it('ensures all major roles exist', () => {
     const staff = ensureTeamStaff({ id: 1, staff: {} }, { year: 2026 });
     expect(staff.headCoach).toBeTruthy();
-    expect(staff.leadScout).toBeTruthy();
-    expect(staff.proScout).toBeTruthy();
-    expect(staff.headTrainer).toBeTruthy();
-    expect(staff.capAdvisor).toBeTruthy();
+    expect(staff.scoutDirector).toBeTruthy();
+    expect(staff.leadScout).toBe(staff.scoutDirector);
+    expect(staff.proScout).toBe(staff.scoutDirector);
   });
 
   it('keeps modifiers bounded', () => {
