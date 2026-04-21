@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import TraitBadge from "./TraitBadge";
 import PlayerProfile from "./PlayerProfile";
+import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import PlayerPreview from "./PlayerPreview";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Table, TableHeader, TableHead, TableRow, TableBody, TableCell } from "@/components/ui/table";
@@ -2486,20 +2487,22 @@ export default function Draft({ league, actions, onNavigate = null }) {
 
       {/* Player profile modal — opened by clicking a prospect's name */}
       {profilePlayerId && (
-        <PlayerProfile
-          playerId={profilePlayerId}
-          onClose={() => setProfilePlayerId(null)}
-          actions={actions}
-          league={league}
-          isUserOnClock={
-            enrichedDraftState?.isUserPick &&
-            !enrichedDraftState?.isDraftComplete
-          }
-          onDraftPlayer={(pid) => {
-            handleDraftPlayer(pid);
-            setProfilePlayerId(null);
-          }}
-        />
+        <PlayerProfileModalBoundary playerId={profilePlayerId} onClose={() => setProfilePlayerId(null)}>
+          <PlayerProfile
+            playerId={profilePlayerId}
+            onClose={() => setProfilePlayerId(null)}
+            actions={actions}
+            league={league}
+            isUserOnClock={
+              enrichedDraftState?.isUserPick &&
+              !enrichedDraftState?.isDraftComplete
+            }
+            onDraftPlayer={(pid) => {
+              handleDraftPlayer(pid);
+              setProfilePlayerId(null);
+            }}
+          />
+        </PlayerProfileModalBoundary>
       )}
     </div>
   );

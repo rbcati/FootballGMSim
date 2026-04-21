@@ -33,6 +33,7 @@ import HallOfFame from "./HallOfFame.jsx";
 import HistoryHub from "./HistoryHub.jsx";
 import TradeWorkspace from "./TradeWorkspace.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
+import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
 import LeagueLeaders from "./LeagueLeaders.jsx";
@@ -1287,14 +1288,16 @@ export default function LeagueDashboard({
       {/* ── Player Profile modal ── */}
       {selectedPlayerId && (
         <TabErrorBoundary label="Player Profile">
-          <PlayerProfile
-            playerId={selectedPlayerId}
-            onClose={() => setSelectedPlayerId(null)}
-            actions={actions}
-            teams={league.teams}
-            league={league}
-            onNavigate={setActiveTab}
-          />
+          <PlayerProfileModalBoundary playerId={selectedPlayerId} onClose={() => setSelectedPlayerId(null)}>
+            <PlayerProfile
+              playerId={selectedPlayerId}
+              onClose={() => setSelectedPlayerId(null)}
+              actions={actions}
+              teams={league.teams}
+              league={league}
+              onNavigate={setActiveTab}
+            />
+          </PlayerProfileModalBoundary>
         </TabErrorBoundary>
       )}
 
