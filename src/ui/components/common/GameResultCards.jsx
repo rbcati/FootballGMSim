@@ -78,6 +78,8 @@ export function CompletedGameCard({
   const { awayWon, homeWon, tied } = winnerState(game);
   const interactive = Boolean(onOpen && (canOpenBoxScore || canOpenResult));
   const primaryLabel = canOpenBoxScore ? "Open box score" : canOpenResult ? "View result" : "Unavailable";
+  const detailRows = [summary, recap].filter(Boolean).slice(0, 2);
+  const outcomeLabel = tied ? "Tie" : awayWon ? `${away?.abbr} won` : homeWon ? `${home?.abbr} won` : "Final";
   return (
     <article className={`premium-game-card is-completed ${isUserGame ? "is-user-game" : ""} ${interactive ? "is-clickable" : "is-disabled"}`}>
       <div className="premium-game-card__head">
@@ -89,19 +91,29 @@ export function CompletedGameCard({
       </div>
       <button
         type="button"
-        className="premium-game-card__scoreblock"
+        className="premium-game-card__interactive"
         onClick={interactive ? onOpen : undefined}
         disabled={!interactive}
         aria-label={interactive ? `${primaryLabel}: ${away?.abbr} at ${home?.abbr}` : undefined}
       >
-        <TeamLine team={away} score={game?.awayScore} won={awayWon} side="away" />
-        <span className="premium-game-card__at">@</span>
-        <TeamLine team={home} score={game?.homeScore} won={homeWon} side="home" />
+        <div className="premium-game-card__scoreblock">
+          <TeamLine team={away} score={game?.awayScore} won={awayWon} side="away" />
+          <span className="premium-game-card__at">@</span>
+          <TeamLine team={home} score={game?.homeScore} won={homeWon} side="home" />
+        </div>
+        <div className="premium-game-card__statusline">
+          <strong>{outcomeLabel}</strong>
+          <span>{statusLabel ?? "Archive status unavailable"}</span>
+        </div>
+        {detailRows.length > 0 ? (
+          <ul className="premium-game-card__details">
+            {detailRows.map((detail, idx) => <li key={`${week}-${idx}`}>{detail}</li>)}
+          </ul>
+        ) : null}
+        <div className="premium-game-card__cta">
+          <span>{interactive ? `${primaryLabel} →` : "Game detail unavailable"}</span>
+        </div>
       </button>
-      <div className="premium-game-card__statusline">
-        <strong>{primaryLabel}</strong>
-        <span>{statusLabel ?? "Archive status unavailable"}</span>
-      </div>
       {!interactive ? (
         <div className={`premium-game-card__fallback ${archiveQuality === "partial" ? "is-partial" : "is-missing"}`}>
           <strong>{archiveQuality === "partial" ? "Partial archive available" : "Detailed box score unavailable"}</strong>
@@ -112,12 +124,6 @@ export function CompletedGameCard({
           </p>
           {summary ? <p>{summary}</p> : null}
           {recap ? <p>{recap}</p> : null}
-        </div>
-      ) : null}
-      {(tied || recap || summary) && interactive ? (
-        <div className="premium-game-card__story">
-          {summary ? <strong>{summary}</strong> : null}
-          <span>{recap ?? (tied ? "Final ended tied." : "Open game for full breakdown.")}</span>
         </div>
       ) : null}
       {secondaryActions ? <div className="premium-game-card__actions">{secondaryActions}</div> : null}

@@ -77,9 +77,9 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Game Plan');
     expect(html).toContain('Scout Opponent');
     expect(html).toContain('News &amp; Injuries');
-    expect(html).toContain('Priority Rail');
-    expect(html).toContain('Snapshot');
-    expect(html).toContain('Owner Mandate');
+    expect(html).toContain('Next Action');
+    expect(html).toContain('Command Snapshot');
+    expect(html).toContain('Recent Team / League News');
     expect(html).toContain('Open Results');
   });
 

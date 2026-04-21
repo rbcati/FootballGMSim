@@ -4,16 +4,10 @@ import { SHELL_SECTIONS } from '../utils/shellNavigation.js';
 
 const MORE_GROUPS = [
   {
-    title: 'Transactions',
+    title: 'Team Management',
     items: [
-      { id: 'Transactions', label: 'Trades', icon: TradesIcon },
-      { id: 'Free Agency', label: 'Free Agency', icon: FAIcon },
-      { id: 'Draft', label: 'Draft', icon: DraftIcon },
-    ],
-  },
-  {
-    title: 'Team Ops',
-    items: [
+      { id: 'Team:Overview', label: 'Team Hub', icon: HomeIcon },
+      { id: 'Team:Roster / Depth', label: 'Roster / Depth', icon: RosterIcon },
       { id: 'Staff', label: 'Staff', icon: StaffIcon },
       { id: 'Training', label: 'Training', icon: TrainingIcon },
       { id: 'Injuries', label: 'Injuries', icon: InjuryIcon },
@@ -22,8 +16,13 @@ const MORE_GROUPS = [
     ],
   },
   {
-    title: 'League + History',
+    title: 'League Office',
     items: [
+      { id: 'League:Overview', label: 'League Hub', icon: StandingsIcon },
+      { id: 'League:Results', label: 'Weekly Results', icon: StandingsIcon },
+      { id: 'Transactions', label: 'Trades', icon: TradesIcon },
+      { id: 'Free Agency', label: 'Free Agency', icon: FAIcon },
+      { id: 'Draft', label: 'Draft', icon: DraftIcon },
       { id: 'league-leaders', label: 'League Leaders', icon: StandingsIcon },
       { id: 'History Hub', label: 'History', icon: HomeIcon },
       { id: 'Analytics', label: 'Analytics', icon: AnalyticsIcon },

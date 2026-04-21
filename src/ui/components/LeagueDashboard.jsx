@@ -213,8 +213,8 @@ const BASE_TABS = [
 
 const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
-  { id: SHELL_SECTIONS.team, title: "Team", tabs: ["Team", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"] },
-  { id: SHELL_SECTIONS.league, title: "League", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "History Hub", "History", "Awards & Records", "Season Recap"] },
+  { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
+  { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "History", "Awards & Records", "Season Recap"] },
   { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
 ];
 

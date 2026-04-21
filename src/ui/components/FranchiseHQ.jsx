@@ -23,6 +23,7 @@ import {
   getActionContext,
   getActionDestination,
   rankHqPriorityItems,
+  getTeamSnapshotNotes,
 } from "../utils/hqHelpers.js";
 import { deriveWeeklyPrepState, markWeeklyPrepStep } from "../utils/weeklyPrep.js";
 
@@ -159,6 +160,13 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
   const ownerApproval = safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, null);
   const expiringCount = safeNum(weekly?.pressurePoints?.expiringCount);
   const rosterCount = Array.isArray(team?.roster) ? team.roster.length : safeNum(team?.rosterCount, 0);
+  const snapshotNotes = getTeamSnapshotNotes(team, weekly, cap.capRoom);
+  const nextDecision = rankedPriorities.featured ?? null;
+  const topNeedRows = previewPriorities.filter((item) => String(item?.tab ?? "").toLowerCase().includes("team")).slice(0, 3);
+  const injuryRows = (team?.roster ?? [])
+    .filter((player) => safeNum(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining, 0) > 0)
+    .sort((a, b) => safeNum(b?.ovr, 0) - safeNum(a?.ovr, 0))
+    .slice(0, 3);
 
   return (
     <div className="app-screen-stack franchise-hq">
@@ -197,21 +205,18 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
       </div>
       {lineupToast ? <p className="app-inline-toast">{lineupToast}</p> : null}
 
-      <SectionCard title="Priority Rail" subtitle="Top front-office actions this week." variant="compact">
-        <div className="app-priority-rail">
-          {previewPriorities.length > 0 ? previewPriorities.map((item, idx) => (
-            <CompactInsightCard
-              key={`${item.label}-${idx}`}
-              title={item.label}
-              subtitle={item.detail}
-              tone={getSeverityTone(item.level)}
-              ctaLabel={item.verb || "Review"}
-              onCta={() => onNavigate?.(item?.tab ?? "Team")}
-            />
-          )) : (
-            <CompactInsightCard title="No urgent blockers" subtitle="Use this week to gain edges in prep and depth." tone="info" ctaLabel="Open Team" onCta={() => onNavigate?.("Team:Overview")} />
-          )}
-        </div>
+      <SectionCard title="Next Action" subtitle="Your highest-priority decision this week." variant="compact">
+        {nextDecision ? (
+          <CompactListRow
+            title={nextDecision.label}
+            subtitle={nextDecision.detail}
+            meta={<StatusChip label={nextDecision.level === "urgent" ? "Urgent" : "Recommended"} tone={getSeverityTone(nextDecision.level)} />}
+          >
+            <Button size="sm" onClick={() => onNavigate?.(nextDecision?.tab ?? "Team")}>{nextDecision.verb ?? "Open task"}</Button>
+          </CompactListRow>
+        ) : (
+          <CompactInsightCard title="No urgent blockers" subtitle="Use this week to gain edges in prep and depth." tone="info" ctaLabel="Open Team" onCta={() => onNavigate?.("Team:Overview")} />
+        )}
       </SectionCard>
       {developmentSummary.rising.length > 0 && (
         <SectionCard title="Development Outlook" subtitle="Risers and breakout candidates." variant="compact">
@@ -230,7 +235,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
         </SectionCard>
       )}
 
-      <SectionHeader eyebrow="Team status" title="Snapshot" subtitle="Roster and cap in one line." />
+      <SectionHeader eyebrow="Team status" title="Command Snapshot" subtitle="Core team state in one pass." />
       <StatStrip items={[
         { label: "OVR", value: `${safeNum(team?.ovr, 0)}`, tone: "team" },
         { label: "Cap Room", value: formatMoneyM(cap.capRoom), tone: cap.capRoom < 10 ? "warning" : "ok" },
@@ -238,7 +243,24 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
         { label: "Expiring", value: `${expiringCount}`, tone: expiringCount >= 8 ? "warning" : "neutral" },
       ]} />
 
-      <SectionCard title="Last Result" variant="compact">
+      <SectionCard title="Team Health Snapshot" subtitle="Current injuries and availability impact." variant="compact">
+        <div className="app-row-stack">
+          {injuryRows.length === 0 ? (
+            <CompactInsightCard title="No active injuries" subtitle="Primary rotation is currently available." tone="ok" />
+          ) : injuryRows.map((player) => (
+            <CompactListRow
+              key={player.id}
+              title={`${player.name} · ${player.pos}`}
+              subtitle={`${safeNum(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining, 0)} game(s) out`}
+              meta={<StatusChip label="Unavailable" tone="warning" />}
+            >
+              <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Team:Injuries")}>Injury report</Button>
+            </CompactListRow>
+          ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Latest Game Result" subtitle="Open full recap and box score." variant="compact">
         {lastGame ? (
           <CompactListRow
             title={`${lastGame.userWon ? "Win" : "Loss"} · Week ${lastGame.week ?? vm.league?.week ?? 1}`}
@@ -269,11 +291,38 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
         )}
       </SectionCard>
 
+      <SectionCard title="Cap & Contracts Snapshot" subtitle="Financial pressure and expiration risk." variant="compact">
+        <div className="app-priority-rail">
+          <CompactInsightCard title={formatMoneyM(cap.capRoom)} subtitle={snapshotNotes.capNote} tone={cap.capRoom < 5 ? "warning" : "ok"} ctaLabel="Open cap" onCta={() => onNavigate?.("💰 Cap")} />
+          <CompactInsightCard title={`${expiringCount} expiring`} subtitle={snapshotNotes.expiringNote} tone={expiringCount >= 6 ? "warning" : "info"} ctaLabel="Contracts" onCta={() => onNavigate?.("Team:Contracts")} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Top Roster Needs" subtitle="Where depth or planning work should happen next." variant="compact">
+        <div className="app-priority-rail">
+          {topNeedRows.length > 0 ? topNeedRows.map((item, idx) => (
+            <CompactInsightCard
+              key={`${item.label}-${idx}`}
+              title={item.label}
+              subtitle={item.detail}
+              tone={getSeverityTone(item.level)}
+              ctaLabel={item.verb || "Open"}
+              onCta={() => onNavigate?.(item?.tab ?? "Team")}
+            />
+          )) : (
+            <CompactInsightCard title={snapshotNotes.rosterNote} subtitle="No high-priority roster alarms this week." tone="ok" ctaLabel="Roster / Depth" onCta={() => onNavigate?.("Team:Roster / Depth")} />
+          )}
+        </div>
+      </SectionCard>
+
       <section className="app-teaser-strip card">
-        <CompactListRow title="League Results" subtitle="Open full recap and spotlight games." meta={<StatusChip label="League" tone="league" />}>
+        <CompactListRow title="Team View" subtitle="Roster, depth chart, contracts, and injuries." meta={<StatusChip label="Team" tone="team" />}>
+          <Button size="sm" variant="ghost" onClick={() => onNavigate?.("Team:Overview")}>Open Team Hub</Button>
+        </CompactListRow>
+        <CompactListRow title="League View" subtitle="Standings, weekly scores, and spotlight games." meta={<StatusChip label="League" tone="league" />}>
           <Button size="sm" variant="ghost" onClick={() => onNavigate?.("League:Results")}>Open Results</Button>
         </CompactListRow>
-        <CompactListRow title="Owner Mandate" subtitle={ownerApproval == null ? "Approval unavailable" : `Approval ${ownerApproval}`} meta={<StatusChip label="HQ" tone={ownerApproval != null && ownerApproval < 55 ? "warning" : "info"} />}>
+        <CompactListRow title="Recent Team / League News" subtitle={ownerApproval == null ? "Approval unavailable" : `Owner approval ${ownerApproval}`} meta={<StatusChip label="News" tone={ownerApproval != null && ownerApproval < 55 ? "warning" : "info"} />}>
           <Button size="sm" variant="ghost" onClick={() => onNavigate?.("🤖 GM Advisor")}>Open Advisor</Button>
         </CompactListRow>
       </section>
