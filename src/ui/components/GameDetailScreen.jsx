@@ -29,7 +29,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
       <ScreenHeader
         eyebrow="Game Book"
         title="Game Book"
-        subtitle="Final score, recap narrative, team comparison, and player box score in one place."
+        subtitle="Scan the final, review the recap narrative, compare team stats, then drill into player leaders and play detail."
         onBack={onBack}
         backLabel="Back"
         primaryAction={<StatusChip label="Command View" tone="info" />}
@@ -39,7 +39,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           { label: 'Week', value: weekFromId ?? '—' },
         ]}
       />
-      <SectionCard variant="info" title="Game Book Detail" subtitle="Box score, recap, and player-level logs.">
+      <SectionCard variant="info" title="Game Book Detail" subtitle="Summary → Team stats → Player leaders → Drive/play recap.">
         <BoxScorePanel
           gameId={gameId}
           actions={actions}

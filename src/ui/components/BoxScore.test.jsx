@@ -79,7 +79,7 @@ describe('BoxScore postgame command center', () => {
     );
 
     expect(html).toContain('Standout storylines');
-    expect(html).toContain('Team leaders');
+    expect(html).toContain('Player leaders');
     expect(html).toContain('Scoring summary');
     expect(html).toContain('Game flow &amp; momentum');
   });

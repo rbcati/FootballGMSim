@@ -7712,8 +7712,28 @@ details[open] .nav-summary::after {
   align-items: center;
   gap: 8px;
 }
-.premium-game-card__scoreblock { cursor: pointer; }
-.premium-game-card__scoreblock:disabled { cursor: default; opacity: .74; }
+.premium-game-card__interactive {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  display: grid;
+  gap: 8px;
+}
+.premium-game-card.is-clickable .premium-game-card__interactive { cursor: pointer; }
+.premium-game-card.is-disabled .premium-game-card__interactive { cursor: default; opacity: .84; }
+.premium-game-card.is-clickable:hover,
+.premium-game-card.is-clickable:focus-within {
+  border-color: color-mix(in oklab, var(--accent) 48%, var(--hairline));
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 26%, transparent);
+}
+.premium-game-card__interactive:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 64%, white 4%);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
 .premium-game-card__at { color: var(--text-subtle); font-size: 11px; font-weight: 700; }
 .game-team-line { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; color: var(--text-muted); }
 .game-team-line.is-winner { color: var(--text); font-weight: 800; }
@@ -7722,7 +7742,22 @@ details[open] .nav-summary::after {
 .game-team-line__score { font-size: 20px; line-height: 1; font-weight: 900; }
 .premium-game-card__statusline { display: grid; gap: 2px; font-size: 12px; color: var(--text-muted); }
 .premium-game-card__statusline strong { color: var(--text); }
-.premium-game-card__story { border: 1px solid var(--hairline); border-radius: 8px; padding: 7px 8px; display: grid; gap: 2px; font-size: 12px; color: var(--text-muted); }
+.premium-game-card__details {
+  margin: 0;
+  padding: 0 0 0 16px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.premium-game-card__cta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
 .premium-game-card__fallback { border-radius: 8px; padding: 8px; font-size: 12px; display: grid; gap: 4px; }
 .premium-game-card__fallback.is-missing { border: 1px solid color-mix(in oklab, var(--warning) 50%, transparent); background: color-mix(in oklab, var(--warning) 12%, transparent); }
 .premium-game-card__fallback.is-partial { border: 1px solid color-mix(in oklab, var(--accent) 48%, transparent); background: color-mix(in oklab, var(--accent) 8%, transparent); }

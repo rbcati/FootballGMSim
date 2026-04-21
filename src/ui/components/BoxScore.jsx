@@ -510,34 +510,19 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
                 </ul>
               </div>
             )}
+            {!!momentumNotes.length && (
+              <div className="bs-storylines-box" style={{ marginTop: 16 }}>
+                <h5>Recap narrative</h5>
+                <ul className="bs-list">
+                  {momentumNotes.slice(0, expanded ? 8 : 4).map((note, idx) => (
+                    <li key={`momentum-${idx}`} className="bs-list-item">{note?.text ?? note}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
-
-          {hasTeamLeaders && (
-            <section className="bs-section" data-testid="team-leaders">
-              <h4>Team leaders</h4>
-              <div className="bs-team-groups">
-                {[{ side: "away", team: awayTeam }, { side: "home", team: homeTeam }].map(({ side, team }) => {
-                  const rows = teamLeaders?.[side] ?? {};
-                  return (
-                    <div key={side} className="bs-team-group">
-                      <h5>{team?.abbr ?? side.toUpperCase()}</h5>
-                      <div className="bs-list">
-                        <TeamLeaderCell label="Passing" player={rows.passing} statKeys={["passComp", "passAtt", "passYd", "passTD", "interceptions"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Rushing" player={rows.rushing} statKeys={["rushAtt", "rushYd", "rushTD"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Receiving" player={rows.receiving} statKeys={["receptions", "recYd", "recTD"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Tackles" player={rows.tackles} statKeys={["tackles", "sacks"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Sacks" player={rows.sacks} statKeys={["sacks", "tackles"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Interceptions" player={rows.interceptions} statKeys={["interceptions", "passesDefended"]} onPlayerSelect={onPlayerSelect} />
-                        <TeamLeaderCell label="Kicking" player={rows.kicking} statKeys={["fieldGoalsMade", "fieldGoalsAttempted", "extraPointsMade", "extraPointsAttempted"]} onPlayerSelect={onPlayerSelect} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
 
           <section className="bs-section" ref={(node) => { sectionRefs.current.team = node; }} data-section="team">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
@@ -568,6 +553,31 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               )}
             </div>
           </section>
+
+          {hasTeamLeaders && (
+            <section className="bs-section" data-testid="team-leaders">
+              <h4>Player leaders</h4>
+              <div className="bs-team-groups">
+                {[{ side: "away", team: awayTeam }, { side: "home", team: homeTeam }].map(({ side, team }) => {
+                  const rows = teamLeaders?.[side] ?? {};
+                  return (
+                    <div key={side} className="bs-team-group">
+                      <h5>{team?.abbr ?? side.toUpperCase()}</h5>
+                      <div className="bs-list">
+                        <TeamLeaderCell label="Passing" player={rows.passing} statKeys={["passComp", "passAtt", "passYd", "passTD", "interceptions"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Rushing" player={rows.rushing} statKeys={["rushAtt", "rushYd", "rushTD"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Receiving" player={rows.receiving} statKeys={["receptions", "recYd", "recTD"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Tackles" player={rows.tackles} statKeys={["tackles", "sacks"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Sacks" player={rows.sacks} statKeys={["sacks", "tackles"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Interceptions" player={rows.interceptions} statKeys={["interceptions", "passesDefended"]} onPlayerSelect={onPlayerSelect} />
+                        <TeamLeaderCell label="Kicking" player={rows.kicking} statKeys={["fieldGoalsMade", "fieldGoalsAttempted", "extraPointsMade", "extraPointsAttempted"]} onPlayerSelect={onPlayerSelect} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
           {sections.scoringSummary && (
             <section className="bs-section" ref={(node) => { sectionRefs.current.scoring = node; }} data-section="scoring">
