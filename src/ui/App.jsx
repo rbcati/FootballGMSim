@@ -148,6 +148,7 @@ function AppContent() {
     pendingNewSlot,
     initFlowMode: initFlow?.mode,
   });
+  const loadingSlot = initFlow?.active ? initFlow?.slotKey ?? null : null;
 
   // Local guard to prevent rapid-click double submission before 'busy' propagates
   const advancingRef = useRef(false);
@@ -383,8 +384,13 @@ function AppContent() {
     const slotNum = activeSlot?.split('_')?.[2];
     if (!slotNum) return;
     const userTeam = Array.isArray(league?.teams) ? league.teams.find(t => t?.id === league?.userTeamId) : null;
-    const existingRaw = localStorage.getItem(`footballgm_slot_${slotNum}_meta`);
-    const existing = existingRaw ? JSON.parse(existingRaw) : {};
+    let existing = {};
+    try {
+      const existingRaw = localStorage.getItem(`footballgm_slot_${slotNum}_meta`);
+      existing = existingRaw ? JSON.parse(existingRaw) : {};
+    } catch {
+      existing = {};
+    }
     const nextMeta = {
       name: existing?.name ?? `Franchise ${slotNum}`,
       teamName: userTeam?.name ?? userTeam?.abbr ?? 'Unknown Team',
@@ -460,6 +466,26 @@ function AppContent() {
 
   const safePhase = league?.phase ?? null;
   const canUseTopActions = !!safePhase && !(busy || simulating || isBatchSimBlocking);
+  const retryLabel = initFlow?.mode === 'load' ? 'Retry Load' : initFlow?.mode === 'new' ? 'Retry Setup' : 'Reload App';
+  const handlePrimaryRetry = () => {
+    if (initFlow?.mode === 'load' && initFlow?.slotKey) {
+      setInitFlow((prev) => prev ? { ...prev, active: true, timedOut: false, message: '' } : prev);
+      actions.loadSlot(initFlow.slotKey).catch((err) => {
+        setInitFlow((prev) => prev ? {
+          ...prev,
+          active: true,
+          timedOut: true,
+          message: `Failed to load franchise: ${err?.message ?? 'unknown error'}`,
+        } : prev);
+      });
+      return;
+    }
+    if (initFlow?.mode === 'new') {
+      setActiveView('new_league');
+      return;
+    }
+    window.location.reload();
+  };
 
   const topSecondaryAction = useMemo(() => {
     if (!safePhase) return null;
@@ -586,6 +612,14 @@ function AppContent() {
                   message: '',
                 });
               }}
+              onCreateError={(err) => {
+                setInitFlow((prev) => prev ? {
+                  ...prev,
+                  active: true,
+                  timedOut: true,
+                  message: `Failed to create league: ${err?.message ?? 'unknown error'}`,
+                } : prev);
+              }}
               onCancel={() => setActiveView('saves')}
             />
           </div>
@@ -598,10 +632,19 @@ function AppContent() {
           {initTimeoutPanel}
           <SaveSlotManager
             activeSlot={activeSlot}
+            loadingSlot={loadingSlot}
+            loadingLabel={initFlow?.mode === 'load' ? 'Loading franchise state…' : 'Preparing franchise setup…'}
             onLoad={(slotKey) => {
               setInitFlow({ active: true, mode: 'load', slotKey, timedOut: false, message: '' });
               setActiveSlot(slotKey);
-              actions.loadSlot(slotKey);
+              actions.loadSlot(slotKey).catch((err) => {
+                setInitFlow((prev) => prev?.slotKey === slotKey ? {
+                  ...prev,
+                  active: true,
+                  timedOut: true,
+                  message: `Failed to load franchise: ${err?.message ?? 'unknown error'}`,
+                } : prev);
+              });
             }}
             onSave={(slotKey) => { setActiveSlot(slotKey); actions.saveSlot(slotKey); }}
             onDelete={(slotKey) => { actions.deleteSlot(slotKey); if (activeSlot === slotKey) setActiveSlot(null); }}
@@ -839,8 +882,8 @@ function AppContent() {
       {error && (
         <div role="alert" className="app-banner app-banner-error">
           <span>{error}</span>
-          <button className="btn app-banner-btn" onClick={handleAdvanceWeek} disabled={busy || simulating}>
-            Retry
+          <button className="btn app-banner-btn" onClick={handlePrimaryRetry} disabled={busy || simulating}>
+            {retryLabel}
           </button>
         </div>
       )}
