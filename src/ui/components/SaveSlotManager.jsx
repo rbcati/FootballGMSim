@@ -47,7 +47,15 @@ export function createSlotActionHandlers({ onLoad, onSave }, slotKey) {
   };
 }
 
-export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, onNew }) {
+export default function SaveSlotManager({
+  activeSlot,
+  onLoad,
+  onSave,
+  onDelete,
+  onNew,
+  loadingSlot = null,
+  loadingLabel = 'Loading franchise…',
+}) {
   const [editing, setEditing] = useState(null);
   const [value, setValue] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
@@ -74,6 +82,8 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
       {slots.map((slot) => {
         const isActive = activeSlot === slot.key;
         const isEmpty = !slot.meta?.lastSaved;
+        const isLoadingThisSlot = loadingSlot === slot.key;
+        const disableSlotActions = Boolean(loadingSlot);
         const slotName = slot.meta?.name ?? `Franchise ${slot.slotNum}`;
         const accent = teamAccent(slot.meta);
         const slotActions = createSlotActionHandlers({ onLoad, onSave }, slot.key);
@@ -92,11 +102,11 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
                 {isActive && <Badge>Active</Badge>}
                 {editing === slot.slotNum ? (
                   <>
-                    <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Rename slot ${slot.slotNum}`} />
-                    <Button size="sm" onClick={() => persistName(slot.slotNum)}>Save</Button>
+                    <input value={value} onChange={(e) => setValue(e.target.value)} aria-label={`Rename slot ${slot.slotNum}`} disabled={disableSlotActions} />
+                    <Button size="sm" onClick={() => persistName(slot.slotNum)} disabled={disableSlotActions}>Save</Button>
                   </>
                 ) : (
-                  <Button variant="ghost" size="sm" onClick={() => { setEditing(slot.slotNum); setValue(slotName); }}>Rename</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setEditing(slot.slotNum); setValue(slotName); }} disabled={disableSlotActions}>Rename</Button>
                 )}
               </div>
             </CardHeader>
@@ -118,15 +128,20 @@ export default function SaveSlotManager({ activeSlot, onLoad, onSave, onDelete, 
                   </div>
 
                   <div className="save-slot-v2__actions">
-                    <Button onClick={slotActions.onEnterFranchise}>Enter Franchise</Button>
-                    <Button variant="secondary" onClick={slotActions.onSaveChanges}>Save Changes</Button>
+                    <Button onClick={slotActions.onEnterFranchise} disabled={disableSlotActions}>Enter Franchise</Button>
+                    <Button variant="secondary" onClick={slotActions.onSaveChanges} disabled={disableSlotActions}>Save Changes</Button>
                     <Button variant="destructive" onClick={() => {
                       if (!window.confirm('Delete this slot? This clears all franchise data in this slot.')) return;
                       localStorage.removeItem(`footballgm_slot_${slot.slotNum}_meta`);
                       onDelete?.(slot.key);
                       setRefreshKey((k) => k + 1);
-                    }}>Delete</Button>
+                    }} disabled={disableSlotActions}>Delete</Button>
                   </div>
+                  {isLoadingThisSlot && (
+                    <p role="status" style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted)' }}>
+                      {loadingLabel}
+                    </p>
+                  )}
                 </>
               )}
             </CardContent>

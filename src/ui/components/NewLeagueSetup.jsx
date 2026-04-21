@@ -49,7 +49,7 @@ const SCHEDULE_BALANCE_OPTIONS = [
   { value: "conference-heavy", label: "Conference Heavy" },
 ];
 
-export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
+export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCreateError }) {
   // Step management
   const [step, setStep] = useState(0); // 0: team, 1: settings, 2: confirm
 
@@ -145,10 +145,12 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate }) {
           leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
         },
       });
+    } catch (err) {
+      onCreateError?.(err);
     } finally {
       setCreating(false);
     }
-  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions, onStartCreate]);
+  }, [selectedTeam, year, difficulty, leagueName, selectedTeamData, playoffFormat, draftOrder, salaryCap, godMode, injuryFrequency, tradeRealism, seasonLength, playoffTeams, capFloor, progressionVolatility, regressionSeverity, scoutingFogStrength, ownerPatienceStrictness, playerMoodVolatility, staffImpactStrength, freeAgencyAggressiveness, leagueSize, draftRounds, scheduleBalancePreset, conferenceNames, divisionNames, actions, onStartCreate, onCreateError]);
 
   const canProceed = step === 0 ? selectedTeam !== null : true;
 
