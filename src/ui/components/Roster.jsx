@@ -33,6 +33,7 @@ import TraitBadge from "./TraitBadge";
 import PlayerComparison from "./PlayerComparison.jsx";
 import PlayerCompareTray from "./PlayerCompareTray.jsx";
 import PlayerProfile from "./PlayerProfile.jsx";
+import PlayerProfileModalBoundary from "./PlayerProfileModalBoundary.jsx";
 import ExtensionNegotiationModal from "./ExtensionNegotiationModal.jsx";
 import { teamColor } from "../../data/team-utils.js";
 import { OFFENSIVE_SCHEMES, DEFENSIVE_SCHEMES } from "../../core/scheme-core.js";
@@ -2070,6 +2071,15 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
   const [viewMode, setViewMode] = useState(initialConfig.safeView); // 'cards' | 'table' | 'depth'
   const [initialFilter, setInitialFilter] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+  const rosterPlayerIds = useMemo(() => new Set(players.map((p) => String(p?.id))), [players]);
+  const handlePlayerSelect = useCallback((playerId) => {
+    if (playerId == null) return;
+    if (rosterPlayerIds.has(String(playerId))) {
+      setSelectedPlayerId(playerId);
+      return;
+    }
+    console.warn("[Roster] Ignored invalid player selection", { playerId, teamId });
+  }, [rosterPlayerIds, teamId]);
 
   const fetchRoster = useCallback(async () => {
     if (teamId == null || !actions?.getRoster) return;
@@ -2346,9 +2356,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       {!loading && viewMode === "cards" && (
         <PlayerCardGrid
           players={players}
-          onPlayerSelect={(playerId) => {
-            if (playerId != null) setSelectedPlayerId(playerId);
-          }}
+          onPlayerSelect={handlePlayerSelect}
           phase={league?.phase}
           team={team}
           week={league?.week}
@@ -2365,9 +2373,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
           team={team}
           week={league?.week}
           onRefetch={fetchRoster}
-          onPlayerSelect={(playerId) => {
-            if (playerId != null) setSelectedPlayerId(playerId);
-          }}
+          onPlayerSelect={handlePlayerSelect}
           phase={league?.phase}
           chemistry={chemistry}
           initialFilter={initialFilter}
@@ -2420,13 +2426,15 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
         </CardContent></Card>
       )}
       {selectedPlayerId != null && (
-        <PlayerProfile
-          playerId={selectedPlayerId}
-          actions={actions}
-          teams={league?.teams ?? []}
-          league={league}
-          onClose={() => setSelectedPlayerId(null)}
-        />
+        <PlayerProfileModalBoundary playerId={selectedPlayerId} onClose={() => setSelectedPlayerId(null)}>
+          <PlayerProfile
+            playerId={selectedPlayerId}
+            actions={actions}
+            teams={league?.teams ?? []}
+            league={league}
+            onClose={() => setSelectedPlayerId(null)}
+          />
+        </PlayerProfileModalBoundary>
       )}
     </div>
   );

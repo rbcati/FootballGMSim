@@ -334,6 +334,19 @@ function getTeamName(teamId, teams) {
   return getTeamIdentity(teamId, teams).name;
 }
 
+
+function PlayerProfileSkeleton() {
+  return (
+    <div style={{ padding: "var(--space-4)", display: "grid", gap: 10 }}>
+      <div style={{ height: 22, width: "42%", borderRadius: 8, background: "var(--surface-strong)" }} />
+      <div style={{ height: 14, width: "58%", borderRadius: 6, background: "var(--surface-strong)" }} />
+      <div style={{ height: 12, width: "100%", borderRadius: 6, background: "var(--surface-strong)" }} />
+      <div style={{ height: 12, width: "90%", borderRadius: 6, background: "var(--surface-strong)" }} />
+      <div style={{ height: 220, width: "100%", borderRadius: 10, background: "var(--surface-strong)" }} />
+    </div>
+  );
+}
+
 export default function PlayerProfile({
   playerId,
   onClose,
@@ -346,7 +359,6 @@ export default function PlayerProfile({
 }) {
 
   const [data, setData] = useState(null);
-  const [loadingLocal, setLoadingLocal] = useState(true);
   const [extending, setExtending] = useState(false);
   const [showProjections, setShowProjections] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState("Overview");
@@ -381,6 +393,8 @@ export default function PlayerProfile({
     if (fetchedData) setData(fetchedData);
   }, [fetchedData]);
   const player = data?.player;
+  const playerMissing = !loading && !player;
+  const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: data?.meta?.week ?? 1 }), [userTeam, data?.meta?.week]);
   const isProspect = player?.status === "draft_eligible";
@@ -510,6 +524,47 @@ export default function PlayerProfile({
     [careerRows],
   );
 
+  if (playerMissing) {
+    return (
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "rgba(0,0,0,0.6)",
+          zIndex: 9000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: "var(--surface-elevated)",
+            width: "min(520px, 100%)",
+            borderRadius: 12,
+            border: "1px solid var(--hairline)",
+            padding: 16,
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <strong>Player profile unavailable</strong>
+          <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
+            {loadErrorMessage ? `Reason: ${loadErrorMessage}.` : "The selected player could not be loaded."}
+          </div>
+          <div>
+            <Button className="btn" onClick={onClose}>Close</Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={onClose}
@@ -594,7 +649,7 @@ export default function PlayerProfile({
           }}
         >
           {loading ? (
-            <div style={{ color: "var(--text-muted)" }}>Loading…</div>
+            <PlayerProfileSkeleton />
           ) : player ? (
             <div
               style={{
