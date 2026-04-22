@@ -1,5 +1,6 @@
 import React from 'react';
 import { SectionCard, StatusChip } from './ScreenSystem.jsx';
+import { buildEventChoiceImpactChips } from '../utils/franchiseEvents.js';
 
 export default function EventDecisionModal({ event, onChoose, onClose, onDecideLater }) {
   if (!event) return null;
@@ -22,6 +23,13 @@ export default function EventDecisionModal({ event, onChoose, onClose, onDecideL
               >
                 <strong>{choice.label}</strong>
                 <span style={{ fontSize: 12, opacity: 0.8 }}>{choice.preview}</span>
+                <div className="app-row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                  {buildEventChoiceImpactChips(choice).map((chip) => (
+                    <span key={chip.key} style={{ fontSize: 11, borderRadius: 999, padding: '2px 8px', border: '1px solid var(--hairline)', background: chip.tone === 'negative' ? 'rgba(255,69,58,0.14)' : chip.tone === 'positive' ? 'rgba(52,199,89,0.14)' : 'rgba(120,120,120,0.14)' }}>
+                      {chip.label}
+                    </span>
+                  ))}
+                </div>
               </button>
             ))}
             <button type="button" className="btn" onClick={onDecideLater}>Decide later</button>

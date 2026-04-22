@@ -3,6 +3,8 @@ import {
   resolveWeeklyEvent,
   evaluateTradeFairness,
   buildContractCounterOffer,
+  buildEventChoiceImpactChips,
+  resolveHoldoutReturnChance,
   updateRelationshipScore,
 } from './franchiseEvents.js';
 
@@ -58,5 +60,25 @@ describe('updateRelationshipScore', () => {
   it('clamps the score between -100 and 100', () => {
     expect(updateRelationshipScore(95, 20)).toBe(100);
     expect(updateRelationshipScore(-95, -20)).toBe(-100);
+  });
+});
+
+describe('resolveHoldoutReturnChance', () => {
+  it('stays in 20%-50% band and is deterministic with provided rng', () => {
+    const low = resolveHoldoutReturnChance({ weeksHeldOut: 0, morale: 25, teamWinPct: 0.2, rng: () => 0.3 });
+    const high = resolveHoldoutReturnChance({ weeksHeldOut: 6, morale: 88, teamWinPct: 0.8, rng: () => 0.3 });
+    expect(low.chance).toBeGreaterThanOrEqual(0.2);
+    expect(low.chance).toBeLessThanOrEqual(0.5);
+    expect(high.chance).toBeLessThanOrEqual(0.5);
+    expect(high.returns).toBe(true);
+  });
+});
+
+describe('buildEventChoiceImpactChips', () => {
+  it('builds readable impact chips including cap fallback', () => {
+    const chips = buildEventChoiceImpactChips({ effects: { ownerApproval: 4, morale: -6, capImpact: 0 } });
+    expect(chips.some((chip) => chip.label.includes('Owner +4%'))).toBe(true);
+    expect(chips.some((chip) => chip.label.includes('Morale -6'))).toBe(true);
+    expect(chips.some((chip) => chip.label.includes('Cap none'))).toBe(true);
   });
 });
