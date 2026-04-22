@@ -77,10 +77,9 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Scout Opponent');
     expect(html).toContain('News &amp; Injuries');
     expect(html).toContain('Weekly Agenda');
-    expect(html).toContain('Snapshot');
-    expect(html).toContain('Owner Mandate');
-    expect(html).toContain('League Pulse');
-    expect(html).toContain('Last Game Recap');
+    expect(html).toContain('Weekly Action Grid');
+    expect(html).toContain('Team Overview');
+    expect(html).toContain('League News');
   });
 
   it('is safe with partial/older save payloads', () => {
