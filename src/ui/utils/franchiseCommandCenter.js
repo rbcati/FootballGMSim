@@ -41,17 +41,23 @@ function deriveActionStatuses(weekly, nextGame) {
   };
 }
 
+function toSeverity(level) {
+  if (level === 'urgent' || level === 'blocker') return 'danger';
+  if (level === 'recommended' || level === 'warning') return 'warning';
+  return 'info';
+}
+
 export function buildWeeklyAgenda({ team, league, weekly, prep, nextGame }) {
   if (!team || !league) return [];
   const ranked = rankHqPriorityItems(team, league, weekly, nextGame);
-  const mappedRanked = [ranked.featured, ...(ranked.secondary ?? [])]
+  const mappedRanked = [ranked.featured, ...(ranked.secondary ?? []), ...((weekly?.urgentItems ?? []).slice(0, 3))]
     .filter(Boolean)
     .map((item, idx) => ({
-      id: `priority-${idx}`,
+      id: item?.id ?? `priority-${idx}`,
       icon: item.level === 'urgent' ? '⛳' : item.level === 'recommended' ? '⚠️' : '📌',
       title: item.label,
       description: item.detail,
-      severity: item.level === 'urgent' ? 'danger' : item.level === 'recommended' ? 'warning' : 'info',
+      severity: toSeverity(item.level),
       ctaLabel: item.verb ?? 'Open',
       targetRoute: item.tab ?? 'HQ',
     }));
@@ -95,7 +101,55 @@ export function buildWeeklyAgenda({ team, league, weekly, prep, nextGame }) {
     });
   }
 
-  return items.slice(0, 5);
+  const moraleState = String(weekly?.chemistry?.state ?? '').toLowerCase();
+  if ((moraleState.includes('fragmented') || moraleState.includes('uneasy')) && !items.some((item) => item.id === 'morale-alert')) {
+    items.push({
+      id: 'morale-alert',
+      icon: '🧠',
+      title: 'Locker room morale check',
+      description: weekly?.chemistry?.reasons?.[0] ?? 'Team chemistry needs attention before kickoff.',
+      severity: moraleState.includes('fragmented') ? 'danger' : 'warning',
+      ctaLabel: 'Review team pulse',
+      targetRoute: 'Team:Overview',
+    });
+  }
+
+  const startersMissing = safeNum(team?.depthChartWarnings?.missingStarters ?? team?.missingStarters ?? weekly?.pressurePoints?.missingStarters, 0);
+  if (startersMissing > 0 && !items.some((item) => item.id === 'missing-starters')) {
+    items.push({
+      id: 'missing-starters',
+      icon: '🧩',
+      title: 'Starter roles unresolved',
+      description: `${startersMissing} starting slot${startersMissing > 1 ? 's are' : ' is'} unresolved this week.`,
+      severity: startersMissing >= 2 ? 'danger' : 'warning',
+      ctaLabel: 'Set lineup',
+      targetRoute: 'Team:Roster / Depth',
+    });
+  }
+
+  const staffVacancies = safeNum(team?.staffVacancies ?? league?.staffVacancies, 0);
+  if (staffVacancies > 0 && !items.some((item) => item.id === 'staff-vacancies')) {
+    items.push({
+      id: 'staff-vacancies',
+      icon: '🧑‍💼',
+      title: 'Staff vacancy requires action',
+      description: `${staffVacancies} open staff role${staffVacancies > 1 ? 's are' : ' is'} affecting weekly operations.`,
+      severity: 'warning',
+      ctaLabel: 'Open staff',
+      targetRoute: 'Staff',
+    });
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  for (const item of items) {
+    const key = `${String(item?.title ?? '').toLowerCase()}|${String(item?.targetRoute ?? '').toLowerCase()}`;
+    if (!item?.title || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+
+  return deduped.slice(0, 5);
 }
 
 export function selectWeeklyAgenda(league) {
@@ -153,6 +207,8 @@ export function selectFranchiseHQViewModel(league) {
     .slice(0, 4)
     .map((item, index) => ({ id: item.id ?? `news-${index}`, headline: item.headline ?? item.title ?? 'League update', detail: item.summary ?? item.body ?? null }));
 
+  const ownerApproval = safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50);
+
   return {
     readyState: 'ready',
     seasonLabel: `${vm.league?.year ?? 'Season'} · ${String(vm.league?.phase ?? 'regular').replaceAll('_', ' ')}`,
@@ -163,6 +219,7 @@ export function selectFranchiseHQViewModel(league) {
     nextGame,
     prep,
     prepStatus: prep?.readinessLabel ?? 'Prep status unavailable',
+    pressureSummary: ownerApproval < 45 ? `Owner pressure high (${ownerApproval}%)` : ownerApproval < 60 ? `Owner pressure elevated (${ownerApproval}%)` : `Owner confidence stable (${ownerApproval}%)`,
     blockers: prep?.blockers ?? [],
     actionStatuses: deriveActionStatuses(weekly, nextGame),
     weeklyAgenda: buildWeeklyAgenda({ team, league: vm.league, weekly, prep, nextGame }),
@@ -177,6 +234,11 @@ export function selectFranchiseHQViewModel(league) {
       { label: 'Owner Confidence', value: `${safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50)}%`, tone: safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50) < 50 ? 'danger' : 'ok' },
     ],
     leagueNews,
+    navState: {
+      activeSection: 'hq',
+      suggestedDestinations: ['HQ', 'Team', 'League', 'News', 'More'],
+      hasSecondaryAdvance: true,
+    },
   };
 }
 
