@@ -20,8 +20,8 @@ describe('MobileNav', () => {
     );
 
     expect(html).toContain('premium-bottom-nav');
-    expect(html).toContain('premium-bottom-tab active" aria-label="Lineup"');
-    expect(html).toContain('Lineup');
+    expect(html).toContain('premium-bottom-tab active" aria-label="Team"');
+    expect(html).toContain('Team');
     expect(html).toContain('Advance Week');
   });
 
@@ -41,6 +41,6 @@ describe('MobileNav', () => {
     expect(html).toContain('Command Menu');
     expect(html).toContain('Trades');
     expect(html).toContain('Free Agency');
-    expect(html).toContain('Office');
+    expect(html).toContain('League');
   });
 });

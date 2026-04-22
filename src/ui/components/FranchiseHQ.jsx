@@ -3,18 +3,17 @@ import { Button } from '@/components/ui/button';
 import { openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
-import { selectFranchiseCommandCenter } from '../utils/franchiseCommandCenter.js';
+import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import {
   EmptyState,
   StatusChip,
-  HeroPanel,
+  WeeklyHero,
   ActionTile,
   SectionCard,
   CompactListRow,
-  SectionHeader,
-  SummaryCard,
-  TaskList,
-  NewsList,
+  SummaryGrid,
+  WeeklyAgenda,
+  CompactNewsCard,
 } from './ScreenSystem.jsx';
 
 function safeNum(value, fallback = 0) {
@@ -24,7 +23,7 @@ function safeNum(value, fallback = 0) {
 
 export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdvanceWeek, busy, simulating }) {
   const [lineupToast, setLineupToast] = useState(null);
-  const command = useMemo(() => selectFranchiseCommandCenter(league), [league]);
+  const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
 
   if (command.readyState !== 'ready') {
     return <EmptyState title="HQ loading" body="Team context is still loading or this save is missing team ownership metadata." />;
@@ -60,13 +59,11 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
 
   return (
     <div className="app-screen-stack franchise-hq franchise-command-center">
-      <SectionHeader eyebrow="Franchise Command Center" title={`${command.weekLabel} Command Center`} subtitle={command.seasonLabel} actions={<StatusChip label={command.standingSummary} tone="team" />} />
-
-      <HeroPanel
-        eyebrow={`${command.weekLabel} matchup`}
+      <WeeklyHero
+        eyebrow={`${command.seasonLabel} · ${command.weekLabel}`}
         title={`${command.nextGame?.isHome ? 'vs' : '@'} ${command.nextOpponent}`}
-        subtitle={`Opponent record ${command.nextOpponentRecord}`}
-        rightMeta={<StatusChip label={command.prep?.readinessLabel ?? 'Prep status unavailable'} tone="info" />}
+        subtitle={`Your record ${command.teamRecord} · Opponent ${command.nextOpponentRecord}`}
+        rightMeta={<StatusChip label={command.prepStatus} tone="info" />}
         actions={(
           <>
             <Button size="sm" variant="outline" onClick={() => onNavigate?.('Weekly Prep')}>Prep Details</Button>
@@ -74,7 +71,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
           </>
         )}
       >
-        <div className="app-hero-summary-grid">
+        <div className="app-hero-summary-grid app-hero-summary-grid-command">
           <div>
             <span>Last Game</span>
             <strong>{lastGame ? `${lastGame.userWon ? 'W' : 'L'} · ${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}` : 'No completed game yet'}</strong>
@@ -85,7 +82,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
           </div>
         </div>
         {command.blockers?.length ? <div className="app-blocker-row"><StatusChip label={`${command.blockers.length} prep blocker${command.blockers.length > 1 ? 's' : ''}`} tone="warning" /></div> : null}
-      </HeroPanel>
+      </WeeklyHero>
 
       <div className="app-action-grid-2x2">
         {actionTiles.map((action) => (
@@ -94,14 +91,21 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
       </div>
       {lineupToast ? <p className="app-inline-toast">{lineupToast}</p> : null}
 
-      <SectionCard title="Priority Tasks" subtitle="Top weekly agenda items to keep your franchise on track." variant="compact">
-        <TaskList tasks={command.weeklyAgenda} onOpenTask={(task) => onNavigate?.(task?.tab ?? 'HQ')} />
+      <SectionCard title="Weekly Agenda" subtitle="Front office priorities ranked for this week." variant="compact">
+        <WeeklyAgenda items={command.weeklyAgenda} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
       </SectionCard>
 
       <div className="app-command-bottom-grid">
-        <SummaryCard title="Team Overview" subtitle="Quick team health and franchise pressure." items={command.teamOverview} />
-        <SectionCard title="League News" subtitle="Around the league this week." variant="compact">
-          <NewsList items={command.leagueNews} emptyLabel="No league headlines yet. Advance to generate weekly stories." />
+        <SectionCard title="Snapshot" subtitle="Quick pressure and readiness indicators." variant="compact">
+          <SummaryGrid items={command.teamOverview} />
+        </SectionCard>
+        <SectionCard title="League Pulse" subtitle="Compact headlines around the league." variant="compact">
+          <div className="app-news-compact-list">
+            {(command.leagueNews ?? []).slice(0, 3).map((item) => (
+              <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
+            ))}
+            {!command.leagueNews?.length ? <EmptyState title="No league headlines yet." body="Advance to generate weekly stories." /> : null}
+          </div>
         </SectionCard>
       </div>
 

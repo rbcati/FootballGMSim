@@ -34,10 +34,10 @@ const MORE_GROUPS = [
 ];
 
 const BOTTOM_TABS = [
-  { id: 'Home', label: 'Home', icon: HomeIcon, action: 'section', value: SHELL_SECTIONS.hq },
-  { id: 'Lineup', label: 'Lineup', icon: RosterIcon, action: 'destination', value: 'Team:Roster / Depth' },
-  { id: 'Scouting', label: 'Scouting', icon: DraftIcon, action: 'destination', value: 'Weekly Prep' },
-  { id: 'Office', label: 'Office', icon: StaffIcon, action: 'destination', value: 'Staff' },
+  { id: 'HQ', label: 'HQ', icon: HomeIcon, action: 'section', value: SHELL_SECTIONS.hq },
+  { id: 'Team', label: 'Team', icon: RosterIcon, action: 'section', value: SHELL_SECTIONS.team },
+  { id: 'League', label: 'League', icon: StandingsIcon, action: 'section', value: SHELL_SECTIONS.league },
+  { id: 'News', label: 'News', icon: NewsIcon, action: 'destination', value: 'News' },
 ];
 
 export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
@@ -118,7 +118,7 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
         })}
 
         <button
-          className="mobile-bottom-tab premium-bottom-tab mobile-bottom-tab-advance"
+          className="mobile-bottom-tab premium-bottom-tab mobile-bottom-tab-advance mobile-bottom-tab-advance-subtle"
           onClick={onAdvance}
           disabled={advanceDisabled}
           aria-label={advanceLabel || 'Advance'}

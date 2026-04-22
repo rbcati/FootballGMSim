@@ -229,11 +229,23 @@
 }
 
 .franchise-command-center { gap: var(--space-4); }
-.app-command-advance { min-width: 210px; font-size: var(--text-base); font-weight: 800; box-shadow: 0 10px 24px rgba(var(--accent-rgb), .35); }
+.app-command-advance { min-width: 220px; font-size: var(--text-base); font-weight: 800; box-shadow: 0 10px 24px rgba(var(--accent-rgb), .26); }
 .app-blocker-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .app-command-bottom-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.app-summary-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.app-news-compact-list { display: grid; gap: 6px; }
+.app-compact-news-card {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 2px;
+  background: color-mix(in srgb, var(--surface) 95%, black 5%);
+}
+.app-compact-news-card strong { font-size: var(--text-xs); }
+.app-compact-news-card span { font-size: 11px; color: var(--text-muted); }
 
-.app-action-tile { min-height: 92px; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
+.app-action-tile { min-height: 102px; transition: transform .16s ease, border-color .16s ease, background .16s ease; }
 .app-action-tile:hover, .app-action-tile:focus-visible { transform: translateY(-2px); border-color: rgba(var(--accent-rgb), .5); background: color-mix(in srgb, var(--surface-2) 86%, var(--accent) 14%); }
 .app-action-tile:active { transform: translateY(0); }
 .app-action-tile__icon { margin-right: 6px; }
@@ -258,7 +270,7 @@
 .app-task-row__copy span { color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-task-row__chevron { color: var(--text-subtle); font-size: 1.1rem; }
 .app-task-row.tone-warning { border-color: rgba(255, 159, 10, .45); }
-.app-task-row.tone-danger { border-color: rgba(255, 69, 58, .45); background: rgba(255, 69, 58, .06); }
+.app-task-row.tone-danger { border-color: rgba(255, 69, 58, .45); background: rgba(255, 69, 58, .04); }
 
 .app-news-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .app-news-list li { border-bottom: 1px solid var(--hairline); padding-bottom: 8px; display: grid; gap: 2px; }
@@ -275,4 +287,6 @@
   .app-action-grid-2x2 { grid-template-columns: 1fr; }
   .app-task-row { grid-template-columns: 20px 1fr auto; }
   .app-task-row .app-status-chip { display: none; }
+  .app-command-advance { width: 100%; min-width: 0; }
+  .app-summary-grid { grid-template-columns: 1fr; }
 }

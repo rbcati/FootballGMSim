@@ -84,6 +84,7 @@ export function HeroCard({ eyebrow, title, subtitle, rightMeta = null, children,
 }
 
 export const HeroPanel = HeroCard;
+export const WeeklyHero = HeroCard;
 
 export function ActionTile({ icon = null, title, subtitle, badge = null, onClick, tone = 'info' }) {
   return (
@@ -141,6 +142,7 @@ export function EmptyState({ title, body }) {
 export function StatusChip({ label, tone = 'neutral' }) {
   return <span className={`app-status-chip tone-${tone}`}>{label}</span>;
 }
+export const StatusBadge = StatusChip;
 
 export function CtaRow({ actions = [] }) {
   if (!actions.length) return null;
@@ -202,12 +204,34 @@ export function TaskList({ tasks = [], onOpenTask }) {
           key={task.id}
           icon={task.icon ?? '🏈'}
           title={task.title}
-          subtitle={task.detail}
-          badge={task.badge}
+          subtitle={task.description ?? task.detail}
+          badge={task.badge ?? task.ctaLabel}
           tone={task.severity ?? 'info'}
           onClick={() => onOpenTask?.(task)}
         />
       ))}
+    </div>
+  );
+}
+
+export function AgendaItemRow({ item, onOpenTask }) {
+  return (
+    <TaskRow
+      icon={item?.icon ?? '🏈'}
+      title={item?.title}
+      subtitle={item?.description ?? item?.detail}
+      badge={item?.badge ?? item?.ctaLabel}
+      tone={item?.severity ?? 'info'}
+      onClick={() => onOpenTask?.(item)}
+    />
+  );
+}
+
+export function WeeklyAgenda({ items = [], onOpenTask }) {
+  if (!items.length) return <EmptyState title="Agenda clear" body="No urgent front office tasks this week." />;
+  return (
+    <div className="app-task-list">
+      {items.map((item) => <AgendaItemRow key={item.id} item={item} onOpenTask={onOpenTask} />)}
     </div>
   );
 }
@@ -226,6 +250,15 @@ export function SummaryCard({ title, subtitle, items = [] }) {
   );
 }
 
+export function SummaryGrid({ items = [] }) {
+  if (!items.length) return null;
+  return (
+    <div className="app-summary-grid">
+      {items.map((item) => <StatPair key={`${item.label}-${item.value}`} label={item.label} value={item.value} tone={item.tone} />)}
+    </div>
+  );
+}
+
 export function NewsList({ items = [], emptyLabel = 'No major league updates yet.' }) {
   if (!items.length) return <p className="app-news-empty">{emptyLabel}</p>;
   return (
@@ -237,6 +270,15 @@ export function NewsList({ items = [], emptyLabel = 'No major league updates yet
         </li>
       ))}
     </ul>
+  );
+}
+
+export function CompactNewsCard({ title, subtitle }) {
+  return (
+    <div className="app-compact-news-card">
+      <strong>{title}</strong>
+      {subtitle ? <span>{subtitle}</span> : null}
+    </div>
   );
 }
 
