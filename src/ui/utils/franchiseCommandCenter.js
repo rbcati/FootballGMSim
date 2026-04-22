@@ -11,6 +11,97 @@ function safeNum(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function getScoreDiffs(teamId, scheduleWeeks = []) {
+  const diffs = [];
+  for (const week of [...scheduleWeeks].sort((a, b) => safeNum(a?.week) - safeNum(b?.week))) {
+    for (const game of week?.games ?? []) {
+      if (!game?.played) continue;
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      if (homeId !== Number(teamId) && awayId !== Number(teamId)) continue;
+      const homeScore = safeNum(game?.homeScore ?? game?.score?.home);
+      const awayScore = safeNum(game?.awayScore ?? game?.score?.away);
+      diffs.push(homeId === Number(teamId) ? homeScore - awayScore : awayScore - homeScore);
+    }
+  }
+  return diffs;
+}
+
+function deriveMomentum(teamId, scheduleWeeks = []) {
+  const recent = getScoreDiffs(teamId, scheduleWeeks).slice(-3);
+  const total = recent.reduce((sum, value) => sum + value, 0);
+  if (!recent.length) return { icon: '→', label: 'No trend yet' };
+  if (total > 0) return { icon: '↗', label: `Trending up (${total > 9 ? '+' : ''}${total} in last ${recent.length})` };
+  if (total < 0) return { icon: '↘', label: `Trending down (${total} in last ${recent.length})` };
+  return { icon: '→', label: `Flat trend (last ${recent.length})` };
+}
+
+function parsePlayLogMoment(raw, fallback = 'Key swing play') {
+  if (typeof raw !== 'string' || !raw.trim()) return fallback;
+  const compact = raw.replace(/\s+/g, ' ').trim();
+  const quarterMatch = compact.match(/Q[1-4]|OT/i);
+  const quarter = quarterMatch ? quarterMatch[0].toUpperCase() : null;
+  const clipped = compact.length > 88 ? `${compact.slice(0, 85).trimEnd()}…` : compact;
+  return quarter ? `${clipped} (${quarter})` : clipped;
+}
+
+function deriveLastGameMoments(lastGameSummary) {
+  const logs = lastGameSummary?.boxScore?.playLogs;
+  if (!Array.isArray(logs) || !logs.length) return [];
+  const picks = [logs[0], logs[Math.floor(logs.length / 2)], logs[logs.length - 1]].filter(Boolean);
+  return picks.map((entry, idx) => ({
+    id: `moment-${idx}`,
+    text: parsePlayLogMoment(typeof entry === 'string' ? entry : entry?.text),
+  }));
+}
+
+function toMandateDelta({ ownerApproval, capRoom, expiringStarters, incomingTradeCount }) {
+  const deltas = [];
+  deltas.push({ label: 'Win this week', delta: ownerApproval < 55 ? +15 : +10 });
+  deltas.push({ label: 'Trade for a starter', delta: incomingTradeCount > 0 ? +10 : +8 });
+  deltas.push({ label: 'Ignore expiring contracts', delta: expiringStarters >= 4 ? -20 : -12 });
+  if (capRoom < 0) deltas.push({ label: 'Stay over cap', delta: -18 });
+  return deltas;
+}
+
+function estimateResignCost(player) {
+  const annual = safeNum(player?.contract?.baseAnnual ?? player?.contract?.salary ?? player?.contract?.amount, 0);
+  const ovr = safeNum(player?.ovr, 70);
+  const baseline = annual > 0 ? annual : Math.max(1.5, (ovr - 55) * 0.35);
+  return Math.round(baseline * 10) / 10;
+}
+
+function getDisplayName(player) {
+  const composed = `${player?.firstName ?? ''} ${player?.lastName ?? ''}`.trim();
+  if (player?.name) return player.name;
+  if (composed) return composed;
+  return `Player ${player?.id ?? ''}`.trim();
+}
+
+function formatStreak(recentResults = []) {
+  const tail = Array.isArray(recentResults) ? recentResults.slice().reverse() : [];
+  if (!tail.length) return '—';
+  const first = String(tail[0] ?? '').toUpperCase();
+  if (!['W', 'L', 'T'].includes(first)) return '—';
+  let count = 0;
+  for (const value of tail) {
+    if (String(value ?? '').toUpperCase() !== first) break;
+    count += 1;
+  }
+  return `${first}${count}`;
+}
+
+function sortByStandings(teams = []) {
+  return [...teams].sort((a, b) => {
+    const aGames = safeNum(a?.wins) + safeNum(a?.losses) + safeNum(a?.ties);
+    const bGames = safeNum(b?.wins) + safeNum(b?.losses) + safeNum(b?.ties);
+    const aPct = aGames ? (safeNum(a?.wins) + safeNum(a?.ties) * 0.5) / aGames : 0;
+    const bPct = bGames ? (safeNum(b?.wins) + safeNum(b?.ties) * 0.5) / bGames : 0;
+    if (bPct !== aPct) return bPct - aPct;
+    return safeNum(b?.ptsFor) - safeNum(a?.ptsFor);
+  });
+}
+
 function formatRecord(team) {
   if (!team) return '0-0';
   const ties = safeNum(team.ties);
@@ -208,6 +299,69 @@ export function selectFranchiseHQViewModel(league) {
     .map((item, index) => ({ id: item.id ?? `news-${index}`, headline: item.headline ?? item.title ?? 'League update', detail: item.summary ?? item.body ?? null }));
 
   const ownerApproval = safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50);
+  const momentum = deriveMomentum(team?.id, vm.league?.schedule?.weeks ?? []);
+  const lastGameMoments = deriveLastGameMoments(latestArchived ?? fallbackLastGame);
+  const prepChecklist = [
+    { key: 'lineupChecked', label: 'Set Lineup', tab: 'Team:Roster / Depth', done: Boolean(prep?.completion?.lineupChecked) },
+    { key: 'opponentScouted', label: 'Scout Opponent', tab: 'Weekly Prep', done: Boolean(prep?.completion?.opponentScouted) },
+    { key: 'planReviewed', label: 'Game Plan', tab: 'Game Plan', done: Boolean(prep?.completion?.planReviewed) },
+  ];
+  const expiringStarters = (team?.roster ?? [])
+    .filter((player) => safeNum(player?.contract?.yearsRemaining ?? player?.contract?.years ?? 0) <= 1 && safeNum(player?.ovr, 0) >= 75)
+    .sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr))
+    .slice(0, 8)
+    .map((player) => ({
+      id: player?.id,
+      name: getDisplayName(player),
+      pos: player?.pos ?? '—',
+      ovr: safeNum(player?.ovr, 0),
+      estCost: estimateResignCost(player),
+    }));
+  const mandateDeltas = toMandateDelta({
+    ownerApproval,
+    capRoom: cap.capRoom,
+    expiringStarters: expiringStarters.length,
+    incomingTradeCount: safeNum(weekly?.pressurePoints?.incomingTradeCount, 0),
+  });
+  const capTotal = Math.max(1, safeNum(cap.capTotal, 255));
+  const capUsed = safeNum(cap.capUsed, 0);
+  const deadCap = safeNum(team?.deadCap ?? team?.deadMoney ?? 0);
+  const capUsedPct = Math.max(0, Math.min(100, (capUsed / capTotal) * 100));
+  const deadCapPct = Math.max(0, Math.min(capUsedPct, (deadCap / capTotal) * 100));
+  const projectedRollover = Math.round((cap.capRoom - deadCap * 0.25) * 10) / 10;
+  const divisionTeams = (vm.league?.teams ?? []).filter((candidate) => Number(candidate?.conf) === Number(team?.conf) && Number(candidate?.div) === Number(team?.div));
+  const divisionMiniStandings = sortByStandings(divisionTeams).slice(0, 4).map((candidate) => ({
+    id: candidate?.id,
+    abbr: candidate?.abbr ?? candidate?.name ?? 'TEAM',
+    record: formatRecord(candidate),
+    pf: safeNum(candidate?.ptsFor, 0),
+    pa: safeNum(candidate?.ptsAgainst, 0),
+    streak: formatStreak(candidate?.recentResults),
+    isUser: Number(candidate?.id) === Number(team?.id),
+  }));
+  const latestWeek = [...(vm.league?.schedule?.weeks ?? [])]
+    .filter((week) => (week?.games ?? []).some((game) => game?.played))
+    .sort((a, b) => safeNum(b?.week) - safeNum(a?.week))[0];
+  const spotlightResults = (latestWeek?.games ?? [])
+    .filter((game) => game?.played)
+    .map((game, idx) => {
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      const homeTeam = vm.league?.teams?.find((candidate) => Number(candidate?.id) === homeId);
+      const awayTeam = vm.league?.teams?.find((candidate) => Number(candidate?.id) === awayId);
+      const total = safeNum(game?.homeScore) + safeNum(game?.awayScore);
+      const margin = Math.abs(safeNum(game?.homeScore) - safeNum(game?.awayScore));
+      return {
+        id: game?.id ?? `spotlight-${idx}`,
+        label: `${awayTeam?.abbr ?? 'AWY'} ${safeNum(game?.awayScore)} @ ${homeTeam?.abbr ?? 'HME'} ${safeNum(game?.homeScore)}${safeNum(game?.overtimePeriods ?? game?.ot, 0) > 0 ? ' OT' : ''}`,
+        scoreWeight: total + (margin <= 3 ? 8 : 0),
+      };
+    })
+    .sort((a, b) => b.scoreWeight - a.scoreWeight)
+    .slice(0, 2);
+  const injuredSpotlight = (team?.roster ?? [])
+    .filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0)
+    .sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr))[0] ?? null;
 
   return {
     readyState: 'ready',
@@ -219,7 +373,16 @@ export function selectFranchiseHQViewModel(league) {
     nextGame,
     prep,
     prepStatus: prep?.readinessLabel ?? 'Prep status unavailable',
+    prepChecklist,
+    momentum,
+    lastGameMoments,
     pressureSummary: ownerApproval < 45 ? `Owner pressure high (${ownerApproval}%)` : ownerApproval < 60 ? `Owner pressure elevated (${ownerApproval}%)` : `Owner confidence stable (${ownerApproval}%)`,
+    ownerMandate: {
+      approval: ownerApproval,
+      tone: ownerApproval < 45 ? 'danger' : ownerApproval < 65 ? 'warning' : 'ok',
+      deltas: mandateDeltas,
+      expiringStarters,
+    },
     blockers: prep?.blockers ?? [],
     actionStatuses: deriveActionStatuses(weekly, nextGame),
     weeklyAgenda: buildWeeklyAgenda({ team, league: vm.league, weekly, prep, nextGame }),
@@ -233,6 +396,32 @@ export function selectFranchiseHQViewModel(league) {
       { label: 'Injuries', value: `${safeNum(weekly?.pressurePoints?.injuriesCount, 0)}`, tone: safeNum(weekly?.pressurePoints?.injuriesCount, 0) >= 3 ? 'warning' : 'info' },
       { label: 'Owner Confidence', value: `${safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50)}%`, tone: safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50) < 50 ? 'danger' : 'ok' },
     ],
+    capSnapshot: {
+      capTotal,
+      capUsed,
+      capRoom: safeNum(cap.capRoom, 0),
+      capUsedPct,
+      deadCap,
+      deadCapPct,
+      projectedRollover,
+      tone: safeNum(cap.capRoom, 0) < 5 ? 'danger' : safeNum(cap.capRoom, 0) < 12 ? 'warning' : 'ok',
+    },
+    divisionMiniStandings,
+    spotlightResults,
+    injurySpotlight: injuredSpotlight
+      ? {
+        id: injuredSpotlight?.id,
+        name: getDisplayName(injuredSpotlight),
+        pos: injuredSpotlight?.pos ?? '—',
+        ovr: safeNum(injuredSpotlight?.ovr, 0),
+        severity: safeNum(injuredSpotlight?.injuryWeeksRemaining ?? injuredSpotlight?.injuredWeeks ?? injuredSpotlight?.injury?.gamesRemaining, 0) >= 8
+          ? 'IR'
+          : safeNum(injuredSpotlight?.injuryWeeksRemaining ?? injuredSpotlight?.injuredWeeks ?? injuredSpotlight?.injury?.gamesRemaining, 0) >= 2
+            ? 'OUT'
+            : 'DTD',
+        returnWeek: safeNum(vm.league?.week, 1) + safeNum(injuredSpotlight?.injuryWeeksRemaining ?? injuredSpotlight?.injuredWeeks ?? injuredSpotlight?.injury?.gamesRemaining, 0),
+      }
+      : null,
     leagueNews,
     navState: {
       activeSection: 'hq',

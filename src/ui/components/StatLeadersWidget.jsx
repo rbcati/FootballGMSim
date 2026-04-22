@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { teamColor } from "../../data/team-utils.js";
+import EmptyState from "./EmptyState.jsx";
 
 function LeaderList({ title, players, onPlayerSelect }) {
   return (
@@ -111,6 +112,7 @@ export default function StatLeadersWidget({ onPlayerSelect, actions }) {
   const [mode, setMode] = useState("league"); // 'league' | 'team'
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showProjected, setShowProjected] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -146,6 +148,12 @@ export default function StatLeadersWidget({ onPlayerSelect, actions }) {
   if (!data) return null;
 
   const currentData = mode === "league" ? data.league : data.team;
+
+  const projectedLeaders = {
+    passing: (data?.league?.passing || []).slice(0, 3),
+    rushing: (data?.league?.rushing || []).slice(0, 3),
+    receiving: (data?.league?.receiving || []).slice(0, 3),
+  };
 
   // Determine if there's any data
   const hasData = ["passing", "rushing", "receiving"].some(
@@ -217,16 +225,22 @@ export default function StatLeadersWidget({ onPlayerSelect, actions }) {
       </div>
 
       {!hasData ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "var(--space-4) 0",
-            color: "var(--text-muted)",
-            fontSize: "var(--text-sm)",
-          }}
-        >
-          No stats available yet.
-        </div>
+        <>
+          <EmptyState
+            icon="📊"
+            title="Season kicks off this week"
+            subtitle="Stat leaders will appear after Week 1 games are played."
+            action={showProjected ? "Hide League Predictions" : "Preview League Predictions"}
+            onAction={() => setShowProjected((prev) => !prev)}
+          />
+          {showProjected ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)", marginTop: "var(--space-2)" }}>
+              <LeaderList title="Projected Pass Yds" players={projectedLeaders.passing} onPlayerSelect={onPlayerSelect} />
+              <LeaderList title="Projected Rush Yds" players={projectedLeaders.rushing} onPlayerSelect={onPlayerSelect} />
+              <LeaderList title="Projected Rec Yds" players={projectedLeaders.receiving} onPlayerSelect={onPlayerSelect} />
+            </div>
+          ) : null}
+        </>
       ) : (
         <div
           style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-6)" }}

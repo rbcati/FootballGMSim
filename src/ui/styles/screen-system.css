@@ -233,6 +233,36 @@
 .app-blocker-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .app-command-bottom-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .app-summary-grid { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.app-moment-list { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
+.app-moment-list p { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.app-prep-checklist { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.app-prep-checklist__item { border: 1px solid var(--hairline); border-radius: var(--radius-md); background: color-mix(in srgb, var(--surface) 95%, black 5%); color: var(--text); padding: var(--space-2) var(--space-3); display: flex; align-items: center; gap: var(--space-2); text-align: left; font-size: var(--text-sm); transition: transform .16s ease, border-color .16s ease; }
+.app-prep-checklist__item.is-done { text-decoration: line-through; color: var(--text-subtle); border-color: rgba(52,199,89,.45); }
+.app-prep-checklist__item:hover { transform: translateY(-1px); border-color: var(--hairline-strong); }
+.app-prep-checklist__check { font-weight: 800; min-width: 16px; }
+.app-mandate-meter { margin-top: var(--space-2); position: relative; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 1px solid var(--hairline); border-radius: var(--radius-pill); overflow: hidden; min-height: 12px; }
+.app-mandate-meter__segment.tone-danger { background: rgba(255,69,58,.45); }
+.app-mandate-meter__segment.tone-warning { background: rgba(255,159,10,.45); }
+.app-mandate-meter__segment.tone-ok { background: rgba(52,199,89,.45); }
+.app-mandate-meter__needle { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--text); box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+.app-mandate-caption { margin: var(--space-2) 0; font-size: var(--text-xs); color: var(--text-muted); }
+.app-mandate-deltas { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
+.app-mandate-deltas p { margin: 0; display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-muted); }
+.app-expiring-list { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
+.app-expiring-list > strong { font-size: var(--text-sm); }
+.app-expiring-list__row { border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: rgba(255,255,255,.02); color: var(--text); font-size: var(--text-xs); padding: var(--space-2); display: flex; justify-content: space-between; gap: var(--space-2); }
+.app-cap-thermometer { margin-top: var(--space-2); height: 10px; border-radius: var(--radius-pill); background: rgba(255,255,255,.07); overflow: hidden; position: relative; }
+.app-cap-thermometer__fill { height: 100%; }
+.app-cap-thermometer__fill.tone-ok { background: rgba(52,199,89,.7); }
+.app-cap-thermometer__fill.tone-warning { background: rgba(255,159,10,.74); }
+.app-cap-thermometer__fill.tone-danger { background: rgba(255,69,58,.74); }
+.app-cap-thermometer__dead { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(135deg, rgba(255,255,255,.22), rgba(255,255,255,.22) 4px, transparent 4px, transparent 8px); pointer-events: none; }
+.app-cap-caption { margin: var(--space-2) 0 0; font-size: var(--text-xs); color: var(--text-muted); }
+.app-division-mini-table { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
+.app-division-mini-table__row { border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: var(--space-2); font-size: var(--text-xs); display: grid; grid-template-columns: 1fr auto auto auto auto; gap: var(--space-2); align-items: center; }
+.app-division-mini-table__row.is-user { border-color: rgba(var(--accent-rgb), .5); background: rgba(var(--accent-rgb), .08); }
+.app-spotlight-results { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); }
+.app-spotlight-results p { margin: 0; font-size: var(--text-xs); color: var(--text-subtle); }
 .app-news-compact-list { display: grid; gap: 6px; }
 .app-compact-news-card {
   border: 1px solid var(--hairline);

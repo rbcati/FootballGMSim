@@ -1493,6 +1493,7 @@
   min-height: 48px;
   gap: 3px;
   padding-inline: 4px;
+  position: relative;
 }
 
 .premium-bottom-tab svg {
@@ -1503,6 +1504,17 @@
 .mobile-bottom-label {
   font-size: 10px;
   line-height: 1.1;
+}
+
+.mobile-bottom-tab__badge {
+  position: absolute;
+  top: 7px;
+  right: calc(50% - 16px);
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
 }
 
 .mobile-bottom-tab-advance-subtle {
