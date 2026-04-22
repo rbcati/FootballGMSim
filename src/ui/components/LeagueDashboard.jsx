@@ -227,6 +227,8 @@ const NAV_TEST_IDS = {
 };
 
 const TEAM_FACING_TABS = new Set(["Roster", "Depth Chart", "Roster Hub", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center"]);
+const HQ_QUICK_TABS = ['Roster Hub', 'Schedule', 'Standings', 'Staff'];
+
 const TAB_ALIASES = {
   Trades: "Transactions",
 };
@@ -777,7 +779,7 @@ export default function LeagueDashboard({
           ))}
         </div>
         <div className="standings-tabs" style={{ flexWrap: "nowrap", overflowX: "auto", gap: 6 }}>
-          {(NAV_GROUPS.find((group) => group.id === activeSection)?.tabs ?? ["HQ"])
+          {(activeSection === SHELL_SECTIONS.hq ? HQ_QUICK_TABS : (NAV_GROUPS.find((group) => group.id === activeSection)?.tabs ?? ['HQ']))
             .filter((tab) => TABS.includes(tab))
             .map((tab) => (
               <button
@@ -1277,6 +1279,7 @@ export default function LeagueDashboard({
       {/* ── Mobile Navigation (bottom bar + slide-in) ── */}
       <MobileNav
         activeSection={activeSection}
+        activeTab={activeTab}
         onSectionChange={handleSectionChange}
         onDestinationChange={(tab) => setActiveTab(canonicalizeMobileTab(tab))}
         onAdvance={onAdvanceWeek}
