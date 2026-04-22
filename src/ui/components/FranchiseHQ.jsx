@@ -50,9 +50,9 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
 
   const actionTiles = [
     { title: 'Set Lineup', icon: '🧩', subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
-    { title: 'Gameplan', icon: '📋', subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge, onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
-    { title: 'Scouting', icon: '🔎', subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge, onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
-    { title: 'Team News', icon: '📰', subtitle: command.actionStatuses.news.subtitle, badge: command.actionStatuses.news.badge, onClick: () => { markWeeklyPrepStep(league, 'injuriesReviewed', true); onNavigate?.('News'); } },
+    { title: 'Game Plan', icon: '📋', subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
+    { title: 'Scout Opponent', icon: '🔎', subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge, onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
+    { title: 'News & Injuries', icon: '📰', subtitle: command.actionStatuses.news.subtitle, badge: command.actionStatuses.news.badge, onClick: () => { markWeeklyPrepStep(league, 'injuriesReviewed', true); onNavigate?.('News'); } },
   ];
 
   const lastGame = command.lastGameSummary;
@@ -61,7 +61,7 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
     <div className="app-screen-stack franchise-hq franchise-command-center">
       <WeeklyHero
         eyebrow={`${command.seasonLabel} · ${command.weekLabel}`}
-        title={`${command.nextGame?.isHome ? 'vs' : '@'} ${command.nextOpponent}`}
+        title={`Next: ${command.nextGame?.isHome ? 'vs' : '@'} ${command.nextOpponent}`}
         subtitle={`Your record ${command.teamRecord} · Opponent ${command.nextOpponentRecord}`}
         rightMeta={<StatusChip label={command.prepStatus} tone="info" />}
         actions={(
@@ -79,6 +79,10 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
           <div>
             <span>Standing</span>
             <strong>{command.standingSummary}</strong>
+          </div>
+          <div>
+            <span>Owner Pressure</span>
+            <strong>{command.pressureSummary}</strong>
           </div>
         </div>
         {command.blockers?.length ? <div className="app-blocker-row"><StatusChip label={`${command.blockers.length} prep blocker${command.blockers.length > 1 ? 's' : ''}`} tone="warning" /></div> : null}
@@ -109,8 +113,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
         </SectionCard>
       </div>
 
-      <SectionCard title="Last Game Recap" subtitle="Open full recap and box score." variant="compact">
-        {lastGame ? (
+      {lastGame ? (
+        <SectionCard title="Last Game Recap" subtitle="Open full recap and box score." variant="compact">
           <CompactListRow
             title={`${lastGame.userWon ? 'Win' : 'Loss'} · Week ${lastGame.week ?? league?.week ?? 1}`}
             subtitle={`${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}`}
@@ -118,8 +122,8 @@ export default function FranchiseHQ({ league, onNavigate, onOpenBoxScore, onAdva
           >
             <Button size="sm" variant="outline" onClick={() => openResolvedBoxScore({ ...command.latestArchived, id: command.latestArchived?.id ?? lastGame?.id }, { seasonId: league?.seasonId, week: Number(command.latestArchived?.week ?? lastGame?.week ?? league?.week ?? 1), source: 'hq_last_game' }, onOpenBoxScore)} disabled={command.latestArchived ? !command.latestGamePresentation?.canOpen : false}>Box Score</Button>
           </CompactListRow>
-        ) : <EmptyState title="No final yet" body="Play your next game to unlock recap context." />}
-      </SectionCard>
+        </SectionCard>
+      ) : null}
     </div>
   );
 }

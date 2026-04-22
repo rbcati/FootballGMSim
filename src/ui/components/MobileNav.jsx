@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { NAV_LABELS } from '../constants/navigationCopy.js';
 import { SHELL_SECTIONS } from '../utils/shellNavigation.js';
 
 const MORE_GROUPS = [
@@ -38,6 +37,7 @@ const BOTTOM_TABS = [
   { id: 'Team', label: 'Team', icon: RosterIcon, action: 'section', value: SHELL_SECTIONS.team },
   { id: 'League', label: 'League', icon: StandingsIcon, action: 'section', value: SHELL_SECTIONS.league },
   { id: 'News', label: 'News', icon: NewsIcon, action: 'destination', value: 'News' },
+  { id: 'More', label: 'More', icon: MoreIcon, action: 'menu', value: 'more' },
 ];
 
 export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
@@ -107,8 +107,13 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
         {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = (tab.action === 'section' && activeSection === tab.value)
-            || (tab.action === 'destination' && activeTab === tab.value);
-          const onClick = () => (tab.action === 'section' ? handleSectionClick(tab.value) : handleDestinationClick(tab.value));
+            || (tab.action === 'destination' && activeTab === tab.value)
+            || (tab.action === 'menu' && menuOpen);
+          const onClick = () => {
+            if (tab.action === 'section') return handleSectionClick(tab.value);
+            if (tab.action === 'destination') return handleDestinationClick(tab.value);
+            return setMenuOpen((prev) => !prev);
+          };
           return (
             <button key={tab.id} className={`mobile-bottom-tab premium-bottom-tab ${isActive ? 'active' : ''}`} onClick={onClick} aria-label={tab.label}>
               <Icon size={20} />
@@ -125,11 +130,6 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
         >
           <PlayIcon size={22} />
           <span className="mobile-bottom-label">{advanceLabel || 'Advance'}</span>
-        </button>
-
-        <button className={`mobile-bottom-tab premium-bottom-tab ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Open more menu">
-          <MoreIcon size={20} />
-          <span className="mobile-bottom-label">{NAV_LABELS.more}</span>
         </button>
       </div>
     </>
