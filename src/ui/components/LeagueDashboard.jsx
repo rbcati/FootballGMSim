@@ -67,6 +67,7 @@ import DraftBigBoard from "./DraftBigBoard.jsx";
 import CoachingScreen from "./CoachingScreen.jsx";
 import TeamHub from "./TeamHub.jsx";
 import LeagueHub from "./LeagueHub.jsx";
+import FranchiseStoryHub from "./FranchiseStoryHub.jsx";
 import ScheduleCenter from "./ScheduleCenter.jsx";
 import StandingsCenter from "./StandingsCenter.jsx";
 import SectionSubnav from "./SectionSubnav.jsx";
@@ -171,6 +172,7 @@ const BASE_TABS = [
   "Team",
   "League",
   "News",
+  "Story",
   "Standings",
   "Schedule",
   "Weekly Results",
@@ -216,7 +218,7 @@ const NAV_GROUPS = [
   { id: SHELL_SECTIONS.hq, title: "HQ", tabs: ["HQ"] },
   { id: SHELL_SECTIONS.team, title: "Team Management", tabs: ["Team", "Roster Hub", "Roster", "Depth Chart", "Weekly Prep", "Game Plan", "Training", "Injuries", "Staff", "Financials", "Contract Center", "💰 Cap"] },
   { id: SHELL_SECTIONS.league, title: "League Office", tabs: ["League", "Weekly Results", "Schedule", "Standings", "Stats", "League Leaders", "Transactions", "Free Agency", "Draft", "History Hub", "History", "Awards & Records", "Season Recap"] },
-  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News"] },
+  { id: SHELL_SECTIONS.news, title: "News", tabs: ["News", "Story"] },
 ];
 
 const NAV_TEST_IDS = {
@@ -927,6 +929,11 @@ export default function LeagueDashboard({
               onOpenBoxScore={(gameId) => openGameDetail(gameId, "News")}
               onNavigate={setActiveTab}
             />
+          </TabErrorBoundary>
+        )}
+        {activeTab === "Story" && (
+          <TabErrorBoundary label="Story" onNavigate={setActiveTab} fallbackTab="HQ">
+            <FranchiseStoryHub league={league} />
           </TabErrorBoundary>
         )}
         {activeTab === "Standings" && (
