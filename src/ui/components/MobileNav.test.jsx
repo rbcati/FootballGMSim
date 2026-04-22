@@ -9,6 +9,7 @@ describe('MobileNav', () => {
     const html = renderToString(
       <MobileNav
         activeSection={SHELL_SECTIONS.team}
+        activeTab="Team:Roster / Depth"
         onSectionChange={vi.fn()}
         onDestinationChange={vi.fn()}
         onAdvance={vi.fn()}
@@ -19,8 +20,8 @@ describe('MobileNav', () => {
     );
 
     expect(html).toContain('premium-bottom-nav');
-    expect(html).toContain('premium-bottom-tab active');
-    expect(html).toContain('Team');
+    expect(html).toContain('premium-bottom-tab active" aria-label="Lineup"');
+    expect(html).toContain('Lineup');
     expect(html).toContain('Advance Week');
   });
 
@@ -40,6 +41,6 @@ describe('MobileNav', () => {
     expect(html).toContain('Command Menu');
     expect(html).toContain('Trades');
     expect(html).toContain('Free Agency');
-    expect(html).toContain('League Leaders');
+    expect(html).toContain('Office');
   });
 });

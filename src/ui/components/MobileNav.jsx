@@ -34,13 +34,13 @@ const MORE_GROUPS = [
 ];
 
 const BOTTOM_TABS = [
-  { id: SHELL_SECTIONS.hq, label: NAV_LABELS.hq, icon: HomeIcon },
-  { id: SHELL_SECTIONS.team, label: NAV_LABELS.team, icon: RosterIcon },
-  { id: SHELL_SECTIONS.league, label: NAV_LABELS.league, icon: StandingsIcon },
-  { id: SHELL_SECTIONS.news, label: NAV_LABELS.news, icon: NewsIcon },
+  { id: 'Home', label: 'Home', icon: HomeIcon, action: 'section', value: SHELL_SECTIONS.hq },
+  { id: 'Lineup', label: 'Lineup', icon: RosterIcon, action: 'destination', value: 'Team:Roster / Depth' },
+  { id: 'Scouting', label: 'Scouting', icon: DraftIcon, action: 'destination', value: 'Weekly Prep' },
+  { id: 'Office', label: 'Office', icon: StaffIcon, action: 'destination', value: 'Staff' },
 ];
 
-export default function MobileNav({ activeSection, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
+export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => setMenuOpen(false), [activeSection]);
@@ -106,9 +106,11 @@ export default function MobileNav({ activeSection, onSectionChange, onDestinatio
       <div className="mobile-bottom-bar premium-bottom-nav">
         {BOTTOM_TABS.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeSection === tab.id;
+          const isActive = (tab.action === 'section' && activeSection === tab.value)
+            || (tab.action === 'destination' && activeTab === tab.value);
+          const onClick = () => (tab.action === 'section' ? handleSectionClick(tab.value) : handleDestinationClick(tab.value));
           return (
-            <button key={tab.id} className={`mobile-bottom-tab premium-bottom-tab ${isActive ? 'active' : ''}`} onClick={() => handleSectionClick(tab.id)} aria-label={tab.label}>
+            <button key={tab.id} className={`mobile-bottom-tab premium-bottom-tab ${isActive ? 'active' : ''}`} onClick={onClick} aria-label={tab.label}>
               <Icon size={20} />
               <span className="mobile-bottom-label">{tab.label}</span>
             </button>

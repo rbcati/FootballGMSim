@@ -83,11 +83,13 @@ export function HeroCard({ eyebrow, title, subtitle, rightMeta = null, children,
   );
 }
 
-export function ActionTile({ title, subtitle, badge = null, onClick, tone = 'info' }) {
+export const HeroPanel = HeroCard;
+
+export function ActionTile({ icon = null, title, subtitle, badge = null, onClick, tone = 'info' }) {
   return (
     <button type="button" className={`app-action-tile tone-${tone}`} onClick={onClick}>
       <div className="app-action-tile__title-row">
-        <strong>{title}</strong>
+        <strong>{icon ? <span className="app-action-tile__icon">{icon}</span> : null}{title}</strong>
         {badge}
       </div>
       {subtitle ? <span className="app-action-tile__subtitle">{subtitle}</span> : null}
@@ -174,6 +176,67 @@ export function CompactListRow({ title, subtitle, meta, children }) {
       {meta ? <div className="app-compact-list-row__meta">{meta}</div> : null}
       {children ? <div className="app-compact-list-row__actions">{children}</div> : null}
     </div>
+  );
+}
+
+export function TaskRow({ icon = '🏈', title, subtitle, badge, tone = 'info', onClick }) {
+  return (
+    <button type="button" className={`app-task-row tone-${tone}`} onClick={onClick}>
+      <span className="app-task-row__icon" aria-hidden>{icon}</span>
+      <span className="app-task-row__copy">
+        <strong>{title}</strong>
+        <span>{subtitle}</span>
+      </span>
+      {badge ? <StatusChip label={badge} tone={tone} /> : null}
+      <span className="app-task-row__chevron" aria-hidden>›</span>
+    </button>
+  );
+}
+
+export function TaskList({ tasks = [], onOpenTask }) {
+  if (!tasks.length) return <EmptyState title="No urgent tasks" body="You're set for this week. Explore team and scouting upgrades." />;
+  return (
+    <div className="app-task-list">
+      {tasks.map((task) => (
+        <TaskRow
+          key={task.id}
+          icon={task.icon ?? '🏈'}
+          title={task.title}
+          subtitle={task.detail}
+          badge={task.badge}
+          tone={task.severity ?? 'info'}
+          onClick={() => onOpenTask?.(task)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function StatPair({ label, value, tone = 'neutral' }) {
+  return <StatPill label={label} value={value} tone={tone} />;
+}
+
+export function SummaryCard({ title, subtitle, items = [] }) {
+  return (
+    <SectionCard title={title} subtitle={subtitle} variant="compact">
+      <div className="app-stat-strip">
+        {items.map((item) => <StatPair key={`${item.label}-${item.value}`} label={item.label} value={item.value} tone={item.tone} />)}
+      </div>
+    </SectionCard>
+  );
+}
+
+export function NewsList({ items = [], emptyLabel = 'No major league updates yet.' }) {
+  if (!items.length) return <p className="app-news-empty">{emptyLabel}</p>;
+  return (
+    <ul className="app-news-list">
+      {items.map((item) => (
+        <li key={item.id}>
+          <strong>{item.headline}</strong>
+          {item.detail ? <span>{item.detail}</span> : null}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -72,15 +72,15 @@ describe('FranchiseHQ', () => {
     );
 
     expect(html).toContain('Advance Week');
-    expect(html).toContain('Prepare Game');
+    expect(html).toContain('Prep Details');
     expect(html).toContain('Set Lineup');
-    expect(html).toContain('Game Plan');
-    expect(html).toContain('Scout Opponent');
-    expect(html).toContain('News &amp; Injuries');
-    expect(html).toContain('Next Action');
-    expect(html).toContain('Command Snapshot');
-    expect(html).toContain('Recent Team / League News');
-    expect(html).toContain('Open Results');
+    expect(html).toContain('Gameplan');
+    expect(html).toContain('Scouting');
+    expect(html).toContain('Team News');
+    expect(html).toContain('Priority Tasks');
+    expect(html).toContain('Team Overview');
+    expect(html).toContain('League News');
+    expect(html).toContain('Last Game Recap');
   });
 
   it('is safe with partial/older save payloads', () => {
