@@ -5,6 +5,7 @@ import { getHQViewModel } from '../../state/selectors.js';
 import { rankHqPriorityItems, getActionContext } from './hqHelpers.js';
 import { buildCompletedGamePresentation } from './boxScoreAccess.js';
 import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gameArchive.ts';
+import { syncFranchiseChronicle } from './franchiseChronicle.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -359,6 +360,7 @@ export function selectFranchiseHQViewModel(league) {
     })
     .sort((a, b) => b.scoreWeight - a.scoreWeight)
     .slice(0, 2);
+  const story = syncFranchiseChronicle(vm.league);
   const injuredSpotlight = (team?.roster ?? [])
     .filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0)
     .sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr))[0] ?? null;
@@ -423,9 +425,10 @@ export function selectFranchiseHQViewModel(league) {
       }
       : null,
     leagueNews,
+    story,
     navState: {
       activeSection: 'hq',
-      suggestedDestinations: ['HQ', 'Team', 'League', 'News', 'More'],
+      suggestedDestinations: ['HQ', 'Team', 'League', 'News', 'Story', 'More'],
       hasSecondaryAdvance: true,
     },
   };

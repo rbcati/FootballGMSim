@@ -19,6 +19,7 @@ const MORE_GROUPS = [
     items: [
       { id: 'League:Overview', label: 'League Hub', icon: StandingsIcon },
       { id: 'League:Results', label: 'Weekly Results', icon: StandingsIcon },
+      { id: 'Story', label: 'Story', icon: NewsIcon },
       { id: 'Transactions', label: 'Trades', icon: TradesIcon },
       { id: 'Free Agency', label: 'Free Agency', icon: FAIcon },
       { id: 'Draft', label: 'Draft', icon: DraftIcon },
