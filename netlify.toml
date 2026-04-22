@@ -1,7 +1,7 @@
 # netlify.toml — Netlify configuration for Football GM SPA
 
 [build]
-  command   = "npm run build"
+  command   = "yarn build"
   publish   = "dist"
 
 [build.environment]
