@@ -439,9 +439,10 @@ export function selectFranchiseHQViewModel(league) {
     latestGamePresentation,
     teamOverview: [
       { label: 'Cap Space', value: formatMoneyM(cap.capRoom), tone: cap.capRoom < 5 ? 'warning' : 'ok' },
-      { label: 'Roster', value: `${rosterCount}/53`, tone: rosterCount > 53 ? 'danger' : 'info' },
+      { label: 'Roster Count', value: `${rosterCount}/53`, tone: rosterCount > 53 ? 'danger' : 'info' },
       { label: 'Injuries', value: `${safeNum(weekly?.pressurePoints?.injuriesCount, 0)}`, tone: safeNum(weekly?.pressurePoints?.injuriesCount, 0) >= 3 ? 'warning' : 'info' },
-      { label: 'Owner Confidence', value: `${safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50)}%`, tone: safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50) < 50 ? 'danger' : 'ok' },
+      { label: 'Morale', value: weekly?.chemistry?.state ?? 'Stable', tone: String(weekly?.chemistry?.state ?? '').toLowerCase().includes('fragmented') ? 'danger' : String(weekly?.chemistry?.state ?? '').toLowerCase().includes('uneasy') ? 'warning' : 'ok' },
+      { label: 'Owner Approval', value: `${safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50)}%`, tone: safeNum(weekly?.pressurePoints?.ownerApproval ?? vm.league?.ownerApproval ?? vm.league?.ownerMood, 50) < 50 ? 'danger' : 'ok' },
     ],
     capSnapshot: {
       capTotal,

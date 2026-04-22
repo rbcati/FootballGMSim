@@ -229,6 +229,33 @@
 }
 
 .franchise-command-center { gap: var(--space-4); }
+
+.app-hq-topbar {
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  background: color-mix(in srgb, #070b12 88%, var(--surface) 12%);
+  border-radius: var(--radius-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.app-hq-topbar__left { display: grid; gap: 2px; min-width: 0; }
+.app-hq-topbar__left strong { font-size: var(--text-sm); letter-spacing: .01em; }
+.app-hq-topbar__left span { font-size: 11px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .08em; }
+.app-hq-topbar__meta { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.app-section-stack { display: grid; gap: 8px; }
+.app-section-heading { font-size: 11px; color: var(--text-subtle); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+
+
+.franchise-command-center .app-hero-card {
+  padding: var(--space-4);
+  gap: var(--space-3);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--hairline));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32);
+  background: linear-gradient(160deg, color-mix(in srgb, #060b14 90%, var(--accent) 10%), color-mix(in srgb, #060b14 82%, var(--surface) 18%));
+}
+.franchise-command-center .app-section-card { box-shadow: 0 8px 20px rgba(0,0,0,.16); }
 .app-command-advance { min-width: 220px; font-size: var(--text-base); font-weight: 800; box-shadow: 0 10px 24px rgba(var(--accent-rgb), .26); }
 .app-blocker-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .app-command-bottom-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -315,11 +342,18 @@
 }
 
 @media (max-width: 768px) {
-  .app-action-grid-2x2 { grid-template-columns: 1fr; }
+  .app-action-grid-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-task-row { grid-template-columns: 20px 1fr auto; }
   .app-task-row .app-status-chip { display: none; }
-  .app-command-advance { width: 100%; min-width: 0; }
-  .app-summary-grid { grid-template-columns: 1fr; }
+  .app-command-advance { width: 100%; min-width: 0; min-height: 48px; }
+  .app-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-hero-card__actions { grid-template-columns: 1fr; }
   .app-hero-card__actions .btn { width: 100%; }
+  .app-hq-topbar { flex-direction: column; align-items: flex-start; }
+  .app-hq-topbar__meta { width: 100%; justify-content: flex-start; }
+}
+
+@media (max-width: 420px) {
+  .app-action-grid-2x2 { grid-template-columns: 1fr; }
+  .app-summary-grid { grid-template-columns: 1fr; }
 }
