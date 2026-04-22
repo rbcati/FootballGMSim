@@ -44,44 +44,70 @@ function deriveActionStatuses(weekly, nextGame) {
 export function buildWeeklyAgenda({ team, league, weekly, prep, nextGame }) {
   if (!team || !league) return [];
   const ranked = rankHqPriorityItems(team, league, weekly, nextGame);
-  const items = [ranked.featured, ...(ranked.secondary ?? [])]
+  const mappedRanked = [ranked.featured, ...(ranked.secondary ?? [])]
     .filter(Boolean)
     .map((item, idx) => ({
       id: `priority-${idx}`,
+      icon: item.level === 'urgent' ? '⛳' : item.level === 'recommended' ? '⚠️' : '📌',
       title: item.label,
-      detail: item.detail,
+      description: item.detail,
       severity: item.level === 'urgent' ? 'danger' : item.level === 'recommended' ? 'warning' : 'info',
-      badge: item.level === 'urgent' ? 'Urgent' : item.level === 'recommended' ? 'Needs attention' : 'Optional',
-      tab: item.tab ?? 'HQ',
+      ctaLabel: item.verb ?? 'Open',
+      targetRoute: item.tab ?? 'HQ',
     }));
 
+  const items = [...mappedRanked];
+
   const injuries = (team?.roster ?? []).filter((player) => safeNum(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining, 0) > 0).length;
-  if (injuries > 0 && !items.some((item) => item.tab?.includes('Injur'))) {
+  if (injuries > 0 && !items.some((item) => item.targetRoute?.includes('Injur'))) {
     items.push({
       id: 'injury-followup',
+      icon: injuries >= 3 ? '🚑' : '🩹',
       title: 'Adjust injury replacements',
-      detail: `${injuries} player${injuries > 1 ? 's are' : ' is'} unavailable this week.`,
+      description: `${injuries} player${injuries > 1 ? 's are' : ' is'} unavailable this week.`,
       severity: injuries >= 3 ? 'danger' : 'warning',
-      badge: injuries >= 3 ? 'Critical' : 'Monitor',
-      tab: 'Team:Injuries',
+      ctaLabel: 'Review injuries',
+      targetRoute: 'Team:Injuries',
     });
   }
 
   if (prep?.completionPct != null && prep.completionPct < 75) {
     items.push({
       id: 'prep-incomplete',
+      icon: '🧠',
       title: 'Complete weekly prep checklist',
-      detail: `Only ${Math.round(prep.completionPct)}% complete before kickoff.`,
+      description: `Only ${Math.round(prep.completionPct)}% complete before kickoff.`,
       severity: 'warning',
-      badge: 'Prep incomplete',
-      tab: 'Weekly Prep',
+      ctaLabel: 'Open prep',
+      targetRoute: 'Weekly Prep',
+    });
+  }
+
+  if ((weekly?.scouting?.completionPct ?? 100) < 70) {
+    items.push({
+      id: 'scouting-incomplete',
+      icon: '🔬',
+      title: 'Scouting package unfinished',
+      description: `${Math.round(safeNum(weekly?.scouting?.completionPct, 0))}% of this week’s opponent report is complete.`,
+      severity: 'info',
+      ctaLabel: 'Scout opponent',
+      targetRoute: 'Weekly Prep',
     });
   }
 
   return items.slice(0, 5);
 }
 
-export function selectFranchiseCommandCenter(league) {
+export function selectWeeklyAgenda(league) {
+  const vm = getHQViewModel(league);
+  if (!vm.userTeam) return [];
+  const weekly = evaluateWeeklyContext(vm.league);
+  const prep = deriveWeeklyPrepState(vm.league);
+  const nextGame = getPrepNextGame(vm.league);
+  return buildWeeklyAgenda({ team: vm.userTeam, league: vm.league, weekly, prep, nextGame });
+}
+
+export function selectFranchiseHQViewModel(league) {
   const vm = getHQViewModel(league);
   if (!vm.userTeam) {
     return { readyState: 'loading', weeklyAgenda: [] };
@@ -131,10 +157,12 @@ export function selectFranchiseCommandCenter(league) {
     readyState: 'ready',
     seasonLabel: `${vm.league?.year ?? 'Season'} · ${String(vm.league?.phase ?? 'regular').replaceAll('_', ' ')}`,
     weekLabel: `Week ${vm.league?.week ?? 1}`,
+    teamRecord: formatRecord(team),
     nextOpponent: nextGame?.opp?.name ?? 'TBD',
     nextOpponentRecord: nextGame?.opp ? formatRecord(nextGame.opp) : '—',
     nextGame,
     prep,
+    prepStatus: prep?.readinessLabel ?? 'Prep status unavailable',
     blockers: prep?.blockers ?? [],
     actionStatuses: deriveActionStatuses(weekly, nextGame),
     weeklyAgenda: buildWeeklyAgenda({ team, league: vm.league, weekly, prep, nextGame }),
@@ -151,3 +179,5 @@ export function selectFranchiseCommandCenter(league) {
     leagueNews,
   };
 }
+
+export const selectFranchiseCommandCenter = selectFranchiseHQViewModel;
