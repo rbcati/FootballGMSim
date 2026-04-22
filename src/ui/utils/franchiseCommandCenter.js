@@ -5,8 +5,8 @@ import { getHQViewModel } from '../../state/selectors.js';
 import { rankHqPriorityItems, getActionContext } from './hqHelpers.js';
 import { buildCompletedGamePresentation } from './boxScoreAccess.js';
 import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gameArchive.ts';
-import { syncFranchiseChronicle } from './franchiseChronicle.js';
-import { resolveWeeklyEvent } from './franchiseEvents.js';
+import { logChronicleEvent, syncFranchiseChronicle } from './franchiseChronicle.js';
+import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './franchiseEvents.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -104,6 +104,44 @@ function sortByStandings(teams = []) {
   });
 }
 
+function winPct(team) {
+  const games = safeNum(team?.wins) + safeNum(team?.losses) + safeNum(team?.ties);
+  return games > 0 ? (safeNum(team?.wins) + safeNum(team?.ties) * 0.5) / games : 0;
+}
+
+export function buildPowerRankings(league, { limit = 32 } = {}) {
+  const teams = Array.isArray(league?.teams) ? league.teams : [];
+  return [...teams]
+    .sort((a, b) => {
+      const aScore = winPct(a) * 100 + (safeNum(a?.ptsFor) - safeNum(a?.ptsAgainst)) * 0.08 + safeNum((a?.recentResults ?? []).slice(-3).filter((r) => String(r).toUpperCase() === 'W').length) * 0.9;
+      const bScore = winPct(b) * 100 + (safeNum(b?.ptsFor) - safeNum(b?.ptsAgainst)) * 0.08 + safeNum((b?.recentResults ?? []).slice(-3).filter((r) => String(r).toUpperCase() === 'W').length) * 0.9;
+      return bScore - aScore;
+    })
+    .slice(0, limit)
+    .map((team, index) => ({
+      rank: index + 1,
+      teamId: team?.id,
+      teamAbbr: team?.abbr ?? team?.name ?? `Team ${team?.id ?? ''}`.trim(),
+      summary: `${team?.gmPersona ?? 'Balanced'} outlook · ${formatRecord(team)} record`,
+    }));
+}
+
+export function buildLeagueHeadlines(league, { limit = 10 } = {}) {
+  const week = safeNum(league?.week, 1);
+  const raw = Array.isArray(league?.newsItems) ? league.newsItems : [];
+  return raw
+    .filter((item) => safeNum(item?.week ?? item?.meta?.week, week) <= week)
+    .slice(-limit)
+    .reverse()
+    .map((item, index) => ({
+      id: item?.id ?? `league-headline-${index}`,
+      headline: item?.headline ?? item?.title ?? 'League update',
+      detail: item?.summary ?? item?.body ?? item?.detail ?? '',
+      timestamp: `Week ${safeNum(item?.week ?? item?.meta?.week, week)}`,
+      teamId: item?.teamId ?? null,
+    }));
+}
+
 function formatRecord(team) {
   if (!team) return '0-0';
   const ties = safeNum(team.ties);
@@ -161,7 +199,32 @@ function maybeQueueWeeklyEvent(league) {
   if (!Array.isArray(league.pendingWeeklyEvents)) league.pendingWeeklyEvents = [];
   const currentWeek = safeNum(league?.week, 1);
   const unresolved = league.pendingWeeklyEvents.find((evt) => evt?.state !== 'resolved');
-  if (unresolved) return unresolved;
+  if (unresolved) {
+    const currentWeek = safeNum(league?.week, 1);
+    const trackedWeek = safeNum(unresolved?.lastCheckedWeek, safeNum(unresolved?.week, currentWeek));
+    const elapsed = Math.max(0, currentWeek - trackedWeek);
+    if (elapsed > 0) {
+      unresolved.ignoredWeeks = safeNum(unresolved?.ignoredWeeks, 0) + elapsed;
+      unresolved.lastCheckedWeek = currentWeek;
+    }
+    if (safeNum(unresolved?.ignoredWeeks, 0) >= 2) {
+      const fallbackChoice = pickWorstEventChoice(unresolved);
+      if (fallbackChoice?.id) {
+        const resolved = applyEventDecision(unresolved, fallbackChoice.id);
+        Object.assign(unresolved, resolved, { autoResolved: true, ignoredTag: 'Ignored — escalated' });
+        logChronicleEvent(league, {
+          week: currentWeek,
+          season: safeNum(league?.year, 0),
+          type: 'weekly_event_auto_resolve',
+          headline: unresolved?.headline ?? 'Franchise event auto-resolved',
+          outcome: `${resolved?.choiceLabel ?? fallbackChoice.label} · Ignored — escalated`,
+          summary: 'A weekly event was ignored for multiple weeks and escalated.',
+          meta: { ignoredWeeks: safeNum(unresolved?.ignoredWeeks, 0) },
+        });
+      }
+    }
+    return unresolved;
+  }
   const resolvedThisWeek = (league.pendingWeeklyEvents ?? []).some((evt) => safeNum(evt?.week) === currentWeek);
   if (resolvedThisWeek) return null;
   const event = resolveWeeklyEvent({ league });
@@ -473,6 +536,8 @@ export function selectFranchiseHQViewModel(league) {
     leagueNews,
     story,
     weeklyEvent: queuedEvent,
+    powerRankings: buildPowerRankings(vm.league, { limit: 32 }),
+    leagueHeadlines: buildLeagueHeadlines(vm.league, { limit: 10 }),
     navState: {
       activeSection: 'hq',
       suggestedDestinations: ['HQ', 'Team', 'League', 'News', 'Story', 'More'],

@@ -165,8 +165,56 @@ export function applyEventDecision(event, choiceId) {
   };
 }
 
+export function buildEventChoiceImpactChips(choice = {}) {
+  const effects = choice?.effects ?? {};
+  const chips = [];
+  if (Number.isFinite(Number(effects?.ownerApproval))) {
+    chips.push({ key: 'owner', label: `Owner ${safeNum(effects.ownerApproval) >= 0 ? '+' : ''}${safeNum(effects.ownerApproval)}%`, tone: safeNum(effects.ownerApproval) >= 0 ? 'positive' : 'negative' });
+  }
+  if (Number.isFinite(Number(effects?.morale))) {
+    chips.push({ key: 'morale', label: `Morale ${safeNum(effects.morale) >= 0 ? '+' : ''}${safeNum(effects.morale)}`, tone: safeNum(effects.morale) >= 0 ? 'positive' : 'negative' });
+  }
+  if (Number.isFinite(Number(effects?.capImpact)) && safeNum(effects.capImpact) !== 0) {
+    chips.push({ key: 'cap', label: `Cap ${safeNum(effects.capImpact) >= 0 ? '+' : ''}$${Math.abs(safeNum(effects.capImpact)).toFixed(1)}M`, tone: safeNum(effects.capImpact) <= 0 ? 'negative' : 'neutral' });
+  } else {
+    chips.push({ key: 'cap', label: 'Cap none', tone: 'neutral' });
+  }
+  if (choice?.relationship?.gmName || Number.isFinite(Number(choice?.relationship?.delta))) {
+    const delta = safeNum(choice?.relationship?.delta, 0);
+    chips.push({ key: 'relationship', label: `${choice?.relationship?.gmName ?? 'GM'} ${delta >= 0 ? '+' : ''}${delta}`, tone: delta >= 0 ? 'positive' : 'negative' });
+  }
+  return chips.slice(0, 4);
+}
+
+export function pickWorstEventChoice(event = {}) {
+  const choices = Array.isArray(event?.choices) ? event.choices : [];
+  if (!choices.length) return null;
+  return [...choices].sort((a, b) => {
+    const scoreA = safeNum(a?.effects?.ownerApproval) + safeNum(a?.effects?.morale) + safeNum(a?.effects?.fanSentiment) + Math.min(0, safeNum(a?.effects?.capImpact) * 2);
+    const scoreB = safeNum(b?.effects?.ownerApproval) + safeNum(b?.effects?.morale) + safeNum(b?.effects?.fanSentiment) + Math.min(0, safeNum(b?.effects?.capImpact) * 2);
+    return scoreA - scoreB;
+  })[0];
+}
+
 export function updateRelationshipScore(currentValue, delta) {
   return Math.max(-100, Math.min(100, safeNum(currentValue, 0) + safeNum(delta, 0)));
+}
+
+export function resolveHoldoutReturnChance({
+  weeksHeldOut = 0,
+  morale = 50,
+  teamWinPct = 0.5,
+  rng = U.random,
+} = {}) {
+  const base = 0.2;
+  const weekBoost = Math.min(0.2, safeNum(weeksHeldOut) * 0.05);
+  const moraleBoost = safeNum(morale) <= 45 ? 0 : safeNum(morale) >= 75 ? 0.08 : 0.03;
+  const teamBoost = safeNum(teamWinPct) >= 0.6 ? 0.05 : 0;
+  const chance = Math.max(0.2, Math.min(0.5, base + weekBoost + moraleBoost + teamBoost));
+  return {
+    chance,
+    returns: rng() < chance,
+  };
 }
 
 export function evaluateTradeFairness({ offerValue = 0, askValue = 0, relationship = 0, deadlineWeek = false } = {}) {

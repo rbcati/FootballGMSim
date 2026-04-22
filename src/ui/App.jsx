@@ -48,6 +48,7 @@ import { toWorker }        from '../worker/protocol.js';
 import { DEFAULT_TEAMS }   from '../data/default-teams.js';
 import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
+import EventDecisionModal from './components/EventDecisionModal.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
 import { ACTION_LABELS } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
@@ -61,6 +62,8 @@ import {
 import { clearWeeklyPrepForWeek, pruneWeeklyPrepStorage } from './utils/weeklyPrep.js';
 import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
+import { applyEventDecision } from './utils/franchiseEvents.js';
+import { logChronicleEvent } from './utils/franchiseChronicle.js';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -130,12 +133,17 @@ function AppContent() {
   const [watchMode, setWatchMode] = useState('watch');
   const [externalBoxScoreId, setExternalBoxScoreId] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [showWeeklyEventModal, setShowWeeklyEventModal] = useState(false);
   const { settings, updateSetting } = useSettings();
   const soundEnabled = settings?.soundEnabled ?? true;
   const isWeeklyResultPhase = league?.phase === 'preseason' || league?.phase === 'regular' || league?.phase === 'playoffs';
   const authoritativeResults = useMemo(
     () => (isWeeklyResultPhase && Array.isArray(lastResults) ? lastResults : []),
     [isWeeklyResultPhase, lastResults],
+  );
+  const unresolvedWeeklyEvent = useMemo(
+    () => (league?.pendingWeeklyEvents ?? []).find((event) => event?.state !== 'resolved') ?? null,
+    [league?.pendingWeeklyEvents],
   );
 
   // Post-game result shown after GameSimulation completes (before advancing week)
@@ -287,6 +295,10 @@ function AppContent() {
   const handleAdvanceWeek = useCallback(() => {
     if (busy || simulating || advancingRef.current) return;
     if (!league?.phase) return;
+    if (unresolvedWeeklyEvent) {
+      setShowWeeklyEventModal(true);
+      return;
+    }
 
     if (['regular', 'playoffs', 'preseason'].includes(league.phase)) {
       advancingRef.current = true;
@@ -310,7 +322,24 @@ function AppContent() {
       // Note: getDraftState is silent, so busy won't toggle. We don't lock for this.
       actions.getDraftState();
     }
-  }, [busy, simulating, actions, league]);
+  }, [busy, simulating, actions, league, unresolvedWeeklyEvent]);
+
+  const handleResolveWeeklyEvent = useCallback((choiceId) => {
+    if (!league || !unresolvedWeeklyEvent || !choiceId) return;
+    const resolved = applyEventDecision(unresolvedWeeklyEvent, choiceId);
+    if (!resolved) return;
+    Object.assign(unresolvedWeeklyEvent, resolved, { lastCheckedWeek: league?.week ?? 1 });
+    logChronicleEvent(league, {
+      week: league?.week,
+      season: league?.year,
+      type: 'weekly_event_decision',
+      headline: unresolvedWeeklyEvent?.headline ?? 'Franchise event resolved',
+      summary: `${resolved?.choiceLabel ?? 'Decision'} selected`,
+      outcome: resolved?.outcome,
+      meta: { eventId: unresolvedWeeklyEvent?.id, choiceId },
+    });
+    setShowWeeklyEventModal(false);
+  }, [league, unresolvedWeeklyEvent]);
 
   const handleSimToPhase = useCallback((targetPhase) => {
     if (busy || simulating || advancingRef.current || isBatchSimBlocking) return;
@@ -814,6 +843,15 @@ function AppContent() {
               ? `Simulating ${simPhaseLabel} · ${simProgress}% complete.`
               : `Processing ${simPhaseLabel} updates…`}
           </span>
+        </div>
+      )}
+      {unresolvedWeeklyEvent && !simulating && !busy && (
+        <div role="alert" className="app-banner app-banner-error" style={{ marginTop: 8, cursor: 'pointer', animation: 'eventPulse 1.25s ease-in-out infinite' }} onClick={() => setShowWeeklyEventModal(true)}>
+          <span className="app-banner-text">Franchise Event Requires Decision · Advance Week is blocked.</span>
+          <button className="btn app-banner-btn" onClick={(e) => { e.stopPropagation(); setShowWeeklyEventModal(true); }}>
+            Open Event
+          </button>
+          <style>{`@keyframes eventPulse { 0%{opacity:0.8} 50%{opacity:1} 100%{opacity:0.8} }`}</style>
         </div>
       )}
 
@@ -1346,6 +1384,14 @@ function AppContent() {
             </ul>
           </div>
         </div>
+      )}
+      {showWeeklyEventModal && unresolvedWeeklyEvent && (
+        <EventDecisionModal
+          event={unresolvedWeeklyEvent}
+          onChoose={handleResolveWeeklyEvent}
+          onClose={() => setShowWeeklyEventModal(false)}
+          onDecideLater={() => setShowWeeklyEventModal(false)}
+        />
       )}
     </div>
   );
