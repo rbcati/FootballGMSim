@@ -12,17 +12,14 @@ describe('MobileNav', () => {
         activeTab="Team:Roster / Depth"
         onSectionChange={vi.fn()}
         onDestinationChange={vi.fn()}
-        onAdvance={vi.fn()}
-        advanceLabel="Advance Week"
-        advanceDisabled={false}
-        league={{ year: 2026, phase: 'regular' }}
+        league={{ year: 2026, phase: 'regular', userTeamId: 1, teams: [{ id: 1, roster: [{ id: 7, injuryWeeksRemaining: 2 }] }] }}
       />,
     );
 
     expect(html).toContain('premium-bottom-nav');
     expect(html).toContain('premium-bottom-tab active" aria-label="Team"');
     expect(html).toContain('Team');
-    expect(html).toContain('Advance Week');
+    expect(html).toContain('mobile-bottom-tab__badge');
   });
 
   it('keeps command menu destinations wired for more drawer entries', () => {
@@ -31,9 +28,6 @@ describe('MobileNav', () => {
         activeSection={SHELL_SECTIONS.hq}
         onSectionChange={vi.fn()}
         onDestinationChange={vi.fn()}
-        onAdvance={vi.fn()}
-        advanceLabel="Advance"
-        advanceDisabled={false}
         league={{ year: 2026, phase: 'regular' }}
       />,
     );

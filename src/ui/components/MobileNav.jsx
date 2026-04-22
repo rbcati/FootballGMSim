@@ -40,7 +40,7 @@ const BOTTOM_TABS = [
   { id: 'More', label: 'More', icon: MoreIcon, action: 'menu', value: 'more' },
 ];
 
-export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, onAdvance, advanceLabel, advanceDisabled, league }) {
+export default function MobileNav({ activeSection, activeTab, onSectionChange, onDestinationChange, league }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => setMenuOpen(false), [activeSection]);
@@ -68,6 +68,9 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
     setMenuOpen(false);
     window.scrollTo(0, 0);
   };
+
+  const hasTeamAlerts = Boolean((league?.incomingTradeOffers ?? []).length) || Boolean((league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId))?.roster?.some((player) => Number(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0));
+  const hasLeagueAlerts = Boolean((league?.newsItems ?? []).length);
 
   return (
     <>
@@ -118,19 +121,10 @@ export default function MobileNav({ activeSection, activeTab, onSectionChange, o
             <button key={tab.id} className={`mobile-bottom-tab premium-bottom-tab ${isActive ? 'active' : ''}`} onClick={onClick} aria-label={tab.label}>
               <Icon size={20} />
               <span className="mobile-bottom-label">{tab.label}</span>
+              {(tab.id === 'Team' && hasTeamAlerts) || (tab.id === 'League' && hasLeagueAlerts) ? <span className="mobile-bottom-tab__badge" aria-hidden /> : null}
             </button>
           );
         })}
-
-        <button
-          className="mobile-bottom-tab premium-bottom-tab mobile-bottom-tab-advance mobile-bottom-tab-advance-subtle"
-          onClick={onAdvance}
-          disabled={advanceDisabled}
-          aria-label={advanceLabel || 'Advance'}
-        >
-          <PlayIcon size={22} />
-          <span className="mobile-bottom-label">{advanceLabel || 'Advance'}</span>
-        </button>
       </div>
     </>
   );
@@ -140,7 +134,6 @@ function HomeIcon({ size = 24 }) { return <svg width={size} height={size} viewBo
 function StandingsIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 6h14M5 12h14M5 18h14" /></svg>; }
 function RosterIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="9" cy="7" r="4" /><path d="M2 21v-2a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v2" /></svg>; }
 function NewsIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 5h14a2 2 0 0 1 2 2v12H6a2 2 0 0 1-2-2z" /><path d="M8 9h8M8 13h8M8 17h5" /></svg>; }
-function PlayIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="m8 5 11 7-11 7z" /></svg>; }
 function FAIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4v8M20 8h-8" /><circle cx="8" cy="8" r="4" /><path d="M2 21v-1a5 5 0 0 1 5-5h2" /></svg>; }
 function TradesIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m17 1 4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="m7 23-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>; }
 function DraftIcon({ size = 24 }) { return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16h16V8z" /><path d="M14 2v6h6" /></svg>; }
