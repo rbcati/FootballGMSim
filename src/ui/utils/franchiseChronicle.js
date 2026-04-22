@@ -152,6 +152,54 @@ function deriveBadgeState(league, team, chronicle) {
   }));
 }
 
+
+export function logChronicleEvent(league, payload = {}) {
+  if (!league || typeof league !== 'object') return null;
+  if (!Array.isArray(league.franchiseChronicle)) league.franchiseChronicle = [];
+
+  const week = safeNum(payload?.week, safeNum(league?.week, 1));
+  const season = safeNum(payload?.season, safeNum(league?.year, 0));
+  const entry = {
+    id: payload?.id ?? `${season}-wk${week}-event-${String(payload?.type ?? 'custom')}`,
+    season,
+    week,
+    result: payload?.result ?? 'EVT',
+    summary: payload?.summary ?? payload?.headline ?? 'Franchise event',
+    headline: payload?.headline ?? 'Franchise event update',
+    events: Array.isArray(payload?.events) ? payload.events : [payload?.outcome].filter(Boolean),
+    standout: payload?.standout ?? null,
+    moments: Array.isArray(payload?.moments) ? payload.moments : [],
+    meta: { type: payload?.type ?? 'event', ...(payload?.meta ?? {}) },
+  };
+
+  league.franchiseChronicle.push(entry);
+  league.franchiseChronicle = [...league.franchiseChronicle]
+    .sort((a, b) => (safeNum(a?.season) - safeNum(b?.season)) || (safeNum(a?.week) - safeNum(b?.week)))
+    .slice(-340);
+  return entry;
+}
+
+export function logTradeOutcome(league, payload = {}) {
+  return logChronicleEvent(league, {
+    ...payload,
+    type: 'trade',
+    result: payload?.result ?? 'TRD',
+    headline: payload?.headline ?? 'Trade talks concluded',
+    summary: payload?.summary ?? payload?.reasoning ?? 'Trade negotiation completed.',
+    outcome: payload?.outcome,
+  });
+}
+
+export function logContractOutcome(league, payload = {}) {
+  return logChronicleEvent(league, {
+    ...payload,
+    type: 'contract',
+    result: payload?.result ?? 'CON',
+    headline: payload?.headline ?? 'Contract negotiation update',
+    summary: payload?.summary ?? payload?.outcome ?? 'Contract decision recorded.',
+  });
+}
+
 export function syncFranchiseChronicle(league) {
   if (!league || typeof league !== 'object') return { entries: [], seasonReview: null, badges: [] };
   if (!Array.isArray(league.franchiseChronicle)) league.franchiseChronicle = [];

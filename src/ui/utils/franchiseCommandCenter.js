@@ -6,6 +6,7 @@ import { rankHqPriorityItems, getActionContext } from './hqHelpers.js';
 import { buildCompletedGamePresentation } from './boxScoreAccess.js';
 import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gameArchive.ts';
 import { syncFranchiseChronicle } from './franchiseChronicle.js';
+import { resolveWeeklyEvent } from './franchiseEvents.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -139,6 +140,35 @@ function toSeverity(level) {
   return 'info';
 }
 
+
+const DEFAULT_GM_PERSONAS = ['Trader', 'Draft-and-Develop', 'Win-Now', 'Tanker', 'Cap Hoarder', 'Loyalist'];
+
+function ensureLeaguePersonasAndRelationships(league) {
+  if (!league || typeof league !== 'object') return;
+  if (!league.gmRelationships || typeof league.gmRelationships !== 'object') league.gmRelationships = {};
+  for (const team of league.teams ?? []) {
+    const key = String(team?.id ?? '');
+    if (!team?.gmPersona) {
+      const idx = Math.abs(safeNum(team?.id, 0)) % DEFAULT_GM_PERSONAS.length;
+      team.gmPersona = DEFAULT_GM_PERSONAS[idx];
+    }
+    if (!(key in league.gmRelationships)) league.gmRelationships[key] = 0;
+  }
+}
+
+function maybeQueueWeeklyEvent(league) {
+  if (!league || typeof league !== 'object') return null;
+  if (!Array.isArray(league.pendingWeeklyEvents)) league.pendingWeeklyEvents = [];
+  const currentWeek = safeNum(league?.week, 1);
+  const unresolved = league.pendingWeeklyEvents.find((evt) => evt?.state !== 'resolved');
+  if (unresolved) return unresolved;
+  const resolvedThisWeek = (league.pendingWeeklyEvents ?? []).some((evt) => safeNum(evt?.week) === currentWeek);
+  if (resolvedThisWeek) return null;
+  const event = resolveWeeklyEvent({ league });
+  if (event) league.pendingWeeklyEvents.push(event);
+  return event;
+}
+
 export function buildWeeklyAgenda({ team, league, weekly, prep, nextGame }) {
   if (!team || !league) return [];
   const ranked = rankHqPriorityItems(team, league, weekly, nextGame);
@@ -232,6 +262,19 @@ export function buildWeeklyAgenda({ team, league, weekly, prep, nextGame }) {
     });
   }
 
+  const unresolvedEvent = (league?.pendingWeeklyEvents ?? []).find((event) => event?.state !== 'resolved');
+  if (unresolvedEvent) {
+    items.unshift({
+      id: `weekly-event-${unresolvedEvent.id}`,
+      icon: '🗞️',
+      title: unresolvedEvent.headline ?? 'Franchise event awaiting decision',
+      description: 'Decide now or risk an automatic negative outcome.',
+      severity: 'warning',
+      ctaLabel: 'Open event',
+      targetRoute: 'HQ:Events',
+    });
+  }
+
   const deduped = [];
   const seen = new Set();
   for (const item of items) {
@@ -259,6 +302,7 @@ export function selectFranchiseHQViewModel(league) {
     return { readyState: 'loading', weeklyAgenda: [] };
   }
   const team = vm.userTeam;
+  ensureLeaguePersonasAndRelationships(vm.league);
   const weekly = evaluateWeeklyContext(vm.league);
   const prep = deriveWeeklyPrepState(vm.league);
   const nextGame = getPrepNextGame(vm.league);
@@ -360,6 +404,7 @@ export function selectFranchiseHQViewModel(league) {
     })
     .sort((a, b) => b.scoreWeight - a.scoreWeight)
     .slice(0, 2);
+  const queuedEvent = maybeQueueWeeklyEvent(vm.league);
   const story = syncFranchiseChronicle(vm.league);
   const injuredSpotlight = (team?.roster ?? [])
     .filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0)
@@ -426,6 +471,7 @@ export function selectFranchiseHQViewModel(league) {
       : null,
     leagueNews,
     story,
+    weeklyEvent: queuedEvent,
     navState: {
       activeSection: 'hq',
       suggestedDestinations: ['HQ', 'Team', 'League', 'News', 'Story', 'More'],
