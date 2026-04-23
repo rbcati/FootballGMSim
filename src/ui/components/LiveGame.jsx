@@ -562,7 +562,7 @@ export default function LiveGame({
     if (lowerText.includes("touchdown")) {
       setOverlayEvent({ type: "touchdown", text: "TOUCHDOWN" });
     } else if (lowerText.includes("field goal attempt... good")) {
-      setOverlayEvent({ type: "field-goal-made", text: "FIELD GOAL" });
+      setOverlayEvent({ type: "field-goal", text: "FIELD GOAL" });
     } else if (
       lowerText.includes("interception") ||
       lowerText.includes("fumble")
