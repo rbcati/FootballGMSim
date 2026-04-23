@@ -13,6 +13,14 @@ import {
   CompactNewsCard,
 } from './ScreenSystem.jsx';
 
+const BOTTOM_NAV_ITEMS = [
+  { label: 'Home', route: 'HQ', icon: '⌂', active: true },
+  { label: 'Team', route: 'Team:Overview', icon: '⚑' },
+  { label: 'League', route: 'League:Overview', icon: '▦' },
+  { label: 'News', route: 'News', icon: '✦' },
+  { label: 'More', route: 'More', icon: '⋯' },
+];
+
 function safeNum(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -29,6 +37,16 @@ function getMatchupMeta(command, nextGame) {
   const time = nextGame?.kickoffTime ?? '1:00 PM';
   const location = nextGame?.venueName ?? (nextGame?.isHome ? 'Home Field' : 'Away');
   return `${day} • ${time} • ${location}`;
+}
+
+function UtilityControlIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M4 7.25h8m4 0h4M4 16.75h4m4 0h8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="14" cy="7.25" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="8" cy="16.75" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
 }
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
@@ -80,8 +98,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           <strong>{command.weekLabel}</strong>
         </div>
         <div className="app-hq-topbar__meta">
-          <StatusChip label={String(league?.phase ?? 'Regular').replaceAll('_', ' ')} tone="league" />
-          <StatusChip label={command.teamRecord} tone="team" />
+          <StatusChip label={String(league?.phase ?? 'Regular').replaceAll('_', ' ')} tone="ok" />
         </div>
         <div className="app-hq-topbar__team">
           <div className="app-hq-team-badge" aria-hidden>{userTeam?.abbr?.slice(0, 2) ?? 'TM'}</div>
@@ -89,7 +106,9 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             <strong>{userTeam?.name ?? 'Your Team'}</strong>
             <span>{userTeam?.abbr ?? 'TEAM'}</span>
           </div>
-          <button className="app-hq-settings" type="button" aria-label="Open settings" onClick={() => onNavigate?.('Settings')}>⚙</button>
+          <button className="app-hq-settings" type="button" aria-label="Open controls" onClick={() => onNavigate?.('Settings')}>
+            <UtilityControlIcon />
+          </button>
         </div>
       </section>
 
@@ -119,12 +138,20 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
         <div className="app-hq-hero-subcards">
           <div className="app-hq-hero-subcard">
-            <span>Last Game</span>
-            <strong>{lastGame ? `${lastGame.userWon ? 'W' : 'L'} · ${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}` : 'No completed game yet'}</strong>
+            <div className="app-hq-hero-subcard__head">
+              <span>🏟</span>
+              <strong>Last Game</strong>
+            </div>
+            <p className="app-hq-hero-subcard__value">{lastGame ? `${lastGame.userWon ? 'W' : 'L'} · ${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}` : 'No completed game yet'}</p>
+            <small>{lastGame ? `${lastGame.userWon ? 'Win momentum' : 'Bounce-back spot'} heading into week ${safeNum(league?.week, 1)}` : 'Play this week to establish momentum.'}</small>
           </div>
           <div className="app-hq-hero-subcard">
-            <span>Standing</span>
-            <strong>{command.standingSummary}</strong>
+            <div className="app-hq-hero-subcard__head">
+              <span>🏆</span>
+              <strong>Standing</strong>
+            </div>
+            <p className="app-hq-hero-subcard__value">{command.standingSummary}</p>
+            <small>{command.teamRecord} • Division race status</small>
           </div>
         </div>
 
@@ -162,11 +189,17 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </SectionCard>
 
       <nav className="app-hq-bottom-nav" aria-label="HQ quick bottom navigation">
-        <button type="button" className="is-active" onClick={() => onNavigate?.('HQ')}>Home</button>
-        <button type="button" onClick={() => onNavigate?.('Team:Overview')}>Team</button>
-        <button type="button" onClick={() => onNavigate?.('League:Overview')}>League</button>
-        <button type="button" onClick={() => onNavigate?.('News')}>News</button>
-        <button type="button" onClick={() => onNavigate?.('More')}>More</button>
+        {BOTTOM_NAV_ITEMS.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            className={item.active ? 'is-active' : ''}
+            onClick={() => onNavigate?.(item.route)}
+          >
+            <span aria-hidden="true">{item.icon}</span>
+            <small>{item.label}</small>
+          </button>
+        ))}
       </nav>
     </div>
   );
