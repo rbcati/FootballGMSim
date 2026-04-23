@@ -12,6 +12,7 @@ import {
   SectionHeader,
   StatusChip,
 } from './ScreenSystem.jsx';
+import { HQIcon } from './HQVisuals.jsx';
 
 const tickerColor = {
   high: '#f59e0b',
@@ -98,6 +99,13 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
   const pressure = useMemo(() => deriveFranchisePressure(league, { intel: teamIntel }), [league, teamIntel]);
 
   const latestFive = useMemo(() => desk.merged.slice(0, 5), [desk.merged]);
+  const teamInjuryItems = useMemo(() => {
+    const teamRoster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    return teamRoster
+      .filter((player) => Number(player?.injury?.gamesRemaining ?? player?.injuryWeeksRemaining ?? 0) > 0)
+      .sort((a, b) => Number(b?.ovr ?? 0) - Number(a?.ovr ?? 0))
+      .slice(0, 5);
+  }, [userTeam?.roster]);
 
   useEffect(() => {
     if (mode !== 'ticker' || latestFive.length <= 1) return undefined;
@@ -125,13 +133,13 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
   return (
     <div className="app-screen-stack">
       <HeroCard
-        eyebrow="News Desk"
-        title="Desk View"
-        subtitle="Curated league intelligence with team-priority context and actionable links."
+        eyebrow="Weekly Intelligence"
+        title="News & Injuries"
+        subtitle="What matters this week before kickoff."
       >
         {pressure ? (
           <CompactInsightCard
-            title="Local Pressure Briefing"
+            title="Team pressure briefing"
             subtitle={`Fans ${pressure.fans.state} · Media ${pressure.media.state}`}
             tone="warning"
           />
@@ -171,6 +179,23 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
         onPlayerSelect={onPlayerSelect}
       />
 
+      <SectionCard title="Injury board" subtitle="Prioritized player availability risks for this week." variant="compact">
+        <div className="app-screen-stack">
+          {teamInjuryItems.length ? teamInjuryItems.map((player) => (
+            <CompactListRow
+              key={player.id}
+              title={`${player.name} · ${player.pos}`}
+              subtitle={`${player.injury?.name ?? 'Injury'} · ${player.injury?.gamesRemaining ?? player.injuryWeeksRemaining} week(s) remaining`}
+              meta={<StatusChip label="Team impact" tone="warning" />}
+            >
+              <button type="button" className="btn btn-sm" onClick={() => onPlayerSelect?.(player.id)}>Open</button>
+            </CompactListRow>
+          )) : (
+            <CompactInsightCard title="No active injuries" subtitle="Your current injury report is clear." tone="ok" />
+          )}
+        </div>
+      </SectionCard>
+
       {filter === 'all' ? (
         <div className="app-news-aux-grid">
           <NewsSection title="Team Desk" subtitle="Your-team relevant stories" stories={desk.teamStories.slice(0, 3)} onTeamSelect={onTeamSelect} onOpenBoxScore={onOpenBoxScore} onPlayerSelect={onPlayerSelect} />
@@ -180,7 +205,7 @@ export default function NewsFeed({ league, mode = 'full', segment = 'all', onTea
 
       <SectionCard variant="compact">
         <div className="app-news-cta-bar">
-          <div className="app-news-cta-copy">Use filters to keep this desk focused by context.</div>
+          <div className="app-news-cta-copy"><HQIcon name="news" size={14} /> Use filters to keep this desk focused by context.</div>
           <CtaRow
             actions={[
               { label: 'Team', compact: true, onClick: () => onNavigate?.('Team') },

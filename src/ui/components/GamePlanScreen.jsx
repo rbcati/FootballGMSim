@@ -20,6 +20,7 @@ import { OFFENSIVE_PLANS, DEFENSIVE_PLANS } from "../../core/strategy.js";
 import { buildTeamIntelligence } from "../utils/teamIntelligence.js";
 import { deriveTeamCoachingIdentity } from "../utils/coachingIdentity.js";
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
+import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 
 // ── Local-storage key for game plan sliders ───────────────────────────────────
 const GP_STORAGE_KEY = "footballgm_gameplan_v1";
@@ -57,10 +58,10 @@ function schemeAccent(id = "") {
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** Section title row */
-function SectionTitle({ label, emoji, color = "var(--text-muted)" }) {
+function SectionTitle({ label, icon = null, color = "var(--text-muted)" }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-      {emoji && <span style={{ fontSize: "1.1rem" }}>{emoji}</span>}
+      {icon ? <span aria-hidden>{icon}</span> : null}
       <h3 style={{
         margin: 0, fontSize: "0.72rem", fontWeight: 800,
         color, textTransform: "uppercase", letterSpacing: "1.2px",
@@ -72,7 +73,7 @@ function SectionTitle({ label, emoji, color = "var(--text-muted)" }) {
 }
 
 /** Scheme selector card — shows all options as clickable tiles */
-function SchemeSelector({ title, emoji, schemes, selected, onChange }) {
+function SchemeSelector({ title, icon, schemes, selected, onChange }) {
   const arr = Object.values(schemes);
   return (
     <div style={{
@@ -82,7 +83,7 @@ function SchemeSelector({ title, emoji, schemes, selected, onChange }) {
       padding: "16px",
       marginBottom: 14,
     }}>
-      <SectionTitle label={title} emoji={emoji} />
+      <SectionTitle label={title} icon={icon} />
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {arr.map(scheme => {
           const isActive = scheme.id === selected;
@@ -419,11 +420,23 @@ export default function GamePlanScreen({ league, actions }) {
           Save Game Plan
         </button>
       </div>
+      {nextGame ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12, border: '1px solid var(--hairline)', borderRadius: 10, padding: 10, background: 'rgba(255,255,255,0.02)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TeamIdentityBadge team={userTeam} size={32} emphasize />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>Matchup Plan</span>
+          </div>
+          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{nextGame.isHome ? 'vs' : '@'} {nextGame.opp?.name ?? 'Opponent'}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <TeamIdentityBadge team={nextGame.opp} size={32} />
+          </div>
+        </div>
+      ) : null}
 
       {/* ── Offensive Scheme ── */}
       <SchemeSelector
         title="Offensive Scheme"
-        emoji="⚔️"
+        icon={<HQIcon name="target" size={14} />}
         schemes={OFFENSIVE_SCHEMES}
         selected={offScheme}
         onChange={setOffScheme}
@@ -432,7 +445,7 @@ export default function GamePlanScreen({ league, actions }) {
       {/* ── Defensive Scheme ── */}
       <SchemeSelector
         title="Defensive Scheme"
-        emoji="🛡️"
+        icon={<HQIcon name="shield" size={14} />}
         schemes={DEFENSIVE_SCHEMES}
         selected={defScheme}
         onChange={setDefScheme}
@@ -446,7 +459,7 @@ export default function GamePlanScreen({ league, actions }) {
         padding: "16px 18px",
         marginBottom: 14,
       }}>
-        <SectionTitle label="Play-Calling" emoji="🎯" />
+        <SectionTitle label="Play-Calling" icon={<HQIcon name="clipboard" size={14} />} />
 
         <PlanSlider
           label="Run / Pass Balance"
@@ -490,7 +503,7 @@ export default function GamePlanScreen({ league, actions }) {
         padding: "16px 18px",
         marginBottom: 14,
       }}>
-        <SectionTitle label="Special Teams" emoji="🦵" />
+        <SectionTitle label="Special Teams" icon={<HQIcon name="lineup" size={14} />} />
 
         <STOption
           label="Kick Return Strategy"

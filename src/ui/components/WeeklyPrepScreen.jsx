@@ -2,6 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, SectionCard } from './common/UiPrimitives.jsx';
 import { markWeeklyPrepStep, deriveWeeklyPrepState } from '../utils/weeklyPrep.js';
+import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 
 function TonePill({ tone = 'info', label }) {
   const palette = {
@@ -35,12 +36,23 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
   };
 
   return (
-    <div className="app-screen-stack" style={{ display: 'grid', gap: 'var(--space-2)' }}>
+    <div className="app-screen-stack weekly-prep-screen" style={{ display: 'grid', gap: 'var(--space-2)' }}>
       <SectionCard
-        title={`Week ${prep.nextGame.week} Prep · ${prep.nextGame.isHome ? 'vs' : '@'} ${prep.opponent.abbr ?? prep.opponent.name}`}
+        title={`Scout & Prep · Week ${prep.nextGame.week}`}
         subtitle={`Opponent ${prep.opponentSnapshot.record} · ${prep.opponentSnapshot.homeAway} game`}
         actions={<TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.remaining === 0 ? 'success' : 'warning'} label={prep.prepSummary?.status ?? prep.readinessLabel} />}
       >
+        <div className="weekly-prep-opponent-head">
+          <div className="weekly-prep-team">
+            <TeamIdentityBadge team={prep.team} size={36} emphasize />
+            <strong>{prep.team?.abbr ?? 'YOU'}</strong>
+          </div>
+          <span>{prep.nextGame.isHome ? 'vs' : '@'}</span>
+          <div className="weekly-prep-team">
+            <TeamIdentityBadge team={prep.opponent} size={36} />
+            <strong>{prep.opponent?.abbr ?? prep.opponent?.name ?? 'OPP'}</strong>
+          </div>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
           <div style={{ fontSize: 'var(--text-xs)' }}><strong>You:</strong> OVR {prep.teamSnapshot.overall} · OFF {prep.teamSnapshot.offense} · DEF {prep.teamSnapshot.defense}</div>
           <div style={{ fontSize: 'var(--text-xs)' }}><strong>Opp:</strong> OVR {prep.opponentSnapshot.overall} · OFF {prep.opponentSnapshot.offense} · DEF {prep.opponentSnapshot.defense}</div>
@@ -52,19 +64,19 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
         <SectionCard title="Opponent scout" subtitle="Football-specific matchup context.">
           <div style={{ display: 'grid', gap: 8 }}>
             <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Strengths</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="shield" size={12} /> Strengths</div>
               <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
                 {(prep.opponentStrengths.length ? prep.opponentStrengths : ['No clear dominant opponent edge identified yet.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
               </ul>
             </div>
             <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Exploitable weaknesses</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="target" size={12} /> Exploitable weaknesses</div>
               <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
                 {(prep.opponentWeaknesses.length ? prep.opponentWeaknesses : ['No obvious weakness — game script and execution will decide this one.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
               </ul>
             </div>
             <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Pressure points</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="alert" size={12} /> Pressure points</div>
               <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
                 {(prep.pressurePoints.length ? prep.pressurePoints : ['No major pressure point flagged.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
               </ul>

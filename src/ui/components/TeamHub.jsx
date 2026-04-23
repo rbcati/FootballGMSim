@@ -7,6 +7,7 @@ import { SectionCard, CtaRow, StatusChip, CompactListRow, HeroCard, StatStrip, S
 import { derivePlayerContractFinancials } from '../utils/contractFormatting.js';
 import { deriveTeamCapSnapshot, formatMoneyM } from '../utils/numberFormatting.js';
 import { summarizeRosterDevelopment } from '../utils/playerDevelopmentSignals.js';
+import { TeamIdentityBadge } from './HQVisuals.jsx';
 
 const TEAM_SECTIONS = ['Overview', 'Roster / Depth', 'Contracts', 'Development', 'Injuries'];
 const CRITICAL_POSITION_MIN = { QB: 2, RB: 3, WR: 5, TE: 3, OL: 8, DL: 8, LB: 6, CB: 5, S: 4, K: 1, P: 1 };
@@ -89,15 +90,26 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
     if (roster.length > 53 && league?.phase === 'preseason') flags.push({ tone: 'danger', label: `Roster cutdown required (${roster.length}/53)`, target: 'Roster / Depth' });
     return flags.slice(0, 3);
   }, [capSnapshot.capRoom, expiringPlayers.length, injuredPlayers.length, pressureGroups.length, roster.length, league?.phase]);
+  const blockingIssues = useMemo(() => pressureGroups.filter((group) => group.severity >= 2), [pressureGroups]);
+  const weeklyLineupFrame = blockingIssues.length
+    ? `${blockingIssues.length} lineup blockers before kickoff`
+    : 'No critical lineup blockers detected';
 
   return (
     <div className="app-screen-stack">
       <HeroCard
         eyebrow={`${league?.year ?? 'Season'} · Week ${league?.week ?? '—'} · ${league?.phase ?? 'regular'}`}
-        title="Team Command Center"
+        title="Lineup Check Before Kickoff"
         subtitle={`${team?.name ?? 'Team'} · ${team?.wins ?? 0}-${team?.losses ?? 0}${team?.ties ? `-${team.ties}` : ''}`}
         rightMeta={<StatusChip label={`${injuredPlayers.length} injuries`} tone={injuredPlayers.length ? 'warning' : 'ok'} />}
       >
+        <div className="team-hub-lineup-frame">
+          <TeamIdentityBadge team={team} size={44} emphasize />
+          <div>
+            <strong>{weeklyLineupFrame}</strong>
+            <small>{upcomingGame ? `Next: ${makeMatchupLabel(upcomingGame, team)}` : 'No scheduled matchup found.'}</small>
+          </div>
+        </div>
         <div className="app-hero-summary-grid">
           <div><span>Last game</span><strong>{latestGame ? makeMatchupLabel(latestGame, team) : 'No completed game yet'}</strong></div>
           <div><span>Next game</span><strong>{upcomingGame ? makeMatchupLabel(upcomingGame, team) : 'No upcoming matchup'}</strong></div>
@@ -155,11 +167,32 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
 
       {subtab === 'Roster / Depth' && (
         <div className="app-screen-stack">
-          <SectionCard title="Roster and depth" subtitle="Set roles and keep the lineup game-ready." variant="compact">
+          <SectionCard title="Weekly lineup decisions" subtitle="Confirm starters, depth insurance, and injury contingencies." variant="compact">
+            {blockingIssues.length > 0 ? (
+              <div className="team-hub-alert-list">
+                {blockingIssues.map((issue) => (
+                  <div key={issue.pos} className="team-hub-alert">
+                    <div>
+                      <strong>{issue.pos} pressure</strong>
+                      <span>{issue.healthy}/{issue.total} healthy · {issue.starterGap ? 'Starter out' : 'Depth thin'}</span>
+                    </div>
+                    <StatusChip label={issue.starterGap ? 'Starter missing' : 'Thin depth'} tone="warning" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="team-hub-alert team-hub-alert--ok">
+                <div>
+                  <strong>Lineup passes readiness check</strong>
+                  <span>No starter gaps and critical positions are staffed.</span>
+                </div>
+                <StatusChip label="Ready" tone="ok" />
+              </div>
+            )}
             <CtaRow actions={[
               { label: 'Roster table', compact: true, onClick: () => setRosterMode('roster') },
               { label: 'Depth chart', compact: true, onClick: () => setRosterMode('depth') },
-              { label: 'Injured filter', compact: true, onClick: () => setSubtab('Injuries') },
+              { label: 'Open injuries', compact: true, onClick: () => setSubtab('Injuries') },
             ]} />
           </SectionCard>
           <Roster
