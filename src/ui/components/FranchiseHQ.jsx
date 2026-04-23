@@ -12,13 +12,14 @@ import {
   WeeklyAgenda,
   CompactNewsCard,
 } from './ScreenSystem.jsx';
+import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 
 const BOTTOM_NAV_ITEMS = [
-  { label: 'Home', route: 'HQ', icon: '⌂', active: true },
-  { label: 'Team', route: 'Team:Overview', icon: '⚑' },
-  { label: 'League', route: 'League:Overview', icon: '▦' },
-  { label: 'News', route: 'News', icon: '✦' },
-  { label: 'More', route: 'More', icon: '⋯' },
+  { label: 'Home', route: 'HQ', icon: 'home', active: true },
+  { label: 'Team', route: 'Team:Overview', icon: 'team' },
+  { label: 'League', route: 'League:Overview', icon: 'league' },
+  { label: 'News', route: 'News', icon: 'news' },
+  { label: 'More', route: 'More', icon: 'more' },
 ];
 
 function safeNum(value, fallback = 0) {
@@ -37,16 +38,6 @@ function getMatchupMeta(command, nextGame) {
   const time = nextGame?.kickoffTime ?? '1:00 PM';
   const location = nextGame?.venueName ?? (nextGame?.isHome ? 'Home Field' : 'Away');
   return `${day} • ${time} • ${location}`;
-}
-
-function UtilityControlIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path d="M4 7.25h8m4 0h4M4 16.75h4m4 0h8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="14" cy="7.25" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="8" cy="16.75" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
 }
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
@@ -80,15 +71,26 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   };
 
   const actionTiles = [
-    { title: 'Set Lineup', icon: '🧩', subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
-    { title: 'Game Plan', icon: '📋', subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
-    { title: 'Scout Opponent', icon: '🔎', subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
-    { title: 'News & Injuries', icon: '📰', subtitle: command.actionStatuses.news.subtitle, badge: command.actionStatuses.news.badge, onClick: () => { markWeeklyPrepStep(league, 'injuriesReviewed', true); onNavigate?.('News'); } },
+    { title: 'Set Lineup', icon: <HQIcon name="lineup" size={16} />, subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
+    { title: 'Game Plan', icon: <HQIcon name="gamePlan" size={16} />, subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
+    { title: 'Scout Opponent', icon: <HQIcon name="scout" size={16} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
+    { title: 'News & Injuries', icon: <HQIcon name="injuryNews" size={16} />, subtitle: command.actionStatuses.news.subtitle, badge: command.actionStatuses.news.badge, onClick: () => { markWeeklyPrepStep(league, 'injuriesReviewed', true); onNavigate?.('News'); } },
   ];
 
   const lastGame = command.lastGameSummary;
   const homeAwayVerb = command.nextGame?.isHome ? 'vs' : '@';
   const footerDays = Math.max(0, 7 - ((safeNum(league?.week, 1) - 1) % 7));
+  const divisionRows = command.divisionMiniStandings ?? [];
+  const divisionLeader = divisionRows[0] ?? null;
+  const userRow = divisionRows.find((row) => row?.isUser) ?? null;
+  const leaderWins = safeNum(divisionLeader?.record?.split('-')?.[0]);
+  const userWins = safeNum(userRow?.record?.split('-')?.[0]);
+  const gamesBehind = Math.max(0, leaderWins - userWins);
+  const standingDetail = divisionLeader && !divisionLeader?.isUser ? `${gamesBehind || 1} GB behind ${divisionLeader?.abbr ?? 'division lead'}` : 'Leads division race';
+  const lastTwo = Array.isArray(userTeam?.recentResults) ? userTeam.recentResults.slice(-2).map((r) => String(r).toUpperCase()) : [];
+  const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
+  const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
+  const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGame?.userWon ? 'Carrying momentum from last win' : 'Rebound spot after last result');
 
   return (
     <div className="app-screen-stack franchise-hq franchise-command-center">
@@ -101,13 +103,13 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           <StatusChip label={String(league?.phase ?? 'Regular').replaceAll('_', ' ')} tone="ok" />
         </div>
         <div className="app-hq-topbar__team">
-          <div className="app-hq-team-badge" aria-hidden>{userTeam?.abbr?.slice(0, 2) ?? 'TM'}</div>
+          <TeamIdentityBadge team={userTeam} size={32} emphasize />
           <div className="app-hq-team-copy">
             <strong>{userTeam?.name ?? 'Your Team'}</strong>
             <span>{userTeam?.abbr ?? 'TEAM'}</span>
           </div>
           <button className="app-hq-settings" type="button" aria-label="Open controls" onClick={() => onNavigate?.('Settings')}>
-            <UtilityControlIcon />
+            <HQIcon name="controls" size={16} />
           </button>
         </div>
       </section>
@@ -120,7 +122,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
         <div className="app-hq-matchup-main">
           <div className="app-hq-team app-hq-team--user">
-            <div className="app-hq-team-logo">{userTeam?.abbr ?? 'YOU'}</div>
+            <TeamIdentityBadge team={userTeam} size={86} variant="shield" emphasize />
             <strong>{userTeam?.name ?? 'Your Team'}</strong>
             <span>{formatRecordInline(command.teamRecord)}</span>
           </div>
@@ -130,7 +132,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             <small>{homeAwayVerb}</small>
           </div>
           <div className="app-hq-team app-hq-team--opp">
-            <div className="app-hq-team-logo">{opponent?.abbr ?? 'OPP'}</div>
+            <TeamIdentityBadge team={opponent} size={86} variant="circle" />
             <strong>{opponent?.name ?? command.nextOpponent}</strong>
             <span>{formatRecordInline(command.nextOpponentRecord)}</span>
           </div>
@@ -139,24 +141,25 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <div className="app-hq-hero-subcards">
           <div className="app-hq-hero-subcard">
             <div className="app-hq-hero-subcard__head">
-              <span>🏟</span>
+              <HQIcon name="lastGame" size={14} />
               <strong>Last Game</strong>
             </div>
             <p className="app-hq-hero-subcard__value">{lastGame ? `${lastGame.userWon ? 'W' : 'L'} · ${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}` : 'No completed game yet'}</p>
-            <small>{lastGame ? `${lastGame.userWon ? 'Win momentum' : 'Bounce-back spot'} heading into week ${safeNum(league?.week, 1)}` : 'Play this week to establish momentum.'}</small>
+            <small>{lastGame ? lastGameStory : 'Play this week to establish momentum.'}</small>
           </div>
           <div className="app-hq-hero-subcard">
             <div className="app-hq-hero-subcard__head">
-              <span>🏆</span>
+              <HQIcon name="standing" size={14} />
               <strong>Standing</strong>
             </div>
             <p className="app-hq-hero-subcard__value">{command.standingSummary}</p>
-            <small>{command.teamRecord} • Division race status</small>
+            <small>{standingDetail}</small>
           </div>
         </div>
 
         <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating}>
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
+          <HQIcon name="arrowRight" size={16} />
         </Button>
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
@@ -196,7 +199,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             className={item.active ? 'is-active' : ''}
             onClick={() => onNavigate?.(item.route)}
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <span aria-hidden="true"><HQIcon name={item.icon} size={18} /></span>
             <small>{item.label}</small>
           </button>
         ))}
