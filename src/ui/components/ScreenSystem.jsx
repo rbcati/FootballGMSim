@@ -90,7 +90,10 @@ export function ActionTile({ icon = null, title, subtitle, badge = null, onClick
   return (
     <button type="button" className={`app-action-tile tone-${tone}`} onClick={onClick}>
       <div className="app-action-tile__title-row">
-        <strong>{icon ? <span className="app-action-tile__icon">{icon}</span> : null}{title}</strong>
+        <strong>
+          {icon ? <span className="app-action-tile__icon">{icon}</span> : null}
+          {title}
+        </strong>
         {badge}
       </div>
       {subtitle ? <span className="app-action-tile__subtitle">{subtitle}</span> : null}
