@@ -59,7 +59,7 @@ const baseLeague = {
 };
 
 describe('FranchiseHQ', () => {
-  it('renders premium hero + action grid + compact rails', () => {
+  it('renders weekly command center hierarchy and mobile nav labels', () => {
     const html = renderToString(
       <FranchiseHQ
         league={baseLeague}
@@ -77,9 +77,12 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Scout Opponent');
     expect(html).toContain('News &amp; Injuries');
     expect(html).toContain('Weekly Agenda');
-    expect(html).toContain('Weekly Action Grid');
+    expect(html).toContain('This Week');
     expect(html).toContain('Team Overview');
     expect(html).toContain('League News');
+    expect(html).toContain('Next Opponent');
+    expect(html).toContain('Home');
+    expect(html).toContain('More');
   });
 
   it('is safe with partial/older save payloads', () => {
