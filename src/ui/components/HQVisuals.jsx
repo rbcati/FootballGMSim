@@ -38,6 +38,14 @@ export function HQIcon({ name, size = 18 }) {
       return <svg {...common}><path {...baseIconProps} d="M5 17.75 10 12l3.25 3.25 5.75-7" /><path {...baseIconProps} d="M18 8.25h1.75V10" /></svg>;
     case 'arrowRight':
       return <svg {...common}><path {...baseIconProps} d="M5 12h14m-5-5 5 5-5 5" /></svg>;
+    case 'target':
+      return <svg {...common}><circle {...baseIconProps} cx="12" cy="12" r="7.25" /><circle {...baseIconProps} cx="12" cy="12" r="3.25" /><path {...baseIconProps} d="M12 4v2.2M20 12h-2.2M12 20v-2.2M4 12h2.2" /></svg>;
+    case 'shield':
+      return <svg {...common}><path {...baseIconProps} d="M12 3.75 4.75 6.9v6.1c0 4.05 3.1 7.65 7.25 8.65 4.15-1 7.25-4.6 7.25-8.65V6.9z" /></svg>;
+    case 'alert':
+      return <svg {...common}><path {...baseIconProps} d="m12 4.5 8 14h-16z" /><path {...baseIconProps} d="M12 9v4.75M12 16.8h.01" /></svg>;
+    case 'clipboard':
+      return <svg {...common}><rect {...baseIconProps} x="6.25" y="5.25" width="11.5" height="14.5" rx="2" /><path {...baseIconProps} d="M9.25 5.25h5.5v2.1h-5.5zM9.5 11h5M9.5 14h5" /></svg>;
     default:
       return null;
   }
