@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
-import FranchiseHQ from '../FranchiseHQ.jsx';
+import FranchiseHQ, { getLastGameDisplay } from '../FranchiseHQ.jsx';
 
 const baseLeague = {
   year: 2026,
@@ -103,5 +103,35 @@ describe('FranchiseHQ', () => {
         simulating={false}
       />,
     )).not.toThrow();
+  });
+
+  it('shows fallback when no completed game exists', () => {
+    const display = getLastGameDisplay(null, 10);
+    expect(display.heroLine).toContain('No completed game yet');
+  });
+
+  it('formats ties and overtime details from user perspective', () => {
+    const tieDisplay = getLastGameDisplay({
+      homeId: 10,
+      awayId: 11,
+      homeAbbr: 'CHI',
+      awayAbbr: 'DET',
+      homeScore: 20,
+      awayScore: 20,
+      overtimePeriods: 1,
+    }, 10);
+    expect(tieDisplay.heroLine).toContain('T (OT)');
+    expect(tieDisplay.heroLine).toContain('20-20 OT');
+    expect(tieDisplay.heroLine).toContain('vs DET');
+  });
+
+  it('uses TBD when opponent metadata is missing', () => {
+    const display = getLastGameDisplay({
+      homeId: 9,
+      awayId: 10,
+      homeScore: 17,
+      awayScore: 24,
+    }, 10);
+    expect(display.heroLine).toContain('@ TBD');
   });
 });

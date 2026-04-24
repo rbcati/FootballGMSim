@@ -86,9 +86,9 @@ export function HeroCard({ eyebrow, title, subtitle, rightMeta = null, children,
 export const HeroPanel = HeroCard;
 export const WeeklyHero = HeroCard;
 
-export function ActionTile({ icon = null, title, subtitle, badge = null, onClick, tone = 'info' }) {
+export function ActionTile({ icon = null, title, subtitle, badge = null, onClick, tone = 'info', ariaLabel }) {
   return (
-    <button type="button" className={`app-action-tile tone-${tone}`} onClick={onClick}>
+    <button type="button" className={`app-action-tile tone-${tone}`} onClick={onClick} aria-label={ariaLabel ?? title}>
       <div className="app-action-tile__title-row">
         <strong>
           {icon ? <span className="app-action-tile__icon">{icon}</span> : null}

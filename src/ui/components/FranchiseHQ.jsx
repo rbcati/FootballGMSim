@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
@@ -31,7 +31,7 @@ function getGameScores(game) {
   };
 }
 
-function getLastGameDisplay(lastGame, userTeamId) {
+export function getLastGameDisplay(lastGame, userTeamId) {
   if (!lastGame) {
     return {
       heroLine: 'No completed game yet',
@@ -39,6 +39,7 @@ function getLastGameDisplay(lastGame, userTeamId) {
       oppAbbr: 'TBD',
     };
   }
+
   const userId = Number(userTeamId);
   const homeId = Number(lastGame?.homeId ?? lastGame?.home?.id);
   const awayId = Number(lastGame?.awayId ?? lastGame?.away?.id);
@@ -47,14 +48,44 @@ function getLastGameDisplay(lastGame, userTeamId) {
   const scores = getGameScores(lastGame);
   const userScore = userIsHome ? scores.home : userIsAway ? scores.away : scores.home;
   const oppScore = userIsHome ? scores.away : userIsAway ? scores.home : scores.away;
-  const oppAbbr = userIsHome ? (lastGame?.awayAbbr ?? 'TBD') : (lastGame?.homeAbbr ?? 'TBD');
+  const overtimePeriods = safeNum(lastGame?.overtimePeriods ?? lastGame?.ot, 0);
+  const overtimeLabel = overtimePeriods > 1 ? ` ${overtimePeriods}OT` : overtimePeriods === 1 ? ' OT' : '';
+  const opponentAbbr = userIsHome
+    ? (lastGame?.awayAbbr ?? lastGame?.away?.abbr ?? 'TBD')
+    : (lastGame?.homeAbbr ?? lastGame?.home?.abbr ?? 'TBD');
   const location = userIsHome ? 'vs' : userIsAway ? '@' : 'vs';
-  const resultLabel = userScore === oppScore ? 'T' : userScore > oppScore ? 'W' : 'L';
+  const resultLabel = getReadableResultLabel({ userScore, oppScore, overtimePeriods });
+  const scoreLine = `${userScore}-${oppScore}${overtimeLabel}`;
+
   return {
-    heroLine: `${resultLabel} · ${userScore}-${oppScore} ${location} ${oppAbbr}`,
-    overviewLine: `${resultLabel} ${userScore}-${oppScore} ${location} ${oppAbbr}`,
-    oppAbbr,
+    heroLine: `${resultLabel} · ${scoreLine} ${location} ${opponentAbbr}`.trim(),
+    overviewLine: `${resultLabel} ${scoreLine} ${location} ${opponentAbbr}`.trim(),
+    oppAbbr: opponentAbbr,
   };
+}
+
+function getLatestUserCompletedGame(league) {
+  const weeks = [...(league?.schedule?.weeks ?? [])]
+    .sort((a, b) => safeNum(a?.week) - safeNum(b?.week));
+
+  const completedGames = [];
+  for (const week of weeks) {
+    for (const game of (week?.games ?? [])) {
+      if (!game?.played) continue;
+      const homeId = Number(game?.home?.id ?? game?.home ?? game?.homeId);
+      const awayId = Number(game?.away?.id ?? game?.away ?? game?.awayId);
+      if (homeId !== Number(league?.userTeamId) && awayId !== Number(league?.userTeamId)) continue;
+      completedGames.push({ ...game, week: safeNum(week?.week, safeNum(league?.week, 1)), homeId, awayId });
+    }
+  }
+
+  return completedGames.at(-1) ?? null;
+}
+
+function getReadableResultLabel({ userScore, oppScore, overtimePeriods }) {
+  if (userScore === oppScore) return overtimePeriods > 0 ? 'T (OT)' : 'T';
+  const outcome = userScore > oppScore ? 'W' : 'L';
+  return overtimePeriods > 0 ? `${outcome} (OT)` : outcome;
 }
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
@@ -94,7 +125,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     { title: 'Scout Opponent', icon: <HQIcon name="scout" size={22} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
   ];
 
-  const lastGame = command.lastGameSummary;
+  const lastGame = useMemo(() => getLatestUserCompletedGame(league) ?? command.lastGameSummary ?? null, [league, command.lastGameSummary]);
   const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
   const footerDays = Math.max(0, 7 - ((safeNum(league?.week, 1) - 1) % 7));
   const heroMeta = useMemo(() => {
@@ -139,8 +170,19 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       return `W${safeNum(game?.week, 0)} ${isHome ? 'vs' : '@'} ${oppTeam?.abbr ?? 'TBD'}`;
     }), [league]);
 
+  useEffect(() => {
+    document.title = `Franchise HQ • ${command.weekLabel} • Football GM Sim`;
+    let description = document.querySelector('meta[name="description"]');
+    if (!description) {
+      description = document.createElement('meta');
+      description.setAttribute('name', 'description');
+      document.head.appendChild(description);
+    }
+    description.setAttribute('content', 'Manage weekly prep, review your last result, and advance your franchise one week at a time.');
+  }, [command.weekLabel]);
+
   return (
-    <div className="app-screen-stack franchise-hq franchise-command-center">
+    <div className="app-screen-stack franchise-hq franchise-command-center" role="main" aria-label="Franchise HQ weekly command center">
       <section className="app-hq-topbar card" aria-label="Franchise HQ top bar">
         <div className="app-hq-topbar__left">
           <span>{command.seasonLabel}</span>
@@ -152,7 +194,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
       </section>
 
-      <section className="app-hq-matchup-hero card" aria-label="Weekly Hero">
+      <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite">
         <div className="app-hq-matchup-main">
           <div className="app-hq-hero-copy">
             <span className="app-hq-matchup-hero__eyebrow">Next Opponent · Week {safeNum(league?.week, 1)} Operations</span>
@@ -192,11 +234,11 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <div className="app-section-heading">This Week</div>
         <div className="app-action-grid-2x2">
           {actionTiles.map((action) => (
-            <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" />
+            <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" ariaLabel={`${action.title}: ${action.subtitle}`} />
           ))}
         </div>
       </section>
-      {lineupToast ? <p className="app-inline-toast">{lineupToast}</p> : null}
+      {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
       <SectionCard title="Weekly Agenda" subtitle="Weekly Priorities for this week." variant="compact">
         <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
@@ -220,7 +262,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </SectionCard>
 
       <div className="app-hq-sticky-advance">
-        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating}>
+        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance from ${command.weekLabel} to the next week`}>
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
           <HQIcon name="arrowRight" size={16} />
         </Button>
@@ -233,6 +275,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
             type="button"
             className={item.active ? 'is-active' : ''}
             onClick={() => onNavigate?.(item.route)}
+            aria-label={`Open ${item.label}`}
           >
             <span aria-hidden="true"><HQIcon name={item.icon} size={18} /></span>
             <small>{item.label}</small>
