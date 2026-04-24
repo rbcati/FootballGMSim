@@ -39,14 +39,14 @@ function saveStoredPlan(plan) {
 // ── Colour helpers ────────────────────────────────────────────────────────────
 
 const SCHEME_ACCENT = {
-  WEST_COAST:     "#0A84FF",
+  WEST_COAST:     "#C9A54B",
   VERTICAL:       "#BF5AF2",
   SMASHMOUTH:     "#FF9F0A",
   AIR_RAID:       "#BF5AF2",
-  COVER_2:        "#34C759",
-  COVER2:         "#34C759",
-  BLITZ_34:       "#FF453A",
-  BLITZ34:        "#FF453A",
+  COVER_2:        "#8B9BB0",
+  COVER2:         "#8B9BB0",
+  BLITZ_34:       "#C07A66",
+  BLITZ34:        "#C07A66",
   MAN_COVERAGE:   "#FFD60A",
   MAN:            "#FFD60A",
 };
@@ -386,8 +386,8 @@ export default function GamePlanScreen({ league, actions }) {
         flexWrap: "wrap", gap: 12,
       }}>
         <div>
-          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>
-            Game Plan
+          <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#8B9BB0", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 4 }}>
+            Week {league?.week ?? 1} Operations
           </div>
           <div style={{ fontSize: "1.1rem", fontWeight: 900, color: "var(--text)" }}>
             {nextGame
@@ -406,11 +406,11 @@ export default function GamePlanScreen({ league, actions }) {
         <button
           onClick={handleSave}
           style={{
-            background: "var(--accent)", color: "#fff",
+            background: "linear-gradient(180deg, #ffe189, #fbc23b 56%, #ebad1f)", color: "#17120a",
             border: "none", borderRadius: "var(--radius-md)",
             padding: "12px 24px", fontWeight: 800, fontSize: "0.88rem",
             cursor: "pointer", minHeight: 44,
-            boxShadow: "0 4px 16px rgba(10,132,255,0.35)",
+            boxShadow: "0 10px 24px rgba(245, 183, 44, .28)",
             transition: "transform 0.1s, box-shadow 0.1s",
           }}
           onMouseDown={e => e.currentTarget.style.transform = "scale(0.97)"}
@@ -534,12 +534,12 @@ export default function GamePlanScreen({ league, actions }) {
           onClick={handleSave}
           style={{
             width: "100%",
-            background: "linear-gradient(135deg, #0A84FF, #0A84FFbb)",
-            color: "#fff",
+            background: "linear-gradient(180deg, #ffe189, #fbc23b 56%, #ebad1f)",
+            color: "#17120a",
             border: "none", borderRadius: "var(--radius-lg)",
             padding: "16px", fontWeight: 900, fontSize: "0.95rem",
             cursor: "pointer", minHeight: 52,
-            boxShadow: "0 4px 24px rgba(10,132,255,0.4)",
+            boxShadow: "0 10px 24px rgba(245, 183, 44, .28)",
             transition: "transform 0.1s",
             letterSpacing: "0.3px",
           }}

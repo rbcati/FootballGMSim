@@ -668,6 +668,8 @@ export default function LeagueDashboard({
     setActiveTab("Game Detail");
   };
   const activeSection = getShellSectionForDashboardTab(activeTab);
+  const WEEKLY_OPERATIONS_TABS = new Set(["Game Plan", "Depth Chart", "Training", "Weekly Prep"]);
+  const isWeeklyOperationsTab = WEEKLY_OPERATIONS_TABS.has(activeTab);
   const handleSectionChange = (sectionId) => {
     const normalizedSection = normalizeShellSectionId(sectionId);
     const group = NAV_GROUPS.find((entry) => entry.id === normalizedSection);
@@ -800,6 +802,13 @@ export default function LeagueDashboard({
 
       {/* ── Tab Content — each tab is independently error-bounded ── */}
       <div className="fade-in" key={activeTab}>
+        {isWeeklyOperationsTab ? (
+          <div className="week-operations-shell">
+            <p className="week-operations-shell__title">
+              Week {league?.week ?? 1} Operations · {userRecord} · Cap {shell.capSummary}
+            </p>
+          </div>
+        ) : null}
         {TEAM_FACING_TABS.has(activeTab) ? <FranchiseSummaryPanel league={league} compact className="" /> : null}
         {(activeTab === "HQ" || activeTab === "Weekly Hub" || activeTab === "Home") && (
           <TabErrorBoundary label="Franchise HQ" onNavigate={setActiveTab}>
