@@ -1,0 +1,24 @@
+name: Netlify Build Parity
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22 (Netlify parity)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Verify netlify parity build
+        run: npm run check:netlify-parity
+
+      - name: Mirror Netlify with netlify-cli
+        run: npm run check:netlify-cli-build
