@@ -13,13 +13,25 @@ if [[ "$NODE_MAJOR" != "22" ]]; then
   exit 1
 fi
 
+if [[ ! -f "netlify.toml" ]]; then
+  echo "[netlify-parity] ERROR: netlify.toml not found"
+  exit 1
+fi
+
+NETLIFY_CMD="$(sed -n 's/^\s*command\s*=\s*"\(.*\)"/\1/p' netlify.toml | head -n 1)"
+if [[ -z "$NETLIFY_CMD" ]]; then
+  echo "[netlify-parity] ERROR: netlify build command missing in netlify.toml"
+  exit 1
+fi
+
+echo "[netlify-parity] netlify.toml build.command=$NETLIFY_CMD"
 echo "[netlify-parity] Cleaning install artifacts"
 rm -rf node_modules dist
 
 echo "[netlify-parity] Installing dependencies from package-lock.json"
-npm ci
+npm ci --no-audit
 
-echo "[netlify-parity] Building production bundle"
+echo "[netlify-parity] Building production bundle with Netlify-like env"
 CI=true NETLIFY=true CONTEXT=production npm run build
 
 if [[ -f "public/sw.js" && ! -f "dist/sw.js" ]]; then
@@ -37,4 +49,4 @@ if [[ ! -f "dist/index.html" ]]; then
   exit 1
 fi
 
-echo "[netlify-parity] OK: dist/index.html present"
+echo "[netlify-parity] OK: Netlify parity build completed and dist artifacts are present"

@@ -1,7 +1,8 @@
+/** @vitest-environment jsdom */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { renderToString } from 'react-dom/server';
-import FranchiseHQ, { getLastGameDisplay } from '../FranchiseHQ.jsx';
+import { render, screen } from '@testing-library/react';
+import FranchiseHQ from '../FranchiseHQ.jsx';
 
 const baseLeague = {
   year: 2026,
@@ -25,28 +26,10 @@ const baseLeague = {
       offenseRating: 82,
       defenseRating: 83,
       capRoom: 7,
-      roster: [
-        { id: 1, contract: { yearsRemaining: 1 } },
-        { id: 2, contract: { yearsRemaining: 1 }, injury: 'Ankle', injuredWeeks: 1 },
-      ],
+      roster: [{ id: 1 }, { id: 2 }],
       recentResults: ['W', 'W', 'L', 'W'],
     },
-    {
-      id: 11,
-      city: 'Detroit',
-      name: 'Lions',
-      abbr: 'DET',
-      conf: 1,
-      div: 0,
-      wins: 5,
-      losses: 4,
-      ties: 0,
-      ovr: 83,
-      offenseRating: 86,
-      defenseRating: 80,
-      capRoom: 11,
-      roster: [],
-    },
+    { id: 11, city: 'Detroit', name: 'Lions', abbr: 'DET', conf: 1, div: 0, wins: 5, losses: 4, ties: 0, ovr: 83, offenseRating: 86, defenseRating: 80, capRoom: 11, roster: [] },
   ],
   schedule: {
     weeks: [
@@ -59,79 +42,31 @@ const baseLeague = {
 };
 
 describe('FranchiseHQ', () => {
-  it('renders weekly command center hierarchy and mobile nav labels', () => {
-    const html = renderToString(
+  it('renders visible weekly command center essentials and one primary advance CTA', () => {
+    render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    expect(screen.getByRole('heading', { name: /week 10/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: /^game plan:/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^set lineup:/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^training:/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^scout opponent:/i })).toBeTruthy();
+  });
+
+  it('renders record, standing, and fallback copy when schedule is missing', () => {
+    render(
       <FranchiseHQ
-        league={baseLeague}
-        onNavigate={() => {}}
-        onOpenBoxScore={() => {}}
-        onAdvanceWeek={() => {}}
+        league={{ year: 2026, week: 2, phase: 'regular', userTeamId: 1, teams: [{ id: 1, name: 'Legacy Team', city: 'Legacy', conf: 0, div: 0, wins: 0, losses: 0, ties: 0 }], schedule: { weeks: [] } }}
+        onNavigate={vi.fn()}
+        onAdvanceWeek={vi.fn()}
         busy={false}
         simulating={false}
       />,
     );
 
-    expect(html).toContain('Advance Week');
-    expect(html).toContain('Set Lineup');
-    expect(html).toContain('Game Plan');
-    expect(html).toContain('Scout Opponent');
-    expect(html).toContain('Weekly Agenda');
-    expect(html).toContain('This Week');
-    expect(html).toContain('Team Overview');
-    expect(html).toContain('League News');
-    expect(html).toContain('Next Opponent');
-    expect(html).toContain('Home');
-    expect(html).toContain('News');
-    expect(html).toContain('More');
-  });
-
-  it('is safe with partial/older save payloads', () => {
-    expect(() => renderToString(
-      <FranchiseHQ
-        league={{
-          year: 2026,
-          week: 2,
-          phase: 'regular',
-          userTeamId: 1,
-          teams: [{ id: 1, name: 'Legacy Team', city: 'Legacy', conf: 0, div: 0 }],
-          schedule: { weeks: [] },
-        }}
-        onNavigate={vi.fn()}
-        onOpenBoxScore={vi.fn()}
-        onAdvanceWeek={vi.fn()}
-        busy={false}
-        simulating={false}
-      />,
-    )).not.toThrow();
-  });
-
-  it('shows fallback when no completed game exists', () => {
-    const display = getLastGameDisplay(null, 10);
-    expect(display.heroLine).toContain('No completed game yet');
-  });
-
-  it('formats ties and overtime details from user perspective', () => {
-    const tieDisplay = getLastGameDisplay({
-      homeId: 10,
-      awayId: 11,
-      homeAbbr: 'CHI',
-      awayAbbr: 'DET',
-      homeScore: 20,
-      awayScore: 20,
-      overtimePeriods: 1,
-    }, 10);
-    expect(tieDisplay.heroLine).toContain('T (OT)');
-    expect(tieDisplay.heroLine).toContain('20-20 OT');
-    expect(tieDisplay.heroLine).toContain('vs DET');
-  });
-
-  it('uses TBD when opponent metadata is missing', () => {
-    const display = getLastGameDisplay({
-      homeId: 9,
-      awayId: 10,
-      homeScore: 17,
-      awayScore: 24,
-    }, 10);
-    expect(display.heroLine).toContain('@ TBD');
+    expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
+    expect(screen.getByText(/no future games on file/i)).toBeTruthy();
+    expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
   });
 });

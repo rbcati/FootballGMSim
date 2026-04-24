@@ -4,6 +4,7 @@ import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
+import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 
 const BOTTOM_NAV_ITEMS = [
@@ -24,70 +25,6 @@ function formatRecordInline(record) {
   return record;
 }
 
-function getGameScores(game) {
-  return {
-    home: safeNum(game?.score?.home ?? game?.homeScore),
-    away: safeNum(game?.score?.away ?? game?.awayScore),
-  };
-}
-
-export function getLastGameDisplay(lastGame, userTeamId) {
-  if (!lastGame) {
-    return {
-      heroLine: 'No completed game yet',
-      overviewLine: 'No completed game yet',
-      oppAbbr: 'TBD',
-    };
-  }
-
-  const userId = Number(userTeamId);
-  const homeId = Number(lastGame?.homeId ?? lastGame?.home?.id);
-  const awayId = Number(lastGame?.awayId ?? lastGame?.away?.id);
-  const userIsHome = homeId === userId;
-  const userIsAway = awayId === userId;
-  const scores = getGameScores(lastGame);
-  const userScore = userIsHome ? scores.home : userIsAway ? scores.away : scores.home;
-  const oppScore = userIsHome ? scores.away : userIsAway ? scores.home : scores.away;
-  const overtimePeriods = safeNum(lastGame?.overtimePeriods ?? lastGame?.ot, 0);
-  const overtimeLabel = overtimePeriods > 1 ? ` ${overtimePeriods}OT` : overtimePeriods === 1 ? ' OT' : '';
-  const opponentAbbr = userIsHome
-    ? (lastGame?.awayAbbr ?? lastGame?.away?.abbr ?? 'TBD')
-    : (lastGame?.homeAbbr ?? lastGame?.home?.abbr ?? 'TBD');
-  const location = userIsHome ? 'vs' : userIsAway ? '@' : 'vs';
-  const resultLabel = getReadableResultLabel({ userScore, oppScore, overtimePeriods });
-  const scoreLine = `${userScore}-${oppScore}${overtimeLabel}`;
-
-  return {
-    heroLine: `${resultLabel} · ${scoreLine} ${location} ${opponentAbbr}`.trim(),
-    overviewLine: `${resultLabel} ${scoreLine} ${location} ${opponentAbbr}`.trim(),
-    oppAbbr: opponentAbbr,
-  };
-}
-
-function getLatestUserCompletedGame(league) {
-  const weeks = [...(league?.schedule?.weeks ?? [])]
-    .sort((a, b) => safeNum(a?.week) - safeNum(b?.week));
-
-  const completedGames = [];
-  for (const week of weeks) {
-    for (const game of (week?.games ?? [])) {
-      if (!game?.played) continue;
-      const homeId = Number(game?.home?.id ?? game?.home ?? game?.homeId);
-      const awayId = Number(game?.away?.id ?? game?.away ?? game?.awayId);
-      if (homeId !== Number(league?.userTeamId) && awayId !== Number(league?.userTeamId)) continue;
-      completedGames.push({ ...game, week: safeNum(week?.week, safeNum(league?.week, 1)), homeId, awayId });
-    }
-  }
-
-  return completedGames.at(-1) ?? null;
-}
-
-function getReadableResultLabel({ userScore, oppScore, overtimePeriods }) {
-  if (userScore === oppScore) return overtimePeriods > 0 ? 'T (OT)' : 'T';
-  const outcome = userScore > oppScore ? 'W' : 'L';
-  return overtimePeriods > 0 ? `${outcome} (OT)` : outcome;
-}
-
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
   const [lineupToast, setLineupToast] = useState(null);
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
@@ -98,6 +35,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
   const userTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
   const opponent = command.nextGame?.opp ?? null;
+  const nextOpponentDisplay = useMemo(() => getNextOpponentDisplay(command.nextGame), [command.nextGame]);
 
   const handleSetLineup = () => {
     const team = (league?.teams ?? []).find((t) => Number(t?.id) === Number(league?.userTeamId));
@@ -197,13 +135,13 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       <section className="app-hq-matchup-hero card" aria-label="Weekly Hero" aria-live="polite">
         <div className="app-hq-matchup-main">
           <div className="app-hq-hero-copy">
-            <span className="app-hq-matchup-hero__eyebrow">Next Opponent · Week {safeNum(league?.week, 1)} Operations</span>
-            <strong>{heroMeta.operationHeading}</strong>
-            <p>{heroMeta.nextOppSummary}</p>
+            <span className="app-hq-matchup-hero__eyebrow">Week Command • {command.weekLabel}</span>
+            <h1 className="app-hq-hero-title">{heroMeta.operationHeading}</h1>
+            <p>{nextOpponentDisplay.detail} • {heroMeta.nextOppSummary}</p>
           </div>
           <div className="app-hq-team app-hq-team--opp">
             <TeamIdentityBadge team={opponent} size={112} variant="circle" />
-            <strong>{opponent?.abbr ?? command.nextOpponent}</strong>
+            <strong>{nextOpponentDisplay.opponentAbbr}</strong>
             <span>{formatRecordInline(command.nextOpponentRecord)}</span>
           </div>
         </div>
@@ -212,10 +150,10 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           <div className="app-hq-hero-subcard">
             <div className="app-hq-hero-subcard__head">
               <HQIcon name="lastGame" size={14} />
-              <strong>Last Game</strong>
+              <strong>Last Result</strong>
             </div>
             <p className="app-hq-hero-subcard__value">{lastGameDisplay.heroLine}</p>
-            <small>{lastGame ? heroMeta.lastGameStory : 'Play this week to establish momentum.'}</small>
+            <small>{lastGame ? heroMeta.lastGameStory : 'No final yet. Build your plan and get ready for kickoff.'}</small>
           </div>
           <div className="app-hq-hero-subcard">
             <div className="app-hq-hero-subcard__head">
@@ -231,7 +169,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </section>
 
       <section className="app-section-stack" aria-label="This Week Action Center">
-        <div className="app-section-heading">This Week</div>
+        <h2 className="app-section-heading">Prepare for Kickoff</h2>
         <div className="app-action-grid-2x2">
           {actionTiles.map((action) => (
             <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" ariaLabel={`${action.title}: ${action.subtitle}`} />
@@ -240,15 +178,15 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </section>
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
-      <SectionCard title="Weekly Agenda" subtitle="Weekly Priorities for this week." variant="compact">
+      <SectionCard title="Week Command" subtitle="Resolve weekly priorities before advancing." variant="compact">
         <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
       </SectionCard>
 
-      <SectionCard title="Team Overview" subtitle="Last result, standing, and upcoming slate." variant="compact">
+      <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
         <div className="app-hq-team-overview">
           <div><span>Last Game</span><strong>{lastGameDisplay.overviewLine}</strong></div>
           <div><span>Standing</span><strong>{command.standingSummary}</strong></div>
-          <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.map((chip) => <em key={chip}>{chip}</em>)}</div></div>
+          <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
         </div>
       </SectionCard>
 
@@ -262,7 +200,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </SectionCard>
 
       <div className="app-hq-sticky-advance">
-        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance from ${command.weekLabel} to the next week`}>
+        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
           <HQIcon name="arrowRight" size={16} />
         </Button>

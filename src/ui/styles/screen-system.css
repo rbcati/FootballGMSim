@@ -350,7 +350,7 @@
 .app-hq-matchup-hero__meta { font-size: 10px; color: #a6b6ce; text-align: right; }
 .app-hq-matchup-main { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; min-height: 166px; }
 .app-hq-hero-copy { display: grid; gap: 5px; align-content: center; }
-.app-hq-hero-copy strong { color: #E6EDF3; font-size: clamp(1.2rem, 4.4vw, 1.7rem); letter-spacing: .04em; line-height: 1.02; }
+.app-hq-hero-title { margin: 0; color: #E6EDF3; font-size: clamp(1.2rem, 4.4vw, 1.7rem); letter-spacing: .04em; line-height: 1.02; text-transform: uppercase; }
 .app-hq-hero-copy p { margin: 0; color: #b8c8de; font-size: 0.78rem; }
 .app-hq-team { display: grid; gap: 4px; justify-items: center; text-align: center; position: relative; }
 .app-hq-team--user::before,
@@ -439,7 +439,8 @@
   box-shadow: 0 8px 20px rgba(0, 0, 0, .28);
   backdrop-filter: blur(12px);
 }
-.app-hq-bottom-nav button {
+ .app-hq-bottom-nav button {
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: var(--text-subtle);
@@ -478,6 +479,7 @@
 .app-hq-team-overview strong { color: #E6EDF3; font-size: 14px; font-weight: 600; }
 .app-hq-opponent-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .app-hq-opponent-chips em { font-style: normal; font-size: 11px; border: 1px solid #2A3441; border-radius: 999px; padding: 3px 8px; color: #E6EDF3; background: #111722; }
+.app-hq-opponent-chips em:only-child { border-style: dashed; color: #c5d0df; }
 .app-moment-list { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .app-moment-list p { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
 .app-prep-checklist { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
@@ -520,10 +522,10 @@
 .app-compact-news-card strong { font-size: var(--text-xs); color: #E6EDF3; font-weight: 600; }
 .app-compact-news-card span { font-size: 11px; color: #8B9BB0; }
 
-.app-action-tile { min-height: 132px; transition: transform .16s ease, border-color .16s ease, background .16s ease; border-color: #2A3441; background: linear-gradient(180deg, #0B0F14, #121821); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); padding: 12px; }
+ .app-action-tile { min-height: 132px; min-width: 0; transition: transform .16s ease, border-color .16s ease, background .16s ease; border-color: #2A3441; background: linear-gradient(180deg, #0B0F14, #121821); box-shadow: inset 0 1px 0 rgba(255,255,255,.06); padding: 12px; }
 .app-action-tile:hover, .app-action-tile:focus-visible { transform: translateY(-2px); border-color: rgba(var(--accent-rgb), .55); background: color-mix(in srgb, var(--surface-2) 78%, var(--accent) 22%); }
 .app-action-tile:active { transform: translateY(0); }
-.app-action-tile__title-row strong { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; letter-spacing: -.01em; }
+.app-action-tile__title-row strong { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; letter-spacing: -.01em; min-width: 0; }
 .app-action-tile__subtitle { color: var(--text-muted); font-size: 12px; line-height: 1.3; }
 .app-action-tile__icon { width: 88px; height: 88px; border-radius: 12px; display: grid; place-items: center; padding: 12px; background: linear-gradient(180deg, #0B0F14, #121821); border: 1px solid #2A3441; color: #d9e7ff; }
 .app-action-tile .app-status-chip { font-size: 10px; background: rgba(255, 188, 84, .24); border-color: rgba(255, 188, 84, .5); color: #ffd28c; }
@@ -580,6 +582,7 @@
 }
 
 @media (max-width: 420px) {
+  .franchise-command-center { overflow-x: clip; }
   .app-action-grid-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-summary-grid { grid-template-columns: 1fr; }
   .app-hq-hero-subcards { grid-template-columns: 1fr; }
@@ -593,7 +596,7 @@
   .app-hq-topbar__left strong, .app-hq-topbar__team strong { font-size: 0.78rem; letter-spacing: 0.08em; }
   .app-hq-matchup-hero { padding: 0.8rem 0.75rem; gap: 0.65rem; }
   .app-hq-hero-copy strong { font-size: clamp(1rem, 5.5vw, 1.18rem); }
-  .app-hq-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-hq-bottom-nav { grid-template-columns: repeat(3, minmax(0, 1fr)); bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
   .app-hq-bottom-nav button small { font-size: 0.58rem; }
 }
 
