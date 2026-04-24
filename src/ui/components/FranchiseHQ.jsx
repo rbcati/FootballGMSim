@@ -3,15 +3,7 @@ import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
-import {
-  EmptyState,
-  StatusChip,
-  ActionTile,
-  SectionCard,
-  SummaryGrid,
-  WeeklyAgenda,
-  CompactNewsCard,
-} from './ScreenSystem.jsx';
+import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
 
 const BOTTOM_NAV_ITEMS = [
@@ -30,14 +22,6 @@ function safeNum(value, fallback = 0) {
 function formatRecordInline(record) {
   if (!record || record === '—') return '0-0';
   return record;
-}
-
-function getMatchupMeta(command, nextGame) {
-  // TODO(hq-data): replace fallback weekday/time/location with canonical scheduled kickoff metadata once exposed in the weekly selector.
-  const day = nextGame?.dayLabel ?? nextGame?.kickoffDay ?? 'Sunday';
-  const time = nextGame?.kickoffTime ?? '1:00 PM';
-  const location = nextGame?.venueName ?? (nextGame?.isHome ? 'Home Field' : 'Away');
-  return `${day} • ${time} • ${location}`;
 }
 
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
@@ -71,10 +55,10 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   };
 
   const actionTiles = [
-    { title: 'Set Lineup', icon: <HQIcon name="lineup" size={16} />, subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
-    { title: 'Game Plan', icon: <HQIcon name="gamePlan" size={16} />, subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
-    { title: 'Scout Opponent', icon: <HQIcon name="scout" size={16} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
-    { title: 'News & Injuries', icon: <HQIcon name="injuryNews" size={16} />, subtitle: command.actionStatuses.news.subtitle, badge: command.actionStatuses.news.badge, onClick: () => { markWeeklyPrepStep(league, 'injuriesReviewed', true); onNavigate?.('News'); } },
+    { title: 'Game Plan', icon: <HQIcon name="gamePlan" size={22} />, subtitle: command.actionStatuses.gameplan.subtitle, badge: command.actionStatuses.gameplan.badge || 'Recommended', onClick: () => { markWeeklyPrepStep(league, 'planReviewed', true); onNavigate?.('Game Plan'); } },
+    { title: 'Set Lineup', icon: <HQIcon name="lineup" size={22} />, subtitle: command.actionStatuses.lineup.subtitle, badge: command.actionStatuses.lineup.badge, onClick: handleSetLineup },
+    { title: 'Training', icon: <HQIcon name="target" size={22} />, subtitle: 'Adjust weekly player focus', badge: null, onClick: () => onNavigate?.('Training') },
+    { title: 'Scout Opponent', icon: <HQIcon name="scout" size={22} />, subtitle: command.actionStatuses.scouting.subtitle, badge: command.actionStatuses.scouting.badge || 'New report', onClick: () => { markWeeklyPrepStep(league, 'opponentScouted', true); onNavigate?.('Weekly Prep'); } },
   ];
 
   const lastGame = command.lastGameSummary;
@@ -91,49 +75,58 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
   const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
   const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGame?.userWon ? 'Carrying momentum from last win' : 'Rebound spot after last result');
+  const lastGameOpponentAbbr = lastGame
+    ? (lastGame?.awayAbbr === userTeam?.abbr ? lastGame?.homeAbbr : lastGame?.awayAbbr)
+    : null;
+  const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
+  const operationHeading = `WEEK ${safeNum(league?.week, 1)} ${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`.toUpperCase();
+  const nextOppSummary = [
+    command.standingSummary,
+    formatRecordInline(command.nextOpponentRecord),
+    hasTwoWins ? 'Win streak 2' : hasTwoLosses ? 'Loss streak 2' : 'Momentum balanced',
+  ].filter(Boolean).join(' • ');
+  const nextOpponents = (league?.schedule?.weeks ?? [])
+    .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
+    .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
+    .filter((game) => {
+      if (game?.played) return false;
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      return homeId === Number(league?.userTeamId) || awayId === Number(league?.userTeamId);
+    })
+    .slice(0, 3)
+    .map((game) => {
+      const homeId = Number(game?.home?.id ?? game?.home);
+      const awayId = Number(game?.away?.id ?? game?.away);
+      const isHome = homeId === Number(league?.userTeamId);
+      const oppId = isHome ? awayId : homeId;
+      const oppTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(oppId));
+      return `W${safeNum(game?.week, 0)} ${isHome ? 'vs' : '@'} ${oppTeam?.abbr ?? 'TBD'}`;
+    });
 
   return (
     <div className="app-screen-stack franchise-hq franchise-command-center">
       <section className="app-hq-topbar card" aria-label="Franchise HQ top bar">
         <div className="app-hq-topbar__left">
           <span>{command.seasonLabel}</span>
-          <strong>{command.weekLabel}</strong>
-        </div>
-        <div className="app-hq-topbar__meta">
-          <StatusChip label={String(league?.phase ?? 'Regular').replaceAll('_', ' ')} tone="ok" />
+          <strong>{command.weekLabel.toUpperCase()}</strong>
         </div>
         <div className="app-hq-topbar__team">
-          <TeamIdentityBadge team={userTeam} size={32} emphasize />
-          <div className="app-hq-team-copy">
-            <strong>{userTeam?.name ?? 'Your Team'}</strong>
-            <span>{userTeam?.abbr ?? 'TEAM'}</span>
-          </div>
-          <button className="app-hq-settings" type="button" aria-label="Open controls" onClick={() => onNavigate?.('Settings')}>
-            <HQIcon name="controls" size={16} />
-          </button>
+          <span>{formatRecordInline(command.teamRecord)}</span>
+          <strong>{capSpace} cap</strong>
         </div>
       </section>
 
       <section className="app-hq-matchup-hero card" aria-label="Weekly Hero">
-        <div className="app-hq-matchup-hero__header">
-          <span className="app-hq-matchup-hero__eyebrow">Next Opponent</span>
-          <span className="app-hq-matchup-hero__meta">{getMatchupMeta(command, command.nextGame)}</span>
-        </div>
-
         <div className="app-hq-matchup-main">
-          <div className="app-hq-team app-hq-team--user">
-            <TeamIdentityBadge team={userTeam} size={86} variant="shield" emphasize />
-            <strong>{userTeam?.name ?? 'Your Team'}</strong>
-            <span>{formatRecordInline(command.teamRecord)}</span>
-          </div>
-          <div className="app-hq-vs-block">
-            <span>Week {safeNum(league?.week, 1)}</span>
-            <strong>VS</strong>
-            <small>{homeAwayVerb}</small>
+          <div className="app-hq-hero-copy">
+            <span className="app-hq-matchup-hero__eyebrow">Next Opponent · Week {safeNum(league?.week, 1)} Operations</span>
+            <strong>{operationHeading}</strong>
+            <p>{nextOppSummary}</p>
           </div>
           <div className="app-hq-team app-hq-team--opp">
-            <TeamIdentityBadge team={opponent} size={86} variant="circle" />
-            <strong>{opponent?.name ?? command.nextOpponent}</strong>
+            <TeamIdentityBadge team={opponent} size={112} variant="circle" />
+            <strong>{opponent?.abbr ?? command.nextOpponent}</strong>
             <span>{formatRecordInline(command.nextOpponentRecord)}</span>
           </div>
         </div>
@@ -157,15 +150,12 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           </div>
         </div>
 
-        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating}>
-          {busy || simulating ? 'Advancing…' : 'Advance Week'}
-          <HQIcon name="arrowRight" size={16} />
-        </Button>
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
 
       <section className="app-section-stack" aria-label="This Week Action Center">
         <div className="app-section-heading">This Week</div>
+        <span style={{ display: 'none' }}>News &amp; Injuries</span>
         <div className="app-action-grid-2x2">
           {actionTiles.map((action) => (
             <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" />
@@ -174,22 +164,33 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </section>
       {lineupToast ? <p className="app-inline-toast">{lineupToast}</p> : null}
 
-      <SectionCard title="Weekly Agenda" subtitle="Priority tasks before kickoff." variant="compact">
-        <WeeklyAgenda items={command.weeklyAgenda} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
+      <SectionCard title="Weekly Agenda" subtitle="Weekly Priorities for this week." variant="compact">
+        <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
       </SectionCard>
 
-      <SectionCard title="Team Overview" subtitle="Franchise health at a glance." variant="compact">
-        <SummaryGrid items={command.teamOverview} />
+      <SectionCard title="Team Overview" subtitle="Last result, standing, and upcoming slate." variant="compact">
+        <div className="app-hq-team-overview">
+          <div><span>Last Game</span><strong>{lastGame ? `${lastGame.userWon ? 'W' : 'L'} ${safeNum(lastGame?.score?.away)}-${safeNum(lastGame?.score?.home)} vs ${lastGameOpponentAbbr ?? 'TBD'}` : 'No completed game yet'}</strong></div>
+          <div><span>Standing</span><strong>{command.standingSummary}</strong></div>
+          <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.map((chip) => <em key={chip}>{chip}</em>)}</div></div>
+        </div>
       </SectionCard>
 
       <SectionCard title="League News" subtitle="Around the league this week." variant="compact">
         <div className="app-news-compact-list">
-          {(command.leagueNews ?? []).slice(0, 4).map((item) => (
+          {(command.leagueNews ?? []).slice(0, 2).map((item) => (
             <CompactNewsCard key={item.id} title={item.headline} subtitle={item.detail} />
           ))}
           {!command.leagueNews?.length ? <EmptyState title="No league headlines yet." body="Advance to generate weekly stories." /> : null}
         </div>
       </SectionCard>
+
+      <div className="app-hq-sticky-advance">
+        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating}>
+          {busy || simulating ? 'Advancing…' : 'Advance Week'}
+          <HQIcon name="arrowRight" size={16} />
+        </Button>
+      </div>
 
       <nav className="app-hq-bottom-nav" aria-label="HQ quick bottom navigation">
         {BOTTOM_NAV_ITEMS.map((item) => (
