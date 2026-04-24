@@ -75,13 +75,13 @@ describe('FranchiseHQ', () => {
     expect(html).toContain('Set Lineup');
     expect(html).toContain('Game Plan');
     expect(html).toContain('Scout Opponent');
-    expect(html).toContain('News &amp; Injuries');
     expect(html).toContain('Weekly Agenda');
     expect(html).toContain('This Week');
     expect(html).toContain('Team Overview');
     expect(html).toContain('League News');
     expect(html).toContain('Next Opponent');
     expect(html).toContain('Home');
+    expect(html).toContain('News');
     expect(html).toContain('More');
   });
 

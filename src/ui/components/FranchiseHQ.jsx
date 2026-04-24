@@ -24,6 +24,31 @@ function formatRecordInline(record) {
   return record;
 }
 
+function getLastGameDisplay(lastGame, userTeamId) {
+  if (!lastGame) {
+    return {
+      heroLine: 'No completed game yet',
+      overviewLine: 'No completed game yet',
+      oppAbbr: 'TBD',
+    };
+  }
+  const userId = Number(userTeamId);
+  const homeId = Number(lastGame?.homeId ?? lastGame?.home?.id);
+  const awayId = Number(lastGame?.awayId ?? lastGame?.away?.id);
+  const userIsHome = homeId === userId;
+  const userIsAway = awayId === userId;
+  const userScore = userIsHome ? safeNum(lastGame?.score?.home) : safeNum(lastGame?.score?.away);
+  const oppScore = userIsHome ? safeNum(lastGame?.score?.away) : safeNum(lastGame?.score?.home);
+  const oppAbbr = userIsHome ? (lastGame?.awayAbbr ?? 'TBD') : (lastGame?.homeAbbr ?? 'TBD');
+  const location = userIsHome ? 'vs' : userIsAway ? '@' : 'vs';
+  const resultLabel = lastGame?.userWon ? 'W' : 'L';
+  return {
+    heroLine: `${resultLabel} · ${userScore}-${oppScore} ${location} ${oppAbbr}`,
+    overviewLine: `${resultLabel} ${userScore}-${oppScore} ${location} ${oppAbbr}`,
+    oppAbbr,
+  };
+}
+
 export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, simulating }) {
   const [lineupToast, setLineupToast] = useState(null);
   const command = useMemo(() => selectFranchiseHQViewModel(league), [league]);
@@ -75,9 +100,6 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
   const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
   const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGame?.userWon ? 'Carrying momentum from last win' : 'Rebound spot after last result');
-  const lastGameOpponentAbbr = lastGame
-    ? (lastGame?.awayAbbr === userTeam?.abbr ? lastGame?.homeAbbr : lastGame?.awayAbbr)
-    : null;
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
   const operationHeading = `WEEK ${safeNum(league?.week, 1)} ${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`.toUpperCase();
   const nextOppSummary = [
@@ -85,7 +107,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     formatRecordInline(command.nextOpponentRecord),
     hasTwoWins ? 'Win streak 2' : hasTwoLosses ? 'Loss streak 2' : 'Momentum balanced',
   ].filter(Boolean).join(' • ');
-  const nextOpponents = (league?.schedule?.weeks ?? [])
+  const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
     .filter((game) => {
@@ -102,7 +124,8 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       const oppId = isHome ? awayId : homeId;
       const oppTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(oppId));
       return `W${safeNum(game?.week, 0)} ${isHome ? 'vs' : '@'} ${oppTeam?.abbr ?? 'TBD'}`;
-    });
+    }), [league]);
+  const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
 
   return (
     <div className="app-screen-stack franchise-hq franchise-command-center">
@@ -137,7 +160,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
               <HQIcon name="lastGame" size={14} />
               <strong>Last Game</strong>
             </div>
-            <p className="app-hq-hero-subcard__value">{lastGame ? `${lastGame.userWon ? 'W' : 'L'} · ${lastGame.awayAbbr} ${safeNum(lastGame?.score?.away)} @ ${lastGame.homeAbbr} ${safeNum(lastGame?.score?.home)}` : 'No completed game yet'}</p>
+            <p className="app-hq-hero-subcard__value">{lastGameDisplay.heroLine}</p>
             <small>{lastGame ? lastGameStory : 'Play this week to establish momentum.'}</small>
           </div>
           <div className="app-hq-hero-subcard">
@@ -155,7 +178,6 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
       <section className="app-section-stack" aria-label="This Week Action Center">
         <div className="app-section-heading">This Week</div>
-        <span style={{ display: 'none' }}>News &amp; Injuries</span>
         <div className="app-action-grid-2x2">
           {actionTiles.map((action) => (
             <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" />
@@ -170,7 +192,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
       <SectionCard title="Team Overview" subtitle="Last result, standing, and upcoming slate." variant="compact">
         <div className="app-hq-team-overview">
-          <div><span>Last Game</span><strong>{lastGame ? `${lastGame.userWon ? 'W' : 'L'} ${safeNum(lastGame?.score?.away)}-${safeNum(lastGame?.score?.home)} vs ${lastGameOpponentAbbr ?? 'TBD'}` : 'No completed game yet'}</strong></div>
+          <div><span>Last Game</span><strong>{lastGameDisplay.overviewLine}</strong></div>
           <div><span>Standing</span><strong>{command.standingSummary}</strong></div>
           <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.map((chip) => <em key={chip}>{chip}</em>)}</div></div>
         </div>
