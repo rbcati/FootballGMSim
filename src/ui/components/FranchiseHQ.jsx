@@ -24,6 +24,13 @@ function formatRecordInline(record) {
   return record;
 }
 
+function getGameScores(game) {
+  return {
+    home: safeNum(game?.score?.home ?? game?.homeScore),
+    away: safeNum(game?.score?.away ?? game?.awayScore),
+  };
+}
+
 function getLastGameDisplay(lastGame, userTeamId) {
   if (!lastGame) {
     return {
@@ -37,11 +44,12 @@ function getLastGameDisplay(lastGame, userTeamId) {
   const awayId = Number(lastGame?.awayId ?? lastGame?.away?.id);
   const userIsHome = homeId === userId;
   const userIsAway = awayId === userId;
-  const userScore = userIsHome ? safeNum(lastGame?.score?.home) : safeNum(lastGame?.score?.away);
-  const oppScore = userIsHome ? safeNum(lastGame?.score?.away) : safeNum(lastGame?.score?.home);
+  const scores = getGameScores(lastGame);
+  const userScore = userIsHome ? scores.home : userIsAway ? scores.away : scores.home;
+  const oppScore = userIsHome ? scores.away : userIsAway ? scores.home : scores.away;
   const oppAbbr = userIsHome ? (lastGame?.awayAbbr ?? 'TBD') : (lastGame?.homeAbbr ?? 'TBD');
   const location = userIsHome ? 'vs' : userIsAway ? '@' : 'vs';
-  const resultLabel = lastGame?.userWon ? 'W' : 'L';
+  const resultLabel = userScore === oppScore ? 'T' : userScore > oppScore ? 'W' : 'L';
   return {
     heroLine: `${resultLabel} · ${userScore}-${oppScore} ${location} ${oppAbbr}`,
     overviewLine: `${resultLabel} ${userScore}-${oppScore} ${location} ${oppAbbr}`,
@@ -87,26 +95,31 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   ];
 
   const lastGame = command.lastGameSummary;
-  const homeAwayVerb = command.nextGame?.isHome ? 'vs' : '@';
+  const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
   const footerDays = Math.max(0, 7 - ((safeNum(league?.week, 1) - 1) % 7));
-  const divisionRows = command.divisionMiniStandings ?? [];
-  const divisionLeader = divisionRows[0] ?? null;
-  const userRow = divisionRows.find((row) => row?.isUser) ?? null;
-  const leaderWins = safeNum(divisionLeader?.record?.split('-')?.[0]);
-  const userWins = safeNum(userRow?.record?.split('-')?.[0]);
-  const gamesBehind = Math.max(0, leaderWins - userWins);
-  const standingDetail = divisionLeader && !divisionLeader?.isUser ? `${gamesBehind || 1} GB behind ${divisionLeader?.abbr ?? 'division lead'}` : 'Leads division race';
-  const lastTwo = Array.isArray(userTeam?.recentResults) ? userTeam.recentResults.slice(-2).map((r) => String(r).toUpperCase()) : [];
-  const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
-  const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
-  const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGame?.userWon ? 'Carrying momentum from last win' : 'Rebound spot after last result');
+  const heroMeta = useMemo(() => {
+    const homeAwayVerb = command.nextGame?.isHome ? 'vs' : '@';
+    const divisionRows = command.divisionMiniStandings ?? [];
+    const divisionLeader = divisionRows[0] ?? null;
+    const userRow = divisionRows.find((row) => row?.isUser) ?? null;
+    const leaderWins = safeNum(divisionLeader?.record?.split('-')?.[0]);
+    const userWins = safeNum(userRow?.record?.split('-')?.[0]);
+    const gamesBehind = Math.max(0, leaderWins - userWins);
+    const standingDetail = divisionLeader && !divisionLeader?.isUser ? `${gamesBehind || 1} GB behind ${divisionLeader?.abbr ?? 'division lead'}` : 'Leads division race';
+
+    const lastTwo = Array.isArray(userTeam?.recentResults) ? userTeam.recentResults.slice(-2).map((r) => String(r).toUpperCase()) : [];
+    const hasTwoWins = lastTwo.length === 2 && lastTwo.every((result) => result === 'W');
+    const hasTwoLosses = lastTwo.length === 2 && lastTwo.every((result) => result === 'L');
+    const lastGameStory = hasTwoWins ? 'Won 2 straight heading into kickoff' : hasTwoLosses ? 'Need division response this week' : (lastGameDisplay.heroLine.startsWith('W') ? 'Carrying momentum from last win' : 'Rebound spot after last result');
+
+    const operationHeading = `WEEK ${safeNum(league?.week, 1)} ${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`.toUpperCase();
+    const matchupLine = [`${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`, formatRecordInline(command.nextOpponentRecord), `Week ${safeNum(league?.week, 1)}`].join(' • ');
+    const trendLine = hasTwoWins ? 'Win streak 2' : hasTwoLosses ? 'Loss streak 2' : 'Momentum balanced';
+    const nextOppSummary = [command.standingSummary, matchupLine, trendLine].filter(Boolean).join(' • ');
+    return { standingDetail, lastGameStory, operationHeading, nextOppSummary };
+  }, [command.divisionMiniStandings, command.nextGame?.isHome, command.nextOpponent, command.nextOpponentRecord, command.standingSummary, lastGameDisplay.heroLine, league?.week, opponent?.abbr, userTeam?.recentResults]);
+
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
-  const operationHeading = `WEEK ${safeNum(league?.week, 1)} ${homeAwayVerb} ${opponent?.abbr ?? command.nextOpponent ?? 'TBD'}`.toUpperCase();
-  const nextOppSummary = [
-    command.standingSummary,
-    formatRecordInline(command.nextOpponentRecord),
-    hasTwoWins ? 'Win streak 2' : hasTwoLosses ? 'Loss streak 2' : 'Momentum balanced',
-  ].filter(Boolean).join(' • ');
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -125,7 +138,6 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       const oppTeam = (league?.teams ?? []).find((t) => Number(t?.id) === Number(oppId));
       return `W${safeNum(game?.week, 0)} ${isHome ? 'vs' : '@'} ${oppTeam?.abbr ?? 'TBD'}`;
     }), [league]);
-  const lastGameDisplay = useMemo(() => getLastGameDisplay(lastGame, league?.userTeamId), [lastGame, league?.userTeamId]);
 
   return (
     <div className="app-screen-stack franchise-hq franchise-command-center">
@@ -144,8 +156,8 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <div className="app-hq-matchup-main">
           <div className="app-hq-hero-copy">
             <span className="app-hq-matchup-hero__eyebrow">Next Opponent · Week {safeNum(league?.week, 1)} Operations</span>
-            <strong>{operationHeading}</strong>
-            <p>{nextOppSummary}</p>
+            <strong>{heroMeta.operationHeading}</strong>
+            <p>{heroMeta.nextOppSummary}</p>
           </div>
           <div className="app-hq-team app-hq-team--opp">
             <TeamIdentityBadge team={opponent} size={112} variant="circle" />
@@ -161,7 +173,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
               <strong>Last Game</strong>
             </div>
             <p className="app-hq-hero-subcard__value">{lastGameDisplay.heroLine}</p>
-            <small>{lastGame ? lastGameStory : 'Play this week to establish momentum.'}</small>
+            <small>{lastGame ? heroMeta.lastGameStory : 'Play this week to establish momentum.'}</small>
           </div>
           <div className="app-hq-hero-subcard">
             <div className="app-hq-hero-subcard__head">
@@ -169,7 +181,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
               <strong>Standing</strong>
             </div>
             <p className="app-hq-hero-subcard__value">{command.standingSummary}</p>
-            <small>{standingDetail}</small>
+            <small>{heroMeta.standingDetail}</small>
           </div>
         </div>
 
