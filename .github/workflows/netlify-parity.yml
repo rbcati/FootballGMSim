@@ -17,8 +17,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Verify netlify parity build
-        run: npm run check:netlify-parity
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Mirror Netlify with netlify-cli
-        run: npm run check:netlify-cli-build
+      - name: Verify deploy parity checks
+        run: npm run check:deploy
