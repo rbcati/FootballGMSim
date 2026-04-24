@@ -52,6 +52,10 @@ describe('FranchiseHQ', () => {
     expect(screen.getByRole('button', { name: /^set lineup:/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^training:/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^scout opponent:/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /coordinator brief/i })).toBeTruthy();
+    expect(screen.getAllByText(/home matchup vs det/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/ratings are tightly clustered/i)).toBeTruthy();
+    expect(screen.getByText(/open roster \/ depth/i)).toBeTruthy();
   });
 
   it('renders record, standing, and fallback copy when schedule is missing', () => {
@@ -66,6 +70,7 @@ describe('FranchiseHQ', () => {
     );
 
     expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
+    expect(screen.getByText(/no opponent is locked yet/i)).toBeTruthy();
     expect(screen.getByText(/no future games on file/i)).toBeTruthy();
     expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
   });
