@@ -19,34 +19,45 @@ if [[ ! -f "netlify.toml" ]]; then
 fi
 
 NETLIFY_CMD="$(sed -n 's/^\s*command\s*=\s*"\(.*\)"/\1/p' netlify.toml | head -n 1)"
+NETLIFY_PUBLISH="$(sed -n 's/^\s*publish\s*=\s*"\(.*\)"/\1/p' netlify.toml | head -n 1)"
+
 if [[ -z "$NETLIFY_CMD" ]]; then
   echo "[netlify-parity] ERROR: netlify build command missing in netlify.toml"
   exit 1
 fi
 
-echo "[netlify-parity] netlify.toml build.command=$NETLIFY_CMD"
-echo "[netlify-parity] Cleaning install artifacts"
-rm -rf node_modules dist
+if [[ -z "$NETLIFY_PUBLISH" ]]; then
+  echo "[netlify-parity] ERROR: netlify publish directory missing in netlify.toml"
+  exit 1
+fi
 
-echo "[netlify-parity] Installing dependencies from package-lock.json"
-npm ci --no-audit
+echo "[netlify-parity] netlify.toml build.command=$NETLIFY_CMD"
+echo "[netlify-parity] netlify.toml build.publish=$NETLIFY_PUBLISH"
+
+if [[ ! -d "node_modules" ]]; then
+  echo "[netlify-parity] ERROR: node_modules is missing. Run 'npm ci' before this check."
+  exit 1
+fi
+
+echo "[netlify-parity] Cleaning publish directory"
+rm -rf "$NETLIFY_PUBLISH"
 
 echo "[netlify-parity] Building production bundle with Netlify-like env"
 CI=true NETLIFY=true CONTEXT=production npm run build
 
-if [[ -f "public/sw.js" && ! -f "dist/sw.js" ]]; then
-  echo "[netlify-parity] ERROR: dist/sw.js missing (public/sw.js should be copied)"
+if [[ -f "public/sw.js" && ! -f "$NETLIFY_PUBLISH/sw.js" ]]; then
+  echo "[netlify-parity] ERROR: $NETLIFY_PUBLISH/sw.js missing (public/sw.js should be copied)"
   exit 1
 fi
 
-if [[ -f "public/_headers" && ! -f "dist/_headers" ]]; then
-  echo "[netlify-parity] ERROR: dist/_headers missing (public/_headers should be copied)"
+if [[ -f "public/_headers" && ! -f "$NETLIFY_PUBLISH/_headers" ]]; then
+  echo "[netlify-parity] ERROR: $NETLIFY_PUBLISH/_headers missing (public/_headers should be copied)"
   exit 1
 fi
 
-if [[ ! -f "dist/index.html" ]]; then
-  echo "[netlify-parity] ERROR: dist/index.html missing after build"
+if [[ ! -f "$NETLIFY_PUBLISH/index.html" ]]; then
+  echo "[netlify-parity] ERROR: $NETLIFY_PUBLISH/index.html missing after build"
   exit 1
 fi
 
-echo "[netlify-parity] OK: Netlify parity build completed and dist artifacts are present"
+echo "[netlify-parity] OK: Netlify parity build completed and publish artifacts are present"
