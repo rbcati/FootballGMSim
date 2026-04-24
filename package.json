@@ -13,7 +13,8 @@
     "check:netlify-parity": "bash scripts/netlify-parity-check.sh",
     "check:netlify-cli-build": "npx --yes netlify-cli@latest build --context production --offline",
     "check:netlify-rules": "node scripts/validate-netlify-rules.mjs",
-    "check:deploy": "npm run check:netlify-parity && npm run check:netlify-rules && npm run check:netlify-cli-build"
+    "check:deploy": "npm run check:netlify-parity && npm run check:netlify-rules && npm run check:netlify-cli-build && npm run check:netlify-cli-build:preview",
+    "check:netlify-cli-build:preview": "npx --yes netlify-cli@latest build --context deploy-preview --offline"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
