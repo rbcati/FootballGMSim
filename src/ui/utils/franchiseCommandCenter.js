@@ -7,6 +7,7 @@ import { buildCompletedGamePresentation } from './boxScoreAccess.js';
 import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gameArchive.ts';
 import { logChronicleEvent, syncFranchiseChronicle } from './franchiseChronicle.js';
 import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './franchiseEvents.js';
+import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './weeklyIntelligence.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -495,7 +496,13 @@ export function selectFranchiseHQViewModel(league) {
     },
     blockers: prep?.blockers ?? [],
     actionStatuses: deriveActionStatuses(weekly, nextGame),
-    weeklyAgenda: buildWeeklyAgenda({ team, league: vm.league, weekly, prep, nextGame }),
+    weeklyIntelligence: buildWeeklyIntelligence({ league: vm.league, team, nextGame, prep }),
+    weeklyAgenda: buildActionableWeeklyPriorities({
+      team,
+      nextGame,
+      prep,
+      weeklyAgenda: buildWeeklyAgenda({ team, league: vm.league, weekly, prep, nextGame }),
+    }),
     lastGameSummary: latestArchived ?? fallbackLastGame,
     standingSummary: `${formatRecord(team)} · ${team?.conf ?? ''} ${team?.div ?? ''}`.trim(),
     latestArchived,

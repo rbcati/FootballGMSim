@@ -89,6 +89,17 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   }, [command.divisionMiniStandings, command.nextGame?.isHome, command.nextOpponent, command.nextOpponentRecord, command.standingSummary, lastGameDisplay.heroLine, league?.week, opponent?.abbr, userTeam?.recentResults]);
 
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
+  const weeklyIntel = useMemo(() => command.weeklyIntelligence?.insights ?? [], [command.weeklyIntelligence?.insights]);
+  const postAdvanceNote = useMemo(() => {
+    const latestNews = (command.leagueNews ?? [])[0] ?? null;
+    const recordDelta = lastGame ? `Record now ${formatRecordInline(command.teamRecord)}` : 'Advance to generate game feedback';
+    return {
+      result: lastGameDisplay.overviewLine,
+      recordDelta,
+      nextOpponent: `${nextOpponentDisplay.isHome ? 'vs' : '@'} ${nextOpponentDisplay.opponentAbbr}`,
+      note: latestNews?.headline ?? 'No new league bulletin yet.',
+    };
+  }, [command.leagueNews, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -168,6 +179,14 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         <p className="app-hq-hero-footnote">Sim to Sunday • {footerDays} days until kickoff</p>
       </section>
 
+      <SectionCard title={command.weeklyIntelligence?.heading ?? 'Coordinator Brief'} subtitle="Matchup intel for this week’s decision loop." variant="compact">
+        <div className="app-hq-intel-list" role="list" aria-label="Weekly intelligence">
+          {weeklyIntel.map((insight) => (
+            <p key={insight.id} role="listitem" className={`app-hq-intel-item tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
+          ))}
+        </div>
+      </SectionCard>
+
       <section className="app-section-stack" aria-label="This Week Action Center">
         <h2 className="app-section-heading">Prepare for Kickoff</h2>
         <div className="app-action-grid-2x2">
@@ -178,14 +197,16 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </section>
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
-      <SectionCard title="Week Command" subtitle="Resolve weekly priorities before advancing." variant="compact">
+      <SectionCard title="Week Command" subtitle="What needs attention, why it matters, and where to handle it." variant="compact">
         <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
       </SectionCard>
 
       <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
         <div className="app-hq-team-overview">
-          <div><span>Last Game</span><strong>{lastGameDisplay.overviewLine}</strong></div>
-          <div><span>Standing</span><strong>{command.standingSummary}</strong></div>
+          <div><span>Last Game</span><strong>{postAdvanceNote.result}</strong></div>
+          <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
+          <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
+          <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
           <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
         </div>
       </SectionCard>

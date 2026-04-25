@@ -12,6 +12,7 @@ for (const viewport of [
 
     await expect(page.getByText(/Week\s+\d+/i).first()).toBeVisible({ timeout: 60000 });
     await expect(page.getByText(/Last Result/i).first()).toBeVisible();
+    await expect(page.getByText(/Coordinator Brief|Weekly Intelligence|Opponent Intel/i).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Advance Week/i })).toBeVisible();
 
     for (const label of ['Game Plan', 'Set Lineup', 'Training', 'Scout Opponent']) {
