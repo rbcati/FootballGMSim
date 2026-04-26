@@ -13,6 +13,7 @@ export function normalizeManagementDestination(tabToken) {
     statsFamily: null,
     leagueSection: null,
     teamSection: null,
+    initialWeek: null,
   };
   if (typeof tabToken !== "string") return normalized;
 
@@ -57,6 +58,13 @@ export function normalizeManagementDestination(tabToken) {
     normalized.tab = "Team";
     const canonicalSection = [...TEAM_SECTIONS].find((v) => v.toLowerCase() === state.toLowerCase());
     normalized.teamSection = canonicalSection ?? "Overview";
+    return normalized;
+  }
+
+  if (tab === "Weekly Results") {
+    normalized.tab = "Weekly Results";
+    const parsedWeek = Number(state);
+    normalized.initialWeek = Number.isFinite(parsedWeek) && parsedWeek >= 1 ? parsedWeek : null;
     return normalized;
   }
 

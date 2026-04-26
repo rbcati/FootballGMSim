@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveCompactResultRecap, getGameLifecycleBucket, selectWeekGames } from './gameCenterResults.js';
+import { deriveCompactResultRecap, getGameLifecycleBucket, resolveDefaultResultsWeek, selectWeekGames } from './gameCenterResults.js';
 
 describe('gameCenterResults helpers', () => {
   it('creates deterministic recap text for the same payload', () => {
@@ -37,5 +37,22 @@ describe('gameCenterResults helpers', () => {
     expect(selectWeekGames(schedule, 1)).toHaveLength(1);
     expect(selectWeekGames(schedule, 2)).toHaveLength(2);
     expect(selectWeekGames(schedule, 3)).toHaveLength(0);
+  });
+
+  it('resolves a smarter default week when current week is not completed', () => {
+    const schedule = {
+      weeks: [
+        { week: 1, games: [{ played: true, homeScore: 7, awayScore: 3 }] },
+        { week: 2, games: [{ played: true, homeScore: 17, awayScore: 20 }] },
+        { week: 3, games: [{ played: false }] },
+      ],
+    };
+    expect(resolveDefaultResultsWeek(schedule, { currentWeek: 3 })).toBe(2);
+    expect(resolveDefaultResultsWeek(schedule, { initialWeek: 1, currentWeek: 3 })).toBe(1);
+  });
+
+  it('falls back safely when schedule payload is missing or malformed', () => {
+    expect(resolveDefaultResultsWeek(null, { currentWeek: 4 })).toBe(4);
+    expect(resolveDefaultResultsWeek({ weeks: [{ week: 'bad', games: [] }] }, { currentWeek: 'bad' })).toBe(1);
   });
 });

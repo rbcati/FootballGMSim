@@ -67,7 +67,7 @@ describe('FranchiseHQ', () => {
     fireEvent.click(within(view.container).getAllByRole('button', { name: /open weekly results/i })[0]);
 
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
-    expect(onNavigate).toHaveBeenCalledWith('Weekly Results');
+    expect(onNavigate).toHaveBeenCalledWith('Weekly Results:9');
   });
 
   it('renders record, standing, and fallback copy when schedule is missing', () => {

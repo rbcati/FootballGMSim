@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGamePlanImpact } from './gamePlanImpact.js';
+import { buildGamePlanImpact, buildPostGameReview } from './gamePlanImpact.js';
 
 const baseTeam = { id: 1, abbr: 'CHI', offenseRating: 84, defenseRating: 84, roster: [] };
 const baseOpponent = { id: 2, abbr: 'DET', offenseRating: 84, defenseRating: 84 };
@@ -52,5 +52,15 @@ describe('buildGamePlanImpact', () => {
   it('adds late-season pressure card when applicable', () => {
     const result = buildGamePlanImpact(buildInput({ league: { week: 14 } }));
     expect(result.recommendedAdjustments.some((item) => item.title === 'Late-Season Pressure')).toBe(true);
+  });
+
+  it('uses a valid Weekly Results route for postgame review actions', () => {
+    const review = buildPostGameReview({
+      userTeamId: 1,
+      latestNews: null,
+      lastGame: { week: 9, home: 1, away: 2, homeScore: 24, awayScore: 17, played: true },
+    });
+
+    expect(review.actions.find((item) => item.label === 'Open Weekly Results')?.targetRoute).toBe('Weekly Results:9');
   });
 });
