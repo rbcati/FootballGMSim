@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
 
 const baseLeague = {
@@ -53,9 +53,21 @@ describe('FranchiseHQ', () => {
     expect(screen.getByRole('button', { name: /^training:/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^scout opponent:/i })).toBeTruthy();
     expect(screen.getByRole('heading', { name: /coordinator brief/i })).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/home matchup vs det/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ratings are tightly clustered/i)).toBeTruthy();
     expect(screen.getByText(/open roster \/ depth/i)).toBeTruthy();
+  });
+
+  it('routes Game Plan Impact and review CTAs through onNavigate', () => {
+    const onNavigate = vi.fn();
+    const view = render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    fireEvent.click(within(view.container).getAllByRole('button', { name: /attack plan: tune game plan/i })[0]);
+    fireEvent.click(within(view.container).getAllByRole('button', { name: /open weekly results/i })[0]);
+
+    expect(onNavigate).toHaveBeenCalledWith('Game Plan');
+    expect(onNavigate).toHaveBeenCalledWith('Weekly Results');
   });
 
   it('renders record, standing, and fallback copy when schedule is missing', () => {
@@ -71,6 +83,7 @@ describe('FranchiseHQ', () => {
 
     expect(screen.getByText(/no completed game yet/i)).toBeTruthy();
     expect(screen.getByText(/no opponent is locked yet/i)).toBeTruthy();
+    expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
     expect(screen.getByText(/no future games on file/i)).toBeTruthy();
     expect(screen.getAllByText(/0-0 · 0 0/i).length).toBeGreaterThan(0);
   });
