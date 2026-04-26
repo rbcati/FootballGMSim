@@ -8,6 +8,7 @@ import { getRecentGames as getArchivedRecentGames } from '../../core/archive/gam
 import { logChronicleEvent, syncFranchiseChronicle } from './franchiseChronicle.js';
 import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './franchiseEvents.js';
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './weeklyIntelligence.js';
+import { buildGamePlanImpact, buildPostGameReview } from './gamePlanImpact.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -470,6 +471,12 @@ export function selectFranchiseHQViewModel(league) {
     .slice(0, 2);
   const queuedEvent = maybeQueueWeeklyEvent(vm.league);
   const story = syncFranchiseChronicle(vm.league);
+  const gamePlanImpact = buildGamePlanImpact({ league: vm.league, team, nextGame, prep });
+  const postGameReview = buildPostGameReview({
+    lastGame: latestArchived ?? fallbackLastGame,
+    userTeamId: vm.league?.userTeamId,
+    latestNews: leagueNews?.[0] ?? null,
+  });
   const injuredSpotlight = (team?.roster ?? [])
     .filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0)
     .sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr))[0] ?? null;
@@ -497,6 +504,10 @@ export function selectFranchiseHQViewModel(league) {
     blockers: prep?.blockers ?? [],
     actionStatuses: deriveActionStatuses(weekly, nextGame),
     weeklyIntelligence: buildWeeklyIntelligence({ league: vm.league, team, nextGame, prep }),
+    gamePlanImpact,
+    recommendedAdjustments: gamePlanImpact.recommendedAdjustments,
+    postGameReview,
+    advanceFeedback: postGameReview,
     weeklyAgenda: buildActionableWeeklyPriorities({
       team,
       nextGame,

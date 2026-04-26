@@ -90,16 +90,22 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
   const capSpace = command.teamOverview?.find((item) => item.label === 'Cap Space')?.value ?? '—';
   const weeklyIntel = useMemo(() => command.weeklyIntelligence?.insights ?? [], [command.weeklyIntelligence?.insights]);
+  const gamePlanImpactCards = useMemo(() => command.gamePlanImpact?.recommendedAdjustments ?? [], [command.gamePlanImpact?.recommendedAdjustments]);
   const postAdvanceNote = useMemo(() => {
-    const latestNews = (command.leagueNews ?? [])[0] ?? null;
+    const review = command.postGameReview ?? null;
     const recordDelta = lastGame ? `Record now ${formatRecordInline(command.teamRecord)}` : 'Advance to generate game feedback';
     return {
-      result: lastGameDisplay.overviewLine,
+      heading: review?.heading ?? 'Review Last Week',
+      result: review?.result ?? lastGameDisplay.overviewLine,
+      takeaway: review?.takeaway ?? 'Result recorded. Open box score for full drive details.',
+      nextAction: review?.nextAction ?? "Tune this week's prep before advancing again.",
       recordDelta,
       nextOpponent: `${nextOpponentDisplay.isHome ? 'vs' : '@'} ${nextOpponentDisplay.opponentAbbr}`,
-      note: latestNews?.headline ?? 'No new league bulletin yet.',
+      note: review?.newsNote ?? (command.leagueNews ?? [])[0]?.headline ?? 'No new league bulletin yet.',
+      actions: Array.isArray(review?.actions) ? review.actions : [],
     };
-  }, [command.leagueNews, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
+  }, [command.leagueNews, command.postGameReview, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
+
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -187,6 +193,23 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
       </SectionCard>
 
+      <SectionCard title={command.gamePlanImpact?.heading ?? 'Game Plan Impact'} subtitle={command.gamePlanImpact?.summary ?? 'Translate coordinator intel into fast football actions.'} variant="compact">
+        <div className="app-hq-impact-list" role="list" aria-label="Game plan impact recommendations">
+          {gamePlanImpactCards.map((item) => (
+            <article key={item.id} role="listitem" className={`app-hq-impact-card tone-${item.tag?.tone ?? 'info'}`}>
+              <div className="app-hq-impact-card__head">
+                <strong>{item.title}</strong>
+                <StatusChip label={item.tag?.label ?? `${item.confidenceLevel ?? 'medium'} confidence`} tone={item.tag?.tone ?? 'warning'} />
+              </div>
+              <p>{item.explanation}</p>
+              <button type="button" className="btn btn-sm app-hq-impact-card__cta" onClick={() => onNavigate?.(item.targetRoute)} aria-label={`${item.title}: ${item.ctaLabel}`}>
+                {item.ctaLabel}
+              </button>
+            </article>
+          ))}
+        </div>
+      </SectionCard>
+
       <section className="app-section-stack" aria-label="This Week Action Center">
         <h2 className="app-section-heading">Prepare for Kickoff</h2>
         <div className="app-action-grid-2x2">
@@ -203,10 +226,13 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
       <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">
         <div className="app-hq-team-overview">
-          <div><span>Last Game</span><strong>{postAdvanceNote.result}</strong></div>
+          <div><span>{postAdvanceNote.heading}</span><strong>{postAdvanceNote.result}</strong></div>
+          <div><span>Key Takeaway</span><strong>{postAdvanceNote.takeaway}</strong></div>
+          <div><span>Next Action</span><strong>{postAdvanceNote.nextAction}</strong></div>
           <div><span>Record Update</span><strong>{postAdvanceNote.recordDelta}</strong></div>
           <div><span>Next Opponent</span><strong>{postAdvanceNote.nextOpponent}</strong></div>
           <div><span>News Note</span><strong>{postAdvanceNote.note}</strong></div>
+          <div><span>Review Routes</span><div className="app-hq-opponent-chips">{postAdvanceNote.actions.length ? postAdvanceNote.actions.map((action) => <button key={action.targetRoute} type="button" onClick={() => onNavigate?.(action.targetRoute)}>{action.label}</button>) : <em>No review actions</em>}</div></div>
           <div><span>Next 3</span><div className="app-hq-opponent-chips">{nextOpponents.length ? nextOpponents.map((chip) => <em key={chip}>{chip}</em>) : <em>No future games on file</em>}</div></div>
         </div>
       </SectionCard>

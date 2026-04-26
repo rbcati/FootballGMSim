@@ -13,6 +13,7 @@ for (const viewport of [
     await expect(page.getByText(/Week\s+\d+/i).first()).toBeVisible({ timeout: 60000 });
     await expect(page.getByText(/Last Result/i).first()).toBeVisible();
     await expect(page.getByText(/Coordinator Brief|Weekly Intelligence|Opponent Intel/i).first()).toBeVisible();
+    await expect(page.getByText(/Game Plan Impact/i).first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Advance Week/i })).toBeVisible();
 
     for (const label of ['Game Plan', 'Set Lineup', 'Training', 'Scout Opponent']) {
@@ -22,6 +23,12 @@ for (const viewport of [
     const advance = page.getByRole('button', { name: /Advance Week/i });
     await expect(advance).toBeEnabled();
     await expect(advance).toBeInViewport();
+
+    const noOverflow = await page.evaluate(() => {
+      const doc = document.documentElement;
+      return doc.scrollWidth <= doc.clientWidth + 1;
+    });
+    expect(noOverflow).toBeTruthy();
     await expect(page.locator('html, body')).not.toContainText('Something went wrong');
   });
 }
