@@ -648,3 +648,54 @@
   .app-action-grid-2x2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-hq-sticky-advance { position: static; }
 }
+
+.app-game-plan-screen { overflow-x: clip; }
+.app-game-plan-hero {
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--hairline));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 92%, #122238 8%), var(--surface));
+  border-radius: calc(var(--radius-lg) + 2px);
+  margin-bottom: 10px;
+}
+.app-game-plan-hero__meta { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: .08em; }
+.app-game-plan-hero__row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.app-game-plan-hero h1 { margin: 0; font-size: clamp(1rem, 4vw, 1.35rem); text-align: center; }
+.app-game-plan-hero p { margin: 8px 0 0; color: var(--text-muted); font-size: var(--text-xs); }
+.app-game-plan-team-pill { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.app-game-plan-team-pill--opp { justify-content: flex-end; text-align: right; }
+.app-game-plan-team-pill span { display: block; color: var(--text-subtle); font-size: var(--text-xs); }
+.app-game-plan-card { padding: var(--space-3); margin-bottom: 10px; }
+.app-game-plan-impact-summary { margin: 0 0 8px; color: var(--text-muted); font-size: var(--text-xs); }
+.app-game-plan-brief-grid { display: grid; gap: 8px; }
+.app-game-plan-brief-item { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 8px 10px; background: color-mix(in srgb, var(--surface) 94%, black 6%); }
+.app-game-plan-brief-item strong { font-size: var(--text-sm); }
+.app-game-plan-brief-item p { margin: 4px 0 0; color: var(--text-muted); font-size: var(--text-xs); }
+.app-game-plan-sticky-save {
+  position: sticky;
+  bottom: 10px;
+  display: grid;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.app-game-plan-save-btn {
+  width: 100%;
+  min-height: 50px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #ffe189, #fbc23b 56%, #ebad1f);
+  color: #17120a;
+  font-weight: 900;
+  font-size: 0.95rem;
+}
+.app-game-plan-save-btn:focus-visible,
+.app-game-plan-sticky-save .btn:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), .95);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .app-game-plan-hero__row { grid-template-columns: 1fr; }
+  .app-game-plan-team-pill,
+  .app-game-plan-team-pill--opp { justify-content: flex-start; text-align: left; }
+  .app-game-plan-hero h1 { text-align: left; }
+}

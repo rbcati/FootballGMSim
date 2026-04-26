@@ -73,7 +73,7 @@ describe('weekly loop cohesion surfaces', () => {
   it('renders GamePlanScreen strategy header safely', () => {
     const html = renderToString(<GamePlanScreen league={league} actions={actions} />);
     expect(html).toContain('Game Plan');
-    expect(html).toContain('Matchup Plan');
+    expect(html).toContain('Tactical Brief');
   });
 
   it('renders NewsFeed injury board safely', () => {
