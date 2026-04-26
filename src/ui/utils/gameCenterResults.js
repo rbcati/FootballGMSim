@@ -41,3 +41,41 @@ export function selectWeekGames(schedule, week) {
   const row = schedule.weeks.find((entry) => Number(entry?.week) === Number(week));
   return Array.isArray(row?.games) ? row.games : [];
 }
+
+function hasCompletedGame(games = []) {
+  return games.some((game) => getGameLifecycleBucket(game) === 'completed');
+}
+
+export function resolveDefaultResultsWeek(schedule, { initialWeek, currentWeek = 1 } = {}) {
+  const parsedInitialWeek = Number(initialWeek);
+  if (Number.isFinite(parsedInitialWeek) && parsedInitialWeek >= 1) return parsedInitialWeek;
+
+  if (!Array.isArray(schedule?.weeks) || !schedule.weeks.length) {
+    const fallback = Number(currentWeek);
+    return Number.isFinite(fallback) && fallback >= 1 ? fallback : 1;
+  }
+
+  const normalizedWeeks = schedule.weeks
+    .map((row) => ({ week: Number(row?.week), games: Array.isArray(row?.games) ? row.games : [] }))
+    .filter((row) => Number.isFinite(row.week) && row.week >= 1)
+    .sort((a, b) => a.week - b.week);
+
+  if (!normalizedWeeks.length) return 1;
+
+  const parsedCurrentWeek = Number(currentWeek);
+  const effectiveCurrentWeek = Number.isFinite(parsedCurrentWeek) && parsedCurrentWeek >= 1
+    ? parsedCurrentWeek
+    : normalizedWeeks[normalizedWeeks.length - 1].week;
+  const currentRow = normalizedWeeks.find((row) => row.week === effectiveCurrentWeek);
+
+  if (currentRow && hasCompletedGame(currentRow.games)) return currentRow.week;
+
+  for (let i = normalizedWeeks.length - 1; i >= 0; i -= 1) {
+    const row = normalizedWeeks[i];
+    if (row.week > effectiveCurrentWeek) continue;
+    if (hasCompletedGame(row.games)) return row.week;
+  }
+
+  const closest = normalizedWeeks.find((row) => row.week >= effectiveCurrentWeek) ?? normalizedWeeks[normalizedWeeks.length - 1];
+  return closest?.week ?? 1;
+}

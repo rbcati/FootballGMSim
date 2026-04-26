@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
-import { deriveCompactResultRecap, getGameLifecycleBucket, selectWeekGames } from '../utils/gameCenterResults.js';
+import { deriveCompactResultRecap, getGameLifecycleBucket, resolveDefaultResultsWeek, selectWeekGames } from '../utils/gameCenterResults.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import {
   CompactInsightCard,
@@ -52,6 +52,27 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
   );
 }
 
+function buildUserTeamResult(row, userTeamId) {
+  if (!row || userTeamId == null) return null;
+  const homeId = Number(row?.game?.home?.id ?? row?.game?.home);
+  const awayId = Number(row?.game?.away?.id ?? row?.game?.away);
+  const isUserHome = homeId === Number(userTeamId);
+  const isUserAway = awayId === Number(userTeamId);
+  if (!isUserHome && !isUserAway) return null;
+  const opponent = isUserHome ? row.away : row.home;
+  const userScore = Number(isUserHome ? row?.game?.homeScore : row?.game?.awayScore);
+  const oppScore = Number(isUserHome ? row?.game?.awayScore : row?.game?.homeScore);
+  const outcome = userScore > oppScore ? 'W' : userScore < oppScore ? 'L' : 'T';
+  return {
+    ...row,
+    opponent,
+    isHome: isUserHome,
+    userScore,
+    oppScore,
+    outcome,
+  };
+}
+
 function LiveOrUpcomingRow({ row, label, tone = 'info' }) {
   return (
     <article className="app-game-center-card card is-compact">
@@ -97,10 +118,10 @@ function SpotlightCard({ row, seasonId, onGameSelect }) {
   );
 }
 
-export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect }) {
+export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect, onNavigate }) {
   const totalWeeks = Number(league?.schedule?.weeks?.length ?? 0);
-  const currentWeek = Number(initialWeek ?? league?.week ?? 1);
-  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+  const resolvedWeek = useMemo(() => resolveDefaultResultsWeek(league?.schedule, { initialWeek, currentWeek: league?.week }), [initialWeek, league?.schedule, league?.week]);
+  const [selectedWeek, setSelectedWeek] = useState(resolvedWeek);
 
   const teamById = useMemo(() => {
     const out = {};
@@ -133,22 +154,33 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect 
 
   const leagueRecap = useMemo(() => buildWeeklyLeagueRecap(league, { week: selectedWeek }), [league, selectedWeek]);
   const spotlightRows = useMemo(() => leagueRecap.spotlights.map((spotlight) => ({ ...spotlight, teamById })), [leagueRecap.spotlights, teamById]);
+  const userTeamResult = useMemo(() => {
+    const userTeamId = Number(league?.userTeamId);
+    if (!Number.isFinite(userTeamId)) return null;
+    return completed.map((row) => buildUserTeamResult(row, userTeamId)).find(Boolean) ?? null;
+  }, [completed, league?.userTeamId]);
+  const userResultPresentation = useMemo(
+    () => (userTeamResult ? buildCompletedGamePresentation(userTeamResult.game, { seasonId: league?.seasonId, week: userTeamResult.week, teamById, source: 'weekly_results_user_game' }) : null),
+    [league?.seasonId, teamById, userTeamResult],
+  );
+  const canOpenUserGame = Boolean(userResultPresentation?.canOpen && onGameSelect);
 
   if (!totalWeeks) {
     return <EmptyState title="No schedule data available for weekly results." body="Weekly game center will populate when league schedule weeks are present." />;
   }
 
   return (
-    <div className="app-screen-stack">
+    <div className="app-screen-stack app-weekly-results-screen">
       <HeroCard
-        eyebrow="Game Center"
+        eyebrow="Franchise HQ • Results"
         title="Weekly Results"
-        subtitle="Track finals, live windows, and upcoming slates from one command view."
+        subtitle="Review your latest final first, then scan league-wide outcomes and prep next steps."
         rightMeta={<StatusChip label={`Week ${selectedWeek}`} tone="info" />}
         actions={(
-          <div className="app-weekly-results-nav">
+          <div className="app-weekly-results-nav" role="group" aria-label="Weekly results navigation">
             <button type="button" className="btn btn-sm" onClick={() => setSelectedWeek((w) => Math.max(1, w - 1))} disabled={selectedWeek <= 1}>Prev</button>
             <button type="button" className="btn btn-sm" onClick={() => setSelectedWeek((w) => Math.min(totalWeeks, w + 1))} disabled={selectedWeek >= totalWeeks}>Next</button>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('HQ')}>Back to HQ</button>
           </div>
         )}
       >
@@ -168,6 +200,31 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect 
           />
         ) : null}
       </HeroCard>
+
+      {userTeamResult ? (
+        <SectionCard title="Your Game" subtitle="Fast recap from your latest completed matchup in this week." variant="info">
+          <article className="app-game-center-card app-game-center-user card">
+            <div className="app-game-center-card__top">
+              <strong>{userTeamResult.outcome === 'W' ? 'Win' : userTeamResult.outcome === 'L' ? 'Loss' : 'Tie'} • {userTeamResult.isHome ? 'vs' : '@'} {userTeamResult.opponent?.abbr ?? 'TBD'}</strong>
+              <StatusChip label={`${userTeamResult.userScore}-${userTeamResult.oppScore}`} tone={userTeamResult.outcome === 'W' ? 'ok' : userTeamResult.outcome === 'L' ? 'warning' : 'info'} />
+            </div>
+            <p className="app-game-center-card__scoreline">{userTeamResult.recap}</p>
+            <p className="app-game-center-card__summary">{userResultPresentation?.displayScoreLine ?? 'Final score unavailable.'}</p>
+            <div className="app-game-center-card__footer">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={canOpenUserGame ? () => openResolvedBoxScore(userTeamResult.game, { seasonId: league?.seasonId, week: userTeamResult.week, source: 'weekly_results_user_game' }, onGameSelect) : undefined}
+                disabled={!canOpenUserGame}
+                title={canOpenUserGame ? 'Open full Game Book' : (userResultPresentation?.statusLabel ?? 'Archive unavailable')}
+              >
+                {canOpenUserGame ? 'Open Game Book' : `Game Book unavailable (${userResultPresentation?.statusLabel ?? 'Archive unavailable'})`}
+              </button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('Weekly Prep')}>Continue Weekly Prep</button>
+            </div>
+          </article>
+        </SectionCard>
+      ) : null}
 
       {leagueRecap.bullets.length > 0 && (
         <SectionCard

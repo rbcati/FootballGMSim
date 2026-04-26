@@ -531,6 +531,7 @@ export default function LeagueDashboard({
   advanceDisabled = false,
 }) {
   const [activeTab, setActiveTab] = useState("HQ");
+  const [weeklyResultsInitialWeek, setWeeklyResultsInitialWeek] = useState(null);
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [lastGameTab, setLastGameTab] = useState("Schedule");
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
@@ -832,6 +833,9 @@ export default function LeagueDashboard({
                   if (destination.teamSection) {
                     setTeamInitialSection(destination.teamSection);
                   }
+                  if (destination.tab === "Weekly Results") {
+                    setWeeklyResultsInitialWeek(destination.initialWeek ?? null);
+                  }
                   setActiveTab(destination.tab && TABS.includes(destination.tab) ? destination.tab : "HQ");
                 }}
                 onAdvanceWeek={onAdvanceWeek}
@@ -910,7 +914,8 @@ export default function LeagueDashboard({
               renderResults={() => (
                 <WeeklyResultsCenter
                   league={league}
-                  initialWeek={league?.week}
+                  initialWeek={weeklyResultsInitialWeek ?? league?.week}
+                  onNavigate={setActiveTab}
                   onGameSelect={(gameId) => openGameDetail(gameId, "League")}
                 />
               )}
@@ -979,7 +984,8 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="Weekly Results" onNavigate={setActiveTab} fallbackTab="League">
             <WeeklyResultsCenter
               league={league}
-              initialWeek={league?.week}
+              initialWeek={weeklyResultsInitialWeek ?? league?.week}
+              onNavigate={setActiveTab}
               onGameSelect={(gameId) => openGameDetail(gameId, "Weekly Results")}
             />
           </TabErrorBoundary>

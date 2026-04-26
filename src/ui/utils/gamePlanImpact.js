@@ -217,7 +217,7 @@ export function buildPostGameReview({ lastGame, userTeamId, latestNews }) {
     nextAction,
     newsNote: latestNews?.headline ?? 'No new league bulletin yet.',
     actions: [
-      { label: 'Open Weekly Results', targetRoute: 'Weekly Results' },
+      { label: 'Open Weekly Results', targetRoute: `Weekly Results:${Math.max(1, safeNum(lastGame?.week, 1))}` },
       { label: 'Open News', targetRoute: 'News' },
     ],
   };

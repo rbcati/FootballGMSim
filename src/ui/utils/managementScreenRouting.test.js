@@ -65,6 +65,18 @@ describe("normalizeManagementDestination", () => {
       statsFamily: null,
       leagueSection: null,
       teamSection: null,
+      initialWeek: null,
+    });
+  });
+
+  it("supports Weekly Results deep links with optional initial week", () => {
+    expect(normalizeManagementDestination("Weekly Results:12")).toMatchObject({
+      tab: "Weekly Results",
+      initialWeek: 12,
+    });
+    expect(normalizeManagementDestination("Weekly Results:bad")).toMatchObject({
+      tab: "Weekly Results",
+      initialWeek: null,
     });
   });
 });

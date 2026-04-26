@@ -147,8 +147,9 @@
   .app-hero-summary-grid { grid-template-columns: 1fr; }
 }
 
+.app-weekly-results-screen { overflow-x: clip; }
 .app-weekly-results-nav { display: flex; gap: 8px; flex-wrap: wrap; }
-.app-weekly-results-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.app-weekly-results-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
 .app-weekly-results-recap-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .app-weekly-results-bullets { display: grid; gap: 6px; }
 
@@ -169,6 +170,28 @@
 .app-game-center-card__scoreline { font-size: var(--text-base); font-weight: 700; letter-spacing: -0.01em; }
 .app-game-center-card__summary { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
 .app-game-center-card__footer { display: flex; justify-content: flex-start; gap: 8px; }
+.app-game-center-user {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--hairline));
+  background: linear-gradient(150deg, color-mix(in srgb, var(--surface) 91%, #132035 9%), var(--surface));
+}
+.app-game-center-card button:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), .9);
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .app-weekly-results-nav .btn,
+  .app-game-center-card__footer .btn {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+  .app-weekly-results-grid {
+    grid-template-columns: 1fr;
+  }
+  .app-weekly-results-recap-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 .app-news-filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .app-news-filter-row .btn.is-active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(var(--accent-rgb), .38) inset; }
