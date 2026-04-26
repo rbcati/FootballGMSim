@@ -1041,7 +1041,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Game Plan" && (
           <TabErrorBoundary label="Game Plan" onNavigate={setActiveTab}>
-            <GamePlanScreen league={league} actions={actions} />
+            <GamePlanScreen league={league} actions={actions} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Roster" && (
