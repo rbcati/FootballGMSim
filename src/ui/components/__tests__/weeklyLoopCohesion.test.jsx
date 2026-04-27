@@ -66,8 +66,8 @@ describe('weekly loop cohesion surfaces', () => {
 
   it('renders WeeklyPrepScreen matchup framing safely', () => {
     const html = renderToString(<WeeklyPrepScreen league={league} onNavigate={() => {}} />);
-    expect(html).toContain('Scout &amp; Prep');
-    expect(html).toContain('Lineup readiness');
+    expect(html).toContain('Weekly Prep War Room');
+    expect(html).toContain('Readiness Command');
   });
 
   it('renders GamePlanScreen strategy header safely', () => {
