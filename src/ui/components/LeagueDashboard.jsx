@@ -1221,6 +1221,7 @@ export default function LeagueDashboard({
               league={league}
               actions={actions}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
