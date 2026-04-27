@@ -1,6 +1,7 @@
+/** @vitest-environment jsdom */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { renderToString } from 'react-dom/server';
+import { fireEvent, render, screen } from '@testing-library/react';
 import WeeklyPrepScreen from '../WeeklyPrepScreen.jsx';
 
 const league = {
@@ -20,7 +21,7 @@ const league = {
       offenseRating: 82,
       defenseRating: 83,
       recentResults: ['W', 'W', 'L', 'W'],
-      roster: [{ id: 11, pos: 'QB', ovr: 80, teamId: 1 }],
+      roster: [{ id: 11, pos: 'QB', ovr: 80, teamId: 1, depthChart: { rowKey: 'QB' } }],
     },
     {
       id: 2,
@@ -41,22 +42,34 @@ const league = {
 };
 
 describe('WeeklyPrepScreen', () => {
-  it('renders prep workflow sections for an upcoming game', () => {
-    const html = renderToString(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
-    expect(html).toContain('Opponent scout');
-    expect(html).toContain('Lineup readiness');
-    expect(html).toContain('Game plan recommendations');
-    expect(html).toContain('Active effects');
-    expect(html).toContain('Prep completion');
+  it('renders war room flow and completion chips', () => {
+    render(<WeeklyPrepScreen league={league} onNavigate={vi.fn()} />);
+    expect(screen.getByText(/Weekly Prep War Room/i)).toBeTruthy();
+    expect(screen.getByText(/Readiness Command/i)).toBeTruthy();
+    expect(screen.getByText(/Priority Actions/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Matchup Intel/i })).toBeTruthy();
+    expect(screen.getByText(/Prep Checklist/i)).toBeTruthy();
+    expect(screen.getByText(/Opponent (scouted|pending)/i)).toBeTruthy();
+  });
+
+  it('routes action cards and secondary HQ CTA through onNavigate', () => {
+    const onNavigate = vi.fn();
+    render(<WeeklyPrepScreen league={league} onNavigate={onNavigate} />);
+
+    screen.getAllByRole('button', { name: /open|review|adjust|set/i }).forEach((btn) => fireEvent.click(btn));
+    screen.getAllByRole('button', { name: /back to hq/i }).forEach((btn) => fireEvent.click(btn));
+
+    expect(onNavigate).toHaveBeenCalledWith('HQ');
+    expect(onNavigate.mock.calls.some((args) => String(args?.[0] ?? '').includes('Game Plan'))).toBe(true);
   });
 
   it('handles missing matchup data safely', () => {
-    const html = renderToString(
+    render(
       <WeeklyPrepScreen
         league={{ year: 2027, week: 1, userTeamId: 1, teams: [{ id: 1, name: 'Legacy', roster: [] }], schedule: { weeks: [] } }}
         onNavigate={vi.fn()}
       />,
     );
-    expect(html).toContain('Weekly prep unavailable');
+    expect(screen.getByText(/Weekly prep unavailable/i)).toBeTruthy();
   });
 });

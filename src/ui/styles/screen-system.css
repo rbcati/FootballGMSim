@@ -699,3 +699,29 @@
   .app-game-plan-team-pill--opp { justify-content: flex-start; text-align: left; }
   .app-game-plan-hero h1 { text-align: left; }
 }
+
+.weekly-prep-screen { gap: var(--space-2); }
+.weekly-prep-pill { font-size: var(--text-xs); border-radius: 999px; padding: 2px 8px; }
+.weekly-prep-hero-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.weekly-prep-team { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
+.weekly-prep-mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); gap: 8px; font-size: var(--text-xs); }
+.weekly-prep-command-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.weekly-prep-caption { margin: 0; font-size: var(--text-sm); color: var(--text-muted); }
+.weekly-prep-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 8px; }
+.weekly-prep-action-card { border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 10px; display: grid; gap: 8px; background: color-mix(in srgb, var(--surface) 94%, black 6%); }
+.weekly-prep-action-head { display: flex; gap: 8px; justify-content: space-between; align-items: flex-start; }
+.weekly-prep-action-card p { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.weekly-prep-nav-row { display: flex; justify-content: flex-end; }
+.weekly-prep-intel-grid { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+.weekly-prep-intel-head { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; }
+.weekly-prep-intel-grid ul { margin: 4px 0 0; padding-left: 16px; display: grid; gap: 4px; }
+.weekly-prep-intel-grid li { font-size: var(--text-sm); }
+.weekly-prep-effects-grid { display: grid; gap: 6px; }
+.weekly-prep-effect-row { font-size: var(--text-sm); border: 1px solid var(--hairline); border-radius: var(--radius-md); padding: 8px; }
+
+@media (max-width: 480px) {
+  .weekly-prep-action-card .btn,
+  .weekly-prep-nav-row .btn {
+    min-height: 40px;
+  }
+}

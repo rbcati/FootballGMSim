@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, SectionCard } from './common/UiPrimitives.jsx';
-import { markWeeklyPrepStep, deriveWeeklyPrepState } from '../utils/weeklyPrep.js';
-import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
+import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
+import { buildWeeklyPrepScreenModel } from '../utils/weeklyPrepScreenModel.js';
+import { TeamIdentityBadge } from './HQVisuals.jsx';
 
 function TonePill({ tone = 'info', label }) {
   const palette = {
@@ -13,14 +14,15 @@ function TonePill({ tone = 'info', label }) {
   };
   const active = palette[tone] ?? palette.info;
   return (
-    <span style={{ fontSize: 'var(--text-xs)', border: `1px solid ${active.border}`, background: active.bg, borderRadius: 999, padding: '2px 8px' }}>
+    <span className="weekly-prep-pill" style={{ border: `1px solid ${active.border}`, background: active.bg }}>
       {label}
     </span>
   );
 }
 
 export default function WeeklyPrepScreen({ league, onNavigate }) {
-  const prep = useMemo(() => deriveWeeklyPrepState(league), [league]);
+  const model = useMemo(() => buildWeeklyPrepScreenModel({ league }), [league]);
+  const prep = model.prep;
 
   useEffect(() => {
     markWeeklyPrepStep(league, 'opponentScouted', true);
@@ -36,104 +38,94 @@ export default function WeeklyPrepScreen({ league, onNavigate }) {
   };
 
   return (
-    <div className="app-screen-stack weekly-prep-screen" style={{ display: 'grid', gap: 'var(--space-2)' }}>
+    <div className="app-screen-stack weekly-prep-screen">
       <SectionCard
-        title={`Scout & Prep · Week ${prep.nextGame.week}`}
-        subtitle={`Opponent ${prep.opponentSnapshot.record} · ${prep.opponentSnapshot.homeAway} game`}
-        actions={<TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.remaining === 0 ? 'success' : 'warning'} label={prep.prepSummary?.status ?? prep.readinessLabel} />}
+        title={`Weekly Prep War Room · Week ${model.week}`}
+        subtitle={model.matchupHeadline}
+        actions={<TonePill tone={model.readinessTone} label={model.readinessStatus} />}
       >
-        <div className="weekly-prep-opponent-head">
+        <div className="weekly-prep-hero-row">
           <div className="weekly-prep-team">
-            <TeamIdentityBadge team={prep.team} size={36} emphasize />
+            <TeamIdentityBadge team={prep.team} size={40} emphasize />
             <strong>{prep.team?.abbr ?? 'YOU'}</strong>
           </div>
           <span>{prep.nextGame.isHome ? 'vs' : '@'}</span>
           <div className="weekly-prep-team">
-            <TeamIdentityBadge team={prep.opponent} size={36} />
-            <strong>{prep.opponent?.abbr ?? prep.opponent?.name ?? 'OPP'}</strong>
+            <TeamIdentityBadge team={prep.opponent} size={40} />
+            <strong>{model.opponentAbbr}</strong>
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8 }}>
-          <div style={{ fontSize: 'var(--text-xs)' }}><strong>You:</strong> OVR {prep.teamSnapshot.overall} · OFF {prep.teamSnapshot.offense} · DEF {prep.teamSnapshot.defense}</div>
-          <div style={{ fontSize: 'var(--text-xs)' }}><strong>Opp:</strong> OVR {prep.opponentSnapshot.overall} · OFF {prep.opponentSnapshot.offense} · DEF {prep.opponentSnapshot.defense}</div>
-          <div style={{ fontSize: 'var(--text-xs)' }}><strong>Form:</strong> You {prep.teamSnapshot.recentForm.summary} · Opp {prep.opponentSnapshot.recentForm.summary}</div>
+        <div className="weekly-prep-mini-grid">
+          <div><strong>You:</strong> OVR {prep.teamSnapshot.overall} · OFF {prep.teamSnapshot.offense} · DEF {prep.teamSnapshot.defense}</div>
+          <div><strong>Opp:</strong> OVR {prep.opponentSnapshot.overall} · OFF {prep.opponentSnapshot.offense} · DEF {prep.opponentSnapshot.defense}</div>
+          <div><strong>Form:</strong> You {prep.teamSnapshot.recentForm.summary} · Opp {prep.opponentSnapshot.recentForm.summary}</div>
         </div>
       </SectionCard>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: 'var(--space-2)' }}>
-        <SectionCard title="Opponent scout" subtitle="Football-specific matchup context.">
-          <div style={{ display: 'grid', gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="shield" size={12} /> Strengths</div>
-              <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
-                {(prep.opponentStrengths.length ? prep.opponentStrengths : ['No clear dominant opponent edge identified yet.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
-              </ul>
-            </div>
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="target" size={12} /> Exploitable weaknesses</div>
-              <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
-                {(prep.opponentWeaknesses.length ? prep.opponentWeaknesses : ['No obvious weakness — game script and execution will decide this one.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
-              </ul>
-            </div>
-            <div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', textTransform: 'uppercase' }}><HQIcon name="alert" size={12} /> Pressure points</div>
-              <ul style={{ margin: '4px 0 0', paddingLeft: 16 }}>
-                {(prep.pressurePoints.length ? prep.pressurePoints : ['No major pressure point flagged.']).map((item) => <li key={item} style={{ fontSize: 'var(--text-sm)' }}>{item}</li>)}
-              </ul>
-            </div>
-          </div>
-        </SectionCard>
+      <SectionCard title="Readiness Command" subtitle="Confirm prep quality before returning to HQ.">
+        <div className="weekly-prep-command-row">
+          <TonePill tone={model.readinessTone} label={`${model.readinessScore}% ready`} />
+          <TonePill tone={prep.remaining === 0 ? 'success' : 'warning'} label={`${4 - prep.remaining}/4 complete`} />
+          <TonePill tone={model.readyToAdvance ? 'success' : 'warning'} label={model.readyToAdvance ? 'Ready to Advance' : 'Needs Attention'} />
+        </div>
+        <p className="weekly-prep-caption">{model.keyRiskLabel}</p>
+      </SectionCard>
 
-        <SectionCard title="Lineup readiness" subtitle="Depth/injury blockers before kickoff.">
-          <div style={{ display: 'grid', gap: 8 }}>
-            {prep.lineupIssues.length === 0 ? (
-              <div style={{ fontSize: 'var(--text-sm)' }}>No lineup blockers detected. Depth chart and injury coverage look stable.</div>
-            ) : prep.lineupIssues.map((issue) => (
-              <div key={issue.id} style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 8 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <strong style={{ fontSize: 'var(--text-sm)' }}>{issue.label}</strong>
-                  <TonePill tone={issue.level === 'urgent' ? 'danger' : 'warning'} label={issue.level} />
-                </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 2 }}>{issue.detail}</div>
-                <Button size="sm" variant="outline" style={{ marginTop: 6 }} onClick={() => openAction(issue.actionTab, issue.actionTab === 'Injuries' ? 'injuriesReviewed' : 'lineupChecked')}>
-                  {issue.actionLabel}
-                </Button>
+      <SectionCard title="Priority Actions" subtitle="Complete these before sim day.">
+        <div className="weekly-prep-action-grid">
+          {model.priorityActions.slice(0, 4).map((action) => (
+            <article key={action.id} className="weekly-prep-action-card">
+              <div className="weekly-prep-action-head">
+                <strong>{action.title}</strong>
+                <TonePill tone={action.statusTone} label={action.statusLabel} />
               </div>
-            ))}
-          </div>
-        </SectionCard>
-      </div>
-
-      <SectionCard title="Game plan recommendations" subtitle="Data-driven weekly suggestions.">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-          {prep.recommendations.map((card) => (
-            <div key={card.title} style={{ border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 10 }}>
-              <div style={{ fontWeight: 700, fontSize: 'var(--text-sm)' }}>{card.title}</div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4 }}>{card.reason}</div>
-              <Button size="sm" variant="outline" style={{ marginTop: 8 }} onClick={() => openAction(card.actionTab, 'planReviewed')}>
-                {card.actionLabel}
-              </Button>
-            </div>
+              <p>{action.reason}</p>
+              <Button size="sm" variant="outline" onClick={() => openAction(action.route, action.completionStep)}>{action.ctaLabel}</Button>
+            </article>
           ))}
         </div>
+        <div className="weekly-prep-nav-row">
+          <Button size="sm" variant="secondary" onClick={() => onNavigate?.('HQ')}>Back to HQ</Button>
+        </div>
       </SectionCard>
 
-      <SectionCard title="Active effects" subtitle="Strategy synergy and readiness impacts for this week.">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+      <SectionCard title="Matchup Intel" subtitle="Strengths, weaknesses, and pressure points.">
+        <div className="weekly-prep-intel-grid">
+          <div>
+            <div className="weekly-prep-intel-head">Strengths</div>
+            <ul>
+              {(prep.opponentStrengths.length ? prep.opponentStrengths : ['No clear dominant opponent edge identified yet.']).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+          <div>
+            <div className="weekly-prep-intel-head">Exploitable weaknesses</div>
+            <ul>
+              {(prep.opponentWeaknesses.length ? prep.opponentWeaknesses : ['No obvious weakness — execution will decide this one.']).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+          <div>
+            <div className="weekly-prep-intel-head">Pressure points</div>
+            <ul>
+              {(prep.pressurePoints.length ? prep.pressurePoints : ['No major pressure point flagged.']).map((item) => <li key={item}>{item}</li>)}
+            </ul>
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Active Effects" subtitle="Strategy synergy and readiness impacts for this week.">
+        <div className="weekly-prep-command-row">
           <TonePill tone={prep.prepSummary?.severity === 'major_risk' ? 'danger' : prep.prepSummary?.severity === 'minor_risk' ? 'warning' : 'success'} label={`Prep state: ${prep.prepSummary?.status ?? 'Ready'}`} />
           <TonePill tone={prep.prepSummary?.netImpact >= 0 ? 'success' : 'warning'} label={`Net impact ${prep.prepSummary?.netImpact >= 0 ? '+' : ''}${Number(prep.prepSummary?.netImpact ?? 0).toFixed(3)}`} />
         </div>
-        <div style={{ display: 'grid', gap: 6 }}>
+        <div className="weekly-prep-effects-grid">
           {(prep.prepSummary?.reasons?.length ? prep.prepSummary.reasons : ['No active matchup synergy or readiness penalties.']).map((reason) => (
-            <div key={reason} style={{ fontSize: 'var(--text-sm)', border: '1px solid var(--hairline)', borderRadius: 'var(--radius-md)', padding: 8 }}>
-              {reason}
-            </div>
+            <div key={reason} className="weekly-prep-effect-row">{reason}</div>
           ))}
         </div>
       </SectionCard>
 
-      <SectionCard title="Prep completion" subtitle="Lightweight weekly readiness checklist.">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+      <SectionCard title="Prep Checklist" subtitle="Status-driven checks aligned with HQ loop.">
+        <div className="weekly-prep-command-row">
           <TonePill tone={prep.completion.lineupChecked ? 'success' : 'warning'} label={`Lineup ${prep.completion.lineupChecked ? 'checked' : 'pending'}`} />
           <TonePill tone={prep.completion.injuriesReviewed ? 'success' : 'warning'} label={`Injuries ${prep.completion.injuriesReviewed ? 'reviewed' : 'pending'}`} />
           <TonePill tone={prep.completion.opponentScouted ? 'success' : 'warning'} label={`Opponent ${prep.completion.opponentScouted ? 'scouted' : 'pending'}`} />
