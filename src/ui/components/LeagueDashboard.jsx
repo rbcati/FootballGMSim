@@ -1248,6 +1248,7 @@ export default function LeagueDashboard({
             <InjuryReport
               league={league}
               onPlayerSelect={setSelectedPlayerId}
+              onNavigate={setActiveTab}
             />
           </TabErrorBoundary>
         )}
