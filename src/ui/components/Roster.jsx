@@ -65,6 +65,8 @@ import { TeamWorkspaceHeader, TeamCapSummaryStrip } from "./TeamWorkspacePrimiti
 import { ToneChip, DevelopmentSignalRow } from "./PlayerDevelopmentUI.jsx";
 import EmptyState from "./EmptyState.jsx";
 import { getPositionColor } from "../constants/positionColors.js";
+import { deriveRosterReadinessModel } from "../utils/rosterReadinessModel.js";
+import { markWeeklyPrepStep } from "../utils/weeklyPrep.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2182,6 +2184,13 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
   }
   const depthAssignments = autoBuildDepthChart(players, existingDepthAssignments);
   const depthAlerts = depthWarnings(depthAssignments, players);
+  const readiness = useMemo(() => deriveRosterReadinessModel({
+    league,
+    team,
+    roster: players,
+    source: initialState?.source ?? null,
+    assignments: depthAssignments,
+  }), [league, team, players, initialState?.source, depthAssignments]);
   const unassignedDepthCount = players.filter((p) => !p?.depthChart?.rowKey).length;
   const expiringCount = players.filter((p) => getContractYearsLeft(p) <= 1).length;
   const injuredCount = players.filter((p) => isInjuredPlayer(p)).length;
@@ -2210,6 +2219,41 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     return map;
   }, [players, team, chemistry, league?.week]);
   const developmentSummary = useMemo(() => summarizeRosterDevelopment(players, moraleById), [players, moraleById]);
+
+  const statusBadgeVariant = readiness.status === 'ready' ? 'secondary' : readiness.status === 'blocked' ? 'destructive' : 'outline';
+
+  const handleAutoBuildDepthChart = useCallback(async () => {
+    const updates = DEPTH_ROWS.flatMap((row) => (readiness.assignments?.[row.key] ?? []).map((playerId, index) => ({
+      playerId,
+      rowKey: row.key,
+      newOrder: index + 1,
+    })));
+
+    if (updates.length === 0) return;
+
+    setPlayers((prev) => prev.map((player) => {
+      const update = updates.find((entry) => Number(entry.playerId) === Number(player.id));
+      if (!update) return player;
+      return {
+        ...player,
+        depthOrder: update.newOrder,
+        depthChart: {
+          ...(player.depthChart ?? {}),
+          rowKey: update.rowKey,
+          order: update.newOrder,
+        },
+      };
+    }));
+
+    if (actions?.updateDepthChart) {
+      await actions.updateDepthChart(updates);
+      await fetchRoster();
+    }
+
+    if (readiness.safeToMarkLineupChecked) {
+      markWeeklyPrepStep(league, 'lineupChecked', true);
+    }
+  }, [actions, fetchRoster, league, readiness.assignments, readiness.safeToMarkLineupChecked]);
 
   return (
     <div>
@@ -2245,6 +2289,35 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
         starterHealth={`${Math.max(0, starterCount - injuredCount)}/${starterCount || 0} available`}
         expiringCount={expiringCount}
       />
+
+      <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
+        <CardContent style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Badge variant={statusBadgeVariant}>Lineup Readiness: {readiness.statusLabel}</Badge>
+            <Badge variant="outline">Roster {readiness.rosterCount}/53</Badge>
+            <Badge variant={readiness.missingStarterCount > 0 ? 'destructive' : 'secondary'}>Missing starters: {readiness.missingStarterCount}</Badge>
+            <Badge variant={readiness.injuryReplacementConcerns > 0 ? 'destructive' : 'outline'}>Injury concerns: {readiness.injuryReplacementConcerns}</Badge>
+          </div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>{readiness.starterReadiness}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {readiness.topRiskyPositionGroups.length > 0
+              ? readiness.topRiskyPositionGroups.map((group) => (
+                  <Badge key={group.rowKey} variant="outline">{group.label}: {group.reason}</Badge>
+                ))
+              : <Badge variant="secondary">No high-risk position groups</Badge>}
+          </div>
+          <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
+            Recommended action: <strong style={{ color: 'var(--text)' }}>{readiness.recommendedNextAction}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Button size="sm" onClick={() => { setViewMode('depth'); setInitialFilter('DEPTH'); }}>Open Depth Chart</Button>
+            <Button variant="outline" size="sm" onClick={() => onNavigate?.('Injuries')}>Review Injuries</Button>
+            {readiness.routeHints.showBackToWeeklyPrep && <Button variant="outline" size="sm" onClick={() => onNavigate?.('Weekly Prep')}>Back to Weekly Prep</Button>}
+            {readiness.routeHints.showBackToHQ && <Button variant="outline" size="sm" onClick={() => onNavigate?.('HQ')}>Back to HQ</Button>}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
         <CardContent style={{ display: "grid", gap: 8 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
@@ -2404,6 +2477,9 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
                   </div>
                 )) : <div style={{ fontSize: 12, color: 'var(--success)' }}>Starter requirements currently covered.</div>}
                 <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                  <Button variant="outline" size="sm" onClick={handleAutoBuildDepthChart}>
+                    Auto-Build Depth Chart
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => actions.repairRoster(teamId).then(fetchRoster)}>
                     Auto-Fix Missing Assignments
                   </Button>
@@ -2413,6 +2489,9 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
                   <Button variant="outline" size="sm" onClick={() => actions.optimizeRoster(teamId).then(fetchRoster)}>
                     Optimize for Plan
                   </Button>
+                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('Injuries')}>Review Injuries</Button>
+                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('Weekly Prep')}>Back to Weekly Prep</Button>
+                  <Button variant="outline" size="sm" onClick={() => onNavigate?.('HQ')}>Back to HQ</Button>
                 </div>
               </div>
               <DepthChartView players={players} onReorder={handleReorderDepthChart} schemeName={(() => {

@@ -68,7 +68,9 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
   const pressureGroups = useMemo(() => getPositionGroupPressure(roster), [roster]);
 
   useEffect(() => {
-    setSubtab(normalizeSection(initialSection));
+    const next = normalizeSection(initialSection);
+    setSubtab(next);
+    if (next === 'Roster / Depth') setRosterMode('depth');
   }, [initialSection]);
 
   const latestGame = useMemo(() => {
