@@ -228,7 +228,7 @@ export default function TeamHub({ league, actions, onOpenGameDetail, onPlayerSel
           />
         </div>
       )}
-      {subtab === 'Injuries' && <InjuryReport league={league} onPlayerSelect={onPlayerSelect} />}
+      {subtab === 'Injuries' && <InjuryReport league={league} onPlayerSelect={onPlayerSelect} onNavigate={onNavigate} />}
     </div>
   );
 }
