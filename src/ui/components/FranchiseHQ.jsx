@@ -106,6 +106,8 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     };
   }, [command.leagueNews, command.postGameReview, command.teamRecord, lastGame, lastGameDisplay.overviewLine, nextOpponentDisplay.isHome, nextOpponentDisplay.opponentAbbr]);
 
+  const decisionReview = useMemo(() => command.weeklyDecisionImpact ?? null, [command.weeklyDecisionImpact]);
+
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -222,6 +224,32 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
       <SectionCard title="Week Command" subtitle="What needs attention, why it matters, and where to handle it." variant="compact">
         <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
+      </SectionCard>
+
+
+      <SectionCard title={decisionReview?.heading ?? 'What Mattered Last Week'} subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'} variant="compact">
+        <div className="app-hq-intel-list" role="list" aria-label="Weekly decision impact recap">
+          {(decisionReview?.bullets ?? []).slice(0, 4).map((bullet, idx) => (
+            <p key={`decision-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
+          ))}
+        </div>
+        {decisionReview?.recommendedAction ? (
+          <div className="app-hq-impact-card tone-info" style={{ marginTop: 10 }}>
+            <div className="app-hq-impact-card__head">
+              <strong>Recommended next action</strong>
+              <StatusChip label={decisionReview.recommendedAction.label} tone="info" />
+            </div>
+            <p>{decisionReview.recommendedAction.reason}</p>
+            <button
+              type="button"
+              className="btn btn-sm app-hq-impact-card__cta"
+              onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}
+              aria-label={`Decision review: ${decisionReview.recommendedAction.label}`}
+            >
+              {decisionReview.recommendedAction.label}
+            </button>
+          </div>
+        ) : null}
       </SectionCard>
 
       <SectionCard title="Operations Snapshot" subtitle="Last result, standing, and upcoming slate." variant="compact">

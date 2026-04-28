@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
 
 const baseLeague = {
@@ -42,6 +42,10 @@ const baseLeague = {
 };
 
 describe('FranchiseHQ', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it('renders visible weekly command center essentials and one primary advance CTA', () => {
     render(<FranchiseHQ league={baseLeague} onNavigate={() => {}} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
@@ -70,6 +74,16 @@ describe('FranchiseHQ', () => {
     expect(onNavigate).toHaveBeenCalledWith('Weekly Results:9');
   });
 
+
+  it('renders weekly decision review and routes the recommended action', () => {
+    const onNavigate = vi.fn();
+    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    expect(screen.getAllByRole('heading', { name: /what mattered last week|decision review/i }).length).toBeGreaterThan(0);
+    const button = screen.getByRole('button', { name: /decision review:/i });
+    fireEvent.click(button);
+    expect(onNavigate).toHaveBeenCalled();
+  });
   it('renders record, standing, and fallback copy when schedule is missing', () => {
     render(
       <FranchiseHQ

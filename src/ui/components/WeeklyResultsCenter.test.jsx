@@ -63,6 +63,22 @@ describe('WeeklyResultsCenter', () => {
     expect(onGameSelect.mock.calls[0][0]).toMatch(/2026_w2_/);
   });
 
+
+  it('renders decision review in Your Game and routes recommended action', () => {
+    const onNavigate = vi.fn();
+    const leagueWithInjuryContext = {
+      ...league,
+      teams: league.teams.map((team) => (team.id === 1
+        ? { ...team, roster: [{ id: 88, injuryWeeksRemaining: 2 }], strategies: { gamePlan: { runPassBalance: 60 } } }
+        : team)),
+    };
+    render(<WeeklyResultsCenter league={leagueWithInjuryContext} initialWeek={2} onGameSelect={() => {}} onNavigate={onNavigate} />);
+
+    expect(screen.getByRole('list', { name: /decision review/i })).toBeTruthy();
+    const cta = screen.getByRole('button', { name: /review availability/i });
+    fireEvent.click(cta);
+    expect(onNavigate).toHaveBeenCalledWith('Team:Injuries');
+  });
   it('is safe for older partial payloads with score-only games', () => {
     const legacyLeague = {
       ...league,

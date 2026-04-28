@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/boxScoreAccess.js';
 import { deriveCompactResultRecap, getGameLifecycleBucket, resolveDefaultResultsWeek, selectWeekGames } from '../utils/gameCenterResults.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
+import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
 import {
   CompactInsightCard,
   EmptyState,
@@ -165,6 +166,15 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
   );
   const canOpenUserGame = Boolean(userResultPresentation?.canOpen && onGameSelect);
 
+  const decisionReview = useMemo(() => {
+    if (!userTeamResult) return null;
+    return buildWeeklyDecisionImpact({
+      league,
+      userTeam: teamById[Number(league?.userTeamId)],
+      lastGame: { ...userTeamResult.game, week: userTeamResult.week },
+    });
+  }, [league, teamById, userTeamResult]);
+
   if (!totalWeeks) {
     return <EmptyState title="No schedule data available for weekly results." body="Weekly game center will populate when league schedule weeks are present." />;
   }
@@ -210,6 +220,13 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
             </div>
             <p className="app-game-center-card__scoreline">{userTeamResult.recap}</p>
             <p className="app-game-center-card__summary">{userResultPresentation?.displayScoreLine ?? 'Final score unavailable.'}</p>
+            {decisionReview?.bullets?.length ? (
+              <div className="app-hq-intel-list" role="list" aria-label="Decision review">
+                {decisionReview.bullets.slice(0, 2).map((bullet, idx) => (
+                  <p key={`user-impact-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
+                ))}
+              </div>
+            ) : null}
             <div className="app-game-center-card__footer">
               <button
                 type="button"
@@ -221,6 +238,9 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
                 {canOpenUserGame ? 'Open Game Book' : `Game Book unavailable (${userResultPresentation?.statusLabel ?? 'Archive unavailable'})`}
               </button>
               <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('Weekly Prep')}>Continue Weekly Prep</button>
+              {decisionReview?.recommendedAction ? (
+                <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}>{decisionReview.recommendedAction.label}</button>
+              ) : null}
             </div>
           </article>
         </SectionCard>
