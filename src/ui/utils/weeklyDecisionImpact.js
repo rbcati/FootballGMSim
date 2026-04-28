@@ -174,16 +174,13 @@ function chooseRecommendation({ result, contextBullets }) {
     return { label: 'Review Availability', reason: 'Injury risk was already present.', route: lineupBullet.targetRoute };
   }
 
-  return { label: 'Review Game Book', reason: 'Review drive detail before making next-week changes.', route: result?.gameId ? `Game Book:${result.gameId}` : 'Weekly Results' };
+  return {
+    label: 'Review Game Book',
+    reason: 'Review drive detail before making next-week changes.',
+    route: result?.gameId ? `Game Book:${result.gameId}` : 'Weekly Results',
+  };
 }
 
-/**
- * Weekly Decision Impact Audit surface.
- * Category notes:
- * - strategy IDs/sliders are stored and referenced only as "saved" context here (no causal claim).
- * - depth/injury state is used as pregame risk context only.
- * - training focus stamp is treated as logged/not logged context only.
- */
 export function buildWeeklyDecisionImpact({ league, userTeam, lastGame } = {}) {
   const team = userTeam ?? (league?.teams ?? []).find((entry) => Number(entry?.id) === Number(league?.userTeamId)) ?? null;
   const result = normalizeResult({ lastGame, userTeamId: league?.userTeamId });
@@ -192,6 +189,12 @@ export function buildWeeklyDecisionImpact({ league, userTeam, lastGame } = {}) {
     return {
       heading: 'Decision Review',
       resultSummary: 'No completed user game available yet.',
+      offensiveTakeaway: 'Advance the week to generate a game result and decision review.',
+      defensiveTakeaway: 'No defensive snapshot yet.',
+      gamePlanTakeaway: 'No saved game result to evaluate this week.',
+      lineupInjuryTakeaway: 'Injury and lineup context appears after a completed game.',
+      trainingTakeaway: 'Practice logs will appear after a completed game week.',
+      preparationBullets: ['No completed user game available yet.'],
       bullets: [
         'Advance the week to generate a game result and decision review.',
       ],
@@ -200,6 +203,7 @@ export function buildWeeklyDecisionImpact({ league, userTeam, lastGame } = {}) {
         reason: 'Finish prep steps before kickoff.',
         route: 'Weekly Prep',
       },
+      routeTarget: 'Weekly Prep',
     };
   }
 
@@ -207,10 +211,9 @@ export function buildWeeklyDecisionImpact({ league, userTeam, lastGame } = {}) {
     ? team.roster.filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.weeksRemaining ?? player?.injury?.gamesRemaining, 0) > 0).length
     : 0;
 
-  const coreBullets = [
-    buildOffensiveTakeaway({ result }),
-    buildDefensiveTakeaway({ result }),
-  ];
+  const offensiveTakeaway = buildOffensiveTakeaway({ result });
+  const defensiveTakeaway = buildDefensiveTakeaway({ result });
+
   const contextBullets = buildContextTakeaway({
     result,
     userTeam: team,
@@ -218,14 +221,28 @@ export function buildWeeklyDecisionImpact({ league, userTeam, lastGame } = {}) {
     injuryRiskCount,
   });
 
+  const gamePlanTakeaway = contextBullets.find((item) => item.id === 'game-plan')?.text
+    ?? 'No saved game-plan snapshot was found for this matchup.';
+  const lineupInjuryTakeaway = contextBullets.find((item) => item.id === 'lineup-injury')?.text
+    ?? 'No pregame injury-risk marker was found in this review window.';
+  const trainingTakeaway = contextBullets.find((item) => item.id.startsWith('training'))?.text
+    ?? 'No weekly practice log was matched to this game week.';
+
   const recommendedAction = chooseRecommendation({ result, contextBullets });
 
   return {
     heading: 'Decision Review',
     resultSummary: result.resultLine,
-    bullets: [...coreBullets, ...contextBullets.map((item) => item.text)].slice(0, 4),
+    offensiveTakeaway,
+    defensiveTakeaway,
+    gamePlanTakeaway,
+    lineupInjuryTakeaway,
+    trainingTakeaway,
+    bullets: [offensiveTakeaway, defensiveTakeaway, gamePlanTakeaway, lineupInjuryTakeaway].slice(0, 4),
+    preparationBullets: [gamePlanTakeaway, trainingTakeaway, lineupInjuryTakeaway].filter((text) => typeof text === 'string' && text.trim()),
     contextRoutes: contextBullets,
     recommendedAction,
+    routeTarget: recommendedAction?.route ?? 'Weekly Prep',
     metadata: {
       hasStrategyContext: hasSavedGamePlan(team?.strategies),
       hasTrainingContext: contextBullets.some((item) => item.id.startsWith('training')),

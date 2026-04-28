@@ -46,9 +46,10 @@ describe('buildWeeklyDecisionImpact', () => {
     });
 
     expect(result.resultSummary).toContain('W 27-17 vs PHI');
-    expect(result.bullets.join(' ')).toContain('Game plan was saved before kickoff');
-    expect(result.bullets.join(' ')).toContain('Practice effects were logged this week');
+    expect(result.gamePlanTakeaway).toContain('Game plan was saved before kickoff');
+    expect(result.trainingTakeaway).toContain('Practice effects were logged this week');
     expect(result.metadata.hasTeamStats).toBe(true);
+    expect(result.routeTarget).toBe('Game Book:2026_w5_1_2');
   });
 
   it('derives a loss review and recommends game plan changes after low output', () => {
@@ -66,8 +67,34 @@ describe('buildWeeklyDecisionImpact', () => {
     });
 
     expect(result.resultSummary).toContain('L 13-24 @ PHI');
-    expect(result.bullets[0]).toMatch(/low offensive output|offensive output/i);
+    expect(result.offensiveTakeaway).toMatch(/low offensive output|offensive output/i);
     expect(result.recommendedAction.route).toBe('Game Plan');
+  });
+
+  it('flags injury risk context and routes recommendation to availability', () => {
+    const leagueWithInjury = {
+      ...baseLeague,
+      teams: [{
+        ...baseLeague.teams[0],
+        roster: [{ id: 17, injuryWeeksRemaining: 2 }],
+      }],
+    };
+
+    const result = buildWeeklyDecisionImpact({
+      league: leagueWithInjury,
+      userTeam: leagueWithInjury.teams[0],
+      lastGame: {
+        gameId: '2026_w5_1_2',
+        week: 5,
+        home: { id: 1, abbr: 'DAL' },
+        away: { id: 2, abbr: 'PHI' },
+        homeScore: 24,
+        awayScore: 21,
+      },
+    });
+
+    expect(result.lineupInjuryTakeaway).toContain('Injury/availability risk was active entering the week');
+    expect(result.recommendedAction.route).toBe('Team:Injuries');
   });
 
   it('falls back safely when box score team stats are missing', () => {
@@ -98,5 +125,34 @@ describe('buildWeeklyDecisionImpact', () => {
 
     expect(result.resultSummary).toContain('No completed user game available yet');
     expect(result.recommendedAction.route).toBe('Weekly Prep');
+  });
+
+  it('uses safe copy when context markers are missing and avoids fake causality', () => {
+    const cleanLeague = {
+      ...baseLeague,
+      teams: [{
+        ...baseLeague.teams[0],
+        strategies: {},
+        weeklyDevelopmentFocus: null,
+        roster: [{ id: 1, injuryWeeksRemaining: 0 }],
+      }],
+    };
+
+    const result = buildWeeklyDecisionImpact({
+      league: cleanLeague,
+      userTeam: cleanLeague.teams[0],
+      lastGame: {
+        gameId: '2026_w5_1_2',
+        week: 5,
+        home: { id: 1, abbr: 'DAL' },
+        away: { id: 2, abbr: 'PHI' },
+        homeScore: 21,
+        awayScore: 20,
+      },
+    });
+
+    expect(result.gamePlanTakeaway).toContain('No saved game-plan snapshot');
+    expect(result.trainingTakeaway).toContain('No weekly practice log was matched');
+    expect(result.bullets.join(' ')).not.toMatch(/won the game|caused the win|directly improved/i);
   });
 });
