@@ -187,13 +187,15 @@ export function buildTrainingPlanModel({ league, intensity = 'normal', drillType
 
   const isTrainingCamp = String(league?.phase ?? '').toLowerCase() === 'preseason';
   const maxDrills = isTrainingCamp ? 5 : 2;
-  const safeDrillsRun = Math.max(0, safeNum(drillsRun, 0));
-  const drillsRemaining = Math.max(0, maxDrills - safeDrillsRun);
 
   const seasonKey = league?.seasonId ?? league?.year ?? 'season';
   const week = safeNum(league?.week, 1);
   const focusStamp = userTeam?.weeklyDevelopmentFocus?.stamp;
-  const usedThisWeek = Boolean(focusStamp && focusStamp === `${seasonKey}:${week}`);
+  // weeklyDevelopmentFocus.stamp is authoritative for weekly practice usage in regular season.
+  // Preseason training camp keeps local per-screen drill limits.
+  const usedThisWeek = !isTrainingCamp && Boolean(focusStamp && focusStamp === `${seasonKey}:${week}`);
+  const safeDrillsRun = Math.max(0, safeNum(drillsRun, 0));
+  const drillsRemaining = usedThisWeek ? 0 : Math.max(0, maxDrills - safeDrillsRun);
 
   const injuredCount = roster.filter(isInjured).length;
   const risk = summarizeRisk(intensity, injuredCount);
@@ -211,6 +213,7 @@ export function buildTrainingPlanModel({ league, intensity = 'normal', drillType
     isTrainingCamp,
     maxDrills,
     drillsRemaining,
+    practiceLocked: usedThisWeek,
     practiceStateLabel: usedThisWeek ? 'Practice already logged this week' : 'Practice available this week',
     usedThisWeek,
     intensity,

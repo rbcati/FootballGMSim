@@ -96,6 +96,7 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
 
   const model = useMemo(() => buildTrainingPlanModel({ league, intensity, drillType, drillsRun, actions }), [league, intensity, drillType, drillsRun, actions]);
   const { roster, drillsRemaining } = model;
+  const runDisabled = drillsRemaining <= 0 || model.practiceLocked;
 
   const groups = useMemo(() => {
     const map = {};
@@ -133,7 +134,7 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
   }, []);
 
   const runDrills = useCallback(async () => {
-    if (drillsRemaining <= 0) return;
+    if (runDisabled) return;
 
     const seed = (league?.year ?? 2025) * 1000 + (league?.week ?? 1) * 100 + drillsRun;
     const rng = seededRandom(seed);
@@ -170,12 +171,12 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
         await actions.conductDrill(teamId, intensity, drillType, posGroups);
         setPersistState('persisted');
       } catch {
-        setPersistState('preview');
+        setPersistState('failed');
       }
     } else {
-      setPersistState('preview');
+      setPersistState('unavailable');
     }
-  }, [drillsRemaining, league, drillsRun, intensity, roster, focusGroups, drillType, actions]);
+  }, [runDisabled, league, drillsRun, intensity, roster, focusGroups, drillType, actions]);
 
   const summary = useMemo(() => {
     if (!results) return null;
@@ -188,6 +189,14 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
     return { improved, injured, totalGain, total: Object.keys(results).length };
   }, [results]);
 
+  const practiceStateChip = useMemo(() => {
+    if (persistState === 'persisted') return { label: 'Persisted This Session', color: 'var(--success)' };
+    if (persistState === 'failed') return { label: 'Preview Only', color: 'var(--warning)' };
+    if (persistState === 'unavailable') return { label: 'Persistence Unavailable', color: 'var(--warning)' };
+    if (model.practiceLocked) return { label: 'Practice Already Logged', color: 'var(--text-muted)' };
+    return { label: 'Practice Available', color: 'var(--accent)' };
+  }, [persistState, model.practiceLocked]);
+
   return (
     <div style={{ maxWidth: 800, margin: '0 auto', paddingBottom: 16 }}>
       <div className="stat-box" style={{ marginBottom: 'var(--space-4, 16px)', padding: '12px' }}>
@@ -198,6 +207,11 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
           </div>
           <span style={{ fontSize: 11, border: '1px solid var(--hairline)', borderRadius: 999, padding: '6px 10px', alignSelf: 'flex-start' }}>
             {model.risk.label}
+          </span>
+        </div>
+        <div style={{ marginTop: 8 }}>
+          <span style={{ fontSize: 11, border: `1px solid ${practiceStateChip.color}`, color: practiceStateChip.color, borderRadius: 999, padding: '4px 10px', display: 'inline-block' }}>
+            {practiceStateChip.label}
           </span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 10, fontSize: 12 }}>
@@ -332,15 +346,19 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
         <button
           className="btn"
           onClick={runDrills}
-          disabled={drillsRemaining <= 0}
+          disabled={runDisabled}
           style={{
             width: '100%', padding: '12px', fontSize: 14, fontWeight: 800,
-            background: drillsRemaining > 0 ? 'var(--accent)' : 'var(--surface-strong, #1a1a2e)',
-            color: drillsRemaining > 0 ? 'white' : 'var(--text-subtle)',
-            border: 'none', borderRadius: 'var(--radius-md, 8px)', cursor: drillsRemaining > 0 ? 'pointer' : 'not-allowed',
+            background: !runDisabled ? 'var(--accent)' : 'var(--surface-strong, #1a1a2e)',
+            color: !runDisabled ? 'white' : 'var(--text-subtle)',
+            border: 'none', borderRadius: 'var(--radius-md, 8px)', cursor: !runDisabled ? 'pointer' : 'not-allowed',
           }}
         >
-          {drillsRemaining > 0 ? `Run Drills (${drillsRemaining} remaining)` : 'No Drills Remaining This Week'}
+          {!model.practiceLocked && drillsRemaining > 0
+            ? `Run Drills (${drillsRemaining} remaining)`
+            : model.practiceLocked
+              ? 'Practice Already Logged This Week'
+              : 'No Drills Remaining This Week'}
         </button>
       </div>
 
@@ -348,11 +366,11 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
         <div className="stat-box fade-in" style={{ marginBottom: 'var(--space-4, 16px)', padding: '12px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, textAlign: 'center' }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--success)' }}>{summary.improved}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Players Improved</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Players with Positive Drill Result</div>
           </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>+{summary.totalGain}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Total OVR Gained</div>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Preview Gain Signal</div>
           </div>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800, color: summary.injured > 0 ? 'var(--danger)' : 'var(--text-muted)' }}>{summary.injured}</div>
@@ -363,7 +381,11 @@ export default function TrainingCamp({ league, actions, onPlayerSelect, onNaviga
 
       {results && (
         <div className="stat-box" style={{ marginBottom: 12, padding: 10, fontSize: 12 }}>
-          {persistState === 'persisted' ? 'Drill effects were sent to simulation via conductDrill (weekly boosts/injury risk persist for this week).' : 'Persistence unavailable — this run is a local preview for planning only.'}
+          {persistState === 'persisted'
+            ? 'Preview complete. conductDrill persisted weekly training effects (temporary weekly boosts and drill injury outcomes) for this week.'
+            : persistState === 'failed'
+              ? 'Preview complete. conductDrill failed, so this run stayed local preview only and did not persist weekly effects.'
+              : 'Preview complete. Persistence unavailable, so this run stayed local preview only.'}
         </div>
       )}
 
