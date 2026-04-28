@@ -9,6 +9,7 @@ import { logChronicleEvent, syncFranchiseChronicle } from './franchiseChronicle.
 import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './franchiseEvents.js';
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './weeklyIntelligence.js';
 import { buildGamePlanImpact, buildPostGameReview } from './gamePlanImpact.js';
+import { buildWeeklyDecisionImpact } from './weeklyDecisionImpact.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -477,6 +478,11 @@ export function selectFranchiseHQViewModel(league) {
     userTeamId: vm.league?.userTeamId,
     latestNews: leagueNews?.[0] ?? null,
   });
+  const weeklyDecisionImpact = buildWeeklyDecisionImpact({
+    league: vm.league,
+    userTeam: team,
+    lastGame: latestArchived ?? fallbackLastGame,
+  });
   const injuredSpotlight = (team?.roster ?? [])
     .filter((player) => safeNum(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injury?.gamesRemaining ?? 0) > 0)
     .sort((a, b) => safeNum(b?.ovr) - safeNum(a?.ovr))[0] ?? null;
@@ -507,6 +513,7 @@ export function selectFranchiseHQViewModel(league) {
     gamePlanImpact,
     recommendedAdjustments: gamePlanImpact.recommendedAdjustments,
     postGameReview,
+    weeklyDecisionImpact,
     advanceFeedback: postGameReview,
     weeklyAgenda: buildActionableWeeklyPriorities({
       team,

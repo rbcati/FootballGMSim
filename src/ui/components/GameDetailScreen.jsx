@@ -1,9 +1,25 @@
 import React from 'react';
 import BoxScorePanel from './BoxScorePanel.jsx';
 import { EmptyState, ScreenHeader, SectionCard, StatusChip } from './ScreenSystem.jsx';
+import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
+
+function findScheduleGame(league, gameId) {
+  for (const week of league?.schedule?.weeks ?? []) {
+    for (const game of week?.games ?? []) {
+      const candidate = game?.gameId ?? game?.id;
+      if (String(candidate) === String(gameId)) return { ...game, week: Number(week?.week ?? league?.week ?? 1) };
+    }
+  }
+  return null;
+}
+
 
 export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect }) {
   const weekFromId = typeof gameId === 'string' ? gameId.match(/_w(\d+)_/i)?.[1] : null;
+
+  const scheduleGame = findScheduleGame(league, gameId);
+  const userTeam = (league?.teams ?? []).find((team) => Number(team?.id) === Number(league?.userTeamId));
+  const prepContext = buildWeeklyDecisionImpact({ league, userTeam, lastGame: scheduleGame });
 
   if (!gameId) {
     return (
@@ -39,6 +55,13 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           { label: 'Week', value: weekFromId ?? '—' },
         ]}
       />
+      <SectionCard variant="compact" title="Preparation Context" subtitle={prepContext?.resultSummary ?? 'Weekly decision context unavailable for this game.'}>
+        <div className="app-hq-intel-list" role="list" aria-label="Preparation context">
+          {(prepContext?.bullets ?? []).slice(0, 3).map((bullet, idx) => (
+            <p key={`prep-context-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
+          ))}
+        </div>
+      </SectionCard>
       <SectionCard variant="info" title="Game Book Detail" subtitle="Summary → Team stats → Player leaders → Drive/play recap.">
         <BoxScorePanel
           gameId={gameId}
