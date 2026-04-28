@@ -33,8 +33,9 @@ describe('trainingPlanModel', () => {
   it('builds weekly practice model defaults', () => {
     const model = buildTrainingPlanModel({ league: baseLeague, intensity: 'normal', drillsRun: 1, actions: { conductDrill: vi.fn() } });
     expect(model.phaseLabel).toBe('Weekly Practice');
-    expect(model.drillsRemaining).toBe(1);
+    expect(model.drillsRemaining).toBe(0);
     expect(model.usedThisWeek).toBe(true);
+    expect(model.practiceLocked).toBe(true);
     expect(model.practiceStateLabel).toMatch(/already logged/i);
   });
 
@@ -42,6 +43,8 @@ describe('trainingPlanModel', () => {
     const model = buildTrainingPlanModel({ league: { ...baseLeague, phase: 'preseason' }, drillsRun: 0 });
     expect(model.phaseLabel).toBe('Training Camp');
     expect(model.maxDrills).toBe(5);
+    expect(model.usedThisWeek).toBe(false);
+    expect(model.drillsRemaining).toBe(5);
   });
 
   it('handles empty roster safely', () => {

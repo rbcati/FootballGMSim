@@ -29,6 +29,20 @@ const league = {
   ],
   schedule: { weeks: [{ week: 6, games: [{ played: false, home: { id: 1 }, away: { id: 2 } }] }] },
 };
+const loggedLeague = {
+  ...league,
+  teams: [
+    {
+      ...league.teams[0],
+      weeklyDevelopmentFocus: { stamp: 's2028:6' },
+    },
+    league.teams[1],
+  ],
+};
+const preseasonLoggedLeague = {
+  ...loggedLeague,
+  phase: 'preseason',
+};
 
 describe('TrainingCamp', () => {
   it('selecting recommended focus updates local controls', () => {
@@ -46,13 +60,42 @@ describe('TrainingCamp', () => {
 
     fireEvent.click(screen.getAllByRole('button', { name: /Run Drills/i })[0]);
     await waitFor(() => expect(conductDrill).toHaveBeenCalled());
-    expect(screen.getByText(/sent to simulation via conductDrill/i)).toBeTruthy();
+    expect(screen.getByText(/persisted weekly training effects/i)).toBeTruthy();
   });
 
   it('shows honest preview copy when persistence is unavailable', () => {
     render(<TrainingCamp league={league} actions={{}} onNavigate={vi.fn()} onPlayerSelect={vi.fn()} />);
     fireEvent.click(screen.getAllByRole('button', { name: /Run Drills/i })[0]);
-    expect(screen.getByText(/local preview for planning only/i)).toBeTruthy();
+    expect(screen.getByText(/stayed local preview only/i)).toBeTruthy();
+    expect(screen.getAllByText(/Persistence Unavailable/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows preview-only copy when conductDrill fails', async () => {
+    const conductDrill = vi.fn().mockRejectedValue(new Error('worker unavailable'));
+    render(<TrainingCamp league={league} actions={{ conductDrill }} onNavigate={vi.fn()} onPlayerSelect={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Run Drills/i })[0]);
+    await waitFor(() => expect(conductDrill).toHaveBeenCalled());
+    expect(screen.getByText(/conductDrill failed/i)).toBeTruthy();
+    expect(screen.getAllByText(/Preview Only/i).length).toBeGreaterThan(0);
+  });
+
+  it('locks regular-season practice when already logged this week', () => {
+    const conductDrill = vi.fn().mockResolvedValue({});
+    render(<TrainingCamp league={loggedLeague} actions={{ conductDrill }} onNavigate={vi.fn()} onPlayerSelect={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Practice Already Logged This Week/i }).getAttribute('disabled')).not.toBeNull();
+  });
+
+  it('still allows preseason drills when weekly stamp exists', () => {
+    const conductDrill = vi.fn().mockResolvedValue({});
+    render(<TrainingCamp league={preseasonLoggedLeague} actions={{ conductDrill }} onNavigate={vi.fn()} onPlayerSelect={vi.fn()} />);
+    expect(screen.getByRole('button', { name: /Run Drills/i }).getAttribute('disabled')).toBeNull();
+  });
+
+  it('uses preview-safe labels for local drill summaries', () => {
+    render(<TrainingCamp league={league} actions={{}} onNavigate={vi.fn()} onPlayerSelect={vi.fn()} />);
+    fireEvent.click(screen.getAllByRole('button', { name: /Run Drills/i })[0]);
+    expect(screen.getByText(/Players with Positive Drill Result/i)).toBeTruthy();
+    expect(screen.getByText(/Preview Gain Signal/i)).toBeTruthy();
   });
 
   it('routes back actions', () => {
