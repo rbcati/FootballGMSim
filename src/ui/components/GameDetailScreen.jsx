@@ -55,11 +55,12 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           { label: 'Week', value: weekFromId ?? '—' },
         ]}
       />
-      <SectionCard variant="compact" title="Preparation Context" subtitle={prepContext?.resultSummary ?? 'Weekly decision context unavailable for this game.'}>
+      <SectionCard variant="compact" title="Preparation Context" subtitle="Pregame context captured before kickoff. This strip does not assign direct causality.">
         <div className="app-hq-intel-list" role="list" aria-label="Preparation context">
-          {(prepContext?.bullets ?? []).slice(0, 3).map((bullet, idx) => (
+          {(prepContext?.preparationBullets ?? []).slice(0, 3).map((bullet, idx) => (
             <p key={`prep-context-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{bullet}</p>
           ))}
+          {!(prepContext?.preparationBullets ?? []).length ? <p className="app-hq-intel-item tone-info">No pregame preparation markers were found for this game.</p> : null}
         </div>
       </SectionCard>
       <SectionCard variant="info" title="Game Book Detail" subtitle="Summary → Team stats → Player leaders → Drive/play recap.">
