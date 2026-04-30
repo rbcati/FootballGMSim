@@ -2070,6 +2070,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
   const [loading, setLoading] = useState(false);
   const [team, setTeam] = useState(null);
   const [players, setPlayers] = useState([]);
+  const [teamBuilder, setTeamBuilder] = useState(null);
   const [viewMode, setViewMode] = useState(initialConfig.safeView); // 'cards' | 'table' | 'depth'
   const [initialFilter, setInitialFilter] = useState(null);
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
@@ -2091,6 +2092,7 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       if (resp?.payload) {
         setTeam(resp.payload.team);
         setPlayers(resp.payload.players ?? []);
+        setTeamBuilder(resp.payload.analysis ?? null);
       }
     } catch (e) {
       console.error("[Roster] getRoster failed:", e);
@@ -2219,6 +2221,8 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
     return map;
   }, [players, team, chemistry, league?.week]);
   const developmentSummary = useMemo(() => summarizeRosterDevelopment(players, moraleById), [players, moraleById]);
+  const urgentNeed = teamBuilder?.positionGroups?.find((g) => g.needLevel === 'urgent') ?? teamBuilder?.positionGroups?.find((g) => g.needLevel === 'thin') ?? null;
+  const nextAction = teamBuilder?.recommendedActions?.[0] ?? null;
 
   const statusBadgeVariant = readiness.status === 'ready' ? 'secondary' : readiness.status === 'blocked' ? 'destructive' : 'outline';
 
@@ -2289,6 +2293,22 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
         starterHealth={`${Math.max(0, starterCount - injuredCount)}/${starterCount || 0} available`}
         expiringCount={expiringCount}
       />
+      {teamBuilder ? (
+        <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
+          <CardContent style={{ display: "grid", gap: 8 }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+              Roster Building Command Center
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Badge variant={teamBuilder?.capSummary?.payrollPressure === 'critical' ? 'destructive' : 'outline'}>Cap pressure: {teamBuilder?.capSummary?.payrollPressure ?? 'needs data'}</Badge>
+              <Badge variant={urgentNeed?.needLevel === 'urgent' ? 'destructive' : 'secondary'}>Biggest need: {urgentNeed?.key ?? 'Needs more data'}</Badge>
+              <Badge variant="outline">Expiring: {teamBuilder?.expiringContracts?.length ?? 0}</Badge>
+              <Badge variant="outline">Dev targets: {teamBuilder?.developmentTargets?.length ?? 0}</Badge>
+            </div>
+            {nextAction ? <div style={{ fontSize: "var(--text-xs)" }}>Next best move: <strong>{nextAction.label}</strong> — {nextAction.reason}</div> : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
         <CardContent style={{ display: 'grid', gap: 10 }}>
