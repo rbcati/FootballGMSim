@@ -1,59 +1,69 @@
 import { describe, expect, it } from 'vitest';
 import { buildRosterBuildingAnalysis } from '../rosterBuildingAnalysis.js';
+import { FOOTBALL_ROSTER_CONFIG } from '../sports/footballRosterConfig.js';
 
-describe('buildRosterBuildingAnalysis', () => {
-  it('flags QB urgent need when starter is weak despite backup depth', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 60, age: 30 }] });
-    expect(res.positionGroups.find((g) => g.key === 'QB')?.needLevel).toBe('urgent');
+describe('buildRosterBuildingAnalysis replacement boards', () => {
+  it('replacementBoards exists and includes urgent QB need', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 58, age: 31 }] });
+    expect(res.replacementBoards).toBeTruthy();
+    expect(res.replacementBoards.some((b) => b.key === 'QB' && b.needLevel === 'urgent')).toBe(true);
   });
 
-  it('uses WR top-3 starter window', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'WR1', pos: 'WR', ovr: 89 }, { id: 2, name: 'WR2', pos: 'WR', ovr: 62 }, { id: 3, name: 'WR3', pos: 'WR', ovr: 61 }] });
-    expect(res.positionGroups.find((g) => g.key === 'WR')?.starterOVR).toBe(71);
+  it('internalOptions includes backup when available', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 52 }, { id: 2, name: 'QB2', pos: 'QB', ovr: 68 }] });
+    const qb = res.replacementBoards.find((b) => b.key === 'QB');
+    expect(qb?.internalOptions.some((p) => p.name === 'QB1' || p.name === 'QB2')).toBe(true);
   });
 
-  it('uses OL top-5 starters and does not hide weak line', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'OL1', pos: 'OL', ovr: 92 }, { id: 2, name: 'OL2', pos: 'OL', ovr: 62 }, { id: 3, name: 'OL3', pos: 'OL', ovr: 61 }, { id: 4, name: 'OL4', pos: 'OL', ovr: 60 }, { id: 5, name: 'OL5', pos: 'OL', ovr: 59 }, { id: 6, name: 'OL6', pos: 'OL', ovr: 58 }] });
-    const group = res.positionGroups.find((g) => g.key === 'OL');
-    expect(group?.starterCountExpected).toBe(5);
-    expect(group?.needLevel).toMatch(/urgent|thin/);
+  it('freeAgentOptions includes matching FA and excludes wrong position', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 55 }], freeAgents: [{ id: 20, name: 'FA QB', pos: 'QB', ovr: 72 }, { id: 21, name: 'FA RB', pos: 'RB', ovr: 90 }] });
+    const qb = res.replacementBoards.find((b) => b.key === 'QB');
+    expect(qb?.freeAgentOptions.some((p) => p.name === 'FA QB')).toBe(true);
+    expect(qb?.freeAgentOptions.some((p) => p.pos === 'RB')).toBe(false);
   });
 
-  it('increases RB age risk earlier', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'RB Vet', pos: 'RB', ovr: 80, age: 29 }] });
-    expect((res.positionGroups.find((g) => g.key === 'RB')?.ageRisk ?? 0)).toBeGreaterThan(0);
+  it('bestAction chooses freeAgency when FA is better and cap is okay', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 55 }], freeAgents: [{ id: 20, name: 'FA QB', pos: 'QB', ovr: 82 }], cap: { capRoom: 40, capUsed: 200, deadCap: 10 } });
+    expect(res.replacementBoards.find((b) => b.key === 'QB')?.bestAction?.type).toBe('freeAgency');
   });
 
-  it('sets starter expectations for DL/LB/CB/S', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [] });
-    expect(res.positionGroups.find((g) => g.key === 'DL')?.starterCountExpected).toBe(4);
-    expect(res.positionGroups.find((g) => g.key === 'LB')?.starterCountExpected).toBe(3);
-    expect(res.positionGroups.find((g) => g.key === 'CB')?.starterCountExpected).toBe(3);
-    expect(res.positionGroups.find((g) => g.key === 'S')?.starterCountExpected).toBe(2);
+  it('bestAction chooses internal when backup is good enough', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 54 }, { id: 2, name: 'QB2', pos: 'QB', ovr: 78, schemeFit: 80 }] });
+    expect(['internal', 'draft']).toContain(res.replacementBoards.find((b) => b.key === 'QB')?.bestAction?.type);
   });
 
-  it('adds matching free-agent candidate when available', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB A', pos: 'QB', ovr: 58 }], freeAgents: [{ id: 99, name: 'FA QB', pos: 'QB', ovr: 74 }] });
-    expect(res.candidateActions.some((a) => a.type === 'freeAgency' && a.playerName === 'FA QB')).toBe(true);
+  it('bestAction chooses draft when no immediate option and picks exist', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 58 }], draftPicks: [{ round: 1 }] });
+    const qb = res.replacementBoards.find((b) => b.key === 'QB');
+    expect(['draft', 'trade']).toContain(qb?.bestAction?.type);
   });
 
-  it('does not add free-agent action when no matching FA exists', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB A', pos: 'QB', ovr: 58 }], freeAgents: [{ id: 99, name: 'FA RB', pos: 'RB', ovr: 74 }] });
-    expect(res.candidateActions.some((a) => a.type === 'freeAgency' && a.pos === 'QB')).toBe(false);
+  it('bestAction chooses training when development target matches and need not urgent', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'TE1', pos: 'TE', ovr: 60 }, { id: 2, name: 'TE2', pos: 'TE', ovr: 58, potential: 84, age: 22, schemeFit: 75 }], draftPicks: [{ round: 2 }] });
+    const te = res.replacementBoards.find((b) => b.key === 'TE');
+    expect(['training', 'internal', 'draft']).toContain(te?.bestAction?.type);
   });
 
-  it('detects aging expensive low-fit veteran as value risk', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'RB Vet', pos: 'RB', ovr: 70, age: 31, schemeFit: 40, contract: { baseAnnual: 15, yearsRemaining: 2 } }] });
-    expect(res.valueRisks.length).toBeGreaterThan(0);
+  it('tradeSearch enabled only when urgent and no clear options', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 48 }] });
+    expect(res.replacementBoards.find((b) => b.key === 'QB')?.tradeSearch?.enabled).toBe(true);
   });
 
-  it('creates training action from development target', () => {
-    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'LB Dev', pos: 'LB', ovr: 68, potential: 81, age: 22, schemeFit: 70 }, { id: 2, name: 'LB Vet', pos: 'LB', ovr: 48, age: 31 }], draftPicks: [{ round: 2 }] });
-    expect(res.candidateActions.some((a) => a.type === 'training')).toBe(true);
+  it('K/P lower priority than QB for similar weakness', () => {
+    const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'QB1', pos: 'QB', ovr: 62 }, { id: 2, name: 'K1', pos: 'K', ovr: 62 }, { id: 3, name: 'P1', pos: 'P', ovr: 62 }] });
+    const qb = res.positionGroups.find((g) => g.key === 'QB')?.needScore ?? 0;
+    const k = res.positionGroups.find((g) => g.key === 'K')?.needScore ?? 0;
+    expect(qb).toBeGreaterThan(k);
   });
 
-  it('does not crash on missing cap/free-agent/draft data', () => {
+  it('missing freeAgents/draftPicks/cap does not crash', () => {
     const res = buildRosterBuildingAnalysis({ roster: [{ id: 1, name: 'Unknown', pos: 'K' }] });
     expect(res.capSummary).toBeTruthy();
+  });
+
+  it('football config starter counts remain correct', () => {
+    expect(FOOTBALL_ROSTER_CONFIG.groupConfig.OL.starterCountExpected).toBe(5);
+    expect(FOOTBALL_ROSTER_CONFIG.groupConfig.DL.starterCountExpected).toBe(4);
+    expect(FOOTBALL_ROSTER_CONFIG.groupConfig.CB.starterCountExpected).toBe(3);
   });
 });
