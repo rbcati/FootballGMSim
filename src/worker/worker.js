@@ -149,6 +149,7 @@ import {
   simulateWithOptionalNewEngine,
 } from '../core/sim/weekSimulationBridge.ts';
 import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
+import { buildGamePlanNarrative } from '../core/narrative.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -3000,6 +3001,51 @@ function applyGameResultToCache(result, week, seasonId) {
   const turningPoints = buildTurningPointsFromGameEvents(playLogs, archiveContext);
   const teamStats = buildTeamStatComparisonFromArchive(result.boxScore ?? {}, archiveContext);
   const playerLeaders = buildPlayerLeadersFromArchive(result.boxScore ?? {}, archiveContext);
+  const getRating = (team, key) => Number(team?.[key] ?? team?.[`${key}Rating`] ?? team?.[`${key}Ovr`] ?? team?.ovr ?? 0);
+  const countInjured = (roster = []) => roster.filter((player) => {
+    const weeks = Number(player?.injuryWeeksRemaining ?? player?.injuredWeeks ?? player?.injuryDuration ?? 0);
+    const status = String(player?.status ?? '').toLowerCase();
+    return weeks > 0 || status === 'injured' || status === 'ir';
+  }).length;
+  const blockingLineupIssue = (roster = []) => {
+    const starters = roster.filter((p) => Number(p?.depthOrder ?? 0) === 1 || Number(p?.depthChart?.order ?? 0) === 1);
+    const startersWithInjury = starters.filter((p) => Number(p?.injuryWeeksRemaining ?? p?.injuredWeeks ?? 0) > 0).length;
+    return starters.length > 0 && startersWithInjury >= 2;
+  };
+  const homeGap = getRating(homeTeamSnapshot, 'ovr') - getRating(awayTeamSnapshot, 'ovr');
+  const buildPrep = ({ team, opp, plan, isHome }) => deriveGamePlanMultipliers({
+    weeklyPrepState: {
+      insights: {
+        weakSecondary: getRating(opp, 'defense') <= 76 || (getRating(team, 'offense') - getRating(opp, 'defense')) >= 6,
+        weakRunDefense: getRating(opp, 'defense') <= 78 || (getRating(team, 'offense') - getRating(opp, 'defense')) >= 4,
+        elitePassRush: getRating(opp, 'defense') >= 85,
+        explosiveOpponentOffense: getRating(opp, 'offense') >= 84,
+        balancedMatchup: Math.abs(homeGap * (isHome ? 1 : -1)) <= 4,
+      },
+      hasTracking: false,
+    },
+    gamePlan: plan,
+    teamContext: {
+      majorInjuryStress: countInjured(team?.roster ?? []) >= 3,
+      hasBlockingLineupIssue: blockingLineupIssue(team?.roster ?? []),
+    },
+  });
+  const homePrepMultipliers = buildPrep({ team: homeTeamSnapshot, opp: awayTeamSnapshot, plan: homeTeamSnapshot?.strategies?.gamePlan ?? {}, isHome: true });
+  const awayPrepMultipliers = buildPrep({ team: awayTeamSnapshot, opp: homeTeamSnapshot, plan: awayTeamSnapshot?.strategies?.gamePlan ?? {}, isHome: false });
+  const homePlanNarrative = buildGamePlanNarrative(homePrepMultipliers, {
+    homeScore: scoreHome,
+    awayScore: scoreAway,
+    topPasser: playerLeaders?.categories?.passing?.home,
+    topRusher: playerLeaders?.categories?.rushing?.home,
+    topReceiver: playerLeaders?.categories?.receiving?.home,
+  });
+  const awayPlanNarrative = buildGamePlanNarrative(awayPrepMultipliers, {
+    homeScore: scoreAway,
+    awayScore: scoreHome,
+    topPasser: playerLeaders?.categories?.passing?.away,
+    topRusher: playerLeaders?.categories?.rushing?.away,
+    topReceiver: playerLeaders?.categories?.receiving?.away,
+  });
   const wentOvertime = playLogs.some((log) => Number(log?.quarter) > 4);
   const rivalryGame = Boolean(homeTeamSnapshot?.conf && awayTeamSnapshot?.conf && homeTeamSnapshot?.conf === awayTeamSnapshot?.conf && homeTeamSnapshot?.div === awayTeamSnapshot?.div);
   const gameScript = classifyGameScript({
@@ -3085,6 +3131,16 @@ function applyGameResultToCache(result, week, seasonId) {
         game.homeScore = scoreHome;
         game.awayScore = scoreAway;
         game.archiveQuality = archiveQuality;
+        game.prepImpact = {
+          home: {
+            activeReasons: homePrepMultipliers.activeReasons ?? [],
+            narrative: homePlanNarrative ?? '',
+          },
+          away: {
+            activeReasons: awayPrepMultipliers.activeReasons ?? [],
+            narrative: awayPlanNarrative ?? '',
+          },
+        };
       } else {
         console.warn(`[Worker] applyGameResultToCache: Could not find game ${hId} vs ${aId} in week ${week} schedule (${weekData.games.length} games in week)`);
       }

@@ -52,6 +52,30 @@ describe('WeeklyResultsCenter', () => {
     expect(screen.getAllByRole('button', { name: /open game book/i }).length).toBeGreaterThan(0);
   });
 
+  it('shows game-plan recap and reasons when prep impact exists', () => {
+    const leagueWithPrep = {
+      ...league,
+      schedule: {
+        weeks: [
+          ...league.schedule.weeks.slice(0, 1),
+          {
+            week: 2,
+            games: [
+              {
+                gameId: '2026_w2_1_4', home: 1, away: 4, played: true, homeScore: 20, awayScore: 21,
+                summary: { storyline: 'Game-winning drive in final minute.' },
+                prepImpact: { home: { narrative: 'Our run-heavy plan attacked a weak run defense.', activeReasons: ['Run Matchup Advantage: run-heavy script targets a soft front.'] } },
+              },
+            ],
+          },
+        ],
+      },
+    };
+    render(<WeeklyResultsCenter league={leagueWithPrep} initialWeek={2} onGameSelect={() => {}} onNavigate={() => {}} />);
+    expect(screen.getByText(/game-plan impact recap/i)).toBeTruthy();
+    expect(screen.getByRole('list', { name: /game plan reasons/i })).toBeTruthy();
+  });
+
   it('opens Game Book from the user-team spotlight card', () => {
     const onGameSelect = vi.fn();
     render(<WeeklyResultsCenter league={league} initialWeek={2} onGameSelect={onGameSelect} onNavigate={() => {}} />);
@@ -87,6 +111,7 @@ describe('WeeklyResultsCenter', () => {
     const html = renderToString(<WeeklyResultsCenter league={legacyLeague} initialWeek={3} onGameSelect={() => {}} onNavigate={() => {}} />);
     expect(html).toContain('DAL won by 4 (3-7).');
     expect(html).toContain('Game Book unavailable (Archive unavailable)');
+    expect(html).not.toContain('Game-plan impact recap');
   });
 
   it('routes spotlight game records through current game book open helper', () => {

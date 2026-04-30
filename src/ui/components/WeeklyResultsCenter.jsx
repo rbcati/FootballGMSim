@@ -71,6 +71,7 @@ function buildUserTeamResult(row, userTeamId) {
     userScore,
     oppScore,
     outcome,
+    prepImpact: row?.game?.prepImpact?.[isUserHome ? 'home' : 'away'] ?? null,
   };
 }
 
@@ -220,6 +221,20 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
             </div>
             <p className="app-game-center-card__scoreline">{userTeamResult.recap}</p>
             <p className="app-game-center-card__summary">{userResultPresentation?.displayScoreLine ?? 'Final score unavailable.'}</p>
+            {userTeamResult?.prepImpact?.narrative ? (
+              <CompactInsightCard
+                title="Game-plan impact recap"
+                subtitle={userTeamResult.prepImpact.narrative}
+                tone="info"
+              />
+            ) : null}
+            {Array.isArray(userTeamResult?.prepImpact?.activeReasons) && userTeamResult.prepImpact.activeReasons.length ? (
+              <div className="app-hq-intel-list" role="list" aria-label="Game plan reasons">
+                {userTeamResult.prepImpact.activeReasons.map((reason, idx) => (
+                  <p key={`plan-reason-${idx}`} role="listitem" className="app-hq-intel-item tone-info">{reason}</p>
+                ))}
+              </div>
+            ) : null}
             {decisionReview?.bullets?.length ? (
               <div className="app-hq-intel-list" role="list" aria-label="Decision review">
                 {decisionReview.bullets.slice(0, 2).map((bullet, idx) => (
