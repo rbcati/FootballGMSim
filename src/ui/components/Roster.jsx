@@ -2319,6 +2319,38 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
               </div>
             </div>
             <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>Replacement Market Board</div>
+              {(teamBuilder?.replacementBoards ?? []).filter((b) => b.needLevel === 'urgent' || b.needLevel === 'thin').map((board) => {
+                const bestInternal = board.internalOptions?.[0] ?? null;
+                const bestFA = board.freeAgentOptions?.[0] ?? null;
+                const training = board.trainingOptions?.[0] ?? null;
+                return (
+                  <div key={board.key} style={{ border: '1px solid var(--hairline)', borderRadius: 10, padding: 10, display: 'grid', gap: 6 }}>
+                    <button type="button" className="btn" style={{ textAlign: 'left', minHeight: 44 }} onClick={() => { setViewMode('table'); setInitialFilter(board.key); }}>
+                      <strong>{board.key} • {board.needLevel}</strong> — {board.primaryIssue?.replace('_', ' ') ?? 'none'}
+                    </button>
+                    <div style={{ fontSize: 'var(--text-xs)' }}>{board.bestAction?.label ?? 'No clear action yet.'}</div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                      Internal: {bestInternal ? `${bestInternal.name} (${bestInternal.ovr})` : 'No clear internal option'}
+                    </div>
+                    {bestInternal && onPlayerSelect ? <Button size="sm" variant="outline" onClick={() => onPlayerSelect(bestInternal.id)}>Open internal option</Button> : null}
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                      Free agency: {bestFA ? `${bestFA.name} (${bestFA.ovr})` : 'No matching FA options in market cache'}
+                    </div>
+                    {bestFA && onNavigate ? <Button size="sm" variant="outline" onClick={() => onNavigate('Free Agency')}>Open Free Agency</Button> : null}
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Draft: {board.draftPriority?.priority ?? 'none'} {board.draftPriority?.targetRoundRange ? `(${board.draftPriority.targetRoundRange})` : ''}</div>
+                    {training ? (
+                      <>
+                        <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Training: {training.playerName} • {training.expectedPath}</div>
+                        {onNavigate ? <Button size="sm" variant="outline" onClick={() => onNavigate('Training')}>Open Training</Button> : <div style={{ fontSize: 'var(--text-xs)' }}>Training route unavailable.</div>}
+                      </>
+                    ) : null}
+                    {board.tradeSearch?.enabled ? <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Trade search: {board.tradeSearch.reason}</div> : null}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
               <div style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>Action Queue</div>
               {(teamBuilder?.candidateActions ?? []).slice(0, 6).map((action, idx) => (
                 <div key={`${action.type}-${idx}`} style={{ fontSize: 'var(--text-xs)', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
