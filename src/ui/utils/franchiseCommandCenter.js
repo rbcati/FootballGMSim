@@ -10,6 +10,7 @@ import { applyEventDecision, pickWorstEventChoice, resolveWeeklyEvent } from './
 import { buildWeeklyIntelligence, buildActionableWeeklyPriorities } from './weeklyIntelligence.js';
 import { buildGamePlanImpact, buildPostGameReview } from './gamePlanImpact.js';
 import { buildWeeklyDecisionImpact } from './weeklyDecisionImpact.js';
+import { formatRegularUnitLabel } from '../constants/navigationCopy.js';
 
 function safeNum(value, fallback = 0) {
   const n = Number(value);
@@ -490,7 +491,7 @@ export function selectFranchiseHQViewModel(league) {
   return {
     readyState: 'ready',
     seasonLabel: `${vm.league?.year ?? 'Season'} · ${String(vm.league?.phase ?? 'regular').replaceAll('_', ' ')}`,
-    weekLabel: `Week ${vm.league?.week ?? 1}`,
+    weekLabel: formatRegularUnitLabel(vm.league?.week ?? 1),
     teamRecord: formatRecord(team),
     nextOpponent: nextGame?.opp?.name ?? 'TBD',
     nextOpponentRecord: nextGame?.opp ? formatRecord(nextGame.opp) : '—',

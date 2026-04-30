@@ -50,7 +50,7 @@ import MilestoneModal      from './components/MilestoneModal.jsx';
 import ThemeToggle         from './components/ThemeToggle.jsx';
 import EventDecisionModal from './components/EventDecisionModal.jsx';
 import { SettingsProvider, useSettings } from './context/SettingsContext.jsx';
-import { ACTION_LABELS } from './constants/navigationCopy.js';
+import { ACTION_LABELS, formatRegularUnitLabel } from './constants/navigationCopy.js';
 import { buildCompletedGamePresentation, openResolvedBoxScore } from './utils/boxScoreAccess.js';
 import { buildOffseasonActionCenter } from './utils/offseasonActionCenter.js';
 import {
@@ -490,7 +490,7 @@ function AppContent() {
       const roundNames = { 19: 'Wild Card', 20: 'Divisional', 21: 'Conf. Champ', 22: 'Super Bowl' };
       return `▶ ${roundNames[league.week] || `Playoffs Wk ${league.week}`}`;
     }
-    return `▶ Advance Week ${league.week}`;
+    return `▶ Advance ${formatRegularUnitLabel(league.week)}`;
   };
 
   const safePhase = league?.phase ?? null;
