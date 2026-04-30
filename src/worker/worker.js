@@ -221,6 +221,17 @@ function applyDynamicEventEffects(events = []) {
   }
 }
 
+function normalizeLeaderForTeam(leader, teamId) {
+  if (!leader || typeof leader !== 'object') return null;
+  const leaderTeamId = Number(leader?.teamId);
+  if (Number.isFinite(leaderTeamId) && Number.isFinite(Number(teamId)) && leaderTeamId !== Number(teamId)) return null;
+  const stats = leader?.stats ?? {};
+  return {
+    ...leader,
+    ...stats,
+  };
+}
+
 const SIM_SESSION_STAGES = Object.freeze([
   'regular_season',
   'playoffs',
@@ -3035,16 +3046,18 @@ function applyGameResultToCache(result, week, seasonId) {
   const homePlanNarrative = buildGamePlanNarrative(homePrepMultipliers, {
     homeScore: scoreHome,
     awayScore: scoreAway,
-    topPasser: playerLeaders?.categories?.passing?.home,
-    topRusher: playerLeaders?.categories?.rushing?.home,
-    topReceiver: playerLeaders?.categories?.receiving?.home,
+    topPasser: normalizeLeaderForTeam(playerLeaders?.categories?.passing, hId),
+    topRusher: normalizeLeaderForTeam(playerLeaders?.categories?.rushing, hId),
+    topReceiver: normalizeLeaderForTeam(playerLeaders?.categories?.receiving, hId),
+    teamStats: teamStats?.home,
   });
   const awayPlanNarrative = buildGamePlanNarrative(awayPrepMultipliers, {
     homeScore: scoreAway,
     awayScore: scoreHome,
-    topPasser: playerLeaders?.categories?.passing?.away,
-    topRusher: playerLeaders?.categories?.rushing?.away,
-    topReceiver: playerLeaders?.categories?.receiving?.away,
+    topPasser: normalizeLeaderForTeam(playerLeaders?.categories?.passing, aId),
+    topRusher: normalizeLeaderForTeam(playerLeaders?.categories?.rushing, aId),
+    topReceiver: normalizeLeaderForTeam(playerLeaders?.categories?.receiving, aId),
+    teamStats: teamStats?.away,
   });
   const wentOvertime = playLogs.some((log) => Number(log?.quarter) > 4);
   const rivalryGame = Boolean(homeTeamSnapshot?.conf && awayTeamSnapshot?.conf && homeTeamSnapshot?.conf === awayTeamSnapshot?.conf && homeTeamSnapshot?.div === awayTeamSnapshot?.div);
