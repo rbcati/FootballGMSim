@@ -79,6 +79,7 @@ function TeamLeaderCell({ label, player, statKeys, onPlayerSelect }) {
 
 const SECTION_LINKS = [
   { key: "summary", label: "Summary" },
+  { key: "prep", label: "Game-plan Impact" },
   { key: "team", label: "Team Stats" },
   { key: "players", label: "Players" },
   { key: "scoring", label: "Scoring" },
@@ -428,6 +429,17 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
     game.homeScore != null || game.awayScore != null || game.stats || game.playerStats || game.teamStats || game.recap || game.quarterScores
   ));
   const unavailableMessage = "No data saved for this game.";
+  const prepImpact = game?.prepImpact ?? null;
+  const prepRows = useMemo(() => ([
+    { side: "away", team: awayTeam, impact: prepImpact?.away ?? null },
+    { side: "home", team: homeTeam, impact: prepImpact?.home ?? null },
+  ]).map((entry) => {
+    const reasons = Array.isArray(entry.impact?.activeReasons) ? entry.impact.activeReasons : [];
+    const warnings = reasons.filter((reason) => /penalty|risk|missing|gap|no scouting support|injury stress|readiness penalty/i.test(String(reason)));
+    const positives = reasons.filter((reason) => !warnings.includes(reason));
+    return { ...entry, warnings, positives };
+  }), [awayTeam, homeTeam, prepImpact]);
+  const hasPrepImpact = prepRows.some((row) => row.impact?.narrative || row.warnings.length || row.positives.length);
 
   const shell = (
     <div className={`${embedded ? "card" : "modal-content modal-large box-score-modal"}`} onClick={(e) => !embedded && e.stopPropagation()}>
@@ -521,6 +533,29 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               </div>
             )}
           </section>
+          {hasPrepImpact && (
+            <section className="bs-section" ref={(node) => { sectionRefs.current.prep = node; }} data-section="prep">
+              <h4>Postgame Film Room</h4>
+              <div className="bs-team-groups">
+                {prepRows.map((row) => (
+                  <div key={row.side} className="bs-team-group">
+                    <h5>{row.team?.abbr ?? row.side.toUpperCase()}</h5>
+                    {row.impact?.narrative ? <div className="bs-list-item">{row.impact.narrative}</div> : <EmptyState title="No game-plan recap" body="No prep impact was archived for this side." />}
+                    {!!row.positives.length && (
+                      <div className="bs-list" aria-label={`${row.side} positive game plan reasons`}>
+                        {row.positives.map((reason, idx) => <div key={`${row.side}-pos-${idx}`} className="bs-list-item">{reason}</div>)}
+                      </div>
+                    )}
+                    {!!row.warnings.length && (
+                      <div className="bs-list" aria-label={`${row.side} warning game plan reasons`}>
+                        {row.warnings.map((reason, idx) => <div key={`${row.side}-warn-${idx}`} className="bs-list-item" style={{ borderColor: "var(--warning)" }}>Warning: {reason}</div>)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <GameDetailV2 game={game} awayTeam={awayTeam} homeTeam={homeTeam} />
 

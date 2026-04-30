@@ -42,6 +42,16 @@ describe('BoxScore postgame command center', () => {
             away: { redZoneScores: 4, redZoneTrips: 5, explosivePlays: 7 },
           },
         },
+        prepImpact: {
+          away: {
+            narrative: 'Our pass-heavy script aligned with the coverage matchup and helped generate 294 passing yards, 3 pass TD, 0 INT.',
+            activeReasons: ['Pass Attack Edge: pass-heavy script targets a soft secondary.'],
+          },
+          home: {
+            narrative: 'Final score 24-31.',
+            activeReasons: ['Readiness Penalty Active: no scouting support this week.'],
+          },
+        },
         teamStats: {
           home: { totalYards: 342, turnovers: 2, sacks: 1, passYards: 212 },
           away: { totalYards: 426, turnovers: 0, sacks: 4, passYards: 294 },
@@ -82,6 +92,8 @@ describe('BoxScore postgame command center', () => {
     expect(html).toContain('Player leaders');
     expect(html).toContain('Scoring summary');
     expect(html).toContain('Game flow &amp; momentum');
+    expect(html).toContain('Postgame Film Room');
+    expect(html).toContain('Warning: <!-- -->Readiness Penalty Active');
   });
 
   it('fails safely for partial archived payloads without crashing', () => {
@@ -111,6 +123,7 @@ describe('BoxScore postgame command center', () => {
 
     expect(html).toContain('Game Book');
     expect(html).toContain('Detailed box score is unavailable');
+    expect(html).not.toContain('Postgame Film Room');
   });
 
   it('player buttons trigger existing selection handlers when player ids are present', () => {
