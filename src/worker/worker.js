@@ -150,6 +150,7 @@ import {
 } from '../core/sim/weekSimulationBridge.ts';
 import { deriveGamePlanMultipliers } from '../core/sim/gamePlanMultipliers.ts';
 import { buildGamePlanNarrative } from '../core/narrative.js';
+import { buildRosterBuildingAnalysis } from '../core/rosterBuildingAnalysis.js';
 
 // ── DB Reload Guard ───────────────────────────────────────────────────────────
 // Register a callback with db/index.js so that when IDB fires onblocked or
@@ -5068,6 +5069,14 @@ async function handleGetRoster({ teamId }, id) {
       };
   });
 
+  const analysis = buildRosterBuildingAnalysis({
+    team,
+    roster: players,
+    cap: { capRoom: team?.capRoom, capUsed: team?.capUsed, deadCap: team?.deadCap },
+    freeAgents: cache.getAllPlayers().filter((p) => !p?.teamId || p?.status === 'free_agent'),
+    draftPicks: Array.isArray(team?.picks) ? team.picks : [],
+  });
+
   post(toUI.ROSTER_DATA, {
     teamId: numId,
     team: {
@@ -5082,6 +5091,7 @@ async function handleGetRoster({ teamId }, id) {
       staff:             team.staff,
     },
     players,
+    analysis,
   }, id);
 }
 
