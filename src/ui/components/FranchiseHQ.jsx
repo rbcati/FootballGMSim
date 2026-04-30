@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { autoBuildDepthChart, depthWarnings } from '../../core/depthChart.js';
 import { markWeeklyPrepStep } from '../utils/weeklyPrep.js';
 import { selectFranchiseHQViewModel } from '../utils/franchiseCommandCenter.js';
+import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
@@ -120,6 +121,20 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
     };
   }, [userTeam]);
 
+
+
+  const weeklyCommandHub = useMemo(() => buildWeeklyCommandHub({
+    league,
+    userTeam,
+    command,
+    teamBuilder: hqTeamBuilder,
+    weeklyDecisionImpact: decisionReview,
+    gamePlanImpact: command.gamePlanImpact,
+    weeklyIntelligence: command.weeklyIntelligence,
+    nextGame: command.nextGame,
+    lastGame,
+  }), [league, userTeam, command, hqTeamBuilder, decisionReview, lastGame]);
+
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -207,12 +222,32 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
       </SectionCard>
 
-      <SectionCard title="Roster Needs" subtitle="Quick Team Builder snapshot for weekly personnel calls." variant="compact">
-        <div className="app-hq-intel-list" role="list" aria-label="Roster needs snapshot">
-          <p role="listitem" className="app-hq-intel-item tone-warning">Biggest need: <strong>{hqTeamBuilder.biggestNeed}</strong></p>
-          <p role="listitem" className="app-hq-intel-item tone-info">Cap pressure: <strong>{hqTeamBuilder.capPressure}</strong></p>
-          <p role="listitem" className="app-hq-intel-item tone-info">Next roster action: {hqTeamBuilder.nextAction}</p>
-          <Button size="sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>Open Team Builder</Button>
+
+
+      <SectionCard title="Weekly Command Hub" subtitle="Ranked actions for this week before you advance." variant="compact">
+        <div className="app-hq-intel-list">
+          {(weeklyCommandHub.sections ?? []).map((section) => (
+            <div key={section.key} className="app-hq-impact-card" style={{ marginBottom: 8 }}>
+              <div className="app-hq-impact-card__head">
+                <strong>{section.title}</strong>
+                <StatusChip label={`${section.actions.length} action${section.actions.length === 1 ? '' : 's'}`} tone={section.tone === 'danger' ? 'warning' : 'info'} />
+              </div>
+              {section.actions.length ? section.actions.map((action) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="btn btn-sm app-hq-impact-card__cta"
+                  style={{ width: '100%', minHeight: 44, textAlign: 'left', marginTop: 6 }}
+                  disabled={!action.route}
+                  onClick={() => action.route && onNavigate?.(action.route)}
+                  aria-label={`${section.title}: ${action.label}`}
+                >
+                  <strong>{action.label}</strong>
+                  <span style={{ display: 'block', opacity: 0.85 }}>{action.detail}</span>
+                </button>
+              )) : <p className="app-hq-intel-item tone-info">No actions right now.</p>}
+            </div>
+          ))}
         </div>
       </SectionCard>
 
@@ -233,19 +268,10 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
         </div>
       </SectionCard>
 
-      <section className="app-section-stack" aria-label="This Week Action Center">
-        <h2 className="app-section-heading">Prepare for Kickoff</h2>
-        <div className="app-action-grid-2x2">
-          {actionTiles.map((action) => (
-            <ActionTile key={action.title} icon={action.icon} title={action.title} subtitle={action.subtitle} badge={action.badge ? <StatusChip label={action.badge} tone="warning" /> : null} onClick={action.onClick} tone="info" ariaLabel={`${action.title}: ${action.subtitle}`} />
-          ))}
-        </div>
-      </section>
+
       {lineupToast ? <p className="app-inline-toast" role="status" aria-live="polite">{lineupToast}</p> : null}
 
-      <SectionCard title="Week Command" subtitle="What needs attention, why it matters, and where to handle it." variant="compact">
-        <WeeklyAgenda items={(command.weeklyAgenda ?? []).slice(0, 3)} onOpenTask={(task) => onNavigate?.(task?.targetRoute ?? task?.tab ?? 'HQ')} />
-      </SectionCard>
+
 
 
       <SectionCard title={decisionReview?.heading ?? 'What Mattered Last Week'} subtitle={decisionReview?.resultSummary ?? 'Run a completed game to unlock a weekly decision review.'} variant="compact">
@@ -294,6 +320,19 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           {!command.leagueNews?.length ? <EmptyState title="No league headlines yet." body="Advance to generate weekly stories." /> : null}
         </div>
       </SectionCard>
+
+      <section className="card" aria-label="Advance readiness">
+        <p className="app-hq-intel-item tone-info">
+          {weeklyCommandHub.readiness.readyToAdvance ? 'Ready to advance.' : `${weeklyCommandHub.readiness.criticalOpen} critical item open.`} {' '}
+          {weeklyCommandHub.readiness.recommendedOpen ? `${weeklyCommandHub.readiness.recommendedOpen} recommended actions remaining.` : 'No recommended actions remaining.'}
+          {weeklyCommandHub.readiness.lastCompletedAction ? ` Last review: ${weeklyCommandHub.readiness.lastCompletedAction}.` : ''}
+        </p>
+        {weeklyCommandHub.primaryAction?.blocking ? (
+          <button type="button" className="btn btn-sm app-hq-impact-card__cta" onClick={() => onNavigate?.(weeklyCommandHub.primaryAction.route)}>
+            Resolve blocker: {weeklyCommandHub.primaryAction.label}
+          </button>
+        ) : null}
+      </section>
 
       <div className="app-hq-sticky-advance">
         <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
