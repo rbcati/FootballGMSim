@@ -50,6 +50,7 @@ import { applyAdvancedPlayerFilters } from "../../core/footballAdvancedFilters";
 import { buildPlayerEvaluation } from "../../core/playerEvaluation.js";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import { formatDemandTier } from "../utils/offseasonActionCenter.js";
+import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyMarketAnalysis.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -674,6 +675,7 @@ export default function FreeAgency({
   const [positionNeedOnly, setPositionNeedOnly] = useState(false);
   const [watchlistIds, setWatchlistIds] = useState(new Set());
   const [sortPreset, setSortPreset] = useState("best_available");
+  const [marketFilter, setMarketFilter] = useState("all");
 
   // Sorting
   const [sortKey, setSortKey] = useState("ovr");
@@ -748,19 +750,33 @@ export default function FreeAgency({
     }),
   })), [faPool, teamIntel, userTeam?.roster, userTeam?.gamePlan, needsSummary?.needs]);
   const topNeeds = useMemo(() => (needsSummary?.needs ?? []).slice(0, 4), [needsSummary?.needs]);
+  const marketAnalysis = useMemo(() => buildFreeAgencyMarketAnalysis({
+    team: userTeam,
+    roster: userTeam?.roster ?? [],
+    freeAgents: evaluatedFaPool,
+    cap: { capRoom, capUsed, deadCap },
+  }), [userTeam, evaluatedFaPool, capRoom, capUsed, deadCap]);
+
+  const marketRowsById = useMemo(() => new Map((marketAnalysis?.marketRows ?? []).map((r) => [r.playerId, r])), [marketAnalysis]);
 
   const displayed = useMemo(() => {
     const base = filterFreeAgentsForView(evaluatedFaPool, {
       signedIds, posFilter, minOvr, nameFilter, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, needs: topNeeds,
     });
     return base.filter((player) => {
+      const marketRow = marketRowsById.get(player.id);
+      if (marketFilter === "need" && !marketAnalysis.filters.fitsTeamNeed(marketRow || {})) return false;
+      if (marketFilter === "affordable" && !marketAnalysis.filters.affordable(marketRow || {})) return false;
+      if (marketFilter === "starter" && !marketAnalysis.filters.starterUpgrades(marketRow || {})) return false;
+      if (marketFilter === "young" && !marketAnalysis.filters.youngUpside(marketRow || {})) return false;
+      if (marketFilter === "risk" && !marketAnalysis.filters.avoidRisks(marketRow || {})) return false;
       if ((player.age ?? 99) > maxAge) return false;
       if ((player._eval?.schemeFit?.score ?? player.schemeFit ?? 0) < minSchemeFit) return false;
       if (demandTier !== "ALL" && formatDemandTier(player) !== demandTier) return false;
       if (watchOnly && !watchlistIds.has(player.id)) return false;
       return true;
     });
-  }, [evaluatedFaPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, topNeeds, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds]);
+  }, [evaluatedFaPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, topNeeds, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds, marketFilter, marketAnalysis, marketRowsById]);
 
   const sortedAgents = useMemo(() => {
     return sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs: (needsSummary?.needs ?? []).slice(0, 4) });
@@ -872,6 +888,32 @@ export default function FreeAgency({
           { label: "Phase", value: faState?.phase ?? "loading" },
         ]}
       />
+      <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
+        <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 10 }}>
+          <div style={{ fontSize: "var(--text-xs)", textTransform: "uppercase", color: "var(--text-muted)" }}>Market Snapshot</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 8 }}>
+            <Badge variant="outline">Cap Room: {marketAnalysis?.summary?.capRoom != null ? `$${marketAnalysis.summary.capRoom.toFixed(1)}M` : "Unknown"}</Badge>
+            <Badge variant="outline">Need: {marketAnalysis?.summary?.biggestNeed?.key ?? "Unknown"}</Badge>
+            <Badge variant="outline">Top Fit: {marketAnalysis?.summary?.topFit?.name ?? "None"}</Badge>
+            <Badge variant="outline">Bargain: {marketAnalysis?.summary?.bargainOption?.name ?? "None"}</Badge>
+          </div>
+          {(marketAnalysis?.summary?.capPressure === "high" || marketAnalysis?.summary?.capPressure === "critical") && <div style={{ color: "var(--warning)", fontSize: "var(--text-xs)" }}>Cap pressure is high. Expensive options may be risky.</div>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {[["all","All"],["need","Fits Team Need"],["affordable","Affordable"],["starter","Starter Upgrades"],["young","Young Upside"],["risk","Avoid Risks"]].map(([k,l]) => (
+              <Button key={k} size="sm" variant={marketFilter===k?"default":"outline"} onClick={() => setMarketFilter(k)}>{l}</Button>
+            ))}
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {(marketAnalysis?.topFits ?? []).slice(0,5).map((row) => (
+              <button key={row.playerId} type="button" onClick={() => onPlayerSelect?.(row._player)} style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 10, padding: 8 }}>
+                <div style={{ fontWeight: 700 }}>{row.name} · {row.pos} · OVR {row.ovr}</div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{row.recommendation} · fit {row.fitScore} · {row.capFit} · {row.reason}</div>
+              </button>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       <Card className="card-premium" style={{ marginBottom: "var(--space-4)" }}>
         <CardContent style={{ padding: "var(--space-4)", display: "grid", gap: 8 }}>
           <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Free Agency · transaction workspace</div>
