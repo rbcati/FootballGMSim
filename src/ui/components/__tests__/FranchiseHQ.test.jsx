@@ -52,26 +52,22 @@ describe('FranchiseHQ', () => {
     expect(screen.getByRole('heading', { name: /week 10/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /advance week/i })).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /advance week/i })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: /^game plan:/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^set lineup:/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^training:/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^scout opponent:/i })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /weekly command hub/i })).toBeTruthy();
+    expect(screen.getByText(/must handle/i)).toBeTruthy();
+    expect(screen.getByText(/tactical edge/i)).toBeTruthy();
     expect(screen.getByRole('heading', { name: /coordinator brief/i })).toBeTruthy();
     expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/home matchup vs det/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ratings are tightly clustered/i)).toBeTruthy();
-    expect(screen.getByText(/open roster \/ depth/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /tactical edge: review game plan/i })).toBeTruthy();
   });
 
-  it('routes Game Plan Impact and review CTAs through onNavigate', () => {
+  it('routes weekly command hub action through onNavigate', () => {
     const onNavigate = vi.fn();
     const view = render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
-    fireEvent.click(within(view.container).getAllByRole('button', { name: /attack plan: tune game plan/i })[0]);
-    fireEvent.click(within(view.container).getAllByRole('button', { name: /open weekly results/i })[0]);
-
+    fireEvent.click(within(view.container).getAllByRole('button', { name: /tactical edge: review game plan/i })[0]);
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
-    expect(onNavigate).toHaveBeenCalledWith('Weekly Results:9');
   });
 
 
@@ -80,6 +76,7 @@ describe('FranchiseHQ', () => {
     render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
 
     expect(screen.getAllByRole('heading', { name: /what mattered last week|decision review/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('heading', { name: /roster needs/i })).toBeNull();
     const button = screen.getByRole('button', { name: /decision review:/i });
     fireEvent.click(button);
     expect(onNavigate).toHaveBeenCalled();
