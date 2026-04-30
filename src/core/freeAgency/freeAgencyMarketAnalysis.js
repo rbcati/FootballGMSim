@@ -30,6 +30,8 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
   }, {}))).map(([pos, players]) => [pos, [...players].sort((a, b) => (num(b?.ovr, 0) - num(a?.ovr, 0)))[0]]));
 
   const needMap = new Map(positionGroups.map((g) => [g.key, g]));
+  const recommendationRankMap = { pursue: 4, consider: 3, watch: 2, avoid: 1 };
+  const capFitRankMap = { affordable: 4, tight: 3, expensive: 2, unknown: 1 };
 
   const marketRows = freeAgents.map((p) => {
     const group = needMap.get(p?.pos);
@@ -42,6 +44,11 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
     const cost = getCost(p);
     const starter = starterByPos[p?.pos];
     const replacementDelta = starter ? ovr - num(starter?.ovr, 0) : null;
+    const projectedCapRoomAfterSigning = cost != null && capRoom != null ? Number((capRoom - cost).toFixed(1)) : null;
+    const replacementDeltaLabel = starter
+      ? `${replacementDelta >= 0 ? "+" : ""}${replacementDelta} vs starter`
+      : "No current starter";
+    const capImpactLabel = projectedCapRoomAfterSigning == null ? "cost unknown" : `$${projectedCapRoomAfterSigning.toFixed(1)}M after signing`;
 
     const isUrgentNeed = needLevel === 'urgent' || needLevel === 'thin';
     const needBoost = isUrgentNeed ? 18 : needScore >= 35 ? 8 : 0;
@@ -68,6 +75,33 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
     ].filter(Boolean);
 
     const recommendation = fitScore >= 78 ? 'pursue' : fitScore >= 62 ? 'consider' : fitScore >= 45 ? 'watch' : 'avoid';
+    const marketTier = recommendation === 'avoid'
+      ? 'avoid'
+      : ovr >= 88
+        ? 'premium'
+        : ovr >= 80
+          ? 'starter'
+          : ovr >= 73
+            ? 'rotation'
+            : age != null && age <= 24 && potential > ovr
+              ? 'stash'
+              : 'depth';
+    const valueTag = cost == null
+      ? 'unknown'
+      : fitScore >= 74 && cost <= 6
+        ? 'bargain'
+        : fitScore >= 60 && cost <= 12
+          ? 'fair'
+          : 'expensive';
+    const needFitTag = ['K', 'P'].includes(p?.pos) && !isUrgentNeed
+      ? 'low_priority'
+      : isUrgentNeed
+        ? 'urgent_need'
+        : needScore >= 35
+          ? 'team_need'
+          : fitScore >= 75
+            ? 'luxury'
+            : 'low_priority';
     const reason = replacementDelta != null && replacementDelta >= 5
       ? `Possible starter upgrade at ${p?.pos}.`
       : isUrgentNeed
@@ -90,11 +124,31 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
       currentTeamNeedLevel: needLevel,
       currentTeamNeedScore: needScore,
       replacementDelta,
+      replacementDeltaLabel,
+      currentStarterName: starter?.name ?? null,
+      currentStarterOVR: starter ? num(starter?.ovr, null) : null,
+      currentStarterAge: starter ? num(starter?.age, null) : null,
+      currentUnitOVR: group ? num(group?.currentUnitOvr ?? group?.unitOvr, null) : null,
       capFit,
+      projectedCapRoomAfterSigning,
+      capImpactLabel,
       roleFit,
+      marketTier,
+      valueTag,
+      needFitTag,
       riskFlags,
       fitScore,
       recommendation,
+      sortKeys: {
+        fitScore,
+        ovr,
+        age: age ?? null,
+        cost: cost ?? null,
+        replacementDelta: replacementDelta ?? null,
+        schemeFit: schemeFit ?? null,
+        recommendationRank: recommendationRankMap[recommendation] ?? 0,
+        capFitRank: capFitRankMap[capFit] ?? 0,
+      },
       reason,
       _player: p,
     };

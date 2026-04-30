@@ -19,6 +19,14 @@ const teamBuilder = {
 };
 
 describe('buildFreeAgencyMarketAnalysis', () => {
+  it('market row includes current starter comparison and labels', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [{ id: 70, name: 'FA QB', pos: 'QB', ovr: 76, age: 27, potential: 80, contractDemand: { baseAnnual: 8 } }] });
+    expect(res.marketRows[0].currentStarterName).toBe('QB A');
+    expect(res.marketRows[0].currentStarterOVR).toBe(68);
+    expect(res.marketRows[0].currentStarterAge).toBe(28);
+    expect(res.marketRows[0].replacementDeltaLabel).toBe('+8 vs starter');
+  });
+
   it('urgent need boosts matching fit score and wrong position does not', () => {
     const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [
       { id: 10, name: 'FA QB', pos: 'QB', ovr: 74, age: 27, potential: 78, contractDemand: { baseAnnual: 8 } },
@@ -30,6 +38,18 @@ describe('buildFreeAgencyMarketAnalysis', () => {
   it('higher OVR than starter gets starter_upgrade', () => {
     const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [{ id: 10, name: 'FA QB', pos: 'QB', ovr: 80, age: 27, potential: 82, contractDemand: { baseAnnual: 10 } }] });
     expect(res.marketRows[0].roleFit).toBe('starter_upgrade');
+  });
+
+  it('projected cap room is calculated when cost and cap are known', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team: { capRoom: 20 }, roster, teamBuilder, freeAgents: [{ id: 12, name: 'FA QB', pos: 'QB', ovr: 78, age: 27, potential: 80, contractDemand: { baseAnnual: 7.6 } }] });
+    expect(res.marketRows[0].projectedCapRoomAfterSigning).toBe(12.4);
+    expect(res.marketRows[0].capImpactLabel).toContain('$12.4M');
+  });
+
+  it('projected cap room is unknown when cost is missing', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team: { capRoom: 20 }, roster, teamBuilder, freeAgents: [{ id: 13, name: 'Unknown Cost QB', pos: 'QB', ovr: 75, age: 26, potential: 78 }] });
+    expect(res.marketRows[0].projectedCapRoomAfterSigning).toBeNull();
+    expect(res.marketRows[0].capImpactLabel).toBe('cost unknown');
   });
 
   it('young high potential becomes development_stash/young upside', () => {
@@ -60,6 +80,43 @@ describe('buildFreeAgencyMarketAnalysis', () => {
   it('missing salary/cap/scheme data does not crash', () => {
     const res = buildFreeAgencyMarketAnalysis({ team: {}, roster, freeAgents: [{ id: 40, name: 'Unknown', pos: 'QB', ovr: 70 }] });
     expect(res.marketRows[0].capFit).toBe('unknown');
+  });
+
+  it('market tier and value tags classify players reasonably', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [
+      { id: 80, name: 'Premium QB', pos: 'QB', ovr: 90, age: 27, potential: 92, contractDemand: { baseAnnual: 20 } },
+      { id: 81, name: 'Cheap Fit WR', pos: 'WR', ovr: 78, age: 24, potential: 83, contractDemand: { baseAnnual: 3 } },
+      { id: 82, name: 'Unknown Cost', pos: 'WR', ovr: 70, age: 25, potential: 72 },
+    ] });
+    expect(res.marketRows.find((r) => r.playerId === 80)?.marketTier).toBe('premium');
+    expect(res.marketRows.find((r) => r.playerId === 81)?.valueTag).toBe('bargain');
+    expect(res.marketRows.find((r) => r.playerId === 82)?.valueTag).toBe('unknown');
+  });
+
+  it('needFitTag prioritizes urgent needs and de-prioritizes luxury K/P', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [
+      { id: 90, name: 'QB Need', pos: 'QB', ovr: 72, age: 26, potential: 74, contractDemand: { baseAnnual: 5 } },
+      { id: 91, name: 'K Luxury', pos: 'K', ovr: 88, age: 27, potential: 89, contractDemand: { baseAnnual: 1 } },
+    ] });
+    expect(res.marketRows.find((r) => r.playerId === 90)?.needFitTag).toBe('urgent_need');
+    expect(res.marketRows.find((r) => r.playerId === 91)?.needFitTag).toBe('low_priority');
+  });
+
+  it('sortKeys are present and numeric/null safe', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team, roster, teamBuilder, freeAgents: [{ id: 92, name: 'QB', pos: 'QB', ovr: 75, age: 26, potential: 78 }] });
+    expect(typeof res.marketRows[0].sortKeys.fitScore).toBe('number');
+    expect(typeof res.marketRows[0].sortKeys.recommendationRank).toBe('number');
+    expect(res.marketRows[0].sortKeys.cost).toBeNull();
+  });
+
+  it('low-risk young upside outranks old expensive low-fit in same position', () => {
+    const res = buildFreeAgencyMarketAnalysis({ team: { capRoom: 5 }, roster, teamBuilder, freeAgents: [
+      { id: 100, name: 'Young QB', pos: 'QB', ovr: 74, age: 23, potential: 82, schemeFit: 78, contractDemand: { baseAnnual: 3 } },
+      { id: 101, name: 'Old QB', pos: 'QB', ovr: 75, age: 34, potential: 75, schemeFit: 38, contractDemand: { baseAnnual: 12 } },
+    ] });
+    const young = res.marketRows.find((r) => r.playerId === 100);
+    const old = res.marketRows.find((r) => r.playerId === 101);
+    expect((young?.fitScore ?? 0)).toBeGreaterThan(old?.fitScore ?? 0);
   });
 
   it('topFits sorted by fitScore descending', () => {

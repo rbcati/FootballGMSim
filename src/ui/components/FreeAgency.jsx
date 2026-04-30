@@ -150,14 +150,15 @@ export function filterFreeAgentsForView(faPool, { signedIds, posFilter, minOvr, 
   return applyAdvancedPlayerFilters(baseFiltered, advancedFilters);
 }
 
-export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs = [] }) {
+export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs = [], marketRowsById = new Map() }) {
   const arr = [...displayed];
+  const rowFor = (p) => marketRowsById.get(p?.id) ?? {};
   if (sortPreset === "best_available") {
-    arr.sort((a, b) => (b.ovr ?? 0) - (a.ovr ?? 0));
+    arr.sort((a, b) => (rowFor(b).sortKeys?.fitScore ?? 0) - (rowFor(a).sortKeys?.fitScore ?? 0) || (b.ovr ?? 0) - (a.ovr ?? 0));
     return arr;
   }
   if (sortPreset === "cheapest_value") {
-    arr.sort((a, b) => ((b.ovr ?? 0) / Math.max(0.2, b._ask ?? 1)) - ((a.ovr ?? 0) / Math.max(0.2, a._ask ?? 1)));
+    arr.sort((a, b) => (rowFor(a).sortKeys?.cost ?? a._ask ?? 999) - (rowFor(b).sortKeys?.cost ?? b._ask ?? 999));
     return arr;
   }
   if (sortPreset === "youngest") {
@@ -171,6 +172,18 @@ export function sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir,
   }
   if (sortPreset === "tactical_fit") {
     arr.sort((a, b) => (b?._eval?.schemeFit?.score ?? 0) - (a?._eval?.schemeFit?.score ?? 0) || (b.ovr ?? 0) - (a.ovr ?? 0));
+    return arr;
+  }
+  if (sortPreset === "starter_upgrade") {
+    arr.sort((a, b) => (rowFor(b).sortKeys?.replacementDelta ?? -999) - (rowFor(a).sortKeys?.replacementDelta ?? -999));
+    return arr;
+  }
+  if (sortPreset === "young_upside") {
+    arr.sort((a, b) => ((b.potential ?? b.ovr ?? 0) - (b.age ?? 99)) - ((a.potential ?? a.ovr ?? 0) - (a.age ?? 99)));
+    return arr;
+  }
+  if (sortPreset === "lowest_risk") {
+    arr.sort((a, b) => (rowFor(a).riskFlags?.length ?? 0) - (rowFor(b).riskFlags?.length ?? 0) || (rowFor(b).sortKeys?.fitScore ?? 0) - (rowFor(a).sortKeys?.fitScore ?? 0));
     return arr;
   }
   arr.sort((a, b) => {
@@ -770,6 +783,7 @@ export default function FreeAgency({
       if (marketFilter === "starter" && !marketAnalysis.filters.starterUpgrades(marketRow || {})) return false;
       if (marketFilter === "young" && !marketAnalysis.filters.youngUpside(marketRow || {})) return false;
       if (marketFilter === "risk" && !marketAnalysis.filters.avoidRisks(marketRow || {})) return false;
+      if (marketFilter === "watchlist" && !watchlistIds.has(player.id)) return false;
       if ((player.age ?? 99) > maxAge) return false;
       if ((player._eval?.schemeFit?.score ?? player.schemeFit ?? 0) < minSchemeFit) return false;
       if (demandTier !== "ALL" && formatDemandTier(player) !== demandTier) return false;
@@ -779,8 +793,8 @@ export default function FreeAgency({
   }, [evaluatedFaPool, signedIds, posFilter, nameFilter, minOvr, advancedFilters, archetypeFilter, fitTierFilter, roleFilter, positionNeedOnly, topNeeds, maxAge, minSchemeFit, demandTier, watchOnly, watchlistIds, marketFilter, marketAnalysis, marketRowsById]);
 
   const sortedAgents = useMemo(() => {
-    return sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs: (needsSummary?.needs ?? []).slice(0, 4) });
-  }, [displayed, sortKey, sortDir, sortPreset, needsSummary?.needs]);
+    return sortFreeAgentsForView(displayed, { sortPreset, sortKey, sortDir, needs: (needsSummary?.needs ?? []).slice(0, 4), marketRowsById });
+  }, [displayed, sortKey, sortDir, sortPreset, needsSummary?.needs, marketRowsById]);
   const archetypeOptions = useMemo(
     () => Array.from(new Set(evaluatedFaPool.map((p) => p?._eval?.archetype?.archetype).filter(Boolean))).slice(0, 24),
     [evaluatedFaPool],
@@ -899,16 +913,20 @@ export default function FreeAgency({
           </div>
           {(marketAnalysis?.summary?.capPressure === "high" || marketAnalysis?.summary?.capPressure === "critical") && <div style={{ color: "var(--warning)", fontSize: "var(--text-xs)" }}>Cap pressure is high. Expensive options may be risky.</div>}
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {[["all","All"],["need","Fits Team Need"],["affordable","Affordable"],["starter","Starter Upgrades"],["young","Young Upside"],["risk","Avoid Risks"]].map(([k,l]) => (
+            {[["all","All"],["need","Fits Team Need"],["affordable","Affordable"],["starter","Starter Upgrades"],["young","Young Upside"],["risk","Avoid Risks"],["watchlist","Watchlist"]].map(([k,l]) => (
               <Button key={k} size="sm" variant={marketFilter===k?"default":"outline"} onClick={() => setMarketFilter(k)}>{l}</Button>
             ))}
           </div>
           <div style={{ display: "grid", gap: 6 }}>
             {(marketAnalysis?.topFits ?? []).slice(0,5).map((row) => (
-              <button key={row.playerId} type="button" onClick={() => onPlayerSelect?.(row._player)} style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 10, padding: 8 }}>
-                <div style={{ fontWeight: 700 }}>{row.name} · {row.pos} · OVR {row.ovr}</div>
-                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{row.recommendation} · fit {row.fitScore} · {row.capFit} · {row.reason}</div>
-              </button>
+              <div key={row.playerId} style={{ textAlign: "left", background: "var(--surface)", border: "1px solid var(--hairline)", borderRadius: 10, padding: 8 }}>
+                <button type="button" onClick={() => onPlayerSelect?.(row._player)} style={{ width: "100%", textAlign: "left", background: "transparent", border: 0, padding: 0 }}>
+                  <div style={{ fontWeight: 700 }}>{row.name} · {row.pos} · OVR {row.ovr}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>{row.recommendation} · fit {row.fitScore} · {row.capFit} · {row.replacementDeltaLabel}</div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-subtle)" }}>{row.capImpactLabel}</div>
+                </button>
+                <Button size="sm" variant="outline" onClick={() => setWatchlistIds((prev) => { const next = new Set(prev); if (next.has(row.playerId)) next.delete(row.playerId); else next.add(row.playerId); return next; })}>{watchlistIds.has(row.playerId) ? "Unwatch" : "Watch"}</Button>
+              </div>
             ))}
           </div>
         </CardContent>
@@ -1122,11 +1140,13 @@ export default function FreeAgency({
               <option value="premium">Demand: Premium</option>
             </select>
             <select value={sortPreset} onChange={(e) => setSortPreset(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
-              <option value="best_available">Sort: Best available</option>
-              <option value="cheapest_value">Sort: Cheapest value</option>
-              <option value="youngest">Sort: Youngest</option>
+              <option value="best_available">Sort: Best Fit</option>
+              <option value="cheapest_value">Sort: Cheapest</option>
+              <option value="young_upside">Sort: Young Upside</option>
               <option value="position_need">Sort: Position need</option>
-              <option value="tactical_fit">Sort: Tactical fit</option>
+              <option value="starter_upgrade">Sort: Starter Upgrade</option>
+              <option value="tactical_fit">Sort: Scheme Fit</option>
+              <option value="lowest_risk">Sort: Lowest Risk</option>
               <option value="manual">Sort: Manual columns</option>
             </select>
             <select value={fitTierFilter} onChange={(e) => setFitTierFilter(e.target.value)} style={{ height: 30, borderRadius: 8, background: "var(--surface-strong)", border: "1px solid var(--hairline)", color: "var(--text)", fontSize: 12 }}>
