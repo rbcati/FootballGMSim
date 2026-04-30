@@ -108,6 +108,18 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
 
   const decisionReview = useMemo(() => command.weeklyDecisionImpact ?? null, [command.weeklyDecisionImpact]);
 
+  const hqTeamBuilder = useMemo(() => {
+    const roster = Array.isArray(userTeam?.roster) ? userTeam.roster : [];
+    const byPos = ['QB','RB','WR','TE','OL','DL','LB','CB','S'].map((pos) => ({ pos, players: roster.filter((p) => p?.pos === pos).sort((a,b)=>safeNum(b?.ovr)-safeNum(a?.ovr)) }));
+    const weakest = byPos.map((g) => ({ pos: g.pos, top: safeNum(g.players[0]?.ovr, 0), depth: g.players.length })).sort((a,b)=>(a.top + a.depth*2)-(b.top + b.depth*2))[0] ?? null;
+    const capPressure = safeNum(userTeam?.capRoom, 0) < 0 ? 'critical' : safeNum(userTeam?.capRoom, 0) < 10 ? 'high' : 'managed';
+    return {
+      biggestNeed: weakest?.pos ?? 'Needs more data',
+      capPressure,
+      nextAction: weakest ? `Review ${weakest.pos} starter/depth plan` : 'Review roster needs',
+    };
+  }, [userTeam]);
+
   const nextOpponents = useMemo(() => (league?.schedule?.weeks ?? [])
     .filter((week) => safeNum(week?.week, 0) >= safeNum(league?.week, 1))
     .flatMap((week) => (week?.games ?? []).map((game) => ({ ...game, week: week.week })))
@@ -192,6 +204,15 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
           {weeklyIntel.map((insight) => (
             <p key={insight.id} role="listitem" className={`app-hq-intel-item tone-${insight.tone ?? 'info'}`}>{insight.text}</p>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Roster Needs" subtitle="Quick Team Builder snapshot for weekly personnel calls." variant="compact">
+        <div className="app-hq-intel-list" role="list" aria-label="Roster needs snapshot">
+          <p role="listitem" className="app-hq-intel-item tone-warning">Biggest need: <strong>{hqTeamBuilder.biggestNeed}</strong></p>
+          <p role="listitem" className="app-hq-intel-item tone-info">Cap pressure: <strong>{hqTeamBuilder.capPressure}</strong></p>
+          <p role="listitem" className="app-hq-intel-item tone-info">Next roster action: {hqTeamBuilder.nextAction}</p>
+          <Button size="sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>Open Team Builder</Button>
         </div>
       </SectionCard>
 

@@ -2295,17 +2295,38 @@ export default function Roster({ league, actions, onPlayerSelect, onNavigate = n
       />
       {teamBuilder ? (
         <Card className="card-premium" style={{ marginBottom: "var(--space-2)", padding: "var(--space-3) var(--space-4)" }}>
-          <CardContent style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
-              Roster Building Command Center
-            </div>
+          <CardContent style={{ display: "grid", gap: 10 }}>
+            <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>Team Builder Workspace</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Badge variant={teamBuilder?.capSummary?.payrollPressure === 'critical' ? 'destructive' : 'outline'}>Cap pressure: {teamBuilder?.capSummary?.payrollPressure ?? 'needs data'}</Badge>
               <Badge variant={urgentNeed?.needLevel === 'urgent' ? 'destructive' : 'secondary'}>Biggest need: {urgentNeed?.key ?? 'Needs more data'}</Badge>
-              <Badge variant="outline">Expiring: {teamBuilder?.expiringContracts?.length ?? 0}</Badge>
-              <Badge variant="outline">Dev targets: {teamBuilder?.developmentTargets?.length ?? 0}</Badge>
+              <Badge variant="outline">Top expiring: {teamBuilder?.expiringContracts?.[0]?.name ?? '—'}</Badge>
+              <Badge variant="outline">Best dev target: {teamBuilder?.developmentTargets?.[0]?.name ?? '—'}</Badge>
             </div>
-            {nextAction ? <div style={{ fontSize: "var(--text-xs)" }}>Next best move: <strong>{nextAction.label}</strong> — {nextAction.reason}</div> : null}
+            {nextAction ? <div style={{ fontSize: "var(--text-xs)" }}>Next best action: <strong>{nextAction.label}</strong> — {nextAction.reason}</div> : null}
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>Position Needs Board</div>
+              <div style={{ display: 'grid', gap: 6 }}>
+                {(teamBuilder?.positionGroups ?? []).map((g) => (
+                  <button key={g.key} type="button" className="btn" style={{ textAlign: 'left', padding: '8px 10px', border: '1px solid var(--hairline)', borderRadius: 8, background: g.needLevel === 'urgent' ? 'rgba(255,69,58,0.15)' : 'transparent' }} onClick={() => { setViewMode('table'); setInitialFilter(g.key); }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 'var(--text-xs)' }}>
+                      <strong>{g.key} • {g.needLevel}</strong>
+                      <span>Unit {g.unitOVR ?? 0}</span>
+                    </div>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Starters {g.starterCountAvailable}/{g.starterCountExpected} • {g.primaryIssue?.replace('_', ' ') ?? 'none'}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ fontSize: "var(--text-xs)", fontWeight: 700 }}>Action Queue</div>
+              {(teamBuilder?.candidateActions ?? []).slice(0, 6).map((action, idx) => (
+                <div key={`${action.type}-${idx}`} style={{ fontSize: 'var(--text-xs)', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span><strong>{action.label}</strong> — {action.reason}</span>
+                  {action.route ? <Button size="sm" variant="outline" onClick={() => onNavigate?.(action.route)}>{action.type}</Button> : null}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       ) : null}
