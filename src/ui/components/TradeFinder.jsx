@@ -7,6 +7,7 @@ import { buildTeamIntelligence } from '../utils/teamIntelligence.js';
 import { rankTradePartners, playerAssetValue, pickAssetValue, buildCounterAdjustment } from '../utils/tradeFinder.js';
 import { normalizeManagement, CONTRACT_PLAN_LABELS, TRADE_STATUS_LABELS } from '../utils/playerManagement.js';
 import { buildAskOfferOutcome } from '../utils/tradeFinderOffers.js';
+import { buildTradeFinderAnalysis } from '../../core/trades/tradeFinderAnalysis.js';
 
 function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
@@ -173,6 +174,24 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     .filter((row) => targetContractFilter === 'ALL' ? true : row.contractType === targetContractFilter)
     .filter((row) => targetAvailabilityFilter === 'ALL' ? true : row.availability === targetAvailabilityFilter)
     .filter((row) => row.age >= targetAgeMin && row.age <= targetAgeMax), [tradeTargets, targetPosFilter, targetTeamFilter, targetContractFilter, targetAvailabilityFilter, targetAgeMin, targetAgeMax]);
+  const tradeFinderAnalysis = useMemo(() => buildTradeFinderAnalysis({
+    userTeam,
+    teams,
+    userRoster: userTeam?.roster ?? [],
+    leaguePlayers: teams.flatMap((t) => (t?.roster ?? []).map((p) => ({ ...p, teamId: t.id }))),
+    cap: { capRoom: userTeam?.capRoom },
+  }), [userTeam, teams]);
+  const [finderFilter, setFinderFilter] = useState('all');
+  const visibleIdeas = useMemo(() => (tradeFinderAnalysis.tradeIdeas ?? []).filter((idea) => {
+    if (finderFilter === 'all') return true;
+    if (finderFilter === 'team_need') return ['urgent_need', 'team_need'].includes(idea.needFitTag);
+    if (finderFilter === 'starter_upgrade') return idea.roleFit === 'starter_upgrade';
+    if (finderFilter === 'youth_upside') return idea.roleFit === 'youth_upside';
+    if (finderFilter === 'fair_value') return idea.valueMatch === 'fair';
+    if (finderFilter === 'cap_relief') return (idea.capImpact ?? 0) > 0;
+    if (finderFilter === 'avoid_risks') return (idea.riskFlags ?? []).length === 0;
+    return true;
+  }), [tradeFinderAnalysis.tradeIdeas, finderFilter]);
 
   const askWhatTheyOffer = useCallback((partnerId = selectedPartnerId) => {
     const partner = teams.find((t) => Number(t.id) === Number(partnerId));
@@ -219,6 +238,30 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
       <Card className="card-premium">
         <CardHeader><CardTitle>Trade Finder</CardTitle></CardHeader>
         <CardContent style={{ display: 'grid', gap: 10 }}>
+          <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 6 }}>
+            <div style={{ fontWeight: 700 }}>Trade Snapshot</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              Biggest Need: {tradeFinderAnalysis.summary?.biggestNeed?.pos ?? '—'} · Strongest Surplus: {tradeFinderAnalysis.summary?.strongestSurplus?.pos ?? '—'} · Best Chip: {tradeFinderAnalysis.summary?.bestTradeChip?.name ?? '—'} · Top Target: {tradeFinderAnalysis.summary?.topTarget?.targetPlayerName ?? '—'}
+            </div>
+            {tradeFinderAnalysis.summary?.capWarning ? <Badge variant="destructive">{tradeFinderAnalysis.summary.capWarning}</Badge> : null}
+          </div>
+          <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
+            <div style={{ fontWeight: 700 }}>Suggested Frameworks</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {['all','team_need','starter_upgrade','youth_upside','fair_value','cap_relief','avoid_risks'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
+            </div>
+            {visibleIdeas.slice(0, 10).map((idea) => (
+              <div key={idea.id} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, display: 'grid', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{idea.targetPos} {idea.targetPlayerName} ({idea.targetTeamAbbr})</strong><Badge variant="outline">Fit {idea.fitScore}</Badge></div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Outgoing: {idea.outgoingSummary} · {idea.valueMatch} value · {idea.capImpactLabel}</div>
+                <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <Button className="btn" onClick={() => onPlayerSelect?.(idea.targetPlayerId)}>Open Player</Button>
+                  <Button className="btn" onClick={() => onOpenTradeCenter?.()}>Open Trade Center</Button>
+                </div>
+              </div>
+            ))}
+          </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Select outgoing assets, rank partners, then open Builder with this exact context.</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
             <div>
