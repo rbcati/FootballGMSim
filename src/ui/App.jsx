@@ -689,13 +689,19 @@ function AppContent() {
     );
   }
 
-  const bootstrapSummary = summarizeBootstrapState(league);
-  const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId);
-  const isCutdownRequired = (league?.phase === 'preseason') && (userTeam?.rosterCount ?? 0) > 53;
+  const shellLeague = leagueReady ? league : null;
+  const safeWeek = shellLeague?.week ?? null;
+  const safeYear = shellLeague?.year ?? shellLeague?.seasonId ?? null;
+  const safeUserTeamId = shellLeague?.userTeamId ?? null;
+  const bootstrapSummary = summarizeBootstrapState(shellLeague);
+  const userTeam = Array.isArray(shellLeague?.teams)
+    ? shellLeague.teams.find((t) => Number(t?.id) === Number(safeUserTeamId))
+    : null;
+  const isCutdownRequired = (safePhase === 'preseason') && (userTeam?.rosterCount ?? 0) > 53;
 
-  const isPostseason = league?.phase === 'playoffs';
+  const isPostseason = safePhase === 'playoffs';
 
-  const themeClass = league?.phase ? `theme-${league.phase}` : 'theme-default';
+  const themeClass = safePhase ? `theme-${safePhase}` : 'theme-default';
 
   if (isNewFranchiseBootstrapping) {
     return (
@@ -708,10 +714,10 @@ function AppContent() {
           <div role="alert" className="app-banner app-banner-error" style={{ marginTop: 12 }}>
             <span>{initFlow.message}</span>
             <div style={{ display: 'inline-flex', gap: 8, marginLeft: 10 }}>
-              <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
+              <button data-testid="app-bootstrap-retry" className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
                 Retry Setup
               </button>
-              <button className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
+              <button data-testid="app-bootstrap-back-to-slots" className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
                 Back to Slots
               </button>
             </div>
@@ -752,19 +758,19 @@ function AppContent() {
         <div className="app-header-left">
           <h1 className="app-title">Football GM</h1>
           <div className="app-season-info">
-            <span className="app-season-year">{league.year ?? league.seasonId}</span>
+            <span className="app-season-year">{safeYear}</span>
             <span className="app-season-sep">&middot;</span>
-            <span>{league.week ? `Week ${league.week}` : 'Offseason'}</span>
+            <span>{safeWeek ? `Week ${safeWeek}` : 'Offseason'}</span>
             <span className="app-season-sep">&middot;</span>
             <span className="app-phase-badge">{
-              league.phase === 'regular' ? 'Regular Season' :
-              league.phase === 'playoffs' ? 'Playoffs' :
-              league.phase === 'preseason' ? 'Preseason' :
-              league.phase === 'offseason_resign' ? 'Re-Signing' :
-              league.phase === 'offseason' ? 'Offseason' :
-              league.phase === 'free_agency' ? 'Free Agency' :
-              league.phase === 'draft' ? 'Draft' :
-              league.phase
+              safePhase === 'regular' ? 'Regular Season' :
+              safePhase === 'playoffs' ? 'Playoffs' :
+              safePhase === 'preseason' ? 'Preseason' :
+              safePhase === 'offseason_resign' ? 'Re-Signing' :
+              safePhase === 'offseason' ? 'Offseason' :
+              safePhase === 'free_agency' ? 'Free Agency' :
+              safePhase === 'draft' ? 'Draft' :
+              safePhase
             }</span>
             {userTeam && (
               <>
