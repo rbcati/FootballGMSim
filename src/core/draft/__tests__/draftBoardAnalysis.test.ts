@@ -55,4 +55,28 @@ describe('draftBoardAnalysis', () => {
     const out = buildDraftBoardAnalysis({ team, prospects: [], draftPicks: [], teamBuilder: baseTeamBuilder });
     expect(out.draftNeeds[0].pos).toBe('QB');
   });
+  it('manualOrderIds affects ordering', () => {
+    const out = buildDraftBoardAnalysis({ team, prospects: [{id:1,name:'A',pos:'QB',ovr:80,potential:82},{id:2,name:'B',pos:'QB',ovr:70,potential:71}], manualOrderIds:[2,1], draftPicks: [], teamBuilder: baseTeamBuilder });
+    expect(out.prospectRows[0].prospectId).toBe(2);
+  });
+  it('shortlistIds marks rows', () => {
+    const out = buildDraftBoardAnalysis({ team, prospects: [{id:8,name:'A',pos:'QB'}], shortlistIds:[8], draftPicks: [], teamBuilder: baseTeamBuilder });
+    expect(out.prospectRows[0].isShortlist).toBe(true);
+  });
+  it('tier labels assigned', () => {
+    const out = buildDraftBoardAnalysis({ team, prospects: Array.from({ length: 20 }).map((_, i) => ({ id:i+1, name:`P${i}`, pos:'QB', ovr:80-i, potential:85-i })), draftPicks: [], teamBuilder: baseTeamBuilder });
+    expect(out.prospectRows[0].tier).toBe('Tier 1');
+    expect(out.prospectRows[10].tier).toBe('Tier 2');
+  });
+  it('class identity and early runs populated', () => {
+    const out = buildDraftBoardAnalysis({ team, prospects: [{id:1,name:'A',pos:'QB',projectedRound:1},{id:2,name:'B',pos:'QB',projectedRound:2},{id:3,name:'C',pos:'WR',projectedRound:1},{id:4,name:'D',pos:'P',projectedRound:7}], draftPicks: [], teamBuilder: baseTeamBuilder });
+    expect(out.classIdentity.strengths.length).toBeGreaterThan(0);
+    expect(out.classIdentity.thinSpots).toContain('P');
+    expect(out.classIdentity.likelyEarlyRuns).toContain('QB');
+  });
+  it('comparison receipt and sort keys present', () => {
+    const out = buildDraftBoardAnalysis({ team, prospects: [{id:1,name:'A',pos:'QB',projectedRound:1,scoutingConfidence:10,rawness:80}], draftPicks: [{teamId:1,round:3,pick:1}], teamBuilder: baseTeamBuilder });
+    expect(out.prospectRows[0].comparisonReceipt.length).toBeGreaterThan(0);
+    expect(out.prospectRows[0].sortKeys).toBeTruthy();
+  });
 });
