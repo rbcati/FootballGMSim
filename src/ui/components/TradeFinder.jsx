@@ -192,7 +192,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     if (finderFilter === 'cap_relief') return (idea.capImpact ?? 0) > 0;
     if (finderFilter === 'high_confidence') return idea.confidence === 'high';
     if (finderFilter === 'needs_more_value') return idea.feasibilityLabel === 'needs_more_value';
-    if (finderFilter === 'cap_safe') return idea.capImpact == null || idea.capImpact >= 0;
+    if (finderFilter === 'cap_safe') return !(idea.warnings ?? []).some((w) => String(w).toLowerCase().includes('cap')) && (idea.capImpact == null || idea.capImpact >= 0);
     if (finderFilter === 'long_shot') return idea.feasibilityLabel === 'long_shot';
     if (finderFilter === 'selected') return idea.id === selectedFrameworkId;
     if (finderFilter === 'avoid_risks') return (idea.riskFlags ?? []).length === 0;
@@ -210,8 +210,13 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
       outgoingPlayerIds: idea.outgoingPlayerIds ?? [],
       source: 'tradeFinder',
     };
+
+    if (typeof onOpenTradeCenter !== 'function') return;
+
     try {
-      onOpenTradeCenter?.(payload);
+      if (onOpenTradeCenter.length >= 1) {
+        onOpenTradeCenter(payload);
+      }
     } catch (_err) {
       // fallback panel still preserves framework context
     }
