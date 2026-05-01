@@ -5,6 +5,7 @@ import {
   NEW_SLOT_BOOTSTRAP_PHASES,
   shouldFinalizeNewSlotBootstrap,
   shouldShowAuthoritativeInitGate,
+  shouldShowNewFranchiseBootstrapGate,
   shouldStartNewSlotInitialSave,
   summarizeBootstrapState,
 } from './leagueBootstrap.js';
@@ -22,10 +23,34 @@ describe('league bootstrap guards', () => {
     expect(hasMinimumPlayableLeague(playableLeague)).toBe(true);
   });
 
+  it('null league is not playable and reports missing state', () => {
+    expect(hasMinimumPlayableLeague(null)).toBe(false);
+    expect(summarizeBootstrapState(null).reasons[0]).toContain('No league state received');
+  });
+
   it('rejects partial payloads and reports reasons', () => {
     const summary = summarizeBootstrapState({ teams: [], userTeamId: 0 });
     expect(summary.ready).toBe(false);
     expect(summary.reasons.length).toBeGreaterThan(0);
+  });
+
+  it('new-franchise bootstrap gate clears once league is playable', () => {
+    expect(shouldShowNewFranchiseBootstrapGate({
+      league: null,
+      pendingNewSlot: 'save_slot_1',
+      initFlowMode: 'new',
+    })).toBe(true);
+    expect(shouldShowNewFranchiseBootstrapGate({
+      league: playableLeague,
+      pendingNewSlot: 'save_slot_1',
+      initFlowMode: 'new',
+    })).toBe(false);
+  });
+
+  it('simple finalize path only resolves with playable league and pending slot', () => {
+    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: null, league: playableLeague })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: { teams: [] } })).toBe(false);
+    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: playableLeague })).toBe(true);
   });
 
   it('does not request the first new-save write before a league is minimally playable', () => {
