@@ -480,7 +480,7 @@ function AppContent() {
     if (simulating) return `Simulating ${simProgress}%`;
     if (busy) return 'Working…';
     if (!league) return 'Advance';
-    const isCutdownRequired = league.phase === 'preseason' && ((league?.teams?.find(t => t.id === league.userTeamId)?.rosterCount ?? 0) > 53);
+    const isCutdownRequired = (league?.phase === 'preseason') && ((league?.teams?.find((t) => t.id === league?.userTeamId)?.rosterCount ?? 0) > 53);
     if (isCutdownRequired) return 'Cut to 53';
     if (league.phase === 'preseason') return '▶ Start Season';
     if (['offseason_resign', 'offseason'].includes(league.phase)) return '▶ Advance';
@@ -628,7 +628,7 @@ function AppContent() {
     if (activeView === 'new_league') {
       return (
         <ErrorBoundary contextHint="new-franchise-setup">
-          <div className="view fade-in" key="new_league">
+          <div className="view fade-in" key="new_league" data-testid="app-new-league-setup">
             {initTimeoutPanel}
             <NewLeagueSetup
               actions={actions}
@@ -657,7 +657,7 @@ function AppContent() {
   }
   return (
       <ErrorBoundary contextHint="save-slot-manager">
-        <div className="view fade-in" key="save_slot_manager">
+        <div className="view fade-in" key="save_slot_manager" data-testid="app-save-slots">
           {initTimeoutPanel}
           <SaveSlotManager
             activeSlot={activeSlot}
@@ -690,8 +690,8 @@ function AppContent() {
   }
 
   const bootstrapSummary = summarizeBootstrapState(league);
-  const userTeam = league?.teams?.find(t => t.id === league.userTeamId);
-  const isCutdownRequired = league.phase === 'preseason' && (userTeam?.rosterCount ?? 0) > 53;
+  const userTeam = league?.teams?.find((t) => t.id === league?.userTeamId);
+  const isCutdownRequired = (league?.phase === 'preseason') && (userTeam?.rosterCount ?? 0) > 53;
 
   const isPostseason = league?.phase === 'playoffs';
 
@@ -699,7 +699,7 @@ function AppContent() {
 
   if (isNewFranchiseBootstrapping) {
     return (
-      <div className="app-loading">
+      <div className="app-loading" data-testid="app-bootstrap-loading">
         <div className="app-loading-spinner" />
         <p className="app-loading-text">
           Loading playable league state… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
