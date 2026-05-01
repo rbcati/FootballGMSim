@@ -199,6 +199,8 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     if (finderFilter === 'player_plus_pick') return idea.packageType === 'player_plus_pick';
     if (finderFilter === 'pick_included') return (idea.outgoingPickIds ?? []).length > 0;
     if (finderFilter === 'multi_asset') return (idea.packageAssetCount ?? 1) > 1;
+    if (finderFilter === 'overpay_risk') return idea.feasibilityLabel === 'overpay_risk' || (idea.warnings ?? []).some((w) => String(w).toLowerCase().includes('overpay'));
+    if (finderFilter === 'premium_pick') return (idea.outgoingAssets ?? []).some((a) => a.assetType === 'pick' && a.valueTier === 'premium');
     return true;
   }), [tradeFinderAnalysis.tradeIdeas, finderFilter]);
 
@@ -282,15 +284,16 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
           <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Suggested Frameworks</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['all','team_need','starter_upgrade','youth_upside','fair_value','high_confidence','needs_more_value','cap_safe','long_shot','selected','cap_relief','avoid_risks','player_plus_pick','pick_included','multi_asset'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
+              {['all','team_need','starter_upgrade','youth_upside','fair_value','high_confidence','needs_more_value','cap_safe','long_shot','selected','cap_relief','avoid_risks','player_plus_pick','pick_included','multi_asset','overpay_risk','premium_pick'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
             </div>
             {visibleIdeas.slice(0, 10).map((idea) => (
               <div key={idea.id} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, display: 'grid', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{idea.targetPos} {idea.targetPlayerName} ({idea.targetTeamAbbr})</strong><Badge variant="outline">Fit {idea.fitScore}</Badge></div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Package: {idea.packageType} · Send: {idea.outgoingSummary}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{idea.valueMatch} value ({idea.valueDeltaLabel ?? idea.valueDelta}) · {idea.capImpactLabel}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{idea.valueMatch} value ({idea.valueDeltaLabel ?? idea.valueDelta}) · {idea.capImpactLabel}{idea.projectedCapLabel ? ` · ${idea.projectedCapLabel}` : ''}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {idea.targetOVR} · Age {idea.targetAge ?? '—'} · Role {idea.roleFit}</div>
                 <div style={{ fontSize: 12 }}>Confidence: <strong>{idea.confidence}</strong> · Feasibility: <strong>{idea.feasibilityLabel}</strong></div>
+                {Array.isArray(idea.confidenceReasons) && idea.confidenceReasons.length ? <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{idea.confidenceReasons.join(' · ')}</div> : null}
                 <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
                 {Array.isArray(idea.warnings) && idea.warnings.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>Warnings: {idea.warnings.join(' · ')}</div> : null}
                 <div style={{ display: 'flex', gap: 6 }}>
