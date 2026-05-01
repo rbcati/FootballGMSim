@@ -196,6 +196,9 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     if (finderFilter === 'long_shot') return idea.feasibilityLabel === 'long_shot';
     if (finderFilter === 'selected') return idea.id === selectedFrameworkId;
     if (finderFilter === 'avoid_risks') return (idea.riskFlags ?? []).length === 0;
+    if (finderFilter === 'player_plus_pick') return idea.packageType === 'player_plus_pick';
+    if (finderFilter === 'pick_included') return (idea.outgoingPickIds ?? []).length > 0;
+    if (finderFilter === 'multi_asset') return (idea.packageAssetCount ?? 1) > 1;
     return true;
   }), [tradeFinderAnalysis.tradeIdeas, finderFilter]);
 
@@ -208,6 +211,8 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
       targetTeamId: idea.targetTeamId,
       targetPlayerIds: [idea.targetPlayerId],
       outgoingPlayerIds: idea.outgoingPlayerIds ?? [],
+      outgoingPickIds: idea.outgoingPickIds ?? [],
+      outgoingAssets: idea.outgoingAssets ?? [],
       source: 'tradeFinder',
     };
 
@@ -277,12 +282,13 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
           <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Suggested Frameworks</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['all','team_need','starter_upgrade','youth_upside','fair_value','high_confidence','needs_more_value','cap_safe','long_shot','selected','cap_relief','avoid_risks'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
+              {['all','team_need','starter_upgrade','youth_upside','fair_value','high_confidence','needs_more_value','cap_safe','long_shot','selected','cap_relief','avoid_risks','player_plus_pick','pick_included','multi_asset'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
             </div>
             {visibleIdeas.slice(0, 10).map((idea) => (
               <div key={idea.id} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, display: 'grid', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{idea.targetPos} {idea.targetPlayerName} ({idea.targetTeamAbbr})</strong><Badge variant="outline">Fit {idea.fitScore}</Badge></div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Outgoing: {idea.outgoingSummary} · {idea.valueMatch} value · {idea.capImpactLabel}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Package: {idea.packageType} · Send: {idea.outgoingSummary}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{idea.valueMatch} value ({idea.valueDeltaLabel ?? idea.valueDelta}) · {idea.capImpactLabel}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {idea.targetOVR} · Age {idea.targetAge ?? '—'} · Role {idea.roleFit}</div>
                 <div style={{ fontSize: 12 }}>Confidence: <strong>{idea.confidence}</strong> · Feasibility: <strong>{idea.feasibilityLabel}</strong></div>
                 <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
@@ -299,7 +305,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
             <div style={{ fontSize: 12 }}>{selectedFramework.targetPos} {selectedFramework.targetPlayerName} ({selectedFramework.targetTeamAbbr}) for {selectedFramework.outgoingSummary}</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedFramework.valueMatch} value · {selectedFramework.capImpactLabel} · {selectedFramework.feasibilityLabel}</div>
             {selectedFramework.warnings?.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>{selectedFramework.warnings.join(' · ')}</div> : null}
-            <div><Button className="btn" style={{ minHeight: 44 }} onClick={() => onOpenTradeCenter?.({ targetTeamId: selectedFramework.targetTeamId, targetPlayerIds: [selectedFramework.targetPlayerId], outgoingPlayerIds: selectedFramework.outgoingPlayerIds ?? [], source: 'tradeFinder' })}>Open Trade Center</Button></div>
+            <div><Button className="btn" style={{ minHeight: 44 }} onClick={() => onOpenTradeCenter?.({ targetTeamId: selectedFramework.targetTeamId, targetPlayerIds: [selectedFramework.targetPlayerId], outgoingPlayerIds: selectedFramework.outgoingPlayerIds ?? [], outgoingPickIds: selectedFramework.outgoingPickIds ?? [], outgoingAssets: selectedFramework.outgoingAssets ?? [], source: 'tradeFinder' })}>Open Trade Center</Button></div>
           </div> : null}
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Select outgoing assets, rank partners, then open Builder with this exact context.</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
