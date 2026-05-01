@@ -42,12 +42,15 @@ function buildPickAssets(draftPicks = [], teamId) {
     .sort((a, b) => a.round - b.round);
 }
 
-export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], draftPicks = [], teamBuilder = null }) {
+export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], draftPicks = [], teamBuilder = null, shortlistIds = [], manualOrderIds = [] }) {
   const rosterAnalysis = !teamBuilder ? buildRosterBuildingAnalysis({ team, roster, draftPicks }) : null;
   const draftNeeds = deriveDraftNeeds(teamBuilder, rosterAnalysis);
   const needMap = new Map(draftNeeds.map((n) => [n.pos, n]));
   const pickAssets = buildPickAssets(draftPicks, team?.id);
   const firstPickRound = pickAssets[0]?.round ?? null;
+
+  const shortlistSet = new Set((shortlistIds ?? []).map((id) => Number(id)));
+  const manualOrderMap = new Map((manualOrderIds ?? []).map((id, index) => [Number(id), index]));
 
   const prospectRows = prospects.map((p) => {
     const need = needMap.get(p?.pos) ?? { needLevel: 'stable', needScore: 15 };
@@ -75,13 +78,32 @@ export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], dra
     const fitScore = Math.round(clamp(ratingBase + needBoost + upsideBoost + schemeBoost + posWeight - riskPenalty, 1, 100));
 
     const pickValueFit = projectedRound == null || firstPickRound == null ? 'unknown' : projectedRound >= firstPickRound + 2 ? 'reach' : projectedRound <= firstPickRound - 1 ? 'bargain' : 'fair_value';
+    const riskCount = riskFlags.length;
+    const safePick = !riskFlags.some((f) => ['injury', 'raw', 'unknown_eval'].includes(f));
     const roleProjection = fitScore >= 80 ? 'starter_path' : fitScore >= 65 ? 'depth_patch' : upsideBoost >= 12 ? 'development_stash' : p?.pos === 'K' || p?.pos === 'P' ? 'special_teams' : 'low_fit';
     const recommendation = fitScore >= 82 && !riskFlags.includes('unknown_eval') ? 'target' : fitScore >= 68 ? 'consider' : fitScore >= 55 ? 'watch' : 'avoid';
+
+    const workflowTags = [];
+    if (need.needLevel === 'urgent' || need.needLevel === 'thin') workflowTags.push('fits_team_need');
+    if (roleProjection === 'starter_path') workflowTags.push('starter_path');
+    if (roleProjection === 'development_stash') workflowTags.push('young_upside');
+    if (safePick) workflowTags.push('safe_pick');
+    if (pickValueFit === 'bargain') workflowTags.push('bargain');
+    if (riskCount > 0) workflowTags.push('high_risk');
+
+    const receipt = [];
+    if (need.needLevel === 'urgent') receipt.push(`Urgent ${p?.pos ?? 'UNK'} need`);
+    if (projectedRound != null) receipt.push(`projected Round ${projectedRound}`);
+    if (pickValueFit === 'bargain') receipt.push('Bargain vs next pick');
+    if (scoutingConfidence === 'low' || scoutingConfidence === 'unknown') receipt.push('Low confidence evaluation');
+    if (riskFlags.includes('raw')) receipt.push('High upside but raw');
+    if (need.needLevel === 'stable') receipt.push('Stable position, luxury fit');
 
     return {
       prospectId: p?.id,
       name: p?.name ?? 'Unknown prospect',
       pos: p?.pos ?? 'UNK',
+      college: p?.college ?? null,
       age,
       projectedRound,
       ovr,
@@ -97,14 +119,60 @@ export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], dra
       riskFlags,
       fitScore,
       recommendation,
+      workflowTags,
+      comparisonReceipt: receipt.join(' · '),
+      sortKeys: {
+        fitScore: fitScore ?? null,
+        ovr,
+        potential,
+        projectedRound,
+        scoutingConfidenceRank: scoutingConfidence === 'high' ? 3 : scoutingConfidence === 'medium' ? 2 : scoutingConfidence === 'low' ? 1 : 0,
+        pickValueRank: pickValueFit === 'bargain' ? 3 : pickValueFit === 'fair_value' ? 2 : pickValueFit === 'reach' ? 1 : 0,
+        riskCount,
+      },
+      pickWindowLabel: projectedRound == null ? null : projectedRound <= 1 ? 'Early target' : projectedRound <= 3 ? 'Day 2 target' : 'Day 3 target',
+      isShortlist: shortlistSet.has(Number(p?.id)),
       reason: `${need.needLevel} ${p?.pos ?? ''} need${pickValueFit !== 'unknown' ? ` · ${pickValueFit} value` : ''}`.trim(),
     };
-  }).sort((a, b) => b.fitScore - a.fitScore);
+  }).sort((a, b) => {
+    const ai = manualOrderMap.get(Number(a.prospectId));
+    const bi = manualOrderMap.get(Number(b.prospectId));
+    if (ai != null && bi != null) return ai - bi;
+    if (ai != null) return -1;
+    if (bi != null) return 1;
+    return b.fitScore - a.fitScore;
+  }).map((p, index) => ({
+    ...p,
+    boardRank: index + 1,
+    defaultRank: index + 1,
+    tier: index < 6 ? 'Tier 1' : index < 16 ? 'Tier 2' : index < 32 ? 'Tier 3' : 'Tier 4',
+  }));
 
   const topFits = prospectRows.slice(0, 10);
   const safePicks = prospectRows.filter((p) => !p.riskFlags.some((f) => ['injury', 'raw', 'unknown_eval'].includes(f))).slice(0, 5);
   const upsidePicks = prospectRows.filter((p) => (num(p.potential, 0) - num(p.ovr, 0) >= 10) && num(p.age, 99) <= 22).slice(0, 5);
   const riskFlags = prospectRows.filter((p) => p.riskFlags.length > 0).slice(0, 8);
+  const top24 = prospectRows.slice(0, 24);
+  const posCounts = new Map();
+  const earlyRunCounts = new Map();
+  prospects.forEach((p) => {
+    const pos = p?.pos ?? 'UNK';
+    posCounts.set(pos, (posCounts.get(pos) ?? 0) + 1);
+  });
+  top24.forEach((p) => earlyRunCounts.set(p.pos, (earlyRunCounts.get(p.pos) ?? 0) + 1));
+  prospectRows.forEach((p) => {
+    if (p.projectedRound != null && p.projectedRound <= 2) earlyRunCounts.set(p.pos, (earlyRunCounts.get(p.pos) ?? 0) + 1);
+  });
+  const sortedStrengths = [...posCounts.entries()].sort((a, b) => b[1] - a[1]);
+  const strengths = sortedStrengths.slice(0, 3).map(([pos]) => pos);
+  const thinSpots = sortedStrengths.filter(([, c]) => c <= 1).map(([pos]) => pos).slice(0, 3);
+  const likelyEarlyRuns = [...earlyRunCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([pos]) => pos);
+  const classIdentity = {
+    headline: strengths.length > 0 ? `${strengths.join('/')} lead this class` : 'Class distribution still forming',
+    strengths,
+    thinSpots,
+    likelyEarlyRuns,
+  };
 
   return {
     summary: {
@@ -113,6 +181,7 @@ export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], dra
       safestPick: safePicks[0] ?? null,
       highestUpsidePick: upsidePicks[0] ?? null,
       nextPick: pickAssets[0] ?? null,
+      classIdentity,
     },
     draftNeeds,
     pickAssets,
@@ -121,6 +190,7 @@ export function buildDraftBoardAnalysis({ team, roster = [], prospects = [], dra
     safePicks,
     upsidePicks,
     riskFlags,
+    classIdentity,
     filters: ['all', 'need', 'starter_path', 'young_upside', 'safe_pick', 'high_risk', 'bargain'],
   };
 }
