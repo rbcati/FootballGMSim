@@ -28,7 +28,7 @@ const WORKER_TIMEOUT_BY_TYPE = Object.freeze({
 
 // ── State shape ───────────────────────────────────────────────────────────────
 
-const INITIAL_STATE = {
+export const INITIAL_WORKER_STATE = {
   /** true while the worker is handling a command */
   busy:         false,
   /** true while multi-game sim is in progress */
@@ -68,7 +68,7 @@ function isWeeklyResultsPhase(phase) {
   return phase === 'preseason' || phase === 'regular' || phase === 'playoffs';
 }
 
-function reducer(state, action) {
+export function workerReducer(state, action) {
   switch (action.type) {
     case 'BUSY':
       return { ...state, busy: true, error: null };
@@ -185,7 +185,7 @@ function reducer(state, action) {
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useWorker() {
-  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
+  const [state, dispatch] = useReducer(workerReducer, INITIAL_WORKER_STATE);
   const leagueRef = useRef(null);
   useEffect(() => {
     leagueRef.current = state.league;
