@@ -182,6 +182,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     cap: { capRoom: userTeam?.capRoom },
   }), [userTeam, teams]);
   const [finderFilter, setFinderFilter] = useState('all');
+  const [selectedFrameworkId, setSelectedFrameworkId] = useState(null);
   const visibleIdeas = useMemo(() => (tradeFinderAnalysis.tradeIdeas ?? []).filter((idea) => {
     if (finderFilter === 'all') return true;
     if (finderFilter === 'team_need') return ['urgent_need', 'team_need'].includes(idea.needFitTag);
@@ -189,9 +190,32 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
     if (finderFilter === 'youth_upside') return idea.roleFit === 'youth_upside';
     if (finderFilter === 'fair_value') return idea.valueMatch === 'fair';
     if (finderFilter === 'cap_relief') return (idea.capImpact ?? 0) > 0;
+    if (finderFilter === 'high_confidence') return idea.confidence === 'high';
+    if (finderFilter === 'needs_more_value') return idea.feasibilityLabel === 'needs_more_value';
+    if (finderFilter === 'cap_safe') return idea.capImpact == null || idea.capImpact >= 0;
+    if (finderFilter === 'long_shot') return idea.feasibilityLabel === 'long_shot';
+    if (finderFilter === 'selected') return idea.id === selectedFrameworkId;
     if (finderFilter === 'avoid_risks') return (idea.riskFlags ?? []).length === 0;
     return true;
   }), [tradeFinderAnalysis.tradeIdeas, finderFilter]);
+
+
+  const selectedFramework = useMemo(() => (tradeFinderAnalysis.tradeIdeas ?? []).find((idea) => idea.id === selectedFrameworkId) ?? null, [tradeFinderAnalysis.tradeIdeas, selectedFrameworkId]);
+
+  const handleUseFramework = useCallback((idea) => {
+    setSelectedFrameworkId(idea.id);
+    const payload = {
+      targetTeamId: idea.targetTeamId,
+      targetPlayerIds: [idea.targetPlayerId],
+      outgoingPlayerIds: idea.outgoingPlayerIds ?? [],
+      source: 'tradeFinder',
+    };
+    try {
+      onOpenTradeCenter?.(payload);
+    } catch (_err) {
+      // fallback panel still preserves framework context
+    }
+  }, [onOpenTradeCenter]);
 
   const askWhatTheyOffer = useCallback((partnerId = selectedPartnerId) => {
     const partner = teams.find((t) => Number(t.id) === Number(partnerId));
@@ -248,20 +272,30 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
           <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 8 }}>
             <div style={{ fontWeight: 700 }}>Suggested Frameworks</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {['all','team_need','starter_upgrade','youth_upside','fair_value','cap_relief','avoid_risks'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
+              {['all','team_need','starter_upgrade','youth_upside','fair_value','high_confidence','needs_more_value','cap_safe','long_shot','selected','cap_relief','avoid_risks'].map((f) => <button key={f} className={`standings-tab${finderFilter===f?' active':''}`} onClick={() => setFinderFilter(f)}>{f.replace('_',' ')}</button>)}
             </div>
             {visibleIdeas.slice(0, 10).map((idea) => (
               <div key={idea.id} style={{ border: '1px solid var(--hairline)', borderRadius: 8, padding: 8, display: 'grid', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><strong>{idea.targetPos} {idea.targetPlayerName} ({idea.targetTeamAbbr})</strong><Badge variant="outline">Fit {idea.fitScore}</Badge></div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Outgoing: {idea.outgoingSummary} · {idea.valueMatch} value · {idea.capImpactLabel}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>OVR {idea.targetOVR} · Age {idea.targetAge ?? '—'} · Role {idea.roleFit}</div>
+                <div style={{ fontSize: 12 }}>Confidence: <strong>{idea.confidence}</strong> · Feasibility: <strong>{idea.feasibilityLabel}</strong></div>
                 <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
+                {Array.isArray(idea.warnings) && idea.warnings.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>Warnings: {idea.warnings.join(' · ')}</div> : null}
                 <div style={{ display: 'flex', gap: 6 }}>
                   <Button className="btn" onClick={() => onPlayerSelect?.(idea.targetPlayerId)}>Open Player</Button>
-                  <Button className="btn" onClick={() => onOpenTradeCenter?.()}>Open Trade Center</Button>
+                  <Button className="btn" style={{ minHeight: 44 }} onClick={() => handleUseFramework(idea)}>Use Framework</Button>
                 </div>
               </div>
             ))}
           </div>
+          {selectedFramework ? <div className="card" style={{ padding: '10px 12px', display: 'grid', gap: 6 }}>
+            <div style={{ fontWeight: 700 }}>Selected Framework</div>
+            <div style={{ fontSize: 12 }}>{selectedFramework.targetPos} {selectedFramework.targetPlayerName} ({selectedFramework.targetTeamAbbr}) for {selectedFramework.outgoingSummary}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{selectedFramework.valueMatch} value · {selectedFramework.capImpactLabel} · {selectedFramework.feasibilityLabel}</div>
+            {selectedFramework.warnings?.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>{selectedFramework.warnings.join(' · ')}</div> : null}
+            <div><Button className="btn" style={{ minHeight: 44 }} onClick={() => onOpenTradeCenter?.({ targetTeamId: selectedFramework.targetTeamId, targetPlayerIds: [selectedFramework.targetPlayerId], outgoingPlayerIds: selectedFramework.outgoingPlayerIds ?? [], source: 'tradeFinder' })}>Open Trade Center</Button></div>
+          </div> : null}
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Select outgoing assets, rank partners, then open Builder with this exact context.</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))', gap: 10 }}>
             <div>
