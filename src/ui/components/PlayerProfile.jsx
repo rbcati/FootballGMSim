@@ -20,6 +20,8 @@ import FaceAvatar from './FaceAvatar.jsx';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend } from 'chart.js';
 import { PERSONALITY_TOOLTIPS } from '../../core/development/personalitySystem.js';
+import { buildPlayerProfileAnalysis } from "../../core/playerProfileAnalysis.js";
+import { resolvePlayerForProfile } from "../utils/playerProfileResolver.js";
 import { buildDevelopmentNotes, classifyDevelopmentTrend, getPlayerReadiness, getSchemeFitSignal, getAgeCurveContext, getDevelopmentSnapshot, getDevelopmentDrivers } from '../utils/playerDevelopmentSignals.js';
 import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDevelopmentUI.jsx';
 import EmptyState from './EmptyState.jsx';
@@ -62,6 +64,8 @@ function computePasserRating(t) {
     0,
     Math.min(2.375, 2.375 - (t.interceptions || 0) / att / 0.04),
   );
+  const playerView = effectivePlayer;
+
   return (((a + b + c + d) / 6) * 100).toFixed(1);
 }
 
@@ -356,6 +360,7 @@ export default function PlayerProfile({
   onNavigate = null,
   isUserOnClock = false,
   onDraftPlayer = null,
+  profileContext = null,
 }) {
 
   const [data, setData] = useState(null);
@@ -393,11 +398,13 @@ export default function PlayerProfile({
     if (fetchedData) setData(fetchedData);
   }, [fetchedData]);
   const player = data?.player;
-  const playerMissing = !loading && !player;
+  const resolvedProfile = useMemo(() => resolvePlayerForProfile({ playerId, league, context: profileContext ?? {} }), [playerId, league, profileContext]);
+  const effectivePlayer = player ?? resolvedProfile.player;
+  const playerMissing = !loading && !effectivePlayer;
   const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
   const teamIntel = useMemo(() => buildTeamIntelligence(userTeam, { week: data?.meta?.week ?? 1 }), [userTeam, data?.meta?.week]);
-  const isProspect = player?.status === "draft_eligible";
+  const isProspect = effectivePlayer?.status === "draft_eligible" || resolvedProfile.statusHint === "draft_prospect";
   const prospectProfile = useMemo(() => (isProspect ? describeProspectProfile(player) : null), [isProspect, player]);
   const needFit = useMemo(() => (isProspect ? classifyNeedFitForProspect(player?.pos, teamIntel) : null), [isProspect, player?.pos, teamIntel]);
   const chemistry = useMemo(() => buildTeamChemistrySummary(userTeam, { week: data?.meta?.week ?? 1, direction: teamIntel?.direction }), [userTeam, data?.meta?.week, teamIntel]);
@@ -421,10 +428,10 @@ export default function PlayerProfile({
     });
   };
   const stats = data?.stats ?? [];
-  const columns = getColumns(player?.pos);
+  const columns = getColumns(effectivePlayer?.pos);
 
   // Group accolades: condense SB_RING into count
-  const accolades = Array.isArray(player?.accolades) ? player.accolades : [];
+  const accolades = Array.isArray(effectivePlayer?.accolades) ? effectivePlayer.accolades : [];
   const ringCount = accolades.filter((a) => a.type === "SB_RING").length;
   const nonRing = accolades
     .filter((a) => a.type !== "SB_RING")
@@ -501,8 +508,8 @@ export default function PlayerProfile({
   }), [devHistory]);
 
   const careerRows = useMemo(
-    () => (Array.isArray(player?.careerStats) ? [...player.careerStats] : []),
-    [player?.careerStats],
+    () => (Array.isArray(effectivePlayer?.careerStats) ? [...effectivePlayer.careerStats] : []),
+    [effectivePlayer?.careerStats],
   );
   const careerTotals = useMemo(
     () =>
@@ -523,6 +530,9 @@ export default function PlayerProfile({
       }),
     [careerRows],
   );
+
+  const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
+
 
   if (playerMissing) {
     return (
@@ -598,7 +608,7 @@ export default function PlayerProfile({
         }}
       >
         {/* ── Draft Banner (only when user is on the clock) ── */}
-        {isUserOnClock && onDraftPlayer && player && (
+        {isUserOnClock && onDraftPlayer && playerView && (
           <div
             style={{
               padding: "var(--space-3) var(--space-5)",
@@ -616,7 +626,7 @@ export default function PlayerProfile({
                 fontSize: "var(--text-sm)",
               }}
             >
-              ★ You're on the clock! Draft {player.name}?
+              ★ You're on the clock! Draft {playerView.name}?
             </span>
             <Button
               className="btn"
@@ -675,7 +685,7 @@ export default function PlayerProfile({
                     lineHeight: 1.15,
                   }}
                 >
-                  {player.name}
+                  {playerView.name}
                 </h2>
                 <div
                   style={{
@@ -880,7 +890,7 @@ export default function PlayerProfile({
           </div>
           {activeProfileTab === "Overview" && (
             <>
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Tab</h3>
               <div style={{ display: 'grid', gap: 10 }}>
@@ -937,7 +947,7 @@ export default function PlayerProfile({
             </section>
           )}
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Core Attributes</h3>
               <AttrRow label="OVR" value={player?.ovr ?? 0} />
@@ -981,7 +991,7 @@ export default function PlayerProfile({
           )}
 
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Intelligence</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -1036,7 +1046,7 @@ export default function PlayerProfile({
             </section>
           )}
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Morale & Role Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -1089,7 +1099,7 @@ export default function PlayerProfile({
           )}
 
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Contract Retention Panel</h3>
               {(() => {
@@ -1125,7 +1135,7 @@ export default function PlayerProfile({
           )}
 
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Current vs Peak Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -1143,7 +1153,7 @@ export default function PlayerProfile({
             </section>
           )}
 
-          {!loading && player && (
+          {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Legacy Context</h3>
               <div style={{ display: "grid", gap: "var(--space-2)", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
@@ -1587,7 +1597,7 @@ export default function PlayerProfile({
       </div>
 
       {/* Extension modal */}
-      {extending && player && (
+      {extending && playerView && (
         <ExtensionNegotiationModal
           player={player}
           actions={actions}
