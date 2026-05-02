@@ -17,8 +17,8 @@ function teamInfo(league, id, side, game) {
   };
 }
 
-function normalizePlayers(raw = {}, side) {
-  return Object.entries(raw || {}).map(([id, row]) => ({ playerId: Number(id), teamSide: side, ...row, stats: row?.stats ?? row ?? {} }));
+function normalizePlayers(raw = {}, side, teamId) {
+  return Object.entries(raw || {}).map(([id, row]) => ({ playerId: Number(id), teamId, teamSide: side, ...row, stats: row?.stats ?? row ?? {} }));
 }
 
 export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = {}) {
@@ -32,13 +32,21 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = 
   const awayScore = toNum(payload?.awayScore);
   const quarterScores = payload?.quarterScores ?? null;
   const scoringSummary = Array.isArray(payload?.scoringSummary) ? payload.scoringSummary : [];
-  const teamStats = payload?.teamStats ?? payload?.stats?.team ?? payload?.stats ?? {};
-  const playerStats = payload?.playerStats ?? payload?.stats ?? {};
-  const homePlayers = normalizePlayers(playerStats?.home, 'home');
-  const awayPlayers = normalizePlayers(playerStats?.away, 'away');
-  const hasDetailedStats = Boolean(quarterScores || scoringSummary.length || homePlayers.length || awayPlayers.length || teamStats?.home || teamStats?.away);
+  const teamStats = payload?.teamStats ?? payload?.stats?.team ?? {};
+  const playerStats = payload?.playerStats ?? payload?.stats?.players ?? payload?.stats ?? {};
+  const homePlayers = normalizePlayers(playerStats?.home, 'home', homeId);
+  const awayPlayers = normalizePlayers(playerStats?.away, 'away', awayId);
+
   const hasScore = homeScore != null && awayScore != null;
-  const archiveQuality = hasDetailedStats ? QUALITY.full : (hasScore ? QUALITY.score : QUALITY.missing);
+  const hasQuarter = Array.isArray(quarterScores?.home) || Array.isArray(quarterScores?.away);
+  const hasTeamTotals = Boolean(teamStats?.home || teamStats?.away);
+  const hasPlayerStats = homePlayers.length > 0 || awayPlayers.length > 0;
+  const hasScoringSummary = scoringSummary.length > 0;
+
+  let archiveQuality = QUALITY.missing;
+  if (hasScore && hasQuarter && hasTeamTotals && hasPlayerStats) archiveQuality = QUALITY.full;
+  else if (hasScore && (hasQuarter || hasTeamTotals || hasPlayerStats || hasScoringSummary)) archiveQuality = QUALITY.partial;
+  else if (hasScore) archiveQuality = QUALITY.score;
 
   return {
     gameId: payload?.gameId ?? payload?.id ?? gameId ?? null,
@@ -53,7 +61,7 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = 
     teamTotals: { home: teamStats?.home ?? {}, away: teamStats?.away ?? {} },
     scoringSummary,
     playerTables: { home: homePlayers, away: awayPlayers },
-    missingDetailReason: hasDetailedStats ? null : 'Detailed box score data was not recorded for this game.',
-    hasDetailedStats,
+    missingDetailReason: archiveQuality === QUALITY.full ? null : 'Detailed box score data was not recorded for this game.',
+    hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
   };
 }
