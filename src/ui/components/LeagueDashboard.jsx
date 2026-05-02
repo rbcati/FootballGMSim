@@ -38,7 +38,7 @@ import TeamProfile from "./TeamProfile.jsx";
 import Leaders from "./Leaders.jsx";
 import LeagueLeaders from "./LeagueLeaders.jsx";
 import AwardRaces from "./AwardRaces.jsx";
-import PlayerStats from "./PlayerStats.jsx";
+import LeagueStats from "./LeagueStats.jsx";
 import StrategyPanel from "./StrategyPanel.jsx";
 import GamePlanScreen from "./GamePlanScreen.jsx";
 import WeeklyPrepScreen from "./WeeklyPrepScreen.jsx";
@@ -997,11 +997,9 @@ export default function LeagueDashboard({
         )}
         {activeTab === "Stats" && (
           <TabErrorBoundary label="Stats" onNavigate={setActiveTab}>
-            <PlayerStats
-              actions={actions}
+            <LeagueStats
               league={league}
               onPlayerSelect={setSelectedPlayerId}
-              initialFamily={statsInitialFamily}
             />
           </TabErrorBoundary>
         )}
