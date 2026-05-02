@@ -27,6 +27,7 @@ import { ToneChip, DevelopmentSignalRow, DevelopmentStatCard } from './PlayerDev
 import EmptyState from './EmptyState.jsx';
 import { buildRouteRequestKey, buildLeagueCacheScopeKey } from "../utils/requestLoopGuard.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
+import { getPlayerGameLogs } from "../utils/playerGameLogs.js";
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -356,6 +357,7 @@ export default function PlayerProfile({
   teams = [],
   league = null,
   onNavigate = null,
+  onOpenBoxScore = null,
   isUserOnClock = false,
   onDraftPlayer = null,
   profileContext = null,
@@ -531,6 +533,7 @@ export default function PlayerProfile({
   );
 
   const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
+  const playerGameLogs = useMemo(() => getPlayerGameLogs(league, effectivePlayer), [league, effectivePlayer]);
   const gmContext = profileAnalysis?.recommendationContext ?? {};
   const hasGmContext = Boolean(
     gmContext?.sourceLabel || gmContext?.reason || gmContext?.comparisonReceipt || gmContext?.recommendation || gmContext?.fitScore != null || gmContext?.capImpactLabel || gmContext?.valueLabel
@@ -881,7 +884,7 @@ export default function PlayerProfile({
         {/* ── Body ── */}
         <div style={{ padding: "var(--space-4)", flex: 1, display: "grid", gap: "var(--space-4)" }}>
           <div className="standings-tabs profile-tab-row" style={{ gap: 6, flexWrap: "nowrap" }}>
-            {["Overview", "Career Stats"].map((tab) => (
+            {["Overview", "Career Stats", "Game Log"].map((tab) => (
               <button
                 key={tab}
                 className={`standings-tab${activeProfileTab === tab ? " active" : ""}`}
@@ -1559,6 +1562,39 @@ export default function PlayerProfile({
             </section>
           )}
             </>
+          )}
+          {activeProfileTab === "Game Log" && (
+            <section className="card-enter">
+              <h3 style={sectionLabelStyle}>Game Log</h3>
+              {playerGameLogs.length === 0 ? (
+                <EmptyState title="No game logs recorded yet." body="Game logs will appear once this player has archived game stats." />
+              ) : (
+                <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
+                  <Table className="standings-table" style={{ width: "100%", minWidth: 560 }}>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Week</TableHead>
+                        <TableHead>Opponent</TableHead>
+                        <TableHead>Result</TableHead>
+                        <TableHead>Summary</TableHead>
+                        <TableHead>Game</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {playerGameLogs.map((row) => (
+                        <TableRow key={`${row.week}-${row.gameId ?? row.opponentId}`}>
+                          <TableCell>W{row.week}</TableCell>
+                          <TableCell>{row.opponentAbbr}</TableCell>
+                          <TableCell>{row.result}</TableCell>
+                          <TableCell>{row.summary}</TableCell>
+                          <TableCell>{row.gameId ? <button type="button" className="btn-link" onClick={() => onOpenBoxScore?.(row.gameId)}>Open</button> : "—"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </section>
           )}
           {activeProfileTab === "Career Stats" && (
             <section className="card-enter">
