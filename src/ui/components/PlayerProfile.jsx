@@ -531,6 +531,10 @@ export default function PlayerProfile({
   );
 
   const profileAnalysis = useMemo(() => buildPlayerProfileAnalysis({ player: effectivePlayer, team: resolvedProfile.team, league, context: profileContext ?? {} }), [effectivePlayer, resolvedProfile.team, league, profileContext]);
+  const gmContext = profileAnalysis?.recommendationContext ?? {};
+  const hasGmContext = Boolean(
+    gmContext?.sourceLabel || gmContext?.reason || gmContext?.comparisonReceipt || gmContext?.recommendation || gmContext?.fitScore != null || gmContext?.capImpactLabel || gmContext?.valueLabel
+  );
 
 
   if (playerMissing) {
@@ -889,6 +893,22 @@ export default function PlayerProfile({
           </div>
           {activeProfileTab === "Overview" && (
             <>
+          {!loading && hasGmContext && (
+            <section className="card-enter">
+              <h3 style={sectionLabelStyle}>Why this player?</h3>
+              <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                {(gmContext.sourceLabel ?? "GM context")}{gmContext.action ? ` · ${gmContext.action}` : ""}
+              </div>
+              {gmContext.reason ? <div style={{ fontSize: 13, fontWeight: 600 }}>{gmContext.reason}</div> : null}
+              {gmContext.comparisonReceipt ? <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{gmContext.comparisonReceipt}</div> : null}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {gmContext.fitScore != null ? <span className="chip">Fit {gmContext.fitScore}</span> : null}
+                {gmContext.valueLabel ? <span className="chip">{gmContext.valueLabel}</span> : null}
+                {gmContext.capImpactLabel ? <span className="chip">{gmContext.capImpactLabel}</span> : null}
+              </div>
+              {gmContext.recommendation ? <div style={{ fontSize: 12 }}>{gmContext.recommendation}</div> : null}
+            </section>
+          )}
           {!loading && playerView && (
             <section className="card-enter">
               <h3 style={sectionLabelStyle}>Development Tab</h3>

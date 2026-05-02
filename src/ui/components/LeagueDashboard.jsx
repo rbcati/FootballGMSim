@@ -535,6 +535,11 @@ export default function LeagueDashboard({
   const [selectedGameId, setSelectedGameId] = useState(null);
   const [lastGameTab, setLastGameTab] = useState("Schedule");
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
+  const [selectedPlayerContext, setSelectedPlayerContext] = useState(null);
+  const handlePlayerSelect = (playerOrId, profileContext = null) => {
+    setSelectedPlayerId(playerOrId?.id ?? playerOrId);
+    setSelectedPlayerContext(profileContext ?? null);
+  };
   const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [comparePlayerId, setComparePlayerId] = useState(null);
   const [tradeInitialView, setTradeInitialView] = useState("Finder");
@@ -856,7 +861,7 @@ export default function LeagueDashboard({
             <TeamHub
               league={league}
               actions={actions}
-              onPlayerSelect={setSelectedPlayerId}
+              onPlayerSelect={handlePlayerSelect}
               onTeamSelect={setSelectedTeamId}
               onOpenGameDetail={openGameDetail}
               onNavigate={setActiveTab}
@@ -1102,7 +1107,7 @@ export default function LeagueDashboard({
         )}
         {isInitialized && activeTab === "🎓 Draft" && (
           <TabErrorBoundary label="Draft Big Board">
-            <DraftBigBoard league={league} actions={actions} onPlayerSelect={setSelectedPlayerId} onNavigate={setActiveTab} />
+            <DraftBigBoard league={league} actions={actions} onPlayerSelect={handlePlayerSelect} onNavigate={setActiveTab} />
           </TabErrorBoundary>
         )}
         {activeTab === "Draft Room" && (
@@ -1315,14 +1320,15 @@ export default function LeagueDashboard({
       {/* ── Player Profile modal ── */}
       {selectedPlayerId && (
         <TabErrorBoundary label="Player Profile">
-          <PlayerProfileModalBoundary playerId={selectedPlayerId} onClose={() => setSelectedPlayerId(null)}>
+          <PlayerProfileModalBoundary playerId={selectedPlayerId} onClose={() => { setSelectedPlayerId(null); setSelectedPlayerContext(null); }}>
             <PlayerProfile
               playerId={selectedPlayerId}
-              onClose={() => setSelectedPlayerId(null)}
+              onClose={() => { setSelectedPlayerId(null); setSelectedPlayerContext(null); }}
               actions={actions}
               teams={league.teams}
               league={league}
               onNavigate={setActiveTab}
+              profileContext={selectedPlayerContext}
             />
           </PlayerProfileModalBoundary>
         </TabErrorBoundary>

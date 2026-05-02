@@ -51,6 +51,7 @@ import { buildPlayerEvaluation } from "../../core/playerEvaluation.js";
 import { usePlayerCompare } from "../utils/playerCompare.js";
 import { formatDemandTier } from "../utils/offseasonActionCenter.js";
 import { buildFreeAgencyMarketAnalysis } from "../../core/freeAgency/freeAgencyMarketAnalysis.js";
+import { buildFreeAgencyProfileContext } from "../utils/playerProfileContext.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1500,7 +1501,7 @@ export default function FreeAgency({
                           {idx + 1}
                         </TableCell>
                         <TableCell><PosBadge pos={player.pos} /></TableCell>
-                        <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id)} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
+                        <TableCell onClick={() => onPlayerSelect && onPlayerSelect(player.id, buildFreeAgencyProfileContext(player.market ?? player))} style={{ fontWeight: 600, color: "var(--text)", cursor: onPlayerSelect ? "pointer" : "default" }}>
                           <span style={{ borderBottom: onPlayerSelect ? "1px dotted var(--text-muted)" : "none" }}>{player.name}</span>
                           <div style={{ fontSize: 10, color: "var(--text-subtle)", marginTop: 2 }}>
                             {player?._eval?.archetype?.archetype ?? "Balanced"} · {player?._eval?.roleProjection?.replaceContext ?? "Depth option"}
@@ -1582,7 +1583,7 @@ export default function FreeAgency({
                     <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{player?.demandProfile?.headline ?? 'Balanced motivations'}{player?.demandProfile?.fitScore ? ` · Fit ${player.demandProfile.fitScore}/100` : ''}</div>
                     {Array.isArray(player?.market?.stateChips) && player.market.stateChips.length > 0 ? <div style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{player.market.stateChips.join(' · ')}</div> : null}
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                      <Button className="btn" onClick={() => onPlayerSelect && onPlayerSelect(player.id)}>View profile</Button>
+                      <Button className="btn" onClick={() => onPlayerSelect && onPlayerSelect(player.id, buildFreeAgencyProfileContext(player.market ?? player))}>View profile</Button>
                       <Button className="btn" onClick={() => toggleCompare(player)}>{compareIds.includes(player.id) ? "Uncompare" : "Compare"}</Button>
                       <Button className="btn btn-primary" onClick={() => setSigningPlayerId(player.id)}>Negotiate</Button>
                     </div>
