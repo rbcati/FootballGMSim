@@ -61,7 +61,9 @@ export function buildBoxScoreViewModel({ league, game, gameId, context = {} } = 
     teamTotals: { home: teamStats?.home ?? {}, away: teamStats?.away ?? {} },
     scoringSummary,
     playerTables: { home: homePlayers, away: awayPlayers },
-    missingDetailReason: archiveQuality === QUALITY.full ? null : 'Detailed box score data was not recorded for this game.',
+    prepImpact: Array.isArray(payload?.prepImpact) ? payload.prepImpact : (payload?.prepImpact ? [String(payload.prepImpact)] : []),
+    detailWarning: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
+    missingDetailReason: archiveQuality === QUALITY.partial ? 'Partial archive: some Game Book sections were not recorded.' : archiveQuality === QUALITY.score ? 'Detailed box score data was not recorded for this game.' : archiveQuality === QUALITY.missing ? 'Game data missing.' : null,
     hasDetailedStats: archiveQuality === QUALITY.full || archiveQuality === QUALITY.partial,
   };
 }
