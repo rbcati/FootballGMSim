@@ -92,7 +92,7 @@ export function buildCompletedGamePresentation(game, context = {}) {
     ctaLabel: availability.canOpen
       ? (hasTacticalData
         ? "Tactical breakdown"
-        : (availability.archiveQuality === "partial" ? "View result" : "Open box score"))
+        : "View Game Book")
       : "View result",
     statusLabel: getArchiveQualityLabel(availability.archiveQuality),
     displayScoreLine,

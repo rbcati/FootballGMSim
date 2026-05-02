@@ -43,13 +43,27 @@ export function getPlayerGameLogs(league, player) {
       const awayId = normalizeTeamId(game?.awayId ?? game?.away);
       const playerTeamId = normalizeTeamId(player?.teamId);
       const opponentId = playerTeamId === homeId ? awayId : homeId;
+      const stats = statRow?.stats ?? statRow ?? {};
+      const pa = Number(stats.passAtt ?? 0);
+      const pc = Number(stats.passComp ?? 0);
+      const py = Number(stats.passYd ?? 0);
+      const ptd = Number(stats.passTD ?? 0);
+      const pint = Number(stats.interceptions ?? 0);
+      const rate = pa > 0 ? Number((((pc / pa) * 100) + (py / pa) + (ptd * 7) - (pint * 10)).toFixed(1)) : null;
       rows.push({
         week,
         gameId: resolveCompletedGameId(game, { seasonId: league?.seasonId, week }),
         opponentId,
         opponentAbbr: league?.teamById?.[opponentId]?.abbr ?? 'OPP',
         result: normalizeResult(game, playerTeamId),
-        summary: summarizePlayerGameStats(statRow?.stats ?? statRow, player?.pos ?? player?.position),
+        summary: summarizePlayerGameStats(stats, player?.pos ?? player?.position),
+        stats: {
+          passComp: stats.passComp, passAtt: stats.passAtt, passYd: stats.passYd, passTD: stats.passTD, interceptions: stats.interceptions, rate,
+          rushAtt: stats.rushAtt, rushYd: stats.rushYd, rushTD: stats.rushTD, receptions: stats.receptions, targets: stats.targets, recYd: stats.recYd, recTD: stats.recTD,
+          tackles: stats.tackles, sacks: stats.sacks, passDeflections: stats.passDeflections, forcedFumbles: stats.forcedFumbles,
+          fieldGoalsMade: stats.fieldGoalsMade, fieldGoalsAttempted: stats.fieldGoalsAttempted, extraPointsMade: stats.extraPointsMade, extraPointsAttempted: stats.extraPointsAttempted,
+          punts: stats.punts, puntYards: stats.puntYards,
+        },
       });
     }
   }

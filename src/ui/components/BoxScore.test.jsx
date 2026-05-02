@@ -122,7 +122,7 @@ describe('BoxScore postgame command center', () => {
     );
 
     expect(html).toContain('Game Book');
-    expect(html).toContain('Detailed box score is unavailable');
+    expect(html).toContain('Detailed box score data was not recorded for this game.');
     expect(html).not.toContain('Postgame Film Room');
   });
 
