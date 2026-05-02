@@ -428,7 +428,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
   const hasAnyPayload = Boolean(game && (
     game.homeScore != null || game.awayScore != null || game.stats || game.playerStats || game.teamStats || game.recap || game.quarterScores
   ));
-  const unavailableMessage = "No data saved for this game.";
+  const unavailableMessage = "Detailed box score data was not recorded for this game.";
   const prepImpact = game?.prepImpact ?? null;
   const prepRows = useMemo(() => ([
     { side: "away", team: awayTeam, impact: prepImpact?.away ?? null },
@@ -490,7 +490,7 @@ export default function BoxScore({ gameId, actions, league, onClose, onBack, onP
               <div className="bs-list-item" style={{ borderColor: "var(--warning)", color: "var(--text-muted)" }}>
                 {archiveQuality === "partial"
                   ? "Result recorded. Partial archive: final score and summary are available, but complete drive/play detail was not stored."
-                  : "Result recorded. Detailed box score is unavailable for this game, but any recap and context below are still shown."}
+                  : "Detailed box score data was not recorded for this game."}
               </div>
             </section>
           )}

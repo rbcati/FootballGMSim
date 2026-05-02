@@ -62,7 +62,7 @@ export function getBoxScoreAvailability(game, context = {}) {
     || normalized?.teamDriveStats?.home
     || normalized?.teamDriveStats?.away,
   );
-  const canOpen = Boolean(isCompleted && resolvedGameId && (archiveQuality !== "missing" || hasAnyDetail));
+  const canOpen = Boolean(isCompleted && resolvedGameId);
   let fallbackReason = null;
   if (!isCompleted) fallbackReason = "Game not completed";
   else if (!resolvedGameId) fallbackReason = "Missing game identity";
