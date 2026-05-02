@@ -1570,26 +1570,20 @@ export default function PlayerProfile({
                 <EmptyState title="No game logs recorded yet." body="Game logs will appear once this player has archived game stats." />
               ) : (
                 <div className="table-wrapper" style={{ overflowX: "auto", border: "1px solid var(--hairline)", borderRadius: "var(--radius-md)" }}>
-                  <Table className="standings-table" style={{ width: "100%", minWidth: 560 }}>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Week</TableHead>
-                        <TableHead>Opponent</TableHead>
-                        <TableHead>Result</TableHead>
-                        <TableHead>Summary</TableHead>
-                        <TableHead>Game</TableHead>
-                      </TableRow>
-                    </TableHeader>
+                  <Table className="standings-table" style={{ width: "100%", minWidth: 760 }}>
+                    <TableHeader><TableRow><TableHead>Week</TableHead><TableHead>Opp</TableHead><TableHead>Result</TableHead><TableHead>Key Stats</TableHead><TableHead>Game</TableHead></TableRow></TableHeader>
                     <TableBody>
-                      {playerGameLogs.map((row) => (
-                        <TableRow key={`${row.week}-${row.gameId ?? row.opponentId}`}>
-                          <TableCell>W{row.week}</TableCell>
-                          <TableCell>{row.opponentAbbr}</TableCell>
-                          <TableCell>{row.result}</TableCell>
-                          <TableCell>{row.summary}</TableCell>
-                          <TableCell>{row.gameId ? <button type="button" className="btn-link" onClick={() => onOpenBoxScore?.(row.gameId)}>Open</button> : "—"}</TableCell>
-                        </TableRow>
-                      ))}
+                      {playerGameLogs.map((row) => {
+                        const st = row.stats ?? {};
+                        const pos = String(player?.pos ?? player?.position ?? '').toUpperCase();
+                        const keyStats = pos === 'QB' ? `${st.passComp ?? 0}/${st.passAtt ?? 0}, ${st.passYd ?? 0} YDS, ${st.passTD ?? 0} TD, ${st.interceptions ?? 0} INT${st.rate != null ? `, ${st.rate} RTG` : ''}`
+                          : ['RB','FB'].includes(pos) ? `${st.rushAtt ?? 0} ATT, ${st.rushYd ?? 0} YDS, ${st.rushTD ?? 0} TD, ${st.receptions ?? 0} REC`
+                          : ['WR','TE'].includes(pos) ? `${st.targets ?? 0} TGT, ${st.receptions ?? 0} REC, ${st.recYd ?? 0} YDS, ${st.recTD ?? 0} TD`
+                          : ['K'].includes(pos) ? `${st.fieldGoalsMade ?? 0}/${st.fieldGoalsAttempted ?? 0} FG, ${st.extraPointsMade ?? 0}/${st.extraPointsAttempted ?? 0} XP`
+                          : ['P'].includes(pos) ? `${st.punts ?? 0} P, ${st.puntYards ?? 0} YDS`
+                          : `${st.tackles ?? 0} TKL, ${st.sacks ?? 0} SACK, ${st.interceptions ?? 0} INT, ${st.passDeflections ?? 0} PD`;
+                        return <TableRow key={`${row.week}-${row.gameId ?? row.opponentId}`}><TableCell>W{row.week}</TableCell><TableCell>{row.opponentAbbr}</TableCell><TableCell>{row.result}</TableCell><TableCell>{keyStats || row.summary}</TableCell><TableCell>{row.gameId ? <button type="button" className="btn-link" onClick={() => onOpenBoxScore?.(row.gameId)}>View Game Book</button> : "—"}</TableCell></TableRow>;
+                      })}
                     </TableBody>
                   </Table>
                 </div>
