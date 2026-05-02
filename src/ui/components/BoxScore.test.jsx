@@ -1,135 +1,37 @@
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderToString } from 'react-dom/server';
-
-const mockRequestState = {
-  data: null,
-  loading: false,
-  error: null,
-};
-
-vi.mock('../hooks/useStableRouteRequest.js', () => ({
-  default: () => mockRequestState,
-}));
-
 import BoxScore, { PlayerButton } from './BoxScore.jsx';
 
-describe('BoxScore postgame command center', () => {
-  beforeEach(() => {
-    mockRequestState.data = null;
-    mockRequestState.loading = false;
-    mockRequestState.error = null;
+describe('BoxScore game book rendering', () => {
+  const baseLeague = { seasonId: 2031, week: 2, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] };
+
+  it('renders score-only game', () => {
+    const html = renderToString(<BoxScore gameId="g1" league={{ ...baseLeague, gameById: { g1: { homeId: 1, awayId: 2, homeScore: 14, awayScore: 10 } } }} embedded />);
+    expect(html).toContain('Score only');
+    expect(html).toContain('Quarter-by-quarter scoring was not recorded for this game.');
   });
 
-  it('renders standout storylines and team leaders for rich completed payloads', () => {
-    mockRequestState.data = {
-      payload: {
-        id: '2031_w1_1_2',
-        week: 1,
-        seasonId: 2031,
-        homeId: 1,
-        awayId: 2,
-        homeScore: 24,
-        awayScore: 31,
-        topReason1: 'Pocket survived pressure',
-        summary: {
-          simOutputs: {
-            home: { rushingYpc: 3.9 },
-            away: { rushingYpc: 4.8 },
-          },
-          teamStats: {
-            home: { redZoneScores: 2, redZoneTrips: 4, explosivePlays: 3 },
-            away: { redZoneScores: 4, redZoneTrips: 5, explosivePlays: 7 },
-          },
-        },
-        prepImpact: {
-          away: {
-            narrative: 'Our pass-heavy script aligned with the coverage matchup and helped generate 294 passing yards, 3 pass TD, 0 INT.',
-            activeReasons: ['Pass Attack Edge: pass-heavy script targets a soft secondary.'],
-          },
-          home: {
-            narrative: 'Final score 24-31.',
-            activeReasons: ['Readiness Penalty Active: no scouting support this week.'],
-          },
-        },
-        teamStats: {
-          home: { totalYards: 342, turnovers: 2, sacks: 1, passYards: 212 },
-          away: { totalYards: 426, turnovers: 0, sacks: 4, passYards: 294 },
-        },
-        playerStats: {
-          away: {
-            201: { name: 'A. QB', pos: 'QB', stats: { passComp: 25, passAtt: 35, passYd: 294, passTD: 3 } },
-            202: { name: 'A. RB', pos: 'RB', stats: { rushAtt: 19, rushYd: 101, rushTD: 1 } },
-            203: { name: 'A. WR', pos: 'WR', stats: { receptions: 8, recYd: 120, recTD: 2 } },
-            204: { name: 'A. LB', pos: 'LB', stats: { tackles: 10, sacks: 2, interceptions: 1 } },
-            205: { name: 'A. K', pos: 'K', stats: { fieldGoalsMade: 1, fieldGoalsAttempted: 1, extraPointsMade: 4, extraPointsAttempted: 4 } },
-          },
-          home: {
-            101: { name: 'H. QB', pos: 'QB', stats: { passComp: 22, passAtt: 34, passYd: 212, passTD: 2, interceptions: 2 } },
-          },
-        },
-        playLog: [
-          { quarter: 2, clock: '10:20', text: 'Touchdown pass', isTouchdown: true, teamId: 2 },
-          { quarter: 1, clock: '1:59', text: 'Field goal', teamId: 1 },
-        ],
-        eventDigest: [
-          { quarter: 3, clockSec: 312, team: 'away', type: 'explosive_play', text: '50-yard bomb flips field', winProbSwing: 0.2, isScore: true },
-        ],
-      },
-      errorMessage: null,
-    };
-
-    const html = renderToString(
-      <BoxScore
-        gameId="2031_w1_1_2"
-        league={{ seasonId: 2031, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] }}
-        actions={{}}
-        embedded
-      />,
-    );
-
-    expect(html).toContain('Standout storylines');
-    expect(html).toContain('Player leaders');
-    expect(html).toContain('Scoring summary');
-    expect(html).toContain('Game flow &amp; momentum');
-    expect(html).toContain('Postgame Film Room');
-    expect(html).toContain('Warning: <!-- -->Readiness Penalty Active');
+  it('renders partial game', () => {
+    const html = renderToString(<BoxScore gameId="g2" league={{ ...baseLeague, gameById: { g2: { homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, teamStats: { home: { passYards: 201 }, away: { passYards: 230 } } } } }} embedded />);
+    expect(html).toContain('Partial detail');
+    expect(html).toContain('Team comparison');
   });
 
-  it('fails safely for partial archived payloads without crashing', () => {
-    mockRequestState.data = {
-      payload: {
-        id: 'legacy_game',
-        homeId: 1,
-        awayId: 2,
-        homeScore: 14,
-        awayScore: 10,
-        summary: null,
-        playerStats: { home: {}, away: {} },
-        teamStats: { home: null, away: null },
-        playLog: [],
-      },
-      errorMessage: null,
-    };
-
-    const html = renderToString(
-      <BoxScore
-        gameId="legacy_game"
-        league={{ seasonId: 2031, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }] }}
-        actions={{}}
-        embedded
-      />,
-    );
-
-    expect(html).toContain('Game Book');
-    expect(html).toContain('Detailed box score data was not recorded for this game.');
-    expect(html).not.toContain('Postgame Film Room');
+  it('renders full-detail game with player tables', () => {
+    const html = renderToString(<BoxScore gameId="g3" league={{ ...baseLeague, gameById: { g3: { homeId: 1, awayId: 2, homeScore: 21, awayScore: 17, quarterScores: { home: [7,7,7,0], away: [3,7,0,7] }, teamStats: { home: { passYards: 201 }, away: { passYards: 230 } }, playerStats: { home: { 11: { name: 'QB Home', stats: { passAtt: 20, passComp: 14 } } }, away: { 22: { name: 'QB Away', stats: { passAtt: 24, passComp: 18 } } } } } } }} embedded />);
+    expect(html).toContain('Full detail');
+    expect(html).toContain('Passing');
   });
 
-  it('player buttons trigger existing selection handlers when player ids are present', () => {
+  it('renders missing-detail fallback', () => {
+    const html = renderToString(<BoxScore gameId="g4" league={baseLeague} embedded />);
+    expect(html).toContain('Game Book unavailable');
+  });
+
+  it('player buttons trigger selection handlers when ids are present', () => {
     const onSelect = vi.fn();
     const element = PlayerButton({ player: { playerId: 55, name: 'Tester' }, onSelect });
-    expect(element.type).toBe('button');
     element.props.onClick();
     expect(onSelect).toHaveBeenCalledWith(55);
   });

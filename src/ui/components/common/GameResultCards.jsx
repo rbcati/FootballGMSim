@@ -77,7 +77,7 @@ export function CompletedGameCard({
 }) {
   const { awayWon, homeWon, tied } = winnerState(game);
   const interactive = Boolean(onOpen && (canOpenBoxScore || canOpenResult));
-  const primaryLabel = canOpenBoxScore ? "Open box score" : canOpenResult ? "View result" : "Unavailable";
+  const primaryLabel = canOpenBoxScore ? "View Game Book" : canOpenResult ? "View result" : "Unavailable";
   const detailRows = [summary, recap].filter(Boolean).slice(0, 2);
   const outcomeLabel = tied ? "Tie" : awayWon ? `${away?.abbr} won` : homeWon ? `${home?.abbr} won` : "Final";
   return (
