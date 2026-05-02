@@ -64,8 +64,6 @@ function computePasserRating(t) {
     0,
     Math.min(2.375, 2.375 - (t.interceptions || 0) / att / 0.04),
   );
-  const playerView = effectivePlayer;
-
   return (((a + b + c + d) / 6) * 100).toFixed(1);
 }
 
@@ -400,6 +398,7 @@ export default function PlayerProfile({
   const player = data?.player;
   const resolvedProfile = useMemo(() => resolvePlayerForProfile({ playerId, league, context: profileContext ?? {} }), [playerId, league, profileContext]);
   const effectivePlayer = player ?? resolvedProfile.player;
+  const playerView = effectivePlayer;
   const playerMissing = !loading && !effectivePlayer;
   const loadErrorMessage = requestError?.message || data?.error || null;
   const userTeam = useMemo(() => teams.find((t) => t.id === data?.meta?.userTeamId || t.id === player?.teamId), [teams, data?.meta?.userTeamId, player?.teamId]);
@@ -660,7 +659,7 @@ export default function PlayerProfile({
         >
           {loading ? (
             <PlayerProfileSkeleton />
-          ) : player ? (
+          ) : playerView ? (
             <div
               style={{
                 display: "flex",
@@ -671,8 +670,8 @@ export default function PlayerProfile({
             >
               {/* Avatar */}
               <FaceAvatar
-                face={player.face}
-                seed={player.id ?? player.name}
+                face={playerView.face}
+                seed={playerView.id ?? playerView.name}
                 size={54}
                 style={{ flexShrink: 0 }}
               />
@@ -694,9 +693,9 @@ export default function PlayerProfile({
                     marginTop: 4,
                   }}
                 >
-                  {player.pos} · Age {player.age} ·{" "}
-                  {player.status === "active"
-                    ? getTeamName(player.teamId, teams)
+                  {playerView.pos} · Age {playerView.age} ·{" "}
+                  {playerView.status === "active"
+                    ? getTeamName(playerView.teamId, teams)
                     : "Retired"}
                 </div>
 
@@ -711,25 +710,25 @@ export default function PlayerProfile({
                   }}
                 >
                   <span
-                    className={`rating-pill rating-color-${player.ovr >= 85 ? "elite" : player.ovr >= 75 ? "good" : "avg"}`}
+                    className={`rating-pill rating-color-${playerView.ovr >= 85 ? "elite" : playerView.ovr >= 75 ? "good" : "avg"}`}
                   >
-                    {player.ovr} OVR
+                    {playerView.ovr} OVR
                   </span>
-                  {player.progressionDelta != null &&
-                    player.progressionDelta !== 0 && (
+                  {playerView.progressionDelta != null &&
+                    playerView.progressionDelta !== 0 && (
                       <span
                         className={
-                          player.progressionDelta > 0
+                          playerView.progressionDelta > 0
                             ? "text-success"
                             : "text-danger"
                         }
                         style={{ fontSize: "var(--text-sm)", fontWeight: 700 }}
                       >
-                        ({player.progressionDelta > 0 ? "+" : ""}
-                        {player.progressionDelta})
+                        ({playerView.progressionDelta > 0 ? "+" : ""}
+                        {playerView.progressionDelta})
                       </span>
                     )}
-                  {player.potential && (
+                  {playerView.potential && (
                     <span
                       style={{
                         color: "var(--text-muted)",
@@ -737,15 +736,15 @@ export default function PlayerProfile({
                         fontWeight: 700,
                       }}
                     >
-                      Pot: {player.potential}
+                      Pot: {playerView.potential}
                     </span>
                   )}
                 </div>
 
 
-                {player.developmentContext && (
+                {playerView.developmentContext && (
                   <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
-                    Dev path: {player.developmentContext.baseAgeCurve} · Focus {String(player.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {player.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{player.developmentContext.staffDevelopmentModifier}% · {player.developmentContext.playingTimeModifier}
+                    Dev path: {playerView.developmentContext.baseAgeCurve} · Focus {String(playerView.developmentContext.trainingFocus || 'balanced').replace('_', ' ')} · Staff mod {playerView.developmentContext.staffDevelopmentModifier >= 0 ? '+' : ''}{playerView.developmentContext.staffDevelopmentModifier}% · {playerView.developmentContext.playingTimeModifier}
                   </div>
                 )}
                 <div style={{ marginTop: 6, fontSize: 'var(--text-xs)', color: 'var(--text-subtle)' }}>
@@ -810,7 +809,7 @@ export default function PlayerProfile({
                 )}
 
                 {/* Extension button */}
-                {player.status === "active" && player.contract?.years === 1 && (
+                {playerView.status === "active" && player.contract?.years === 1 && (
                   <div style={{ marginTop: "var(--space-3)" }}>
                     <Button
                       className="btn"
@@ -826,7 +825,7 @@ export default function PlayerProfile({
                     </Button>
                   </div>
                 )}
-                {player.status === "active" && player?.teamId != null && (
+                {playerView.status === "active" && player?.teamId != null && (
                   <div style={{ marginTop: 'var(--space-3)', display: 'grid', gap: 6, maxWidth: 360 }}>
                     <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Trade posture</div>
                     <select
@@ -998,7 +997,7 @@ export default function PlayerProfile({
                 <DevelopmentStatCard
                   label="Trajectory"
                   value={`${developmentSignal.icon} ${developmentSignal.label}`}
-                  detail={`OVR change: ${player.progressionDelta > 0 ? "+" : ""}${player.progressionDelta ?? 0}`}
+                  detail={`OVR change: ${playerView.progressionDelta > 0 ? "+" : ""}${playerView.progressionDelta ?? 0}`}
                   tone={developmentSignal.tone}
                 />
                 <DevelopmentStatCard
