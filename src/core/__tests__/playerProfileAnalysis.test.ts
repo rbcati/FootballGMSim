@@ -59,4 +59,24 @@ describe('playerProfileAnalysis', () => {
     const result = buildPlayerProfileAnalysis({ player: null as any });
     expect(result.identity).toBeNull();
   });
+
+  it('maps recommendation context fields', () => {
+    const result = buildPlayerProfileAnalysis({
+      player: basePlayer,
+      context: { source: 'draft_board', action: 'draft_fit', sourceLabel: 'Draft Board target', fitScore: 81, recommendation: 'Draft fit' },
+    });
+    expect(result.recommendationContext.source).toBe('draft_board');
+    expect(result.recommendationContext.action).toBe('draft_fit');
+    expect(result.recommendationContext.fitScore).toBe(81);
+  });
+
+  it('includes context risk flags safely', () => {
+    const result = buildPlayerProfileAnalysis({ player: basePlayer, context: { riskFlags: ['raw'] } });
+    expect(result.warnings).toContain('raw');
+  });
+
+  it('trade context does not imply acceptance', () => {
+    const result = buildPlayerProfileAnalysis({ player: basePlayer, context: { source: 'trade_finder', recommendation: 'Possible framework, AI acceptance not guaranteed' } });
+    expect(result.recommendationContext.recommendation).toContain('not guaranteed');
+  });
 });

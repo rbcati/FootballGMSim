@@ -50,11 +50,13 @@ export function buildPlayerProfileAnalysis({ player, team, league, recentGames =
   const contract = player.contract ?? null;
 
   const warnings = [];
+  const contextRiskFlags = Array.isArray(context?.riskFlags) ? context.riskFlags.filter(Boolean) : [];
   if (!seasonStats && !careerStats) warnings.push('missing_stats');
   if (!contract && status === 'roster') warnings.push('missing_contract');
   if (schemeFit != null && schemeFit < 50) warnings.push('low_scheme_fit');
   if (player.injury?.status && player.injury.status !== 'Healthy') warnings.push('injury');
   if (player.age >= 30) warnings.push('age_decline');
+  contextRiskFlags.forEach((flag) => { if (!warnings.includes(flag)) warnings.push(flag); });
 
   const summary = buildPositionStatSummary(player.pos, seasonStats);
 
@@ -106,14 +108,23 @@ export function buildPlayerProfileAnalysis({ player, team, league, recentGames =
     transactionHistory: Array.isArray(player.transactionHistory) ? player.transactionHistory : [],
     awards: Array.isArray(player.awards) ? player.awards : [],
     fitSummary: {
-      whyFits: context?.whyFits ?? null,
-      whyRisky: context?.whyRisky ?? null,
+      whyFits: context?.whyFits ?? context?.reason ?? null,
+      whyRisky: context?.whyRisky ?? (Array.isArray(context?.warnings) ? context.warnings.join(' · ') : null),
       action: context?.action ?? 'watch',
+      summaryLine: context?.comparisonReceipt ?? context?.reason ?? null,
     },
     recommendationContext: {
       source: context?.source ?? 'unknown',
+      sourceLabel: context?.sourceLabel ?? null,
+      action: context?.action ?? null,
       reason: context?.reason ?? null,
       comparisonReceipt: context?.comparisonReceipt ?? null,
+      recommendation: context?.recommendation ?? null,
+      roleFit: context?.roleFit ?? null,
+      needFit: context?.needFit ?? null,
+      fitScore: context?.fitScore ?? null,
+      capImpactLabel: context?.capImpactLabel ?? null,
+      valueLabel: context?.valueLabel ?? null,
     },
     warnings,
   };

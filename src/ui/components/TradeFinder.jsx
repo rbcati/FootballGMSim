@@ -8,6 +8,7 @@ import { rankTradePartners, playerAssetValue, pickAssetValue, buildCounterAdjust
 import { normalizeManagement, CONTRACT_PLAN_LABELS, TRADE_STATUS_LABELS } from '../utils/playerManagement.js';
 import { buildAskOfferOutcome } from '../utils/tradeFinderOffers.js';
 import { buildTradeFinderAnalysis } from '../../core/trades/tradeFinderAnalysis.js';
+import { buildTradeFinderProfileContext } from '../utils/playerProfileContext.js';
 
 function money(v) { return `$${Number(v ?? 0).toFixed(1)}M`; }
 
@@ -297,7 +298,7 @@ export default function TradeFinder({ league, actions, onPlayerSelect, onOpenTra
                 <div style={{ fontSize: 12 }}>{idea.recommendation}: {idea.reason}</div>
                 {Array.isArray(idea.warnings) && idea.warnings.length ? <div style={{ fontSize: 12, color: 'var(--warning)' }}>Warnings: {idea.warnings.join(' · ')}</div> : null}
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <Button className="btn" onClick={() => onPlayerSelect?.(idea.targetPlayerId)}>Open Player</Button>
+                  <Button className="btn" onClick={() => onPlayerSelect?.(idea.targetPlayerId, buildTradeFinderProfileContext(idea, 'target'))}>Open Player</Button>
                   <Button className="btn" style={{ minHeight: 44 }} onClick={() => handleUseFramework(idea)}>Use Framework</Button>
                 </div>
               </div>
