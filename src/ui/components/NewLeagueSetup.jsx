@@ -43,6 +43,8 @@ const DRAFT_ORDER_TYPES = [
   { value: "random", label: "Random", desc: "Fully randomized draft order" },
 ];
 
+const NEW_FRANCHISE_BOOT_TIMEOUT_MS = 15000;
+
 const SCHEDULE_BALANCE_OPTIONS = [
   { value: "balanced", label: "Balanced" },
   { value: "division-heavy", label: "Division Heavy" },
@@ -108,7 +110,7 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
     setCreating(true);
     onStartCreate?.();
     try {
-      await actions.newLeague(DEFAULT_TEAMS, {
+      const leagueRequest = actions.newLeague(DEFAULT_TEAMS, {
         userTeamId: selectedTeam,
         year,
         difficulty,
@@ -145,6 +147,10 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
           leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
         },
       });
+      await Promise.race([
+        leagueRequest,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('League creation timed out.')), NEW_FRANCHISE_BOOT_TIMEOUT_MS)),
+      ]);
     } catch (err) {
       onCreateError?.(err);
     } finally {

@@ -2013,7 +2013,12 @@ async function handleNewLeague(payload, id) {
     post(toUI.FULL_STATE, buildViewState(), id);
   } catch (err) {
     console.error('[Worker] NEW_LEAGUE error:', err);
-    post(toUI.ERROR, { message: err.message, stack: err.stack }, id);
+    post(toUI.ERROR, {
+      code: 'NEW_LEAGUE_BOOT_FAILED',
+      stage: 'new_league',
+      message: err?.message ?? 'Failed to create a playable franchise.',
+      stack: err?.stack,
+    }, id);
   }
 }
 
