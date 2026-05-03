@@ -4,7 +4,7 @@
  * Authoritative readiness gates for league initialization.
  * Prevents race conditions during new franchise creation.
  */
-import { isPlayableLeagueState } from '../../state/leagueInit.ts';
+import { getPlayableLeagueValidation, isPlayableLeagueState } from '../../state/leagueInit.ts';
 
 export const NEW_SLOT_BOOTSTRAP_PHASES = {
   IDLE: 'idle',
@@ -26,18 +26,11 @@ export function hasMinimumPlayableLeague(league) {
  * Diagnostic helper to see exactly why a league isn't ready.
  */
 export function summarizeBootstrapState(league) {
-  const reasons = [];
-  if (!league) {
-    reasons.push('No league state received');
-  } else {
-    if (!league.phase) reasons.push('Missing phase (preseason/regular/etc)');
-    if (typeof league.week !== 'number') reasons.push('Missing week number');
-    if (!Array.isArray(league.teams) || league.teams.length === 0) reasons.push('No teams loaded');
-    if (typeof league.userTeamId === 'undefined' || league.userTeamId === null) reasons.push('No user team assigned');
-  }
+  const validation = getPlayableLeagueValidation(league);
+  const reasons = validation.valid ? [] : validation.reasons;
 
   return {
-    ready: reasons.length === 0,
+    ready: validation.valid,
     reasons,
   };
 }
