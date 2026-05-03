@@ -1,8 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 
-export default function SchedulePage({ league }) {
-  const [toast, setToast] = useState('');
-
+export default function SchedulePage({ league, onAdvanceWeek, onViewGameBook }) {
   const rows = useMemo(() => {
     const teamsById = new Map((league?.teams ?? []).map((team) => [Number(team.id), team]));
     return (league?.schedule?.weeks ?? []).flatMap((weekBlock) =>
@@ -11,19 +9,18 @@ export default function SchedulePage({ league }) {
         week: weekBlock.week,
         away: teamsById.get(Number(game.away))?.name ?? `Team ${game.away}`,
         home: teamsById.get(Number(game.home))?.name ?? `Team ${game.home}`,
+        played: !!game.played,
+        game,
       })),
     );
   }, [league]);
 
-  const showSoon = () => setToast('Feature coming soon');
-
   return (
     <section data-testid="schedule-page">
       <h2>Schedule</h2>
-      {toast ? <p role="status">{toast}</p> : null}
       <table>
         <thead>
-          <tr><th>Week</th><th>Away team</th><th>Home team</th><th>Watch</th><th>Sim</th></tr>
+          <tr><th>Week</th><th>Away team</th><th>Home team</th><th>Action</th></tr>
         </thead>
         <tbody>
           {rows.map((row) => (
@@ -31,8 +28,17 @@ export default function SchedulePage({ league }) {
               <td>{row.week}</td>
               <td>{row.away}</td>
               <td>{row.home}</td>
-              <td><button type="button" onClick={showSoon}>Watch</button></td>
-              <td><button type="button" onClick={showSoon}>Sim</button></td>
+              <td>
+                {row.played ? (
+                  <button type="button" onClick={() => onViewGameBook?.(row.game)}>
+                    View Game Book
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => onAdvanceWeek?.()}>
+                    Advance Week
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

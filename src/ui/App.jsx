@@ -495,7 +495,7 @@ function AppContent() {
 
   const safePhase = league?.phase ?? null;
   const canUseTopActions = !!safePhase && !(busy || simulating || isBatchSimBlocking);
-  const retryLabel = initFlow?.mode === 'load' ? 'Retry Load' : initFlow?.mode === 'new' ? 'Retry Setup' : 'Reload App';
+  const retryLabel = initFlow?.mode === 'load' ? 'Retry Load' : initFlow?.mode === 'new' ? 'Retry' : 'Reload App';
   const handlePrimaryRetry = () => {
     if (initFlow?.mode === 'load' && initFlow?.slotKey) {
       setInitFlow((prev) => prev ? { ...prev, active: true, timedOut: false, message: '' } : prev);
@@ -616,11 +616,11 @@ function AppContent() {
           )}
           {initFlow.mode === 'new' && (
             <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
-              Retry Setup
+              Retry
             </button>
           )}
           <button className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
-            Back to Slots
+            Safe Reset
           </button>
         </div>
       </div>
@@ -708,17 +708,17 @@ function AppContent() {
       <div className="app-loading" data-testid="app-bootstrap-loading">
         <div className="app-loading-spinner" />
         <p className="app-loading-text">
-          Loading playable league state… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
+          Still setting up your franchise… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
         </p>
         {initFlow?.timedOut && (
           <div role="alert" className="app-banner app-banner-error" style={{ marginTop: 12 }}>
             <span>{initFlow.message}</span>
             <div style={{ display: 'inline-flex', gap: 8, marginLeft: 10 }}>
               <button data-testid="app-bootstrap-retry" className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
-                Retry Setup
+                Retry
               </button>
               <button data-testid="app-bootstrap-back-to-slots" className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
-                Back to Slots
+                Safe Reset
               </button>
             </div>
           </div>
@@ -942,18 +942,18 @@ function AppContent() {
             )}
             {initFlow.mode === 'new' && (
               <button className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
-                Retry Setup
+                Retry
               </button>
             )}
             <button className="btn app-banner-btn" onClick={() => setActiveSlot(null)}>
-              Back to Slots
+              Safe Reset
             </button>
           </div>
         </div>
       )}
       {!bootstrapSummary.ready && (
         <div role="status" className="app-banner app-banner-info">
-          Loading playable league state… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
+          Still setting up your franchise… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
         </div>
       )}
 
