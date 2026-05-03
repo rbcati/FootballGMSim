@@ -34,6 +34,20 @@ describe('buildLeagueStatsHubModel', () => {
 
     const full = buildLeagueStatsHubModel({ teams:[{id:1,abbr:'AAA'},{id:2,abbr:'BBB'}], schedule:[{played:true,homeId:1,awayId:2,homeScore:7,awayScore:3,teamStats:{home:{passYd:200,rushYd:80,sacks:2,defInt:1},away:{passYd:120,rushYd:70}}}] });
     expect(full.teamRankings.offense[0].yds).toBe(280);
+    expect(full.teamRankings.defense[0].ydsAllowed).toBe(0);
     expect(full.statSources.teamStats).toBe('gameTeamStats');
+  });
+
+  it('supports team stat aliases and truthful score-only output', () => {
+    const model = buildLeagueStatsHubModel({ teams:[{id:1,abbr:'AAA'},{id:2,abbr:'BBB'}], schedule:[{played:true,homeId:1,awayId:2,homeScore:17,awayScore:10,teamStats:{home:{passYards:190,rushingYards:90,giveaways:1,takeaways:2,sacks:3},away:{passYds:120,rushYds:70,giveaways:2,takeaways:1}}}] });
+    expect(model.teamRankings.offense[0].passYds).toBe(190);
+    expect(model.teamRankings.offense[0].rushYds).toBe(90);
+    expect(model.teamRankings.defense[0].ppgAllowed).toBe(10);
+  });
+
+  it('marks no team ranking data when scores and team stats are missing', () => {
+    const model = buildLeagueStatsHubModel({ teams:[{id:1,abbr:'AAA'},{id:2,abbr:'BBB'}], schedule:[{homeId:1,awayId:2}] });
+    expect(model.teamRankings.offense).toHaveLength(0);
+    expect(model.statSources.teamStats).toBe('unavailable');
   });
 });

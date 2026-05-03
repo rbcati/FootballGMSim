@@ -14,6 +14,7 @@ describe('LeagueStats', () => {
     expect(screen.getByRole('button', { name: /^Rate/ })).toBeTruthy();
     fireEvent.change(screen.getByPlaceholderText(/Search name\/team\/pos/i), { target: { value: 'WR' } });
     expect(screen.queryByRole('button', { name: /^QB$/ })).toBeFalsy();
+    expect(screen.getByRole('button', { name: 'passing' }).getAttribute('style')).toContain('font-weight: 700');
   });
 
   it('sorting changes row order', () => {
@@ -29,6 +30,15 @@ describe('LeagueStats', () => {
     render(<LeagueStats onPlayerSelect={onPlayerSelect} league={{teams:[{id:1,abbr:'AAA',roster:[{id:1,name:'QB',position:'QB',seasonStats:{passYards:200}}]}],schedule:[]}} />);
     fireEvent.click(screen.getAllByRole('button', { name: /^QB$/ })[0]);
     expect(onPlayerSelect).toHaveBeenCalled();
-    expect(screen.getAllByText(/Team rankings are unavailable/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/No team ranking data recorded yet/i).length).toBeGreaterThan(0);
+  });
+
+  it('shows rank column and team click callback', () => {
+    const onTeamSelect = vi.fn();
+    render(<LeagueStats onTeamSelect={onTeamSelect} league={league} />);
+    expect(screen.getAllByText('Rank').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole('button', { name: 'AAA' })[0]);
+    expect(onTeamSelect).toHaveBeenCalledWith(1);
+    expect(screen.queryByText('Yds Allowed')).toBeFalsy();
   });
 });

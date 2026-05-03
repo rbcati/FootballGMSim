@@ -1000,6 +1000,7 @@ export default function LeagueDashboard({
             <LeagueStats
               league={league}
               onPlayerSelect={setSelectedPlayerId}
+              onTeamSelect={setSelectedTeamId}
             />
           </TabErrorBoundary>
         )}
