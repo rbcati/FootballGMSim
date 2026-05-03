@@ -64,6 +64,8 @@ import { buildCanonicalGameId } from '../core/gameIdentity.js';
 import { getRecentGames, saveGame } from '../core/archive/gameArchive.ts';
 import { applyEventDecision } from './utils/franchiseEvents.js';
 import { logChronicleEvent } from './utils/franchiseChronicle.js';
+import { buildDefaultLeague } from '../data/defaultLeague.ts';
+import { getPlayableLeagueValidation } from '../state/leagueInit.ts';
 
 // Increment this when shipping notable UX/bugfix updates so users
 // see the in-app changelog popup once per version.
@@ -149,6 +151,15 @@ function AppContent() {
   // Post-game result shown after GameSimulation completes (before advancing week)
   const [postGameResult, setPostGameResult] = useState(null);
   const [initFlow, setInitFlow] = useState(null);
+  const [bootRequestId, setBootRequestId] = useState(null);
+  const [bootDiagnostics, setBootDiagnostics] = useState([]);
+  const isBootDebugEnabled = import.meta.env.DEV || (typeof window !== 'undefined' && localStorage.getItem('DEBUG_BOOT') === '1');
+  const pushBootDiag = useCallback((stage, extra = {}) => {
+    if (!isBootDebugEnabled) return;
+    const row = { stage, ts: Date.now(), ...extra };
+    setBootDiagnostics((prev) => [...prev.slice(-40), row]);
+    console.log('[BOOT_TRACE]', row);
+  }, [isBootDebugEnabled]);
   const archiveMigrationRef = useRef(null);
   const leagueReady = hasMinimumPlayableLeague(league);
   const isNewFranchiseBootstrapping = shouldShowNewFranchiseBootstrapGate({
@@ -449,6 +460,14 @@ function AppContent() {
   }, [league?.seasonId, league?.year, league?.week, league?.userTeamId]);
 
   useEffect(() => {
+    console.info('[BuildMarker]', {
+      appVersion: APP_VERSION,
+      buildTime: import.meta.env.VITE_BUILD_TIME ?? 'unknown',
+      commitSha: import.meta.env.VITE_GIT_SHA ?? 'unknown',
+    });
+  }, []);
+
+  useEffect(() => {
     if (!shouldFinalizeNewSlotBootstrap({ league, pendingNewSlot })) return;
     // FIX: Only save and finalize if the league is actually playable
     if (hasMinimumPlayableLeague(league)) {
@@ -456,8 +475,10 @@ function AppContent() {
       setActiveSlot(pendingNewSlot);
       setPendingNewSlot(null);
       setInitFlow(null);
+      setBootRequestId(null);
+      pushBootDiag('league_state_set', { hasLeague: true });
     }
-  }, [league, pendingNewSlot, actions]);
+  }, [league, pendingNewSlot, actions, pushBootDiag]);
 
   useEffect(() => {
     if (!initFlow?.active) return;
@@ -472,9 +493,24 @@ function AppContent() {
         timedOut: true,
         message: 'Initialization is taking longer than expected. You can retry without losing this slot.',
       } : prev);
+      pushBootDiag('bootstrap_gate_result', { timedOut: true });
     }, timeoutMs);
     return () => clearTimeout(timer);
-  }, [initFlow, league]);
+  }, [initFlow, league, pushBootDiag]);
+
+  const handleSafeStarterLeague = useCallback(() => {
+    const safeLeague = buildDefaultLeague();
+    const validation = getPlayableLeagueValidation(safeLeague);
+    pushBootDiag('fallback_validation_result', { valid: validation.valid, reasons: validation.reasons });
+    if (!validation.valid) {
+      setInitFlow((prev) => prev ? { ...prev, timedOut: true, message: `Safe starter failed validation: ${validation.reasons?.[0] ?? 'unknown'}` } : prev);
+      return;
+    }
+    window.__SAFE_STARTER_LEAGUE__ = safeLeague;
+    setPendingNewSlot(null);
+    setInitFlow(null);
+    setActiveView('saves');
+  }, [pushBootDiag]);
   const getAdvanceLabel = () => {
     if (batchSim) return `Simulating…`;
     if (simulating) return `Simulating ${simProgress}%`;
@@ -632,7 +668,9 @@ function AppContent() {
             {initTimeoutPanel}
             <NewLeagueSetup
               actions={actions}
-              onStartCreate={() => {
+              onStartCreate={(requestId) => {
+                setBootRequestId(requestId);
+                pushBootDiag('new_league_setup_submit', { requestId, pendingNewSlot });
                 setInitFlow({
                   active: true,
                   mode: 'new',
@@ -642,6 +680,7 @@ function AppContent() {
                 });
               }}
               onCreateError={(err) => {
+                pushBootDiag('ui_received_ERROR', { message: err?.message ?? 'unknown' });
                 setInitFlow((prev) => prev ? {
                   ...prev,
                   active: true,
@@ -717,11 +756,33 @@ function AppContent() {
               <button data-testid="app-bootstrap-retry" className="btn btn-primary app-banner-btn" onClick={() => setActiveView('new_league')}>
                 Retry
               </button>
+              <button data-testid="app-bootstrap-safe-starter" className="btn btn-primary app-banner-btn" onClick={handleSafeStarterLeague}>
+                Use Safe Starter League
+              </button>
               <button data-testid="app-bootstrap-back-to-slots" className="btn app-banner-btn" onClick={() => { setActiveSlot(null); setActiveView('saves'); }}>
                 Safe Reset
               </button>
             </div>
           </div>
+        )}
+        {isBootDebugEnabled && (
+          <details style={{ marginTop: 12, color: '#fff', width: '95%', maxWidth: 720 }}>
+            <summary>Boot diagnostics</summary>
+            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify({
+              latest: bootDiagnostics[bootDiagnostics.length - 1] ?? null,
+              workerResponseArrived: !!league || !!error,
+              fullStateArrived: !!league,
+              errorArrived: !!error,
+              activeSlot,
+              pendingNewSlot,
+              initFlow,
+              bootRequestId,
+              hasLeague: !!league,
+              teamCount: Array.isArray(league?.teams) ? league.teams.length : 0,
+              weekCount: Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks.length : 0,
+              trace: bootDiagnostics,
+            }, null, 2)}</pre>
+          </details>
         )}
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>

@@ -108,9 +108,11 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
   const handleStart = useCallback(async () => {
     if (selectedTeam === null) return;
     setCreating(true);
-    onStartCreate?.();
+    const bootRequestId = `boot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    onStartCreate?.(bootRequestId);
     try {
       const leagueRequest = actions.newLeague(DEFAULT_TEAMS, {
+        bootRequestId,
         userTeamId: selectedTeam,
         year,
         difficulty,
