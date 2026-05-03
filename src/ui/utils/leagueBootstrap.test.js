@@ -13,9 +13,11 @@ import {
 const playableLeague = {
   activeLeagueId: 'save_slot_1',
   phase: 'preseason',
+  year: 2025,
   week: 1,
   userTeamId: 4,
-  teams: [{ id: 4, name: 'Phoenix' }],
+  teams: [{ id: 4, name: 'Phoenix', roster: [{ id: 10 }] }, { id: 2, name: 'Vegas', roster: [{ id: 11 }] }],
+  schedule: { weeks: [{ week: 1, games: [{ home: 4, away: 2, played: false }] }] },
 };
 
 describe('league bootstrap guards', () => {
