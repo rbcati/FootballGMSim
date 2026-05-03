@@ -246,6 +246,7 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
               <button
                 type="button"
                 className="btn btn-sm"
+                data-testid="completed-game-link"
                 onClick={canOpenUserGame ? () => openResolvedBoxScore(userTeamResult.game, { seasonId: league?.seasonId, week: userTeamResult.week, source: 'weekly_results_user_game' }, onGameSelect) : undefined}
                 disabled={!canOpenUserGame}
                 title={canOpenUserGame ? 'Open full Game Book' : (userResultPresentation?.statusLabel ?? 'Archive unavailable')}

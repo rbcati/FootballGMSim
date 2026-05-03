@@ -86,7 +86,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
     <div className="box-score-header"><h2>Game Book</h2>{!embedded && <button className="btn" onClick={onClose}>Close</button>}</div>
     <section className="bs-section">
       <h3><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /> vs <TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></h3>
-      <div>{vm.finalScore.away ?? "—"} - {vm.finalScore.home ?? "—"}</div>
+      <div data-testid="game-book-final-score">{vm.finalScore.away ?? "—"} - {vm.finalScore.home ?? "—"}</div>
       <div>Week {vm.week ?? "—"} · Season {vm.season ?? "—"}</div>
       <span className={`status-chip ${QUALITY_BADGE_CLASS[vm.archiveQuality] ?? "muted"}`}>{vm.archiveQuality}</span>
       {vm.detailWarning ? <p>{vm.detailWarning}</p> : null}
