@@ -144,6 +144,8 @@ import { generateDynamicEvents, calculateSeasonAwards } from '../core/events/eve
 import { validateCustomRoster, validateDraftClass, validateLeagueFile, validateLeagueSettingsPayload, summarizeValidationErrors } from './modding/schemaValidation.js';
 import { buildDraftOrder } from './modding/ruleEngine.js';
 import { simulationManager } from './WorkerPool.ts';
+import { buildDefaultLeague } from '../data/defaultLeague.ts';
+import { isPlayableLeagueState } from '../state/leagueInit.ts';
 import {
   aggregateTeamUnitsFromRoster,
   buildDeterministicSeed,
@@ -1867,7 +1869,7 @@ async function handleNewLeague(payload, id) {
     }
 
     // Generate via existing core logic
-    const league = makeLeague(configuredTeams, {
+    let league = makeLeague(configuredTeams, {
         ...options,
         settings: resolvedSettings,
       }, {
@@ -1875,9 +1877,14 @@ async function handleNewLeague(payload, id) {
         generateInitialStaff: generateInitialStaff
     });
 
-    // Validate schedule
-    if (!league.schedule || !Array.isArray(league.schedule.weeks) || league.schedule.weeks.length === 0) {
-        throw new Error('League generation failed: Schedule is missing or empty.');
+    // Validate league state. If generation failed or is stale/incomplete,
+    // recover with the default offline league to keep first-session boot playable.
+    if (!isPlayableLeagueState(league)) {
+      console.warn('[Worker] NEW_LEAGUE produced an invalid league payload; falling back to default league.');
+      league = buildDefaultLeague();
+    }
+    if (!isPlayableLeagueState(league)) {
+      throw new Error('League generation failed: no playable league state available.');
     }
 
     const seasonId = `s${league.season ?? 1}`;

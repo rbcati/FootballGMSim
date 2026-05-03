@@ -4,6 +4,7 @@
  * Authoritative readiness gates for league initialization.
  * Prevents race conditions during new franchise creation.
  */
+import { isPlayableLeagueState } from '../../state/leagueInit.ts';
 
 export const NEW_SLOT_BOOTSTRAP_PHASES = {
   IDLE: 'idle',
@@ -16,13 +17,9 @@ export const NEW_SLOT_BOOTSTRAP_PHASES = {
  * Returns true only if the league object has all critical fields
  * required to render the dashboard and simulate games.
  */
+
 export function hasMinimumPlayableLeague(league) {
-  if (!league) return false;
-  const hasPhase = !!league.phase;
-  const hasWeek = typeof league.week === 'number';
-  const hasTeams = Array.isArray(league.teams) && league.teams.length > 0;
-  const hasUserTeam = typeof league.userTeamId !== 'undefined' && league.userTeamId !== null;
-  return hasPhase && hasWeek && hasTeams && hasUserTeam;
+  return isPlayableLeagueState(league);
 }
 
 /**
@@ -120,4 +117,3 @@ export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, in
   if (initFlowMode !== 'new' || !pendingNewSlot) return false;
   return !hasMinimumPlayableLeague(league);
 }
-import { isPlayableLeagueState } from '../../state/leagueInit.ts';
