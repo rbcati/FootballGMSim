@@ -118,6 +118,7 @@ import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } f
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
+import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../ui/utils/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload } from '../core/gameArchive.js';
@@ -8173,6 +8174,19 @@ async function archiveSeason(seasonId) {
       teams,
       seasonStats: populatedStats,
     });
+    const archivedLeagueView = archiveCompletedSeasonIfNeeded(ensureLeagueHistoryContainer({
+      seasonId: year,
+      year,
+      standings: standingsRows,
+      champion: championSummary,
+      runnerUp: runnerUpSummary,
+      playoffResults: seasonSummary?.playoffResults ?? [],
+      leaders,
+      awards,
+      playerStats: populatedStats,
+      history: meta?.history,
+      leagueHistory: meta?.leagueHistory,
+    }), { season: year });
 
     meta = ensureLeagueMemoryMeta(meta);
     const historyRows = [...(meta.leagueHistory || []).filter((s) => s?.id !== seasonId), seasonSummary]
@@ -8187,6 +8201,7 @@ async function archiveSeason(seasonId) {
       franchiseHistoryByTeam: memoryMeta.franchiseHistoryByTeam,
       recordBook: memoryMeta.recordBook,
       seasonStorylines: memoryMeta.seasonStorylines,
+      history: archivedLeagueView.history,
     });
 
     await Seasons.save(seasonSummary);

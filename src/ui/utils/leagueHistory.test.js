@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLeagueHistoryModel, buildCurrentSeasonSnapshot, deriveAwardWinnersFromStats, deriveLeagueRecords, buildTeamYearHistory } from './leagueHistory.js';
+import { buildLeagueHistoryModel, buildCurrentSeasonSnapshot, deriveAwardWinnersFromStats, deriveLeagueRecords, buildTeamYearHistory, archiveCompletedSeasonIfNeeded } from './leagueHistory.js';
 
 describe('leagueHistory utils', () => {
   it('handles missing league.history', () => {
@@ -11,6 +11,14 @@ describe('leagueHistory utils', () => {
     const s = buildCurrentSeasonSnapshot({ seasonId: 2026, week: 2, standings: [{ id: 1 }] });
     expect(s.season).toBe(2026);
     expect(s.standings).toHaveLength(1);
+  });
+  it('archiveCompletedSeasonIfNeeded creates history and avoids duplicates', () => {
+    const league = { seasonId: 2026, standings: [{ id: 1, wins: 11 }], playerStats: [{ name: 'Star', position: 'QB', stats: { passYd: 3500, passTD: 28 } }] };
+    const once = archiveCompletedSeasonIfNeeded(league);
+    expect(once.history.seasons).toHaveLength(1);
+    const twice = archiveCompletedSeasonIfNeeded(once);
+    expect(twice.history.seasons).toHaveLength(1);
+    expect(twice.history.seasons[0].awards?.source).toBe('derived');
   });
   it('award derivation avoids zero stat players and labels derived', () => {
     const awards = deriveAwardWinnersFromStats({ playerRows: [{ name: 'Zero', position: 'QB', stats: { passYd: 0 } }, { name: 'Star', position: 'QB', stats: { passYd: 3000, passTD: 30 } }] });

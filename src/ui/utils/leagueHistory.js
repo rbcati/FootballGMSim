@@ -36,10 +36,16 @@ export function buildCurrentSeasonSnapshot(league = {}) {
   const warnings = [];
   const standings = asArray(league.standings);
   if (!standings.length) warnings.push('Current standings are unavailable.');
+  const awards = league.awards ?? (asArray(league.playerStats ?? league.stats).length ? deriveAwardWinnersFromStats({ playerRows: asArray(league.playerStats ?? league.stats) }) : null);
   return {
     season: league.seasonId ?? league.year ?? null,
     week: league.week ?? null,
     standings,
+    champion: league.champion ?? null,
+    runnerUp: league.runnerUp ?? null,
+    playoffResults: asArray(league.playoffResults),
+    leaders: asArray(league.leaders),
+    awards,
     stats: asArray(league.playerStats ?? league.stats),
     warnings,
   };
@@ -77,6 +83,40 @@ export function buildTeamYearHistory(history = [], league = {}) {
     }
   }
   return [...byTeam.values()];
+}
+
+
+
+export function ensureLeagueHistoryContainer(league = {}) {
+  const history = league?.history && typeof league.history === 'object' ? league.history : {};
+  const seasons = asArray(history.seasons);
+  return { ...league, history: { ...history, seasons } };
+}
+
+export function archiveCompletedSeasonIfNeeded(league = {}, options = {}) {
+  const safeLeague = ensureLeagueHistoryContainer(league);
+  const seasonKey = options.season ?? safeLeague.seasonId ?? safeLeague.year ?? null;
+  if (seasonKey == null) return safeLeague;
+
+  const existing = asArray(safeLeague.history?.seasons);
+  const alreadyArchived = existing.some((s) => Number(s?.season ?? s?.year ?? s?.id) === Number(seasonKey));
+  if (alreadyArchived) return safeLeague;
+
+  const snapshot = buildCurrentSeasonSnapshot({ ...safeLeague, seasonId: seasonKey, year: seasonKey });
+  const warnings = [...asArray(snapshot.warnings)];
+  if (!snapshot.champion) warnings.push('Champion data unavailable at archive time.');
+  if (!asArray(snapshot.playoffResults).length) warnings.push('Playoff results unavailable at archive time.');
+  if (!snapshot.awards) warnings.push('Awards unavailable at archive time.');
+
+  const archivedSeason = {
+    year: seasonKey,
+    season: seasonKey,
+    ...snapshot,
+    warnings: [...new Set(warnings)],
+  };
+
+  const seasons = [...existing, archivedSeason].sort((a, b) => Number(a?.year ?? a?.season ?? 0) - Number(b?.year ?? b?.season ?? 0));
+  return { ...safeLeague, history: { ...safeLeague.history, seasons } };
 }
 
 export function buildLeagueHistoryModel(league = {}) {
