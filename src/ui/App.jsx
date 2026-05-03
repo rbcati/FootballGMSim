@@ -152,6 +152,7 @@ function AppContent() {
   const [postGameResult, setPostGameResult] = useState(null);
   const [initFlow, setInitFlow] = useState(null);
   const [bootRequestId, setBootRequestId] = useState(null);
+  const [safeStarterWarning, setSafeStarterWarning] = useState('');
   const [bootDiagnostics, setBootDiagnostics] = useState([]);
   const isBootDebugEnabled = import.meta.env.DEV || (typeof window !== 'undefined' && localStorage.getItem('DEBUG_BOOT') === '1');
   const pushBootDiag = useCallback((stage, extra = {}) => {
@@ -499,6 +500,7 @@ function AppContent() {
   }, [initFlow, league, pushBootDiag]);
 
   const handleSafeStarterLeague = useCallback(() => {
+    const safeBootRequestId = `safe_boot_${Date.now()}`;
     const safeLeague = buildDefaultLeague();
     const validation = getPlayableLeagueValidation(safeLeague);
     pushBootDiag('fallback_validation_result', { valid: validation.valid, reasons: validation.reasons });
@@ -506,11 +508,18 @@ function AppContent() {
       setInitFlow((prev) => prev ? { ...prev, timedOut: true, message: `Safe starter failed validation: ${validation.reasons?.[0] ?? 'unknown'}` } : prev);
       return;
     }
-    window.__SAFE_STARTER_LEAGUE__ = safeLeague;
+    actions.setActiveBootRequestId(safeBootRequestId);
+    actions.hydrateLeagueSnapshot(safeLeague, { bootRequestId: null });
+    actions.saveSlot(pendingNewSlot);
+    setActiveSlot(pendingNewSlot);
     setPendingNewSlot(null);
     setInitFlow(null);
-    setActiveView('saves');
-  }, [pushBootDiag]);
+    setBootRequestId(null);
+    actions.setActiveBootRequestId(null);
+    setSafeStarterWarning('Loaded a safe starter league because normal franchise setup did not respond.');
+    pushBootDiag('fallback_committed_to_slot', { slotKey: pendingNewSlot });
+    setActiveView('league_dashboard');
+  }, [actions, pendingNewSlot, pushBootDiag]);
   const getAdvanceLabel = () => {
     if (batchSim) return `Simulating…`;
     if (simulating) return `Simulating ${simProgress}%`;
@@ -1017,6 +1026,11 @@ function AppContent() {
           Still setting up your franchise… {bootstrapSummary.reasons[0] ?? 'Preparing franchise data.'}
         </div>
       )}
+      {safeStarterWarning ? (
+        <div role="status" className="app-banner app-banner-warn" data-testid="safe-starter-warning">
+          {safeStarterWarning}
+        </div>
+      ) : null}
 
       {/* ── Notifications ──────────────────────────────────────────────── */}
       {Array.isArray(notifications) && notifications.length > 0 && (
