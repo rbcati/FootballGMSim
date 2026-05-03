@@ -118,7 +118,7 @@ import { getPlayerCapHit, getRosterLimitForPhase, validateLeagueTeamLegality } f
 import { DEFAULT_LEAGUE_SETTINGS, normalizeLeagueSettings, getRuleEditType } from '../core/leagueSettings.js';
 import { migrateSaveMetaToCurrent, CURRENT_SAVE_SCHEMA_VERSION } from '../state/saveSchema.js';
 import { getTradeWindowSnapshot, isTradeWindowOpen } from '../core/tradeWindow.js';
-import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../ui/utils/leagueHistory.js';
+import { archiveCompletedSeasonIfNeeded, ensureLeagueHistoryContainer } from '../core/leagueHistory.js';
 import { ensurePersonalityProfile, mentorshipBonusForPlayer, contractPersonalityModifier } from '../core/development/personalitySystem.js';
 import { buildCanonicalGameId, buildArchivedGame, toTeamId } from '../core/gameIdentity.js';
 import { normalizeArchivedGamePayload, classifyArchiveQuality, validateArchivedGame, recoverArchivedGameFromSchedule, enrichArchivedGamePayload } from '../core/gameArchive.js';
