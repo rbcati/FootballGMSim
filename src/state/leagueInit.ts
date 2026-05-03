@@ -11,17 +11,18 @@ export function getPlayableLeagueValidation(league: any) {
   if (typeof league.week !== 'number') reasons.push('Missing week number');
   if (typeof league.year !== 'number' && typeof league.seasonId !== 'number' && typeof league.season !== 'number') reasons.push('Missing season/year');
   if (!Array.isArray(league.teams) || league.teams.length < 2) reasons.push('Teams unavailable');
-  const inferredUserTeamId = league.userTeamId ?? league.teams?.[0]?.id;
-  const hasUserTeam = inferredUserTeamId != null && league.teams.some((t: any) => Number(t?.id) === Number(inferredUserTeamId));
+  const teams = Array.isArray(league.teams) ? league.teams : [];
+  const inferredUserTeamId = league.userTeamId ?? teams[0]?.id;
+  const hasUserTeam = inferredUserTeamId != null && teams.some((t: any) => Number(t?.id) === Number(inferredUserTeamId));
   if (!hasUserTeam) reasons.push('User team missing');
-  const hasRosterData = league.teams.some((team: any) => Array.isArray(team?.roster) ? team.roster.length > 0 : Array.isArray(team?.players) && team.players.length > 0);
+  const hasRosterData = teams.some((team: any) => Array.isArray(team?.roster) ? team.roster.length > 0 : Array.isArray(team?.players) && team.players.length > 0);
   if (!hasRosterData && Array.isArray(league.players) && league.players.length > 0) {
     // valid roster fallback via flattened player pool
   } else if (!hasRosterData) {
     reasons.push('No roster/player data');
   }
-  const weeks = league?.schedule?.weeks;
-  if (!Array.isArray(weeks) || weeks.length === 0) reasons.push('Schedule missing');
+  const weeks = Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks : [];
+  if (weeks.length === 0) reasons.push('Schedule missing');
   const hasGames = weeks.some((w: any) => Array.isArray(w?.games) && w.games.length > 0);
   if (!hasGames) reasons.push('No games available');
 

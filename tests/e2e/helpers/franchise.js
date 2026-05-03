@@ -57,7 +57,6 @@ export async function ensureLeagueLoaded(page) {
 }
 
 export async function launchFranchise(page) {
-  await page.goto('http://localhost:5173');
   await ensureLeagueLoaded(page);
 }
 

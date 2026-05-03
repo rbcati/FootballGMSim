@@ -166,7 +166,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
   }, [command.weekLabel]);
 
   return (
-    <div className="app-screen-stack franchise-hq franchise-command-center" role="main" aria-label="Franchise HQ weekly command center">
+    <div className="app-screen-stack franchise-hq franchise-command-center" data-testid="franchise-hq" role="main" aria-label="Franchise HQ weekly command center">
       <section className="app-hq-topbar card" aria-label="Franchise HQ top bar">
         <div className="app-hq-topbar__left">
           <span>{command.seasonLabel}</span>
@@ -335,7 +335,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </section>
 
       <div className="app-hq-sticky-advance">
-        <Button className="app-command-advance app-command-advance-gold" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
+        <Button className="app-command-advance app-command-advance-gold" data-testid="advance-week-cta" onClick={onAdvanceWeek} disabled={busy || simulating} aria-label={`Advance Week — move from ${command.weekLabel} to next week`} title="Advance Week">
           {busy || simulating ? 'Advancing…' : 'Advance Week'}
           <HQIcon name="arrowRight" size={16} />
         </Button>

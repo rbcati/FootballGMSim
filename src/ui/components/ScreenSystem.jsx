@@ -15,7 +15,7 @@ export function ScreenHeader({
       <div className="app-screen-header__main">
         {(eyebrow || onBack) && (
           <div className="app-screen-header__top">
-            {onBack ? <button className="btn app-screen-header__back" onClick={onBack}>← {backLabel ?? 'Back'}</button> : null}
+            {onBack ? <button data-testid="return-to-hq" className="btn app-screen-header__back" onClick={onBack}>← {backLabel ?? 'Back'}</button> : null}
             {eyebrow ? <span className="app-screen-header__eyebrow">{eyebrow}</span> : null}
           </div>
         )}
