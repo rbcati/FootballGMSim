@@ -1823,6 +1823,7 @@ async function handleDuplicateSave({ leagueId, name }, id) {
 
 async function handleNewLeague(payload, id) {
   try {
+    const bootRequestId = payload?.options?.bootRequestId ?? null;
     const { teams: teamDefs, options = {} } = payload;
     const userTeamId = options.userTeamId ?? 0;
     const resolvedSettings = normalizeLeagueSettings({
@@ -2010,12 +2011,13 @@ async function handleNewLeague(payload, id) {
     await Saves.save(saveEntry);
     postManifestUpdate(saveEntry);
 
-    post(toUI.FULL_STATE, buildViewState(), id);
+    post(toUI.FULL_STATE, { ...buildViewState(), bootRequestId }, id);
   } catch (err) {
     console.error('[Worker] NEW_LEAGUE error:', err);
     post(toUI.ERROR, {
       code: 'NEW_LEAGUE_BOOT_FAILED',
       stage: 'new_league',
+      bootRequestId: payload?.options?.bootRequestId ?? null,
       message: err?.message ?? 'Failed to create a playable franchise.',
       stack: err?.stack,
     }, id);

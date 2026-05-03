@@ -204,6 +204,7 @@ export function useWorker() {
     latestUpdates: null,
     waiters: [],
   });
+  const activeBootRequestIdRef = useRef(null);
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -252,6 +253,12 @@ export function useWorker() {
           dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave });
           break;
         case toUI.FULL_STATE:
+          if (payload?.bootRequestId && activeBootRequestIdRef.current && payload.bootRequestId !== activeBootRequestIdRef.current) {
+            break;
+          }
+          if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
+            activeBootRequestIdRef.current = null;
+          }
           dispatch({ type: 'FULL_STATE', payload });
           break;
         case toUI.STATE_UPDATE:
@@ -310,6 +317,9 @@ export function useWorker() {
           dispatch({ type: 'IDLE' });
           break;
         case toUI.ERROR:
+          if (payload?.bootRequestId && activeBootRequestIdRef.current && payload.bootRequestId !== activeBootRequestIdRef.current) {
+            break;
+          }
           dispatch({ type: 'ERROR', message: payload.message });
           break;
         case toUI.SIM_BATCH_PROGRESS:
@@ -446,7 +456,8 @@ export function useWorker() {
 
     /** Generate a new league. teams = array of team definitions. */
     newLeague: (teams, options) =>
-      request(toWorker.NEW_LEAGUE, { teams, options }, { silent: false }),
+      (activeBootRequestIdRef.current = options?.bootRequestId ?? null,
+      request(toWorker.NEW_LEAGUE, { teams, options }, { silent: false })),
 
     /** Watch the user game (returns a Promise resolving to logs). */
     watchGame: () => request(toWorker.WATCH_GAME, {}, { silent: false }),
