@@ -26,7 +26,7 @@ import RookieDraft from "./RookieDraft.jsx";
 import Coaches from "./Coaches.jsx";
 import FreeAgency from "./FreeAgency.jsx";
 import GameDetailScreen from "./GameDetailScreen.jsx";
-import LeagueHistory from "./LeagueHistory.jsx";
+import History from "./History.jsx";
 import TeamHistoryScreen from "./TeamHistoryScreen.jsx";
 import AwardsRecordsScreen from "./AwardsRecordsScreen.jsx";
 import HallOfFame from "./HallOfFame.jsx";
@@ -1184,12 +1184,7 @@ export default function LeagueDashboard({
         )}
         {activeTab === "History" && (
           <TabErrorBoundary label="History">
-            <LeagueHistory
-              onPlayerSelect={setSelectedPlayerId}
-              actions={actions}
-              league={league}
-              onOpenBoxScore={(gameId) => openGameDetail(gameId, "History")}
-            />
+            <History league={league} onNavigatePlayer={setSelectedPlayerId} onNavigateTeam={(teamId) => { setSelectedTeamId?.(teamId); setActiveTab("Team"); }} />
           </TabErrorBoundary>
         )}
         {activeTab === "Team History" && (
