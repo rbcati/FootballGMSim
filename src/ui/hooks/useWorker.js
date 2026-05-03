@@ -458,6 +458,12 @@ export function useWorker() {
     newLeague: (teams, options) =>
       (activeBootRequestIdRef.current = options?.bootRequestId ?? null,
       request(toWorker.NEW_LEAGUE, { teams, options }, { silent: false })),
+    setActiveBootRequestId: (requestId = null) => {
+      activeBootRequestIdRef.current = requestId;
+    },
+    hydrateLeagueSnapshot: (league, { bootRequestId = null } = {}) => {
+      dispatch({ type: 'FULL_STATE', payload: { ...league, bootRequestId } });
+    },
 
     /** Watch the user game (returns a Promise resolving to logs). */
     watchGame: () => request(toWorker.WATCH_GAME, {}, { silent: false }),
