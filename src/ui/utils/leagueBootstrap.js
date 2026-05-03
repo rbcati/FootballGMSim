@@ -22,7 +22,6 @@ export function hasMinimumPlayableLeague(league) {
   const hasWeek = typeof league.week === 'number';
   const hasTeams = Array.isArray(league.teams) && league.teams.length > 0;
   const hasUserTeam = typeof league.userTeamId !== 'undefined' && league.userTeamId !== null;
-
   return hasPhase && hasWeek && hasTeams && hasUserTeam;
 }
 
@@ -121,3 +120,4 @@ export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, in
   if (initFlowMode !== 'new' || !pendingNewSlot) return false;
   return !hasMinimumPlayableLeague(league);
 }
+import { isPlayableLeagueState } from '../../state/leagueInit.ts';
