@@ -109,7 +109,13 @@ export default function NewLeagueSetup({ actions, onCancel, onStartCreate, onCre
     if (selectedTeam === null) return;
     setCreating(true);
     const bootRequestId = `boot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    onStartCreate?.(bootRequestId);
+    onStartCreate?.(bootRequestId, {
+      userTeamId: selectedTeam,
+      leagueName: leagueName || `${selectedTeamData?.name || "My"} Dynasty`,
+      year,
+      difficulty,
+      salaryCap,
+    });
     try {
       const leagueRequest = actions.newLeague(DEFAULT_TEAMS, {
         bootRequestId,

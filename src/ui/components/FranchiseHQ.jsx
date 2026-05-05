@@ -154,6 +154,42 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       return `W${safeNum(game?.week, 0)} ${isHome ? 'vs' : '@'} ${oppTeam?.abbr ?? 'TBD'}`;
     }), [league]);
 
+  const seasonPulse = useMemo(() => {
+    const approval = Math.max(0, Math.min(100, safeNum(command.ownerMandate?.approval, 50)));
+    const mandateTone = command.ownerMandate?.tone ?? (approval < 45 ? 'danger' : approval < 65 ? 'warning' : 'ok');
+    const capRoom = safeNum(command.capSnapshot?.capRoom, safeNum(userTeam?.capRoom, 0));
+    const capTone = command.capSnapshot?.tone ?? (capRoom < 5 ? 'danger' : capRoom < 12 ? 'warning' : 'ok');
+    const capLabel = `${capRoom >= 0 ? '$' : '-$'}${Math.abs(capRoom).toFixed(1)}M`;
+    const gameId = decisionReview?.metadata?.gameId ?? lastGame?.gameId ?? lastGame?.id ?? null;
+    return {
+      approval,
+      mandateTone,
+      pressureSummary: command.pressureSummary ?? `Owner approval ${approval}%`,
+      momentumLabel: command.momentum?.label ?? 'No trend yet',
+      filmLabel: lastGame ? lastGameDisplay.heroLine : 'Kickoff ahead',
+      filmDetail: lastGame ? 'Open the latest final before changing next week.' : 'Scout the opponent and lock a plan before kickoff.',
+      filmRoute: gameId ? `Game Book:${gameId}` : 'Weekly Prep',
+      filmCta: gameId ? 'Open Game Book' : 'Open Weekly Prep',
+      rosterNeed: hqTeamBuilder.biggestNeed ?? 'No urgent need',
+      rosterDetail: hqTeamBuilder.nextAction ?? 'Review team builder for leverage.',
+      capLabel,
+      capTone,
+    };
+  }, [
+    command.ownerMandate?.approval,
+    command.ownerMandate?.tone,
+    command.pressureSummary,
+    command.momentum?.label,
+    command.capSnapshot?.capRoom,
+    command.capSnapshot?.tone,
+    decisionReview?.metadata?.gameId,
+    hqTeamBuilder.biggestNeed,
+    hqTeamBuilder.nextAction,
+    lastGame,
+    lastGameDisplay.heroLine,
+    userTeam?.capRoom,
+  ]);
+
   useEffect(() => {
     document.title = `Franchise HQ • ${command.weekLabel} • Football GM Sim`;
     let description = document.querySelector('meta[name="description"]');
@@ -223,6 +259,57 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       </SectionCard>
 
 
+
+      <SectionCard title="Season Pulse" subtitle="Pressure, form, and roster leverage at a glance." variant="compact">
+        <div className="app-hq-pulse-grid" data-testid="season-pulse">
+          <article className={`app-hq-pulse-card tone-${seasonPulse.mandateTone}`}>
+            <div className="app-hq-pulse-card__head">
+              <span>Owner Mandate</span>
+              <StatusChip label={`${seasonPulse.approval}%`} tone={seasonPulse.mandateTone} />
+            </div>
+            <strong>{seasonPulse.pressureSummary}</strong>
+            <div className="app-mandate-meter" aria-hidden="true">
+              <span className="app-mandate-meter__segment tone-danger" />
+              <span className="app-mandate-meter__segment tone-warning" />
+              <span className="app-mandate-meter__segment tone-ok" />
+              <span className="app-mandate-meter__needle" style={{ left: `${seasonPulse.approval}%` }} />
+            </div>
+          </article>
+
+          <article className="app-hq-pulse-card tone-info">
+            <div className="app-hq-pulse-card__head">
+              <span>Momentum</span>
+              <StatusChip label={formatRecordInline(command.teamRecord)} tone="info" />
+            </div>
+            <strong>{seasonPulse.momentumLabel}</strong>
+            <p>{seasonPulse.filmLabel}</p>
+          </article>
+
+          <article className={`app-hq-pulse-card tone-${seasonPulse.capTone}`}>
+            <div className="app-hq-pulse-card__head">
+              <span>Roster Lever</span>
+              <StatusChip label={seasonPulse.rosterNeed} tone={seasonPulse.capTone} />
+            </div>
+            <strong>{seasonPulse.capLabel} cap room</strong>
+            <p>{seasonPulse.rosterDetail}</p>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Team:Roster / Team Builder')}>
+              Open Team Builder
+            </button>
+          </article>
+
+          <article className="app-hq-pulse-card tone-ok">
+            <div className="app-hq-pulse-card__head">
+              <span>Film Room</span>
+              <StatusChip label={lastGame ? 'Postgame' : 'Pregame'} tone={lastGame ? 'ok' : 'warning'} />
+            </div>
+            <strong>{seasonPulse.filmCta}</strong>
+            <p>{seasonPulse.filmDetail}</p>
+            <button type="button" className="btn btn-sm" onClick={() => onNavigate?.(seasonPulse.filmRoute)}>
+              {seasonPulse.filmCta}
+            </button>
+          </article>
+        </div>
+      </SectionCard>
 
       <SectionCard title="Weekly Command Hub" subtitle="Ranked actions for this week before you advance." variant="compact">
         <div className="app-hq-intel-list">

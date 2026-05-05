@@ -41,7 +41,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
   }
 
   return (
-    <div className="app-screen-stack">
+    <div className="app-screen-stack" data-testid="game-book">
       <ScreenHeader
         eyebrow="Game Book"
         title="Game Book"

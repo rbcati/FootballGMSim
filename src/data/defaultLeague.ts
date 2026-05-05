@@ -1,47 +1,229 @@
 import { DEFAULT_TEAMS } from './default-teams.js';
 
 const TEAM_COUNT = 32;
-const ROSTER_SIZE = 53;
+const START_YEAR = 2026;
+const SEASON_ID = 's1';
+const ROSTER_POSITIONS = [
+  ['QB', 3],
+  ['RB', 4],
+  ['WR', 6],
+  ['TE', 3],
+  ['OL', 9],
+  ['DL', 9],
+  ['LB', 7],
+  ['CB', 6],
+  ['S', 4],
+  ['K', 1],
+  ['P', 1],
+] as const;
 
-function makePlayer(teamId: number, index: number) {
+const RATING_KEYS = [
+  'throwPower',
+  'throwAccuracy',
+  'awareness',
+  'catching',
+  'catchInTraffic',
+  'acceleration',
+  'speed',
+  'agility',
+  'trucking',
+  'juking',
+  'passRushSpeed',
+  'passRushPower',
+  'runStop',
+  'coverage',
+  'runBlock',
+  'passBlock',
+  'intelligence',
+  'kickPower',
+  'kickAccuracy',
+];
+
+function buildRatings(pos: string, ovr: number) {
+  const ratings = Object.fromEntries(RATING_KEYS.map((key) => [key, Math.max(45, Math.min(90, ovr - 2))]));
+  const boost = (keys: string[], amount = 8) => {
+    keys.forEach((key) => {
+      ratings[key] = Math.max(45, Math.min(95, ovr + amount));
+    });
+  };
+
+  if (pos === 'QB') boost(['throwPower', 'throwAccuracy', 'awareness', 'intelligence']);
+  if (pos === 'RB') boost(['speed', 'acceleration', 'trucking', 'juking', 'awareness']);
+  if (pos === 'WR') boost(['speed', 'acceleration', 'catching', 'catchInTraffic']);
+  if (pos === 'TE') boost(['catching', 'catchInTraffic', 'runBlock', 'passBlock']);
+  if (pos === 'OL') boost(['runBlock', 'passBlock', 'awareness']);
+  if (pos === 'DL') boost(['passRushPower', 'passRushSpeed', 'runStop']);
+  if (pos === 'LB') boost(['speed', 'runStop', 'coverage', 'awareness']);
+  if (pos === 'CB') boost(['speed', 'acceleration', 'coverage', 'intelligence']);
+  if (pos === 'S') boost(['speed', 'coverage', 'runStop', 'awareness']);
+  if (pos === 'K' || pos === 'P') boost(['kickPower', 'kickAccuracy', 'awareness']);
+
+  return ratings;
+}
+
+function makePlayer(teamId: number, index: number, pos: string, depthOrder: number) {
+  const ovr = Math.max(58, Math.min(84, 74 - Math.floor(depthOrder / 2) + ((teamId + index) % 5)));
+  const ratings = buildRatings(pos, ovr);
+  const id = teamId * 1000 + index + 1;
   return {
-    id: teamId * 1000 + index,
-    name: `Player ${teamId + 1}-${index + 1}`,
-    pos: 'UNK',
-    age: 24,
-    ovr: 60,
-    pot: 65,
-    contract: { years: 2, amount: 1.2 },
+    id,
+    name: `${pos} Starter ${teamId + 1}-${depthOrder}`,
+    pos,
+    age: 23 + ((teamId + index) % 10),
+    ratings,
+    trueRatings: { ...ratings },
+    visibleRatings: { ...ratings },
+    ovr,
+    displayOvr: ovr,
+    trueOvr: ovr,
+    scoutedOvr: ovr,
+    pot: Math.min(95, ovr + 6),
+    potential: Math.min(95, ovr + 6),
+    years: 2,
+    yearsTotal: 2,
+    baseAnnual: pos === 'QB' ? 8 : pos === 'K' || pos === 'P' ? 1.2 : 2.2,
+    signingBonus: 0,
+    guaranteedPct: 0.45,
+    contract: { years: 2, yearsTotal: 2, salary: pos === 'QB' ? 8 : 2.2, amount: pos === 'QB' ? 8 : 2.2 },
+    status: 'active',
     teamId,
+    depthOrder,
+    injuryWeeksRemaining: 0,
+    injuryWeeks: 0,
+    fatigue: 0,
+    morale: 75,
+    stats: {
+      game: {},
+      season: {},
+      career: {},
+    },
+    awards: [],
+    history: [],
+    traits: [],
+    abilities: [],
   };
 }
 
-export function buildDefaultLeague() {
-  const teams = DEFAULT_TEAMS.slice(0, TEAM_COUNT).map((team, idx) => ({
-    ...team,
-    id: idx,
-    wins: 0,
-    losses: 0,
-    ties: 0,
-    roster: Array.from({ length: ROSTER_SIZE }, (_, playerIndex) => makePlayer(idx, playerIndex)),
-  }));
-
-  const games = [] as Array<{ home: number; away: number; played: boolean }>;
-  for (let i = 0; i < teams.length; i += 2) {
-    if (teams[i + 1]) games.push({ away: teams[i].id, home: teams[i + 1].id, played: false });
+function makeRoster(teamId: number) {
+  const roster = [];
+  let index = 0;
+  for (const [pos, count] of ROSTER_POSITIONS) {
+    for (let depth = 1; depth <= count; depth += 1) {
+      roster.push(makePlayer(teamId, index, pos, depth));
+      index += 1;
+    }
   }
+  return roster;
+}
+
+function makeDraftPicks(teamId: number) {
+  const picks = [];
+  for (let yearOffset = 0; yearOffset < 3; yearOffset += 1) {
+    for (let round = 1; round <= 7; round += 1) {
+      picks.push({
+        id: `safe-pick-${teamId}-${START_YEAR + yearOffset}-${round}`,
+        round,
+        season: START_YEAR + yearOffset,
+        originalOwner: teamId,
+        currentOwner: teamId,
+        isCompensatory: false,
+      });
+    }
+  }
+  return picks;
+}
+
+function makeSchedule(teams: Array<{ id: number }>) {
+  const ids = teams.map((team) => team.id);
+  const weeks = [];
+  for (let week = 1; week <= 18; week += 1) {
+    const offset = (week - 1) % ids.length;
+    const rotated = ids.slice(offset).concat(ids.slice(0, offset));
+    const games = [];
+    for (let i = 0; i < rotated.length; i += 2) {
+      const away = rotated[i];
+      const home = rotated[i + 1];
+      if (home == null || away == null) continue;
+      const gameId = `${SEASON_ID}_w${week}_${home}_${away}`;
+      games.push({
+        id: gameId,
+        gameId,
+        seasonId: SEASON_ID,
+        week,
+        away,
+        home,
+        played: false,
+      });
+    }
+    weeks.push({ week, games });
+  }
+  return { weeks };
+}
+
+export function buildDefaultLeague(options: { userTeamId?: number; name?: string; year?: number } = {}) {
+  const userTeamId = Number.isFinite(Number(options.userTeamId)) ? Number(options.userTeamId) : 0;
+  const year = Number.isFinite(Number(options.year)) ? Number(options.year) : START_YEAR;
+  const teams = DEFAULT_TEAMS.slice(0, TEAM_COUNT).map((team, idx) => {
+    const roster = makeRoster(idx);
+    return {
+      ...team,
+      id: idx,
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      ptsFor: 0,
+      ptsAgainst: 0,
+      roster,
+      rosterIds: roster.map((player) => player.id),
+      rosterCount: roster.length,
+      picks: makeDraftPicks(idx),
+      capTotal: 301.2,
+      capUsed: 0,
+      capRoom: 301.2,
+      capSpace: 301.2,
+      fanApproval: 50,
+      history: [],
+      stats: { season: {}, game: {} },
+      strategies: { offPlanId: 'BALANCED', defPlanId: 'BALANCED', riskId: 'BALANCED', starTargetId: null },
+      franchiseInvestments: {
+        stadiumLevel: 1,
+        concessionsStrategy: 'balanced',
+        trainingLevel: 1,
+        scoutingLevel: 1,
+        scoutingRegion: 'national',
+        ownerCapacity: 10,
+        usedCapacity: 4,
+        trainingFocus: 'balanced',
+        history: [],
+      },
+    };
+  });
+
+  const schedule = makeSchedule(teams);
 
   return {
     id: 'fallback-league',
-    name: 'Fallback League',
+    name: options.name ?? 'Safe Starter League',
     phase: 'regular',
     week: 1,
-    year: 2026,
+    year,
     season: 1,
-    userTeamId: 0,
+    seasonId: SEASON_ID,
+    currentSeasonId: SEASON_ID,
+    userTeamId,
     teams,
-    schedule: {
-      weeks: [{ week: 1, games }],
+    schedule,
+    resultsByWeek: [],
+    transactions: [],
+    newsItems: [],
+    ownerGoals: [],
+    retiredPlayers: [],
+    records: {
+      mostPassingYardsSeason: null,
+      mostRushingYardsSeason: null,
+      mostWinsSeason: null,
+      mostChampionships: null,
+      highestOvrPlayer: null,
     },
   };
 }

@@ -519,6 +519,17 @@
 .app-hq-impact-card__cta { justify-self: start; min-height: 34px; }
 .app-hq-impact-card.tone-warning { border-color: rgba(255,159,10,.45); background: rgba(255,159,10,.08); }
 .app-hq-impact-card.tone-ok { border-color: rgba(52,199,89,.45); background: rgba(52,199,89,.08); }
+.app-hq-pulse-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.app-hq-pulse-card { border: 1px solid var(--hairline); border-radius: 10px; padding: 10px; background: color-mix(in srgb, var(--surface) 95%, black 5%); display: grid; gap: 8px; min-width: 0; }
+.app-hq-pulse-card.tone-danger { border-color: rgba(255,69,58,.45); background: rgba(255,69,58,.08); }
+.app-hq-pulse-card.tone-warning { border-color: rgba(255,159,10,.45); background: rgba(255,159,10,.08); }
+.app-hq-pulse-card.tone-ok { border-color: rgba(52,199,89,.45); background: rgba(52,199,89,.08); }
+.app-hq-pulse-card.tone-info { border-color: rgba(var(--accent-rgb), .38); background: rgba(var(--accent-rgb), .07); }
+.app-hq-pulse-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.app-hq-pulse-card__head span { color: #8B9BB0; font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.app-hq-pulse-card strong { color: #E6EDF3; font-size: 13px; line-height: 1.25; }
+.app-hq-pulse-card p { margin: 0; color: #c9d8ed; font-size: 12px; line-height: 1.35; }
+.app-hq-pulse-card .btn { justify-self: start; min-height: 34px; }
 .app-moment-list { margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .app-moment-list p { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
 .app-prep-checklist { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
@@ -627,6 +638,8 @@
   .app-hq-bottom-nav { gap: 6px; }
   .app-action-grid-2x2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-summary-grid { grid-template-columns: 1fr; }
+  .app-hq-pulse-grid { grid-template-columns: 1fr; }
+  .app-hq-pulse-card .btn { width: 100%; }
   .app-hq-impact-card__head { align-items: flex-start; flex-direction: column; }
   .app-hq-impact-card__cta { width: 100%; }
   .app-hq-hero-subcards { grid-template-columns: 1fr; }

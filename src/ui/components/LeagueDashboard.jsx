@@ -919,7 +919,7 @@ export default function LeagueDashboard({
               renderResults={() => (
                 <WeeklyResultsCenter
                   league={league}
-                  initialWeek={weeklyResultsInitialWeek ?? league?.week}
+                  initialWeek={weeklyResultsInitialWeek}
                   onNavigate={setActiveTab}
                   onGameSelect={(gameId) => openGameDetail(gameId, "League")}
                 />
@@ -989,7 +989,7 @@ export default function LeagueDashboard({
           <TabErrorBoundary label="Weekly Results" onNavigate={setActiveTab} fallbackTab="League">
             <WeeklyResultsCenter
               league={league}
-              initialWeek={weeklyResultsInitialWeek ?? league?.week}
+              initialWeek={weeklyResultsInitialWeek}
               onNavigate={setActiveTab}
               onGameSelect={(gameId) => openGameDetail(gameId, "Weekly Results")}
             />

@@ -145,7 +145,7 @@ import { validateCustomRoster, validateDraftClass, validateLeagueFile, validateL
 import { buildDraftOrder } from './modding/ruleEngine.js';
 import { simulationManager } from './WorkerPool.ts';
 import { buildDefaultLeague } from '../data/defaultLeague.ts';
-import { isPlayableLeagueState } from '../state/leagueInit.ts';
+import { getPlayableLeagueValidation, isPlayableLeagueState } from '../state/leagueInit.ts';
 import {
   aggregateTeamUnitsFromRoster,
   buildDeterministicSeed,
@@ -771,6 +771,7 @@ function buildViewState() {
   }
 
   return {
+    activeLeagueId: getActiveLeagueId() ?? meta?.activeLeagueId ?? null,
     seasonId:   meta?.currentSeasonId,
     year:       meta?.year,
     week:       meta?.currentWeek ?? 1,
@@ -1313,7 +1314,8 @@ function hydrateAllPlayersForDevelopment() {
 // allowed to run before a save is explicitly loaded (via LOAD_SAVE or NEW_LEAGUE),
 // it would write an empty state to IndexedDB, wiping the player's save.
 //
-// _saveIsExplicitlyLoaded is ONLY set to true by handleLoadSave / handleNewLeague.
+// _saveIsExplicitlyLoaded is ONLY set to true by handleLoadSave / handleNewLeague
+// / handleUseSafeStarterLeague.
 // Every other path that might call flushDirty() is therefore safely blocked.
 let _saveIsExplicitlyLoaded = false;
 
@@ -2034,6 +2036,10 @@ function slimifySchedule(schedule, teams) {
     weeks: schedule.weeks.map(week => ({
       week:  week.week,
       games: (week.games ?? []).map(g => ({
+        id:     g.id ?? g.gameId,
+        gameId: g.gameId ?? g.id,
+        seasonId: g.seasonId,
+        week:   g.week ?? week.week,
         home:   (typeof g.home === 'object') ? g.home.id : g.home,
         away:   (typeof g.away === 'object') ? g.away.id : g.away,
         played: g.played ?? false,
@@ -2049,12 +2055,166 @@ function expandSchedule(slimSchedule) {
     weeks: slimSchedule.weeks.map(week => ({
       week:  week.week,
       games: (week.games ?? []).map(g => ({
+        id: g.id ?? g.gameId,
+        gameId: g.gameId ?? g.id,
+        seasonId: g.seasonId,
+        week: g.week ?? week.week,
         home: cache.getTeam(g.home),
         away: cache.getTeam(g.away),
         played: g.played ?? false,
       })).filter(g => g.home && g.away),
     })),
   };
+}
+
+async function handleUseSafeStarterLeague(payload, id) {
+  const bootRequestId = payload?.options?.bootRequestId ?? null;
+  const slotKey = payload?.slotKey ?? null;
+  if (!isValidSlotKey(slotKey)) {
+    post(toUI.ERROR, { message: 'Invalid slot key', bootRequestId }, id);
+    return;
+  }
+
+  try {
+    const safeLeague = buildDefaultLeague({
+      userTeamId: payload?.options?.userTeamId,
+      name: payload?.options?.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`,
+      year: payload?.options?.year,
+    });
+    const validation = getPlayableLeagueValidation(safeLeague);
+    if (!validation.valid) {
+      throw new Error(`Safe starter failed validation: ${validation.reasons?.[0] ?? 'unknown error'}`);
+    }
+
+    configureActiveLeague(slotKey);
+    await clearAllData();
+    cache.reset();
+
+    const year = Number(safeLeague.year ?? 2026);
+    const season = Number(safeLeague.season ?? 1);
+    const seasonId = safeLeague.seasonId ?? safeLeague.currentSeasonId ?? `s${season}`;
+    const userTeamId = Number.isFinite(Number(safeLeague.userTeamId)) ? Number(safeLeague.userTeamId) : 0;
+    const salaryCap = Number(payload?.options?.salaryCap ?? 301.2);
+    const economy = normalizeLeagueEconomy({
+      ...DEFAULT_LEAGUE_ECONOMY,
+      baseSalaryCap: salaryCap,
+      currentSalaryCap: salaryCap,
+    }, { year });
+    const settings = normalizeLeagueSettings({
+      ...DEFAULT_LEAGUE_SETTINGS,
+      salaryCap: economy.currentSalaryCap,
+      leagueName: safeLeague.name,
+    });
+
+    const meta = ensureLeagueMemoryMeta({
+      id: 'league',
+      name: String(safeLeague.name ?? `Safe Starter ${slotKey?.split('_')?.[2] ?? '1'}`).slice(0, 80),
+      userTeamId,
+      currentSeasonId: seasonId,
+      currentWeek: Number(safeLeague.week ?? 1),
+      year,
+      season,
+      phase: safeLeague.phase ?? 'regular',
+      difficulty: payload?.options?.difficulty ?? 'Normal',
+      settings,
+      economy,
+      commissionerMode: false,
+      commissionerEverEnabled: false,
+      commissionerLog: [],
+      newsItems: Array.isArray(safeLeague.newsItems) ? safeLeague.newsItems : [],
+      ownerGoals: Array.isArray(safeLeague.ownerGoals) && safeLeague.ownerGoals.length ? safeLeague.ownerGoals : generateOwnerGoals(),
+      retiredPlayers: Array.isArray(safeLeague.retiredPlayers) ? safeLeague.retiredPlayers : [],
+      records: safeLeague.records ?? {
+        mostPassingYardsSeason: null,
+        mostRushingYardsSeason: null,
+        mostWinsSeason: null,
+        mostChampionships: null,
+        highestOvrPlayer: null,
+      },
+    });
+
+    const teams = safeLeague.teams.map((team) => {
+      const { roster, players, ...teamWithoutRoster } = team;
+      const rosterRows = Array.isArray(roster) ? roster : Array.isArray(players) ? players : [];
+      const normalizedStaff = ensureTeamStaff(teamWithoutRoster, { year });
+      return {
+        ...teamWithoutRoster,
+        staff: normalizedStaff,
+        draftBoard: teamWithoutRoster?.draftBoard ?? { ranks: {}, notes: {}, tags: {}, shortlist: [], avoid: [] },
+        rosterIds: rosterRows.map((player) => player.id),
+        rosterCount: rosterRows.length,
+        capTotal: economy.currentSalaryCap,
+        capRoom: economy.currentSalaryCap,
+        capSpace: economy.currentSalaryCap,
+        wins: Number(teamWithoutRoster?.wins ?? 0),
+        losses: Number(teamWithoutRoster?.losses ?? 0),
+        ties: Number(teamWithoutRoster?.ties ?? 0),
+        ptsFor: Number(teamWithoutRoster?.ptsFor ?? 0),
+        ptsAgainst: Number(teamWithoutRoster?.ptsAgainst ?? 0),
+        fanApproval: teamWithoutRoster?.fanApproval ?? 50,
+        franchiseInvestments: normalizeFranchiseInvestments(teamWithoutRoster?.franchiseInvestments),
+        rivalTeamId: teamWithoutRoster?.rivalTeamId ?? null,
+      };
+    });
+
+    const players = [];
+    safeLeague.teams.forEach((team) => {
+      const rosterRows = Array.isArray(team?.roster) ? team.roster : Array.isArray(team?.players) ? team.players : [];
+      rosterRows.forEach((player) => {
+        players.push({ ...player, teamId: team.id });
+      });
+    });
+
+    const draftPicks = [];
+    safeLeague.teams.forEach((team) => {
+      (team.picks ?? []).forEach((pick) => {
+        draftPicks.push({ ...pick, currentOwner: team.id });
+      });
+    });
+
+    cache.hydrate({ meta, teams, players, draftPicks });
+    hydrateAllPlayersForDevelopment();
+    for (const team of cache.getAllTeams()) {
+      recalculateTeamCap(team.id);
+    }
+    cache.setMeta({ schedule: slimifySchedule(safeLeague.schedule, safeLeague.teams) });
+
+    _saveIsExplicitlyLoaded = true;
+    await Meta.save(cache.getMeta());
+    await Promise.all([
+      Teams.saveBulk(cache.getAllTeams()),
+      Players.saveBulk(cache.getAllPlayers()),
+      DraftPicks.saveBulk(cache.getAllDraftPicks()),
+    ]);
+    cache.drainDirty();
+
+    const userTeam = cache.getTeam(userTeamId);
+    const saveEntry = {
+      id: slotKey,
+      name: meta.name,
+      year: meta.year,
+      teamId: userTeamId,
+      teamAbbr: userTeam?.abbr ?? '???',
+      lastPlayed: Date.now(),
+    };
+    await Saves.save(saveEntry);
+    postManifestUpdate(saveEntry);
+
+    post(toUI.NOTIFICATION, {
+      level: 'warn',
+      message: 'Loaded a safe starter league because normal franchise setup did not respond.',
+    });
+    post(toUI.FULL_STATE, { ...buildViewState(), bootRequestId }, id);
+  } catch (err) {
+    console.error('[Worker] USE_SAFE_STARTER_LEAGUE error:', err);
+    post(toUI.ERROR, {
+      code: 'SAFE_STARTER_BOOT_FAILED',
+      stage: 'safe_starter',
+      bootRequestId,
+      message: err?.message ?? 'Failed to load safe starter league.',
+      stack: err?.stack,
+    }, id);
+  }
 }
 
 // ── Playoff bracket builder ────────────────────────────────────────────────────
@@ -9133,6 +9293,7 @@ async function handleMessage(event) {
       case toWorker.RENAME_SAVE:        return await handleRenameSave(payload, id);
       case toWorker.DUPLICATE_SAVE:     return await handleDuplicateSave(payload, id);
       case toWorker.NEW_LEAGUE:         return await handleNewLeague(payload, id);
+      case toWorker.USE_SAFE_STARTER_LEAGUE: return await handleUseSafeStarterLeague(payload, id);
       case toWorker.ADVANCE_WEEK:       return await handleAdvanceWeek(payload, id);
       case toWorker.SIM_TO_WEEK:        return await handleSimToWeek(payload, id);
       case toWorker.SIM_TO_PLAYOFFS:    return await handleSimToWeek({ targetWeek: 18 }, id);
