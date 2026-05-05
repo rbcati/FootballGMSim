@@ -62,10 +62,22 @@ export const INITIAL_WORKER_STATE = {
   promptUserGame: false,
   userGameLogs: null,
   userGameLiveStats: null,
+  lastWorkerMessageType: null,
 };
 
 function isWeeklyResultsPhase(phase) {
   return phase === 'preseason' || phase === 'regular' || phase === 'playoffs';
+}
+
+export function shouldAcceptBootScopedPayload(payload = {}, activeBootRequestId = null, ignoredBootRequestIds = []) {
+  const requestId = payload?.bootRequestId ?? null;
+  if (!requestId) return true;
+  const ignored = ignoredBootRequestIds instanceof Set
+    ? ignoredBootRequestIds
+    : new Set(Array.isArray(ignoredBootRequestIds) ? ignoredBootRequestIds : []);
+  if (ignored.has(requestId)) return false;
+  if (activeBootRequestId && requestId !== activeBootRequestId) return false;
+  return true;
 }
 
 export function workerReducer(state, action) {
@@ -79,15 +91,16 @@ export function workerReducer(state, action) {
     case 'IDLE':
       return { ...state, busy: false, simulating: false, simProgress: 0 };
     case 'WORKER_READY':
-      return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false };
+      return { ...state, workerReady: true, hasSave: action.hasSave ?? false, busy: false, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
     case 'FULL_STATE':
-      return { ...state, busy: false, simulating: false, batchSim: null, league: action.payload };
+      return { ...state, busy: false, simulating: false, batchSim: null, league: action.payload, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
     case 'STATE_UPDATE':
       // Also clear busy: send()-based actions (signPlayer, releasePlayer, setUserTeam)
       // respond with STATE_UPDATE and have no other mechanism to clear the flag.
       return {
         ...state,
         busy: false,
+        lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType,
         league: { ...(state.league ?? {}), ...action.payload },
         ...(action.payload?.phase && !isWeeklyResultsPhase(action.payload.phase)
           ? { lastResults: [], lastSimWeek: null, gameEvents: [] }
@@ -149,7 +162,9 @@ export function workerReducer(state, action) {
     case 'DRAFT_TRADE_OFFER':
       return { ...state, draftTradeProposal: action.proposal ?? null };
     case 'ERROR':
-      return { ...state, busy: false, simulating: false, error: action.message };
+      return { ...state, busy: false, simulating: false, error: action.message, lastWorkerMessageType: action.messageType ?? state.lastWorkerMessageType };
+    case 'WORKER_MESSAGE':
+      return { ...state, lastWorkerMessageType: action.messageType ?? null };
     case 'NOTIFY':
       {
         const now = Date.now();
@@ -205,6 +220,7 @@ export function useWorker() {
     waiters: [],
   });
   const activeBootRequestIdRef = useRef(null);
+  const ignoredBootRequestIdsRef = useRef(new Set());
 
   // ── Spawn worker once ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -247,22 +263,24 @@ export function useWorker() {
         dispatch({ type: silent ? 'CLEAR_BUSY' : 'IDLE' });
       }
 
+      dispatch({ type: 'WORKER_MESSAGE', messageType: type });
+
       // Then update React state
       switch (type) {
         case toUI.READY:
-          dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave });
+          dispatch({ type: 'WORKER_READY', hasSave: payload.hasSave, messageType: type });
           break;
         case toUI.FULL_STATE:
-          if (payload?.bootRequestId && activeBootRequestIdRef.current && payload.bootRequestId !== activeBootRequestIdRef.current) {
+          if (!shouldAcceptBootScopedPayload(payload, activeBootRequestIdRef.current, ignoredBootRequestIdsRef.current)) {
             break;
           }
           if (payload?.bootRequestId && activeBootRequestIdRef.current === payload.bootRequestId) {
             activeBootRequestIdRef.current = null;
           }
-          dispatch({ type: 'FULL_STATE', payload });
+          dispatch({ type: 'FULL_STATE', payload, messageType: type });
           break;
         case toUI.STATE_UPDATE:
-          dispatch({ type: 'STATE_UPDATE', payload });
+          dispatch({ type: 'STATE_UPDATE', payload, messageType: type });
           break;
         case toUI.PROMPT_USER_GAME:
           dispatch({ type: 'PROMPT_USER_GAME' });
@@ -317,10 +335,10 @@ export function useWorker() {
           dispatch({ type: 'IDLE' });
           break;
         case toUI.ERROR:
-          if (payload?.bootRequestId && activeBootRequestIdRef.current && payload.bootRequestId !== activeBootRequestIdRef.current) {
+          if (!shouldAcceptBootScopedPayload(payload, activeBootRequestIdRef.current, ignoredBootRequestIdsRef.current)) {
             break;
           }
-          dispatch({ type: 'ERROR', message: payload.message });
+          dispatch({ type: 'ERROR', message: payload.message, messageType: type });
           break;
         case toUI.SIM_BATCH_PROGRESS:
           dispatch({ type: 'BATCH_SIM_PROGRESS', currentWeek: payload.currentWeek, phase: payload.phase });
@@ -457,12 +475,30 @@ export function useWorker() {
     /** Generate a new league. teams = array of team definitions. */
     newLeague: (teams, options) =>
       (activeBootRequestIdRef.current = options?.bootRequestId ?? null,
+      options?.bootRequestId ? ignoredBootRequestIdsRef.current.delete(options.bootRequestId) : null,
       request(toWorker.NEW_LEAGUE, { teams, options }, { silent: false })),
     setActiveBootRequestId: (requestId = null) => {
       activeBootRequestIdRef.current = requestId;
     },
+    invalidateBootRequestId: (requestId = null) => {
+      if (!requestId) {
+        activeBootRequestIdRef.current = null;
+        return;
+      }
+      ignoredBootRequestIdsRef.current.add(requestId);
+      if (activeBootRequestIdRef.current === requestId) {
+        activeBootRequestIdRef.current = null;
+      }
+    },
     hydrateLeagueSnapshot: (league, { bootRequestId = null } = {}) => {
       dispatch({ type: 'FULL_STATE', payload: { ...league, bootRequestId } });
+    },
+    useSafeStarterLeague: (slotKey, options = {}) => {
+      if (options?.bootRequestId) {
+        activeBootRequestIdRef.current = options.bootRequestId;
+        ignoredBootRequestIdsRef.current.delete(options.bootRequestId);
+      }
+      return request(toWorker.USE_SAFE_STARTER_LEAGUE, { slotKey, options }, { silent: false });
     },
 
     /** Watch the user game (returns a Promise resolving to logs). */

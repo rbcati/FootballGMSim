@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
+  getBootViewStateValidation,
+  getPlayableLeagueValidation,
+  isPlayableLeagueState,
+} from '../../state/leagueInit.ts';
+import {
   canPersistActiveSlot,
   hasMinimumPlayableLeague,
   NEW_SLOT_BOOTSTRAP_PHASES,
@@ -9,6 +14,7 @@ import {
   shouldStartNewSlotInitialSave,
   summarizeBootstrapState,
 } from './leagueBootstrap.js';
+import { buildDefaultLeague } from '../../data/defaultLeague.ts';
 
 const playableLeague = {
   activeLeagueId: 'save_slot_1',
@@ -20,7 +26,23 @@ const playableLeague = {
   schedule: { weeks: [{ week: 1, games: [{ home: 4, away: 2, played: false }] }] },
 };
 
+const bootViewState = {
+  activeLeagueId: 'save_slot_1',
+  phase: 'regular',
+  year: 2026,
+  week: 1,
+  userTeamId: 4,
+  teams: [{ id: 4, name: 'Phoenix' }, { id: 2, name: 'Vegas' }],
+};
+
 describe('league bootstrap guards', () => {
+  it('separates UI boot-view readiness from full simulation readiness', () => {
+    expect(getBootViewStateValidation(bootViewState).valid).toBe(true);
+    expect(hasMinimumPlayableLeague(bootViewState)).toBe(true);
+    expect(getPlayableLeagueValidation(bootViewState).valid).toBe(false);
+    expect(isPlayableLeagueState(bootViewState)).toBe(false);
+  });
+
   it('accepts minimal playable league payload', () => {
     expect(hasMinimumPlayableLeague(playableLeague)).toBe(true);
   });
@@ -36,16 +58,45 @@ describe('league bootstrap guards', () => {
     expect(summary.reasons.length).toBeGreaterThan(0);
   });
 
+  it('boot-view validator fails missing user team and phase/week fields', () => {
+    expect(getBootViewStateValidation({ ...bootViewState, userTeamId: 99 }).reasons).toContain('User team missing');
+    expect(getBootViewStateValidation({ ...bootViewState, phase: '' }).reasons).toContain('Missing phase');
+    expect(getBootViewStateValidation({ ...bootViewState, week: undefined }).reasons).toContain('Missing week number');
+  });
+
+  it('full sim validator passes upgraded default league and fails missing sim data', () => {
+    const fallbackLeague = buildDefaultLeague();
+    expect(getPlayableLeagueValidation(fallbackLeague).valid).toBe(true);
+    expect(isPlayableLeagueState(fallbackLeague)).toBe(true);
+    expect(getPlayableLeagueValidation({ ...fallbackLeague, schedule: { weeks: [] } }).reasons).toContain('Schedule missing');
+    expect(getPlayableLeagueValidation({
+      ...fallbackLeague,
+      teams: fallbackLeague.teams.map(({ roster, ...team }) => team),
+    }).reasons).toContain('No roster/player data');
+    expect(getPlayableLeagueValidation({
+      ...fallbackLeague,
+      schedule: { weeks: [{ week: 1, games: [] }] },
+    }).reasons).toContain('No games available');
+  });
+
   it('new-franchise bootstrap gate clears once league is playable', () => {
     expect(shouldShowNewFranchiseBootstrapGate({
       league: null,
       pendingNewSlot: 'save_slot_1',
       initFlowMode: 'new',
+      initFlowActive: false,
+    })).toBe(false);
+    expect(shouldShowNewFranchiseBootstrapGate({
+      league: null,
+      pendingNewSlot: 'save_slot_1',
+      initFlowMode: 'new',
+      initFlowActive: true,
     })).toBe(true);
     expect(shouldShowNewFranchiseBootstrapGate({
       league: playableLeague,
       pendingNewSlot: 'save_slot_1',
       initFlowMode: 'new',
+      initFlowActive: true,
     })).toBe(false);
   });
 
@@ -53,6 +104,7 @@ describe('league bootstrap guards', () => {
     expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: null, league: playableLeague })).toBe(false);
     expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: { teams: [] } })).toBe(false);
     expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: playableLeague })).toBe(true);
+    expect(shouldFinalizeNewSlotBootstrap({ pendingNewSlot: 'save_slot_1', league: bootViewState })).toBe(true);
   });
 
   it('does not request the first new-save write before a league is minimally playable', () => {

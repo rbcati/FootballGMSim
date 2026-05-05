@@ -56,6 +56,11 @@ describe('FranchiseHQ', () => {
     expect(screen.getByText(/must handle/i)).toBeTruthy();
     expect(screen.getByText(/tactical edge/i)).toBeTruthy();
     expect(screen.getByRole('heading', { name: /coordinator brief/i })).toBeTruthy();
+    const seasonPulse = within(screen.getByTestId('season-pulse'));
+    expect(seasonPulse.getByText(/owner mandate/i)).toBeTruthy();
+    expect(seasonPulse.getByText(/momentum/i)).toBeTruthy();
+    expect(seasonPulse.getByText(/roster lever/i)).toBeTruthy();
+    expect(seasonPulse.getByText(/film room/i)).toBeTruthy();
     expect(screen.getAllByRole('heading', { name: /game plan impact/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/home matchup vs det/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/ratings are tightly clustered/i)).toBeTruthy();
@@ -68,6 +73,14 @@ describe('FranchiseHQ', () => {
 
     fireEvent.click(within(view.container).getAllByRole('button', { name: /tactical edge: review game plan/i })[0]);
     expect(onNavigate).toHaveBeenCalledWith('Game Plan');
+  });
+
+  it('routes season pulse roster action through onNavigate', () => {
+    const onNavigate = vi.fn();
+    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /open team builder/i }));
+    expect(onNavigate).toHaveBeenCalledWith('Team:Roster / Team Builder');
   });
 
 

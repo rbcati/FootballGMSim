@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { INITIAL_WORKER_STATE, workerReducer } from './useWorker.js';
+import { INITIAL_WORKER_STATE, shouldAcceptBootScopedPayload, workerReducer } from './useWorker.js';
 
 describe('workerReducer', () => {
   it('preserves league state on WORKER_READY while clearing busy', () => {
@@ -24,5 +24,12 @@ describe('workerReducer', () => {
     expect(next.workerReady).toBe(true);
     expect(next.hasSave).toBe(true);
     expect(next.busy).toBe(false);
+  });
+
+  it('rejects stale boot-scoped payloads after a boot id is invalidated', () => {
+    expect(shouldAcceptBootScopedPayload({ bootRequestId: 'boot_1' }, null, ['boot_1'])).toBe(false);
+    expect(shouldAcceptBootScopedPayload({ bootRequestId: 'boot_1' }, 'safe_boot_1', [])).toBe(false);
+    expect(shouldAcceptBootScopedPayload({ bootRequestId: 'safe_boot_1' }, 'safe_boot_1', ['boot_1'])).toBe(true);
+    expect(shouldAcceptBootScopedPayload({ phase: 'regular' }, null, ['boot_1'])).toBe(true);
   });
 });

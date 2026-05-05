@@ -1,10 +1,10 @@
 /**
  * leagueBootstrap.js
  *
- * Authoritative readiness gates for league initialization.
+ * Authoritative UI readiness gates for league initialization.
  * Prevents race conditions during new franchise creation.
  */
-import { getPlayableLeagueValidation, isPlayableLeagueState } from '../../state/leagueInit.ts';
+import { getBootViewStateValidation, isBootViewStateReady } from '../../state/leagueInit.ts';
 
 export const NEW_SLOT_BOOTSTRAP_PHASES = {
   IDLE: 'idle',
@@ -14,19 +14,23 @@ export const NEW_SLOT_BOOTSTRAP_PHASES = {
 };
 
 /**
- * Returns true only if the league object has all critical fields
- * required to render the dashboard and simulate games.
+ * Returns true once the worker view-state has the critical fields
+ * required to leave the bootstrap overlay and render Franchise HQ.
+ *
+ * This intentionally does not validate the full simulation league blob.
+ * React state stores buildViewState() output, while the worker validates
+ * full league objects before persisting them.
  */
 
 export function hasMinimumPlayableLeague(league) {
-  return isPlayableLeagueState(league);
+  return isBootViewStateReady(league);
 }
 
 /**
  * Diagnostic helper to see exactly why a league isn't ready.
  */
 export function summarizeBootstrapState(league) {
-  const validation = getPlayableLeagueValidation(league);
+  const validation = getBootViewStateValidation(league);
   const reasons = validation.valid ? [] : validation.reasons;
 
   return {
@@ -106,7 +110,8 @@ export function shouldFinalizeNewSlotBootstrap({ pendingNewSlot, bootstrapPhase,
 /**
  * Gates the main dashboard view during new franchise creation.
  */
-export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, initFlowMode }) {
+export function shouldShowNewFranchiseBootstrapGate({ league, pendingNewSlot, initFlowMode, initFlowActive = false }) {
   if (initFlowMode !== 'new' || !pendingNewSlot) return false;
+  if (!initFlowActive) return false;
   return !hasMinimumPlayableLeague(league);
 }

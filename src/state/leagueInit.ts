@@ -2,29 +2,66 @@ import { buildDefaultLeague } from '../data/defaultLeague';
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
-export function getPlayableLeagueValidation(league: any) {
+export function getBootViewStateValidation(viewState: any) {
   const reasons: string[] = [];
-  if (!league || typeof league !== 'object') {
+  if (!viewState || typeof viewState !== 'object') {
     return { valid: false, reasons: ['No league state received'] };
   }
-  if (!league.phase) reasons.push('Missing phase');
-  if (typeof league.week !== 'number') reasons.push('Missing week number');
-  if (typeof league.year !== 'number' && typeof league.seasonId !== 'number' && typeof league.season !== 'number') reasons.push('Missing season/year');
-  if (!Array.isArray(league.teams) || league.teams.length < 2) reasons.push('Teams unavailable');
-  const teams = Array.isArray(league.teams) ? league.teams : [];
-  const inferredUserTeamId = league.userTeamId ?? teams[0]?.id;
+
+  if (!viewState.phase) reasons.push('Missing phase');
+  if (typeof viewState.week !== 'number') reasons.push('Missing week number');
+  if (typeof viewState.year !== 'number' && typeof viewState.seasonId !== 'number' && typeof viewState.season !== 'number') {
+    reasons.push('Missing season/year');
+  }
+
+  const teams = Array.isArray(viewState.teams) ? viewState.teams : [];
+  if (teams.length < 2) reasons.push('Teams unavailable');
+  const inferredUserTeamId = viewState.userTeamId ?? teams[0]?.id;
   const hasUserTeam = inferredUserTeamId != null && teams.some((t: any) => Number(t?.id) === Number(inferredUserTeamId));
   if (!hasUserTeam) reasons.push('User team missing');
+
+  return {
+    valid: reasons.length === 0,
+    reasons,
+    inferredUserTeamId,
+  };
+}
+
+export function isBootViewStateReady(viewState: any) {
+  return getBootViewStateValidation(viewState).valid;
+}
+
+export function getPlayableLeagueValidation(league: any) {
+  const bootValidation = getBootViewStateValidation(league);
+  const reasons: string[] = [...bootValidation.reasons];
+  if (!league || typeof league !== 'object') {
+    return { valid: false, reasons };
+  }
+
+  const teams = Array.isArray(league.teams) ? league.teams : [];
+  const flattenedPlayers = Array.isArray(league.players) ? league.players : [];
+  const teamsMissingRoster = teams.filter((team: any) => {
+    if (Array.isArray(team?.roster) && team.roster.length > 0) return false;
+    if (Array.isArray(team?.players) && team.players.length > 0) return false;
+    return !flattenedPlayers.some((player: any) => Number(player?.teamId) === Number(team?.id));
+  });
   const hasRosterData = teams.some((team: any) => Array.isArray(team?.roster) ? team.roster.length > 0 : Array.isArray(team?.players) && team.players.length > 0);
-  if (!hasRosterData && Array.isArray(league.players) && league.players.length > 0) {
-    // valid roster fallback via flattened player pool
-  } else if (!hasRosterData) {
+  if (teamsMissingRoster.length > 0) {
+    reasons.push('No roster/player data');
+  } else if (!hasRosterData && flattenedPlayers.length === 0) {
     reasons.push('No roster/player data');
   }
+
   const weeks = Array.isArray(league?.schedule?.weeks) ? league.schedule.weeks : [];
   if (weeks.length === 0) reasons.push('Schedule missing');
   const hasGames = weeks.some((w: any) => Array.isArray(w?.games) && w.games.length > 0);
   if (!hasGames) reasons.push('No games available');
+  const hasScheduledMatchup = weeks.some((w: any) => (w?.games ?? []).some((game: any) => {
+    const home = game?.home?.id ?? game?.home ?? game?.homeId;
+    const away = game?.away?.id ?? game?.away ?? game?.awayId;
+    return home != null && away != null;
+  }));
+  if (hasGames && !hasScheduledMatchup) reasons.push('No scheduled matchups');
 
   return {
     valid: reasons.length === 0,

@@ -41,15 +41,13 @@ export async function ensureLeagueLoaded(page) {
 
   if (state === 'team_select') {
     await page.locator(`${TEAM_SELECT} .team-card`).first().click();
-    state = await detectBootstrapState(page);
   }
 
-  while (state === 'onboarding_continue') {
+  while (await page.locator(ONBOARDING_CONTINUE).first().isVisible().catch(() => false)) {
     await page.locator(ONBOARDING_CONTINUE).first().click();
-    state = await detectBootstrapState(page);
   }
 
-  if (state === 'start_dynasty') {
+  if (await page.locator(START_DYNASTY).first().isVisible().catch(() => false)) {
     await page.locator(START_DYNASTY).first().click();
   }
 
@@ -71,6 +69,7 @@ export async function goToTab(page, name) {
     schedule: 'league',
     stats: 'league',
     'league-leaders': 'league',
+    'weekly-results': 'league',
     draft: 'transactions',
     transactions: 'transactions',
     'free-agency': 'transactions',
