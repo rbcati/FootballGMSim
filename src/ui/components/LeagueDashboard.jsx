@@ -1171,7 +1171,8 @@ export default function LeagueDashboard({
               gameId={selectedGameId}
               league={league}
               actions={actions}
-              onBack={() => setActiveTab(lastGameTab || "Schedule")}
+              onBack={() => setActiveTab("HQ")}
+              onNavigate={setActiveTab}
               onPlayerSelect={setSelectedPlayerId}
               onTeamSelect={setSelectedTeamId}
             />

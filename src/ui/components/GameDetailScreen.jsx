@@ -1,6 +1,6 @@
 import React from 'react';
 import BoxScorePanel from './BoxScorePanel.jsx';
-import { EmptyState, ScreenHeader, SectionCard, StatusChip } from './ScreenSystem.jsx';
+import { EmptyState, ScreenHeader, SectionCard } from './ScreenSystem.jsx';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
 
 function findScheduleGame(league, gameId) {
@@ -14,7 +14,7 @@ function findScheduleGame(league, gameId) {
 }
 
 
-export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect }) {
+export default function GameDetailScreen({ gameId, league, actions, onBack, onPlayerSelect, onTeamSelect, onNavigate }) {
   const weekFromId = typeof gameId === 'string' ? gameId.match(/_w(\d+)_/i)?.[1] : null;
 
   const scheduleGame = findScheduleGame(league, gameId);
@@ -29,7 +29,7 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
           title="Game Book"
           subtitle="Open any game to view score context, recap, and box score details when available."
           onBack={onBack}
-          backLabel="Back"
+          backLabel="Return to HQ"
           metadata={[{ label: 'Season', value: league?.seasonId ?? '—' }, { label: 'Status', value: 'No game selected' }]}
         />
         <EmptyState
@@ -47,8 +47,12 @@ export default function GameDetailScreen({ gameId, league, actions, onBack, onPl
         title="Game Book"
         subtitle="Scan the final, review the recap narrative, compare team stats, then drill into player leaders and play detail."
         onBack={onBack}
-        backLabel="Back"
-        primaryAction={<StatusChip label="Command View" tone="info" />}
+        backLabel="Return to HQ"
+        primaryAction={(
+          <button type="button" className="btn btn-sm" onClick={() => onNavigate?.('Weekly Prep')}>
+            Review Next Week
+          </button>
+        )}
         metadata={[
           { label: 'Game ID', value: gameId },
           { label: 'Season', value: league?.seasonId ?? '—' },
