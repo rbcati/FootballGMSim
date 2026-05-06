@@ -66,6 +66,16 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('hq-last-result')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('hq-next-action')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
+  const hqNextAction = page.getByTestId('hq-next-action');
+  const reviewGameBookCta = hqNextAction.getByRole('button', { name: /Review Game Book/i });
+  if (await reviewGameBookCta.isVisible().catch(() => false)) {
+    await reviewGameBookCta.click();
+    await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await page.getByTestId('return-to-hq').click();
+    await expect(page.getByTestId('franchise-hq')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  }
+
   await page.reload();
   await expect(page.getByTestId('app-bootstrap-loading')).toBeHidden({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('app-shell-ready')).toBeVisible({ timeout: SMOKE_TIMEOUT });

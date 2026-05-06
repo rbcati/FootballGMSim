@@ -1,3 +1,5 @@
+import { buildGameBookDestination } from './managementScreenRouting.js';
+
 function safeNum(value, fallback = null) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -116,7 +118,7 @@ function buildContextTakeaway({ result, userTeam, seasonId, injuryRiskCount }) {
       id: 'game-plan',
       text: 'Game plan was saved before kickoff. Open Game Book to inspect whether your script held up in live drives.',
       route: 'Game Book',
-      targetRoute: result?.gameId ? `Game Book:${result.gameId}` : 'Game Plan',
+      targetRoute: result?.gameId ? buildGameBookDestination(result.gameId) : 'Game Plan',
     });
   }
 
@@ -177,7 +179,7 @@ function chooseRecommendation({ result, contextBullets }) {
   return {
     label: 'Review Game Book',
     reason: 'Review drive detail before making next-week changes.',
-    route: result?.gameId ? `Game Book:${result.gameId}` : 'Weekly Results',
+    route: buildGameBookDestination(result?.gameId),
   };
 }
 

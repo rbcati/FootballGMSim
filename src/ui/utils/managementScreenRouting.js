@@ -5,6 +5,29 @@ const STAT_FAMILIES = new Set(["passing", "rushing", "receiving", "defense"]);
 const LEAGUE_SECTIONS = new Set(["Overview", "Results", "Standings", "News", "Leaders"]);
 const TEAM_SECTIONS = new Set(["Overview", "Roster / Depth", "Contracts", "Development", "Injuries"]);
 
+
+export function buildGameBookDestination(gameId) {
+  return gameId ? `Game Book:${String(gameId)}` : 'Weekly Results';
+}
+
+export function parseGameBookDestination(destination) {
+  if (!destination) return null;
+  if (typeof destination === "object") {
+    const type = String(destination.type ?? destination.kind ?? "").toLowerCase();
+    const gameId = destination.gameId ?? destination.id ?? null;
+    if ((type === "gamebook" || type === "game-book" || type === "game_book") && gameId != null && String(gameId).trim()) {
+      return { type: "gameBook", gameId: String(gameId).trim() };
+    }
+    return null;
+  }
+  if (typeof destination !== "string") return null;
+  const [route, ...rest] = destination.split(":");
+  if (route.trim().toLowerCase() !== "game book") return null;
+  const gameId = rest.join(":").trim();
+  if (!gameId) return null;
+  return { type: "gameBook", gameId };
+}
+
 export function normalizeManagementDestination(tabToken) {
   const normalized = {
     tab: tabToken,
