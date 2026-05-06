@@ -762,3 +762,15 @@
   .app-game-center-performers { grid-template-columns: 1fr; }
   .app-game-center-card__footer--primary .btn { width: 100%; min-height: 44px; }
 }
+
+.app-compact-insight--button {
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-compact-insight--button:hover,
+.app-compact-insight--button:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hairline));
+  outline: none;
+}

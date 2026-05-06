@@ -42,11 +42,17 @@ function formatDefense(best) {
 
 export function getTopPerformers(vm) {
   const players = [...(vm?.playerTables?.away ?? []), ...(vm?.playerTables?.home ?? [])];
-  const offense = formatOffense(bestBy(players, ['passYd', 'rushYd', 'recYd']));
-  const defense = formatDefense(bestBy(players, ['sacks', 'interceptions', 'tackles']));
+  const offenseBest = bestBy(players, ['passYd', 'rushYd', 'recYd']);
+  const defenseBest = bestBy(players, ['sacks', 'interceptions', 'tackles']);
+  const offense = formatOffense(offenseBest);
+  const defense = formatDefense(defenseBest);
   return {
     offense: offense ?? 'Offensive player stats were not recorded.',
     defense: defense ?? 'Defensive player stats were not recorded.',
+    offensePlayer: offenseBest?.player ?? null,
+    defensePlayer: defenseBest?.player ?? null,
+    offenseStatKey: offenseBest?.key ?? null,
+    defenseStatKey: defenseBest?.key ?? null,
     hasOffense: Boolean(offense),
     hasDefense: Boolean(defense),
   };
