@@ -4,13 +4,17 @@ import tailwindcss from '@tailwindcss/vite';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
 
+function getDeployRef() {
+  return process.env.VITE_GIT_SHA || process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'local';
+}
+
 function injectSwVersion() {
   return {
     name: 'inject-sw-version',
     apply: 'build',
     generateBundle(_, bundle) {
       const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
-      const deployRef = process.env.COMMIT_REF || process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || Date.now().toString();
+      const deployRef = getDeployRef();
       const cacheVersion = `fgm-${pkg.version}-${String(deployRef).slice(0, 12)}`;
 
       const swAsset = Object.values(bundle).find(
@@ -28,6 +32,10 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  define: {
+    'import.meta.env.VITE_BUILD_TIME': JSON.stringify(process.env.VITE_BUILD_TIME || new Date().toISOString()),
+    'import.meta.env.VITE_GIT_SHA': JSON.stringify(getDeployRef()),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src/ui', import.meta.url)),

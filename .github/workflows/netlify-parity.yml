@@ -22,3 +22,24 @@ jobs:
 
       - name: Verify deploy parity checks
         run: npm run check:deploy
+
+  first-session-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node 22 (Netlify parity)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run fresh franchise first-week smoke
+        run: npm run test -- tests/e2e/fresh_franchise_first_week_smoke.spec.js
