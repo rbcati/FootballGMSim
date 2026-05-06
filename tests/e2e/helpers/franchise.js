@@ -88,7 +88,7 @@ export async function goToTab(page, name) {
     return;
   }
 
-  if (tab === 'weekly-results' && await page.getByTestId('completed-game-link').first().isVisible().catch(() => false)) {
+  if (tab === 'weekly-results' && (await page.getByTestId('completed-game-link').first().isVisible().catch(() => false) || await page.getByTestId('game-book-primary-cta').first().isVisible().catch(() => false))) {
     return;
   }
 

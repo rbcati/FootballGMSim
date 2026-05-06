@@ -3,6 +3,7 @@ import { EmptyState } from "./ScreenSystem.jsx";
 import { buildBoxScoreViewModel } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
+import { getTopPerformers } from "../utils/gameBookHighlights.js";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -44,6 +45,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
     return <EmptyState title="Game Book unavailable" body="Game data missing." />;
   }
   const storyBullets = buildGameBookStory(vm);
+  const topPerformers = getTopPerformers(vm);
   const qHome = vm.quarterScores?.home ?? [];
   const qAway = vm.quarterScores?.away ?? [];
   const qCount = Math.max(qHome.length, qAway.length, 4);
@@ -84,14 +86,15 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
 
   return <div className={embedded ? "card" : "modal-content"}>
     <div className="box-score-header"><h2>Game Book</h2>{!embedded && <button className="btn" onClick={onClose}>Close</button>}</div>
-    <section className="bs-section">
+    <section className="bs-section bs-summary-card">
       <h3><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /> vs <TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></h3>
-      <div data-testid="game-book-final-score">{vm.finalScore.away ?? "—"} - {vm.finalScore.home ?? "—"}</div>
+      <div className="bs-scoreline" data-testid="game-book-final-score">{vm.awayTeam.abbr} {vm.finalScore.away ?? "—"} - {vm.finalScore.home ?? "—"} {vm.homeTeam.abbr}</div>
       <div>Week {vm.week ?? "—"} · Season {vm.season ?? "—"}</div>
       <span className={`status-chip ${QUALITY_BADGE_CLASS[vm.archiveQuality] ?? "muted"}`}>{vm.archiveQuality}</span>
       {vm.detailWarning ? <p>{vm.detailWarning}</p> : null}
     </section>
-    <section className="bs-section"><h4>Why this game was decided</h4>{storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}</section>
+    <section className="bs-section" data-testid="game-book-decision-summary"><h4>Why this game was decided</h4>{storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}</section>
+    <section className="bs-section"><h4>Top performers</h4><div className="bs-leaders-grid"><article className="bs-leader-card"><span className="bs-leader-label">Offense</span><p className="bs-leader-name">{topPerformers.offense}</p></article><article className="bs-leader-card"><span className="bs-leader-label">Defense</span><p className="bs-leader-name">{topPerformers.defense}</p></article></div></section>
     <section className="bs-section"><h4>Score by quarter</h4>{hasQuarter ? <div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Team</th>{headers.map((h) => <th key={h}>{h}</th>)}<th>Final</th></tr></thead><tbody><tr><td><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /></td>{headers.map((_, i) => <td key={`a-${i}`}>{qAway[i] ?? "—"}</td>)}<td>{vm.finalScore.away ?? "—"}</td></tr><tr><td><TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></td>{headers.map((_, i) => <td key={`h-${i}`}>{qHome[i] ?? "—"}</td>)}<td>{vm.finalScore.home ?? "—"}</td></tr></tbody></table></div> : <p>Quarter-by-quarter scoring was not recorded for this game.</p>}</section>
 
     <section className="bs-section"><h4>Team comparison</h4>{teamRows.length ? <div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead><tbody>{teamRows.map(([label, a, h]) => <tr key={label}><td>{label}</td><td>{a ?? "—"}</td><td>{h ?? "—"}</td></tr>)}</tbody></table></div> : <p>Team totals were not recorded for this game.</p>}</section>

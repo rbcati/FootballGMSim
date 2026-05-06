@@ -3,6 +3,8 @@ import { buildCompletedGamePresentation, openResolvedBoxScore } from '../utils/b
 import { deriveCompactResultRecap, getGameLifecycleBucket, resolveDefaultResultsWeek, selectWeekGames } from '../utils/gameCenterResults.js';
 import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
+import { buildBoxScoreViewModel } from '../utils/boxScoreViewModel.js';
+import { getTopPerformers } from '../utils/gameBookHighlights.js';
 import {
   CompactInsightCard,
   EmptyState,
@@ -51,6 +53,15 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
       </div>
     </article>
   );
+}
+
+function formatRecord(team) {
+  if (!team) return 'Record unavailable';
+  const wins = Number(team.wins ?? 0);
+  const losses = Number(team.losses ?? 0);
+  const ties = Number(team.ties ?? 0);
+  if (!Number.isFinite(wins) || !Number.isFinite(losses)) return 'Record unavailable';
+  return ties ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`;
 }
 
 function buildUserTeamResult(row, userTeamId) {
@@ -176,12 +187,17 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
     });
   }, [league, teamById, userTeamResult]);
 
+  const userGameVm = useMemo(() => (userTeamResult ? buildBoxScoreViewModel({ league, game: userTeamResult.game, gameId: userResultPresentation?.resolvedGameId, context: { season: league?.seasonId, week: userTeamResult.week } }) : null), [league, userResultPresentation?.resolvedGameId, userTeamResult]);
+  const topPerformers = useMemo(() => getTopPerformers(userGameVm), [userGameVm]);
+  const userTeam = teamById[Number(league?.userTeamId)] ?? null;
+  const userTeamRecord = formatRecord(userTeam);
+
   if (!totalWeeks) {
     return <EmptyState title="No schedule data available for weekly results." body="Weekly game center will populate when league schedule weeks are present." />;
   }
 
   return (
-    <div className="app-screen-stack app-weekly-results-screen">
+    <div className="app-screen-stack app-weekly-results-screen" data-testid="weekly-results">
       <HeroCard
         eyebrow="Franchise HQ • Results"
         title="Weekly Results"
@@ -213,14 +229,21 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
       </HeroCard>
 
       {userTeamResult ? (
-        <SectionCard title="Your Game" subtitle="Fast recap from your latest completed matchup in this week." variant="info">
-          <article className="app-game-center-card app-game-center-user card">
+        <SectionCard title="Your Game Result" subtitle="Your completed matchup, team impact, and the next click." variant="info">
+          <article className="app-game-center-card app-game-center-user card" data-testid="user-game-result-card">
             <div className="app-game-center-card__top">
-              <strong>{userTeamResult.outcome === 'W' ? 'Win' : userTeamResult.outcome === 'L' ? 'Loss' : 'Tie'} • {userTeamResult.isHome ? 'vs' : '@'} {userTeamResult.opponent?.abbr ?? 'TBD'}</strong>
+              <strong>Week {userTeamResult.week} • {userTeamResult.outcome === 'W' ? 'Win' : userTeamResult.outcome === 'L' ? 'Loss' : 'Tie'} • {userTeamResult.isHome ? 'vs' : '@'} {userTeamResult.opponent?.abbr ?? 'TBD'}</strong>
               <StatusChip label={`${userTeamResult.userScore}-${userTeamResult.oppScore}`} tone={userTeamResult.outcome === 'W' ? 'ok' : userTeamResult.outcome === 'L' ? 'warning' : 'info'} />
             </div>
+            <div className="app-game-center-result-score" aria-label="Final score">
+              <span>{userResultPresentation?.displayScoreLine ?? `${userTeamResult.userScore}-${userTeamResult.oppScore}`}</span>
+              <small>Record after game: {userTeamRecord}</small>
+            </div>
             <p className="app-game-center-card__scoreline">{userTeamResult.recap}</p>
-            <p className="app-game-center-card__summary">{userResultPresentation?.displayScoreLine ?? 'Final score unavailable.'}</p>
+            <div className="app-game-center-performers" aria-label="Top performers">
+              <CompactInsightCard title="Top offensive player" subtitle={topPerformers.offense} tone={topPerformers.hasOffense ? 'ok' : 'info'} />
+              <CompactInsightCard title="Top defensive player" subtitle={topPerformers.defense} tone={topPerformers.hasDefense ? 'ok' : 'info'} />
+            </div>
             {userTeamResult?.prepImpact?.narrative ? (
               <CompactInsightCard
                 title="Game-plan impact recap"
@@ -242,18 +265,18 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
                 ))}
               </div>
             ) : null}
-            <div className="app-game-center-card__footer">
+            <div className="app-game-center-card__footer app-game-center-card__footer--primary">
               <button
                 type="button"
-                className="btn btn-sm"
-                data-testid="completed-game-link"
+                className="btn btn-sm app-game-center-primary-cta"
+                data-testid="game-book-primary-cta"
                 onClick={canOpenUserGame ? () => openResolvedBoxScore(userTeamResult.game, { seasonId: league?.seasonId, week: userTeamResult.week, source: 'weekly_results_user_game' }, onGameSelect) : undefined}
                 disabled={!canOpenUserGame}
                 title={canOpenUserGame ? 'Open full Game Book' : (userResultPresentation?.statusLabel ?? 'Archive unavailable')}
               >
                 {canOpenUserGame ? 'Open Game Book' : `Game Book unavailable (${userResultPresentation?.statusLabel ?? 'Archive unavailable'})`}
               </button>
-              <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('Weekly Prep')}>Continue Weekly Prep</button>
+              <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.('HQ')}>Return to Franchise HQ</button>
               {decisionReview?.recommendedAction ? (
                 <button type="button" className="btn btn-sm btn-secondary" onClick={() => onNavigate?.(decisionReview.recommendedAction.route)}>{decisionReview.recommendedAction.label}</button>
               ) : null}

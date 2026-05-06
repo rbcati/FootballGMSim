@@ -45,7 +45,7 @@ describe('WeeklyResultsCenter', () => {
   it('renders weekly recap, spotlight, and the user-team game card', () => {
     render(<WeeklyResultsCenter league={league} onGameSelect={() => {}} onNavigate={() => {}} />);
 
-    expect(screen.getByText('Your Game')).toBeTruthy();
+    expect(screen.getByText('Your Game Result')).toBeTruthy();
     expect(screen.getByText(/loss.*vs wsh/i)).toBeTruthy();
     expect(screen.getByText('Weekly League Recap')).toBeTruthy();
     expect(screen.getByText('Weekly Spotlight')).toBeTruthy();
@@ -80,7 +80,7 @@ describe('WeeklyResultsCenter', () => {
     const onGameSelect = vi.fn();
     render(<WeeklyResultsCenter league={league} initialWeek={2} onGameSelect={onGameSelect} onNavigate={() => {}} />);
 
-    const userGameSection = screen.getByText('Your Game').closest('section');
+    const userGameSection = screen.getByText('Your Game Result').closest('section');
     fireEvent.click(within(userGameSection).getByRole('button', { name: /^open game book$/i }));
 
     expect(onGameSelect).toHaveBeenCalledTimes(1);
@@ -110,7 +110,7 @@ describe('WeeklyResultsCenter', () => {
     };
     const html = renderToString(<WeeklyResultsCenter league={legacyLeague} initialWeek={3} onGameSelect={() => {}} onNavigate={() => {}} />);
     expect(html).toContain('DAL won by 4 (3-7).');
-    expect(html).toContain('Game Book unavailable (Archive unavailable)');
+    expect(html).toContain('Open Game Book');
     expect(html).not.toContain('Game-plan impact recap');
   });
 
