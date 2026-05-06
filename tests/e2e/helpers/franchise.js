@@ -82,7 +82,17 @@ export async function goToTab(page, name) {
       await primaryLocator.click();
     }
   }
-  await page.locator(`[data-testid="section-tab-${tab}"]`).first().click();
+  const sectionTab = page.locator(`[data-testid="section-tab-${tab}"]`).first();
+  if (await sectionTab.isVisible().catch(() => false)) {
+    await sectionTab.click();
+    return;
+  }
+
+  if (tab === 'weekly-results' && await page.getByTestId('completed-game-link').first().isVisible().catch(() => false)) {
+    return;
+  }
+
+  await sectionTab.click();
 }
 
 export async function simulateSingleWeek(page) {
