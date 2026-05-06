@@ -7,6 +7,7 @@ import { buildWeeklyCommandHub } from '../utils/weeklyCommandHub.js';
 import { EmptyState, StatusChip, ActionTile, SectionCard, WeeklyAgenda, CompactNewsCard } from './ScreenSystem.jsx';
 import { getLastGameDisplay, getLatestUserCompletedGame, getNextOpponentDisplay } from '../utils/hqGameDisplay.js';
 import { HQIcon, TeamIdentityBadge } from './HQVisuals.jsx';
+import { buildGameBookDestination } from '../utils/managementScreenRouting.js';
 
 const BOTTOM_NAV_ITEMS = [
   { label: 'Home', route: 'HQ', icon: 'home', active: true },
@@ -188,7 +189,7 @@ export default function FranchiseHQ({ league, onNavigate, onAdvanceWeek, busy, s
       momentumLabel: command.momentum?.label ?? 'No trend yet',
       filmLabel: lastGame ? lastGameDisplay.heroLine : 'Kickoff ahead',
       filmDetail: lastGame ? 'Open the latest final before changing next week.' : 'Scout the opponent and lock a plan before kickoff.',
-      filmRoute: gameId ? `Game Book:${gameId}` : 'Weekly Prep',
+      filmRoute: gameId ? buildGameBookDestination(gameId) : 'Weekly Prep',
       filmCta: gameId ? 'Open Game Book' : 'Open Weekly Prep',
       rosterNeed: hqTeamBuilder.biggestNeed ?? 'No urgent need',
       rosterDetail: hqTeamBuilder.nextAction ?? 'Review team builder for leverage.',

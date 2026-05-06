@@ -3,6 +3,8 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import FranchiseHQ from '../FranchiseHQ.jsx';
+import LeagueDashboard from '../LeagueDashboard.jsx';
+import { normalizeManagementDestination, parseGameBookDestination } from '../../utils/managementScreenRouting.js';
 
 const baseLeague = {
   year: 2026,
@@ -33,9 +35,12 @@ const baseLeague = {
   ],
   schedule: {
     weeks: [
-      { week: 9, games: [{ id: 'g-9', home: { id: 11, abbr: 'DET' }, away: { id: 10, abbr: 'CHI' }, homeScore: 20, awayScore: 23, played: true }] },
+      { week: 9, games: [{ id: 'g-9', home: { id: 11, abbr: 'DET' }, away: { id: 10, abbr: 'CHI' }, homeId: 11, awayId: 10, homeAbbr: 'DET', awayAbbr: 'CHI', homeScore: 20, awayScore: 23, played: true }] },
       { week: 10, games: [{ id: 'g-10', home: { id: 10, abbr: 'CHI' }, away: { id: 11, abbr: 'DET' }, played: false }] },
     ],
+  },
+  gameById: {
+    'g-9': { id: 'g-9', home: 11, away: 10, homeId: 11, awayId: 10, week: 9, played: true, homeScore: 20, awayScore: 23 },
   },
   incomingTradeOffers: [],
   newsItems: [{ id: 'n1', teamId: 10, headline: 'Starter upgraded to probable status.' }],
@@ -94,6 +99,38 @@ describe('FranchiseHQ', () => {
     fireEvent.click(button);
     expect(onNavigate).toHaveBeenCalled();
   });
+
+  it('renders Review Game Book as the postgame next action and emits a Game Book route', () => {
+    const onNavigate = vi.fn();
+    render(<FranchiseHQ league={baseLeague} onNavigate={onNavigate} onAdvanceWeek={() => {}} busy={false} simulating={false} />);
+
+    const nextAction = within(screen.getByTestId('hq-next-action'));
+    expect(nextAction.getAllByText('Review Game Book').length).toBeGreaterThan(0);
+    fireEvent.click(nextAction.getByRole('button', { name: /review game book/i }));
+
+    expect(onNavigate).toHaveBeenCalledWith('Game Book:g-9');
+  });
+
+  it('parses Game Book route intents before tab normalization can reject them', () => {
+    expect(parseGameBookDestination('Game Book:g-9')).toEqual({ type: 'gameBook', gameId: 'g-9' });
+    expect(parseGameBookDestination({ type: 'gameBook', gameId: 'g-9' })).toEqual({ type: 'gameBook', gameId: 'g-9' });
+    expect(normalizeManagementDestination('Game Book:g-9').tab).toBe('Game Book');
+  });
+
+  it('opens Game Detail from the HQ Review Game Book next action and returns to Franchise HQ', async () => {
+    window.matchMedia = window.matchMedia ?? (() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+    render(<LeagueDashboard league={baseLeague} actions={{ getDashboardLeaders: vi.fn(() => Promise.resolve({ league: {}, team: {} })) }} busy={false} simulating={false} onAdvanceWeek={() => {}} />);
+
+    const nextAction = within(screen.getByTestId('hq-next-action'));
+    fireEvent.click(nextAction.getByRole('button', { name: /review game book/i }));
+
+    expect(await screen.findByTestId('game-book')).toBeTruthy();
+    expect(screen.getByTestId('game-book-final-score').textContent).toContain('CHI 23 - 20 DET');
+
+    fireEvent.click(screen.getByTestId('return-to-hq'));
+    expect(await screen.findByTestId('franchise-hq')).toBeTruthy();
+  });
+
   it('renders record, standing, and fallback copy when schedule is missing', () => {
     render(
       <FranchiseHQ

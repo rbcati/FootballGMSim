@@ -81,7 +81,7 @@ import {
   safeRound,
 } from "../utils/numberFormatting.js";
 import { deriveFranchisePressure } from "../utils/pressureModel.js";
-import { normalizeManagementDestination } from "../utils/managementScreenRouting.js";
+import { normalizeManagementDestination, parseGameBookDestination } from "../utils/managementScreenRouting.js";
 import { safeGetLeagueState, getSafePhaseContext, getSafeStandingsRows } from "../../state/selectors.js";
 import {
   SHELL_SECTIONS,
@@ -821,6 +821,12 @@ export default function LeagueDashboard({
               <FranchiseHQ
                 league={safeLeague}
                 onNavigate={(tab) => {
+                  const gameBookRoute = parseGameBookDestination(tab);
+                  if (gameBookRoute) {
+                    openGameDetail(gameBookRoute.gameId, "HQ");
+                    return;
+                  }
+
                   const destination = normalizeManagementDestination(tab);
                   if (destination.tradeView) {
                     setTradeInitialView(destination.tradeView);
