@@ -5,6 +5,7 @@ import { buildWeeklyLeagueRecap } from '../utils/weeklyLeagueRecap.js';
 import { buildWeeklyDecisionImpact } from '../utils/weeklyDecisionImpact.js';
 import { buildBoxScoreViewModel } from '../utils/boxScoreViewModel.js';
 import { getTopPerformers } from '../utils/gameBookHighlights.js';
+import { hasValidPlayerProfileId, openPlayerProfile } from '../utils/playerProfileNavigation.js';
 import {
   CompactInsightCard,
   EmptyState,
@@ -53,6 +54,24 @@ function ResultRow({ row, seasonId, onGameSelect, source = 'weekly_results_cente
       </div>
     </article>
   );
+}
+
+
+function TopPerformerCard({ title, performer, player, tone, onPlayerSelect, context }) {
+  if (hasValidPlayerProfileId(player?.playerId) && onPlayerSelect) {
+    return (
+      <button
+        type="button"
+        className="app-compact-insight app-compact-insight--button"
+        data-testid="weekly-results-top-performer-link"
+        onClick={() => openPlayerProfile(player.playerId, onPlayerSelect, { ...context, player, statLine: player?.stats })}
+      >
+        <span>{title}</span>
+        <strong>{performer}</strong>
+      </button>
+    );
+  }
+  return <CompactInsightCard title={title} subtitle={performer} tone={tone} />;
 }
 
 function formatRecord(team) {
@@ -131,7 +150,7 @@ function SpotlightCard({ row, seasonId, onGameSelect }) {
   );
 }
 
-export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect, onNavigate }) {
+export default function WeeklyResultsCenter({ league, initialWeek = null, onGameSelect, onNavigate, onPlayerSelect }) {
   const totalWeeks = Number(league?.schedule?.weeks?.length ?? 0);
   const resolvedWeek = useMemo(() => resolveDefaultResultsWeek(league?.schedule, { initialWeek, currentWeek: league?.week }), [initialWeek, league?.schedule, league?.week]);
   const [selectedWeek, setSelectedWeek] = useState(resolvedWeek);
@@ -241,8 +260,22 @@ export default function WeeklyResultsCenter({ league, initialWeek, onGameSelect,
             </div>
             <p className="app-game-center-card__scoreline">{userTeamResult.recap}</p>
             <div className="app-game-center-performers" aria-label="Top performers">
-              <CompactInsightCard title="Top offensive player" subtitle={topPerformers.offense} tone={topPerformers.hasOffense ? 'ok' : 'info'} />
-              <CompactInsightCard title="Top defensive player" subtitle={topPerformers.defense} tone={topPerformers.hasDefense ? 'ok' : 'info'} />
+              <TopPerformerCard
+                title="Top offensive player"
+                performer={topPerformers.offense}
+                player={topPerformers.offensePlayer}
+                tone={topPerformers.hasOffense ? 'ok' : 'info'}
+                onPlayerSelect={onPlayerSelect}
+                context={{ source: 'weekly-results', gameId: userResultPresentation?.resolvedGameId, week: userTeamResult.week, role: 'Top offensive player', returnTo: 'weekly-results' }}
+              />
+              <TopPerformerCard
+                title="Top defensive player"
+                performer={topPerformers.defense}
+                player={topPerformers.defensePlayer}
+                tone={topPerformers.hasDefense ? 'ok' : 'info'}
+                onPlayerSelect={onPlayerSelect}
+                context={{ source: 'weekly-results', gameId: userResultPresentation?.resolvedGameId, week: userTeamResult.week, role: 'Top defensive player', returnTo: 'weekly-results' }}
+              />
             </div>
             {userTeamResult?.prepImpact?.narrative ? (
               <CompactInsightCard

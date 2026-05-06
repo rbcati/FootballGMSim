@@ -1,6 +1,8 @@
+/** @vitest-environment jsdom */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { renderToString } from 'react-dom/server';
+import { fireEvent, render } from '@testing-library/react';
 import BoxScore, { PlayerButton } from './BoxScore.jsx';
 
 vi.mock('../hooks/useStableRouteRequest.js', () => ({ default: vi.fn(() => ({ data: null })) }));
@@ -34,6 +36,14 @@ describe('BoxScore game book rendering', () => {
     const onSelect = vi.fn();
     const element = PlayerButton({ player: { playerId: 55, name: 'Tester' }, onSelect });
     element.props.onClick();
-    expect(onSelect).toHaveBeenCalledWith(55);
+    expect(onSelect.mock.calls[0][0]).toBe(55);
+  });
+
+  it('top performers trigger player profile selection when ids are present', () => {
+    const onSelect = vi.fn();
+    const game = { gameId: 'g4', week: 2, homeId: 1, awayId: 2, homeScore: 28, awayScore: 17, quarterScores: { home: [7,7,7,7], away: [0,7,3,7] }, teamStats: { home: { passYards: 250 }, away: {} }, playerStats: { home: { 11: { name: 'Home QB', stats: { passAtt: 30, passComp: 20, passYd: 250, passTD: 3 } } }, away: {} } };
+    const { getByTestId } = render(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: game } }} onPlayerSelect={onSelect} embedded />);
+    fireEvent.click(getByTestId('game-book-top-performer-link'));
+    expect(onSelect.mock.calls[0][0]).toBe(11);
   });
 });

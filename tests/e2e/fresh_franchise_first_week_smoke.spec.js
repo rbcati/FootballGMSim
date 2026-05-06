@@ -58,6 +58,16 @@ test('fresh franchise first week smoke', async ({ page, context }) => {
   await expect(page.getByTestId('game-book-final-score')).toBeVisible({ timeout: SMOKE_TIMEOUT });
   await expect(page.getByTestId('game-book-decision-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
 
+  const gameBookPlayerLink = page.getByTestId('game-book-top-performer-link').first().or(page.getByTestId('game-book-player-link').first());
+  if (await gameBookPlayerLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+    await gameBookPlayerLink.click();
+    await expect(page.getByTestId('player-profile')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('player-profile-summary')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await expect(page.getByTestId('player-profile-game-impact')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+    await page.getByTestId('player-profile-return-to-game-book').click();
+    await expect(page.getByTestId('game-book')).toBeVisible({ timeout: SMOKE_TIMEOUT });
+  }
+
   await page.getByTestId('return-to-hq').click();
   if (!(await page.getByTestId('franchise-hq').isVisible({ timeout: 3000 }).catch(() => false))) {
     await page.getByRole('button', { name: /^Back to HQ$/i }).click();

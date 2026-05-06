@@ -4,6 +4,7 @@ import { buildBoxScoreViewModel } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
 import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getTopPerformers } from "../utils/gameBookHighlights.js";
+import { hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 
 const QUALITY_BADGE_CLASS = {
   "Full detail": "success",
@@ -18,10 +19,10 @@ export function TeamButton({ team, onSelect }) {
   return <button className="btn-link" onClick={() => onSelect(team.id)}>{team.abbr}</button>;
 }
 
-export function PlayerButton({ player, onSelect }) {
+export function PlayerButton({ player, onSelect, context }) {
   if (!player) return <span>—</span>;
-  if (!onSelect || player.playerId == null) return <span>{player.name ?? "Unknown"}</span>;
-  return <button className="btn-link" onClick={() => onSelect(player.playerId)}>{player.name ?? "Unknown"}</button>;
+  if (!onSelect || !hasValidPlayerProfileId(player.playerId)) return <span>{player.name ?? "Unknown"}</span>;
+  return <button type="button" className="btn-link" data-testid="game-book-player-link" onClick={() => openPlayerProfile(player.playerId, onSelect, { ...context, player, statLine: player?.stats })}>{player.name ?? "Unknown"}</button>;
 }
 
 const asNum = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
@@ -46,6 +47,21 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
   }
   const storyBullets = buildGameBookStory(vm);
   const topPerformers = getTopPerformers(vm);
+  const gameContextBase = {
+    source: "game-book",
+    gameId: vm.gameId ?? gameId,
+    week: vm.week,
+    seasonId: vm.season,
+    awayTeam: vm.awayTeam,
+    homeTeam: vm.homeTeam,
+  };
+  const openGameBookPlayer = (player, role) => openPlayerProfile(player?.playerId, onPlayerSelect, {
+    ...gameContextBase,
+    role,
+    player,
+    statLine: player?.stats,
+    returnTo: "game-book",
+  });
   const qHome = vm.quarterScores?.home ?? [];
   const qAway = vm.quarterScores?.away ?? [];
   const qCount = Math.max(qHome.length, qAway.length, 4);
@@ -81,7 +97,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
     const home = sortPlayers((vm.playerTables?.home ?? []).filter((p) => spec.include(p.stats ?? {})));
     if (!away.length && !home.length) return null;
     const rows = [[vm.awayTeam, away], [vm.homeTeam, home]];
-    return <section key={spec.title} className="bs-section"><h4>{spec.title}</h4><div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Team</th><th>Player</th>{spec.cols.map(([key, label]) => <th key={label}><button className="btn-link" onClick={() => setSortState((prev) => ({ ...prev, [spec.title]: { key, dir: prev?.[spec.title]?.key === key && prev?.[spec.title]?.dir === desc ? "asc" : desc } }))}>{label}</button></th>)}</tr></thead><tbody>{rows.map(([team, players]) => players.map((p) => <tr key={`${spec.title}-${team?.id}-${p.playerId}`}><td>{team?.abbr}</td><td><PlayerButton player={p} onSelect={onPlayerSelect} /></td>{spec.cols.map(([key, label]) => <td key={label}>{p.stats?.[key] ?? "—"}</td>)}</tr>))}</tbody></table></div></section>;
+    return <section key={spec.title} className="bs-section"><h4>{spec.title}</h4><div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Team</th><th>Player</th>{spec.cols.map(([key, label]) => <th key={label}><button className="btn-link" onClick={() => setSortState((prev) => ({ ...prev, [spec.title]: { key, dir: prev?.[spec.title]?.key === key && prev?.[spec.title]?.dir === desc ? "asc" : desc } }))}>{label}</button></th>)}</tr></thead><tbody>{rows.map(([team, players]) => players.map((p) => <tr key={`${spec.title}-${team?.id}-${p.playerId}`}><td>{team?.abbr}</td><td><PlayerButton player={p} onSelect={onPlayerSelect} context={{ ...gameContextBase, role: spec.title, returnTo: "game-book" }} /></td>{spec.cols.map(([key, label]) => <td key={label}>{p.stats?.[key] ?? "—"}</td>)}</tr>))}</tbody></table></div></section>;
   };
 
   return <div className={embedded ? "card" : "modal-content"}>
@@ -94,7 +110,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
       {vm.detailWarning ? <p>{vm.detailWarning}</p> : null}
     </section>
     <section className="bs-section" data-testid="game-book-decision-summary"><h4>Why this game was decided</h4>{storyBullets.length ? <ul>{storyBullets.map((b) => <li key={b}>{b}</li>)}</ul> : <p>No detailed team/player stats were recorded for this game.</p>}</section>
-    <section className="bs-section"><h4>Top performers</h4><div className="bs-leaders-grid"><article className="bs-leader-card"><span className="bs-leader-label">Offense</span><p className="bs-leader-name">{topPerformers.offense}</p></article><article className="bs-leader-card"><span className="bs-leader-label">Defense</span><p className="bs-leader-name">{topPerformers.defense}</p></article></div></section>
+    <section className="bs-section"><h4>Top performers</h4><div className="bs-leaders-grid"><article className="bs-leader-card"><span className="bs-leader-label">Offense</span>{topPerformers.offensePlayer && onPlayerSelect ? <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(topPerformers.offensePlayer, "Top offensive player")}>{topPerformers.offense}</button> : <p className="bs-leader-name">{topPerformers.offense}</p>}</article><article className="bs-leader-card"><span className="bs-leader-label">Defense</span>{topPerformers.defensePlayer && onPlayerSelect ? <button type="button" className="btn-link bs-leader-name" data-testid="game-book-top-performer-link" onClick={() => openGameBookPlayer(topPerformers.defensePlayer, "Top defensive player")}>{topPerformers.defense}</button> : <p className="bs-leader-name">{topPerformers.defense}</p>}</article></div></section>
     <section className="bs-section"><h4>Score by quarter</h4>{hasQuarter ? <div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Team</th>{headers.map((h) => <th key={h}>{h}</th>)}<th>Final</th></tr></thead><tbody><tr><td><TeamButton team={vm.awayTeam} onSelect={onTeamSelect} /></td>{headers.map((_, i) => <td key={`a-${i}`}>{qAway[i] ?? "—"}</td>)}<td>{vm.finalScore.away ?? "—"}</td></tr><tr><td><TeamButton team={vm.homeTeam} onSelect={onTeamSelect} /></td>{headers.map((_, i) => <td key={`h-${i}`}>{qHome[i] ?? "—"}</td>)}<td>{vm.finalScore.home ?? "—"}</td></tr></tbody></table></div> : <p>Quarter-by-quarter scoring was not recorded for this game.</p>}</section>
 
     <section className="bs-section"><h4>Team comparison</h4>{teamRows.length ? <div className="bs-table-wrap"><table className="box-score-table"><thead><tr><th>Stat</th><th>{vm.awayTeam.abbr}</th><th>{vm.homeTeam.abbr}</th></tr></thead><tbody>{teamRows.map(([label, a, h]) => <tr key={label}><td>{label}</td><td>{a ?? "—"}</td><td>{h ?? "—"}</td></tr>)}</tbody></table></div> : <p>Team totals were not recorded for this game.</p>}</section>
