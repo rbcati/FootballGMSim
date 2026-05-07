@@ -428,8 +428,8 @@ function averageOvr(players = []) {
   return Math.round(rows.reduce((sum, p) => sum + Number(p.ovr), 0) / rows.length);
 }
 
-function deriveTeamUnitRatings(teamId) {
-  const roster = cache.getPlayersByTeam(teamId);
+function deriveTeamUnitRatings(teamId, optionalRoster = null) {
+  const roster = optionalRoster ?? cache.getPlayersByTeam(teamId);
   const posBuckets = {
     QB: [], RB: [], WR: [], TE: [], OL: [],
     DL: [], LB: [], DB: [],
@@ -476,11 +476,23 @@ function deriveTeamUnitRatings(teamId) {
 function repairRosterAndTeamLinks({ reason = 'load' } = {}) {
   let repairedTeams = 0;
   const teams = cache.getAllTeams();
+  const allPlayers = cache.getAllPlayers();
+
+  // Create a player-team map in a single pass to avoid O(N*M) redundant iterations
+  const playerTeamMap = new Map();
+  for (const p of allPlayers) {
+    const tid = resolvePlayerTeamId(p);
+    if (tid != null) {
+      if (!playerTeamMap.has(tid)) playerTeamMap.set(tid, []);
+      playerTeamMap.get(tid).push(p);
+    }
+  }
+
   for (const team of teams) {
     const teamId = Number(team?.id);
     if (!Number.isFinite(teamId)) continue;
 
-    const rosterFromPool = cache.getPlayersByTeam(teamId);
+    let rosterFromPool = playerTeamMap.get(teamId) || [];
     const rosterIds = Array.isArray(team?.rosterIds) ? team.rosterIds : [];
     if (!rosterFromPool.length && rosterIds.length) {
       for (const pid of rosterIds) {
@@ -488,20 +500,23 @@ function repairRosterAndTeamLinks({ reason = 'load' } = {}) {
         if (!player) continue;
         if (resolvePlayerTeamId(player) !== teamId) cache.updatePlayer(player.id, { teamId });
       }
+      // If we repaired, refresh the roster for this team from the pool
+      rosterFromPool = cache.getPlayersByTeam(teamId);
+      playerTeamMap.set(teamId, rosterFromPool);
     }
 
-    const repairedRoster = cache.getPlayersByTeam(teamId);
+    const repairedRoster = rosterFromPool;
     const shouldRepair = (team?.roster ?? []).length === 0 && (Number(team?.rosterCount ?? 0) >= 53 || repairedRoster.length >= 53);
     if (shouldRepair || repairedRoster.length !== (team?.roster ?? []).length) {
       cache.updateTeam(teamId, {
         roster: repairedRoster,
         rosterIds: repairedRoster.map((p) => p.id),
         rosterCount: repairedRoster.length,
-        ...deriveTeamUnitRatings(teamId),
+        ...deriveTeamUnitRatings(teamId, repairedRoster),
       });
       repairedTeams += 1;
     } else {
-      cache.updateTeam(teamId, deriveTeamUnitRatings(teamId));
+      cache.updateTeam(teamId, deriveTeamUnitRatings(teamId, repairedRoster));
     }
   }
 
