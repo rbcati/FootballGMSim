@@ -2355,9 +2355,6 @@ class GameController {
             }
         });
 
-        // FIX: Menu Toggle (ZenGM Style) - Removed duplicate handler
-        // ui-interactions.js handles mobile menu toggle via .nav-toggle
-
         // Sound Toggle UI
         const navContainer = document.querySelector('.nav-toggle-container');
         if (navContainer && !document.getElementById('soundToggle')) {
