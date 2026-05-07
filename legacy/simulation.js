@@ -816,7 +816,9 @@ function startNewSeason() {
 
     // Fix Empty Array Bug: Ensure draft class exists
     if (!window.state.draftClass || window.state.draftClass.length === 0) {
-        if (typeof window.generateDraftClass === 'function') window.generateDraftClass(nextYear + 1);
+        if (typeof window.generateDraftClass === "function") {
+            window.state.draftClass = window.generateDraftClass(nextYear + 1);
+        }
     }
 
     // CPU Free Agency - simulate other teams signing free agents
