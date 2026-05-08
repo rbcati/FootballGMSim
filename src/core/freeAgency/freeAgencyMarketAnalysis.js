@@ -2,15 +2,24 @@ import { buildRosterBuildingAnalysis } from '../rosterBuildingAnalysis.js';
 
 const num = (v, fb = null) => (Number.isFinite(Number(v)) ? Number(v) : fb);
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
-const COST_KEYS = ['contractDemand.baseAnnual', 'contractDemand.annual', 'desiredContract.baseAnnual', 'desiredContract.annual', 'askingPrice', 'ask', 'contract.baseAnnual', 'baseAnnual'];
+const COST_KEYS = [
+  { key: 'contractDemand.baseAnnual', source: 'contractDemand' },
+  { key: 'contractDemand.annual', source: 'contractDemand' },
+  { key: 'desiredContract.baseAnnual', source: 'desiredContract' },
+  { key: 'desiredContract.annual', source: 'desiredContract' },
+  { key: 'askingPrice', source: 'ask' },
+  { key: 'ask', source: 'ask' },
+  { key: 'contract.baseAnnual', source: 'staleContract' },
+  { key: 'baseAnnual', source: 'unknown' },
+];
 
 const getPath = (obj, path) => path.split('.').reduce((acc, key) => (acc == null ? acc : acc[key]), obj);
-const getCost = (player) => {
-  for (const key of COST_KEYS) {
+const getCostInfo = (player) => {
+  for (const { key, source } of COST_KEYS) {
     const value = num(getPath(player, key));
-    if (value != null && value > 0) return value;
+    if (value != null && value > 0) return { value, source };
   }
-  return null;
+  return { value: null, source: 'unknown' };
 };
 
 export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgents = [], cap = {}, teamBuilder = null } = {}) {
@@ -41,7 +50,7 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
     const age = num(p?.age, null);
     const ovr = num(p?.ovr, 0);
     const potential = num(p?.potential, ovr);
-    const cost = getCost(p);
+    const { value: cost, source: costSource } = getCostInfo(p);
     const starter = starterByPos[p?.pos];
     const replacementDelta = starter ? ovr - num(starter?.ovr, 0) : null;
     const projectedCapRoomAfterSigning = cost != null && capRoom != null ? Number((capRoom - cost).toFixed(1)) : null;
@@ -120,6 +129,7 @@ export function buildFreeAgencyMarketAnalysis({ team = {}, roster = [], freeAgen
       schemeFit,
       baseAnnual: cost,
       estimatedCost: cost,
+      costSource,
       years: num(p?.contractDemand?.years ?? p?.desiredContract?.years ?? p?.years, null),
       currentTeamNeedLevel: needLevel,
       currentTeamNeedScore: needScore,

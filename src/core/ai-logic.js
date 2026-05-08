@@ -419,14 +419,23 @@ class AiLogic {
         // build a richer market analysis so AI can reason about fit, bargains,
         // and cap pressure instead of sorting purely by OVR.
         let marketByPos = null;
+        const demandByPlayerId = new Map();
         if (freeAgentsMap) {
             const flatFreeAgents = Object.values(freeAgentsMap).flat().filter(Boolean);
             if (flatFreeAgents.length > 0) {
                 const roster = cache.getPlayersByTeam(teamId);
+                const analyzedFreeAgents = flatFreeAgents.map((fa) => {
+                    const demand = calculateExtensionDemand(fa);
+                    if (demand) {
+                        demandByPlayerId.set(fa.id, demand);
+                        return { ...fa, contractDemand: demand };
+                    }
+                    return fa;
+                });
                 const analysis = buildFreeAgencyMarketAnalysis({
                     team,
                     roster,
-                    freeAgents: flatFreeAgents,
+                    freeAgents: analyzedFreeAgents,
                     cap: { capRoom: team.capRoom },
                 });
                 marketByPos = analysis?.marketRows?.reduce((acc, row) => {
@@ -454,7 +463,11 @@ class AiLogic {
         const getCandidatesForPos = (pos) => {
             if (marketByPos && marketByPos[pos]?.length) {
                 return marketByPos[pos]
-                    .filter(row => row.recommendation !== 'avoid' && row.capFit !== 'expensive')
+                    .filter(
+                        (row) =>
+                            row.recommendation !== 'avoid' &&
+                            (row.capFit !== 'expensive' || row.costSource === 'staleContract'),
+                    )
                     .map(row => row._player)
                     .filter(Boolean);
             }
@@ -480,7 +493,7 @@ class AiLogic {
                 if (fa.offers && fa.offers.find(o => o.teamId === teamId)) continue;
 
                 // Calculate Ask / Offer
-                const demand = calculateExtensionDemand(fa);
+                const demand = demandByPlayerId.get(fa.id) ?? calculateExtensionDemand(fa);
                 if (!demand) continue;
 
                 const capHit = demand.baseAnnual + (demand.signingBonus / demand.yearsTotal);

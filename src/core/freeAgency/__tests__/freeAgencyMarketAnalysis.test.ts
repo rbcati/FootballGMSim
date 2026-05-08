@@ -44,6 +44,7 @@ describe('buildFreeAgencyMarketAnalysis', () => {
     const res = buildFreeAgencyMarketAnalysis({ team: { capRoom: 20 }, roster, teamBuilder, freeAgents: [{ id: 12, name: 'FA QB', pos: 'QB', ovr: 78, age: 27, potential: 80, contractDemand: { baseAnnual: 7.6 } }] });
     expect(res.marketRows[0].projectedCapRoomAfterSigning).toBe(12.4);
     expect(res.marketRows[0].capImpactLabel).toContain('$12.4M');
+    expect(res.marketRows[0].costSource).toBe('contractDemand');
   });
 
   it('projected cap room is unknown when cost is missing', () => {
@@ -107,6 +108,27 @@ describe('buildFreeAgencyMarketAnalysis', () => {
     expect(typeof res.marketRows[0].sortKeys.fitScore).toBe('number');
     expect(typeof res.marketRows[0].sortKeys.recommendationRank).toBe('number');
     expect(res.marketRows[0].sortKeys.cost).toBeNull();
+  });
+
+  it('prefers contractDemand over stale contract for cost classification', () => {
+    const res = buildFreeAgencyMarketAnalysis({
+      team: { capRoom: 8 },
+      roster,
+      teamBuilder,
+      freeAgents: [{
+        id: 93,
+        name: 'Released Veteran',
+        pos: 'QB',
+        ovr: 74,
+        age: 31,
+        potential: 74,
+        contract: { baseAnnual: 30 },
+        contractDemand: { baseAnnual: 5 },
+      }],
+    });
+    expect(res.marketRows[0].baseAnnual).toBe(5);
+    expect(res.marketRows[0].costSource).toBe('contractDemand');
+    expect(res.marketRows[0].capFit).not.toBe('expensive');
   });
 
   it('low-risk young upside outranks old expensive low-fit in same position', () => {
