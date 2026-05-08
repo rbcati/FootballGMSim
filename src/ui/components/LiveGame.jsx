@@ -561,18 +561,18 @@ export default function LiveGame({
     setPlays((prev) => [...prev.slice(-59), entry]); // keep last 60 entries
 
     if (lowerText.includes("touchdown")) {
-      setOverlayEvent({ type: "touchdown", text: "TOUCHDOWN" });
+      setOverlayEvent({ type: "goal touchdown", text: "TOUCHDOWN" });
     } else if (lowerText.includes("field goal attempt... good")) {
-      setOverlayEvent({ type: "field-goal-made", text: "FIELD GOAL" });
+      setOverlayEvent({ type: "goal field-goal-made", text: "FIELD GOAL" });
     } else if (
       lowerText.includes("interception") ||
       lowerText.includes("fumble")
     ) {
-      setOverlayEvent({ type: "turnover", text: "TURNOVER" });
+      setOverlayEvent({ type: "save turnover", text: "TURNOVER" });
     } else if (lowerText.includes("sack")) {
-      setOverlayEvent({ type: "sack", text: "SACK" });
+      setOverlayEvent({ type: "save sack", text: "SACK" });
     } else if (lowerText.includes("safety")) {
-      setOverlayEvent({ type: "safety", text: "SAFETY" });
+      setOverlayEvent({ type: "save safety", text: "SAFETY" });
     } else if (lowerText.includes("deep pass complete")) {
       setOverlayEvent({ type: "big-play", text: "BIG PLAY" });
     } else {

@@ -947,7 +947,7 @@ function AppContent() {
   }
 
   return (
-    <div className={`app-shell ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" data-testid="app-shell-ready">
+    <div className={`app-shell view-enter ${isPostseason ? 'postseason' : ''} ${themeClass}`} key="league_dashboard" data-testid="app-shell-ready">
 
       {/* Phase-based Theming */}
       <style>{`
