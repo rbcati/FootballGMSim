@@ -2078,6 +2078,7 @@ export function simGameStats(home, away, options = {}) {
                             const sackYds = U.rand(3, 10);
                             if (rusher && qb) {
                                 _addStat(rusher, 'sacks');
+                                _addStat(qb, 'sacked', 1);
                                 addLog(`${_n(rusher)} sacks ${_n(qb)}! Loss of ${sackYds} yds.`, null, 'sack', rusher,
                                     { sackedQB: qb });
                             } else { addLog(`${defAbbr} sack! Loss of ${sackYds} yds.`); }
@@ -2258,6 +2259,7 @@ export function simGameStats(home, away, options = {}) {
                             const sackYds = U.rand(3, 8);
                             if (rusher && qb) {
                                 _addStat(rusher, 'sacks');
+                                _addStat(qb, 'sacked', 1);
                                 addLog(`${_n(rusher)} sacks ${_n(qb)}! Loss of ${sackYds} yds.`, null, 'sack', rusher,
                                     { sackedQB: qb });
                             } else { addLog(`${defAbbr} sack! Loss of ${sackYds} yds.`); }
@@ -2281,6 +2283,7 @@ export function simGameStats(home, away, options = {}) {
                         const retYds = U.rand(25, 98);
                         if (isInt && defPlayer && offQB) {
                             _addStat(defPlayer, 'ints'); _addStat(defPlayer, 'intTDs');
+                            _addStat(offQB, 'interceptions', 1);
                             addLog(`INTERCEPTION by ${_n(defPlayer)}! Picks off ${_n(offQB)} and takes it ${retYds} yards for a TOUCHDOWN!`,
                                 null, 'touchdown', defPlayer, { isTouchdown: true, tdType: 'int_return', intedQB: offQB });
                         } else if (defPlayer) {
@@ -2298,6 +2301,7 @@ export function simGameStats(home, away, options = {}) {
                             const db = _pickDB(_defGrp);
                             if (db && offQB) {
                                 _addStat(db, 'ints');
+                                _addStat(offQB, 'interceptions', 1);
                                 addLog(`INTERCEPTION by ${_n(db)}! Picks off ${_n(offQB)}. ${defAbbr} ball.`,
                                     null, 'interception', db, { intedQB: offQB });
                             } else { addLog(`INTERCEPTION! ${defAbbr} takes over.`, null, 'interception'); }
@@ -3026,7 +3030,16 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
                 const pStats = teamStats.players[pid] ?? teamStats.players[p.id];
                 if (pStats) {
                     initializePlayerStats(p);
-                    p.stats.game = { ...pStats };
+                    let rawGame = {};
+                    if (pStats.stats && typeof pStats.stats === 'object') {
+                        rawGame = { ...pStats.stats };
+                    } else {
+                        const {
+                            name: _n, pos: _p, teamId: _tid, playerId: _pid, stats: _s, ...rest
+                        } = pStats;
+                        rawGame = rest;
+                    }
+                    p.stats.game = normalizeGameStatsForBoxScore(rawGame);
 
                     if (isPlayoff) {
                         if (!p.stats.playoffs) p.stats.playoffs = {};
@@ -3080,8 +3093,8 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
     updateRivalries(home, away, homeScore, awayScore, isPlayoff);
 
     // 5. Create Result Object
-    const homeBoxScore = transformStatsForBoxScore(stats?.home?.players, home.roster);
-    const awayBoxScore = transformStatsForBoxScore(stats?.away?.players, away.roster);
+    const homeBoxScore = transformStatsForBoxScore(stats?.home?.players, home.roster, homeTeamId);
+    const awayBoxScore = transformStatsForBoxScore(stats?.away?.players, away.roster, awayTeamId);
     const teamStats = buildCanonicalTeamStats({
         home: homeBoxScore,
         away: awayBoxScore,
@@ -3207,37 +3220,41 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
 // Deprecated alias for backward compatibility until refactor complete
 export const finalizeGameResult = commitGameResult;
 
-function transformStatsForBoxScore(playerStatsMap, roster) {
+function transformStatsForBoxScore(playerStatsMap, roster, teamId = null) {
     if (!playerStatsMap) return {};
     const box = {};
-
-    // OPTIMIZATION: Create a map for fast roster lookups O(N) instead of O(N*M)
     const pids = Object.keys(playerStatsMap);
+    const rosterById = new Map((roster ?? []).map((player) => [String(player?.id), player]));
 
-    // Instead of looping all roster players, only lookup players that have stats
     for (let i = 0; i < pids.length; i++) {
         const pid = pids[i];
-        // We do have to search the array, but roster is small (53 elements)
-        // Alternatively we can use the map approach but without array checks if already map
-        // Given earlier benchmarks, ObjectKeys is taking time
-        // Let's optimize by just looping through the roster!
+        const p = rosterById.get(String(pid));
+        if (!p) continue;
 
-        let p = null;
-        for (let j = 0; j < roster.length; j++) {
-            if (String(roster[j].id) === pid) {
-                p = roster[j];
-                break;
-            }
+        const row = playerStatsMap[pid];
+        let rawStats = {};
+        let name = p.name;
+        let pos = p.pos;
+
+        if (row && typeof row === 'object' && row.stats && typeof row.stats === 'object' && !Array.isArray(row.stats)) {
+            rawStats = row.stats;
+            if (row.name != null) name = row.name;
+            if (row.pos != null) pos = row.pos;
+        } else if (row && typeof row === 'object') {
+            const { name: rn, pos: rp, teamId: _tid, playerId: _pid, ...rest } = row;
+            rawStats = rest;
+            if (rn != null) name = rn;
+            if (rp != null) pos = rp;
         }
 
-        if (p) {
-            const normalizedStats = normalizeGameStatsForBoxScore(playerStatsMap[pid]);
-            box[pid] = {
-                name: p.name,
-                pos: p.pos,
-                stats: normalizedStats
-            };
-        }
+        const normalizedStats = normalizeGameStatsForBoxScore(rawStats);
+        box[pid] = {
+            name,
+            pos,
+            playerId: p.id,
+            ...(teamId != null ? { teamId } : {}),
+            stats: normalizedStats,
+        };
     }
     return box;
 }
@@ -3573,7 +3590,7 @@ export function simulateBatch(games, options = {}) {
                             playerStats[String(player.id)] = {
                                 name: player.name,
                                 pos: player.pos,
-                                ...normalizedStats
+                                stats: normalizedStats,
                             };
                         }
                     }
@@ -3588,51 +3605,61 @@ export function simulateBatch(games, options = {}) {
             // -- Feats Check --
             const checkFeats = (teamStats, teamAbbr, oppAbbr) => {
                 const feats = [];
+                const num = (row, key) => {
+                    if (!row || typeof row !== 'object') return 0;
+                    const s = row.stats && typeof row.stats === 'object' ? row.stats : row;
+                    const v = s?.[key];
+                    const n = Number(v);
+                    return Number.isFinite(n) ? n : 0;
+                };
                 for (const [pid, p] of Object.entries(teamStats)) {
                     const featList = [];
+                    const row = p;
                     // Passing
-                    if (p.passYd >= 400 || p.passTD >= 5) {
+                    if (num(row, 'passYd') >= 400 || num(row, 'passTD') >= 5) {
                         const sub = [];
-                        if (p.passYd >= 400) sub.push(`${p.passYd} passing yards`);
-                        if (p.passTD >= 5) sub.push(`${p.passTD} passing TDs`);
+                        if (num(row, 'passYd') >= 400) sub.push(`${num(row, 'passYd')} passing yards`);
+                        if (num(row, 'passTD') >= 5) sub.push(`${num(row, 'passTD')} passing TDs`);
                         featList.push(sub.join(' and '));
                     }
                     // Rushing
-                    if (p.rushYd >= 150 || p.rushTD >= 3) {
+                    if (num(row, 'rushYd') >= 150 || num(row, 'rushTD') >= 3) {
                         const sub = [];
-                        if (p.rushYd >= 150) sub.push(`${p.rushYd} rushing yards`);
-                        if (p.rushTD >= 3) sub.push(`${p.rushTD} rushing TDs`);
+                        if (num(row, 'rushYd') >= 150) sub.push(`${num(row, 'rushYd')} rushing yards`);
+                        if (num(row, 'rushTD') >= 3) sub.push(`${num(row, 'rushTD')} rushing TDs`);
                         featList.push(sub.join(' and '));
                     }
                     // Receiving
-                    if (p.recYd >= 200 || p.receptions >= 12 || p.recTD >= 3) {
+                    if (num(row, 'recYd') >= 200 || num(row, 'receptions') >= 12 || num(row, 'recTD') >= 3) {
                         const sub = [];
-                        if (p.recYd >= 200) sub.push(`${p.recYd} receiving yards`);
-                        if (p.receptions >= 12) sub.push(`${p.receptions} receptions`);
-                        if (p.recTD >= 3) sub.push(`${p.recTD} receiving TDs`);
+                        if (num(row, 'recYd') >= 200) sub.push(`${num(row, 'recYd')} receiving yards`);
+                        if (num(row, 'receptions') >= 12) sub.push(`${num(row, 'receptions')} receptions`);
+                        if (num(row, 'recTD') >= 3) sub.push(`${num(row, 'recTD')} receiving TDs`);
                         featList.push(sub.join(', '));
                     }
                     // Defense
-                    if (p.sacks >= 3.0 || p.interceptions >= 2 || p.defTDs > 0) {
+                    if (num(row, 'sacks') >= 3.0 || num(row, 'interceptions') >= 2 || num(row, 'defTD') > 0 || num(row, 'defTDs') > 0) {
                         const sub = [];
-                        if (p.sacks >= 3.0) sub.push(`${p.sacks} sacks`);
-                        if (p.interceptions >= 2) sub.push(`${p.interceptions} interceptions`);
-                        if (p.defTDs > 0) sub.push(`${p.defTDs} defensive TDs`);
+                        if (num(row, 'sacks') >= 3.0) sub.push(`${num(row, 'sacks')} sacks`);
+                        if (num(row, 'interceptions') >= 2) sub.push(`${num(row, 'interceptions')} interceptions`);
+                        if (num(row, 'defTD') > 0 || num(row, 'defTDs') > 0) sub.push(`${num(row, 'defTD') || num(row, 'defTDs')} defensive TDs`);
                         featList.push(sub.join(' and '));
                     }
                     // Special Teams
-                    if (p.longestFG >= 55) {
-                        featList.push(`a ${p.longestFG}-yard field goal`);
+                    if (num(row, 'longestFG') >= 55) {
+                        featList.push(`a ${num(row, 'longestFG')}-yard field goal`);
                     }
-                    if (p.returnTDs > 0) {
-                        featList.push(`a return TD`);
+                    if (num(row, 'returnTD') > 0 || num(row, 'returnTDs') > 0) {
+                        featList.push('a return TD');
                     }
 
                     if (featList.length > 0) {
+                        const displayName = row?.name ?? 'Unknown';
+                        const displayPos = row?.pos ?? '';
                         feats.push({
                             playerId: pid,
-                            name: p.name,
-                            pos: p.pos,
+                            name: displayName,
+                            pos: displayPos,
                             teamAbbr: teamAbbr,
                             opponentAbbr: oppAbbr,
                             featDescription: featList.join(', '),
@@ -3652,6 +3679,7 @@ export function simulateBatch(games, options = {}) {
 
             // Finalize Game Result via Commit
             const gameData = {
+                gameId: pair.gameId ?? pair.id ?? null,
                 homeTeamId: (home.id !== undefined) ? home.id : pair.home,
                 awayTeamId: (away.id !== undefined) ? away.id : pair.away,
                 homeScore: sH,

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyResult,
   calculateMomentumSwing,
+  calculateQuarterbackRating,
   commitGameResult,
   decideLateGameSequence,
   getSimulationSpeedDelay,
@@ -165,7 +166,8 @@ describe('commitGameResult archive shape', () => {
       quarterScores: { home: [7, 3, 7, 3], away: [0, 7, 3, 3] },
     }, { persist: false });
 
-    expect(result.playerStats.home.qb1.teamId).toBeUndefined();
+    expect(result.playerStats.home.qb1.teamId).toBe(1);
+    expect(result.playerStats.home.qb1.playerId).toBe('qb1');
     expect(result.playerStats.home.qb1.stats.passerRating).toBeGreaterThan(0);
     expect(result.playerStats.home.qb1.stats.sacked).toBe(3);
     expect(result.playerStats.home.k1.stats.fieldGoalsMade).toBe(2);
@@ -174,6 +176,42 @@ describe('commitGameResult archive shape', () => {
     expect(result.teamStats.home.turnovers).toBe(3);
     expect(result.teamStats.home.sacksAllowed).toBe(3);
     expect(result.teamStats.away.sacks).toBe(3);
+
+    const homeQb = result.boxScore.home.qb1;
+    expect(homeQb.stats.passAtt).toBe(28);
+    expect(homeQb.stats.receptions).toBeUndefined();
+    const awayEdge = result.boxScore.away.edge2;
+    expect(awayEdge.stats.tfl).toBe(2);
+    expect(awayEdge.stats.sacks).toBe(3);
+  });
+});
+
+describe('calculateQuarterbackRating', () => {
+  it('returns 0 when there are no pass attempts', () => {
+    expect(calculateQuarterbackRating({ completions: 0, attempts: 0, yards: 0, touchdowns: 0, interceptions: 0 })).toBe(0);
+  });
+
+  it('handles zero passing touchdowns and multiple interceptions without throwing', () => {
+    const rating = calculateQuarterbackRating({
+      completions: 20,
+      attempts: 40,
+      yards: 180,
+      touchdowns: 0,
+      interceptions: 3,
+    });
+    expect(Number.isFinite(rating)).toBe(true);
+    expect(rating).toBeLessThan(80);
+  });
+
+  it('returns an elevated rating for efficient high-TD games', () => {
+    const rating = calculateQuarterbackRating({
+      completions: 26,
+      attempts: 32,
+      yards: 320,
+      touchdowns: 4,
+      interceptions: 0,
+    });
+    expect(rating).toBeGreaterThan(110);
   });
 });
 

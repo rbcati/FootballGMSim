@@ -43,16 +43,39 @@ describe('BoxScore game book rendering', () => {
 
   it('player buttons trigger selection handlers when ids are present', () => {
     const onSelect = vi.fn();
-    const element = PlayerButton({ player: { playerId: 55, name: 'Tester' }, onSelect });
-    element.props.onClick();
+    const { container } = render(<PlayerButton player={{ playerId: 55, name: 'Tester' }} onSelect={onSelect} context={{ source: 'test' }} />);
+    fireEvent.click(container.querySelector('button'));
     expect(onSelect.mock.calls[0][0]).toBe(55);
   });
 
   it('top performers trigger player profile selection when ids are present', () => {
     const onSelect = vi.fn();
     const game = { gameId: 'g4', week: 2, homeId: 1, awayId: 2, homeScore: 28, awayScore: 17, quarterScores: { home: [7,7,7,7], away: [0,7,3,7] }, teamStats: { home: { passYards: 250 }, away: {} }, playerStats: { home: { 11: { name: 'Home QB', stats: { passAtt: 30, passComp: 20, passYd: 250, passTD: 3 } } }, away: {} } };
-    const { getByTestId } = render(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: game } }} onPlayerSelect={onSelect} embedded />);
-    fireEvent.click(getByTestId('game-book-top-performer-link'));
+    const { getAllByTestId } = render(<BoxScore gameId="g4" league={{ ...baseLeague, gameById: { g4: game } }} onPlayerSelect={onSelect} embedded />);
+    fireEvent.click(getAllByTestId('game-book-top-performer-link')[0]);
     expect(onSelect.mock.calls[0][0]).toBe(11);
+  });
+
+  it('renders Defense and scoring summary rows when detailed stats exist', () => {
+    const game = {
+      homeId: 1,
+      awayId: 2,
+      homeScore: 21,
+      awayScore: 17,
+      quarterScores: { home: [7, 7, 7, 0], away: [3, 7, 0, 7] },
+      teamStats: { home: { passYards: 201, sacks: 3 }, away: { passYards: 230 } },
+      scoringSummary: [
+        { quarter: 1, time: '8:12', teamAbbr: 'BUF', type: 'TD', description: '1-yard run', scoreAfter: { home: 0, away: 7 } },
+      ],
+      playerStats: {
+        home: { 99: { name: 'DE Star', stats: { tackles: 6, sacks: 2, tfl: 1, interceptions: 0, passesDefended: 2 } } },
+        away: { 12: { name: 'Away QB', stats: { passAtt: 22, passComp: 14, passYd: 180, passTD: 1, interceptions: 2, sacked: 3, passerRating: 72.5 } } },
+      },
+    };
+    const { container, getByTestId } = render(<BoxScore gameId="g-def" league={{ ...baseLeague, teams: [{ id: 1, abbr: 'KC' }, { id: 2, abbr: 'BUF' }], gameById: { 'g-def': game } }} embedded />);
+    expect(getByTestId('game-book-table-defense')).toBeTruthy();
+    const scoringBlock = container.querySelector('[data-testid="game-book-scoring-summary"]');
+    expect(scoringBlock?.textContent).toContain('8:12');
+    expect(scoringBlock?.textContent).toContain('7-0');
   });
 });

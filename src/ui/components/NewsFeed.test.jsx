@@ -28,8 +28,8 @@ describe('NewsFeed', () => {
       />,
     );
 
-    expect(html).toContain('News Desk');
-    expect(html).toContain('Desk View');
+    expect(html).toContain('Weekly Intelligence');
+    expect(html).toContain('News &amp; Injuries');
     expect(html).toContain('Featured Lead Story');
     expect(html).toContain('Open game');
     expect(html).toContain('Open team');
