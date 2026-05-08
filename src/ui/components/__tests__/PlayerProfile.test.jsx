@@ -74,6 +74,61 @@ describe('PlayerProfile', () => {
     expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('Game logs will appear after this player records tracked stats.');
   });
 
+  it('renders a game log row when completed-game stats exist', () => {
+    const leagueWithGame = {
+      ...league,
+      schedule: {
+        weeks: [
+          {
+            week: 1,
+            games: [
+              {
+                played: true,
+                home: 1,
+                away: 2,
+                homeScore: 24,
+                awayScore: 17,
+                playerStats: {
+                  home: {
+                    11: {
+                      stats: {
+                        passComp: 18,
+                        passAtt: 27,
+                        passYd: 245,
+                        passTD: 2,
+                        interceptions: 1,
+                      },
+                    },
+                  },
+                  away: {},
+                },
+              },
+            ],
+          },
+        ],
+      },
+      teamById: {
+        1: { id: 1, abbr: 'DAL' },
+        2: { id: 2, abbr: 'NYG' },
+      },
+    };
+
+    render(
+      <PlayerProfile
+        playerId={11}
+        onClose={vi.fn()}
+        actions={actions}
+        teams={leagueWithGame.teams}
+        league={leagueWithGame}
+      />,
+    );
+
+    // Navigate to Game Log tab
+    fireEvent.click(screen.getByRole('button', { name: 'Game Log' }));
+    expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('W1');
+    expect(screen.getByTestId('player-profile-game-logs').textContent).toContain('DAL');
+  });
+
   it('return buttons navigate to Game Book and HQ', () => {
     const onClose = vi.fn();
     const onOpenBoxScore = vi.fn();

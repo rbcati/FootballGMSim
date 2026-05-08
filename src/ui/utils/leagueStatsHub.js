@@ -3,8 +3,6 @@ const NUM = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const playerCategories = ["passing", "rushing", "receiving", "defense", "kicking"];
-
 const sortDesc = (rows, key) => [...rows].sort((a, b) => NUM(b[key]) - NUM(a[key]));
 
 const pick = (obj = {}, keys = []) => {
@@ -35,6 +33,16 @@ const withDerived = (row) => ({
     : 0,
 });
 
+/**
+ * Normalize a single season stat line for a player.
+ *
+ * This intentionally accepts either:
+ * - full player objects with nested seasonStats/stats, or
+ * - already-normalized rows that may contain these keys at top-level.
+ *
+ * That lets us reuse this helper for both roster season totals and
+ * completed-game aggregates without duplicating mappings.
+ */
 function normalizeSeasonRow(player, team) {
   const s = player?.seasonStats ?? player?.stats ?? {};
   return withDerived({
@@ -74,7 +82,9 @@ function normalizeSeasonRow(player, team) {
   });
 }
 
-function normalizePlayerStats(stats = {}) { return normalizeSeasonRow({ seasonStats: stats }, {}); }
+function normalizePlayerStats(stats = {}) {
+  return normalizeSeasonRow({ seasonStats: stats }, {});
+}
 
 function normalizeTeamStatsRow(teamStats = {}) {
   const passYds = NUM(pick(teamStats, ["passYards", "passYds", "passingYards", "passYd"]));
@@ -99,6 +109,46 @@ function normalizeTeamStatsRow(teamStats = {}) {
     firstDowns: NUM(pick(teamStats, ["firstDowns"])),
     timeOfPossession: pickDefined(teamStats, ["timeOfPossession"]),
   };
+}
+
+function extractCompletedGames(league = {}) {
+  const out = [];
+
+  // Legacy shape: league.schedule is already an array of games.
+  if (Array.isArray(league?.schedule)) {
+    for (const game of league.schedule) {
+      if (!game) continue;
+      out.push(game);
+    }
+  }
+
+  // New shape: league.schedule.weeks[week].games[*]
+  if (Array.isArray(league?.schedule?.weeks)) {
+    for (const weekRow of league.schedule.weeks) {
+      const weekNumber = Number(weekRow?.week);
+      for (const game of weekRow?.games ?? []) {
+        if (!game) continue;
+        // Attach week metadata for downstream consumers, without mutating
+        out.push({ ...game, week: game.week ?? weekNumber });
+      }
+    }
+  }
+
+  // De-dupe by a stable game key so schedule arrays and week blocks
+  // cannot double-count the same completed game.
+  const seen = new Set();
+  const unique = [];
+  for (const game of out) {
+    const homeId = Number(game?.homeId ?? game?.home);
+    const awayId = Number(game?.awayId ?? game?.away);
+    const week = Number(game?.week ?? 0);
+    const key = String(game?.id ?? game?.gameId ?? `w${week}_${homeId || "h"}_${awayId || "a"}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(game);
+  }
+
+  return unique;
 }
 
 function aggregateGamePlayers(games, teamsById) {
@@ -131,10 +181,26 @@ function aggregateGamePlayers(games, teamsById) {
   return { rows: [...byPlayer.values()], missingDetail };
 }
 
-function aggregateTeams(league = {}, teamsById) {
-  const games = Array.isArray(league?.schedule) ? league.schedule : [];
+function aggregateTeams(games, teamsById) {
   const teamAgg = new Map();
-  const ensure = (id) => teamAgg.get(id) ?? teamAgg.set(id, { teamId: id, team: teamsById.get(id)?.abbr ?? teamsById.get(id)?.name ?? String(id), g: 0, pf: 0, pa: 0, yds: 0, ydsAllowed: 0, passYds: 0, rushYds: 0, turnovers: 0, sacks: 0, takeaways: 0, penalties: 0, penaltyYards: 0, columnAvailability: {} }).get(id);
+  const ensure = (id) => teamAgg.get(id) ?? teamAgg.set(id, {
+    teamId: id,
+    team: teamsById.get(id)?.abbr ?? teamsById.get(id)?.name ?? String(id),
+    g: 0,
+    pf: 0,
+    pa: 0,
+    yds: 0,
+    ydsAllowed: 0,
+    passYds: 0,
+    rushYds: 0,
+    turnovers: 0,
+    sacks: 0,
+    sacksAllowed: 0,
+    takeaways: 0,
+    penalties: 0,
+    penaltyYards: 0,
+    columnAvailability: {},
+  }).get(id);
   let withTeamStats = 0;
   let withScores = 0;
   for (const game of games) {
@@ -155,8 +221,27 @@ function aggregateTeams(league = {}, teamsById) {
       withTeamStats += 1;
       const hsx = normalizeTeamStatsRow(ts.home ?? {});
       const asx = normalizeTeamStatsRow(ts.away ?? {});
-      h.yds += hsx.totalYards; h.passYds += hsx.passYards; h.rushYds += hsx.rushYards; h.ydsAllowed += hsx.yardsAllowed; h.turnovers += hsx.giveaways; h.sacks += hsx.sacks; h.takeaways += hsx.takeaways; h.penalties += hsx.penalties; h.penaltyYards += hsx.penaltyYards;
-      a.yds += asx.totalYards; a.passYds += asx.passYards; a.rushYds += asx.rushYards; a.ydsAllowed += asx.yardsAllowed; a.turnovers += asx.giveaways; a.sacks += asx.sacks; a.takeaways += asx.takeaways; a.penalties += asx.penalties; a.penaltyYards += asx.penaltyYards;
+      h.yds += hsx.totalYards;
+      h.passYds += hsx.passYards;
+      h.rushYds += hsx.rushYards;
+      h.ydsAllowed += hsx.yardsAllowed;
+      h.turnovers += hsx.giveaways;
+      h.sacks += hsx.sacks;
+      h.sacksAllowed += hsx.sacksAllowed;
+      h.takeaways += hsx.takeaways;
+      h.penalties += hsx.penalties;
+      h.penaltyYards += hsx.penaltyYards;
+
+      a.yds += asx.totalYards;
+      a.passYds += asx.passYards;
+      a.rushYds += asx.rushYards;
+      a.ydsAllowed += asx.yardsAllowed;
+      a.turnovers += asx.giveaways;
+      a.sacks += asx.sacks;
+      a.sacksAllowed += asx.sacksAllowed;
+      a.takeaways += asx.takeaways;
+      a.penalties += asx.penalties;
+      a.penaltyYards += asx.penaltyYards;
       Object.keys(h.columnAvailability).forEach((k) => k);
       if (hsx.totalYards > 0 || asx.totalYards > 0) { h.columnAvailability.yds = true; a.columnAvailability.yds = true; }
       if (hsx.yardsAllowed > 0 || asx.yardsAllowed > 0) { h.columnAvailability.ydsAllowed = true; a.columnAvailability.ydsAllowed = true; }
@@ -164,6 +249,7 @@ function aggregateTeams(league = {}, teamsById) {
       if (hsx.rushYards > 0 || asx.rushYards > 0) { h.columnAvailability.rushYds = true; a.columnAvailability.rushYds = true; }
       if (hsx.giveaways > 0 || asx.giveaways > 0) { h.columnAvailability.turnovers = true; a.columnAvailability.turnovers = true; }
       if (hsx.sacks > 0 || asx.sacks > 0) { h.columnAvailability.sacks = true; a.columnAvailability.sacks = true; }
+      if (hsx.sacksAllowed > 0 || asx.sacksAllowed > 0) { h.columnAvailability.sacksAllowed = true; a.columnAvailability.sacksAllowed = true; }
       if (hsx.takeaways > 0 || asx.takeaways > 0) { h.columnAvailability.takeaways = true; a.columnAvailability.takeaways = true; }
       if (hsx.penalties > 0 || asx.penalties > 0) { h.columnAvailability.penalties = true; a.columnAvailability.penalties = true; }
       if (hsx.penaltyYards > 0 || asx.penaltyYards > 0) { h.columnAvailability.penaltyYards = true; a.columnAvailability.penaltyYards = true; }
@@ -171,7 +257,21 @@ function aggregateTeams(league = {}, teamsById) {
   }
   const rows = [...teamAgg.values()].map((r) => ({ ...r, ppg: safeRate(r.pf, r.g), ppgAllowed: safeRate(r.pa, r.g), turnoverMargin: r.takeaways - r.turnovers }));
   const statSource = rows.length === 0 ? "unavailable" : withTeamStats > 0 ? (withScores > withTeamStats ? "partial" : "gameTeamStats") : (withScores > 0 ? "scoreOnly" : "unavailable");
-  const availableColumns = ["ppg", "ppgAllowed", "yds", "ydsAllowed", "passYds", "rushYds", "turnovers", "sacks", "takeaways", "penalties", "penaltyYards", "turnoverMargin"].reduce((acc, k) => {
+  const availableColumns = [
+    "ppg",
+    "ppgAllowed",
+    "yds",
+    "ydsAllowed",
+    "passYds",
+    "rushYds",
+    "turnovers",
+    "sacks",
+    "sacksAllowed",
+    "takeaways",
+    "penalties",
+    "penaltyYards",
+    "turnoverMargin",
+  ].reduce((acc, k) => {
     acc[k] = rows.some((r) => NUM(r[k]) > 0 || ["ppg", "ppgAllowed"].includes(k));
     return acc;
   }, {});
@@ -180,7 +280,7 @@ function aggregateTeams(league = {}, teamsById) {
 
 export function buildLeagueStatsHubModel(league = {}) {
   const teams = Array.isArray(league?.teams) ? league.teams : [];
-  const games = Array.isArray(league?.schedule) ? league.schedule : [];
+  const games = extractCompletedGames(league);
   const teamsById = new Map(teams.map((t) => [Number(t?.id), t]));
   const seasonRows = teams.flatMap((team) => (team?.roster ?? []).map((p) => normalizeSeasonRow(p, team))).filter((p) => Object.values(p).some((v) => typeof v === 'number' && v > 0));
   const gameAgg = aggregateGamePlayers(games, teamsById);
@@ -199,7 +299,7 @@ export function buildLeagueStatsHubModel(league = {}) {
     kicking: sortDesc(baseRows.filter((r) => r.fga > 0 || r.xpa > 0 || r.fgm > 0), "pts"),
   };
 
-  const teamAgg = aggregateTeams(league, teamsById);
+  const teamAgg = aggregateTeams(games, teamsById);
   const teamRankings = {
     offense: [...teamAgg.rows].sort((a,b)=> NUM(b.ppg)-NUM(a.ppg) || NUM(b.yds)-NUM(a.yds)).map((r,i)=>({...r, rank:i+1})),
     defense: [...teamAgg.rows].sort((a,b)=> NUM(a.ppgAllowed)-NUM(b.ppgAllowed) || NUM(a.ydsAllowed)-NUM(b.ydsAllowed)).map((r,i)=>({...r, rank:i+1})),

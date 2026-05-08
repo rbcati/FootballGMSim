@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import EmptyState from "./EmptyState.jsx";
 import { getSafeLeagueLeaderCategories } from "../../state/selectors.js";
+import { buildLeagueStatsHubModel } from "../utils/leagueStatsHub.js";
 
-const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions"];
+const TABS = ["Passing", "Rushing", "Receiving", "Tackles", "Sacks", "Interceptions", "Kicking"];
 
 const CATEGORY_CONFIG = {
   Passing: {
@@ -62,6 +63,18 @@ const CATEGORY_CONFIG = {
     getPrimary: (player) => stat(player, ["interceptions", "ints"]),
     getSecondary: (player) => `${displayNumber(stat(player, ["passesDefended"]))} / ${displayNumber(stat(player, ["tackles", "totalTackles"]))}`,
   },
+  Kicking: {
+    primaryLabel: "FGM",
+    secondaryLabel: "FG% / Pts",
+    getPrimary: (player) => stat(player, ["fgm", "fgMade", "fieldGoalsMade"]),
+    getSecondary: (player) => {
+      const made = stat(player, ["fgm", "fgMade", "fieldGoalsMade"]);
+      const att = stat(player, ["fga", "fgAtt", "fieldGoalsAttempted"]);
+      const pts = stat(player, ["kickingPoints", "points", "pts"]);
+      const pct = att > 0 ? (made / att) * 100 : 0;
+      return `${displayNumber(pct, 1, "%")} / ${displayNumber(pts)}`;
+    },
+  },
 };
 
 function stat(player, keys) {
@@ -95,6 +108,7 @@ const API_TAB_MAP = Object.freeze({
   Tackles: { category: "defense", primaryKey: "tackles", secondaryKey: "sacks" },
   Sacks: { category: "defense", primaryKey: "sacks", secondaryKey: "pressures" },
   Interceptions: { category: "defense", primaryKey: "interceptions", secondaryKey: "passesDefended" },
+  // Kicking leaders currently come from local aggregation only.
 });
 
 export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavigate }) {
@@ -125,18 +139,7 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
     return () => { alive = false; };
   }, [actions]);
 
-  const allPlayers = useMemo(
-    () =>
-      teams.flatMap((team) =>
-        (Array.isArray(team?.roster) ? team.roster : []).map((p) => ({
-          ...p,
-          teamName: team?.name ?? "—",
-          teamId: team?.id ?? null,
-          isUserTeam: team?.isUserTeam ?? Number(team?.id) === Number(league?.userTeamId),
-        })),
-      ),
-    [teams, league?.userTeamId],
-  );
+  const model = useMemo(() => buildLeagueStatsHubModel(league ?? {}), [league]);
 
   const remoteCategories = leaderPayload?.categories;
   const rows = useMemo(() => {
@@ -165,15 +168,34 @@ export default function LeagueLeaders({ league, actions, onPlayerSelect, onNavig
     }
 
     const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
-    return allPlayers
-      .map((player) => ({
-        player,
-        primary: config.getPrimary(player) ?? 0,
-        secondary: config.getSecondary(player),
+    const bucketKey =
+      activeTab === "Passing"
+        ? "passing"
+        : activeTab === "Rushing"
+        ? "rushing"
+        : activeTab === "Receiving"
+        ? "receiving"
+        : activeTab === "Tackles" || activeTab === "Sacks" || activeTab === "Interceptions"
+        ? "defense"
+        : "kicking";
+
+    const sourceRows = model.playerTables?.[bucketKey] ?? [];
+    return sourceRows
+      .map((row) => ({
+        player: {
+          ...row,
+          id: row.playerId,
+          name: row.name,
+          teamName: row.team,
+          teamId: row.teamId,
+          isUserTeam: Number(row.teamId) === Number(league?.userTeamId),
+        },
+        primary: config.getPrimary(row) ?? 0,
+        secondary: config.getSecondary(row),
       }))
       .sort((a, b) => (b.primary ?? 0) - (a.primary ?? 0))
       .slice(0, 10);
-  }, [allPlayers, activeTab, league?.userTeamId, remoteCategories]);
+  }, [activeTab, league?.userTeamId, model.playerTables, remoteCategories]);
 
   const config = CATEGORY_CONFIG[activeTab] ?? CATEGORY_CONFIG.Passing;
   const sourceLabel = leaderPayload?.source === "last_completed_regular_season"
