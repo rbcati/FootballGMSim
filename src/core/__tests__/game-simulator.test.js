@@ -175,8 +175,11 @@ describe('commitGameResult archive shape', () => {
     expect(result.teamStats.home.passYards).toBe(220);
     expect(result.teamStats.home.turnovers).toBe(3);
     expect(result.teamStats.home.sacksAllowed).toBe(3);
-    expect(result.teamStats.away.sacks).toBe(3);
-
+    expect(result.resultSchemaVersion).toBe(1);
+    expect(result.winnerTeamId).toBe(1);
+    expect(Array.isArray(result.gameNarrative)).toBe(true);
+    expect(result.gameNarrative.length).toBeGreaterThan(0);
+    expect(result.topPerformers?.offenseLabel || result.topPerformers?.offense).toBeTruthy();
     const homeQb = result.boxScore.home.qb1;
     expect(homeQb.stats.passAtt).toBe(28);
     expect(homeQb.stats.receptions).toBeUndefined();

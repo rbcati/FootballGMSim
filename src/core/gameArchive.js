@@ -11,6 +11,16 @@ const asNumberOrNull = (value) => {
   return Number.isFinite(n) ? n : null;
 };
 
+function inferWinnerTeamId(rawGame, homeId, awayId) {
+  if (rawGame?.winnerTeamId != null) return toTeamId(rawGame.winnerTeamId);
+  const h = asNumberOrNull(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home);
+  const a = asNumberOrNull(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away);
+  if (h == null || a == null) return null;
+  if (h > a) return homeId;
+  if (a > h) return awayId;
+  return null;
+}
+
 const hasValues = (obj) => Boolean(obj && typeof obj === 'object' && Object.keys(obj).length > 0);
 
 function normalizeQuarterScores(input) {
@@ -168,6 +178,11 @@ export function normalizeArchivedGamePayload(rawGame) {
     phase: rawGame?.phase ?? null,
     homeId,
     awayId,
+    winnerTeamId: inferWinnerTeamId(rawGame, homeId, awayId),
+    topPerformers: rawGame?.topPerformers ?? null,
+    gameNarrative: Array.isArray(rawGame?.gameNarrative) ? rawGame.gameNarrative : null,
+    resultSchemaVersion: rawGame?.resultSchemaVersion ?? null,
+    createdAt: typeof rawGame?.createdAt === 'string' ? rawGame.createdAt : null,
     homeScore: asNumberOrNull(rawGame?.homeScore ?? rawGame?.scoreHome ?? rawGame?.score?.home),
     awayScore: asNumberOrNull(rawGame?.awayScore ?? rawGame?.scoreAway ?? rawGame?.score?.away),
     quarterScores: normalizeQuarterScores(rawGame?.quarterScores ?? rawGame?.linescore),

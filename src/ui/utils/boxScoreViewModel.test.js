@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { buildBoxScoreViewModel } from './boxScoreViewModel.js';
-import { buildGameBookStory } from './gameBookStory.js';
 
 describe('buildBoxScoreViewModel', () => {
   it('classifies full detail when major sections exist', () => {
@@ -12,13 +11,13 @@ describe('buildBoxScoreViewModel', () => {
   it('classifies partial detail warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 10, awayScore: 7, teamStats: { home: { passYards: 100 }, away: {} } } });
     expect(vm.archiveQuality).toBe('Partial detail');
-    expect(vm.detailWarning).toContain('Partial archive');
+    expect(vm.detailWarning).toContain('Some Game Book sections are missing');
   });
 
   it('classifies score only data warning copy', () => {
     const vm = buildBoxScoreViewModel({ game: { played: true, homeScore: 3, awayScore: 0 } });
     expect(vm.archiveQuality).toBe('Score only');
-    expect(vm.detailWarning).toContain('Detailed box score data');
+    expect(vm.detailWarning).toContain('Older saves');
   });
 
   it('classifies missing detail when score unavailable', () => {
@@ -28,8 +27,18 @@ describe('buildBoxScoreViewModel', () => {
 
   it('builds factual game story bullets from available data only', () => {
     const vm = buildBoxScoreViewModel({ game: { homeId: 1, awayId: 2, homeScore: 17, awayScore: 20, teamStats: { home: { turnovers: 2, totalYards: 290 }, away: { turnovers: 0, totalYards: 350 } }, playerStats: { away: { 1: { name: 'A QB', stats: { passYd: 294, passTD: 3 } } }, home: {} } } });
-    const story = buildGameBookStory(vm).join(' ');
+    const story = (vm.storyBullets ?? []).join(' ');
     expect(story).toContain('turnover battle');
     expect(story).toContain('294 passing yards');
+  });
+
+  it('preserves persisted gameNarrative over recomputation when present', () => {
+    const vm = buildBoxScoreViewModel({ game: {
+      homeId: 1, awayId: 2, homeScore: 10, awayScore: 7,
+      teamStats: { home: {}, away: {} },
+      playerStats: { home: {}, away: {} },
+      gameNarrative: ['Custom stored headline from commit time.'],
+    } });
+    expect(vm.storyBullets).toEqual(['Custom stored headline from commit time.']);
   });
 });

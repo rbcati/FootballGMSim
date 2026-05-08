@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import { EmptyState } from "./ScreenSystem.jsx";
 import { buildBoxScoreViewModel } from "../utils/boxScoreViewModel.js";
 import useStableRouteRequest from "../hooks/useStableRouteRequest.js";
-import { buildGameBookStory } from "../utils/gameBookStory.js";
 import { getTopPerformers } from "../utils/gameBookHighlights.js";
 import { getPlayerProfileId, hasValidPlayerProfileId, openPlayerProfile } from "../utils/playerProfileNavigation.js";
 
@@ -61,7 +60,7 @@ function BoxScore({ gameId, league, actions, onClose, onPlayerSelect, onTeamSele
     return <EmptyState title="Game Book unavailable" body="Game data missing." />;
   }
 
-  const storyBullets = buildGameBookStory(vm);
+  const storyBullets = vm.storyBullets ?? [];
   const topPerformers = getTopPerformers(vm);
   const gameContextBase = {
     source: "game-book",

@@ -17,6 +17,7 @@ import {
   buildQuarterScoresFromScoring,
   buildScoringSummaryFromSimulation,
 } from './gameSummary.js';
+import { buildCompletedGameEnrichment } from './completedGameResult.js';
 
 function hashStringToSeed(input = '') {
   let hash = 2166136261;
@@ -3105,6 +3106,22 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         },
     });
 
+    const enrichment = buildCompletedGameEnrichment({
+        league,
+        gameData,
+        homeTeamId,
+        awayTeamId,
+        homeScore,
+        awayScore,
+        homeAbbr: home.abbr,
+        awayAbbr: away.abbr,
+        isPlayoff,
+        teamStats,
+        homeBox: homeBoxScore,
+        awayBox: awayBoxScore,
+        scoringSummary: gameData.scoringSummary || [],
+    });
+
     const resultObj = {
         id: `g_final_${Date.now()}_${U.id()}`,
         gameId: gameData.gameId ?? null,
@@ -3112,6 +3129,13 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         away: awayTeamId,
         homeId: homeTeamId,
         awayId: awayTeamId,
+        seasonId: enrichment.seasonId,
+        phase: enrichment.phase,
+        winnerTeamId: enrichment.winnerTeamId,
+        topPerformers: enrichment.topPerformers,
+        gameNarrative: enrichment.gameNarrative,
+        resultSchemaVersion: enrichment.resultSchemaVersion,
+        createdAt: enrichment.createdAt,
         scoreHome: homeScore,
         scoreAway: awayScore,
         homeScore,
@@ -3171,6 +3195,13 @@ export function commitGameResult(league, gameData, options = { persist: true }) 
         scheduledGame.playLogs = resultObj.playLogs;
         scheduledGame.playLog = resultObj.playLogs;
         scheduledGame.recapText = resultObj.recapText;
+        scheduledGame.seasonId = resultObj.seasonId;
+        scheduledGame.phase = resultObj.phase;
+        scheduledGame.winnerTeamId = resultObj.winnerTeamId;
+        scheduledGame.topPerformers = resultObj.topPerformers;
+        scheduledGame.gameNarrative = resultObj.gameNarrative;
+        scheduledGame.resultSchemaVersion = resultObj.resultSchemaVersion;
+        scheduledGame.createdAt = resultObj.createdAt;
     }
 
     if (gameData.preGameContext) {
@@ -3685,6 +3716,7 @@ export function simulateBatch(games, options = {}) {
                 homeScore: sH,
                 awayScore: sA,
                 isPlayoff: options.isPlayoff || false,
+                phase: options.isPlayoff ? 'playoffs' : (league?.phase ?? 'regular'),
                 preGameContext: pair.preGameContext, // PASS CONTEXT
                 stats: {
                     home: { players: homePlayerStats },

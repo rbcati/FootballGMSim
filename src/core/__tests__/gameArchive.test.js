@@ -124,6 +124,7 @@ describe('gameArchive helpers', () => {
     expect(game.teamStats?.home?.turnovers).toBe(1);
     expect(game.teamStats?.away?.sacks).toBe(2);
     expect(game.playLog).toHaveLength(1);
+    expect(game.winnerTeamId).toBe(1);
   });
 
   it('enriches legacy leader-only archives with playable fallback stats', () => {

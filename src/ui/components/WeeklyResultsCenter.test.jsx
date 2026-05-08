@@ -114,6 +114,40 @@ describe('WeeklyResultsCenter', () => {
     expect(html).not.toContain('Game-plan impact recap');
   });
 
+  it('opens Game Book from a completed row with full box score data', () => {
+    const onGameSelect = vi.fn();
+    const richLeague = {
+      ...league,
+      schedule: {
+        weeks: [
+          {
+            week: 2,
+            games: [{
+              gameId: '2026_w2_5_6',
+              home: 6,
+              away: 5,
+              played: true,
+              homeScore: 31,
+              awayScore: 28,
+              quarterScores: { home: [7, 10, 7, 7], away: [0, 14, 7, 7] },
+              teamStats: { home: { totalYards: 410, passYards: 280 }, away: { totalYards: 350 } },
+              playerStats: {
+                home: { 501: { name: 'QB1', stats: { passAtt: 33, passComp: 24, passYd: 280, passTD: 3 } } },
+                away: { 502: { name: 'Edge', stats: { sacks: 2, tackles: 6 } } },
+              },
+              scoringSummary: [{ quarter: 4, time: '0:42', teamAbbr: 'KC', type: 'FG', description: 'Game winner', scoreAfter: { home: 31, away: 28 } }],
+              resultSchemaVersion: 1,
+            }],
+          },
+        ],
+      },
+    };
+    render(<WeeklyResultsCenter league={richLeague} initialWeek={2} onGameSelect={onGameSelect} onNavigate={() => {}} />);
+    const cards = screen.getAllByRole('button', { name: /open game book/i });
+    fireEvent.click(cards[cards.length - 1]);
+    expect(onGameSelect).toHaveBeenCalledWith('2026_w2_5_6');
+  });
+
   it('routes spotlight game records through current game book open helper', () => {
     const recap = buildWeeklyLeagueRecap(league, { week: 2 });
     const onGameSelect = vi.fn();
